@@ -1,0 +1,64 @@
+## Global
+
+## Directories
+*.tscn
+*.res
+*.remap
+import/
+export/
+.vs/
+.idea/
+*.pyc
+__pycache__/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Godot export templates
+*export_templates*
+
+## Crash reports
+*.crash
+*.dmp
+
+## Local config
+user://
+*.user
+
+## Build artifacts
+*.zip
+*.pck
+*.exe
+*.x86_64
+*.apk
+*.aab
+
+## IDE
+*.suo
+*.user
+*.csproj
+*.sln
+*.wsuo
+*.filters
+
+## Node
+node_modules/
+package-lock.json
+
+## Python
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+## Compatibility profiles (user data)
+user://compatibility_profiles/
+
+## Logs
+*.log
+logs/
+
+## Temp
+*.tmp
+*.temp
