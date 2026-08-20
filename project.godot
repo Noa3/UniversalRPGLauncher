@@ -1,106 +1,36 @@
-## Godot Configuration file
+; Engine configuration file.
+; Edit through Godot where possible.
+;
+; Format:
+;   [section]
+;   param=value
 
-[preset.0]
+config_version=5
 
-name="Windows Desktop"
-platform="Windows Desktop"
-runnable=true
-advanced_options=false
-dedicated_server=false
-custom_features=""
-export_filter="all_resources"
-include_filter=""
-exclude_filter=""
-export_path="../../../export/UniversalRPG.exe"
-patches=PackedStringArray()
-encryption_include_filters=""
-encryption_exclude_filters=""
-seed=0
-encrypt_pck=false
-encrypt_directory=false
-script_export_mode=2
+[application]
 
-[preset.0.options]
+config/name="UniversalRPG"
+config/description="Cross-platform RPG Maker compatibility runtime"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
 
-editable_build_modules_by_default=true
-export_format=0
-custom_template=""
-debug_template=""
-large_chunk_size=0
-debug_http=false
-architecture/architecture="x86_64"
-code_aull=true
-code_debug=false
-version="1.0.0.0"
-name/main_application="UniversalRPG"
-bundle_icon=""
-signature/enable=false
-ssl/ca-certs-root-ca=""
-ssl/enable=true
-code/minify=true
+[display]
 
-[preset.1]
+window/size/viewport_width=1100
+window/size/viewport_height=700
+window/size/window_width_override=1100
+window/size/window_height_override=700
+window/size/resizable=true
+window/stretch/mode="canvas_items"
+window/handheld/orientation=1
 
-name="Linux/X11"
-platform="Linux/X11"
-runnable=true
-advanced_options=false
-dedicated_server=false
-custom_features=""
-export_filter="all_resources"
-include_filter=""
-exclude_filter=""
-export_path="../../../export/UniversalRPG.x86_64"
-patches=PackedStringArray()
-encryption_include_filters=""
-encryption_exclude_filters=""
-seed=0
-encrypt_pck=false
-encrypt_directory=false
-script_export_mode=2
+[rendering]
 
-[preset.1.options]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
 
-editable_build_modules_by_default=true
-export_format=0
-custom_template=""
-debug_template=""
-large_chunk_size=0
-debug_http=false
-architecture/architecture="x86_64"
-code_aull=true
-code_debug=false
-version="1.0.0.0"
-name/main_application="UniversalRPG"
-bundle_icon=""
-signature/enable=false
-ssl/ca-certs-root-ca=""
-ssl/enable=true
-code/minify=true
+[internationalization]
 
-[export_layer.0]
-
-resources=""
-
-[deployment]
-
-target_platform=""
-
-[[external_source]]
-
-uuid="4111fc9e-7a7e-4f66-bc98-2b3e756f023e"
-
-[debugging]
-
-hosting_modes=0
-start_hosting=false
-hosting_port=6969
-
-[type]
-
-mode="standalone"
-
-[platform]
-
-name="UniversalRPG"
-icon="res://assets/icon.png"
+locale/fallback="en"
+locale/translations=PackedStringArray("res://locale/en.po", "res://locale/de.po", "res://locale/es.po", "res://locale/fr.po", "res://locale/ja.po", "res://locale/ko.po", "res://locale/zh_CN.po")

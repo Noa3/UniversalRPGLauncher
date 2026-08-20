@@ -12,9 +12,9 @@ var temp_dir: String
 
 func setup() -> void:
 	vfs = VirtualFileSystem.new()
-	temp_dir = DirAccess.dir_exists_absolute("user://vfs_test")
-	if not temp_dir:
-		DirAccess.make_dir_recursive_absolute("user://vfs_test")
+	temp_dir = "user://vfs_test"
+	if not DirAccess.dir_exists_absolute(temp_dir):
+		DirAccess.make_dir_recursive_absolute(temp_dir)
 		DirAccess.make_dir_recursive_absolute("user://vfs_test/game")
 		DirAccess.make_dir_recursive_absolute("user://vfs_test/override")
 		DirAccess.make_dir_recursive_absolute("user://vfs_test/rtp")
@@ -104,7 +104,7 @@ func test_safe_path_absolute() -> void:
 
 
 func test_safe_path_null_byte() -> void:
-	assert_false(vfs.is_safe_path("Graphics/../../../etc/passwd\0.png"))
+	assert_false(vfs.is_safe_path("Graphics/../../../etc/passwd\u0000.png"))
 
 
 # === TESTS: Mount Management ===

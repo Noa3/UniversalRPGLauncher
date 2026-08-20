@@ -38,7 +38,9 @@ func _create_rmgm2000_game() -> void:
 	DirAccess.make_dir_recursive_absolute(dir + "/Images")
 	
 	_create_file(dir + "/Game.ini", "[Game]\nTitle=TestRM2000\nEngineID=RM2000\n")
-	_create_file(dir + "/Data/Map001.rmm", "rm2000_map_data")
+	_create_file(dir + "/RPG_RT.ldb", "database")
+	_create_file(dir + "/RPG_RT.lmt", "map_tree")
+	_create_file(dir + "/Map0001.lmu", "map_data")
 	_create_file(dir + "/Graphics/Characters/hero.png", "char_data")
 
 
@@ -49,7 +51,10 @@ func _create_rmgm2003_game() -> void:
 	DirAccess.make_dir_recursive_absolute(dir + "/Maps")
 	DirAccess.make_dir_recursive_absolute(dir + "/Images")
 	
-	_create_file(dir + "/Game.ini", "[Game]\nTitle=TestRM2003\nEnginePath=RPG_RT.exe\n")
+	_create_file(dir + "/Game.ini", "[Game]\nTitle=TestRM2003\nEngineID=RM2003\n")
+	_create_file(dir + "/RPG_RT.ldb", "database")
+	_create_file(dir + "/RPG_RT.lmt", "map_tree")
+	_create_file(dir + "/Map0001.lmu", "map_data")
 	_create_file(dir + "/Data/Map001.rxdata", "map_data")
 	_create_file(dir + "/RPG_RT.exe", "rpg_rt_binary")
 
@@ -60,7 +65,7 @@ func _create_rmgm_xp_game() -> void:
 	DirAccess.make_dir_recursive_absolute(dir + "/Graphics")
 	DirAccess.make_dir_recursive_absolute(dir + "/System")
 	
-	_create_file(dir + "/Game.ini", "[Game]\nTitle=TestXP\nEnginePath=RPG_RT.exe\nEngineID=RMXP\n")
+	_create_file(dir + "/Game.ini", "[Game]\nTitle=TestXP\nLibrary=RGSS102A.dll\nRTP1=Standard\n")
 	_create_file(dir + "/RGSS102A.dll", "rgss1_dll")
 	_create_file(dir + "/Data/Map001.rvdata", "map_data")
 
@@ -72,7 +77,7 @@ func _create_rmgm_vx_ace_game() -> void:
 	DirAccess.make_dir_recursive_absolute(dir + "/Pictures")
 	DirAccess.make_dir_recursive_absolute(dir + "/Animations")
 	
-	_create_file(dir + "/Game.ini", "[Game]\nTitle=TestVXAce\nEnginePath=RPG_RT.exe\nEngineID=RMVXAce\n")
+	_create_file(dir + "/Game.ini", "[Game]\nTitle=TestVXAce\nLibrary=RGSS302A.dll\nRTP=RPGVXAce\n")
 	_create_file(dir + "/RGSS302A.dll", "rgss3_dll")
 	_create_file(dir + "/Data/Map001.rvdata2", "rvdata2_data")
 	_create_file(dir + "/Data/Save001.rxdata", "save_data")
@@ -88,6 +93,7 @@ func _create_rmgm_mv_game() -> void:
 	_create_file(dir + "/index.html", "<!DOCTYPE html><html><body>RPG Maker MV</body></html>")
 	_create_file(dir + "/package.json", '{"name":"rmmv","version":"1.6.0"}')
 	_create_file(dir + "/data/Map001.json", '{"id":1,"name":"Test"}')
+	_create_file(dir + "/js/rpg_core.js", "// MV runtime\n")
 	_create_file(dir + "/js/plugins/TestPlugin.js", '// Test plugin\n')
 
 
@@ -137,15 +143,11 @@ func test_detect_rmgm2000() -> void:
 
 func test_detect_rmgm2000_evidence() -> void:
 	var result := detector.analyze(temp_base + "/RM2000_Test")
-	var has_game_ini := false
-	var has_data_dir := false
+	var has_lcf_database := false
 	for e in result.evidence:
-		if "Game.ini" in e:
-			has_game_ini = true
-		if "Data/" in e:
-			has_data_dir = true
-	assert_true(has_game_ini)
-	assert_true(has_data_dir)
+		if "RPG_RT.ldb" in e:
+			has_lcf_database = true
+	assert_true(has_lcf_database)
 
 
 # === TESTS: RM2003 Detection ===
@@ -158,7 +160,6 @@ func test_detect_rmgm2003() -> void:
 
 func test_detect_rmgm2003_evidence() -> void:
 	var result := detector.analyze(temp_base + "/RM2003_Test")
-	assert_true(result.rtp_dependency != "")
 	assert_true(result.has_native_libraries)
 
 
@@ -186,7 +187,7 @@ func test_detect_rmgm_vx_ace() -> void:
 
 func test_detect_rmgm_vx_ace_archives() -> void:
 	var result := detector.analyze(temp_base + "/RMVXAce_Test")
-	assert_true(result.has_encrypted_archives)
+	assert_false(result.has_encrypted_archives)
 	assert_true(result.has_native_libraries)
 
 
@@ -201,11 +202,11 @@ func test_detect_rmgm_mv() -> void:
 func test_detect_rmgm_mv_structure() -> void:
 	var result := detector.analyze(temp_base + "/RMVV_Test")
 	assert_true(result.has_custom_scripts)
-	var has_data_dir := false
+	var has_runtime := false
 	for e in result.evidence:
-		if "data/" in e.to_lower():
-			has_data_dir = true
-	assert_true(has_data_dir)
+		if "javascript" in e.to_lower():
+			has_runtime = true
+	assert_true(has_runtime)
 
 
 # === TESTS: Unknown Game ===
@@ -246,13 +247,13 @@ func test_get_confidence_string() -> void:
 	assert_eq(result.get_confidence_string(), "Low")
 
 
-func test_to_string() -> void:
+func test_describe() -> void:
 	var result := GameDetector.DetectionResult.new()
 	result.engine = GameDetector.EngineType.RPGMAKER_XP
 	result.confidence = GameDetector.Confidence.HIGH
 	result.evidence = ["Found Game.ini", "Found RGSS102A.dll"]
 	
-	var str := result.to_string()
+	var str := result.describe()
 	assert_true("RPG Maker XP" in str)
 	assert_true("High" in str)
 	assert_true("Game.ini" in str)

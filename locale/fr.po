@@ -1,0 +1,175 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: UniversalRPG 0.2\n"
+"PO-Revision-Date: 2026-08-20 00:00+0000\n"
+"Last-Translator: UniversalRPG Contributors\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "APP_SUBTITLE"
+msgstr "Détecte les jeux RPG Maker locaux. Les moteurs natifs sont développés progressivement."
+
+msgid "LANGUAGE_TOOLTIP"
+msgstr "Langue de l'interface"
+
+msgid "LANGUAGE_SYSTEM"
+msgstr "Langue du système"
+
+msgid "LIBRARY_FOLDER"
+msgstr "DOSSIER DES JEUX"
+
+msgid "LIBRARY_SCAN_HINT"
+msgstr "Les sous-dossiers sont analysés jusqu'à une profondeur de 2."
+
+msgid "ACTION_CHOOSE_FOLDER"
+msgstr "Choisir un dossier"
+
+msgid "ACTION_RESCAN"
+msgstr "Analyser à nouveau"
+
+msgid "LIBRARY_FOUND_GAMES"
+msgstr "JEUX TROUVÉS"
+
+msgid "LIBRARY_SELECTION"
+msgstr "SÉLECTION"
+
+msgid "DETAIL_NO_SELECTION"
+msgstr "Aucun jeu sélectionné"
+
+msgid "ACTION_NOT_PLAYABLE"
+msgstr "Pas encore jouable"
+
+msgid "DIALOG_CHOOSE_FOLDER"
+msgstr "Choisir le dossier des jeux"
+
+msgid "STATUS_SCANNING"
+msgstr "Analyse du dossier..."
+
+msgid "STATUS_NO_GAMES"
+msgstr "Aucun jeu RPG Maker trouvé. Placez chaque jeu dans son propre sous-dossier."
+
+msgid "STATUS_ONE_GAME"
+msgid_plural "STATUS_MANY_GAMES"
+msgstr[0] "{count} jeu trouvé. La détection n'exécute jamais les fichiers importés."
+msgstr[1] "{count} jeux trouvés. La détection n'exécute jamais les fichiers importés."
+
+msgid "DETAIL_ENGINE_CONFIDENCE"
+msgstr "{engine}  /  Confiance : {confidence}"
+
+msgid "DETAIL_NATIVE_LIBRARIES"
+msgstr "Bibliothèques natives détectées ; elles ne seront pas exécutées"
+
+msgid "DETAIL_RTP"
+msgstr "RTP : {rtp}"
+
+msgid "DETAIL_RUNTIME_STATE"
+msgstr "{label} : {reason}"
+
+msgid "ACTION_START_GAME"
+msgstr "Lancer le jeu"
+
+msgid "DETAIL_NO_GAMES"
+msgstr "Aucun jeu trouvé"
+
+msgid "DETAIL_DETECTION_SUPPORT"
+msgstr "Les signaux de détection sont pris en charge pour 2000, 2003, XP, VX, VX Ace, MV et MZ."
+
+msgid "DETAIL_RUNTIME_DEVELOPMENT"
+msgstr "Les moteurs d'exécution sont encore en cours de développement."
+
+msgid "ERROR_FOLDER"
+msgstr "Le dossier n'a pas pu être utilisé (erreur {error})."
+
+msgid "CONFIDENCE_HIGH"
+msgstr "Élevée"
+
+msgid "CONFIDENCE_MEDIUM"
+msgstr "Moyenne"
+
+msgid "CONFIDENCE_LOW"
+msgstr "Faible"
+
+msgid "RUNTIME_LCF_LABEL"
+msgstr "Analyseur en cours"
+
+msgid "RUNTIME_LCF_REASON"
+msgstr "Les données LCF peuvent être détectées ; l'interpréteur et le moteur de rendu ne sont pas encore implémentés."
+
+msgid "RUNTIME_PLANNED_LABEL"
+msgstr "Moteur prévu"
+
+msgid "RUNTIME_RGSS_REASON"
+msgstr "Le moteur RGSS/Ruby n'est pas encore implémenté."
+
+msgid "RUNTIME_JS_REASON"
+msgstr "Le moteur JavaScript, navigateur et rendu n'est pas encore implémenté."
+
+msgid "RUNTIME_UNSUPPORTED_LABEL"
+msgstr "Non pris en charge"
+
+msgid "RUNTIME_UNSUPPORTED_REASON"
+msgstr "Aucun moteur d'exécution correspondant n'a été trouvé."
+
+msgid "RUNTIME_NOT_REGISTERED"
+msgstr "Le moteur d'exécution n'est pas enregistré."
+
+msgid "DETECT_LCF_VERSION_AMBIGUOUS"
+msgstr "La version exacte 2000/2003 nécessite l'inspection des données système LCF"
+
+msgid "DETECT_LCF_DATABASE"
+msgstr "RPG_RT.ldb et RPG_RT.lmt trouvés"
+
+msgid "DETECT_LCF_MAPS"
+msgstr "{count} fichier(s) de carte LCF trouvé(s)"
+
+msgid "DETECT_INI_RM2000"
+msgstr "Le fichier INI identifie RPG Maker 2000"
+
+msgid "DETECT_INI_RM2003"
+msgstr "Le fichier INI identifie RPG Maker 2003"
+
+msgid "DETECT_RPG_RT_INI"
+msgstr "RPG_RT.ini trouvé"
+
+msgid "DETECT_RGSS1_INI"
+msgstr "Game.ini référence RGSS1"
+
+msgid "DETECT_RGSS2_INI"
+msgstr "Game.ini référence RGSS2"
+
+msgid "DETECT_RGSS3_INI"
+msgstr "Game.ini référence RGSS3"
+
+msgid "DETECT_RGSSAD"
+msgstr "Archive RGSSAD trouvée"
+
+msgid "DETECT_RGSS2A"
+msgstr "Archive RGSS2A trouvée"
+
+msgid "DETECT_RGSS3A"
+msgstr "Archive RGSS3A trouvée"
+
+msgid "DETECT_XP_DATA"
+msgstr "Fichiers .rxdata de XP trouvés"
+
+msgid "DETECT_VX_DATA"
+msgstr "Fichiers .rvdata de VX trouvés"
+
+msgid "DETECT_VXA_DATA"
+msgstr "Fichiers .rvdata2 de VX Ace trouvés"
+
+msgid "DETECT_MZ_RUNTIME"
+msgstr "Moteur JavaScript MZ trouvé"
+
+msgid "DETECT_MV_RUNTIME"
+msgstr "Moteur JavaScript MV trouvé"
+
+msgid "DETECT_MV_MZ_GENERIC"
+msgstr "Structure web MV/MZ générique trouvée"
+
+msgid "DETECT_FILE_FOUND"
+msgstr "{file} trouvé"

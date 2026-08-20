@@ -1,4 +1,5 @@
 ## class_name VirtualFileSystem
+class_name VirtualFileSystem
 ## plugins/vfs/virtual_filesystem.gd
 ##
 ## A non-destructive virtual filesystem layer for UniversalRPG.
@@ -142,7 +143,7 @@ func normalize_path(p_path: String) -> String:
 	
 	# Remove trailing slash (unless it's the root)
 	if normalized.length() > 1 and normalized.ends_with("/"):
-		normalized = normalized.left_back(normalized.length() - 1)
+		normalized = normalized.trim_suffix("/")
 	
 	return normalized
 
@@ -161,7 +162,7 @@ func is_safe_path(p_path: String) -> bool:
 		return false
 	
 	# Block null bytes
-	if "\0" in normalized:
+	if "\u0000" in normalized:
 		return false
 	
 	return true
@@ -176,12 +177,16 @@ func resolve(p_path: String) -> String:
 	
 	var normalized := normalize_path(p_path).to_lower()
 	
+	if normalized.is_empty():
+		var game := get_mount(MountType.GAME)
+		return game.path if game else ""
+	
 	# Check case map first (cached lookup)
 	if normalized in _case_map:
 		return _case_map[normalized]
 	
 	# Search through mounts in priority order
-	for mount in _mounts:
+	for mount in _mounts_in_priority_order():
 		var full_path := mount.path + "/" + normalized
 		if DirAccess.dir_exists_absolute(mount.path):
 			var candidates := _find_case_insensitive(mount.path, normalized)
@@ -224,11 +229,33 @@ func _find_case_insensitive(p_dir: String, p_normalized: String) -> Array[String
 func _rebuild_case_map() -> void:
 	_case_map.clear()
 	
-	for mount in _mounts:
+	for mount in _mounts_in_priority_order():
 		if not DirAccess.dir_exists_absolute(mount.path):
 			continue
 		
 		_scan_directory(mount.path, mount.path, "")
+
+
+## Return mounts ordered by resolution priority (highest first)
+func _mounts_in_priority_order() -> Array[Mount]:
+	var ordered := _mounts.duplicate()
+	ordered.sort_custom(_mount_priority_less)
+	return ordered
+
+
+## Priority comparison for mount resolution order
+static func _mount_priority_less(p_left: Mount, p_right: Mount) -> bool:
+	return _mount_priority(p_left.mount_type) < _mount_priority(p_right.mount_type)
+
+
+## Resolution priority of a mount type (lower wins first)
+static func _mount_priority(p_type: MountType) -> int:
+	match p_type:
+		MountType.OVERRIDE: return 0
+		MountType.RTP: return 1
+		MountType.GAME: return 2
+		MountType.SAVE: return 3
+		_: return 4
 
 
 ## Recursively scan a directory and build case map

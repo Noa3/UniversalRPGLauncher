@@ -1,7 +1,7 @@
 # UniversalRPG — Development Roadmap
 
-> **Last Updated:** 2026-08-17
-> **Current Phase:** Phase 1 — Runtime Foundation (IN PROGRESS)
+> **Last Updated:** 2026-08-20
+> **Current Phase:** Phase 1.5 — Application Foundation
 
 ## Phase 0 — Repository Audit ✅
 
@@ -61,6 +61,25 @@
 - [ ] Add unit tests for CompatibilityProfile
 - [ ] Create synthetic test fixtures for detection
 - [ ] Export and test Godot project
+
+---
+
+## Phase 1.5 — Application Foundation ✅
+
+**Status:** Complete for desktop MVP; mobile import integration remains
+
+- [x] Valid Godot 4.7.2 project and responsive start scene
+- [x] Persistent user-selected games directory
+- [x] Bounded library scan with link/junction avoidance
+- [x] Real LCF, RGSS, MV, and MZ detection signals
+- [x] Honest runtime-support state and disabled launch action
+- [x] English-default localized UI with German, Spanish, French, Japanese, Korean, and Simplified Chinese
+- [x] Bundled CJK-capable font
+- [x] Initial UTF-8/CP932/Shift-JIS metadata decoder
+- [x] Windows, Linux, macOS, Android, and iOS export presets
+- [ ] Android Storage Access Framework import
+- [ ] iOS document picker import
+- [ ] Cover art, favorites, search, sorting, and recent play time
 
 ---
 
@@ -214,6 +233,12 @@ Modern improvements without altering gameplay semantics.
 - [ ] Screenshot system
 - [ ] Asset override system
 - [ ] Per-game enhancement profiles
+- [ ] Configurable virtual touch gamepad and per-game layouts
+- [ ] Physical controller remapping and mouse/touch emulation
+- [ ] Save backup/import/export and conflict-safe device transfer
+- [ ] Non-destructive translation/patch packs (PO/XLIFF)
+- [ ] Translation memory, glossary, font packs, and overflow diagnostics
+- [ ] Optional compatibility/debug/cheat tools with explicit safety policy
 
 ---
 
@@ -304,7 +329,11 @@ Support x86 Windows plugins on ARM64 Android.
 
 ### Security
 
-- [ ] Virtual filesystem sandbox
+- [x] Detection never executes imported files
+- [x] Scanner depth, link, hidden-directory, and metadata-size limits
+- [ ] Canonical root containment on every runtime access
+- [ ] Safe archive staging and zip-bomb limits
+- [ ] Virtual filesystem runtime sandbox
 - [ ] Plugin loading policy
 - [ ] Network access control
 - [ ] Clipboard access control
@@ -330,6 +359,8 @@ Support x86 Windows plugins on ARM64 Android.
 - [ ] docs/RUNTIME_MV_MZ.md
 - [ ] docs/NATIVE_PLUGINS.md
 - [ ] docs/SECURITY.md
+- [x] docs/IMPORT_SECURITY.md
+- [x] docs/LOCALIZATION.md
 - [ ] THIRD_PARTY_LICENSES.md
 
 ### Performance
@@ -348,3 +379,4 @@ Support x86 Windows plugins on ARM64 Android.
 |---------|-------|--------|------|
 | 0.1.0 | Phase 0 | Complete | 2026-08-17 |
 | 0.2.0 | Phase 1 | In Progress | 2026-08-17 |
+| 0.2.1 | Phase 1.5 | Application foundation | 2026-08-20 |

@@ -1,11 +1,13 @@
 ## Global
 
 ## Directories
-*.tscn
 *.res
 *.remap
 import/
 export/
+.godot/
+.codegraph/
+build/
 .vs/
 .idea/
 *.pyc
@@ -17,6 +19,9 @@ Thumbs.db
 
 ## Godot export templates
 *export_templates*
+
+## Downloaded Godot editors (see tools/godot/README.md)
+/tools/godot/editors/
 
 ## Crash reports
 *.crash
@@ -37,8 +42,6 @@ user://
 ## IDE
 *.suo
 *.user
-*.csproj
-*.sln
 *.wsuo
 *.filters
 
@@ -62,3 +65,6 @@ logs/
 ## Temp
 *.tmp
 *.temp
+
+## Local tooling
+.opencode/

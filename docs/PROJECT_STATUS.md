@@ -1,11 +1,11 @@
 # UniversalRPG — Project Status
 
-> **Last Updated:** 2026-08-17
-> **Current Phase:** Phase 1 — Runtime Foundation
+> **Last Updated:** 2026-08-20
+> **Current Phase:** Phase 1.5 — Application Foundation complete; Phase 2 next
 
 ## Executive Summary
 
-This is a **fresh repository** at the start of Phase 1. The core runtime abstractions (VirtualFileSystem, VirtualClock, GameDetector, CompatibilityProfile) have been implemented as a foundation for all subsequent work.
+The project now has a validated Godot 4.7.2 application, localized game-library UI, bounded folder scanner, improved generation detector, legacy metadata decoding, and export presets. No runtime backend is playable yet. RM2000/2003 format correctness remains the next critical path.
 
 ## Phase Status Overview
 
@@ -13,6 +13,7 @@ This is a **fresh repository** at the start of Phase 1. The core runtime abstrac
 |-------|-------------|--------|-------|
 | 0 | Repository audit | ✅ Complete | Initial setup |
 | 1 | Runtime foundation | ✅ Complete | Core abstractions implemented |
+| 1.5 | Application foundation | ✅ Complete | Library, detection UI, localization, initial import safety |
 | 2 | RM2000/2003 parser | 📋 Planned | Next priority |
 | 3 | RM2000/2003 rendering | 📋 Planned | Depends on Phase 2 |
 | 4 | Event interpreter | 📋 Planned | Depends on Phase 2 |
@@ -111,10 +112,11 @@ This is a **fresh repository** at the start of Phase 1. The core runtime abstrac
 
 | Item | Severity | Description |
 |------|----------|-------------|
-| No tests | High | Core systems lack test coverage |
+| Legacy test harness missing | High | Existing `extends Test` suites are not connected to a test runner |
 | No CI | Medium | No automated build/testing |
-| No export pipeline | Medium | No automated export for Windows/Linux/Android |
-| Empty architecture docs | Low | Sections marked TODO in docs |
+| No export pipeline | Medium | Presets exist; signed/release exports are not automated |
+| Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
+| No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
 | No error reporting system | Medium | GameDetector._get_file_version() and _get_dll_imports() are stubs |
 
 ## Missing Core Components (Planned)
@@ -138,16 +140,19 @@ This is a **fresh repository** at the start of Phase 1. The core runtime abstrac
 | Target | Status | Notes |
 |--------|--------|-------|
 | Godot Editor | ✅ Runs | project.godot created |
-| Windows Export | ⏸️ Not tested | Needs Godot editor |
-| Linux Export | ⏸️ Not tested | Needs Godot editor |
-| Android Export | ⏸️ Not tested | Needs Godot editor |
+| Linux headless | ✅ Tested | Godot 4.7.2 import and all UI locales start |
+| Windows Export | ⏸️ Not tested | Preset present; templates/toolchain needed |
+| Linux Export | ⏸️ Not tested | Preset present; templates needed |
+| macOS/iOS Export | ⏸️ Not tested | Requires macOS, Xcode, signing, templates |
+| Android Export | ⏸️ Not tested | Preset present; Android SDK/templates needed |
 
 ## Next Immediate Tasks
 
-1. **Write unit tests** for VirtualFileSystem, GameDetector, CompatibilityProfile
-2. **Create synthetic test fixtures** for game detection
-3. **Export the project** to verify it builds
-4. **Start Phase 2** — RM2000/2003 data format research and parsing
+1. Connect or replace the legacy test harness and add malicious import fixtures
+2. Test CP932/Shift-JIS decoding on every target platform
+3. Implement real LCF parsing from documented, legal fixtures
+4. Add Android/iOS document-provider imports
+5. Produce unsigned desktop test exports once templates are installed
 
 ## Open Questions
 

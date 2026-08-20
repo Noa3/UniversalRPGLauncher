@@ -1,0 +1,175 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: UniversalRPG 0.2\n"
+"PO-Revision-Date: 2026-08-20 00:00+0000\n"
+"Last-Translator: UniversalRPG Contributors\n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "APP_SUBTITLE"
+msgstr "Detect local RPG Maker games. Native runtimes are built step by step."
+
+msgid "LANGUAGE_TOOLTIP"
+msgstr "Interface language"
+
+msgid "LANGUAGE_SYSTEM"
+msgstr "System language"
+
+msgid "LIBRARY_FOLDER"
+msgstr "GAMES DIRECTORY"
+
+msgid "LIBRARY_SCAN_HINT"
+msgstr "Subdirectories are scanned up to a depth of 2."
+
+msgid "ACTION_CHOOSE_FOLDER"
+msgstr "Choose directory"
+
+msgid "ACTION_RESCAN"
+msgstr "Scan again"
+
+msgid "LIBRARY_FOUND_GAMES"
+msgstr "FOUND GAMES"
+
+msgid "LIBRARY_SELECTION"
+msgstr "SELECTION"
+
+msgid "DETAIL_NO_SELECTION"
+msgstr "No game selected"
+
+msgid "ACTION_NOT_PLAYABLE"
+msgstr "Not playable yet"
+
+msgid "DIALOG_CHOOSE_FOLDER"
+msgstr "Choose games directory"
+
+msgid "STATUS_SCANNING"
+msgstr "Scanning directory ..."
+
+msgid "STATUS_NO_GAMES"
+msgstr "No RPG Maker games found. Put each game in its own subdirectory."
+
+msgid "STATUS_ONE_GAME"
+msgid_plural "STATUS_MANY_GAMES"
+msgstr[0] "{count} game found. Detection never executes imported files."
+msgstr[1] "{count} games found. Detection never executes imported files."
+
+msgid "DETAIL_ENGINE_CONFIDENCE"
+msgstr "{engine}  /  Confidence: {confidence}"
+
+msgid "DETAIL_NATIVE_LIBRARIES"
+msgstr "Native libraries detected; they will not be executed"
+
+msgid "DETAIL_RTP"
+msgstr "RTP: {rtp}"
+
+msgid "DETAIL_RUNTIME_STATE"
+msgstr "{label}: {reason}"
+
+msgid "ACTION_START_GAME"
+msgstr "Start game"
+
+msgid "DETAIL_NO_GAMES"
+msgstr "No games found"
+
+msgid "DETAIL_DETECTION_SUPPORT"
+msgstr "Detection signals are supported for 2000, 2003, XP, VX, VX Ace, MV, and MZ."
+
+msgid "DETAIL_RUNTIME_DEVELOPMENT"
+msgstr "The runtime backends themselves are still under development."
+
+msgid "ERROR_FOLDER"
+msgstr "Directory could not be used (error {error})."
+
+msgid "CONFIDENCE_HIGH"
+msgstr "High"
+
+msgid "CONFIDENCE_MEDIUM"
+msgstr "Medium"
+
+msgid "CONFIDENCE_LOW"
+msgstr "Low"
+
+msgid "RUNTIME_LCF_LABEL"
+msgstr "Parser in progress"
+
+msgid "RUNTIME_LCF_REASON"
+msgstr "LCF data can be detected; the interpreter and renderer are not implemented yet."
+
+msgid "RUNTIME_PLANNED_LABEL"
+msgstr "Runtime planned"
+
+msgid "RUNTIME_RGSS_REASON"
+msgstr "The RGSS/Ruby runtime is not implemented yet."
+
+msgid "RUNTIME_JS_REASON"
+msgstr "The JavaScript, browser, and rendering runtime is not implemented yet."
+
+msgid "RUNTIME_UNSUPPORTED_LABEL"
+msgstr "Unsupported"
+
+msgid "RUNTIME_UNSUPPORTED_REASON"
+msgstr "No matching runtime backend was found."
+
+msgid "RUNTIME_NOT_REGISTERED"
+msgstr "Runtime backend is not registered."
+
+msgid "DETECT_LCF_VERSION_AMBIGUOUS"
+msgstr "Exact 2000/2003 version requires LCF system-data inspection"
+
+msgid "DETECT_LCF_DATABASE"
+msgstr "Found RPG_RT.ldb and RPG_RT.lmt"
+
+msgid "DETECT_LCF_MAPS"
+msgstr "Found {count} LCF map file(s)"
+
+msgid "DETECT_INI_RM2000"
+msgstr "INI identifies RPG Maker 2000"
+
+msgid "DETECT_INI_RM2003"
+msgstr "INI identifies RPG Maker 2003"
+
+msgid "DETECT_RPG_RT_INI"
+msgstr "Found RPG_RT.ini"
+
+msgid "DETECT_RGSS1_INI"
+msgstr "Game.ini references RGSS1"
+
+msgid "DETECT_RGSS2_INI"
+msgstr "Game.ini references RGSS2"
+
+msgid "DETECT_RGSS3_INI"
+msgstr "Game.ini references RGSS3"
+
+msgid "DETECT_RGSSAD"
+msgstr "Found RGSSAD archive"
+
+msgid "DETECT_RGSS2A"
+msgstr "Found RGSS2A archive"
+
+msgid "DETECT_RGSS3A"
+msgstr "Found RGSS3A archive"
+
+msgid "DETECT_XP_DATA"
+msgstr "Found XP .rxdata files"
+
+msgid "DETECT_VX_DATA"
+msgstr "Found VX .rvdata files"
+
+msgid "DETECT_VXA_DATA"
+msgstr "Found VX Ace .rvdata2 files"
+
+msgid "DETECT_MZ_RUNTIME"
+msgstr "Found MZ JavaScript runtime"
+
+msgid "DETECT_MV_RUNTIME"
+msgstr "Found MV JavaScript runtime"
+
+msgid "DETECT_MV_MZ_GENERIC"
+msgstr "Found generic MV/MZ web structure"
+
+msgid "DETECT_FILE_FOUND"
+msgstr "Found {file}"

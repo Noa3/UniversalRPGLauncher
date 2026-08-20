@@ -1,14 +1,18 @@
 # Third Party Licenses
 
-> **Last Updated:** 2026-08-17
+> **Last Updated:** 2026-08-20
 
 This document tracks all third-party components used in UniversalRPG.
 
 ## Current Third-Party Components
 
-### None (Initial Repository)
+### Noto Sans CJK SC
 
-This is a fresh repository with no third-party dependencies yet.
+- **Component:** `assets/fonts/NotoSansCJKsc-Regular.otf`
+- **Purpose:** Bundled Latin, Japanese, Korean, and Simplified Chinese UI glyph coverage
+- **Source:** [notofonts/noto-cjk](https://github.com/notofonts/noto-cjk)
+- **License:** SIL Open Font License 1.1
+- **License text:** [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt)
 
 ## Planned Third-Party Components
 

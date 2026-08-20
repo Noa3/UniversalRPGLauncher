@@ -198,7 +198,7 @@ func _parse_profile_data(p_data: Dictionary) -> void:
 		for flag_data in p_data["flags"]:
 			if flag_data is Dictionary and "name" in flag_data:
 				var flag_type := _string_to_flag_type(flag_data.get("type", "STRING"))
-				var value := flag_data.get("value", null)
+				var value: Variant = flag_data.get("value", null)
 				add_flag(flag_data["name"], flag_type, value)
 	
 	## Parse entries
@@ -220,7 +220,7 @@ func _parse_profile_data(p_data: Dictionary) -> void:
 					for flag_data in entry_data["flags"]:
 						if flag_data is Dictionary and "name" in flag_data:
 							var flag_type := _string_to_flag_type(flag_data.get("type", "BOOLEAN"))
-							var value := flag_data.get("value", false)
+							var value: Variant = flag_data.get("value", false)
 							var flag := CompatFlag.new(flag_data["name"], flag_type, value)
 							entry.flags.append(flag)
 				

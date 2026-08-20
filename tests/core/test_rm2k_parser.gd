@@ -2,15 +2,19 @@
 ## tests/core/test_rm2k_parser.gd
 ##
 ## Unit tests for RM2KParser.
-## Tests parsing of Game.ini, database, map, and save data.
+## Tests parsing of Game.ini, LCF database (LDB), map (LMU), and save (LSD) files.
+## Fixtures are real LCF encodings: BER length + header, then BER-coded
+## ID/length/payload chunks, structures terminated by ID 0.
 
 extends Test
 
-var parser: RefCounted
+const RM2KParserScript = preload("res://src/rm2k/parser/rm2k_parser.gd")
+
+var parser: RM2KParserScript
 
 
 func setup() -> void:
-	parser = preload("res://src/rm2k/parser/rm2k_parser.gd").new()
+	parser = RM2KParserScript.new()
 	_create_test_files()
 
 
@@ -18,97 +22,84 @@ func teardown() -> void:
 	_cleanup_test_files()
 
 
+func _ber(p_value: int) -> PackedByteArray:
+	var groups := PackedByteArray()
+	var v := p_value
+	while v >= 0x80:
+		groups.append(v & 0x7f)
+		v >>= 7
+	groups.append(v)
+	var bytes := PackedByteArray()
+	for i in range(groups.size() - 1, -1, -1):
+		var b: int = groups[i]
+		if i > 0:
+			b |= 0x80
+		bytes.append(b)
+	return bytes
+
+
+func _chunk(p_id: int, p_payload: PackedByteArray) -> PackedByteArray:
+	var bytes := _ber(p_id)
+	bytes.append_array(_ber(p_payload.size()))
+	bytes.append_array(p_payload)
+	return bytes
+
+
+func _lcf(p_header: String, p_chunks: Array) -> PackedByteArray:
+	var bytes := _ber(p_header.length())
+	bytes.append_array(p_header.to_ascii_buffer())
+	for chunk in p_chunks:
+		bytes.append_array(chunk)
+	return bytes
+
+
+func _tile_layer(p_count: int, p_start: int = 0) -> PackedByteArray:
+	var bytes := PackedByteArray()
+	bytes.resize(p_count * 2)
+	for i in range(p_count):
+		var tile := (p_start + i) & 0xFFFF
+		bytes[i * 2] = tile & 0xFF
+		bytes[i * 2 + 1] = (tile >> 8) & 0xFF
+	return bytes
+
+
+func _write_file(p_path: String, p_bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(p_path, FileAccess.WRITE)
+	if file:
+		file.store_buffer(p_bytes)
+		file.close()
+
+
 func _create_test_files() -> void:
-	## Create test directory
 	var dir := "user://rm2k_test"
 	if not DirAccess.dir_exists_absolute(dir):
 		DirAccess.make_dir_recursive_absolute(dir)
-	
-	## Create Game.ini
-	var ini_path := dir + "/Game.ini"
-	var file := FileAccess.open(ini_path, FileAccess.WRITE)
-	if file:
-		file.store_string("[Game]\nTitle=TestGame\nEngineID=RM2000\nEnginePath=Game.exe\n")
-		file.close()
-	
-	## Create a minimal database file (100 bytes of zeros)
-	var db_path := dir + "/Data.rdata"
-	file = FileAccess.open(db_path, FileAccess.WRITE)
-	if file:
-		var zeros := PackedByteArray()
-		for i in range(100):
-			zeros.append(0)
-		file.store_buffer(zeros)
-		file.close()
-	
-	## Create a minimal map file (width=20, height=15, header=10 bytes)
-	var map_path := dir + "/Map001.rmm"
-	file = FileAccess.open(map_path, FileAccess.WRITE)
-	if file:
-		## Header: width(2), height(2), unknown(6)
-		var header := PackedByteArray()
-		header.append(20)  ## width low
-		header.append(0)   ## width high
-		header.append(15)  ## height low
-		header.append(0)   ## height high
-		for i in range(6):
-			header.append(0)
-		file.store_buffer(header)
-		
-		## Tile data: 20 * 15 = 300 bytes per layer (3 layers)
-		var tile_data := PackedByteArray()
-		for i in range(300 * 3):
-			tile_data.append(0)
-		file.store_buffer(tile_data)
-		
-		## Empty event list (0 events)
-		var empty_event := PackedByteArray([0, 0])
-		file.store_buffer(empty_event)
-		
-		file.close()
-	
-	## Create a minimal save file
-	var save_path := dir + "/Save001.rmm"
-	file = FileAccess.open(save_path, FileAccess.WRITE)
-	if file:
-		## Save header (16 bytes)
-		var header := PackedByteArray()
-		header.append(8)  ## title length
-		header.append(0)  ## title length high
-		header.append(0)  ## padding
-		header.append(0)  ## padding
-		header.append(1)  ## map ID low
-		header.append(0)  ## map ID high
-		header.append(10) ## player X low
-		header.append(0)  ## player X high
-		header.append(10) ## player Y low
-		header.append(0)  ## player Y high
-		header.append(20) ## switch count low
-		header.append(0)  ## switch count high
-		header.append(50) ## variable count low
-		header.append(0)  ## variable count high
-		header.append(0)  ## padding
-		header.append(0)  ## padding
-		file.store_buffer(header)
-		
-		## Title
-		var title := "TestGame"
-		for c in title.to_ascii_buffer():
-			header.append(c)
-		file.store_buffer(title.to_ascii_buffer())
-		
-		## Switches (20 switches = 3 bytes)
-		var switch_data := PackedByteArray([0xFF, 0x00, 0x01])
-		file.store_buffer(switch_data)
-		
-		## Variables (50 variables = 100 bytes)
-		var var_data := PackedByteArray()
-		for i in range(50):
-			var_data.append(i & 0xFF)
-			var_data.append((i >> 8) & 0xFF)
-		file.store_buffer(var_data)
-		
-		file.close()
+
+	_write_file(dir + "/Game.ini", "[RPG_RT]\nGameTitle=TestGame\nEngineID=RM2000\nEnginePath=Game.exe\n".to_ascii_buffer())
+
+	var database := _lcf("LcfDataBase", [
+		_chunk(0x1a, _ber(259)),
+		_chunk(0x0b, _ber(0)),
+		PackedByteArray([0x00]),
+	])
+	_write_file(dir + "/Data.rdata", database)
+
+	var map := _lcf("LcfMapUnit", [
+		_chunk(0x01, _ber(1)),
+		_chunk(0x02, _ber(20)),
+		_chunk(0x03, _ber(15)),
+		_chunk(0x47, _tile_layer(300)),
+		_chunk(0x48, _tile_layer(300, 0x8000)),
+		_chunk(0x51, _ber(0)),
+		PackedByteArray([0x00]),
+	])
+	_write_file(dir + "/Map001.rmm", map)
+
+	var save := _lcf("LcfSaveData", [
+		_chunk(0x01, "TestGame".to_ascii_buffer()),
+		PackedByteArray([0x00]),
+	])
+	_write_file(dir + "/Save001.rmm", save)
 
 
 func _cleanup_test_files() -> void:
@@ -131,8 +122,9 @@ func _cleanup_test_files() -> void:
 func test_parse_game_ini_success() -> void:
 	var result := parser.parse_game_ini("user://rm2k_test/Game.ini")
 	assert_true(result.is_success())
-	assert_eq(result.get_data()["Title"], "TestGame")
+	assert_eq(result.get_data()["GameTitle"], "TestGame")
 	assert_eq(result.get_data()["EngineID"], "RM2000")
+	assert_eq(result.get_data()["section"], "RPG_RT")
 
 
 func test_parse_game_ini_not_found() -> void:
@@ -144,21 +136,14 @@ func test_parse_game_ini_not_found() -> void:
 
 func test_parse_game_ini_wrong_header() -> void:
 	var dir := "user://rm2k_test"
-	var file := FileAccess.open(dir + "/BadGame.ini", FileAccess.WRITE)
-	if file:
-		file.store_string("[BadHeader]\nTitle=Test\n")
-		file.close()
-	
+	_write_file(dir + "/BadGame.ini", "[BadHeader]\nTitle=Test\n".to_ascii_buffer())
 	var result := parser.parse_game_ini(dir + "/BadGame.ini")
 	assert_false(result.is_success())
 
 
 func test_parse_game_ini_empty_file() -> void:
 	var dir := "user://rm2k_test"
-	var file := FileAccess.open(dir + "/EmptyGame.ini", FileAccess.WRITE)
-	if file:
-		file.close()
-	
+	_write_file(dir + "/EmptyGame.ini", PackedByteArray())
 	var result := parser.parse_game_ini(dir + "/EmptyGame.ini")
 	assert_false(result.is_success())
 
@@ -168,7 +153,12 @@ func test_parse_game_ini_empty_file() -> void:
 func test_parse_database_success() -> void:
 	var result := parser.parse_database("user://rm2k_test/Data.rdata")
 	assert_true(result.is_success())
-	assert_true("metadata" in result.get_data())
+	var data := result.get_data()
+	assert_eq(data["format"], "LDB")
+	assert_eq(data["header"], "LcfDataBase")
+	assert_eq(data["version"], 259)
+	assert_eq(data["engine_family"], "RPG Maker 2000")
+	assert_eq(data["section_counts"]["actors"], 0)
 
 
 func test_parse_database_not_found() -> void:
@@ -179,12 +169,26 @@ func test_parse_database_not_found() -> void:
 
 func test_parse_database_too_small() -> void:
 	var dir := "user://rm2k_test"
-	var file := FileAccess.open(dir + "/Tiny.rdata", FileAccess.WRITE)
-	if file:
-		file.store_string("abc")  ## Only 3 bytes, less than header
-		file.close()
-	
+	_write_file(dir + "/Tiny.rdata", "abc".to_ascii_buffer())
 	var result := parser.parse_database(dir + "/Tiny.rdata")
+	assert_false(result.is_success())
+
+
+func test_parse_database_wrong_header() -> void:
+	var dir := "user://rm2k_test"
+	_write_file(dir + "/Wrong.rdata", _lcf("LcfSomething", [PackedByteArray([0x00])]))
+	var result := parser.parse_database(dir + "/Wrong.rdata")
+	assert_false(result.is_success())
+	assert_true("header" in result.get_error().message.to_lower())
+
+
+func test_parse_database_truncated_chunk() -> void:
+	var dir := "user://rm2k_test"
+	var bytes := _ber(11)
+	bytes.append_array("LcfDataBase".to_ascii_buffer())
+	bytes.append(0x1a)
+	_write_file(dir + "/Trunc.rdata", bytes)
+	var result := parser.parse_database(dir + "/Trunc.rdata")
 	assert_false(result.is_success())
 
 
@@ -193,9 +197,19 @@ func test_parse_database_too_small() -> void:
 func test_parse_map_success() -> void:
 	var result := parser.parse_map("user://rm2k_test/Map001.rmm")
 	assert_true(result.is_success())
-	assert_eq(result.get_data()["width"], 20)
-	assert_eq(result.get_data()["height"], 15)
-	assert_eq(result.get_data()["event_count"], 0)
+	var data := result.get_data()
+	assert_eq(data["format"], "LMU")
+	assert_eq(data["width"], 20)
+	assert_eq(data["height"], 15)
+	assert_eq(data["chipset_id"], 1)
+	assert_eq(data["event_count"], 0)
+	var lower: Array = data["lower_layer"]
+	assert_eq(lower.size(), 300)
+	assert_eq(lower[0], 0)
+	assert_eq(lower[299], 299)
+	var upper: Array = data["upper_layer"]
+	assert_eq(upper.size(), 300)
+	assert_eq(upper[299], 0x8000 + 299)
 
 
 func test_parse_map_not_found() -> void:
@@ -206,12 +220,36 @@ func test_parse_map_not_found() -> void:
 
 func test_parse_map_too_small() -> void:
 	var dir := "user://rm2k_test"
-	var file := FileAccess.open(dir + "/TinyMap.rmm", FileAccess.WRITE)
-	if file:
-		file.store_string("abc")  ## Less than header size
-		file.close()
-	
+	_write_file(dir + "/TinyMap.rmm", "abc".to_ascii_buffer())
 	var result := parser.parse_map(dir + "/TinyMap.rmm")
+	assert_false(result.is_success())
+
+
+func test_parse_map_bad_layer_size() -> void:
+	var dir := "user://rm2k_test"
+	var map := _lcf("LcfMapUnit", [
+		_chunk(0x01, _ber(1)),
+		_chunk(0x02, _ber(20)),
+		_chunk(0x03, _ber(15)),
+		_chunk(0x47, _tile_layer(2)),
+		PackedByteArray([0x00]),
+	])
+	_write_file(dir + "/BadLayer.rmm", map)
+	var result := parser.parse_map(dir + "/BadLayer.rmm")
+	assert_false(result.is_success())
+	assert_true("expected" in result.get_error().message.to_lower())
+
+
+func test_parse_map_dimension_limit() -> void:
+	var dir := "user://rm2k_test"
+	var map := _lcf("LcfMapUnit", [
+		_chunk(0x01, _ber(1)),
+		_chunk(0x02, _ber(600)),
+		_chunk(0x03, _ber(15)),
+		PackedByteArray([0x00]),
+	])
+	_write_file(dir + "/Huge.rmm", map)
+	var result := parser.parse_map(dir + "/Huge.rmm")
 	assert_false(result.is_success())
 
 
@@ -220,11 +258,12 @@ func test_parse_map_too_small() -> void:
 func test_parse_save_success() -> void:
 	var result := parser.parse_save("user://rm2k_test/Save001.rmm")
 	assert_true(result.is_success())
-	var save_data := result.get_data()["save_data"]
-	assert_eq(save_data["map_id"], 1)
-	assert_eq(save_data["player_x"], 10)
-	assert_eq(save_data["player_y"], 10)
-	assert_eq(save_data["title"], "TestGame")
+	var data := result.get_data()
+	assert_eq(data["format"], "LSD")
+	assert_eq(data["header"], "LcfSaveData")
+	assert_eq(data["chunk_count"], 1)
+	var chunks: Array = data["chunks"]
+	assert_eq(chunks[0]["id"], 1)
 
 
 func test_parse_save_not_found() -> void:
@@ -235,11 +274,7 @@ func test_parse_save_not_found() -> void:
 
 func test_parse_save_too_small() -> void:
 	var dir := "user://rm2k_test"
-	var file := FileAccess.open(dir + "/TinySave.rmm", FileAccess.WRITE)
-	if file:
-		file.store_string("abc")  ## Less than save header
-		file.close()
-	
+	_write_file(dir + "/TinySave.rmm", "abc".to_ascii_buffer())
 	var result := parser.parse_save(dir + "/TinySave.rmm")
 	assert_false(result.is_success())
 

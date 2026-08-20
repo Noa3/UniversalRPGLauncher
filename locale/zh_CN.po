@@ -1,0 +1,174 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: UniversalRPG 0.2\n"
+"PO-Revision-Date: 2026-08-20 00:00+0000\n"
+"Last-Translator: UniversalRPG Contributors\n"
+"Language-Team: Simplified Chinese\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "APP_SUBTITLE"
+msgstr "检测本地 RPG Maker 游戏。原生运行时正在逐步开发。"
+
+msgid "LANGUAGE_TOOLTIP"
+msgstr "界面语言"
+
+msgid "LANGUAGE_SYSTEM"
+msgstr "系统语言"
+
+msgid "LIBRARY_FOLDER"
+msgstr "游戏文件夹"
+
+msgid "LIBRARY_SCAN_HINT"
+msgstr "扫描子文件夹，最大深度为 2。"
+
+msgid "ACTION_CHOOSE_FOLDER"
+msgstr "选择文件夹"
+
+msgid "ACTION_RESCAN"
+msgstr "重新扫描"
+
+msgid "LIBRARY_FOUND_GAMES"
+msgstr "已找到的游戏"
+
+msgid "LIBRARY_SELECTION"
+msgstr "选择"
+
+msgid "DETAIL_NO_SELECTION"
+msgstr "未选择游戏"
+
+msgid "ACTION_NOT_PLAYABLE"
+msgstr "暂时无法运行"
+
+msgid "DIALOG_CHOOSE_FOLDER"
+msgstr "选择游戏文件夹"
+
+msgid "STATUS_SCANNING"
+msgstr "正在扫描文件夹..."
+
+msgid "STATUS_NO_GAMES"
+msgstr "未找到 RPG Maker 游戏。请将每个游戏放在独立的子文件夹中。"
+
+msgid "STATUS_ONE_GAME"
+msgid_plural "STATUS_MANY_GAMES"
+msgstr[0] "找到 {count} 个游戏。检测过程绝不会执行导入的文件。"
+
+msgid "DETAIL_ENGINE_CONFIDENCE"
+msgstr "{engine}  /  置信度：{confidence}"
+
+msgid "DETAIL_NATIVE_LIBRARIES"
+msgstr "检测到原生库；不会执行这些文件"
+
+msgid "DETAIL_RTP"
+msgstr "RTP：{rtp}"
+
+msgid "DETAIL_RUNTIME_STATE"
+msgstr "{label}：{reason}"
+
+msgid "ACTION_START_GAME"
+msgstr "启动游戏"
+
+msgid "DETAIL_NO_GAMES"
+msgstr "未找到游戏"
+
+msgid "DETAIL_DETECTION_SUPPORT"
+msgstr "支持检测 2000、2003、XP、VX、VX Ace、MV 和 MZ。"
+
+msgid "DETAIL_RUNTIME_DEVELOPMENT"
+msgstr "运行时后端仍在开发中。"
+
+msgid "ERROR_FOLDER"
+msgstr "无法使用该文件夹（错误 {error}）。"
+
+msgid "CONFIDENCE_HIGH"
+msgstr "高"
+
+msgid "CONFIDENCE_MEDIUM"
+msgstr "中"
+
+msgid "CONFIDENCE_LOW"
+msgstr "低"
+
+msgid "RUNTIME_LCF_LABEL"
+msgstr "解析器开发中"
+
+msgid "RUNTIME_LCF_REASON"
+msgstr "可以检测 LCF 数据；解释器和渲染器尚未实现。"
+
+msgid "RUNTIME_PLANNED_LABEL"
+msgstr "运行时已规划"
+
+msgid "RUNTIME_RGSS_REASON"
+msgstr "RGSS/Ruby 运行时尚未实现。"
+
+msgid "RUNTIME_JS_REASON"
+msgstr "JavaScript、浏览器和渲染运行时尚未实现。"
+
+msgid "RUNTIME_UNSUPPORTED_LABEL"
+msgstr "不支持"
+
+msgid "RUNTIME_UNSUPPORTED_REASON"
+msgstr "未找到匹配的运行时后端。"
+
+msgid "RUNTIME_NOT_REGISTERED"
+msgstr "运行时后端尚未注册。"
+
+msgid "DETECT_LCF_VERSION_AMBIGUOUS"
+msgstr "确定具体的 2000/2003 版本需要检查 LCF 系统数据"
+
+msgid "DETECT_LCF_DATABASE"
+msgstr "找到 RPG_RT.ldb 和 RPG_RT.lmt"
+
+msgid "DETECT_LCF_MAPS"
+msgstr "找到 {count} 个 LCF 地图文件"
+
+msgid "DETECT_INI_RM2000"
+msgstr "INI 标识为 RPG Maker 2000"
+
+msgid "DETECT_INI_RM2003"
+msgstr "INI 标识为 RPG Maker 2003"
+
+msgid "DETECT_RPG_RT_INI"
+msgstr "找到 RPG_RT.ini"
+
+msgid "DETECT_RGSS1_INI"
+msgstr "Game.ini 引用了 RGSS1"
+
+msgid "DETECT_RGSS2_INI"
+msgstr "Game.ini 引用了 RGSS2"
+
+msgid "DETECT_RGSS3_INI"
+msgstr "Game.ini 引用了 RGSS3"
+
+msgid "DETECT_RGSSAD"
+msgstr "找到 RGSSAD 存档"
+
+msgid "DETECT_RGSS2A"
+msgstr "找到 RGSS2A 存档"
+
+msgid "DETECT_RGSS3A"
+msgstr "找到 RGSS3A 存档"
+
+msgid "DETECT_XP_DATA"
+msgstr "找到 XP .rxdata 文件"
+
+msgid "DETECT_VX_DATA"
+msgstr "找到 VX .rvdata 文件"
+
+msgid "DETECT_VXA_DATA"
+msgstr "找到 VX Ace .rvdata2 文件"
+
+msgid "DETECT_MZ_RUNTIME"
+msgstr "找到 MZ JavaScript 运行时"
+
+msgid "DETECT_MV_RUNTIME"
+msgstr "找到 MV JavaScript 运行时"
+
+msgid "DETECT_MV_MZ_GENERIC"
+msgstr "找到通用 MV/MZ Web 结构"
+
+msgid "DETECT_FILE_FOUND"
+msgstr "找到 {file}"

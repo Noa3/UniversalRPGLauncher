@@ -1,117 +1,111 @@
 # UniversalRPG
 
-> **Self-contained cross-platform RPG Maker compatibility runtime**
+Self-contained, cross-platform RPG Maker compatibility runtime built with Godot.
 
-## Overview
+## Current State
 
-UniversalRPG is a standalone application that detects, analyzes, and runs RPG Maker games natively on modern hardware — without requiring EasyRPG, mkxp, Wine, or any external runtimes.
+The Godot application now starts, lets the user choose a games directory, scans its subdirectories, and identifies RPG Maker 2000/2003, XP, VX, VX Ace, MV, and MZ projects without executing imported files.
 
-### Key Features
+Runtime backends are not playable yet. Detection, library UI, parser foundations, localization, and security boundaries exist; interpreters, rendering, audio, and complete data parsers remain under development.
 
-- **Universal Detection**: Automatically identifies RPG Maker 2000/2003/XP/VX/VXAce/MV/MZ games
-- **Native Interpretation**: Interprets game data directly — no compatibility layers
-- **Cross-Platform**: Windows x86-64, Linux x86-64, Android ARM64
-- **Faithful Mode**: Preserve original game behavior exactly
-- **Enhanced Mode**: Modern improvements (scaling, shaders, controller support)
-- **Self-Contained**: No external dependencies to install
-- **Security First**: Imported games are treated as untrusted
+| Capability | Status |
+|---|---|
+| Cross-platform game library and folder selection | Working |
+| RPG Maker generation detection | Working, heuristic |
+| English, German, Spanish, French, Japanese, Korean, Simplified Chinese UI | Working |
+| UTF-8, BOM, CP932/Shift-JIS metadata decoding | Initial implementation |
+| RM2000/2003 parser | Prototype, not format-complete |
+| RM2000/2003 gameplay | Not implemented |
+| XP/VX/VX Ace gameplay | Not implemented |
+| MV/MZ gameplay | Not implemented |
+| Windows/Linux/macOS/Android/iOS exports | Presets present, not release-tested |
 
-## Architecture
+## Game Library
 
-```
-UniversalRPG/
-├── app/                    # Application layer
-│   ├── library/           # Game library management
-│   ├── launcher/          # Game launch workflow
-│   ├── settings/          # Configuration
-│   └── ui/               # Godot UI scenes/scripts
-│
-├── runtime/               # Core RPG Maker runtime
-│   ├── core/             # Platform-independent abstractions
-│   ├── rm2k/             # RPG Maker 2000/2003 backend
-│   ├── rgss/             # RGSS runtime (XP/VX/VXAce)
-│   ├── mv/               # RPG Maker MV backend
-│   ├── mz/               # RPG Maker MZ backend
-│   └── compatibility/    # Compatibility database
-│
-├── platform/             # Godot platform adapter
-├── native/               # C++ native code
-├── enhancement/          # Enhanced Mode features
-├── tests/               # Test suite
-├── docs/               # Documentation
-└── tools/              # Build/dev tools
+The default library is `user://games`. Its native location depends on the operating system. The exact path is displayed in the app and can be changed with the folder picker.
+
+Place each game in its own directory:
+
+```text
+games/
+├── Game A/
+│   ├── Game.ini
+│   └── Data/
+└── Game B/
+    ├── index.html
+    ├── data/
+    └── js/
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
+The scanner checks the selected directory and up to two subdirectory levels. Symlinks, junctions, hidden directories, and oversized metadata are not followed or loaded.
 
-## Development Phases
+## Development Setup
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the complete phase breakdown.
+### Included Editors
 
-### Current Phase: Phase 1 — Runtime Foundation ✅
+Godot 4.7.2 stable .NET editors are locally installed at:
 
-- ✅ VirtualFileSystem with case-insensitive resolution
-- ✅ VirtualClock with deterministic timing
-- ✅ GameDetector with multi-signal analysis
-- ✅ CompatibilityProfile system with extensible database
+- Linux x86-64: `tools/godot/editors/4.7.2/linux-x86_64/`
+- Windows x86-64: `tools/godot/editors/4.7.2/windows-x86_64/`
 
-### Next Phase: Phase 2 — RM2000/2003 Parser
+Downloaded binaries are intentionally ignored by Git. Checksums and source URLs are documented in [`tools/godot/README.md`](tools/godot/README.md).
 
-- [ ] RM2K data file parsers
-- [ ] Map/event/database structures
-- [ ] Save/load format support
+The .NET editor needs a separate 64-bit .NET SDK. Godot 4.7 requires .NET 8 or newer; Android C# exports require .NET 9 or newer. UniversalRPG currently uses GDScript, so the standard Godot editor can also build it.
 
-## Getting Started
+### Run
 
-### Prerequisites
-
-- Godot 4.7+ (Mono or standard)
-- Git
-
-### Setup
+Open `project.godot`, then press F6/F5, or on Linux run:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Noa3/UniversalRPG.git
-cd UniversalRPG
-
-# Open in Godot editor
-# File → Open → select project.godot
+tools/godot/editors/4.7.2/linux-x86_64/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64 --path .
 ```
 
-### Running
+### Headless Validation
 
 ```bash
-# Run from Godot editor (F5)
-# Or export and run the built executable
+godot --headless --editor --quit --path .
+godot --headless --path . --quit-after 5
 ```
 
-## Contributing
+## Targets
 
-Contributions are welcome! Please read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before submitting changes.
+- Windows x86-64
+- Linux x86-64
+- macOS universal
+- Android ARM64
+- iOS ARM64
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+Export presets live in `export_presets.cfg`. Apple exports still require macOS/Xcode and signing. Android/iOS need their platform SDKs and export templates.
+
+## Localization
+
+English is the default and fallback language. Current catalogs:
+
+- English (`en`)
+- German (`de`)
+- Spanish (`es`)
+- French (`fr`)
+- Japanese (`ja`)
+- Korean (`ko`)
+- Simplified Chinese (`zh_CN`)
+
+See [`docs/LOCALIZATION.md`](docs/LOCALIZATION.md) to add languages. Noto Sans CJK is bundled so desktop and mobile exports do not depend on system CJK fonts.
+
+## Security
+
+Games are untrusted input. Detection never starts `EXE`, `DLL`, `SO`, Ruby, or JavaScript files. Future runtimes must use capability-based APIs and the virtual filesystem rather than host filesystem/process APIs.
+
+See [`docs/IMPORT_SECURITY.md`](docs/IMPORT_SECURITY.md) for required path, archive, parser, script, network, and save-data controls.
+
+## Direction
+
+- [`idea.md`](idea.md): product and engineering brief for Hermes
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): implementation phases
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): runtime architecture
+- [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): compatibility policy
 
 ## Legal
 
-This project implements RPG Maker behavior independently. It does not include:
+UniversalRPG contains no proprietary RPG Maker engine code, runtime binaries, games, or RTP assets. Users must provide legally obtained games and RTP packages. Third-party components are listed in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
 
-- Proprietary RPG Maker engine code
-- Original runtime binaries
-- RTP assets
-
-See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for third-party component documentation.
-
-Users must provide their own legally obtained RPG Maker games and RTP packages.
-
-## License
-
-TODO: Choose an appropriate open-source license.
-
-## Credits
-
-- Built with [Godot Engine](https://godotengine.org/)
-- Inspired by the RPG Maker community
+License for UniversalRPG itself is still to be selected.
