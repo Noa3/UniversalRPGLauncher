@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Godot;
 using UniversalRPG.App.Launcher;
 using UniversalRPG.App.Library;
+using UniversalRPG.Plugins;
 
 namespace UniversalRPG.App.Ui;
 
@@ -31,8 +32,9 @@ public partial class Main : Control
 	private static readonly Color ColorAccent = new("e8a24a");
 	private static readonly Color ColorBorder = new("343443");
 
-	private readonly GameLibrary _library = new();
-	private readonly RuntimeLauncher _launcher = new();
+	private readonly EnginePluginRegistry _pluginRegistry = BuiltInEnginePluginCatalog.CreateRuntimeRegistry();
+	private readonly GameLibrary _library;
+	private readonly RuntimeLauncher _launcher;
 	private GameLibrary.GameEntry _selectedGame;
 
 	private MarginContainer _pageMargin;
@@ -49,6 +51,12 @@ public partial class Main : Control
 	private Label _status;
 	private FileDialog _folderDialog;
 	private OptionButton _languageMenu;
+
+	public Main()
+	{
+		_library = new GameLibrary(pRuntimeRegistry: _pluginRegistry);
+		_launcher = new RuntimeLauncher(_pluginRegistry);
+	}
 
 	public override void _Ready()
 	{
@@ -284,10 +292,22 @@ public partial class Main : Control
 			.Replace("{engine}", detection.GetEngineName())
 			.Replace("{confidence}", detection.GetConfidenceString());
 		_detailsPath.Text = _selectedGame.Path;
-		var facts = new List<string>();
+		var facts = new List<string>
+		{
+			$"Plugin: {(_selectedGame.SelectedPluginId == "" ? "none" : _selectedGame.SelectedPluginId)}",
+			$"Compatibility: {_selectedGame.CompatibilityStatus}",
+		};
+		foreach (var candidate in _selectedGame.Candidates)
+		{
+			facts.Add($"- Candidate {candidate.PluginId}: {candidate.Status}, score {candidate.Score}/1000");
+		}
 		foreach (var item in detection.Evidence)
 		{
 			facts.Add("- " + item);
+		}
+		foreach (var diagnostic in _selectedGame.Diagnostics)
+		{
+			facts.Add($"- [{diagnostic.Severity}/{diagnostic.Code}] {diagnostic.Message}");
 		}
 		if (detection.HasNativeLibraries)
 		{
@@ -348,6 +368,10 @@ public partial class Main : Control
 		}
 		var result = _launcher.Launch(_selectedGame);
 		_status.Text = result.Message;
+		foreach (var diagnostic in result.Diagnostics)
+		{
+			_status.Text += $"\n[{diagnostic.Severity}/{diagnostic.Code}] {diagnostic.Message}";
+		}
 	}
 
 	private void ApplyResponsiveLayout()

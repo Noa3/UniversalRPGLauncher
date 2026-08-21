@@ -5,9 +5,9 @@
 
 ## Executive Summary
 
-The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder scanner, generation detection, legacy metadata decoding, and a real bounded LCF container parser with initial RM2000/2003 LDB/LMU/LSD decoding validated against pinned EasyRPG TestGame fixtures. No runtime backend is playable yet. The immediate critical path is expanding faithful RM2000/2003 parsing before rendering or event execution.
+The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `128/128` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `151/151` tests.
 
 ## Phase Status Overview
 
@@ -15,7 +15,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 |-------|-------------|--------|-------|
 | 0 | Repository audit | ✅ Complete | Initial setup |
 | 1 | Runtime foundation | ✅ Complete | Core abstractions implemented |
-| 1.5 | Application foundation | ✅ Complete | Library, detection UI, localization, initial import safety |
+| 1.5 | Application foundation | ✅ Complete | Library, plugin detection/selection wiring, persistence, localization, import safety |
 | 2 | RM2000/2003 parser | 🚧 In progress | Real LCF reader + initial LDB/LMU/LSD decoding |
 | 3 | RM2000/2003 rendering | 📋 Planned | Depends on Phase 2 |
 | 4 | Event interpreter | 📋 Planned | Depends on Phase 2 |
@@ -74,19 +74,17 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 **Status:** Implemented
 
 **Features:**
-- Multi-signal detection (Game.ini, RGSS DLLs, archives, directory structure)
-- Confidence scoring (Low/Medium/High)
-- Evidence collection
-- RTP dependency detection
-- Custom script/plugin detection
-- Native library detection
-- Unknown runtime warnings
+- Compatibility facade over registered, deterministic detection plugins
+- Bounded folder/ZIP inspection with ranked candidates and confidence scoring
+- Version, evidence, ambiguity, malformed-input, and structured diagnostics
+- Persisted candidate/selection/evidence/compatibility records in `user://library.cfg`
+- RTP dependency, custom script/plugin, and native library metadata
+- Runtime selection through exact plugin IDs, capability checks, platform checks, and no-fallback errors
 
 **Limitations:**
-- No actual PE/DLL parsing (stubbed)
-- No file signature verification
-- No archive content inspection
-- Detection relies on file/directory presence, not content analysis
+- All built-in targets except Unite have a safe bounded bootstrap; RM2K/RM2K3 additionally parse LDB/LMT/LMU; full gameplay runtime is not implemented
+- Executables and libraries are inspected as bounded data only, never loaded or executed
+- Archive import is read-only inspection; safe extraction/staging for future runtime assets remains separate work
 
 **Test Coverage:** 15 deterministic detection tests
 
@@ -119,7 +117,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 | No export pipeline | Medium | Presets exist; signed/release exports are not automated |
 | Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
 | No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
-| No error reporting system | Medium | GameDetector._get_file_version() and _get_dll_imports() are stubs |
+| Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads data and ticks deterministically; events/presentation/systems remain planned |
 
 ## Missing Core Components (Planned)
 
@@ -187,4 +185,4 @@ Changes prepared in this pass:
 - added provenance-pinned EasyRPG TestGame RM2000/RM2003 LDB/LMT/LMU fixtures and real-framing regression tests;
 - accepted valid zero-length LDB struct-array sections while preserving bounded malformed-input rejection.
 
-The C# migration has been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `128/128`. The only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.
+The C# migration and plugin application wiring have been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `151/151`. The only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.

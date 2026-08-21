@@ -162,10 +162,13 @@ public partial class CSharpRunner : Node
 
 	private void SmokeLibraryScan()
 	{
-		var library = new GameLibrary();
+		var settingsPath = "user://smoke_library.cfg";
+		DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(settingsPath));
+		var library = new GameLibrary(pSettingsPath: settingsPath);
 		library.SetRootPath(ProjectSettings.GlobalizePath(Root), false);
 		var games = library.Scan();
 		Check(games.Count == 2, "Library scans recognized child directories");
+		DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(settingsPath));
 	}
 
 	private void SmokeTranslation()

@@ -4,14 +4,14 @@ Self-contained, cross-platform RPG Maker compatibility runtime built with Godot.
 
 ## Current State
 
-The Godot application now starts, lets the user choose a games directory, scans its subdirectories, and identifies RPG Maker 2000/2003, XP, VX, VX Ace, MV, and MZ projects without executing imported files.
+The Godot application now starts, lets the user choose a games directory, scans its subdirectories, and identifies RPG Maker 95, 2000/2003, XP, VX, VX Ace, MV, MZ, WOLF, and Unity/RPG Maker Unite candidates through a bounded, registry-driven plugin pipeline without executing imported files. Detection reports, ranked candidates, evidence, selected plugin IDs, and compatibility status are persisted in `user://library.cfg`.
 
-Runtime backends are not playable yet. Detection, library UI, localization, security boundaries, a bounded LCF container reader, and initial RM2000/2003 LDB/LMU/LSD parsing exist. Event interpretation, rendering, audio, and complete database/map decoding remain under development.
+All built-in targets except the research-only Unite candidate now have a safe in-process bootstrap that re-inspects bounded metadata and advances the deterministic simulation clock without launching original executables or script VMs. RM2000/2003 additionally load LDB/LMT/LMU data. Full gameplay is not playable yet: event interpretation, RGSS/JavaScript/WOLF VMs, rendering, audio, menus, saves, battles, and complete database/map decoding remain under development.
 
 | Capability | Status |
 |---|---|
 | Cross-platform game library and folder selection | Working |
-| RPG Maker generation detection | Working, heuristic |
+| Registry-driven engine detection, import persistence, and safe runtime selection | Working; detection-only metadata, no playable built-in backend |
 | English, German, Spanish, French, Japanese, Korean, Simplified Chinese UI | Working |
 | UTF-8, BOM, CP932/Shift-JIS metadata decoding | Initial implementation |
 | RM2000/2003 parser | Real LCF container layer + initial LDB/LMU/LSD decoding; not format-complete |
@@ -37,7 +37,7 @@ games/
     └── js/
 ```
 
-The scanner checks the selected directory and up to two subdirectory levels. Symlinks, junctions, hidden directories, and oversized metadata are not followed or loaded.
+The scanner checks the selected directory and up to two subdirectory levels. Symlinks, junctions, hidden directories, and oversized metadata are not followed or loaded. ZIP archives can be inspected read-only through the same bounded inspector. Detection candidates and diagnostics are stored with each library entry, and relaunch revalidates current detection before launch.
 
 ## Development Setup
 
@@ -45,7 +45,7 @@ The scanner checks the selected directory and up to two subdirectory levels. Sym
 
 The repository is pinned to **Godot 4.7.2 stable**. Editor binaries are intentionally not included in the repository/ZIP. Optional local editor locations are documented in [`tools/godot/README.md`](tools/godot/README.md).
 
-The validated/canonical implementation is pure C#/.NET under the Godot 4.7.2 .NET editor. The migration is covered by `dotnet build` and the headless C# suite (`128/128` tests passed).
+The validated/canonical implementation is pure C#/.NET under the Godot 4.7.2 .NET editor. The migration and plugin application wiring are covered by `dotnet build` and the headless C# suite (`151/151` tests passed).
 
 ### Run
 
@@ -94,6 +94,8 @@ See [`docs/LOCALIZATION.md`](docs/LOCALIZATION.md) to add languages. Noto Sans C
 Games are untrusted input. Detection never starts `EXE`, `DLL`, `SO`, Ruby, or JavaScript files. Future runtimes must use capability-based APIs and the virtual filesystem rather than host filesystem/process APIs.
 
 See [`docs/IMPORT_SECURITY.md`](docs/IMPORT_SECURITY.md) for required path, archive, parser, script, network, and save-data controls.
+
+See [`docs/ENGINE_DETECTION.md`](docs/ENGINE_DETECTION.md) and [`docs/ENGINE_PLUGINS.md`](docs/ENGINE_PLUGINS.md) for the plugin contract, bounded inspection flow, safe selection rules, and future runtime integration.
 
 ## Direction
 
