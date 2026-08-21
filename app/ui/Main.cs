@@ -35,22 +35,22 @@ public partial class Main : Control
 	private readonly EnginePluginRegistry _pluginRegistry = BuiltInEnginePluginCatalog.CreateRuntimeRegistry();
 	private readonly GameLibrary _library;
 	private readonly RuntimeLauncher _launcher;
-	private GameLibrary.GameEntry _selectedGame;
+	private GameLibrary.GameEntry? _selectedGame;
 
-	private MarginContainer _pageMargin;
-	private BoxContainer _body;
-	private PanelContainer _gamesPanel;
-	private ItemList _gameList;
-	private Label _folderPath;
-	private Label _detailsTitle;
-	private Label _detailsEngine;
-	private Label _detailsPath;
-	private Label _detailsEvidence;
-	private Label _runtimeState;
-	private Button _launchButton;
-	private Label _status;
-	private FileDialog _folderDialog;
-	private OptionButton _languageMenu;
+	private MarginContainer _pageMargin = null!;
+	private BoxContainer _body = null!;
+	private PanelContainer _gamesPanel = null!;
+	private ItemList _gameList = null!;
+	private Label _folderPath = null!;
+	private Label _detailsTitle = null!;
+	private Label _detailsEngine = null!;
+	private Label _detailsPath = null!;
+	private Label _detailsEvidence = null!;
+	private Label _runtimeState = null!;
+	private Button _launchButton = null!;
+	private Label _status = null!;
+	private FileDialog _folderDialog = null!;
+	private OptionButton _languageMenu = null!;
 
 	public Main()
 	{

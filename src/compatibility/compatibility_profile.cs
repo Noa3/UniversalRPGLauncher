@@ -84,7 +84,7 @@ public partial class CompatibilityProfile : RefCounted
 			Entries.Add(pEntry);
 		}
 
-		public ProfileEntry FindBySha256(string pSha256)
+		public ProfileEntry? FindBySha256(string pSha256)
 		{
 			foreach (var entry in Entries)
 			{

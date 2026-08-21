@@ -123,7 +123,7 @@ public partial class VirtualFileSystem : RefCounted
 	}
 
 	/// <summary>Get the mount of a specific type.</summary>
-	public Mount GetMount(MountType pMountType)
+	public Mount? GetMount(MountType pMountType)
 	{
 		foreach (var mount in _mounts)
 		{
@@ -336,7 +336,7 @@ public partial class VirtualFileSystem : RefCounted
 	}
 
 	/// <summary>Open a file through the virtual filesystem.</summary>
-	public VFile Open(string pPath, FileAccess.ModeFlags pMode)
+	public VFile? Open(string pPath, FileAccess.ModeFlags pMode)
 	{
 		var resolved = Resolve(pPath);
 		if (resolved == "")

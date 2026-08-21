@@ -37,18 +37,18 @@ EnginePluginRegistry -> IEnginePlugin -> runtime
 
 | Plugin ID | Engine | Runtime status |
 |---|---|---|
-| `rpg-maker-95` | RPG Maker 95 | Detection plus safe runtime bootstrap |
+| `rpg-maker-95` | RPG Maker 95 | Detection-only research boundary; no parser/runtime |
 | `rpg-maker-2000` | RPG Maker 2000 | Detection/parsing plus minimal LDB/LMT/LMU runtime bootstrap |
 | `rpg-maker-2003` | RPG Maker 2003 | Detection/parsing plus minimal LDB/LMT/LMU runtime bootstrap |
-| `rpg-maker-xp` | RPG Maker XP / RGSS1 | Detection/parsing plus safe runtime bootstrap |
-| `rpg-maker-vx` | RPG Maker VX / RGSS2 | Detection/parsing plus safe runtime bootstrap |
-| `rpg-maker-vx-ace` | RPG Maker VX Ace / RGSS3 | Detection/parsing plus safe runtime bootstrap |
-| `rpg-maker-mv` | RPG Maker MV | Detection/parsing plus safe runtime bootstrap |
-| `rpg-maker-mz` | RPG Maker MZ | Detection/parsing plus safe runtime bootstrap |
-| `wolf-rpg` | WOLF RPG Editor | Detection/parsing plus safe runtime bootstrap |
+| `rpg-maker-xp` | RPG Maker XP / RGSS1 | Detection/parsing plus bounded RGSS metadata runtime |
+| `rpg-maker-vx` | RPG Maker VX / RGSS2 | Detection/parsing plus bounded RGSS metadata runtime |
+| `rpg-maker-vx-ace` | RPG Maker VX Ace / RGSS3 | Detection/parsing plus bounded RGSS metadata runtime |
+| `rpg-maker-mv` | RPG Maker MV | Detection/parsing only until an embedded JavaScript VM exists |
+| `rpg-maker-mz` | RPG Maker MZ | Detection/parsing only until an embedded JavaScript VM exists |
+| `wolf-rpg` | WOLF RPG Editor | Bounded unencrypted plain-data runtime slice |
 | `rpg-maker-unite` | Unity/RPG Maker Unite candidate | Detection only; arbitrary Unity exports are not treated as Unite games |
 
-Detection-only means the project can be identified and reported, but `EngineRuntimeSelector` refuses to launch it until a plugin advertises the required `Runtime` capability and passes its compatibility probe. All built-in targets except the research-only Unite candidate now have a safe bootstrap lifecycle; RM2K/RM2K3 additionally parse LDB/LMT/LMU data. None of these bootstraps provides full event, RGSS/JavaScript/WOLF VM, rendering, audio, menu, save, or battle behavior yet.
+Detection-only means the project can be identified and reported, but `EngineRuntimeSelector` refuses to launch it until a plugin advertises the required `Runtime` capability and passes its compatibility probe. RM95, MV, MZ, and Unite remain detection-only. RM2K/RM2K3 parse LDB/LMT/LMU data; RGSS and WOLF expose bounded metadata/plain-data lifecycle slices. None of these slices provides full event, Ruby/JavaScript VM, rendering, audio, menu, save, or battle behavior.
 
 ## Extending detection
 

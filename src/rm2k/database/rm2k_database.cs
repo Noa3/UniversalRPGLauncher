@@ -362,7 +362,7 @@ public class Rm2kDatabaseModel
 	public bool EncounterDoubleStep;
 	public int BattleFormat;
 
-	public Actor GetActor(int pId)
+	public Actor? GetActor(int pId)
 	{
 		foreach (var value in Actors)
 		{
@@ -374,7 +374,7 @@ public class Rm2kDatabaseModel
 		return null;
 	}
 
-	public Item GetItem(int pId)
+	public Item? GetItem(int pId)
 	{
 		foreach (var value in Items)
 		{
@@ -386,7 +386,7 @@ public class Rm2kDatabaseModel
 		return null;
 	}
 
-	public Skill GetSkill(int pId)
+	public Skill? GetSkill(int pId)
 	{
 		foreach (var value in Skills)
 		{
@@ -398,7 +398,7 @@ public class Rm2kDatabaseModel
 		return null;
 	}
 
-	public State GetState(int pId)
+	public State? GetState(int pId)
 	{
 		foreach (var value in States)
 		{
@@ -410,7 +410,7 @@ public class Rm2kDatabaseModel
 		return null;
 	}
 
-	public Enemy GetEnemy(int pId)
+	public Enemy? GetEnemy(int pId)
 	{
 		foreach (var value in Enemies)
 		{
@@ -422,7 +422,7 @@ public class Rm2kDatabaseModel
 		return null;
 	}
 
-	public Trooper GetTrooper(int pId)
+	public Trooper? GetTrooper(int pId)
 	{
 		foreach (var value in Troopers)
 		{

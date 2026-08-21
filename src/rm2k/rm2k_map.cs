@@ -15,7 +15,7 @@ public class Rm2kMap
 		public List<int> Parameters = new();
 		public string Text = "";
 
-		public EventCommand(int pCode = 0, List<int> pParams = null, string pText = "")
+		public EventCommand(int pCode = 0, List<int>? pParams = null, string pText = "")
 		{
 			Code = pCode;
 			Parameters = pParams ?? new List<int>();
@@ -153,7 +153,7 @@ public class Rm2kMap
 		};
 	}
 
-	public Event GetEvent(int pId)
+	public Event? GetEvent(int pId)
 	{
 		foreach (var mapEvent in Events)
 		{

@@ -55,7 +55,12 @@ public partial class CSharpRunner : Node
 
 		foreach (var suiteType in suiteTypes)
 		{
-			var suite = (TestBase)Activator.CreateInstance(suiteType);
+			var suite = Activator.CreateInstance(suiteType) as TestBase;
+			if (suite == null)
+			{
+				_failures.Add($"{suiteType.Name}: could not create test suite instance");
+				continue;
+			}
 			TestBase.SuiteResult result;
 			try
 			{
