@@ -78,6 +78,8 @@
 - [x] English-default localized UI with German, Spanish, French, Japanese, Korean, and Simplified Chinese
 - [x] Bundled CJK-capable font
 - [x] Initial UTF-8/CP932/Shift-JIS metadata decoder
+- [x] Trusted in-process engine plugin contracts and deterministic built-in catalog
+- [x] Bounded folder/ZIP detection with persisted candidates and safe runtime selection
 - [x] Windows, Linux, macOS, Android, and iOS export presets
 - [ ] Android Storage Access Framework import
 - [ ] iOS document picker import
@@ -107,6 +109,7 @@ Load an RM2000/2003 project and inspect:
 - [x] Parser error handling for truncation/invalid BER/oversized data/dimensions
 - [x] Parser unit tests with synthetic real-LCF encodings
 - [x] Validate parser against legal/reproducible real-world fixtures
+- [x] Minimal RM2K/RM2K3 parser-backed runtime bootstrap with deterministic ticking
 - [ ] LMT map-tree parser
 - [ ] Full typed LDB section decoding
 - [ ] Full LMU event/page/command data decoding
@@ -348,6 +351,7 @@ Support x86 Windows plugins on ARM64 Android.
 
 ### Testing
 
+- [x] Plugin contract, detection, archive, persistence, and lifecycle regression tests
 - [ ] Unit tests for all parsers
 - [ ] Interpreter tests
 - [ ] Integration tests

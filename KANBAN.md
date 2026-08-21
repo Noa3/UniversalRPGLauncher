@@ -17,6 +17,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-001 | 0 | DONE | Validate 2026-08-20 stabilization changes on Godot 4.7.2 | — |
 | K-002 | 0 | DONE | Harden core test baseline and eliminate remaining parser/runtime compile warnings | K-001 |
 | K-003 | 0 | DONE | Replace superseded GDScript implementation with validated C#/.NET runtime | K-002 |
+| K-004 | 0 | DONE | Integrate trusted engine plugin catalog, bounded detection, import persistence, and safe runtime selection | K-003 |
 | K-010 | 0 | DONE | Validate LCF reader/parser against legal real-world RM2K/2003 fixtures | K-001 |
 | K-011 | 0 | DONE | Implement LMT map-tree parser with bounded BER/structure handling | K-010 |
 | K-012 | 0 | IN PROGRESS | Expand LDB decoding into typed core database sections | K-010 |
@@ -89,6 +90,21 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Godot `4.7.2.stable.mono.official.ed1daf0bf` instantiated `tests/CSharpRunner.cs` after PascalCase file renames required by `ScriptPathAttributeGenerator`.
 - C# runner passed `128/128` tests with exit code `0`.
 - `scripts/validate.sh` now runs .NET restore/build, Godot import, and the C# runner.
+
+### K-004 — Engine plugin foundation and application wiring
+
+**Acceptance criteria**
+- Trusted compiled plugin contracts expose metadata, capabilities, probe results, runtime lifecycle, and typed diagnostics.
+- Built-in descriptors cover RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection; all except Unite provide safe bounded lifecycle bootstraps, while RM2K/RM2K3 additionally parse LDB/LMT/LMU data.
+- Detection uses bounded read-only folder/ZIP inspection and retains ranked candidates, evidence, ambiguity, malformed-input, and unknown diagnostics.
+- Library import/scan persists versioned detection metadata and revalidates persisted selections on relaunch.
+- Runtime selection refuses ambiguous, unknown, malformed, detection-only, missing, capability-incompatible, platform-incompatible, and probe-failing candidates without external fallback.
+- Godot UI displays plugin/candidate status and structured diagnostics.
+
+**Validation evidence (2026-08-21)**
+- `dotnet build UniversalRPG.csproj --no-restore` — passed with 0 errors; existing nullable warnings remain in unrelated baseline code.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `151/151` C# tests.
+- Detection never executes imported EXE, DLL, Ruby, JavaScript, shell, or native plugin files; ZIPs are inspected without extraction. RM2K/RM2K3 runtime tests load only validated fixture data and advance the deterministic clock.
 
 ### K-010 — Real LCF validation
 

@@ -9,7 +9,7 @@
 
 ## Last verified baseline
 
-C# is now canonical. `dotnet build UniversalRPG.csproj` passes with zero errors, Godot 4.7.2 Mono instantiates `tests/CSharpRunner.cs`, and the headless C# suite passes `128/128` with exit code `0`.
+C# is now canonical. `dotnet build UniversalRPG.csproj` passes with zero errors, Godot 4.7.2 Mono instantiates `tests/CSharpRunner.cs`, and the headless C# suite passes `151/151` with exit code `0`.
 
 ## Validated stabilization changes
 
@@ -34,11 +34,21 @@ C# is now canonical. `dotnet build UniversalRPG.csproj` passes with zero errors,
 
 - Added provenance-pinned EasyRPG/TestGame RM2000 and RM2003 LDB/LMT/LMU fixtures with SHA-256 notes.
 - Added real-fixture parser/framing tests for both databases and maps.
-- Accepted valid zero-length struct-array sections and retained unknown top-level chunks.
+- Accepted valid zero-length LDB struct-array sections and retained unknown top-level chunks.
+
+## Completed engine plugin foundation
+
+- Added trusted in-process plugin contracts, deterministic registries, typed probe/lifecycle errors, and runtime host cleanup under `src/plugins/`.
+- Added bounded read-only folder/ZIP inspection and built-in detection plugins for RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection.
+- Added the first functional parser-backed RM2K/RM2K3 runtime bootstrap: validated LDB/LMT/LMU loading, deterministic clock updates, and safe lifecycle start/stop without `RPG_RT.exe`.
+- Added safe bounded lifecycle bootstrap backends for RM95, XP, VX, VX Ace, MV, MZ, and WOLF; Unite remains explicitly research-only.
+- Rewired `GameDetector`, `GameLibrary`, `RuntimeLauncher`, and the Godot UI to preserve ranked detection reports, persist import metadata, and refuse unsafe/unsupported runtime selection without external fallback.
+- Added contract, detection, archive, persistence, ambiguity, platform, and lifecycle regression coverage.
+- Validation passed with Godot 4.7.2 Mono: `151/151` tests.
 
 ## Current action
 
-Migration complete. Continue K-012 typed LDB/database work in C# and keep parser regression coverage in `tests/core/`.
+Plugin foundation and application wiring are complete. Continue K-012 typed LDB/database work in C# and keep parser regression coverage in `tests/core/`.
 
 ## Next action
 
