@@ -15,10 +15,38 @@ public partial class Rm2kParser : RefCounted
 	public const long MaxFileBytes = 64L * 1024 * 1024;
 	public const int MaxMapDimension = 500;
 	public const int MaxMapTiles = 250_000;
+	public const int MaxLmtMaps = 100_000;
+	public const int MaxLmtTreeOrder = 100_000;
+	public const int MaxLmtStringBytes = 1024 * 1024;
 
 	public const string LdbHeader = "LcfDataBase";
 	public const string LmuHeader = "LcfMapUnit";
 	public const string LsdHeader = "LcfSaveData";
+	public const string LmtHeader = "LcfMapTree";
+
+	public static readonly Dictionary<int, string> LmtMapFieldNames = new()
+	{
+		{ 0x01, "name" },
+		{ 0x02, "parent_id" },
+		{ 0x03, "indentation" },
+		{ 0x04, "type" },
+	};
+
+	public static readonly Dictionary<int, string> LmtStartFieldNames = new()
+	{
+		{ 0x01, "party_map_id" },
+		{ 0x02, "party_x" },
+		{ 0x03, "party_y" },
+		{ 0x0b, "boat_map_id" },
+		{ 0x0c, "boat_x" },
+		{ 0x0d, "boat_y" },
+		{ 0x15, "ship_map_id" },
+		{ 0x16, "ship_x" },
+		{ 0x17, "ship_y" },
+		{ 0x1f, "airship_map_id" },
+		{ 0x20, "airship_x" },
+		{ 0x21, "airship_y" },
+	};
 
 	public static readonly Dictionary<int, string> LdbSectionNames = new()
 	{
@@ -364,6 +392,120 @@ public partial class Rm2kParser : RefCounted
 		});
 	}
 
+	public ParseResult ParseMapTree(string pPath)
+	{
+		var loaded = ReadFile(pPath, MaxFileBytes);
+		if (!loaded.Success)
+		{
+			return loaded;
+		}
+		var bytes = (byte[])loaded.Data["bytes"];
+		var reader = new LcfBinaryReader(bytes);
+		reader.ReadHeader(LmtHeader);
+		if (reader.HasError())
+		{
+			return ReaderFailure(reader);
+		}
+
+		var mapCount = reader.ReadBer();
+		if (reader.HasError())
+		{
+			return ReaderFailure(reader);
+		}
+		if (mapCount < 0 || mapCount > MaxLmtMaps)
+		{
+			return Failure($"LMT map count {mapCount} exceeds limit", reader.GetPosition());
+		}
+
+		var maps = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var mapsById = new Dictionary<int, Godot.Collections.Dictionary>();
+		for (var index = 0; index < mapCount; index++)
+		{
+			var mapId = reader.ReadSignedBer();
+			if (reader.HasError())
+			{
+				return ReaderFailure(reader);
+			}
+			var fieldsResult = ReadStructFields(reader, true);
+			if (!fieldsResult.Success)
+			{
+				return Failure($"Invalid LMT map {index}: {fieldsResult.Error!.Message}", fieldsResult.Error.Offset);
+			}
+			if (mapsById.ContainsKey(mapId))
+			{
+				return Failure($"Duplicate LMT map ID {mapId}", reader.GetPosition());
+			}
+			var mapResult = DecodeLmtMapInfo(mapId,
+				(Godot.Collections.Array<Godot.Collections.Dictionary>)fieldsResult.Data["fields"]);
+			if (!mapResult.Success)
+			{
+				return mapResult;
+			}
+			var mapInfo = mapResult.Data;
+			maps.Add(mapInfo);
+			mapsById[mapId] = mapInfo;
+		}
+
+		var treeOrderCount = reader.ReadBer();
+		if (reader.HasError())
+		{
+			return ReaderFailure(reader);
+		}
+		if (treeOrderCount < 0 || treeOrderCount > MaxLmtTreeOrder)
+		{
+			return Failure($"LMT tree order count {treeOrderCount} exceeds limit", reader.GetPosition());
+		}
+		var treeOrder = new Godot.Collections.Array<int>();
+		for (var index = 0; index < treeOrderCount; index++)
+		{
+			var mapId = reader.ReadSignedBer();
+			if (reader.HasError())
+			{
+				return ReaderFailure(reader);
+			}
+			treeOrder.Add(mapId);
+		}
+
+		var activeNode = reader.ReadSignedBer();
+		if (reader.HasError())
+		{
+			return ReaderFailure(reader);
+		}
+		var startResult = ReadStructFields(reader, true);
+		if (!startResult.Success)
+		{
+			return Failure($"Invalid LMT start data: {startResult.Error!.Message}", startResult.Error.Offset);
+		}
+		var startDecoded = DecodeLmtStart(
+			(Godot.Collections.Array<Godot.Collections.Dictionary>)startResult.Data["fields"]);
+		if (!startDecoded.Success)
+		{
+			return startDecoded;
+		}
+		if (!reader.IsEof())
+		{
+			return Failure("Trailing data after LMT start structure", reader.GetPosition());
+		}
+
+		var referenceResult = ValidateLmtReferences(mapsById, treeOrder, activeNode);
+		if (!referenceResult.Success)
+		{
+			return referenceResult;
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary
+		{
+			{ "format", "LMT" },
+			{ "header", LmtHeader },
+			{ "file_size", (long)bytes.Length },
+			{ "map_count", maps.Count },
+			{ "maps", maps },
+			{ "tree_order", treeOrder },
+			{ "active_node", activeNode },
+			{ "start", startDecoded.Data["start"] },
+			{ "unknown_start_fields", startDecoded.Data["unknown_fields"] },
+		});
+	}
+
 	private ParseResult OpenLcf(string pPath, string pHeader)
 	{
 		var loaded = ReadFile(pPath, MaxFileBytes);
@@ -438,6 +580,16 @@ public partial class Rm2kParser : RefCounted
 
 	private static ParseResult ParseStructArray(byte[] pData, bool pCollectFields)
 	{
+		// RM2K/2003 stores some empty sections as a zero-length LCF payload rather
+		// than a BER-encoded count of zero. Both forms represent an empty array.
+		if (pData.Length == 0)
+		{
+			return new ParseResult(true, null, new Godot.Collections.Dictionary
+			{
+				{ "count", 0 },
+				{ "objects", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+			});
+		}
 		var reader = new LcfBinaryReader(pData);
 		var count = reader.ReadBer();
 		if (reader.HasError())
@@ -475,6 +627,170 @@ public partial class Rm2kParser : RefCounted
 			return Failure("Trailing bytes after structure array", reader.GetPosition());
 		}
 		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "count", count }, { "objects", objects } });
+	}
+
+	private ParseResult DecodeLmtMapInfo(int pMapId, Godot.Collections.Array<Godot.Collections.Dictionary> pFields)
+	{
+		var mapInfo = new Godot.Collections.Dictionary
+		{
+			{ "id", pMapId },
+			{ "name", "" },
+			{ "parent_id", 0 },
+			{ "indentation", 0 },
+			{ "type", 0 },
+			{ "fields", pFields },
+			{ "unknown_fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+		};
+		var unknownFields = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		foreach (var field in pFields)
+		{
+			var fieldId = (int)field["id"];
+			if (!LmtMapFieldNames.TryGetValue(fieldId, out var fieldName))
+			{
+				unknownFields.Add(field);
+				continue;
+			}
+			var fieldData = (byte[])field["data"];
+			if (fieldId == 0x01)
+			{
+				var textResult = DecodeLmtString(fieldData, "map name");
+				if (!textResult.Success)
+				{
+					return textResult;
+				}
+				mapInfo["name"] = textResult.Data["value"];
+			}
+			else
+			{
+				var integerResult = DecodeLmtInteger(fieldData, fieldName);
+				if (!integerResult.Success)
+				{
+					return integerResult;
+				}
+				mapInfo[fieldName] = integerResult.Data["value"];
+			}
+		}
+		mapInfo["unknown_fields"] = unknownFields;
+		return new ParseResult(true, null, mapInfo);
+	}
+
+	private static ParseResult DecodeLmtStart(Godot.Collections.Array<Godot.Collections.Dictionary> pFields)
+	{
+		var start = new Godot.Collections.Dictionary();
+		var unknownFields = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		foreach (var field in pFields)
+		{
+			var fieldId = (int)field["id"];
+			if (!LmtStartFieldNames.TryGetValue(fieldId, out var fieldName))
+			{
+				unknownFields.Add(field);
+				continue;
+			}
+			var integerResult = DecodeLmtInteger((byte[])field["data"], fieldName);
+			if (!integerResult.Success)
+			{
+				return integerResult;
+			}
+			start[fieldName] = integerResult.Data["value"];
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary
+		{
+			{ "start", start },
+			{ "unknown_fields", unknownFields },
+		});
+	}
+
+	private ParseResult DecodeLmtString(byte[] pData, string pLabel)
+	{
+		if (pData.Length > MaxLmtStringBytes)
+		{
+			return Failure($"LMT {pLabel} exceeds {MaxLmtStringBytes}-byte limit");
+		}
+		var value = _textDecoder.Decode(pData);
+		if (string.IsNullOrEmpty(value) && pData.Length > 0)
+		{
+			return Failure("Unable to decode LMT " + pLabel);
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "value", value } });
+	}
+
+	private static ParseResult DecodeLmtInteger(byte[] pData, string pLabel)
+	{
+		if (pData.Length == 0)
+		{
+			return new ParseResult(true, null, new Godot.Collections.Dictionary { { "value", 0 } });
+		}
+		var reader = new LcfBinaryReader(pData);
+		var value = reader.ReadSignedBer();
+		if (reader.HasError())
+		{
+			return Failure($"Invalid LMT {pLabel}: {reader.ErrorMessage}", reader.ErrorOffset);
+		}
+		if (!reader.IsEof())
+		{
+			return Failure($"LMT {pLabel} has trailing bytes", reader.GetPosition());
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "value", value } });
+	}
+
+	private static ParseResult ValidateLmtReferences(
+		Dictionary<int, Godot.Collections.Dictionary> pMapsById,
+		Godot.Collections.Array<int> pTreeOrder,
+		int pActiveNode
+	)
+	{
+		foreach (var pair in pMapsById)
+		{
+			var parentId = (int)pair.Value["parent_id"];
+			if (parentId != 0 && !pMapsById.ContainsKey(parentId))
+			{
+				return Failure($"LMT map {pair.Key} references missing parent {parentId}");
+			}
+		}
+
+		foreach (var mapId in pTreeOrder)
+		{
+			if (!pMapsById.ContainsKey(mapId))
+			{
+				return Failure($"LMT tree order references missing map {mapId}");
+			}
+		}
+
+		if (pMapsById.Count == 0)
+		{
+			if (pActiveNode != 0)
+			{
+				return Failure($"Empty LMT map tree has active node {pActiveNode}");
+			}
+		}
+		else if (!pMapsById.ContainsKey(pActiveNode))
+		{
+			return Failure($"LMT active node {pActiveNode} is not present");
+		}
+
+		foreach (var startId in pMapsById.Keys)
+		{
+			var current = startId;
+			var visited = new HashSet<int>();
+			while (current != 0)
+			{
+				if (!visited.Add(current))
+				{
+					return Failure($"LMT parent cycle includes map {current}");
+				}
+				if (!pMapsById.TryGetValue(current, out var info))
+				{
+					return Failure($"LMT parent chain references missing map {current}");
+				}
+				var parentId = (int)info["parent_id"];
+				if (parentId == current)
+				{
+					return Failure($"LMT map {current} is its own parent");
+				}
+				current = parentId;
+			}
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary());
 	}
 
 	private static ParseResult ReadStructFields(LcfBinaryReader pReader, bool pCollect)

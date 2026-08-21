@@ -12,6 +12,7 @@ public partial class LcfBinaryReader : RefCounted
 {
 	public const int MaxBerBytes = 5;
 	public const int MaxInteger = 0x7fffffff;
+	public const uint MaxUnsignedInteger = 0xffffffff;
 	public const int MaxChunkBytes = 32 * 1024 * 1024;
 	public const int MaxChunks = 100_000;
 	public const int MaxArrayItems = 100_000;
@@ -75,6 +76,39 @@ public partial class LcfBinaryReader : RefCounted
 			}
 		}
 		return -1;
+	}
+
+	public int ReadSignedBer()
+	{
+		uint value = 0;
+		var start = _position;
+		for (var index = 0; index < MaxBerBytes; index++)
+		{
+			if (IsEof())
+			{
+				Fail("Unexpected end of data while reading signed BER integer", start);
+				return 0;
+			}
+			var currentByte = _data[_position];
+			_position += 1;
+			if (value > (MaxUnsignedInteger >> 7))
+			{
+				Fail("Signed BER integer overflow", start);
+				return 0;
+			}
+			value = (value << 7) | (uint)(currentByte & 0x7f);
+			if ((currentByte & 0x80) == 0)
+			{
+				// Two's complement over 32 bits, mirroring liblcf's LMT reader.
+				return unchecked((int)value);
+			}
+			if (index == MaxBerBytes - 1)
+			{
+				Fail($"Signed BER integer exceeds {MaxBerBytes} bytes", start);
+				return 0;
+			}
+		}
+		return 0;
 	}
 
 	public byte[] ReadBytes(int pLength)

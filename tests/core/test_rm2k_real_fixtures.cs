@@ -1,0 +1,133 @@
+using Godot;
+using UniversalRPG.Rm2k.Parser;
+using UniversalRPG.Tests.Framework;
+
+namespace UniversalRPG.Tests.Core;
+
+partial class TestRm2kRealFixtures : TestBase
+{
+	private const string FixtureRoot = "res://tests/fixtures/easyrpg-testgame";
+
+	private Rm2kParser _parser = null!;
+
+	public override void Setup()
+	{
+		_parser = new Rm2kParser();
+	}
+
+	public void Test_Rm2000DatabaseHasValidLcfBoundaries()
+	{
+		var result = _parser.ParseDatabase(FixtureRoot.PathJoin("rm2000/RPG_RT.ldb"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		AssertEq(data["header"].AsString(), "LcfDataBase");
+		AssertTrue((long)data["file_size"] > 0);
+		AssertTrue(data["chunk_count"].AsInt32() > 0);
+		AssertTrue(data["chunk_count"].AsInt32() < 100000);
+	}
+
+	public void Test_Rm2003DatabaseHasValidLcfBoundaries()
+	{
+		var result = _parser.ParseDatabase(FixtureRoot.PathJoin("rm2003/RPG_RT.ldb"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		AssertEq(data["header"].AsString(), "LcfDataBase");
+		AssertTrue((long)data["file_size"] > 0);
+		AssertTrue(data["chunk_count"].AsInt32() > 0);
+		AssertTrue(data["chunk_count"].AsInt32() < 100000);
+	}
+
+	public void Test_Rm2000MapHasValidLcfBoundaries()
+	{
+		var result = _parser.ParseMap(FixtureRoot.PathJoin("rm2000/Map0001.lmu"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		AssertEq(data["header"].AsString(), "LcfMapUnit");
+		AssertTrue(data["width"].AsInt32() > 0);
+		AssertTrue(data["height"].AsInt32() > 0);
+		AssertTrue(data["chunk_count"].AsInt32() > 0);
+	}
+
+	public void Test_Rm2003MapHasValidLcfBoundaries()
+	{
+		var result = _parser.ParseMap(FixtureRoot.PathJoin("rm2003/Map0001.lmu"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		AssertEq(data["header"].AsString(), "LcfMapUnit");
+		AssertTrue(data["width"].AsInt32() > 0);
+		AssertTrue(data["height"].AsInt32() > 0);
+		AssertTrue(data["chunk_count"].AsInt32() > 0);
+	}
+
+	public void Test_RealFixtureFramingConsumesExactFileBoundaries()
+	{
+		AssertFixtureFraming("rm2000/RPG_RT.ldb", "LcfDataBase", 16, 210227, false);
+		AssertFixtureFraming("rm2003/RPG_RT.ldb", "LcfDataBase", 22, 416513, false);
+		AssertFixtureFraming("rm2000/Map0001.lmu", "LcfMapUnit", 6, 8544, true);
+		AssertFixtureFraming("rm2003/Map0001.lmu", "LcfMapUnit", 11, 8488, true);
+	}
+
+	private static string DescribeError(Rm2kParser.ParseResult pResult)
+	{
+		return pResult.IsSuccess() ? "" : pResult.GetError()!.Describe();
+	}
+
+	private void AssertFixtureFraming(
+		string pRelativePath,
+		string pHeader,
+		int pExpectedChunks,
+		int pExpectedSize,
+		bool pExpectedTerminator
+	)
+	{
+		var path = FixtureRoot.PathJoin(pRelativePath);
+		using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+		AssertNe(file, null, "Open fixture " + path);
+		if (file == null)
+		{
+			return;
+		}
+		var bytes = file.GetBuffer((long)file.GetLength());
+		AssertEq(bytes.Length, pExpectedSize, "Fixture size " + pRelativePath);
+
+		var reader = new LcfBinaryReader(bytes);
+		AssertEq(reader.ReadHeader(pHeader), pHeader, "Fixture header " + pRelativePath);
+		AssertFalse(reader.HasError(), "Fixture header error " + pRelativePath);
+		var chunkCount = 0;
+		var sawTerminator = false;
+		while (!reader.IsEof())
+		{
+			var chunk = reader.ReadChunk();
+			AssertFalse(reader.HasError(), "Fixture chunk error " + pRelativePath);
+			if (reader.HasError())
+			{
+				return;
+			}
+			chunkCount += 1;
+			if ((bool)chunk["terminator"])
+			{
+				sawTerminator = true;
+				break;
+			}
+		}
+		AssertEq(chunkCount, pExpectedChunks, "Fixture chunk count " + pRelativePath);
+		AssertEq(sawTerminator, pExpectedTerminator, "Fixture terminator " + pRelativePath);
+		AssertEq(reader.GetPosition(), bytes.Length, "Fixture boundary " + pRelativePath);
+	}
+}

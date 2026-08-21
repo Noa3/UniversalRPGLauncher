@@ -6,7 +6,10 @@ namespace UniversalRPG.Core;
 
 public partial class LegacyTextDecoder : RefCounted
 {
-	private static readonly string[] JapaneseEncodings = { "CP932", "SHIFT_JIS", "SJIS" };
+	// Godot's multibyte decoder accepts SHIFT_JIS on Windows. CP932 and SJIS are
+	// common aliases used by game metadata and are normalized before this list is
+	// attempted so they do not produce an avoidable engine error first.
+	public static readonly string[] JapaneseEncodings = { "SHIFT_JIS" };
 	private static bool _codePagesRegistered;
 
 	public string Decode(byte[] pBytes, string pPreferredEncoding = "")
@@ -32,7 +35,7 @@ public partial class LegacyTextDecoder : RefCounted
 		var encodings = new System.Collections.Generic.List<string>();
 		if (!string.IsNullOrEmpty(pPreferredEncoding))
 		{
-			encodings.Add(pPreferredEncoding);
+			encodings.Add(NormalizeEncoding(pPreferredEncoding));
 		}
 		foreach (var encoding in JapaneseEncodings)
 		{
@@ -50,6 +53,16 @@ public partial class LegacyTextDecoder : RefCounted
 			}
 		}
 		return "";
+	}
+
+	private static string NormalizeEncoding(string pEncoding)
+	{
+		var normalized = pEncoding.Trim().ToUpperInvariant().Replace("-", "_");
+		if (normalized is "CP932" or "SJIS" or "SHIFTJIS" or "SHIFT_JIS")
+		{
+			return "SHIFT_JIS";
+		}
+		return pEncoding;
 	}
 
 	private static string DecodeMultibyte(byte[] pBytes, string pEncodingName)
