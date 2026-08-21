@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UniversalRPG.Core;
+using UniversalRPG.Wolf;
 
 namespace UniversalRPG.Plugins;
 
@@ -329,11 +330,22 @@ public abstract class RgssPlugin : BuiltInEnginePlugin
     private readonly string _archiveExtension;
 
     protected RgssPlugin(string pId, string pName, string pGeneration, string pPrefix, string pDataExtension, string pArchiveExtension, int pPriority)
-        : base(pId, pName, $"Detection-only {pName} boundary until a compatible runtime backend is available.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing)
+        : base(pId, pName, $"Bounded {pName} runtime bootstrap.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime)
     {
         _runtimePrefix = pPrefix;
         _dataExtension = pDataExtension;
         _archiveExtension = pArchiveExtension;
+    }
+
+    public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
+    {
+        return PluginResult<IEngineRuntime>.Succeeded(new RgssEngineRuntime(
+            Metadata.Id,
+            Generation,
+            _runtimePrefix,
+            _dataExtension,
+            _archiveExtension,
+            pContext.Game));
     }
 
     public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
@@ -392,7 +404,7 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
     private readonly string _runtimeLabel;
 
     protected WebRpgPlugin(string pId, string pName, string pGeneration, string pRuntimeFile, string pRuntimeLabel, int pPriority)
-        : base(pId, pName, $"Detection-only {pName} boundary until a compatible runtime backend is available.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing)
+        : base(pId, pName, $"Detection-only {pName} boundary until an embedded JavaScript runtime is available.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing)
     {
         _runtimeFile = pRuntimeFile;
         _runtimeLabel = pRuntimeLabel;
@@ -455,9 +467,9 @@ public sealed class RpgMakerMzPlugin : WebRpgPlugin
     public RpgMakerMzPlugin() : base(EnginePluginIds.RpgMakerMz, "RPG Maker MZ", "mz", "rmmz_core.js", "js/rmmz_core.js", 30) { }
 }
 
-public sealed class WolfRpgPlugin : BuiltInEnginePlugin
+public class WolfRpgPlugin : BuiltInEnginePlugin
 {
-    public WolfRpgPlugin() : base(EnginePluginIds.WolfRpg, "WOLF RPG Editor", "Detection-only WOLF boundary until the plain-data runtime slice is registered.", "wolf", 25, PluginCapability.Detection | PluginCapability.Parsing) { }
+    public WolfRpgPlugin() : base(EnginePluginIds.WolfRpg, "WOLF RPG Editor", "Bounded WOLF plain-data runtime slice.", "wolf", 25, PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime) { }
 
     public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
     {
@@ -477,9 +489,12 @@ public sealed class WolfRpgPlugin : BuiltInEnginePlugin
             evidence.Add("MapData");
             score += 100;
         }
-        return Match(snapshot, score, "WOLF RPG Editor data signatures matched; encrypted data remains unsupported.", evidence,
-            pDiagnostics: new[] { PluginDiagnostic.Warning("wolf.detection-only", "WOLF support is detection/parsing-only; no runtime backend is registered.", Metadata.Id) });
+        return Match(snapshot, score, "WOLF RPG Editor data signatures matched; only explicit unencrypted plain data is loadable.", evidence,
+            pDiagnostics: new[] { PluginDiagnostic.Warning("wolf.plain-data-only", "Protected or proprietary WOLF data is not decrypted or bypassed.", Metadata.Id) });
     }
+
+    public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
+        => PluginResult<IEngineRuntime>.Succeeded(new WolfEngineRuntime(Metadata.Id, pContext.Game));
 }
 
 public sealed class RpgMakerUnitePlugin : BuiltInEnginePlugin

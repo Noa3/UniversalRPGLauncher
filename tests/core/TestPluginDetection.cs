@@ -162,8 +162,12 @@ public partial class TestPluginDetection : TestBase
             AssertEq(plugin.Metadata.SupportedEngines[0].EngineId, plugin.Metadata.Id);
             AssertTrue(!string.IsNullOrWhiteSpace(plugin.Metadata.Description));
             var hasRuntimeBootstrap = plugin.Metadata.Id is
-                EnginePluginIds.RpgMaker2000 or
-                EnginePluginIds.RpgMaker2003;
+                            EnginePluginIds.RpgMaker2000 or
+                            EnginePluginIds.RpgMaker2003 or
+                            EnginePluginIds.RpgMakerXp or
+                            EnginePluginIds.RpgMakerVx or
+                            EnginePluginIds.RpgMakerVxAce or
+                EnginePluginIds.WolfRpg;
             AssertTrue(hasRuntimeBootstrap
                 == ((plugin.Metadata.Capabilities & PluginCapability.Runtime) != 0),
                 $"Runtime capability matches the built-in bootstrap boundary: {plugin.Metadata.Id}");

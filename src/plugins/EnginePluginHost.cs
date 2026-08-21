@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace UniversalRPG.Plugins;
 
@@ -61,22 +62,23 @@ public sealed class EnginePluginHost : IDisposable
 		State = PluginRuntimeState.Created;
 
 		var initialize = InvokeLifecycle(
-			"initialize",
-			() => Runtime.Initialize(new EnginePluginRuntimeContext(selected.Game, selected))
+		    "initialize",
+		    () => Runtime.Initialize(new EnginePluginRuntimeContext(selected.Game, selected))
 		);
 		if (!initialize.Success)
 		{
-			return FailRuntime(initialize);
+		    return FailRuntime(AddDiagnostics(initialize, selection.Diagnostics));
 		}
 		State = PluginRuntimeState.Initialized;
 
 		var start = InvokeLifecycle("start", () => Runtime.Start());
 		if (!start.Success)
 		{
-			return FailRuntime(start);
+		    return FailRuntime(AddDiagnostics(start, CombineDiagnostics(selection.Diagnostics, initialize.Diagnostics)));
 		}
 		State = PluginRuntimeState.Running;
-		return PluginOperationResult.Succeeded(selection.Diagnostics);
+		return PluginOperationResult.Succeeded(
+		    CombineDiagnostics(selection.Diagnostics, CombineDiagnostics(initialize.Diagnostics, start.Diagnostics)));
 	}
 
 	public PluginOperationResult Update(double pDeltaSeconds)
@@ -200,10 +202,30 @@ public sealed class EnginePluginHost : IDisposable
 
 	private PluginOperationResult FailRuntime(PluginOperationResult pResult)
 	{
-		State = PluginRuntimeState.Faulted;
-		LastError = pResult.Error;
-		DisposeRuntimeAfterFailure();
-		return pResult;
+	    State = PluginRuntimeState.Faulted;
+	    LastError = pResult.Error;
+	    DisposeRuntimeAfterFailure();
+	    return pResult;
+	}
+
+	private static PluginOperationResult AddDiagnostics(
+	    PluginOperationResult pResult,
+	    IEnumerable<PluginDiagnostic> pAdditionalDiagnostics)
+	{
+	    var diagnostics = CombineDiagnostics(pAdditionalDiagnostics, pResult.Diagnostics);
+	    return pResult.Success
+	        ? PluginOperationResult.Succeeded(diagnostics)
+	        : PluginOperationResult.Failed(pResult.Error!, diagnostics);
+	}
+
+	private static IReadOnlyList<PluginDiagnostic> CombineDiagnostics(
+	    IEnumerable<PluginDiagnostic> pFirst,
+	    IEnumerable<PluginDiagnostic> pSecond)
+	{
+	    var diagnostics = new List<PluginDiagnostic>();
+	    diagnostics.AddRange(pFirst);
+	    diagnostics.AddRange(pSecond);
+	    return diagnostics;
 	}
 
 	private PluginOperationResult FailBeforeRuntime(PluginError pError, System.Collections.Generic.IEnumerable<PluginDiagnostic>? pDiagnostics = null)
