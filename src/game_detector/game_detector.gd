@@ -315,9 +315,17 @@ func _find_file(p_dir: String, p_name: String) -> String:
 
 
 func _find_directory(p_dir: String, p_name: String) -> String:
-	for directory_name in DirAccess.get_directories_at(p_dir):
-		if directory_name.nocasecmp_to(p_name) == 0:
-			return p_dir.path_join(directory_name)
+	var directory := DirAccess.open(p_dir)
+	if directory == null:
+		return ""
+	for directory_name in directory.get_directories():
+		if directory_name.nocasecmp_to(p_name) != 0:
+			continue
+		# Imported games are untrusted. Do not follow a Data/www/js/Scripts
+		# symlink or junction out of the selected game directory.
+		if directory.is_link(directory_name):
+			return ""
+		return p_dir.path_join(directory_name)
 	return ""
 
 

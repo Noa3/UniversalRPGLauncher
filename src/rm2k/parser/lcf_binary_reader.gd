@@ -3,6 +3,7 @@ extends RefCounted
 
 const MAX_BER_BYTES := 5
 const MAX_INTEGER := 0x7fffffff
+const MAX_UNSIGNED_INTEGER := 0xffffffff
 const MAX_CHUNK_BYTES := 32 * 1024 * 1024
 const MAX_CHUNKS := 100_000
 const MAX_ARRAY_ITEMS := 100_000
@@ -64,6 +65,27 @@ func read_ber() -> int:
 		if index == MAX_BER_BYTES - 1:
 			_fail("BER integer exceeds %d bytes" % MAX_BER_BYTES, start)
 	return -1
+
+
+func read_signed_ber() -> int:
+	var value: int = 0
+	var start := _position
+	for index in range(MAX_BER_BYTES):
+		if is_eof():
+			_fail("Unexpected end of data while reading signed BER integer", start)
+			return 0
+		var byte := _data[_position]
+		_position += 1
+		if value > (MAX_UNSIGNED_INTEGER >> 7):
+			_fail("Signed BER integer overflow", start)
+			return 0
+		value = (value << 7) | (byte & 0x7f)
+		if (byte & 0x80) == 0:
+			return value - 0x100000000 if value > MAX_INTEGER else value
+		if index == MAX_BER_BYTES - 1:
+			_fail("Signed BER integer exceeds %d bytes" % MAX_BER_BYTES, start)
+			return 0
+	return 0
 
 
 func read_bytes(p_length: int) -> PackedByteArray:

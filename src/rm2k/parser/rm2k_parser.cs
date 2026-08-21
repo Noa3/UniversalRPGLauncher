@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using UniversalRPG.Core;
 
 namespace UniversalRPG.Rm2k.Parser;
 
@@ -159,7 +160,7 @@ public partial class Rm2kParser : RefCounted
 
 		var sections = new Godot.Collections.Dictionary();
 		var sectionCounts = new Godot.Collections.Dictionary();
-		var unknownChunks = new List<Godot.Collections.Dictionary>();
+		var unknownChunks = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var engineFamily = "RPG Maker 2000";
 		var version = 0;
 
@@ -268,14 +269,15 @@ public partial class Rm2kParser : RefCounted
 			return upperResult;
 		}
 
-		var events = new List<Godot.Collections.Dictionary>();
+		var events = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		if (fields.TryGetValue(0x51, out var eventChunk))
 		{
-			var eventArray = ParseStructArray((byte[])eventChunk["data"], true);
+			var eventChunkData = (Godot.Collections.Dictionary)eventChunk;
+			var eventArray = ParseStructArray((byte[])eventChunkData["data"], true);
 			if (!eventArray.Success)
 			{
 				return Failure($"Invalid map events: {eventArray.Error!.Message}",
-					(int)eventChunk["payload_offset"] + Math.Max(eventArray.Error.Offset, 0));
+					(int)eventChunkData["payload_offset"] + Math.Max(eventArray.Error.Offset, 0));
 			}
 			foreach (var eventObject in (Godot.Collections.Array<Godot.Collections.Dictionary>)eventArray.Data["objects"])
 			{
@@ -284,15 +286,16 @@ public partial class Rm2kParser : RefCounted
 				var yResult = IntegerFromFields(eventFields, 0x03, 0);
 				if (!xResult.Success || !yResult.Success)
 				{
-					return Failure("Invalid event coordinates", (int)eventChunk["payload_offset"]);
+					return Failure("Invalid event coordinates", (int)eventChunkData["payload_offset"]);
 				}
 				var pageCount = 0;
 				if (eventFields.TryGetValue(0x05, out var pageChunk))
 				{
-					var pages = ParseStructArray((byte[])pageChunk["data"], false);
+					var pageChunkData = (Godot.Collections.Dictionary)pageChunk;
+					var pages = ParseStructArray((byte[])pageChunkData["data"], false);
 					if (!pages.Success)
 					{
-						return Failure($"Invalid event pages: {pages.Error!.Message}", (int)eventChunk["payload_offset"]);
+						return Failure($"Invalid event pages: {pages.Error!.Message}", (int)eventChunkData["payload_offset"]);
 					}
 					pageCount = (int)pages.Data["count"];
 				}
@@ -312,7 +315,7 @@ public partial class Rm2kParser : RefCounted
 			0x01, 0x02, 0x03, 0x0b, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x28, 0x29, 0x2a, 0x30,
 			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x3c, 0x3d, 0x3e, 0x47, 0x48, 0x51, 0x5a, 0x5b,
 		};
-		var unknownChunks = new List<Godot.Collections.Dictionary>();
+		var unknownChunks = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		foreach (var chunk in chunks)
 		{
 			if (Array.IndexOf(knownIds, (int)chunk["id"]) < 0)
@@ -393,7 +396,7 @@ public partial class Rm2kParser : RefCounted
 			return Failure("Cannot open file: " + pPath);
 		}
 		var length = file.GetLength();
-		if (length > pLimit)
+		if (length > (ulong)pLimit)
 		{
 			return Failure($"File exceeds {pLimit}-byte limit");
 		}

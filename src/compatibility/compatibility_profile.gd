@@ -79,8 +79,12 @@ class CompatibilityDatabase:
 	func find_all_matching(p_sha256: String, p_engine: String) -> Array[ProfileEntry]:
 		var result: Array[ProfileEntry] = []
 		for entry in entries:
-			if (p_sha256 == "" or entry.sha256 == p_sha256) and \
-			   (p_engine == "" or entry.engine == p_engine):
+			# Empty selectors must never turn a specific profile into a wildcard.
+			# Empty fields on the profile itself are intentional wildcards (for
+			# example, an engine-wide compatibility profile).
+			var sha_matches := entry.sha256.is_empty() or (not p_sha256.is_empty() and entry.sha256 == p_sha256)
+			var engine_matches := entry.engine.is_empty() or (not p_engine.is_empty() and entry.engine == p_engine)
+			if sha_matches and engine_matches:
 				result.append(entry)
 		return result
 
@@ -153,23 +157,22 @@ func add_entry(p_entry: ProfileEntry) -> void:
 ## Get all flags for a game
 func get_game_flags(p_sha256: String, p_engine: String) -> Array[CompatFlag]:
 	var matching_entries := _database.find_all_matching(p_sha256, p_engine)
-	var all_flags: Array[CompatFlag] = []
-	
-	## First add global flags
+	var flags_by_name: Dictionary = {}
+
+	## Global defaults are applied first.
 	for flag_name in _database.flags:
-		all_flags.append(_database.flags[flag_name])
-	
-	## Then add game-specific flags (they override global)
+		flags_by_name[flag_name] = _database.flags[flag_name]
+
+	## Matching entries override global defaults and earlier matching entries.
+	## This is intentional: per-game compatibility rules must be able to
+	## disable or change a global compatibility default.
 	for entry in matching_entries:
 		for flag in entry.flags:
-			var already_exists := false
-			for existing in all_flags:
-				if existing.name == flag.name:
-					already_exists = true
-					break
-			if not already_exists:
-				all_flags.append(flag)
-	
+			flags_by_name[flag.name] = flag
+
+	var all_flags: Array[CompatFlag] = []
+	for flag_name in flags_by_name:
+		all_flags.append(flags_by_name[flag_name])
 	return all_flags
 
 

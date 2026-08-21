@@ -161,6 +161,36 @@ func test_parse_database_success() -> void:
 	assert_eq(data["section_counts"]["actors"], 0)
 
 
+func test_parse_database_accepts_empty_struct_array_section() -> void:
+	var dir := "user://rm2k_test"
+	var database := _lcf("LcfDataBase", [
+		_chunk(0x1f, PackedByteArray()),
+		_chunk(0x1a, _ber(259)),
+		PackedByteArray([0x00]),
+	])
+	_write_file(dir + "/EmptyArray.rdata", database)
+	var result := parser.parse_database(dir + "/EmptyArray.rdata")
+	assert_true(result.is_success(), _describe_error(result))
+	if result.is_success():
+		assert_eq(result.get_data()["section_counts"].get("class_duplicate", -1), 0)
+
+
+func test_parse_database_retains_unknown_top_level_chunks() -> void:
+	var dir := "user://rm2k_test"
+	var database := _lcf("LcfDataBase", [
+		_chunk(0x99, PackedByteArray([0x01, 0x02, 0x03])),
+		_chunk(0x1a, _ber(259)),
+		PackedByteArray([0x00]),
+	])
+	_write_file(dir + "/UnknownChunk.rdata", database)
+	var result := parser.parse_database(dir + "/UnknownChunk.rdata")
+	assert_true(result.is_success(), _describe_error(result))
+	if result.is_success():
+		var unknown_chunks: Array = result.get_data()["unknown_chunks"]
+		assert_eq(unknown_chunks.size(), 1)
+		assert_eq(unknown_chunks[0]["id"], 0x99)
+
+
 func test_parse_database_not_found() -> void:
 	var result := parser.parse_database("user://rm2k_test/NonExistent.rdata")
 	assert_false(result.is_success())
@@ -293,3 +323,9 @@ func test_parse_returns_empty_data_on_failure() -> void:
 	var result := parser.parse_game_ini("user://rm2k_test/NonExistent.ini")
 	assert_false(result.is_success())
 	assert_eq(result.get_data().size(), 0)
+
+
+func _describe_error(p_result) -> String:
+	if p_result.is_success():
+		return ""
+	return p_result.get_error().describe()

@@ -237,6 +237,73 @@ func test_get_flag_value() -> void:
 	assert_eq(compat.get_flag_value("", "RPGMakerUnknown", "NonExistent"), null)
 
 
+func test_game_specific_flag_overrides_global_value() -> void:
+	var compat := preload("res://src/compatibility/compatibility_profile.gd").new()
+
+	var profile_data := {
+		"flags": [
+			{"name": "EnhancedRenderer", "type": "BOOLEAN", "value": true},
+		],
+		"entries": [
+			{
+				"id": "test.override",
+				"sha256": "override123",
+				"engine": "RPGMaker2003",
+				"flags": [
+					{"name": "EnhancedRenderer", "type": "BOOLEAN", "value": false},
+				],
+			},
+		],
+	}
+
+	_create_test_profile("test_override", profile_data)
+	assert_true(compat.load_profile("user://test_profiles/test_override.json"))
+	assert_eq(compat.get_flag_value("override123", "RPGMaker2003", "EnhancedRenderer"), false)
+
+
+func test_specific_profile_does_not_match_when_hash_is_unknown() -> void:
+	var compat := preload("res://src/compatibility/compatibility_profile.gd").new()
+	var profile_data := {
+		"flags": [],
+		"entries": [
+			{
+				"id": "specific.game",
+				"sha256": "specific123",
+				"engine": "RPGMaker2003",
+				"flags": [
+					{"name": "SpecificOnly", "type": "BOOLEAN", "value": true},
+				],
+			},
+		],
+	}
+	_create_test_profile("test_no_hash_wildcard", profile_data)
+	assert_true(compat.load_profile("user://test_profiles/test_no_hash_wildcard.json"))
+	assert_false(compat.has_flag("", "RPGMaker2003", "SpecificOnly"))
+	assert_false(compat.has_flag("other-hash", "RPGMaker2003", "SpecificOnly"))
+	assert_true(compat.has_flag("specific123", "RPGMaker2003", "SpecificOnly"))
+
+
+func test_engine_wide_profile_can_intentionally_use_empty_hash() -> void:
+	var compat := preload("res://src/compatibility/compatibility_profile.gd").new()
+	var profile_data := {
+		"flags": [],
+		"entries": [
+			{
+				"id": "rm2k3.engine.default",
+				"sha256": "",
+				"engine": "RPGMaker2003",
+				"flags": [
+					{"name": "EngineWide", "type": "BOOLEAN", "value": true},
+				],
+			},
+		],
+	}
+	_create_test_profile("test_engine_wide", profile_data)
+	assert_true(compat.load_profile("user://test_profiles/test_engine_wide.json"))
+	assert_true(compat.has_flag("any-hash", "RPGMaker2003", "EngineWide"))
+	assert_false(compat.has_flag("any-hash", "RPGMakerMV", "EngineWide"))
+
+
 # === TESTS: Entry Matching ===
 
 func test_find_by_sha256() -> void:

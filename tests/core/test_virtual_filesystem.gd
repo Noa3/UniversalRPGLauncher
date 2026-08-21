@@ -104,7 +104,8 @@ func test_safe_path_absolute() -> void:
 
 
 func test_safe_path_null_byte() -> void:
-	assert_false(vfs.is_safe_path("Graphics/../../../etc/passwd\u0000.png"))
+	assert_true(VirtualFileSystem._contains_null_byte(PackedByteArray([0x70, 0x00, 0x6e])))
+	assert_false(VirtualFileSystem._contains_null_byte(PackedByteArray([0x70, 0x6e])))
 
 
 # === TESTS: Mount Management ===

@@ -1,11 +1,13 @@
 # UniversalRPG — Project Status
 
 > **Last Updated:** 2026-08-20
-> **Current Phase:** Phase 1.5 — Application Foundation complete; Phase 2 next
+> **Current Phase:** Phase 2 — RM2000/2003 Parser in progress
 
 ## Executive Summary
 
-The project now has a validated Godot 4.7.2 application, localized game-library UI, bounded folder scanner, improved generation detector, legacy metadata decoding, and export presets. No runtime backend is playable yet. RM2000/2003 format correctness remains the next critical path.
+The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder scanner, generation detection, legacy metadata decoding, and a real bounded LCF container parser with initial RM2000/2003 LDB/LMU/LSD decoding validated against pinned EasyRPG TestGame fixtures. No runtime backend is playable yet. The immediate critical path is expanding faithful RM2000/2003 parsing before rendering or event execution.
+
+The repository also exposes a Godot .NET entry point: `project.godot` advertises C# support, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, core tests, and smoke tests. GDScript remains the validated behavioral baseline until the C# port proves parity.
 
 ## Phase Status Overview
 
@@ -14,7 +16,7 @@ The project now has a validated Godot 4.7.2 application, localized game-library 
 | 0 | Repository audit | ✅ Complete | Initial setup |
 | 1 | Runtime foundation | ✅ Complete | Core abstractions implemented |
 | 1.5 | Application foundation | ✅ Complete | Library, detection UI, localization, initial import safety |
-| 2 | RM2000/2003 parser | 📋 Planned | Next priority |
+| 2 | RM2000/2003 parser | 🚧 In progress | Real LCF reader + initial LDB/LMU/LSD decoding |
 | 3 | RM2000/2003 rendering | 📋 Planned | Depends on Phase 2 |
 | 4 | Event interpreter | 📋 Planned | Depends on Phase 2 |
 | 5 | Full RM2000/2003 systems | 📋 Planned | Depends on Phase 4 |
@@ -63,7 +65,7 @@ The project now has a validated Godot 4.7.2 application, localized game-library 
 - No rewind support
 - No deterministic RNG seeding
 
-**Test Coverage:** None yet
+**Test Coverage:** 8 deterministic regression tests
 
 ---
 
@@ -86,7 +88,7 @@ The project now has a validated Godot 4.7.2 application, localized game-library 
 - No archive content inspection
 - Detection relies on file/directory presence, not content analysis
 
-**Test Coverage:** None yet
+**Test Coverage:** 15 deterministic detection tests
 
 ---
 
@@ -106,13 +108,13 @@ The project now has a validated Godot 4.7.2 application, localized game-library 
 - No profile validation
 - No profile signing
 
-**Test Coverage:** None yet
+**Test Coverage:** 19 deterministic profile tests
 
 ## Technical Debt
 
 | Item | Severity | Description |
 |------|----------|-------------|
-| Legacy test harness missing | High | Existing `extends Test` suites are not connected to a test runner |
+| Headless Godot editor diagnostic | Low | Godot 4.7.2 emits an internal `EditorSettings` message during `--headless --editor --quit`; validation still exits successfully |
 | No CI | Medium | No automated build/testing |
 | No export pipeline | Medium | Presets exist; signed/release exports are not automated |
 | Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
@@ -123,7 +125,7 @@ The project now has a validated Godot 4.7.2 application, localized game-library 
 
 | Component | Phase | Priority |
 |-----------|-------|----------|
-| RM2K parser | 2 | Critical |
+| Expand/validate RM2K parser | 2 | Critical |
 | RM2K interpreter | 4 | Critical |
 | RM2K renderer | 3 | High |
 | RGSS runtime | 8 | High |
@@ -148,11 +150,10 @@ The project now has a validated Godot 4.7.2 application, localized game-library 
 
 ## Next Immediate Tasks
 
-1. Connect or replace the legacy test harness and add malicious import fixtures
-2. Test CP932/Shift-JIS decoding on every target platform
-3. Implement real LCF parsing from documented, legal fixtures
-4. Add Android/iOS document-provider imports
-5. Produce unsigned desktop test exports once templates are installed
+1. Implement the LMT map-tree parser with bounded parsing and tests
+2. Expand typed LDB/LMU decoding incrementally; do not guess undocumented offsets/fields
+3. Test CP932/Shift-JIS behavior on target platforms and add malicious-input fixtures
+4. Implement LMU event/page metadata decoding without executing commands
 
 ## Open Questions
 
@@ -172,3 +173,18 @@ The project now has a validated Godot 4.7.2 application, localized game-library 
 | Performance on mobile | Medium | High | Profile early, optimize hot paths |
 | Legal issues with RTP | Low | High | Never bundle RTP, user provides |
 | Win32 compatibility scope creep | High | Medium | Strict scope control, phase gates |
+
+
+## 2026-08-20 Stabilization Pass
+
+Changes prepared in this pass:
+
+- fixed repeating `VirtualClock` callbacks so they keep their requested interval instead of firing every tick after first expiry;
+- corrected slow-motion to use a real speed factor (`0.5 == half speed`), added stable callback IDs and monotonic FPS sampling;
+- fixed compatibility-profile precedence so per-game flags actually override global defaults;
+- repaired the previously non-compiling/incomplete `RM2KDatabase` data model and added round-trip regression tests;
+- added `scripts/validate.sh`, GitHub validation workflow, `KANBAN.md`, `AGENTS.md`, `SESSION_STATE.md`, and the Hermes autonomous-work prompt;
+- added provenance-pinned EasyRPG TestGame RM2000/RM2003 LDB/LMT/LMU fixtures and real-framing regression tests;
+- accepted valid zero-length LDB struct-array sections while preserving bounded malformed-input rejection.
+
+These changes have been validated with the local Godot 4.7.2 stable .NET editor on Windows: import/syntax validation passed, the core suite passed at 102/102, and smoke tests passed. Legacy decoder and VFS parser diagnostics are clean; the only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.

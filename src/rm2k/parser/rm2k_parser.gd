@@ -7,10 +7,36 @@ const LegacyTextDecoderScript = preload("res://src/core/legacy_text_decoder.gd")
 const MAX_FILE_BYTES := 64 * 1024 * 1024
 const MAX_MAP_DIMENSION := 500
 const MAX_MAP_TILES := 250_000
+const MAX_LMT_MAPS := 100_000
+const MAX_LMT_TREE_ORDER := 100_000
+const MAX_LMT_STRING_BYTES := 1024 * 1024
 
 const LDB_HEADER := "LcfDataBase"
 const LMU_HEADER := "LcfMapUnit"
 const LSD_HEADER := "LcfSaveData"
+const LMT_HEADER := "LcfMapTree"
+
+const LMT_MAP_FIELD_NAMES := {
+	0x01: "name",
+	0x02: "parent_id",
+	0x03: "indentation",
+	0x04: "type",
+}
+
+const LMT_START_FIELD_NAMES := {
+	0x01: "party_map_id",
+	0x02: "party_x",
+	0x03: "party_y",
+	0x0b: "boat_map_id",
+	0x0c: "boat_x",
+	0x0d: "boat_y",
+	0x15: "ship_map_id",
+	0x16: "ship_x",
+	0x17: "ship_y",
+	0x1f: "airship_map_id",
+	0x20: "airship_x",
+	0x21: "airship_y",
+}
 
 const LDB_SECTION_NAMES := {
 	0x0b: "actors",
@@ -260,6 +286,79 @@ func parse_save(p_path: String) -> ParseResult:
 	})
 
 
+func parse_map_tree(p_path: String) -> ParseResult:
+	var loaded := _read_file(p_path, MAX_FILE_BYTES)
+	if not loaded.success:
+		return loaded
+	var reader = LCFBinaryReaderScript.new(loaded.data["bytes"])
+	reader.read_header(LMT_HEADER)
+	if reader.has_error():
+		return _reader_failure(reader)
+
+	var map_count := reader.read_ber()
+	if reader.has_error():
+		return _reader_failure(reader)
+	if map_count < 0 or map_count > MAX_LMT_MAPS:
+		return _failure("LMT map count %d exceeds limit" % map_count, reader.get_position())
+
+	var maps: Array[Dictionary] = []
+	var maps_by_id: Dictionary = {}
+	for index in range(map_count):
+		var map_id := reader.read_signed_ber()
+		if reader.has_error():
+			return _reader_failure(reader)
+		var fields_result := _read_struct_fields(reader, true)
+		if not fields_result.success:
+			return _failure("Invalid LMT map %d: %s" % [index, fields_result.error.message], fields_result.error.offset)
+		if maps_by_id.has(map_id):
+			return _failure("Duplicate LMT map ID %d" % map_id, reader.get_position())
+		var map_result := _decode_lmt_map_info(map_id, fields_result.data["fields"])
+		if not map_result.success:
+			return map_result
+		var map_info: Dictionary = map_result.data
+		maps.append(map_info)
+		maps_by_id[map_id] = map_info
+
+	var tree_order_count := reader.read_ber()
+	if reader.has_error():
+		return _reader_failure(reader)
+	if tree_order_count < 0 or tree_order_count > MAX_LMT_TREE_ORDER:
+		return _failure("LMT tree order count %d exceeds limit" % tree_order_count, reader.get_position())
+	var tree_order: Array[int] = []
+	for index in range(tree_order_count):
+		var map_id := reader.read_signed_ber()
+		if reader.has_error():
+			return _reader_failure(reader)
+		tree_order.append(map_id)
+
+	var active_node := reader.read_signed_ber()
+	if reader.has_error():
+		return _reader_failure(reader)
+	var start_result := _read_struct_fields(reader, true)
+	if not start_result.success:
+		return _failure("Invalid LMT start data: %s" % start_result.error.message, start_result.error.offset)
+	var start_decoded := _decode_lmt_start(start_result.data["fields"])
+	if not start_decoded.success:
+		return start_decoded
+	if not reader.is_eof():
+		return _failure("Trailing data after LMT start structure", reader.get_position())
+
+	var reference_result := _validate_lmt_references(maps_by_id, tree_order, active_node)
+	if not reference_result.success:
+		return reference_result
+	return ParseResult.new(true, null, {
+		"format": "LMT",
+		"header": LMT_HEADER,
+		"file_size": loaded.data["bytes"].size(),
+		"map_count": maps.size(),
+		"maps": maps,
+		"tree_order": tree_order,
+		"active_node": active_node,
+		"start": start_decoded.data["start"],
+		"unknown_start_fields": start_decoded.data["unknown_fields"],
+	})
+
+
 func _open_lcf(p_path: String, p_header: String) -> ParseResult:
 	var loaded := _read_file(p_path, MAX_FILE_BYTES)
 	if not loaded.success:
@@ -305,6 +404,10 @@ func _read_top_chunks(p_reader) -> ParseResult:
 
 
 func _parse_struct_array(p_data: PackedByteArray, p_collect_fields: bool) -> ParseResult:
+	# RM2K/2003 stores some empty sections as a zero-length LCF payload rather
+	# than a BER-encoded count of zero. Both forms represent an empty array.
+	if p_data.is_empty():
+		return ParseResult.new(true, null, {"count": 0, "objects": []})
 	var reader = LCFBinaryReaderScript.new(p_data)
 	var count := reader.read_ber()
 	if reader.has_error():
@@ -341,6 +444,114 @@ func _read_struct_fields(p_reader, p_collect: bool) -> ParseResult:
 			fields.append(field)
 		field_count += 1
 	return _failure("Structure is missing terminator", p_reader.get_position())
+
+
+func _decode_lmt_map_info(p_map_id: int, p_fields: Array) -> ParseResult:
+	var map_info := {
+		"id": p_map_id,
+		"name": "",
+		"parent_id": 0,
+		"indentation": 0,
+		"type": 0,
+		"fields": p_fields,
+		"unknown_fields": [],
+	}
+	var unknown_fields: Array[Dictionary] = []
+	for field in p_fields:
+		var field_id: int = field["id"]
+		if not LMT_MAP_FIELD_NAMES.has(field_id):
+			unknown_fields.append(field)
+			continue
+		var field_data: PackedByteArray = field["data"]
+		if field_id == 0x01:
+			var text_result := _decode_lmt_string(field_data, "map name")
+			if not text_result.success:
+				return text_result
+			map_info["name"] = text_result.data["value"]
+		else:
+			var integer_result := _decode_lmt_integer(field_data, LMT_MAP_FIELD_NAMES[field_id])
+			if not integer_result.success:
+				return integer_result
+			map_info[LMT_MAP_FIELD_NAMES[field_id]] = integer_result.data["value"]
+	map_info["unknown_fields"] = unknown_fields
+	return ParseResult.new(true, null, map_info)
+
+
+func _decode_lmt_start(p_fields: Array) -> ParseResult:
+	var start: Dictionary = {}
+	var unknown_fields: Array[Dictionary] = []
+	for field in p_fields:
+		var field_id: int = field["id"]
+		if not LMT_START_FIELD_NAMES.has(field_id):
+			unknown_fields.append(field)
+			continue
+		var integer_result := _decode_lmt_integer(field["data"], LMT_START_FIELD_NAMES[field_id])
+		if not integer_result.success:
+			return integer_result
+		start[LMT_START_FIELD_NAMES[field_id]] = integer_result.data["value"]
+	return ParseResult.new(true, null, {
+		"start": start,
+		"unknown_fields": unknown_fields,
+	})
+
+
+func _decode_lmt_string(p_data: PackedByteArray, p_label: String) -> ParseResult:
+	if p_data.size() > MAX_LMT_STRING_BYTES:
+		return _failure("LMT %s exceeds %d-byte limit" % [p_label, MAX_LMT_STRING_BYTES])
+	var value := _text_decoder.decode(p_data)
+	if value.is_empty() and not p_data.is_empty():
+		return _failure("Unable to decode LMT " + p_label)
+	return ParseResult.new(true, null, {"value": value})
+
+
+func _decode_lmt_integer(p_data: PackedByteArray, p_label: String) -> ParseResult:
+	if p_data.is_empty():
+		return ParseResult.new(true, null, {"value": 0})
+	var reader := LCFBinaryReaderScript.new(p_data)
+	var value := reader.read_signed_ber()
+	if reader.has_error():
+		return _failure("Invalid LMT %s: %s" % [p_label, reader.error_message], reader.error_offset)
+	if not reader.is_eof():
+		return _failure("LMT %s has trailing bytes" % p_label, reader.get_position())
+	return ParseResult.new(true, null, {"value": value})
+
+
+func _validate_lmt_references(
+	p_maps_by_id: Dictionary,
+	p_tree_order: Array[int],
+	p_active_node: int
+) -> ParseResult:
+	for map_id_variant in p_maps_by_id.keys():
+		var map_id: int = map_id_variant
+		var map_info: Dictionary = p_maps_by_id[map_id]
+		var parent_id: int = map_info["parent_id"]
+		if parent_id != 0 and not p_maps_by_id.has(parent_id):
+			return _failure("LMT map %d references missing parent %d" % [map_id, parent_id])
+
+	for map_id in p_tree_order:
+		if not p_maps_by_id.has(map_id):
+			return _failure("LMT tree order references missing map %d" % map_id)
+
+	if p_maps_by_id.is_empty():
+		if p_active_node != 0:
+			return _failure("Empty LMT map tree has active node %d" % p_active_node)
+	elif not p_maps_by_id.has(p_active_node):
+		return _failure("LMT active node %d is not present" % p_active_node)
+
+	for map_id_variant in p_maps_by_id.keys():
+		var current: int = map_id_variant
+		var visited: Dictionary = {}
+		while current != 0:
+			if visited.has(current):
+				return _failure("LMT parent cycle includes map %d" % current)
+			visited[current] = true
+			if not p_maps_by_id.has(current):
+				return _failure("LMT parent chain references missing map %d" % current)
+			var parent_id: int = p_maps_by_id[current]["parent_id"]
+			if parent_id == current:
+				return _failure("LMT map %d is its own parent" % current)
+			current = parent_id
+	return ParseResult.new(true, null, {})
 
 
 func _chunks_by_id(p_chunks: Array) -> Dictionary:

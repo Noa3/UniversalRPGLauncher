@@ -1,7 +1,7 @@
 # UniversalRPG - Architecture
 
-> **Status:** Phase 1 — Runtime Foundation
-> **Last Updated:** 2026-08-17
+> **Status:** Phase 2 — RM2000/2003 Parser
+> **Last Updated:** 2026-08-20
 
 ## Design Philosophy
 
@@ -20,58 +20,35 @@ and optionally enhance presentation on modern hardware.
 
 ## Architecture Overview
 
-```
+The repository currently uses this concrete layout. Planned interfaces should be
+added only when implementation reaches them; this document must not pretend empty
+future directories already exist.
+
+```text
 UniversalRPG/
-├── app/                    # Application layer
-│   ├── library/           # Game library management
-│   ├── launcher/          # Game launch workflow
-│   ├── settings/          # Configuration
-│   └── ui/               # Godot UI scenes/scripts
-│
-├── runtime/               # Core RPG Maker runtime
-│   ├── core/             # Platform-independent abstractions
-│   │   ├── interfaces/   # IRenderer, IAudioBackend, etc.
-│   │   ├── scheduler/    # Virtual clock, simulation loop
-│   │   ├── filesystem/   # Virtual filesystem
-│   │   ├── input/        # Input abstraction
-│   │   ├── audio/        # Audio abstraction
-│   │   ├── rendering/    # Rendering abstraction
-│   │   ├── save/         # Save system
-│   │   ├── serialization/
-│   │   └── diagnostics/  # Logging, error reporting
-│   │
-│   ├── rm2k/             # RPG Maker 2000/2003 backend
-│   │   ├── parser/       # Data file parsers
-│   │   ├── interpreter/  # Event interpreter
-│   │   ├── rendering/    # Map/sprite rendering
-│   │   └── database/     # RM2K database structures
-│   │
-│   ├── rgss/             # RGSS runtime (XP/VX/VXAce)
-│   │   ├── vm/           # Ruby VM adapter
-│   │   ├── api/          # RGSS API implementations
-│   │   └── compatibility/
-│   │
-│   ├── mv/               # RPG Maker MV backend
-│   ├── mz/               # RPG Maker MZ backend
-│   └── compatibility/    # Compatibility database
-│
-├── platform/             # Godot platform adapter
-│   └── godot/           # Godot-specific implementations
-│
-├── native/               # C++ native code
-│   ├── binary_inspector/ # PE/DLL inspection
-│   ├── pe/              # PE format parser
-│   └── win32/           # Win32 API compatibility
-│
-├── enhancement/          # Enhanced Mode features
-├── tests/               # Test suite
-│   ├── unit/
-│   ├── fixtures/
-│   ├── integration/
-│   └── rendering/
-│
-├── docs/               # Documentation
-└── tools/              # Build/dev tools
+├── app/
+│   ├── launcher/          # Runtime availability/launch workflow
+│   ├── library/           # Game library scan/settings
+│   └── ui/                # Godot application UI
+├── src/
+│   ├── core/              # VFS, clock, legacy text decoding
+│   ├── compatibility/     # Compatibility profiles/database
+│   ├── game_detector/     # Non-executing generation/dependency detection
+│   ├── rm2k/
+│   │   ├── parser/        # LCF reader + LDB/LMU/LSD parser
+│   │   ├── database/      # Serializable RM2K/2003 models
+│   │   ├── interpreter/   # Future event interpreter
+│   │   └── rendering/     # Future faithful renderer
+│   ├── rgss/              # Future XP/VX/VX Ace runtime
+│   ├── mv/                # Future MV runtime
+│   └── mz/                # Future MZ runtime
+├── platform/godot/        # Future explicit Godot adapter boundary
+├── enhancement/           # Future optional Enhanced Mode features
+├── plugins/               # Optional integration/plugin surfaces
+├── tests/                 # Core, fixtures, integration, rendering
+├── scripts/               # Validation/development automation
+├── docs/                  # Architecture, roadmap, compatibility/security docs
+└── tools/                 # Local development-tool metadata (binaries ignored)
 ```
 
 ## Runtime Abstractions
@@ -144,20 +121,16 @@ Game-specific behavior uses centralized flags, not scattered conditionals.
 
 See [ROADMAP.md](ROADMAP.md) for the complete phase breakdown.
 
-### Current Phase: Phase 0 — Repository Audit
+### Current Phase: Phase 2 — RM2000/2003 Parser
 
-- Repository structure audit
-- Architecture documentation
-- Technical debt assessment
+- real bounded LCF container/BER parsing exists;
+- initial LDB/LMU/LSD decoding exists;
+- synthetic and provenance-pinned real parser regression fixtures exist;
+- LMT parsing and deeper typed decoding are next.
 
-### Next Phase: Phase 1 — Runtime Foundation
+### Language boundary
 
-- Platform abstractions
-- Virtual filesystem
-- Virtual clock
-- Renderer/audio/input interfaces
-- Game detector
-- Compatibility profiles
+The tested implementation remains GDScript. A partial C# port is present but experimental. Do not delete/replace the GDScript implementation until a dedicated migration gate passes `dotnet build` and the same Godot regression suite under the .NET editor. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
 
 ## Security Model
 

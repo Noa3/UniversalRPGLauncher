@@ -1,7 +1,7 @@
 # UniversalRPG — Development Roadmap
 
 > **Last Updated:** 2026-08-20
-> **Current Phase:** Phase 1.5 — Application Foundation
+> **Current Phase:** Phase 2 — RM2000/2003 Parser
 
 ## Phase 0 — Repository Audit ✅
 
@@ -10,6 +10,8 @@
 - [x] Create repository structure
 - [x] Document architecture
 - [x] Set up project configuration
+- [x] Add Godot .NET project and solution metadata
+- [x] Add reproducible restore/build/import/test validation entrypoint
 - [ ] Audit existing codebase (N/A — fresh repository)
 
 **Deliverables:**
@@ -85,7 +87,7 @@
 
 ## Phase 2 — RM2000/2003 Parser
 
-**Status:** Planned
+**Status:** In progress
 
 ### Goals
 
@@ -97,14 +99,18 @@ Load an RM2000/2003 project and inspect:
 
 ### Tasks
 
-- [ ] RM2K binary format specification (research)
-- [ ] RM2KParser — core parser class
-- [ ] RM2KDatabase — database structures
-- [ ] RM2KMap — map tree parsing
-- [ ] RM2KEvent — event data structures
-- [ ] RM2KSave — save format parsing
-- [ ] Parser error handling (malformed data)
-- [ ] Parser unit tests with synthetic fixtures
+- [x] Real LCF container framing/BER reader with hard limits
+- [x] RM2KParser — core parser class
+- [x] RM2KDatabase — serializable database data model (field decoding still incomplete)
+- [x] Initial LMU base fields: chipset, dimensions, tile layers, event metadata
+- [x] Initial LSD top-level container/chunk parsing
+- [x] Parser error handling for truncation/invalid BER/oversized data/dimensions
+- [x] Parser unit tests with synthetic real-LCF encodings
+- [x] Validate parser against legal/reproducible real-world fixtures
+- [ ] LMT map-tree parser
+- [ ] Full typed LDB section decoding
+- [ ] Full LMU event/page/command data decoding
+- [ ] Preserve/report unknown fields consistently
 
 ### Key Design Decisions
 

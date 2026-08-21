@@ -45,7 +45,10 @@ func _run_test(p_name: String, p_result: Dictionary) -> void:
 	setup()
 	if not _failures.is_empty():
 		_fail("setup() failed before test ran")
-	call(p_name)
+	elif not has_method(p_name):
+		_fail("Test method not found: " + p_name)
+	else:
+		call(p_name)
 	teardown()
 	if _failures.is_empty():
 		p_result["passed"] += 1

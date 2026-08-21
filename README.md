@@ -6,7 +6,7 @@ Self-contained, cross-platform RPG Maker compatibility runtime built with Godot.
 
 The Godot application now starts, lets the user choose a games directory, scans its subdirectories, and identifies RPG Maker 2000/2003, XP, VX, VX Ace, MV, and MZ projects without executing imported files.
 
-Runtime backends are not playable yet. Detection, library UI, parser foundations, localization, and security boundaries exist; interpreters, rendering, audio, and complete data parsers remain under development.
+Runtime backends are not playable yet. Detection, library UI, localization, security boundaries, a bounded LCF container reader, and initial RM2000/2003 LDB/LMU/LSD parsing exist. Event interpretation, rendering, audio, and complete database/map decoding remain under development.
 
 | Capability | Status |
 |---|---|
@@ -14,7 +14,7 @@ Runtime backends are not playable yet. Detection, library UI, parser foundations
 | RPG Maker generation detection | Working, heuristic |
 | English, German, Spanish, French, Japanese, Korean, Simplified Chinese UI | Working |
 | UTF-8, BOM, CP932/Shift-JIS metadata decoding | Initial implementation |
-| RM2000/2003 parser | Prototype, not format-complete |
+| RM2000/2003 parser | Real LCF container layer + initial LDB/LMU/LSD decoding; not format-complete |
 | RM2000/2003 gameplay | Not implemented |
 | XP/VX/VX Ace gameplay | Not implemented |
 | MV/MZ gameplay | Not implemented |
@@ -41,16 +41,11 @@ The scanner checks the selected directory and up to two subdirectory levels. Sym
 
 ## Development Setup
 
-### Included Editors
+### Editor/tooling
 
-Godot 4.7.2 stable .NET editors are locally installed at:
+The repository is pinned to **Godot 4.7.2 stable**. Editor binaries are intentionally not included in the repository/ZIP. Optional local editor locations are documented in [`tools/godot/README.md`](tools/godot/README.md).
 
-- Linux x86-64: `tools/godot/editors/4.7.2/linux-x86_64/`
-- Windows x86-64: `tools/godot/editors/4.7.2/windows-x86_64/`
-
-Downloaded binaries are intentionally ignored by Git. Checksums and source URLs are documented in [`tools/godot/README.md`](tools/godot/README.md).
-
-The .NET editor needs a separate 64-bit .NET SDK. Godot 4.7 requires .NET 8 or newer; Android C# exports require .NET 9 or newer. UniversalRPG currently uses GDScript, so the standard Godot editor can also build it.
+The currently validated/canonical implementation is GDScript. A partial C# port exists as experimental work and must not replace GDScript files until a dedicated migration pass succeeds under the Godot .NET editor and `dotnet build`.
 
 ### Run
 
@@ -62,10 +57,13 @@ tools/godot/editors/4.7.2/linux-x86_64/Godot_v4.7.2-stable_mono_linux_x86_64/God
 
 ### Headless Validation
 
+Preferred command:
+
 ```bash
-godot --headless --editor --quit --path .
-godot --headless --path . --quit-after 5
+./scripts/validate.sh
 ```
+
+Set `GODOT_BIN=/absolute/path/to/Godot` if Godot is not on `PATH`. The script performs editor/import validation, the core test runner, and smoke tests.
 
 ## Targets
 
@@ -99,8 +97,12 @@ See [`docs/IMPORT_SECURITY.md`](docs/IMPORT_SECURITY.md) for required path, arch
 
 ## Direction
 
-- [`idea.md`](idea.md): product and engineering brief for Hermes
-- [`docs/ROADMAP.md`](docs/ROADMAP.md): implementation phases
+- [`KANBAN.md`](KANBAN.md): active autonomous work queue
+- [`SESSION_STATE.md`](SESSION_STATE.md): interruption/restart checkpoint
+- [`HERMES_AUTONOMOUS_PROMPT.md`](HERMES_AUTONOMOUS_PROMPT.md): ready-to-paste Hermes instructions
+- [`AGENTS.md`](AGENTS.md): repository rules for coding agents
+- [`idea.md`](idea.md): product and engineering brief
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): long-term implementation phases
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): runtime architecture
 - [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): compatibility policy
 

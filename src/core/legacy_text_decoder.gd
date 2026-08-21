@@ -1,7 +1,10 @@
 class_name LegacyTextDecoder
 extends RefCounted
 
-const JAPANESE_ENCODINGS := ["CP932", "SHIFT_JIS", "SJIS"]
+# Godot's multibyte decoder accepts SHIFT_JIS on Windows. CP932 and SJIS are
+# common aliases used by game metadata and are normalized before this list is
+# attempted so they do not produce an avoidable engine error first.
+const JAPANESE_ENCODINGS: Array[String] = ["SHIFT_JIS"]
 
 
 func decode(p_bytes: PackedByteArray, p_preferred_encoding: String = "") -> String:
@@ -17,7 +20,7 @@ func decode(p_bytes: PackedByteArray, p_preferred_encoding: String = "") -> Stri
 
 	var encodings: Array[String] = []
 	if not p_preferred_encoding.is_empty():
-		encodings.append(p_preferred_encoding)
+		encodings.append(_normalize_encoding(p_preferred_encoding))
 	for encoding in JAPANESE_ENCODINGS:
 		if encoding not in encodings:
 			encodings.append(encoding)
@@ -26,6 +29,13 @@ func decode(p_bytes: PackedByteArray, p_preferred_encoding: String = "") -> Stri
 		if not decoded.is_empty():
 			return decoded
 	return ""
+
+
+func _normalize_encoding(p_encoding: String) -> String:
+	var normalized := p_encoding.strip_edges().to_upper().replace("-", "_")
+	if normalized in ["CP932", "SJIS", "SHIFTJIS", "SHIFT_JIS"]:
+		return "SHIFT_JIS"
+	return p_encoding
 
 
 func _is_valid_utf8(p_bytes: PackedByteArray) -> bool:

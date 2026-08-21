@@ -161,11 +161,16 @@ func is_safe_path(p_path: String) -> bool:
 	if normalized.begins_with("/"):
 		return false
 	
-	# Block null bytes
-	if "\u0000" in normalized:
+	# Block embedded NUL bytes without putting a NUL character in the script
+	# source; Godot's GDScript parser warns when decoding that escape literal.
+	if _contains_null_byte(normalized.to_utf8_buffer()):
 		return false
 	
 	return true
+
+
+static func _contains_null_byte(p_bytes: PackedByteArray) -> bool:
+	return p_bytes.has(0)
 
 
 ## Resolve a path case-insensitively across all mounts
