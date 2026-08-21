@@ -7,7 +7,7 @@ English (`en`) is the default and fallback. The app currently includes `de`, `es
 1. Copy `locale/en.po` to `locale/<code>.po`.
 2. Set the PO `Language` header and translate every `msgstr`.
 3. Add the file to `internationalization/locale/translations` in `project.godot`.
-4. Add `["<code>", "Native language name"]` to `INTERFACE_LOCALES` in `app/ui/main.gd`.
+4. Add `("<code>", "Native language name")` to `InterfaceLocales` in `app/ui/Main.cs`.
 5. Run Godot with `--language <code>` and test narrow/mobile layouts.
 6. Verify placeholders such as `{count}`, `{engine}`, and `{reason}` remain unchanged.
 

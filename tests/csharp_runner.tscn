@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource path="res://tests/csharp_runner.cs" type="Script" id="1_runner"]
+[ext_resource path="res://tests/CSharpRunner.cs" type="Script" id="1_runner"]
 
 [node name="CSharpRunner" type="Node"]
 script = ExtResource("1_runner")

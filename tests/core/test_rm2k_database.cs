@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UniversalRPG.Rm2k.Database;
@@ -78,20 +79,26 @@ partial class TestRm2kDatabase : TestBase
 		database.Troopers.Add(new Rm2kDatabaseModel.Trooper());
 
 		var serialized = database.ToDict();
-		AssertEq(((List<object>)serialized["items"]).Count, 1);
-		AssertEq(((List<object>)serialized["skills"]).Count, 1);
-		AssertEq(((List<object>)serialized["states"]).Count, 1);
-		AssertEq(((List<object>)serialized["classes"]).Count, 1);
-		AssertEq(((List<object>)serialized["weapons"]).Count, 1);
-		AssertEq(((List<object>)serialized["armors"]).Count, 1);
-		AssertEq(((List<object>)serialized["enemies"]).Count, 1);
-		AssertEq(((List<object>)serialized["battle_animations"]).Count, 1);
-		AssertEq(((List<object>)serialized["troopers"]).Count, 1);
+		AssertCollectionCount(serialized["items"], 1);
+		AssertCollectionCount(serialized["skills"], 1);
+		AssertCollectionCount(serialized["states"], 1);
+		AssertCollectionCount(serialized["classes"], 1);
+		AssertCollectionCount(serialized["weapons"], 1);
+		AssertCollectionCount(serialized["armors"], 1);
+		AssertCollectionCount(serialized["enemies"], 1);
+		AssertCollectionCount(serialized["battle_animations"], 1);
+		AssertCollectionCount(serialized["troopers"], 1);
 	}
 
 	private void AssertIntSeq(List<int> pActual, int[] pExpected)
 	{
 		AssertTrue(pActual.SequenceEqual(pExpected),
 			$"Expected [{string.Join(",", pExpected)}], got [{string.Join(",", pActual)}]");
+	}
+
+	private void AssertCollectionCount(object pValue, int pExpected)
+	{
+		AssertTrue(pValue is ICollection collection && collection.Count == pExpected,
+			$"Expected collection count {pExpected}");
 	}
 }

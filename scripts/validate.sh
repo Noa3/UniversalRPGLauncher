@@ -9,10 +9,10 @@ if ! command -v dotnet >/dev/null 2>&1; then
   exit 2
 fi
 
-echo "[1/5] .NET restore"
+echo "[1/4] .NET restore"
 dotnet restore
 
-echo "[2/5] .NET build"
+echo "[2/4] .NET build"
 dotnet build --no-restore
 
 find_godot() {
@@ -63,13 +63,10 @@ if [[ "$GODOT" == *.exe ]] && command -v cygpath >/dev/null 2>&1; then
   GODOT_PROJECT_PATH="$(cygpath -m "$ROOT_DIR")"
 fi
 
-echo "[3/5] Godot import/syntax validation"
+echo "[3/4] Godot import validation"
 "$GODOT" --headless --editor --quit --path "$GODOT_PROJECT_PATH"
 
-echo "[4/5] Core test suite"
-"$GODOT" --headless --path "$GODOT_PROJECT_PATH" --script res://tests/runner.gd
-
-echo "[5/5] Smoke tests"
-"$GODOT" --headless --path "$GODOT_PROJECT_PATH" --script res://tests/smoke_runner.gd
+echo "[4/4] C# core and smoke tests"
+"$GODOT" --headless --path "$GODOT_PROJECT_PATH" res://tests/csharp_runner.tscn
 
 echo "UniversalRPG validation passed."

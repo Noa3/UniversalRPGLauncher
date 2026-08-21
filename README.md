@@ -45,7 +45,7 @@ The scanner checks the selected directory and up to two subdirectory levels. Sym
 
 The repository is pinned to **Godot 4.7.2 stable**. Editor binaries are intentionally not included in the repository/ZIP. Optional local editor locations are documented in [`tools/godot/README.md`](tools/godot/README.md).
 
-The currently validated/canonical implementation is GDScript. A partial C# port exists as experimental work and must not replace GDScript files until a dedicated migration pass succeeds under the Godot .NET editor and `dotnet build`.
+The validated/canonical implementation is pure C#/.NET under the Godot 4.7.2 .NET editor. The migration is covered by `dotnet build` and the headless C# suite (`128/128` tests passed).
 
 ### Run
 
@@ -63,7 +63,7 @@ Preferred command:
 ./scripts/validate.sh
 ```
 
-Set `GODOT_BIN=/absolute/path/to/Godot` if Godot is not on `PATH`. The script performs editor/import validation, the core test runner, and smoke tests.
+Set `GODOT_BIN=/absolute/path/to/Godot` if Godot is not on `PATH`. The script performs .NET restore/build, editor import validation, and the C# core/smoke suite.
 
 ## Targets
 

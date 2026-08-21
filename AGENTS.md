@@ -19,9 +19,9 @@ Do not invent a parallel private roadmap and do not spend a session only rewriti
 
 ## Current implementation policy
 
-- GDScript is the **validated/canonical implementation** until a complete C# migration passes both `dotnet build` and the Godot test suite under a .NET editor.
-- Existing `.cs` files are an experimental port. Do not delete working `.gd` equivalents just because a C# file exists.
-- Do not continue a broad language migration while it blocks RM2000/2003 runtime progress. Port only behind an explicit Kanban card and acceptance tests.
+- C#/.NET is the validated/canonical implementation. The user-directed migration passed `dotnet build` and the Godot .NET headless suite with `128/128` tests.
+- Superseded `.gd` files were removed after migration validation. Keep future C# changes covered by equivalent regression tests.
+- Do not continue broad language migration work; focus on RM2000/2003 runtime progress behind Kanban cards and acceptance tests.
 - Godot 4.7.2 stable is the pinned engine line for this repository unless a deliberate upgrade card changes it.
 - Imported games are untrusted input. Never execute game EXEs, DLLs, Ruby, JavaScript, shell commands, or native plugins during detection/parsing tests.
 

@@ -5,11 +5,11 @@
 
 ## Current card
 
-User-directed GDScript → pure C#/.NET migration (explicit user request 2026-08-21: "ich möchte kein godotscript sondern pure .net bitte replace die skripte"). Formalize as a Kanban card on next session start.
+`K-012` — Expand LDB decoding into typed core database sections. C# migration is complete under `K-003`.
 
 ## Last verified baseline
 
-GDScript suite remains the last fully validated baseline: 102/102 core tests + smoke tests green under Godot 4.7.2 (`./scripts/validate.sh`, 2026-08-20). The C# port compiles clean (`dotnet build` 0 errors, SDK 8.0.412 at `/tmp/opencode/dotnet8`) but the headless C# test run is blocked: assemblies carry no `[ScriptPath]` attributes because `Godot.SourceGenerators.ScriptPathAttributeGenerator` emits nothing, so scene-referenced classes cannot be instantiated. Full details and next steps: `SESSION_HANDOFF_2026-08-21.md`.
+C# is now canonical. `dotnet build UniversalRPG.csproj` passes with zero errors, Godot 4.7.2 Mono instantiates `tests/CSharpRunner.cs`, and the headless C# suite passes `128/128` with exit code `0`.
 
 ## Validated stabilization changes
 
@@ -38,15 +38,17 @@ GDScript suite remains the last fully validated baseline: 102/102 core tests + s
 
 ## Current action
 
-C# migration, step "make headless test runner instantiate": annotate `Main` and `CSharpRunner` with `[ScriptPathAttribute("res://…")]` manually (attribute exists in GodotSharp 4.7.2), rebuild with `DOTNET_ROOT=/tmp/opencode/dotnet8` on PATH, rerun `res://tests/csharp_runner.tscn`.
+Migration complete. Continue K-012 typed LDB/database work in C# and keep parser regression coverage in `tests/core/`.
 
 ## Next action
 
-After the C# suite runs green: delete superseded `.gd` scripts (user-mandated replacement), purge `.gd` references from project.godot/docs, re-verify build + headless run, then commit and push.
+Run full `./scripts/validate.sh` where Godot and .NET are available, then continue K-012. Commit/push only after final validation review.
 
 ## Failure log
 
 - 2026-08-21 | C# migration | Signature: Godot Mono headless -> `Cannot instantiate C# script because the associated class could not be found. Script: 'res://tests/csharp_runner.cs'`. Hypothesis 1: stale incremental build skipped source generators. Evidence: forced `-t:Rebuild -p:EmitCompilerGeneratedFiles=true` ran ScriptMethods/Properties/Signals generators for all classes, but `ScriptPathAttributeGenerator` produced no output and `UniversalRPG.dll` contains zero `[ScriptPath]` attributes (only 5 unrelated `res://` strings). GodotSharp 4.7.2 defines `ScriptPathAttribute`; SDK targets disable nothing; generator class exists in the package. Attempt 1 (rebuild) did not resolve. Next attempt: manual `[ScriptPathAttribute]` annotation on scene-referenced classes; if that fails, decompile the generator for its emission condition.
+- 2026-08-21 | C# migration | Manual `[ScriptPathAttribute]` annotations did not register scene scripts. Root cause: `ScriptPathAttributeGenerator` requires case-sensitive file/class name equality and emits `AssemblyHasScriptsAttribute`; `main.cs`/`Main` and `csharp_runner.cs`/`CSharpRunner` were skipped. Renamed files to `Main.cs` and `CSharpRunner.cs`, updated scenes, rebuilt, and verified generated script-path registry.
+- 2026-08-21 | C# migration | C# runner initially failed 5 database assertions because `List<int>` and typed dictionary lists do not implement `IEnumerable<object>`, and test cast `List<Dictionary<...>>` to `List<object>`. Changed deserialization to non-generic `IEnumerable`; test now uses `ICollection`. Result: `128/128` passed, exit `0`.
 - 2026-08-20 | K-001 | Signature: `./scripts/validate.sh` -> exit 127, `Godot 4.7.2 was not found`. Hypothesis: the wrapper only knows POSIX/editor-PATH locations while this Windows checkout has a local Godot binary. Evidence: `E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe` exists and reports `4.7.2.stable.mono.official.ed1daf0bf`. Changed prerequisite: supplied `GODOT_BIN`; result: validation reached import/tests and exposed source failures. Next attempt will repair the source signatures, not retry discovery unchanged.
 - 2026-08-20 | K-001 | Signature: Godot test runner -> `Parse Error: Expected closing "]" after array elements` at `src/rm2k/database/rm2k_database.gd:341`, preventing `RM2KDatabase` and `tests/core/test_rm2k_database.gd` from loading. Hypothesis: Python-style array comprehensions are not valid GDScript 4.7.2. Evidence: direct Godot load reports the exact parser location. Attempt 1: source inspection/direct load; confirmed. Next attempt will replace only the invalid serialization syntax and add focused coverage.
 - 2026-08-20 | K-001 | Signature: Godot test runner -> `Could not find type "double"` at `src/core/virtual_clock.gd:54,232`, followed by Variant-inference warnings treated as errors at lines 150 and 158. Hypothesis: the stabilization patch used a non-GDScript type and generic `max()` where typed `float`/`maxi()` are required. Evidence: direct Godot load reproduces all locations. Attempt 1: source inspection/direct load; confirmed. Repair: changed the time values to `float`, made `now`/`elapsed` explicit floats, and replaced `max()` with `maxi()`. Result: targeted core suite and full validation passed.

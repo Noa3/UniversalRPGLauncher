@@ -130,7 +130,7 @@ See [ROADMAP.md](ROADMAP.md) for the complete phase breakdown.
 
 ### Language boundary
 
-The tested implementation remains GDScript. A partial C# port is present but experimental. Do not delete/replace the GDScript implementation until a dedicated migration gate passes `dotnet build` and the same Godot regression suite under the .NET editor. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
+The tested implementation is pure C#/.NET under the Godot .NET editor. Migration gate passed `dotnet build` and the headless C# regression suite at `128/128`. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
 
 ## Security Model
 

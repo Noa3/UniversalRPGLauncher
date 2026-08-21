@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 
 namespace UniversalRPG.Rm2k.Database;
@@ -265,7 +266,7 @@ public class Rm2kDatabaseModel
 			DropItemId = Rm2kMap.GetInt(pDict, "drop_item_id");
 			DropItemWeight = Rm2kMap.GetInt(pDict, "drop_item_weight");
 			Actions = new List<Dictionary<string, object>>();
-			if (pDict.TryGetValue("actions", out var actionsValue) && actionsValue is IEnumerable<object> actionItems)
+			if (pDict.TryGetValue("actions", out var actionsValue) && actionsValue is IEnumerable actionItems)
 			{
 				foreach (var item in actionItems)
 				{
@@ -297,7 +298,7 @@ public class Rm2kDatabaseModel
 			Id = Rm2kMap.GetInt(pDict, "id");
 			Name = Rm2kMap.GetString(pDict, "name");
 			AnimationData = new List<Dictionary<string, object>>();
-			if (pDict.TryGetValue("animation_data", out var dataValue) && dataValue is IEnumerable<object> dataItems)
+			if (pDict.TryGetValue("animation_data", out var dataValue) && dataValue is IEnumerable dataItems)
 			{
 				foreach (var item in dataItems)
 				{
@@ -520,7 +521,7 @@ public class Rm2kDatabaseModel
 	{
 		GameTitle = Rm2kMap.GetString(pDict, "game_title");
 		PartyMembers = new List<int>();
-		if (pDict.TryGetValue("party_members", out var partyValue) && partyValue is IEnumerable<object> partyItems)
+		if (pDict.TryGetValue("party_members", out var partyValue) && partyValue is IEnumerable partyItems)
 		{
 			foreach (var item in partyItems)
 			{
@@ -558,7 +559,7 @@ public class Rm2kDatabaseModel
 
 		AnimationCount = Rm2kMap.GetInt(pDict, "animation_count");
 		TilesetData = new List<string>();
-		if (pDict.TryGetValue("tileset_data", out var tilesetValue) && tilesetValue is IEnumerable<object> tilesetItems)
+		if (pDict.TryGetValue("tileset_data", out var tilesetValue) && tilesetValue is IEnumerable tilesetItems)
 		{
 			foreach (var item in tilesetItems)
 			{
@@ -574,7 +575,7 @@ public class Rm2kDatabaseModel
 	private static void FillList<T>(List<T> pTarget, Dictionary<string, object> pDict, string pKey,
 		System.Func<T> pFactory) where T : class
 	{
-		if (!pDict.TryGetValue(pKey, out var listValue) || listValue is not IEnumerable<object> items)
+		if (!pDict.TryGetValue(pKey, out var listValue) || listValue is not IEnumerable items)
 		{
 			return;
 		}
@@ -603,7 +604,7 @@ public class Rm2kDatabaseModel
 	private static void CopyInts(List<int> pTarget, Dictionary<string, object> pDict, string pKey)
 	{
 		pTarget.Clear();
-		if (!pDict.TryGetValue(pKey, out var value) || value is not IEnumerable<object> items)
+		if (!pDict.TryGetValue(pKey, out var value) || value is not IEnumerable items)
 		{
 			return;
 		}
@@ -616,7 +617,7 @@ public class Rm2kDatabaseModel
 	private static void CopyStrings(List<string> pTarget, Dictionary<string, object> pDict, string pKey)
 	{
 		pTarget.Clear();
-		if (!pDict.TryGetValue(pKey, out var value) || value is not IEnumerable<object> items)
+		if (!pDict.TryGetValue(pKey, out var value) || value is not IEnumerable items)
 		{
 			return;
 		}

@@ -19,4 +19,4 @@ Editor binaries are ignored by Git. Download sources:
 - <https://github.com/godotengine/godot-builds/releases/tag/4.7.2-stable>
 - <https://godotengine.org/download/archive/4.7.2-stable/>
 
-The .NET editor requires a separate 64-bit .NET SDK. The canonical application/runtime is currently GDScript, while a partial experimental C# port is also present. Use the .NET editor when validating that port; the standard editor is sufficient for the canonical GDScript validation suite.
+The .NET editor requires a separate 64-bit .NET SDK. The canonical application/runtime is pure C#/.NET. Use the .NET editor for import, runtime, and headless test validation.

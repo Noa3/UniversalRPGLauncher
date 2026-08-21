@@ -1,13 +1,13 @@
 # UniversalRPG — Project Status
 
-> **Last Updated:** 2026-08-20
+> **Last Updated:** 2026-08-21
 > **Current Phase:** Phase 2 — RM2000/2003 Parser in progress
 
 ## Executive Summary
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder scanner, generation detection, legacy metadata decoding, and a real bounded LCF container parser with initial RM2000/2003 LDB/LMU/LSD decoding validated against pinned EasyRPG TestGame fixtures. No runtime backend is playable yet. The immediate critical path is expanding faithful RM2000/2003 parsing before rendering or event execution.
 
-The repository also exposes a Godot .NET entry point: `project.godot` advertises C# support, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, core tests, and smoke tests. GDScript remains the validated behavioral baseline until the C# port proves parity.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `128/128` tests.
 
 ## Phase Status Overview
 
@@ -29,7 +29,7 @@ The repository also exposes a Godot .NET entry point: `project.godot` advertises
 
 ## Implemented Systems
 
-### 1. VirtualFileSystem (`src/core/virtual_filesystem.gd`)
+### 1. VirtualFileSystem (`src/core/virtual_filesystem.cs`)
 
 **Status:** Implemented
 
@@ -49,7 +49,7 @@ The repository also exposes a Godot .NET entry point: `project.godot` advertises
 
 ---
 
-### 2. VirtualClock (`src/core/virtual_clock.gd`)
+### 2. VirtualClock (`src/core/virtual_clock.cs`)
 
 **Status:** Implemented
 
@@ -69,7 +69,7 @@ The repository also exposes a Godot .NET entry point: `project.godot` advertises
 
 ---
 
-### 3. GameDetector (`src/game_detector/game_detector.gd`)
+### 3. GameDetector (`src/game_detector/game_detector.cs`)
 
 **Status:** Implemented
 
@@ -92,7 +92,7 @@ The repository also exposes a Godot .NET entry point: `project.godot` advertises
 
 ---
 
-### 4. CompatibilityProfile (`src/compatibility/compatibility_profile.gd`)
+### 4. CompatibilityProfile (`src/compatibility/compatibility_profile.cs`)
 
 **Status:** Implemented
 
@@ -187,4 +187,4 @@ Changes prepared in this pass:
 - added provenance-pinned EasyRPG TestGame RM2000/RM2003 LDB/LMT/LMU fixtures and real-framing regression tests;
 - accepted valid zero-length LDB struct-array sections while preserving bounded malformed-input rejection.
 
-These changes have been validated with the local Godot 4.7.2 stable .NET editor on Windows: import/syntax validation passed, the core suite passed at 102/102, and smoke tests passed. Legacy decoder and VFS parser diagnostics are clean; the only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.
+The C# migration has been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `128/128`. The only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.
