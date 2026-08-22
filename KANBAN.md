@@ -95,15 +95,15 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 
 **Acceptance criteria**
 - Trusted compiled plugin contracts expose metadata, capabilities, probe results, runtime lifecycle, and typed diagnostics.
-- Built-in descriptors cover RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection; all except Unite provide safe bounded lifecycle bootstraps, while RM2K/RM2K3 additionally parse LDB/LMT/LMU data.
+- Built-in descriptors cover RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection. RM95/MV/MZ/Unite remain detection-only; RGSS has a bounded metadata lifecycle slice, WOLF has an explicitly unencrypted plain-data slice, and RM2K/RM2K3 additionally parse LDB/LMT/LMU data.
 - Detection uses bounded read-only folder/ZIP inspection and retains ranked candidates, evidence, ambiguity, malformed-input, and unknown diagnostics.
 - Library import/scan persists versioned detection metadata and revalidates persisted selections on relaunch.
 - Runtime selection refuses ambiguous, unknown, malformed, detection-only, missing, capability-incompatible, platform-incompatible, and probe-failing candidates without external fallback.
 - Godot UI displays plugin/candidate status and structured diagnostics.
 
 **Validation evidence (2026-08-21)**
-- `dotnet build UniversalRPG.csproj --no-restore` — passed with 0 errors; existing nullable warnings remain in unrelated baseline code.
-- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `151/151` C# tests.
+- `dotnet build UniversalRPG.csproj --no-restore` — passed with `0` warnings and `0` errors after nullable-contract hardening.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `159/159` C# tests including RGSS/WOLF slices.
 - Detection never executes imported EXE, DLL, Ruby, JavaScript, shell, or native plugin files; ZIPs are inspected without extraction. RM2K/RM2K3 runtime tests load only validated fixture data and advance the deterministic clock.
 
 ### K-010 — Real LCF validation

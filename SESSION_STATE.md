@@ -41,10 +41,11 @@ C# is now canonical. `dotnet build UniversalRPG.csproj` passes with zero errors,
 - Added trusted in-process plugin contracts, deterministic registries, typed probe/lifecycle errors, and runtime host cleanup under `src/plugins/`.
 - Added bounded read-only folder/ZIP inspection and built-in detection plugins for RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection.
 - Added the first functional parser-backed RM2K/RM2K3 runtime bootstrap: validated LDB/LMT/LMU loading, deterministic clock updates, and safe lifecycle start/stop without `RPG_RT.exe`.
-- Added safe bounded lifecycle bootstrap backends for RM95, XP, VX, VX Ace, MV, MZ, and WOLF; Unite remains explicitly research-only.
+- RM95, MV, MZ, and Unite remain detection-only; RGSS exposes bounded metadata lifecycle slices, WOLF exposes an explicitly unencrypted plain-data slice, and RM2K/RM2K3 retain the parser-backed runtime bootstrap.
 - Rewired `GameDetector`, `GameLibrary`, `RuntimeLauncher`, and the Godot UI to preserve ranked detection reports, persist import metadata, and refuse unsafe/unsupported runtime selection without external fallback.
 - Added contract, detection, archive, persistence, ambiguity, platform, and lifecycle regression coverage.
-- Validation passed with Godot 4.7.2 Mono: `151/151` tests.
+- Added RGSS and WOLF regression fixtures/tests; validation passes with Godot 4.7.2 Mono: `159/159` tests.
+- Nullable contracts were hardened across C# core/UI/test code; `.NET` build now reports `0` warnings and `0` errors.
 
 ## Current action
 
