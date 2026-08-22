@@ -5,7 +5,7 @@
 
 ## Current card
 
-|K-023 is DONE (verified liblcf interpreter codes, typed EventCommand model). MZ line complete for now: K-017 (data-directory inspection) and K-018 (database inventory: section counts, System.json switch/variable name counts, map file count) are DONE. Remaining MZ work is gated on the RM2K playable milestone (K-090). Next READY work: branch-condition decoding card or K-022 movement.|
+|K-019 (ConditionalBranch evaluation) is implemented and builds clean but is VERIFY: the headless suite was not re-run successfully after the change (stale assembly 14/14, then one timed-out run). Last verified suite count 205/205. First action on restart: run the csharp_runner once per SESSION_HANDOFF restart procedure; expect TestEventInterpreter 19/19 and All 210; then flip K-019 to DONE, update counts, run scripts/validate.sh, commit.|
 
 ## Last verified baseline
 

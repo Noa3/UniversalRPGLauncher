@@ -12,6 +12,13 @@
 6. **Completed K-017 (user-directed MZ slice)**: `MzDataDirectoryResult.Extract(snapshot)` in `project/src/plugins/BuiltInEnginePlugins.cs` decodes bounded `data/Actors.json` + `data/MapInfos.json` metadata (counts + first 32 names, 2048 KiB/file cap) with Godot's JSON parser; detects MZ encrypted assets (`.rpgmvp/.rpgmvo/.rpgmvm`); refuses snapshots without the rmmz runtime signature.
 7. **Completed K-018 (MZ inventory)**: extended the same result with optional-section counts (Classes/Skills/Items/Weapons/Armors/Enemies/Troops), System.json `switches`/`variables` name-array counts, and physical `Map###.json` file count (cap 9999). Absent sections stay silent; malformed ones get per-file diagnostics. New tests: `TestMzDataDirectory` now 7 tests. Suite total **205/205 green**. Note: malformed-JSON fixtures log Godot engine-side "Parse JSON failed" lines by design of `Json.ParseString`; behavior is deterministic and asserted via diagnostics.
 
+8. **User-directed bound raise**: K-017/K-018 caps changed to 2048 KiB/file, 9999 actors, 9999 maps (MapInfos entries AND physical map files). Committed as `86d7cbf`.
+9. **K-019 written but UNVERIFIED — first action on restart**: implemented ConditionalBranch evaluation (switch type 0 with ON/OFF polarity, variable type 1 with const/var operand and all six CheckOperator comparisons; unsupported types -> diagnostic + else path; branch boundaries resolved by depth counting so nested branches work; true path skips else via EndBranch jump in ExecuteElseBranch). Five new tests added (`Test_ConditionalBranch*`; test file now has 19 Test_* methods). Build is clean, but the headless suite was NOT re-verified: runner returned a stale assembly (14/14) and a later run timed out after a full rebuild. Last verified count **205/205**.
+
+**Restart procedure for K-019:** fresh shell, then
+`cd project && export DOTNET_ROOT="$HOME/.dotnet"; export PATH="$HOME/.dotnet:$PATH" && ../tools/godot/editors/4.7.2/linux-x86_64/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64 --headless --path . res://tests/csharp_runner.tscn`
+Expect `TestEventInterpreter: 19/19` and `All 210 tests passed`. Green -> flip KANBAN K-019 to DONE, update counts to 210/210 in docs/PROJECT_STATUS.md + SESSION_STATE.md + this handoff, run `bash scripts/validate.sh`, commit "K-019 verify conditional branch evaluation". Failing test -> fix before any other card; do not weaken assertions.
+
 ## Toolchain notes (Linux box)
 
 - .NET SDK lives in `~/.dotnet`: run `export DOTNET_ROOT="$HOME/.dotnet"; export PATH="$HOME/.dotnet:$PATH"` before any dotnet command.

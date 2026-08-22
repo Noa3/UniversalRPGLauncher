@@ -27,6 +27,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
 | K-017 | 2 | DONE | Bounded MZ data-directory metadata inspection (Actors/MapInfos/encrypted assets) | K-016 |
 | K-018 | 2 | DONE | Complete MZ database inventory (section counts, system name arrays, map files) | K-017 |
+| K-019 | 1 | VERIFY | ConditionalBranch condition evaluation (switch/variable comparisons) | K-023 |
 | K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
@@ -236,6 +237,24 @@ User-directed MZ slice (extends the K-016 line); stays detection/metadata-only.
 - Added `MzDataDirectoryResult.Extract(GameInspectionSnapshot)` in `project/src/plugins/BuiltInEnginePlugins.cs`; JSON parsed with Godot's `Json` parser under strict bounds (2048 KiB/file, 9999 actors, 9999 maps).
 - Added `TestMzDataDirectory` suite with five tests over synthetic MZ/MV game folders; suite total `205/205`.
 - `bash scripts/validate.sh` — passed; `203/203` C# tests and smoke validation.
+
+### K-019 — ConditionalBranch condition evaluation (VERIFY)
+
+Implements EasyRPG `CommandConditionalBranch` (code 12010) semantics for the two condition types the deterministic core can model.
+
+**Acceptance criteria**
+- Type 0 (switch): switch state compared against ON/OFF polarity (`parameters[2] == 0` means "is ON").
+- Type 1 (variable): variable vs constant or variable operand with the six CheckOperator comparisons (==, >=, <=, >, <, !=).
+- Unsupported types (timer/gold/item/actor) evaluate false with a diagnostic; else path is taken deterministically.
+- True path runs then-body and skips else via matching EndBranch; false path jumps to ElseBranch or EndBranch; nesting handled by depth counting, not indent.
+- Regression coverage: switch polarity, false-runs-else, variable operators, var-vs-var operand with nested branch, unsupported-type diagnostic.
+
+**Status (2026-08-23) — VERIFY, not DONE**
+- Implementation complete in `project/src/rm2k/interpreter/EventInterpreter.cs`; builds clean (0 warnings/errors). Five new tests exist (`Test_ConditionalBranch*`, suite file now has 19 `Test_*` methods).
+- NOT yet verified in the headless suite: the last runner invocations returned a stale assembly (14/14) and then timed out after a full rebuild. Last verified suite count remains **205/205**.
+- Unblock action: run once with a fresh shell:
+  `cd project && "$GODOT" --headless --path . res://tests/csharp_runner.tscn` (GODOT = `tools/godot/editors/4.7.2/linux-x86_64/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64`)
+  Expected: `TestEventInterpreter: 19/19 passed`, `All 210 tests passed`. If green, flip this card to DONE and update counts in PROJECT_STATUS/SESSION_STATE/handoff. If a test fails, fix before any further card work.
 
 ### K-018 — Complete MZ database inventory
 

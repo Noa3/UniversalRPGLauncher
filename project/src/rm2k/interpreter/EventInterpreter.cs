@@ -54,6 +54,18 @@ public sealed class EventInterpreter
 	public const int VarOperandConstant = 0;
 	public const int VarOperandVariable = 1;
 
+	// ConditionalBranch condition types (EasyRPG CommandConditionalBranch).
+	public const int ConditionSwitch = 0;
+	public const int ConditionVariable = 1;
+
+	// ConditionalBranch comparison operators (EasyRPG CheckOperator).
+	public const int BranchOpEqual = 0;
+	public const int BranchOpGreaterOrEqual = 1;
+	public const int BranchOpLessOrEqual = 2;
+	public const int BranchOpGreater = 3;
+	public const int BranchOpLess = 4;
+	public const int BranchOpNotEqual = 5;
+
 	private readonly GameSimulationState _state;
 	private readonly int _eventId;
 	private readonly IReadOnlyList<Rm2kMap.EventCommand> _commands;
@@ -346,20 +358,103 @@ public sealed class EventInterpreter
 
 	private void ExecuteConditionalBranch()
 	{
-		// Condition decoding (switch/variable/actor/timer comparisons) is a
-		// separate slice; for now the true-branch always executes.
+		if (!EvaluateCondition())
+		{
+			var elseIndex = FindConditionalBoundary(_commandIndex, true);
+			var target = elseIndex ?? FindConditionalBoundary(_commandIndex, false);
+			// Jump onto the Else/End marker; the frame loop advances past it.
+			_commandIndex = target ?? _commands.Count - 1;
+		}
+	}
+
+	private bool EvaluateCondition()
+	{
+		var cmd = _commands[_commandIndex];
+		switch (Param(cmd, 0))
+		{
+			case ConditionSwitch:
+				if (cmd.Parameters.Count < 3)
+				{
+					Malformed("ConditionalBranch");
+					return false;
+				}
+				return GetSwitch(Param(cmd, 1)) == (Param(cmd, 2) == 0);
+			case ConditionVariable:
+				if (cmd.Parameters.Count < 5)
+				{
+					Malformed("ConditionalBranch");
+					return false;
+				}
+				var left = GetVariable(Param(cmd, 1));
+				var right = Param(cmd, 2) == VarOperandConstant
+					? Param(cmd, 3)
+					: GetVariable(Param(cmd, 3));
+				return CompareValues(left, right, Param(cmd, 4));
+			default:
+				// Timer/gold/item/actor conditions need party/timer state that
+				// the deterministic core does not model yet; EasyRPG treats an
+				// unevaluable branch as false (else path).
+				_state.AddDiagnostic($"[Event {_eventId}] ConditionalBranch type {Param(cmd, 0)} not supported yet; taking else branch");
+				return false;
+		}
+	}
+
+	private bool CompareValues(int pLeft, int pRight, int pOperator)
+	{
+		switch (pOperator)
+		{
+			case BranchOpEqual: return pLeft == pRight;
+			case BranchOpGreaterOrEqual: return pLeft >= pRight;
+			case BranchOpLessOrEqual: return pLeft <= pRight;
+			case BranchOpGreater: return pLeft > pRight;
+			case BranchOpLess: return pLeft < pRight;
+			case BranchOpNotEqual: return pLeft != pRight;
+			default:
+				Malformed("ConditionalBranch");
+				return false;
+		}
+	}
+
+	/// <summary>
+	/// Finds the ElseBranch or EndBranch belonging to this ConditionalBranch,
+	/// skipping nested branch blocks by depth counting.
+	/// </summary>
+	private int? FindConditionalBoundary(int pFrom, bool pSearchElse)
+	{
+		var depth = 0;
+		for (var i = pFrom + 1; i < _commands.Count; i++)
+		{
+			var code = _commands[i].Code;
+			if (code == ConditionalBranch)
+			{
+				depth++;
+			}
+			else if (code == EndBranch)
+			{
+				if (depth == 0 && !pSearchElse)
+				{
+					return i;
+				}
+				depth--;
+			}
+			else if (code == ElseBranch && depth == 0 && pSearchElse)
+			{
+				return i;
+			}
+		}
+		return null;
 	}
 
 	private void ExecuteElseBranch()
 	{
-		// The condition evaluation above currently never skips blocks, so the
-		// else branch must not run yet. Tracked with full branch semantics.
-		_commandIndex = FindMatchingBranch(_commandIndex, EndBranch) ?? _commandIndex;
+		// Reached only when the condition was true and the then-body ran to
+		// its end: skip the else block by jumping onto the matching EndBranch.
+		_commandIndex = FindConditionalBoundary(_commandIndex, false) ?? _commandIndex;
 	}
 
 	private void ExecuteEndBranch()
 	{
-		// Structured block end; nothing to do until conditions are decoded.
+		// Structured block end; the frame loop advances past it.
 	}
 
 	private void ExecuteBreakLoop()
@@ -411,6 +506,11 @@ public sealed class EventInterpreter
 			return 0;
 		}
 		return _state.Variables[pId - 1];
+	}
+
+	private bool GetSwitch(int pId)
+	{
+		return pId >= 1 && pId <= _state.Switches.Count && _state.Switches[pId - 1];
 	}
 
 	private static int Param(Rm2kMap.EventCommand pCmd, int pIndex)
