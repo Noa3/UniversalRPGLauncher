@@ -5,11 +5,11 @@
 
 ## Current card
 
-|K-021 is DONE — first interpreter slice (message/wait/if/else/endIf/loop/breakLoop + switch/variable/transfer) with bounded payload decoding and diagnostics. K-023 (verified RM2K/2003 command codes) and K-024 (layout split, already executed) are READY follow-ups.|
+|K-023 is DONE — interpreter runs verified liblcf command codes (10110/10210/10220/10810/11410/12010/12210-22210 family) on the typed Rm2kMap.EventCommand model with bounded loop/branch handling. Next READY work: K-022 (movement/passability) or branch-condition decoding as new card.|
 
 ## Last verified baseline
 
-`bash scripts/validate.sh` passed on Linux with the pinned `tools/godot/editors/4.7.2/linux-x86_64/...mono...x86_64` editor: headless C# suite `199/199`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+`bash scripts/validate.sh` passed on Linux with the pinned `tools/godot/editors/4.7.2/linux-x86_64/...mono...x86_64` editor: headless C# suite `198/198`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
 
 ## Layout note (2026-08-23)
 

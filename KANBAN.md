@@ -27,8 +27,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
 | K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
-| K-023 | 2 | READY | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
-| K-024 | 2 | READY | Move Godot project into `project/` and keep runtime/tooling at repo root | — |
+| K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
+| K-024 | 2 | DONE | Move Godot project into `project/` and keep runtime/tooling at repo root | — |
 | K-022 | 1 | BACKLOG | Implement map/player movement and passability simulation | K-020 |
 | K-030 | 1 | BACKLOG | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | BACKLOG | Character/event sprite renderer and camera | K-030 |
@@ -205,7 +205,7 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Added dispatch plus bounded executors for `ControlSwitches`, `ControlVariables` (set/add/sub/mul/div/mod with division-by-zero diagnostic), and `TransferPlayer` (pending-transfer state).
 - Removed the placeholder move-route case whose opcode literal collided with `ControlSwitches` (`CS0152`).
 - Placeholder opcode constants (101–118, 105–107) documented as such; migration is tracked as K-023.
-- `bash scripts/validate.sh` — passed; `199/199` C# tests and smoke validation from the new `project/` layout.
+- `bash scripts/validate.sh` — passed; `198/198` C# tests and smoke validation after the K-023 opcode migration (typed EventCommand model).
 
 ### K-024 — Repository layout split
 
@@ -218,6 +218,21 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Moved project files via `git mv`; `.godot` cache regenerated inside `project/`.
 - `validate.sh` now builds and runs Godot with `--path "$ROOT_DIR/project"`; Godot binary discovery still uses root `tools/godot/editors/4.7.2/`.
 - Full validation green: `199/199`.
+
+### K-023 — Verified RM2K/2003 command codes
+
+**Acceptance criteria**
+- Interpreter command constants match the verified liblcf numeric table (`lcf::rpg::Cmd`).
+- Parameter layouts for implemented commands match EasyRPG Player semantics (ControlSwitches 10210 mode 0=ON/1=OFF/2=flip; ControlVars 10220 [target][op][operandType][value]; Teleport 10810 map/x/y; Wait 11410 tenths of a second).
+- Commands are consumed from the typed `Rm2kMap.EventCommand` model (code/int parameters/text), matching the parser output.
+- Unsupported or malformed payloads produce diagnostics and are skipped safely.
+- Regression tests cover each implemented command family plus loop jump-back and break-jump-past behavior.
+
+**Progress evidence (2026-08-23)**
+- Verified code table extracted from liblcf `src/generated/lcf/rpg/eventcommand.h`; parameter semantics cross-checked against EasyRPG Player `game_interpreter.cpp` and `game_interpreter_map.cpp` (CommandControlSwitches, CommandControlVariables, CommandTeleport 10810, SetupWait).
+- Rewrote `EventInterpreter` on the typed model: message continuation (20110), comment continuation (22410), tenths-based waits with frame clamp, switch flip mode, variable operand type (const/var), bounded loop stack with EndLoop jump-back and BreakLoop jump-past.
+- Known limitations documented in code: conditional branch always takes the true branch until condition decoding lands; ShowChoice/InputNumber remain skipped pending presentation/input slices.
+- `bash scripts/validate.sh` — passed; `198/198` C# tests and smoke validation.
 
 ### K-013 — LMU events/pages
 

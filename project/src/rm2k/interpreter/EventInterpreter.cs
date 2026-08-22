@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Godot;
 using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Rm2k.Interpreter;
@@ -9,74 +8,91 @@ namespace UniversalRPG.Rm2k.Interpreter;
 /// Event command interpreter for RM2K/2003 games.
 /// Executes commands deterministically against a GameSimulationState.
 /// No JavaScript, DLL, or native execution.
+///
+/// Command codes and parameter layouts are verified against the generated
+/// liblcf table (src/generated/lcf/rpg/eventcommand.h) and EasyRPG Player's
+/// interpreter implementation (game_interpreter.cpp, game_interpreter_map.cpp).
 /// </summary>
 public sealed class EventInterpreter
 {
-	public const int MaxCommandPayloadBytes = 65536;
 	public const int MaxScriptRecursion = 256;
 	public const int MaxWaitFrames = 600; // 10 seconds at 60fps
 
-	// Command IDs for the first slice
-	public const int CmdShowMessage = 101;
-	public const int ShowChoice = 102;
-	public const int InputNumber = 103;
-	public const int WhenDecide = 104;
-	public const int If = 111;
-	public const int Else = 112;
-	public const int EndIf = 113;
-	public const int Loop = 114;
-	public const int BreakLoop = 115;
-	public const int Wait = 117;
-	public const int Comment = 118;
+	// Verified RM2K/2003 event command codes (liblcf lcf::rpg::Cmd).
+	public const int End = 0;
+	public const int ShowMessage = 10110;
+	public const int ShowChoice = 10140;
+	public const int InputNumber = 10150;
+	public const int ControlSwitches = 10210;
+	public const int ControlVars = 10220;
+	public const int Teleport = 10810;
+	public const int Wait = 11410;
+	public const int ConditionalBranch = 12010;
+	public const int Loop = 12210;
+	public const int BreakLoop = 12220;
+	public const int Comment = 12410;
+	public const int ShowMessage2 = 20110; // message continuation line
+	public const int ElseBranch = 22010;
+	public const int EndBranch = 22011;
+	public const int EndLoop = 22210;
+	public const int Comment2 = 22410; // comment continuation line
 
-	// Placeholder opcodes for the first interpreter slice. The real RM2K/2003
-	// numeric command table is not verified yet; migrating these IDs is tracked
-	// as a follow-up card so no unverified code is treated as faithful data.
-	public const int ControlSwitches = 105;
-	public const int ControlVariables = 106;
-	public const int TransferPlayer = 107;
+	// ControlSwitches mode values (EasyRPG CommandControlSwitches).
+	public const int SwitchModeOn = 0;
+	public const int SwitchModeOff = 1;
+	public const int SwitchModeFlip = 2;
+
+	// ControlVars operation values (EasyRPG CommandControlVariables).
+	public const int VarOpSet = 0;
+	public const int VarOpAdd = 1;
+	public const int VarOpSub = 2;
+	public const int VarOpMul = 3;
+	public const int VarOpDiv = 4;
+	public const int VarOpMod = 5;
+
+	// ControlVars operand types (subset implemented so far).
+	public const int VarOperandConstant = 0;
+	public const int VarOperandVariable = 1;
 
 	private readonly GameSimulationState _state;
 	private readonly int _eventId;
-	private readonly int _pageId;
-	private readonly IReadOnlyList<Godot.Collections.Dictionary> _pages;
-	private readonly IReadOnlyList<Godot.Collections.Dictionary> _commands;
+	private readonly IReadOnlyList<Rm2kMap.EventCommand> _commands;
+	private readonly Stack<int> _loopStack = new();
 	private int _commandIndex;
-	private int _loopStackDepth;
-	private int _ifDepth;
-	private bool _skipBlock;
+	private int _waitFramesRemaining;
 
-	public EventInterpreter(GameSimulationState state, int eventId, int pageId,
-		IReadOnlyList<Godot.Collections.Dictionary> pages,
-		IReadOnlyList<Godot.Collections.Dictionary> commands)
+	public EventInterpreter(GameSimulationState state, int eventId,
+		IReadOnlyList<Rm2kMap.EventCommand> commands)
 	{
-		_state = state;
+		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
-		_pageId = pageId;
-		_pages = pages;
-		_commands = commands;
+		_commands = commands ?? throw new ArgumentNullException(nameof(commands));
 		_commandIndex = 0;
-		_loopStackDepth = 0;
-		_ifDepth = 0;
-		_skipBlock = false;
 	}
 
 	public GameSimulationState State => _state;
 
 	public int EventId => _eventId;
-	public int PageId => _pageId;
 	public int CurrentCommandIndex => _commandIndex;
+	public int WaitFramesRemaining => _waitFramesRemaining;
 	public bool IsRunning { get; private set; } = true;
 
 	/// <summary>
 	/// Execute one frame of this event's commands.
 	/// Returns true if the event should continue running.
+	/// Active waits consume frames before the next command executes.
 	/// </summary>
 	public bool ExecuteFrame()
 	{
 		if (!IsRunning)
 		{
 			return false;
+		}
+
+		if (_waitFramesRemaining > 0)
+		{
+			_waitFramesRemaining--;
+			return true;
 		}
 
 		if (_commandIndex >= _commands.Count)
@@ -86,150 +102,127 @@ public sealed class EventInterpreter
 		}
 
 		var cmd = _commands[_commandIndex];
-		var cmdId = GetCmdId(cmd);
-		var paramsData = GetCmdParams(cmd);
 
-		switch (cmdId)
+		switch (cmd.Code)
 		{
-			case 0: // End
+			case End:
 				IsRunning = false;
 				return false;
 
-			case CmdShowMessage:
-				ExecuteShowMessage(paramsData);
-				_commandIndex++;
-				return true;
+			case ShowMessage:
+			case Comment:
+				ExecuteMessageOrComment(cmd);
+				return Advance();
+
+			case ShowMessage2:
+			case Comment2:
+				// Continuation line without a preceding ShowMessage/Comment: skip.
+				return Advance();
 
 			case Wait:
-				ExecuteWait(paramsData);
-				_commandIndex++;
-				return true;
+				ExecuteWait(cmd);
+				return Advance();
 
 			case ControlSwitches:
-				ExecuteControlSwitches(paramsData);
-				_commandIndex++;
-				return true;
+				ExecuteControlSwitches(cmd);
+				return Advance();
 
-			case ControlVariables:
-				ExecuteControlVariables(paramsData);
-				_commandIndex++;
-				return true;
+			case ControlVars:
+				ExecuteControlVars(cmd);
+				return Advance();
 
-			case TransferPlayer:
-				ExecuteTransferPlayer(paramsData);
-				_commandIndex++;
-				return true;
+			case Teleport:
+				ExecuteTeleport(cmd);
+				return Advance();
 
-			case If:
-				ExecuteIf(paramsData);
-				_commandIndex++;
-				return true;
+			case ConditionalBranch:
+				ExecuteConditionalBranch();
+				return Advance();
 
-			case Else:
-				ExecuteElse();
-				_commandIndex++;
-				return true;
+			case ElseBranch:
+				ExecuteElseBranch();
+				return Advance();
 
-			case EndIf:
-				ExecuteEndIf();
-				_commandIndex++;
-				return true;
+			case EndBranch:
+				ExecuteEndBranch();
+				return Advance();
 
 			case Loop:
-				ExecuteLoop();
-				_commandIndex++;
-				return true;
+				_loopStack.Push(_commandIndex);
+				return Advance();
 
 			case BreakLoop:
 				ExecuteBreakLoop();
-				_commandIndex++;
-				return true;
+				return true; // index already moved past the matching EndLoop
+
+			case EndLoop:
+				ExecuteEndLoop();
+				return true; // index points at the matching Loop command
 
 			default:
-				// Unknown command - skip
-				_commandIndex++;
-				return true;
+				// Unknown or not-yet-implemented command: skip safely.
+				return Advance();
 		}
 	}
 
-	private int GetCmdId(Godot.Collections.Dictionary pCmd)
+	private bool Advance()
 	{
-		if (pCmd.ContainsKey("code"))
-		{
-			return (int)(long)pCmd["code"];
-		}
-		if (pCmd.ContainsKey("cmd_id"))
-		{
-			return (int)(long)pCmd["cmd_id"];
-		}
-		return 0;
+		_commandIndex++;
+		return IsRunning;
 	}
 
-	private byte[] GetCmdParams(Godot.Collections.Dictionary pCmd)
+	private void ExecuteMessageOrComment(Rm2kMap.EventCommand pCmd)
 	{
-		if (pCmd.ContainsKey("parameters"))
+		var kind = pCmd.Code == ShowMessage ? "Show message" : "Comment";
+		var text = pCmd.Text;
+		// Consume continuation lines (ShowMessage_2 / Comment_2).
+		while (_commandIndex + 1 < _commands.Count
+			&& (_commands[_commandIndex + 1].Code == (pCmd.Code == ShowMessage ? ShowMessage2 : Comment2)))
 		{
-			var raw = pCmd["parameters"].Obj;
-			var bytes = raw as byte[];
-			if (bytes != null)
-			{
-				return bytes;
-			}
-			var arr = raw as Godot.Collections.Array;
-			if (arr != null)
-			{
-				var result = new List<byte>();
-				foreach (var item in arr)
-				{
-					var val = Convert.ToByte(item, System.Globalization.CultureInfo.InvariantCulture);
-					result.Add(val);
-				}
-				return result.ToArray();
-			}
+			_commandIndex++;
+			text += "\n" + _commands[_commandIndex].Text;
 		}
-		return Array.Empty<byte>();
+		_state.AddDiagnostic($"[Event {_eventId}] {kind}: {Truncate(text)}");
 	}
 
-	private void ExecuteShowMessage(byte[] pParams)
+	private static string Truncate(string pText)
 	{
-		if (pParams.Length == 0)
+		var singleLine = pText.Replace("\n", "\\n");
+		return singleLine.Length <= 80 ? singleLine : singleLine[..80];
+	}
+
+	private void ExecuteWait(Rm2kMap.EventCommand pCmd)
+	{
+		// params[0] is a duration in tenths of a second (EasyRPG SetupWait);
+		// 0.0 seconds still waits exactly one frame.
+		var tenths = Param(pCmd, 0);
+		var frames = tenths == 0 ? 1 : checked(tenths * 6);
+		if (frames > MaxWaitFrames)
 		{
+			frames = MaxWaitFrames;
+		}
+		_waitFramesRemaining = frames;
+		_state.AddDiagnostic($"[Event {_eventId}] Wait {frames} frames");
+	}
+
+	private void ExecuteControlSwitches(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Control switches");
 			return;
 		}
-
-		var text = System.Text.Encoding.UTF8.GetString(pParams);
-		_state.AddDiagnostic($"[Event {_eventId}] Show message: {text.Substring(0, Math.Min(80, text.Length))}");
-	}
-
-	private void ExecuteWait(byte[] pParams)
-	{
-		if (pParams.Length == 0)
-		{
-			return;
-		}
-
-		// First byte is usually the wait type (0=f, 1=frames, etc.)
-		var frames = pParams[0];
-		if (frames > 0)
-		{
-			_state.AddDiagnostic($"[Event {_eventId}] Wait {frames} frames");
-		}
-	}
-
-	private void ExecuteControlSwitches(byte[] pParams)
-	{
-		// Placeholder payload layout: [startId:int32][endId:int32][value:byte]
-		if (!TryReadInt32(pParams, 0, out var startId)
-			|| !TryReadInt32(pParams, 4, out var endId)
-			|| pParams.Length < 9)
-		{
-			_state.AddDiagnostic($"[Event {_eventId}] Control switches: malformed parameters skipped");
-			return;
-		}
-		var value = pParams[8] != 0;
+		var startId = pCmd.Parameters[0];
+		var endId = pCmd.Parameters[1];
+		var mode = pCmd.Parameters[3];
 		if (startId < 1 || endId < startId || endId > GameSimulationState.MaxSwitches)
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Control switches: invalid range {startId}-{endId} skipped");
+			return;
+		}
+		if (mode is not (SwitchModeOn or SwitchModeOff or SwitchModeFlip))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control switches: unknown mode {mode} skipped");
 			return;
 		}
 		for (var id = startId; id <= endId; id++)
@@ -238,36 +231,71 @@ public sealed class EventInterpreter
 			{
 				_state.Switches.Add(false);
 			}
-			_state.Switches[id - 1] = value;
+			switch (mode)
+			{
+				case SwitchModeOn:
+					_state.Switches[id - 1] = true;
+					break;
+				case SwitchModeOff:
+					_state.Switches[id - 1] = false;
+					break;
+				default:
+					_state.Switches[id - 1] = !_state.Switches[id - 1];
+					break;
+			}
 		}
-		_state.AddDiagnostic($"[Event {_eventId}] Switches {startId}-{endId} -> {(value ? "ON" : "OFF")}");
+		var effect = mode switch
+		{
+			SwitchModeOn => "ON",
+			SwitchModeOff => "OFF",
+			_ => "FLIP",
+		};
+		_state.AddDiagnostic($"[Event {_eventId}] Switches {startId}-{endId} -> {effect}");
 	}
 
-	private void ExecuteControlVariables(byte[] pParams)
+	private void ExecuteControlVars(Rm2kMap.EventCommand pCmd)
 	{
-		// Placeholder payload layout:
-		// [startId:int32][endId:int32][op:byte][operandType:byte][operand:int32]
-		if (!TryReadInt32(pParams, 0, out var startId)
-			|| !TryReadInt32(pParams, 4, out var endId)
-			|| pParams.Length < 14)
+		if (pCmd.Parameters.Count < 6)
 		{
-			_state.AddDiagnostic($"[Event {_eventId}] Control variables: malformed parameters skipped");
+			Malformed("Control variables");
 			return;
 		}
-		var op = pParams[8];
-		var operandType = pParams[9];
-		TryReadInt32(pParams, 10, out var operand);
+		var startId = pCmd.Parameters[0];
+		var endId = pCmd.Parameters[1];
+		var targetMode = pCmd.Parameters[2];
+		var op = pCmd.Parameters[3];
+		var operandType = pCmd.Parameters[4];
+		var operandValue = pCmd.Parameters[5];
+
+		if (targetMode != 0)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control variables: unsupported target mode {targetMode} skipped");
+			return;
+		}
 		if (startId < 1 || endId < startId || endId > GameSimulationState.MaxVariables)
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Control variables: invalid range {startId}-{endId} skipped");
 			return;
 		}
-		if (operandType > 1)
+		if (op < VarOpSet || op > VarOpMod)
 		{
-			_state.AddDiagnostic($"[Event {_eventId}] Control variables: unsupported operand type {operandType} skipped");
+			_state.AddDiagnostic($"[Event {_eventId}] Control variables: unsupported operation {op} skipped");
 			return;
 		}
-		if ((op == 4 || op == 5) && operand == 0)
+		int operand;
+		switch (operandType)
+		{
+			case VarOperandConstant:
+				operand = operandValue;
+				break;
+			case VarOperandVariable:
+				operand = GetVariable(operandValue);
+				break;
+			default:
+				_state.AddDiagnostic($"[Event {_eventId}] Control variables: unsupported operand type {operandType} skipped");
+				return;
+		}
+		if ((op == VarOpDiv || op == VarOpMod) && operand == 0)
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Control variables: division by zero skipped");
 			return;
@@ -282,28 +310,28 @@ public sealed class EventInterpreter
 			var current = _state.Variables[index];
 			_state.Variables[index] = op switch
 			{
-				0 => operand,
-				1 => current + operand,
-				2 => current - operand,
-				3 => current * operand,
-				4 => current / operand,
-				5 => current % operand,
-				_ => current,
+				VarOpSet => operand,
+				VarOpAdd => current + operand,
+				VarOpSub => current - operand,
+				VarOpMul => current * operand,
+				VarOpDiv => current / operand,
+				_ => current % operand,
 			};
 		}
 		_state.AddDiagnostic($"[Event {_eventId}] Variables {startId}-{endId} <- op {op} {operand}");
 	}
 
-	private void ExecuteTransferPlayer(byte[] pParams)
+	private void ExecuteTeleport(Rm2kMap.EventCommand pCmd)
 	{
-		// Placeholder payload layout: [mapId:int32][x:int32][y:int32]
-		if (!TryReadInt32(pParams, 0, out var mapId)
-			|| !TryReadInt32(pParams, 4, out var x)
-			|| !TryReadInt32(pParams, 8, out var y))
+		// Code 10810 "Place Hero": [0]=map id, [1]=x, [2]=y, optional [3]=facing (2k3).
+		if (pCmd.Parameters.Count < 3)
 		{
-			_state.AddDiagnostic($"[Event {_eventId}] Transfer player: malformed parameters skipped");
+			Malformed("Transfer player");
 			return;
 		}
+		var mapId = pCmd.Parameters[0];
+		var x = pCmd.Parameters[1];
+		var y = pCmd.Parameters[2];
 		if (mapId < 0 || mapId > GameSimulationState.MaxMapId || x < 0 || y < 0)
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Transfer player: invalid target ({mapId}, {x}, {y}) skipped");
@@ -316,72 +344,82 @@ public sealed class EventInterpreter
 		_state.AddDiagnostic($"[Event {_eventId}] Transfer pending -> map {mapId} at ({x}, {y})");
 	}
 
-	private static bool TryReadInt32(byte[] pParams, int pOffset, out int pValue)
+	private void ExecuteConditionalBranch()
 	{
-		pValue = 0;
-		if (pOffset < 0 || pOffset + 4 > pParams.Length)
-		{
-			return false;
-		}
-		pValue = pParams[pOffset]
-			| (pParams[pOffset + 1] << 8)
-			| (pParams[pOffset + 2] << 16)
-			| (pParams[pOffset + 3] << 24);
-		return true;
+		// Condition decoding (switch/variable/actor/timer comparisons) is a
+		// separate slice; for now the true-branch always executes.
 	}
 
-	private void ExecuteIf(byte[] pParams)
+	private void ExecuteElseBranch()
 	{
-		_ifDepth++;
-		if (_skipBlock)
-		{
-			_skipBlock = true; // Nested skip
-			return;
-		}
-
-		// RM2K: If condition = switch/variable check
-		// Simplified: always enter block for now
-		// Real: would decode params[0] (condition type) and params[1+] (values)
+		// The condition evaluation above currently never skips blocks, so the
+		// else branch must not run yet. Tracked with full branch semantics.
+		_commandIndex = FindMatchingBranch(_commandIndex, EndBranch) ?? _commandIndex;
 	}
 
-	private void ExecuteElse()
+	private void ExecuteEndBranch()
 	{
-		if (_ifDepth <= 0)
-		{
-			return;
-		}
-
-		// Toggle skip for if/else block
-		if (!_skipBlock)
-		{
-			_skipBlock = true;
-		}
-	}
-
-	private void ExecuteEndIf()
-	{
-		if (_ifDepth <= 0)
-		{
-			return;
-		}
-
-		_ifDepth--;
-		if (_skipBlock)
-		{
-			_skipBlock = false;
-		}
-	}
-
-	private void ExecuteLoop()
-	{
-		_loopStackDepth++;
+		// Structured block end; nothing to do until conditions are decoded.
 	}
 
 	private void ExecuteBreakLoop()
 	{
-		if (_loopStackDepth > 0)
+		_loopStack.Clear();
+		var endLoop = FindMatchingBranch(_commandIndex, EndLoop);
+		if (endLoop.HasValue)
 		{
-			_loopStackDepth--;
+			_commandIndex = endLoop.Value + 1;
 		}
+		else
+		{
+			// No matching EndLoop (RPG_RT tolerates this): run to the end.
+			_commandIndex = _commands.Count;
+		}
+	}
+
+	private void ExecuteEndLoop()
+	{
+		if (_loopStack.Count > 0)
+		{
+			// Jump to the first body command; the Loop entry stays on the
+			// stack so nesting depth stays bounded without re-pushing.
+			_commandIndex = _loopStack.Peek() + 1;
+		}
+		else
+		{
+			// End without a matching Loop: skip safely.
+			_commandIndex++;
+		}
+	}
+
+	private int? FindMatchingBranch(int pFrom, int pCode)
+	{
+		for (var i = pFrom + 1; i < _commands.Count; i++)
+		{
+			if (_commands[i].Code == pCode)
+			{
+				return i;
+			}
+		}
+		return null;
+	}
+
+	private int GetVariable(int pId)
+	{
+		if (pId < 1 || pId > _state.Variables.Count)
+		{
+			return 0;
+		}
+		return _state.Variables[pId - 1];
+	}
+
+	private static int Param(Rm2kMap.EventCommand pCmd, int pIndex)
+	{
+		return pIndex < pCmd.Parameters.Count ? pCmd.Parameters[pIndex] : 0;
+	}
+
+	private void Malformed(string pCommand)
+	{
+		_state.AddDiagnostic($"[Event {_eventId}] {pCommand}: malformed parameters skipped");
 	}
 }
