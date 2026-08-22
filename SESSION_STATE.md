@@ -5,11 +5,11 @@
 
 ## Current card
 
-|K-023 is DONE (verified liblcf interpreter codes, typed EventCommand model). K-017 (user-directed MZ slice) is DONE: bounded data-directory metadata inspection with Actors/MapInfos decoding and encrypted-asset diagnostics. Remaining MZ work is gated on the RM2K playable milestone (K-090). Next READY work: branch-condition decoding card or K-022 movement.|
+|K-023 is DONE (verified liblcf interpreter codes, typed EventCommand model). MZ line complete for now: K-017 (data-directory inspection) and K-018 (database inventory: section counts, System.json switch/variable name counts, map file count) are DONE. Remaining MZ work is gated on the RM2K playable milestone (K-090). Next READY work: branch-condition decoding card or K-022 movement.|
 
 ## Last verified baseline
 
-`bash scripts/validate.sh` passed on Linux with the pinned `tools/godot/editors/4.7.2/linux-x86_64/...mono...x86_64` editor: headless C# suite `203/203`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+`bash scripts/validate.sh` passed on Linux with the pinned `tools/godot/editors/4.7.2/linux-x86_64/...mono...x86_64` editor: headless C# suite `205/205`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
 
 ## Layout note (2026-08-23)
 

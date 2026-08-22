@@ -26,6 +26,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-015 | 0 | DONE | Decode remaining LDB array sections into typed models | K-012 |
 | K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
 | K-017 | 2 | DONE | Bounded MZ data-directory metadata inspection (Actors/MapInfos/encrypted assets) | K-016 |
+| K-018 | 2 | DONE | Complete MZ database inventory (section counts, system name arrays, map files) | K-017 |
 | K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
@@ -233,8 +234,23 @@ User-directed MZ slice (extends the K-016 line); stays detection/metadata-only.
 
 **Progress evidence (2026-08-23)**
 - Added `MzDataDirectoryResult.Extract(GameInspectionSnapshot)` in `project/src/plugins/BuiltInEnginePlugins.cs`; JSON parsed with Godot's `Json` parser under strict bounds (256 KiB/file, 5000 actors, 2000 maps).
-- Added `TestMzDataDirectory` suite with five tests over synthetic MZ/MV game folders; suite total `203/203`.
+- Added `TestMzDataDirectory` suite with five tests over synthetic MZ/MV game folders; suite total `205/205`.
 - `bash scripts/validate.sh` — passed; `203/203` C# tests and smoke validation.
+
+### K-018 — Complete MZ database inventory
+
+User-directed MZ slice; extends K-017, stays metadata-only.
+
+**Acceptance criteria**
+- Entry counts for present optional database sections (Classes, Skills, Items, Weapons, Armors, Enemies, Troops) under the same bounds; absent sections are omitted silently (trimmed games are normal).
+- System.json `switches`/`variables` name-array counts with the bounded cap.
+- Physical `data/Map###.json` file count (3-4 digit numeric stems only), capped at 1000.
+- Malformed or oversized optional sections produce per-file diagnostics without affecting sibling sections or detection.
+
+**Progress evidence (2026-08-23)**
+- Extended `MzDataDirectoryResult` with `SectionCounts`, `SwitchNameCount`, `VariableNameCount`, and `MapFileCount`.
+- Added two inventory tests; malformed-JSON engine log lines from `Json.ParseString` on deliberately broken fixtures are expected and asserted via diagnostics.
+- `bash scripts/validate.sh` — passed; `205/205` C# tests and smoke validation.
 
 ### K-023 — Verified RM2K/2003 command codes
 

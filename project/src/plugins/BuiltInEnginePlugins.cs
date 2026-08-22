@@ -734,15 +734,34 @@ public sealed class MzDataDirectoryResult
     public const int MaxMapEntries = 2000;
     public const int MaxListedNames = 32;
     public const int MaxNameLength = 64;
+    public const int MaxMapFiles = 1000;
     private static readonly string[] EncryptedExtensions =
     {
         ".rpgmvp", ".rpgmvo", ".rpgmvm", ".png_", ".ogg_", ".m4a_", ".encrypted",
+    };
+    private static readonly string[] OptionalDatabaseSections =
+    {
+        "Classes", "Skills", "Items", "Weapons", "Armors", "Enemies", "Troops",
     };
 
     public int ActorCount { get; init; }
     public IReadOnlyList<string> ActorNames { get; init; } = Array.Empty<string>();
     public int MapCount { get; init; }
     public IReadOnlyList<string> MapNames { get; init; } = Array.Empty<string>();
+
+    /// <summary>Entry counts for present optional database JSON sections.</summary>
+    public IReadOnlyDictionary<string, int> SectionCounts { get; init; } =
+        new Dictionary<string, int>();
+
+    /// <summary>Entries in System.json "switches" name array (0 when absent).</summary>
+    public int SwitchNameCount { get; init; }
+
+    /// <summary>Entries in System.json "variables" name array (0 when absent).</summary>
+    public int VariableNameCount { get; init; }
+
+    /// <summary>Number of physical data/Map###.json files in the snapshot.</summary>
+    public int MapFileCount { get; init; }
+
     public bool HasEncryptedAssets { get; init; }
     public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
 
@@ -765,6 +784,9 @@ public sealed class MzDataDirectoryResult
         var diagnostics = new List<string>();
         var actors = ReadNamedEntries(pSnapshot, "data/Actors.json", MaxActorEntries, MaxDataJsonBytes, "Actors", diagnostics);
         var maps = ReadNamedEntries(pSnapshot, "data/MapInfos.json", MaxMapEntries, MaxDataJsonBytes, "MapInfos", diagnostics);
+        var sectionCounts = CountOptionalSections(pSnapshot, diagnostics);
+        var systemCounts = ReadSystemNameCounts(pSnapshot, diagnostics);
+        var mapFileCount = CountMapFiles(pSnapshot, diagnostics);
         var encrypted = pSnapshot.Files.Any(pFile => EncryptedExtensions.Any(pExtension =>
             pFile.RelativePath.EndsWith(pExtension, StringComparison.OrdinalIgnoreCase)));
         if (encrypted)
@@ -786,9 +808,129 @@ public sealed class MzDataDirectoryResult
             ActorNames = actors.Names,
             MapCount = maps.Count,
             MapNames = maps.Names,
+            SectionCounts = sectionCounts,
+            SwitchNameCount = systemCounts.switches,
+            VariableNameCount = systemCounts.variables,
+            MapFileCount = mapFileCount,
             HasEncryptedAssets = encrypted,
             Diagnostics = diagnostics,
         };
+    }
+
+    private static IReadOnlyDictionary<string, int> CountOptionalSections(
+        GameInspectionSnapshot pSnapshot, List<string> pDiagnostics)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var section in OptionalDatabaseSections)
+        {
+            var path = $"data/{section}.json";
+            if (!pSnapshot.TryGet(path, out var file))
+            {
+                continue; // absent sections are normal for trimmed games
+            }
+            if (file.IsTruncated)
+            {
+                pDiagnostics.Add($"{path} is truncated beyond the bounded inspection limit.");
+                continue;
+            }
+            if (file.Data.Length > MaxDataJsonBytes)
+            {
+                pDiagnostics.Add($"{path} exceeds the bounded inspection limit ({MaxDataJsonBytes} bytes).");
+                continue;
+            }
+            var count = CountJsonArrayEntries(System.Text.Encoding.UTF8.GetString(file.Data));
+            if (count < 0)
+            {
+                pDiagnostics.Add($"{path} contains malformed JSON; skipped.");
+                continue;
+            }
+            if (count > MaxActorEntries)
+            {
+                pDiagnostics.Add($"{section}: entry count {count} exceeds the bounded limit ({MaxActorEntries}); count reported as the limit.");
+                count = MaxActorEntries;
+            }
+            counts[section] = count;
+        }
+        return counts;
+    }
+
+    private static (int switches, int variables) ReadSystemNameCounts(
+        GameInspectionSnapshot pSnapshot, List<string> pDiagnostics)
+    {
+        if (!pSnapshot.TryGet("data/System.json", out var file) || file.IsTruncated
+            || file.Data.Length == 0 || file.Data.Length > 512 * 1024)
+        {
+            return (0, 0);
+        }
+        var text = System.Text.Encoding.UTF8.GetString(file.Data);
+        var parsed = Godot.Json.ParseString(text);
+        if (parsed.VariantType != Godot.Variant.Type.Dictionary)
+        {
+            return (0, 0); // detection already validated boundaries; stay quiet here
+        }
+        var dictionary = parsed.AsGodotDictionary();
+        return (CountNameArray(dictionary, "switches", pDiagnostics),
+            CountNameArray(dictionary, "variables", pDiagnostics));
+    }
+
+    private static int CountNameArray(Godot.Collections.Dictionary pSystem, string pKey, List<string> pDiagnostics)
+    {
+        if (!pSystem.TryGetValue(pKey, out var arrayVariant)
+            || arrayVariant.VariantType != Godot.Variant.Type.Array)
+        {
+            return 0;
+        }
+        var count = arrayVariant.AsGodotArray().Count;
+        if (count > MaxActorEntries)
+        {
+            pDiagnostics.Add($"System.json {pKey}: entry count {count} exceeds the bounded limit ({MaxActorEntries}); count reported as the limit.");
+            return MaxActorEntries;
+        }
+        return count;
+    }
+
+    private static int CountMapFiles(GameInspectionSnapshot pSnapshot, List<string> pDiagnostics)
+    {
+        var count = 0;
+        foreach (var file in pSnapshot.Files)
+        {
+            var name = System.IO.Path.GetFileName(file.RelativePath);
+            var inData = file.RelativePath.EndsWith(name, StringComparison.OrdinalIgnoreCase)
+                && (file.RelativePath.StartsWith("data/", StringComparison.OrdinalIgnoreCase)
+                    || file.RelativePath.Contains("/data/", StringComparison.OrdinalIgnoreCase));
+            if (!inData || !name.StartsWith("Map", StringComparison.OrdinalIgnoreCase)
+                || !name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var stem = name[3..^5];
+            if (stem.Length is < 3 or > 4 || !int.TryParse(stem, out _))
+            {
+                continue;
+            }
+            count++;
+        }
+        if (count > MaxMapFiles)
+        {
+            pDiagnostics.Add($"Map file count {count} exceeds the bounded limit ({MaxMapFiles}).");
+            count = MaxMapFiles;
+        }
+        return count;
+    }
+
+    /// <summary>Counts entries of a JSON array text; -1 when malformed or not an array.</summary>
+    private static int CountJsonArrayEntries(string pText)
+    {
+        if (!pText.TrimStart().StartsWith("[", StringComparison.Ordinal))
+        {
+            return -1;
+        }
+        var parsed = Godot.Json.ParseString(pText);
+        if (parsed.VariantType != Godot.Variant.Type.Array)
+        {
+            return -1;
+        }
+        return parsed.AsGodotArray().Count;
     }
 
     private static (int Count, IReadOnlyList<string> Names) ReadNamedEntries(

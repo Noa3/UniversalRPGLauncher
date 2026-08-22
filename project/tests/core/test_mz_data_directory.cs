@@ -20,12 +20,24 @@ public partial class TestMzDataDirectory : TestBase
         CreateMzGame("MZFull",
             "[{\"id\":1,\"name\":\"Harold\"},{\"id\":2,\"name\":\"Gloria\"}]",
             "[{\"id\":1,\"name\":\"World\",\"parentIndex\":0},{\"id\":2,\"name\":\"Town\",\"parentIndex\":1}]");
+        WriteText(TempBase.PathJoin("MZFull/data/System.json"),
+            "{\"gameTitle\":\"MZFull\",\"switches\":[null,\"Switch A\",\"Switch B\"],\"variables\":[null,\"Gold\"]}");
+        WriteText(TempBase.PathJoin("MZFull/data/Classes.json"), "[{\"id\":1,\"name\":\"Hero\"}]");
+        WriteText(TempBase.PathJoin("MZFull/data/Skills.json"), "[]");
+        WriteText(TempBase.PathJoin("MZFull/data/Items.json"), "[{\"id\":1,\"name\":\"Potion\"},{\"id\":2,\"name\":\"Ether\"}]");
+        WriteText(TempBase.PathJoin("MZFull/data/Map0001.json"), "{\"displayName\":\"World\"}");
+        WriteText(TempBase.PathJoin("MZFull/data/Map002.json"), "{}");
+        WriteText(TempBase.PathJoin("MZFull/data/Map0033.json"), "{}");
+        WriteText(TempBase.PathJoin("MZFull/audio/bgm_theme.ogg"), "audio metadata");
         CreateMzGame("MZNoDataFiles");
         CreateMzGame("MZMalformedActors",
-             "[{\"id\":1,\"name\"",
+            "[{\"id\":1,\"name\"",
             "[]");
+        CreateMzGame("MZBadOptionalSection");
+        WriteText(TempBase.PathJoin("MZBadOptionalSection/data/Items.json"), "[{\"broken\":");
+        WriteText(TempBase.PathJoin("MZBadOptionalSection/data/Skills.json"), "[{\"id\":1}]");
         CreateMzGame("MZNonArrayActors",
-             "{\"id\":1}",
+            "{\"id\":1}",
             "[]");
         CreateMzGame("MZEncrypted");
         WriteText(TempBase.PathJoin("MZEncrypted/img/Actor1.rpgmvp"), new string('x', 32));
@@ -83,6 +95,33 @@ public partial class TestMzDataDirectory : TestBase
         AssertTrue(result != null, "encrypted snapshot returns result");
         AssertTrue(result!.HasEncryptedAssets, ".rpgmvp asset detected");
         AssertTrue(HasDiagnostic(result.Diagnostics, "Encrypted assets detected"), "encryption diagnostic");
+    }
+
+    public void Test_DatabaseInventoryCounts()
+    {
+        var result = Extract("MZFull");
+
+        AssertTrue(result != null, "result extracted");
+        AssertEq(result!.SectionCounts["Classes"], 1, "classes count");
+        AssertEq(result.SectionCounts["Skills"], 0, "empty skills array counts zero");
+        AssertEq(result.SectionCounts["Items"], 2, "items count");
+        AssertFalse(result.SectionCounts.ContainsKey("Weapons"), "absent sections are omitted");
+        AssertEq(result.SwitchNameCount, 3, "system switch name count");
+        AssertEq(result.VariableNameCount, 2, "system variable name count");
+        AssertEq(result.MapFileCount, 3, "physical map files counted (Map0001/002/0033)");
+        AssertEq(result.Diagnostics.Count, 0, "inventory stays quiet on clean data");
+    }
+
+    public void Test_MalformedOptionalSectionDiagnosedButOthersKept()
+    {
+        var result = Extract("MZBadOptionalSection");
+
+        AssertTrue(result != null, "result returned despite malformed optional section");
+        AssertFalse(result!.SectionCounts.ContainsKey("Items"), "malformed section omitted");
+        AssertEq(result.SectionCounts["Skills"], 1, "valid sibling section still counted");
+        AssertTrue(HasDiagnostic(result.Diagnostics, "data/Items.json contains malformed JSON"), "per-file diagnostic");
+        AssertTrue(HasDiagnostic(result.Diagnostics, "Actors.json not found"), "absent required sections still diagnosed");
+        AssertEq(result.Diagnostics.Count, 3, "items + actors + mapinfos diagnostics");
     }
 
     public void Test_NonMzSnapshotIsRefused()
