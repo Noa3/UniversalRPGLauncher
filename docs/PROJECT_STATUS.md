@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `151/151` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `165/165` tests.
 
 ## Phase Status Overview
 
@@ -148,8 +148,8 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 
 ## Next Immediate Tasks
 
-1. Implement the LMT map-tree parser with bounded parsing and tests
-2. Expand typed LDB/LMU decoding incrementally; do not guess undocumented offsets/fields
+1. Decode remaining LDB array sections (skills, items, enemies, troops, terrains, attributes, states, animations, chipsets, classes) into typed models with verified field IDs
+2. Expand typed LMU decoding incrementally; do not guess undocumented offsets/fields
 3. Test CP932/Shift-JIS behavior on target platforms and add malicious-input fixtures
 4. Implement LMU event/page metadata decoding without executing commands
 
@@ -185,4 +185,12 @@ Changes prepared in this pass:
 - added provenance-pinned EasyRPG TestGame RM2000/RM2003 LDB/LMT/LMU fixtures and real-framing regression tests;
 - accepted valid zero-length LDB struct-array sections while preserving bounded malformed-input rejection.
 
-The C# migration and plugin application wiring have been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `151/151`. The only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.
+## 2026-08-22 Typed LDB Slice (K-012)
+
+- `ParseDatabase` now decodes the actors section into typed entries: name/title/character_name/face_name strings plus character_index, transparent, initial_level, final_level, critical_hit, critical_hit_chance, face_index integers; defaults mirror liblcf `rpg::Actor` initializers.
+- Switches and variables sections decode to id/name entries; duplicate structure IDs are rejected.
+- Field IDs are verified against EasyRPG liblcf `src/generated/lcf/ldb/chunks.h`; unknown actor/entry fields remain preserved per entry for diagnostics.
+- Synthetic fixtures cover defaults, unknown-field retention, duplicate IDs, and missing terminators; real-fixture tests assert typed entry counts equal section counts on both pinned TestGame LDBs.
+- Validation: `bash scripts/validate.sh` passed with local Godot `4.7.2.stable.mono`; headless suite `165/165`.
+
+The C# migration and plugin application wiring have been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `159/159` at that time (now `165/165`). The only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.

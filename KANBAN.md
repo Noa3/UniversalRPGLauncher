@@ -1,6 +1,6 @@
 # UniversalRPG Autonomous Kanban
 
-> Updated: 2026-08-21
+> Updated: 2026-08-22
 > Owner: autonomous agent/Hermes
 > Ordering: lowest priority number first, then card ID.
 
@@ -20,9 +20,10 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-004 | 0 | DONE | Integrate trusted engine plugin catalog, bounded detection, import persistence, and safe runtime selection | K-003 |
 | K-010 | 0 | DONE | Validate LCF reader/parser against legal real-world RM2K/2003 fixtures | K-001 |
 | K-011 | 0 | DONE | Implement LMT map-tree parser with bounded BER/structure handling | K-010 |
-| K-012 | 0 | IN PROGRESS | Expand LDB decoding into typed core database sections | K-010 |
+| K-012 | 0 | DONE | Expand LDB decoding into typed core database sections | K-010 |
 | K-013 | 0 | BACKLOG | Expand LMU event/page metadata decoding without executing commands | K-010 |
 | K-014 | 0 | BACKLOG | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
+| K-015 | 0 | BACKLOG | Decode remaining LDB array sections into typed models | K-012 |
 | K-020 | 1 | BACKLOG | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | BACKLOG | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-022 | 1 | BACKLOG | Implement map/player movement and passability simulation | K-020 |
@@ -140,6 +141,21 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Every decoded field has a verified LCF field ID/source; no guessed offsets.
 - Unknown fields remain preserved for diagnostics.
 - Synthetic fixtures and at least one real fixture comparison exist.
+
+**Validation evidence (2026-08-22)**
+- `bash scripts/validate.sh` passed with Godot `4.7.2.stable.mono` on Linux; headless C# suite `165/165`.
+- Actors section decodes to typed entries with verified liblcf field IDs (`src/generated/lcf/ldb/chunks.h`, `ChunkActor`): strings 0x01/0x02/0x03/0x0F, integers 0x04/0x05/0x07/0x08/0x09/0x0A/0x10; defaults mirror `rpg::Actor` initializers.
+- Switches/variables decode as id/name entries (`ChunkSwitch`/`ChunkVariable`: name=0x01); duplicate structure IDs are rejected.
+- Unknown actor/entry fields retained per entry; synthetic tests cover defaults, unknown retention, duplicate IDs, missing terminators.
+- Real-fixture comparison: typed entry counts equal `section_counts` on both pinned EasyRPG TestGame LDBs.
+- Scope note: per agent maintenance rules the remaining array sections were split into successor card K-015; this card is done for actors/switches/variables plus framing already covered earlier.
+
+### K-015 — Remaining typed LDB array sections
+
+**Acceptance criteria**
+- Decode skills, items, enemies, troops, terrains, attributes, states, animations, chipsets, classes, and battle commands incrementally using field IDs verified against liblcf `ldb/chunks.h`.
+- Nested structures stay data-only; unknown fields remain preserved.
+- Synthetic malformed-input fixtures and real-fixture count comparisons exist per section batch.
 
 ### K-013 — LMU events/pages
 

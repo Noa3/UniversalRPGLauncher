@@ -83,6 +83,36 @@ partial class TestRm2kRealFixtures : TestBase
 		AssertFixtureFraming("rm2003/Map0001.lmu", "LcfMapUnit", 11, 8488, true);
 	}
 
+	public void Test_RealDatabaseTypedSectionsMatchSectionCounts()
+	{
+		AssertTypedSectionsMatchCounts("rm2000/RPG_RT.ldb");
+		AssertTypedSectionsMatchCounts("rm2003/RPG_RT.ldb");
+	}
+
+	private void AssertTypedSectionsMatchCounts(string pRelativePath)
+	{
+		var result = _parser.ParseDatabase(FixtureRoot.PathJoin(pRelativePath));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var counts = (Godot.Collections.Dictionary)data["section_counts"];
+		foreach (var section in new[] { "actors", "switches", "variables" })
+		{
+			var entries = (Godot.Collections.Array)data[section];
+			AssertEq(entries.Count, counts[section].AsInt32(), $"{pRelativePath} {section} count");
+		}
+		var actors = (Godot.Collections.Array)data["actors"];
+		AssertTrue(actors.Count > 0, pRelativePath + " has actors");
+		foreach (Godot.Collections.Dictionary actor in actors)
+		{
+			AssertTrue(actor.ContainsKey("name"), pRelativePath + " actor name key");
+			AssertTrue(actor.ContainsKey("unknown_fields"), pRelativePath + " actor unknown_fields key");
+		}
+	}
+
 	private static string DescribeError(Rm2kParser.ParseResult pResult)
 	{
 		return pResult.IsSuccess() ? "" : pResult.GetError()!.Describe();

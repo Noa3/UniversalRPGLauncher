@@ -1,15 +1,15 @@
 # UniversalRPG Autonomous Session State
 
-> Updated: 2026-08-21
+> Updated: 2026-08-22
 > Purpose: small durable checkpoint for Hermes/other autonomous agents.
 
 ## Current card
 
-`K-012` — Expand LDB decoding into typed core database sections. C# migration is complete under `K-003`.
+K-012 is DONE (typed LDB slice: actors/switches/variables). Next `READY` card: `K-015` — decode remaining LDB array sections into typed models (split from K-012 per maintenance rules). K-013/K-014 are also unblocked.
 
 ## Last verified baseline
 
-C# is now canonical. `dotnet build UniversalRPG.csproj` passes with zero errors, Godot 4.7.2 Mono instantiates `tests/CSharpRunner.cs`, and the headless C# suite passes `151/151` with exit code `0`.
+`bash scripts/validate.sh` passed on Linux with local Godot `4.7.2.stable.mono` and .NET SDK 8.0.424 (`~/.dotnet`, no system dotnet): headless C# suite `165/165`, exit 0.
 
 ## Validated stabilization changes
 
@@ -49,11 +49,18 @@ C# is now canonical. `dotnet build UniversalRPG.csproj` passes with zero errors,
 
 ## Current action
 
-Plugin foundation and application wiring are complete. Continue K-012 typed LDB/database work in C# and keep parser regression coverage in `tests/core/`.
+K-012 completed as a scoped slice; successor K-015 covers remaining array sections. Field-ID source of truth: EasyRPG liblcf `src/generated/lcf/ldb/chunks.h`.
 
 ## Next action
 
-Run full `./scripts/validate.sh` where Godot and .NET are available, then continue K-012. Commit/push only after final validation review.
+Select next independent `READY` card (K-015 recommended for parser continuity, or K-013/K-014), move to IN PROGRESS, then continue. Commit/push only after final validation review.
+
+## Completed K-012
+
+- `ParseDatabase` decodes actors into typed entries (verified `ChunkActor` IDs; liblcf-default values for absent fields); switches/variables decode as id/name entries.
+- Duplicate structure IDs rejected; unknown actor/entry fields retained per entry.
+- Synthetic coverage: defaults, unknown retention, duplicate IDs, missing terminator. Real-fixture tests assert typed counts equal section counts on both TestGame LDBs.
+- Validation evidence in `KANBAN.md`; suite now `165/165`.
 
 ## Failure log
 

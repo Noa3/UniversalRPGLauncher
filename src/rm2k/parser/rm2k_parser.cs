@@ -81,6 +81,32 @@ public partial class Rm2kParser : RefCounted
 		0x14, 0x17, 0x18, 0x19, 0x1e, 0x1f, 0x20, 0x21,
 	};
 
+	public const int MaxLdbStringBytes = 1024 * 1024;
+
+	// Field IDs verified against EasyRPG liblcf src/generated/lcf/ldb/chunks.h
+	// (struct ChunkActor). Only scalar header fields are decoded; nested
+	// structures (parameters, equipment, skills) stay raw for later cards.
+	public static readonly Dictionary<int, string> LdbActorFieldNames = new()
+	{
+		{ 0x01, "name" },
+		{ 0x02, "title" },
+		{ 0x03, "character_name" },
+		{ 0x04, "character_index" },
+		{ 0x05, "transparent" },
+		{ 0x07, "initial_level" },
+		{ 0x08, "final_level" },
+		{ 0x09, "critical_hit" },
+		{ 0x0a, "critical_hit_chance" },
+		{ 0x0f, "face_name" },
+		{ 0x10, "face_index" },
+	};
+
+	// struct ChunkSwitch and struct ChunkVariable contain only the name field.
+	public static readonly Dictionary<int, string> LdbNamedEntryFieldNames = new()
+	{
+		{ 0x01, "name" },
+	};
+
 	private readonly LegacyTextDecoder _textDecoder = new();
 
 	public class ParseError
@@ -189,6 +215,9 @@ public partial class Rm2kParser : RefCounted
 		var sections = new Godot.Collections.Dictionary();
 		var sectionCounts = new Godot.Collections.Dictionary();
 		var unknownChunks = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var actors = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var switches = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var variables = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var engineFamily = "RPG Maker 2000";
 		var version = 0;
 
@@ -208,7 +237,8 @@ public partial class Rm2kParser : RefCounted
 			};
 			if (Array.IndexOf(LdbArraySections, id) >= 0)
 			{
-				var arrayResult = ParseStructArray((byte[])chunk["data"], false);
+				var typed = id == 0x0b || id == 0x17 || id == 0x18;
+				var arrayResult = ParseStructArray((byte[])chunk["data"], typed);
 				if (!arrayResult.Success)
 				{
 					return Failure($"Invalid {sectionName} section: {arrayResult.Error!.Message}",
@@ -216,6 +246,25 @@ public partial class Rm2kParser : RefCounted
 				}
 				section["count"] = (int)arrayResult.Data["count"];
 				sectionCounts[sectionName] = (int)arrayResult.Data["count"];
+				var decodeResult = DecodeTypedLdbSection(id,
+					(Godot.Collections.Array<Godot.Collections.Dictionary>)arrayResult.Data["objects"]);
+				if (!decodeResult.Success)
+				{
+					return Failure($"{sectionName} section: {decodeResult.Error!.Message}",
+						(int)chunk["payload_offset"] + Math.Max(decodeResult.Error.Offset, 0));
+				}
+				if (id == 0x0b)
+				{
+					actors = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+				}
+				else if (id == 0x17)
+				{
+					switches = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+				}
+				else if (id == 0x18)
+				{
+					variables = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+				}
 			}
 			if (id == 0x1a)
 			{
@@ -243,9 +292,152 @@ public partial class Rm2kParser : RefCounted
 			{ "sections", sections },
 			{ "section_counts", sectionCounts },
 			{ "unknown_chunks", unknownChunks },
+			{ "actors", actors },
+			{ "switches", switches },
+			{ "variables", variables },
 			{ "version", version },
 			{ "engine_family", engineFamily },
 		});
+	}
+
+	private ParseResult DecodeTypedLdbSection(
+		int pSectionId,
+		Godot.Collections.Array<Godot.Collections.Dictionary> pObjects
+	)
+	{
+		return pSectionId == 0x0b ? DecodeLdbActorEntries(pObjects) : DecodeLdbNamedEntries(pObjects);
+	}
+
+	private ParseResult DecodeLdbActorEntries(
+		Godot.Collections.Array<Godot.Collections.Dictionary> pObjects
+	)
+	{
+		var entries = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		foreach (var pObject in pObjects)
+		{
+			// Defaults mirror the lcf::rpg::Actor member initializers so absent
+			// chunks decode exactly like liblcf would.
+			var entry = new Godot.Collections.Dictionary
+			{
+				{ "id", (int)pObject["id"] },
+				{ "name", "" },
+				{ "title", "" },
+				{ "character_name", "" },
+				{ "face_name", "" },
+				{ "character_index", 0 },
+				{ "transparent", 0 },
+				{ "initial_level", 1 },
+				{ "final_level", -1 },
+				{ "critical_hit", 1 },
+				{ "critical_hit_chance", 30 },
+				{ "face_index", 0 },
+				{ "unknown_fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+			};
+			var unknownFields = (Godot.Collections.Array<Godot.Collections.Dictionary>)entry["unknown_fields"];
+			foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)pObject["fields"])
+			{
+				var fieldId = (int)field["id"];
+				if (!LdbActorFieldNames.TryGetValue(fieldId, out var fieldName))
+				{
+					unknownFields.Add(field);
+					continue;
+				}
+				var fieldData = (byte[])field["data"];
+				if (fieldId is 0x01 or 0x02 or 0x03 or 0x0f)
+				{
+					var textResult = DecodeLdbString(fieldData, $"actor {fieldName}");
+					if (!textResult.Success)
+					{
+						return textResult;
+					}
+					entry[fieldName] = textResult.Data["value"];
+				}
+				else
+				{
+					var integerResult = DecodeLdbIntegerField(fieldData, $"actor {fieldName}");
+					if (!integerResult.Success)
+					{
+						return integerResult;
+					}
+					entry[fieldName] = integerResult.Data["value"];
+				}
+			}
+			entries.Add(entry);
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entries", entries } });
+	}
+
+	private ParseResult DecodeLdbNamedEntries(
+		Godot.Collections.Array<Godot.Collections.Dictionary> pObjects
+	)
+	{
+		var entries = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var seenIds = new HashSet<int>();
+		foreach (var pObject in pObjects)
+		{
+			var objectId = (int)pObject["id"];
+			if (!seenIds.Add(objectId))
+			{
+				return Failure($"Duplicate structure ID {objectId}", 0);
+			}
+			var entry = new Godot.Collections.Dictionary
+			{
+				{ "id", objectId },
+				{ "name", "" },
+				{ "unknown_fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+			};
+			var unknownFields = (Godot.Collections.Array<Godot.Collections.Dictionary>)entry["unknown_fields"];
+			foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)pObject["fields"])
+			{
+				var fieldId = (int)field["id"];
+				if (!LdbNamedEntryFieldNames.TryGetValue(fieldId, out var fieldName))
+				{
+					unknownFields.Add(field);
+					continue;
+				}
+				var textResult = DecodeLdbString((byte[])field["data"], $"{fieldName} {objectId}");
+				if (!textResult.Success)
+				{
+					return textResult;
+				}
+				entry[fieldName] = textResult.Data["value"];
+			}
+			entries.Add(entry);
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entries", entries } });
+	}
+
+	private ParseResult DecodeLdbString(byte[] pData, string pLabel)
+	{
+		if (pData.Length > MaxLdbStringBytes)
+		{
+			return Failure($"LDB {pLabel} exceeds {MaxLdbStringBytes}-byte limit");
+		}
+		var value = _textDecoder.Decode(pData);
+		if (string.IsNullOrEmpty(value) && pData.Length > 0)
+		{
+			return Failure("Unable to decode LDB " + pLabel);
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "value", value } });
+	}
+
+	private static ParseResult DecodeLdbIntegerField(byte[] pData, string pLabel)
+	{
+		if (pData.Length == 0)
+		{
+			return new ParseResult(true, null, new Godot.Collections.Dictionary { { "value", 0 } });
+		}
+		var reader = new LcfBinaryReader(pData);
+		var value = reader.ReadSignedBer();
+		if (reader.HasError())
+		{
+			return Failure($"Invalid LDB {pLabel}: {reader.ErrorMessage}", reader.ErrorOffset);
+		}
+		if (!reader.IsEof())
+		{
+			return Failure($"LDB {pLabel} has trailing bytes", reader.GetPosition());
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "value", value } });
 	}
 
 	public ParseResult ParseMap(string pPath)

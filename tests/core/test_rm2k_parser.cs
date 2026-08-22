@@ -261,6 +261,148 @@ partial class TestRm2kParser : TestBase
 		AssertFalse(result.IsSuccess());
 	}
 
+	internal static byte[] Struct(params byte[][] pFieldChunks)
+	{
+		var bytes = new List<byte>();
+		foreach (var chunk in pFieldChunks)
+		{
+			bytes.AddRange(chunk);
+		}
+		bytes.Add(0x00);
+		return bytes.ToArray();
+	}
+
+	internal static byte[] StructArray(params byte[][] pObjectFields)
+	{
+		var bytes = new List<byte>();
+		bytes.AddRange(Ber(pObjectFields.Length));
+		for (var index = 0; index < pObjectFields.Length; index++)
+		{
+			bytes.AddRange(Ber(index + 1));
+			bytes.AddRange(pObjectFields[index]);
+		}
+		return bytes.ToArray();
+	}
+
+	// === TESTS: Typed LDB Sections ===
+
+	public void Test_ParseDatabaseDecodesTypedActorEntries()
+	{
+		var actor1 = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Alex")),
+			Chunk(0x02, System.Text.Encoding.ASCII.GetBytes("Hero")),
+			Chunk(0x07, Ber(5)),
+			Chunk(0xF0, new byte[] { 0x09 })
+		);
+		var actor2 = Struct(Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Brian")));
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x0b, StructArray(actor1, actor2)),
+			Chunk(0x1a, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("Actors.rdata"), database);
+		var result = _parser.ParseDatabase(Dir.PathJoin("Actors.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var actors = (Godot.Collections.Array)data["actors"];
+		AssertEq(actors.Count, 2, "actor entry count");
+		var first = (Godot.Collections.Dictionary)actors[0];
+		AssertEq(first["id"].AsInt32(), 1, "first actor id");
+		AssertEq(first["name"].AsString(), "Alex", "first actor name");
+		AssertEq(first["title"].AsString(), "Hero", "first actor title");
+		AssertEq(first["initial_level"].AsInt32(), 5, "first actor level");
+		AssertEq(first["final_level"].AsInt32(), -1, "absent final_level default");
+		AssertEq(first["critical_hit"].AsInt32(), 1, "absent critical_hit default");
+		AssertEq(first["critical_hit_chance"].AsInt32(), 30, "absent critical chance default");
+		var unknown = (Godot.Collections.Array)first["unknown_fields"];
+		AssertEq(unknown.Count, 1, "unknown actor field retained");
+		AssertEq(((Godot.Collections.Dictionary)unknown[0])["id"].AsInt32(), 0xF0, "unknown field id");
+		var second = (Godot.Collections.Dictionary)actors[1];
+		AssertEq(second["name"].AsString(), "Brian", "second actor name");
+		AssertEq(second["initial_level"].AsInt32(), 1, "default initial_level");
+		var sectionCounts = (Godot.Collections.Dictionary)data["section_counts"];
+		AssertEq(sectionCounts["actors"].AsInt32(), 2, "section count matches entries");
+	}
+
+	public void Test_ParseDatabaseDecodesSwitchAndVariableNames()
+	{
+		var switchA = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Switch A")),
+			Chunk(0x55, new byte[] { 0x01 })
+		);
+		var switchB = Struct();
+		var variable = Struct(Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Gold")));
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x17, StructArray(switchA, switchB)),
+			Chunk(0x18, StructArray(variable)),
+			Chunk(0x1a, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("Names.rdata"), database);
+		var result = _parser.ParseDatabase(Dir.PathJoin("Names.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var switches = (Godot.Collections.Array)data["switches"];
+		AssertEq(switches.Count, 2, "switch count");
+		var firstSwitch = (Godot.Collections.Dictionary)switches[0];
+		AssertEq(firstSwitch["name"].AsString(), "Switch A", "switch name");
+		AssertEq(((Godot.Collections.Array)firstSwitch["unknown_fields"]).Count, 1, "switch unknown field");
+		AssertEq(((Godot.Collections.Dictionary)switches[1])["name"].AsString(), "", "unnamed switch");
+		var variables = (Godot.Collections.Array)data["variables"];
+		AssertEq(variables.Count, 1, "variable count");
+		AssertEq(((Godot.Collections.Dictionary)variables[0])["name"].AsString(), "Gold", "variable name");
+	}
+
+	public void Test_ParseDatabaseRejectsDuplicateNamedEntryIds()
+	{
+		var fields = Struct(Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("X")));
+		var payload = new List<byte>();
+		payload.AddRange(Ber(2));
+		payload.AddRange(Ber(7));
+		payload.AddRange(fields);
+		payload.AddRange(Ber(7));
+		payload.AddRange(fields);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x17, payload.ToArray()),
+			Chunk(0x1a, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("DupIds.rdata"), database);
+		var result = _parser.ParseDatabase(Dir.PathJoin("DupIds.rdata"));
+		AssertFalse(result.IsSuccess());
+		AssertTrue(result.GetError()!.Message.Contains("Duplicate"), "duplicate id error");
+	}
+
+	public void Test_ParseDatabaseRejectsActorStructMissingTerminator()
+	{
+		var badActor = Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("NoTerm"));
+		var payload = new List<byte>();
+		payload.AddRange(Ber(1));
+		payload.AddRange(Ber(1));
+		payload.AddRange(badActor);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x0b, payload.ToArray()),
+			Chunk(0x1a, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("BadActor.rdata"), database);
+		var result = _parser.ParseDatabase(Dir.PathJoin("BadActor.rdata"));
+		AssertFalse(result.IsSuccess());
+		AssertNe(result.GetError(), null);
+	}
+
 	// === TESTS: Map Parsing ===
 
 	public void Test_ParseMapSuccess()
