@@ -130,12 +130,12 @@ See [ROADMAP.md](ROADMAP.md) for the complete phase breakdown.
 - registry-driven engine plugin detection and safe runtime-selection boundaries exist;
 - built-in engine entries cover RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection;
 - RM2K/RM2K3 have a parser-backed bootstrap runtime that loads validated data and advances the shared deterministic clock;
-- LMT is fully parsed; LDB actors/switches/variables plus scalar skills/items/states/classes metadata decode into typed models with verified liblcf field IDs and per-entry unknown-field retention;
+- LMT is fully parsed; LDB actors/switches/variables plus scalar skills/items/states/classes/enemies/terrains/attributes metadata decode into typed models with verified liblcf field IDs and per-entry unknown-field retention;
 - remaining LDB array sections and LMU event/page metadata typing are next.
 
 ### Language boundary
 
-The tested implementation is pure C#/.NET under the Godot .NET editor. Migration and plugin-wiring validation passed `dotnet build` and the headless C# regression suite at `166/166`. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
+The tested implementation is pure C#/.NET under the Godot .NET editor. Migration and plugin-wiring validation passed `dotnet build` and the headless C# regression suite at `167/167`. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
 
 ## Security Model
 

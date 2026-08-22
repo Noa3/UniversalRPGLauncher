@@ -9,7 +9,7 @@ K-015 is IN PROGRESS — decode the next verified LDB array-section slice into t
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`: headless C# suite `166/166`, exit 0, `.NET` build with `0` warnings and `0` errors.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`: headless C# suite `167/167`, exit 0, `.NET` build with `0` warnings and `0` errors.
 
 ## Validated stabilization changes
 
@@ -49,11 +49,11 @@ K-015 is IN PROGRESS — decode the next verified LDB array-section slice into t
 
 ## Current action
 
-K-015 first batch is complete for scalar skills/items/states/classes. Continue with a bounded enemy/terrain/attribute batch using verified EasyRPG liblcf field IDs, add synthetic coverage, then rerun full validation. Nested arrays remain data-only until separately decoded.
+K-015 second batch is complete for scalar enemies/terrains/attributes. Continue with a bounded troop/animation/chipset metadata batch using verified EasyRPG liblcf field IDs, add synthetic coverage, then rerun full validation. Nested arrays remain data-only until separately decoded.
 
 ## Next action
 
-Commit/push the verified first K-015 batch, then continue the same card with enemy/terrain/attribute scalar metadata. Do not mark K-015 DONE until its remaining section acceptance criteria are met.
+Commit/push the verified second K-015 batch, then continue the same card with troop/animation/chipset metadata. Do not mark K-015 DONE until its remaining section acceptance criteria are met.
 
 ## Completed K-012
 
@@ -66,6 +66,7 @@ Commit/push the verified first K-015 batch, then continue the same card with ene
 
 - 2026-08-22 | K-015 | Signature: new typed-section regression -> `The given key was not present in the dictionary` in `Test_ParseDatabaseDecodesTypedSkillItemStateAndClassEntries`. Hypothesis: the test exposed that the parser only returned actors/switches/variables. Action: added verified scalar field contracts and typed result arrays for skills/items/states/classes. Result: focused behavior became green; full suite then exposed the separate dispatch-boundary regression below.
 - 2026-08-22 | K-015 | Signature: full validation -> `No scalar field contract exists for LDB section 0xE/0x1F` in `ParseDatabase`, breaking real-fixture parsing and RM2K runtime initialization. Hypothesis: all LDB array sections were routed through the new scalar decoder. Action: restricted typed dispatch to sections with an implemented contract while retaining bounded framing/count parsing for the rest. Result: `166/166` tests and smoke validation passed.
+- 2026-08-22 | K-015 | Signature: new combat-section regression -> `The given key was not present in the dictionary` in `Test_ParseDatabaseDecodesTypedEnemyTerrainAndAttributeEntries`. Hypothesis: parser output still exposed only the previous typed batches. Action: added verified scalar contracts and result arrays for enemies/terrains/attributes. Result: `167/167` tests and smoke validation passed.
 
 - 2026-08-21 | C# migration | Signature: Godot Mono headless -> `Cannot instantiate C# script because the associated class could not be found. Script: 'res://tests/csharp_runner.cs'`. Hypothesis 1: stale incremental build skipped source generators. Evidence: forced `-t:Rebuild -p:EmitCompilerGeneratedFiles=true` ran ScriptMethods/Properties/Signals generators for all classes, but `ScriptPathAttributeGenerator` produced no output and `UniversalRPG.dll` contains zero `[ScriptPath]` attributes (only 5 unrelated `res://` strings). GodotSharp 4.7.2 defines `ScriptPathAttribute`; SDK targets disable nothing; generator class exists in the package. Attempt 1 (rebuild) did not resolve. Next attempt: manual `[ScriptPathAttribute]` annotation on scene-referenced classes; if that fails, decompile the generator for its emission condition.
 - 2026-08-21 | C# migration | Manual `[ScriptPathAttribute]` annotations did not register scene scripts. Root cause: `ScriptPathAttributeGenerator` requires case-sensitive file/class name equality and emits `AssemblyHasScriptsAttribute`; `main.cs`/`Main` and `csharp_runner.cs`/`CSharpRunner` were skipped. Renamed files to `Main.cs` and `CSharpRunner.cs`, updated scenes, rebuilt, and verified generated script-path registry.

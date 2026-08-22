@@ -397,6 +397,71 @@ partial class TestRm2kParser : TestBase
 		}
 	}
 
+	public void Test_ParseDatabaseDecodesTypedEnemyTerrainAndAttributeEntries()
+	{
+		var enemy = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Slime")),
+			Chunk(0x02, System.Text.Encoding.ASCII.GetBytes("Slime")),
+			Chunk(0x04, Ber(120)),
+			Chunk(0x0C, Ber(25)),
+			Chunk(0x2A, new byte[] { 0x01 })
+		);
+		var terrain = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Grass")),
+			Chunk(0x02, Ber(3)),
+			Chunk(0x03, Ber(20)),
+			Chunk(0x04, System.Text.Encoding.ASCII.GetBytes("Forest"))
+		);
+		var attribute = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Fire")),
+			Chunk(0x02, Ber(1)),
+			Chunk(0x0B, Ber(2)),
+			Chunk(0x0F, Ber(4))
+		);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x0E, StructArray(enemy)),
+			Chunk(0x10, StructArray(terrain)),
+			Chunk(0x11, StructArray(attribute)),
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("TypedCombatSections.rdata"), database);
+
+		var result = _parser.ParseDatabase(Dir.PathJoin("TypedCombatSections.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var enemies = (Godot.Collections.Array)data["enemies"];
+		var terrains = (Godot.Collections.Array)data["terrains"];
+		var attributes = (Godot.Collections.Array)data["attributes"];
+		AssertEq(enemies.Count, 1, "enemy entry count");
+		AssertEq(terrains.Count, 1, "terrain entry count");
+		AssertEq(attributes.Count, 1, "attribute entry count");
+		var enemyEntry = (Godot.Collections.Dictionary)enemies[0];
+		AssertEq(enemyEntry["name"].AsString(), "Slime", "enemy name");
+		AssertEq(enemyEntry["max_hp"].AsInt32(), 120, "enemy max HP");
+		AssertEq(enemyEntry["gold"].AsInt32(), 25, "enemy gold");
+		AssertEq(((Godot.Collections.Array)enemyEntry["unknown_fields"]).Count, 1, "enemy unknown field retained");
+		var terrainEntry = (Godot.Collections.Dictionary)terrains[0];
+		AssertEq(terrainEntry["name"].AsString(), "Grass", "terrain name");
+		AssertEq(terrainEntry["damage"].AsInt32(), 3, "terrain damage");
+		AssertEq(terrainEntry["background_name"].AsString(), "Forest", "terrain background");
+		var attributeEntry = (Godot.Collections.Dictionary)attributes[0];
+		AssertEq(attributeEntry["name"].AsString(), "Fire", "attribute name");
+		AssertEq(attributeEntry["type"].AsInt32(), 1, "attribute type");
+		AssertEq(attributeEntry["a_rate"].AsInt32(), 2, "attribute A rate");
+		AssertEq(attributeEntry["e_rate"].AsInt32(), 4, "attribute E rate");
+		var sectionCounts = (Godot.Collections.Dictionary)data["section_counts"];
+		foreach (var section in new[] { "enemies", "terrains", "attributes" })
+		{
+			AssertEq(sectionCounts[section].AsInt32(), 1, section + " section count");
+		}
+	}
+
 	public void Test_ParseDatabaseDecodesSwitchAndVariableNames()
 	{
 		var switchA = Struct(

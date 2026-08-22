@@ -146,6 +146,41 @@ public partial class Rm2kParser : RefCounted
 			}
 		},
 		{
+			0x0e,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "battler_name" }, { 0x03, "battler_hue" },
+				{ 0x04, "max_hp" }, { 0x05, "max_sp" }, { 0x06, "attack" }, { 0x07, "defense" },
+				{ 0x08, "spirit" }, { 0x09, "agility" }, { 0x0a, "transparent" }, { 0x0b, "exp" },
+				{ 0x0c, "gold" }, { 0x0d, "drop_id" }, { 0x0e, "drop_prob" }, { 0x15, "critical_hit" },
+				{ 0x16, "critical_hit_chance" }, { 0x1a, "miss" }, { 0x1c, "levitate" },
+				{ 0x1f, "state_ranks_size" }, { 0x21, "attribute_ranks_size" }, { 0x0f, "maniac_unarmed_animation" },
+			}
+		},
+		{
+			0x10,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "damage" }, { 0x03, "encounter_rate" }, { 0x04, "background_name" },
+				{ 0x05, "boat_pass" }, { 0x06, "ship_pass" }, { 0x07, "airship_pass" }, { 0x09, "airship_land" },
+				{ 0x0b, "bush_depth" }, { 0x10, "on_damage_se" }, { 0x11, "background_type" },
+				{ 0x16, "background_a_scrollh" }, { 0x17, "background_a_scrollv" }, { 0x18, "background_a_scrollh_speed" },
+				{ 0x19, "background_a_scrollv_speed" }, { 0x1e, "background_b" }, { 0x20, "background_b_scrollh" },
+				{ 0x21, "background_b_scrollv" }, { 0x22, "background_b_scrollh_speed" }, { 0x23, "background_b_scrollv_speed" },
+				{ 0x28, "special_flags" }, { 0x29, "special_back_party" }, { 0x2a, "special_back_enemies" },
+				{ 0x2b, "special_lateral_party" }, { 0x2c, "special_lateral_enemies" }, { 0x2d, "grid_location" },
+				{ 0x2e, "grid_top_y" }, { 0x2f, "grid_elongation" }, { 0x30, "grid_inclination" },
+			}
+		},
+		{
+			0x11,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "type" }, { 0x0b, "a_rate" }, { 0x0c, "b_rate" },
+				{ 0x0d, "c_rate" }, { 0x0e, "d_rate" }, { 0x0f, "e_rate" },
+			}
+		},
+		{
 			0x12,
 			new Dictionary<int, string>
 			{
@@ -178,6 +213,9 @@ public partial class Rm2kParser : RefCounted
 	{
 		{ 0x0c, new HashSet<int> { 0x01, 0x02, 0x03, 0x04 } },
 		{ 0x0d, new HashSet<int> { 0x01, 0x02 } },
+		{ 0x0e, new HashSet<int> { 0x01, 0x02 } },
+		{ 0x10, new HashSet<int> { 0x01, 0x04 } },
+		{ 0x11, new HashSet<int> { 0x01 } },
 		{ 0x12, new HashSet<int> { 0x01, 0x33, 0x34, 0x35, 0x36, 0x37 } },
 		{ 0x1e, new HashSet<int> { 0x01 } },
 	};
@@ -293,6 +331,9 @@ public partial class Rm2kParser : RefCounted
 		var actors = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var skills = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var items = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var enemies = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var terrains = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var attributes = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var states = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var classes = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var switches = new Godot.Collections.Array<Godot.Collections.Dictionary>();
@@ -354,6 +395,18 @@ public partial class Rm2kParser : RefCounted
 					{
 						items = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
 					}
+					else if (id == 0x0e)
+					{
+						enemies = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x10)
+					{
+						terrains = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x11)
+					{
+						attributes = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
 					else if (id == 0x12)
 					{
 						states = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
@@ -393,6 +446,9 @@ public partial class Rm2kParser : RefCounted
 			{ "actors", actors },
 			{ "skills", skills },
 			{ "items", items },
+			{ "enemies", enemies },
+			{ "terrains", terrains },
+			{ "attributes", attributes },
 			{ "states", states },
 			{ "classes", classes },
 			{ "switches", switches },
