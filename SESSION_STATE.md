@@ -1,15 +1,19 @@
 # UniversalRPG Autonomous Session State
 
-> Updated: 2026-08-22
+> Updated: 2026-08-23
 > Purpose: small durable checkpoint for Hermes/other autonomous agents.
 
 ## Current card
 
-|K-014 is DONE — unknown chunks/fields preserved across all LDB typed sections, LMU events, LMT maps, and LSD saves. K-015 is DONE; K-016 is DONE; K-013 is DONE.|
+|K-021 is DONE — first interpreter slice (message/wait/if/else/endIf/loop/breakLoop + switch/variable/transfer) with bounded payload decoding and diagnostics. K-023 (verified RM2K/2003 command codes) and K-024 (layout split, already executed) are READY follow-ups.|
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`: headless C# suite `171/171`, exit 0, `.NET` build with `0` warnings and `0` errors.
+`bash scripts/validate.sh` passed on Linux with the pinned `tools/godot/editors/4.7.2/linux-x86_64/...mono...x86_64` editor: headless C# suite `199/199`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+
+## Layout note (2026-08-23)
+
+Godot project files (`project.godot`, csproj/sln, app/, src/, tests/, assets/, locale/, scenes/, plugins/) moved to `project/`. Root keeps docs/notes, `docs/`, `scripts/`, and the Godot runtime under `tools/godot/`. Build/test commands must target the project dir (validate.sh does this automatically).
 
 ## Validated stabilization changes
 

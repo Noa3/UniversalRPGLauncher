@@ -22,11 +22,13 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-011 | 0 | DONE | Implement LMT map-tree parser with bounded BER/structure handling | K-010 |
 | K-012 | 0 | DONE | Expand LDB decoding into typed core database sections | K-010 |
 || K-013 | 0 | DONE | Expand LMU event/page metadata decoding without executing commands | K-010 |
-|| K-014 | 0 | DONE | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
+| K-014 | 0 | DONE | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
 | K-015 | 0 | DONE | Decode remaining LDB array sections into typed models | K-012 |
 | K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
-|| K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
-|| K-021 | 1 | IN PROGRESS | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
+| K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
+| K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
+| K-023 | 2 | READY | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
+| K-024 | 2 | READY | Move Godot project into `project/` and keep runtime/tooling at repo root | — |
 | K-022 | 1 | BACKLOG | Implement map/player movement and passability simulation | K-020 |
 | K-030 | 1 | BACKLOG | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | BACKLOG | Character/event sprite renderer and camera | K-030 |
@@ -188,7 +190,34 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - MV remains on the generic `rpg_core.js` path and is not affected by the MZ-only checks.
 - Added positive, missing-manager, malformed-JSON, and oversized-metadata fixtures; no JavaScript, HTML, native binary, or external runtime is executed.
 - `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `171/171` C# tests and smoke validation.
-|- K-016 remains `IN PROGRESS`; next MZ slice is a typed bounded metadata result (gameTitle, systemVersion, audioBrowsers, etc.) and explicit encrypted-asset diagnostics, still without runtime execution.
+- Typed bounded MZ metadata extraction and encrypted-asset diagnostics landed; K-016 is `DONE`.
+
+### K-021 — First event-interpreter slice
+
+**Acceptance criteria**
+- Interpret message, wait, if/else/endIf, loop/breakLoop commands deterministically without side effects beyond the simulation state.
+- Interpret switch, variable, and transfer-player commands against the bounded `GameSimulationState`.
+- Malformed or out-of-range payloads produce diagnostics and are skipped safely; no crashes, no unbounded loops.
+- Regression coverage for each command family including malformed payloads.
+
+**Progress evidence (2026-08-23)**
+- Fixed the Variant cast in `GetCmdParams` (build blocker) and removed the dead `_shouldBreak` field.
+- Added dispatch plus bounded executors for `ControlSwitches`, `ControlVariables` (set/add/sub/mul/div/mod with division-by-zero diagnostic), and `TransferPlayer` (pending-transfer state).
+- Removed the placeholder move-route case whose opcode literal collided with `ControlSwitches` (`CS0152`).
+- Placeholder opcode constants (101–118, 105–107) documented as such; migration is tracked as K-023.
+- `bash scripts/validate.sh` — passed; `199/199` C# tests and smoke validation from the new `project/` layout.
+
+### K-024 — Repository layout split
+
+**Acceptance criteria**
+- Godot project (project.godot, csproj/sln, app/, src/, tests/, assets/, locale/, scenes/, plugins/) lives under `project/`.
+- Repo root keeps development elements: docs, notes, `docs/`, `scripts/`, and the pinned Godot runtime under `tools/godot/`.
+- `scripts/validate.sh` runs restore/build/import/tests from the new layout unchanged for CI.
+
+**Progress evidence (2026-08-23)**
+- Moved project files via `git mv`; `.godot` cache regenerated inside `project/`.
+- `validate.sh` now builds and runs Godot with `--path "$ROOT_DIR/project"`; Godot binary discovery still uses root `tools/godot/editors/4.7.2/`.
+- Full validation green: `199/199`.
 
 ### K-013 — LMU events/pages
 

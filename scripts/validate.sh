@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+PROJECT_DIR="$ROOT_DIR/project"
+cd "$PROJECT_DIR"
 
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "ERROR: dotnet SDK is required for the .NET project." >&2
@@ -58,9 +59,9 @@ fi
 echo "Using Godot: $GODOT"
 "$GODOT" --version
 
-GODOT_PROJECT_PATH="$ROOT_DIR"
+GODOT_PROJECT_PATH="$PROJECT_DIR"
 if [[ "$GODOT" == *.exe ]] && command -v cygpath >/dev/null 2>&1; then
-  GODOT_PROJECT_PATH="$(cygpath -m "$ROOT_DIR")"
+  GODOT_PROJECT_PATH="$(cygpath -m "$PROJECT_DIR")"
 fi
 
 echo "[3/4] Godot import validation"

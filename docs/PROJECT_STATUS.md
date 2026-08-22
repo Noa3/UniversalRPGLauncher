@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `171/171` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `199/199` tests.
 
 ## Phase Status Overview
 
@@ -29,7 +29,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 
 ## Implemented Systems
 
-### 1. VirtualFileSystem (`src/core/virtual_filesystem.cs`)
+### 1. VirtualFileSystem (`project/src/core/virtual_filesystem.cs`)
 
 **Status:** Implemented
 
@@ -49,7 +49,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 
 ---
 
-### 2. VirtualClock (`src/core/virtual_clock.cs`)
+### 2. VirtualClock (`project/src/core/virtual_clock.cs`)
 
 **Status:** Implemented
 
@@ -69,7 +69,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 
 ---
 
-### 3. GameDetector (`src/game_detector/game_detector.cs`)
+### 3. GameDetector (`project/src/game_detector/game_detector.cs`)
 
 **Status:** Implemented
 
@@ -90,7 +90,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 
 ---
 
-### 4. CompatibilityProfile (`src/compatibility/compatibility_profile.cs`)
+### 4. CompatibilityProfile (`project/src/compatibility/compatibility_profile.cs`)
 
 **Status:** Implemented
 

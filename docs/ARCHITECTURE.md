@@ -26,30 +26,31 @@ future directories already exist.
 
 ```text
 UniversalRPG/
-├── app/
-│   ├── launcher/          # Runtime availability/launch workflow
-│   ├── library/           # Game library scan/settings
-│   └── ui/                # Godot application UI
-├── src/
-│   ├── core/              # VFS, clock, legacy text decoding
-│   ├── compatibility/     # Compatibility profiles/database
-│   ├── game_detector/     # Compatibility facade over plugin detection
-│   ├── plugins/            # Trusted engine contracts, inspection, registry
-│   ├── rm2k/
-│   │   ├── parser/        # LCF reader + LDB/LMU/LSD parser
-│   │   ├── database/      # Serializable RM2K/2003 models
-│   │   ├── interpreter/   # Future event interpreter
-│   │   └── rendering/     # Future faithful renderer
-│   ├── rgss/              # Future XP/VX/VX Ace runtime
-│   ├── mv/                # Future MV runtime
-│   └── mz/                # Future MZ runtime
-├── platform/godot/        # Future explicit Godot adapter boundary
-├── enhancement/           # Future optional Enhanced Mode features
-├── plugins/               # Optional integration/plugin surfaces
-├── tests/                 # Core, fixtures, integration, rendering
-├── scripts/               # Validation/development automation
-├── docs/                  # Architecture, roadmap, compatibility/security docs
-└── tools/                 # Local development-tool metadata (binaries ignored)
+├── project/                 # Godot project root (project.godot, csproj/sln)
+│   ├── app/
+│   │   ├── launcher/        # Runtime availability/launch workflow
+│   │   ├── library/         # Game library scan/settings
+│   │   └── ui/              # Godot application UI
+│   ├── src/
+│   │   ├── core/            # VFS, clock, legacy text decoding
+│   │   ├── compatibility/   # Compatibility profiles/database
+│   │   ├── game_detector/   # Compatibility facade over plugin detection
+│   │   ├── plugins/          # Trusted engine contracts, inspection, registry
+│   │   ├── rm2k/
+│   │   │   ├── parser/      # LCF reader + LDB/LMU/LSD parser
+│   │   │   ├── database/    # Serializable RM2K/2003 models
+│   │   │   ├── interpreter/ # Event interpreter (first slice done)
+│   │   │   └── rendering/   # Future faithful renderer
+│   │   ├── rgss/            # Future XP/VX/VX Ace runtime
+│   │   ├── mv/              # Future MV runtime
+│   │   └── mz/              # Future MZ runtime
+│   ├── platform/godot/      # Future explicit Godot adapter boundary
+│   ├── enhancement/         # Future optional Enhanced Mode features
+│   ├── plugins/             # Optional integration/plugin surfaces
+│   └── tests/               # Core, fixtures, integration, rendering
+├── scripts/                 # Validation/development automation
+├── docs/                    # Architecture, roadmap, compatibility/security docs
+└── tools/                   # Pinned Godot editor binaries (runtime stays at root)
 ```
 
 ## Runtime Abstractions
