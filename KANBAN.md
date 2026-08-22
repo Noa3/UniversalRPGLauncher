@@ -233,7 +233,7 @@ User-directed MZ slice (extends the K-016 line); stays detection/metadata-only.
 - Regression coverage for happy path, missing files, malformed JSON, non-array JSON, encrypted assets, and MV-refusal.
 
 **Progress evidence (2026-08-23)**
-- Added `MzDataDirectoryResult.Extract(GameInspectionSnapshot)` in `project/src/plugins/BuiltInEnginePlugins.cs`; JSON parsed with Godot's `Json` parser under strict bounds (256 KiB/file, 5000 actors, 2000 maps).
+- Added `MzDataDirectoryResult.Extract(GameInspectionSnapshot)` in `project/src/plugins/BuiltInEnginePlugins.cs`; JSON parsed with Godot's `Json` parser under strict bounds (2048 KiB/file, 9999 actors, 9999 maps).
 - Added `TestMzDataDirectory` suite with five tests over synthetic MZ/MV game folders; suite total `205/205`.
 - `bash scripts/validate.sh` — passed; `203/203` C# tests and smoke validation.
 

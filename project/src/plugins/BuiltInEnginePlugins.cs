@@ -729,12 +729,12 @@ public sealed class RpgMakerUnitePlugin : BuiltInEnginePlugin
 /// </summary>
 public sealed class MzDataDirectoryResult
 {
-    public const int MaxDataJsonBytes = 256 * 1024;
-    public const int MaxActorEntries = 5000;
-    public const int MaxMapEntries = 2000;
+    public const int MaxDataJsonBytes = 2048 * 1024;
+    public const int MaxActorEntries = 9999;
+    public const int MaxMapEntries = 9999;
     public const int MaxListedNames = 32;
     public const int MaxNameLength = 64;
-    public const int MaxMapFiles = 1000;
+    public const int MaxMapFiles = 9999;
     private static readonly string[] EncryptedExtensions =
     {
         ".rpgmvp", ".rpgmvo", ".rpgmvm", ".png_", ".ogg_", ".m4a_", ".encrypted",
