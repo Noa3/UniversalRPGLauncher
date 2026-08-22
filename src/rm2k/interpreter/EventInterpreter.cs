@@ -29,6 +29,13 @@ public sealed class EventInterpreter
 	public const int Wait = 117;
 	public const int Comment = 118;
 
+	// Placeholder opcodes for the first interpreter slice. The real RM2K/2003
+	// numeric command table is not verified yet; migrating these IDs is tracked
+	// as a follow-up card so no unverified code is treated as faithful data.
+	public const int ControlSwitches = 105;
+	public const int ControlVariables = 106;
+	public const int TransferPlayer = 107;
+
 	private readonly GameSimulationState _state;
 	private readonly int _eventId;
 	private readonly int _pageId;
@@ -36,7 +43,6 @@ public sealed class EventInterpreter
 	private readonly IReadOnlyList<Godot.Collections.Dictionary> _commands;
 	private int _commandIndex;
 	private int _loopStackDepth;
-	private bool _shouldBreak;
 	private int _ifDepth;
 	private bool _skipBlock;
 
@@ -51,7 +57,6 @@ public sealed class EventInterpreter
 		_commands = commands;
 		_commandIndex = 0;
 		_loopStackDepth = 0;
-		_shouldBreak = false;
 		_ifDepth = 0;
 		_skipBlock = false;
 	}
@@ -100,6 +105,21 @@ public sealed class EventInterpreter
 				_commandIndex++;
 				return true;
 
+			case ControlSwitches:
+				ExecuteControlSwitches(paramsData);
+				_commandIndex++;
+				return true;
+
+			case ControlVariables:
+				ExecuteControlVariables(paramsData);
+				_commandIndex++;
+				return true;
+
+			case TransferPlayer:
+				ExecuteTransferPlayer(paramsData);
+				_commandIndex++;
+				return true;
+
 			case If:
 				ExecuteIf(paramsData);
 				_commandIndex++;
@@ -122,11 +142,6 @@ public sealed class EventInterpreter
 
 			case BreakLoop:
 				ExecuteBreakLoop();
-				_commandIndex++;
-				return true;
-
-			case 0x69: // Set move route (skip, not implementing movement yet)
-				ExecuteSetMoveRoute(paramsData);
 				_commandIndex++;
 				return true;
 
@@ -154,7 +169,7 @@ public sealed class EventInterpreter
 	{
 		if (pCmd.ContainsKey("parameters"))
 		{
-			var raw = pCmd["parameters"];
+			var raw = pCmd["parameters"].Obj;
 			var bytes = raw as byte[];
 			if (bytes != null)
 			{
@@ -199,6 +214,120 @@ public sealed class EventInterpreter
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Wait {frames} frames");
 		}
+	}
+
+	private void ExecuteControlSwitches(byte[] pParams)
+	{
+		// Placeholder payload layout: [startId:int32][endId:int32][value:byte]
+		if (!TryReadInt32(pParams, 0, out var startId)
+			|| !TryReadInt32(pParams, 4, out var endId)
+			|| pParams.Length < 9)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control switches: malformed parameters skipped");
+			return;
+		}
+		var value = pParams[8] != 0;
+		if (startId < 1 || endId < startId || endId > GameSimulationState.MaxSwitches)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control switches: invalid range {startId}-{endId} skipped");
+			return;
+		}
+		for (var id = startId; id <= endId; id++)
+		{
+			while (_state.Switches.Count < id)
+			{
+				_state.Switches.Add(false);
+			}
+			_state.Switches[id - 1] = value;
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Switches {startId}-{endId} -> {(value ? "ON" : "OFF")}");
+	}
+
+	private void ExecuteControlVariables(byte[] pParams)
+	{
+		// Placeholder payload layout:
+		// [startId:int32][endId:int32][op:byte][operandType:byte][operand:int32]
+		if (!TryReadInt32(pParams, 0, out var startId)
+			|| !TryReadInt32(pParams, 4, out var endId)
+			|| pParams.Length < 14)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control variables: malformed parameters skipped");
+			return;
+		}
+		var op = pParams[8];
+		var operandType = pParams[9];
+		TryReadInt32(pParams, 10, out var operand);
+		if (startId < 1 || endId < startId || endId > GameSimulationState.MaxVariables)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control variables: invalid range {startId}-{endId} skipped");
+			return;
+		}
+		if (operandType > 1)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control variables: unsupported operand type {operandType} skipped");
+			return;
+		}
+		if ((op == 4 || op == 5) && operand == 0)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control variables: division by zero skipped");
+			return;
+		}
+		for (var id = startId; id <= endId; id++)
+		{
+			while (_state.Variables.Count < id)
+			{
+				_state.Variables.Add(0);
+			}
+			var index = id - 1;
+			var current = _state.Variables[index];
+			_state.Variables[index] = op switch
+			{
+				0 => operand,
+				1 => current + operand,
+				2 => current - operand,
+				3 => current * operand,
+				4 => current / operand,
+				5 => current % operand,
+				_ => current,
+			};
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Variables {startId}-{endId} <- op {op} {operand}");
+	}
+
+	private void ExecuteTransferPlayer(byte[] pParams)
+	{
+		// Placeholder payload layout: [mapId:int32][x:int32][y:int32]
+		if (!TryReadInt32(pParams, 0, out var mapId)
+			|| !TryReadInt32(pParams, 4, out var x)
+			|| !TryReadInt32(pParams, 8, out var y))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Transfer player: malformed parameters skipped");
+			return;
+		}
+		if (mapId < 0 || mapId > GameSimulationState.MaxMapId || x < 0 || y < 0)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Transfer player: invalid target ({mapId}, {x}, {y}) skipped");
+			return;
+		}
+		_state.PendingMapId = mapId;
+		_state.PendingX = x;
+		_state.PendingY = y;
+		_state.IsTransferPending = true;
+		_state.AddDiagnostic($"[Event {_eventId}] Transfer pending -> map {mapId} at ({x}, {y})");
+	}
+
+	private static bool TryReadInt32(byte[] pParams, int pOffset, out int pValue)
+	{
+		pValue = 0;
+		if (pOffset < 0 || pOffset + 4 > pParams.Length)
+		{
+			return false;
+		}
+		pValue = pParams[pOffset]
+			| (pParams[pOffset + 1] << 8)
+			| (pParams[pOffset + 2] << 16)
+			| (pParams[pOffset + 3] << 24);
+		return true;
 	}
 
 	private void ExecuteIf(byte[] pParams)
@@ -246,21 +375,13 @@ public sealed class EventInterpreter
 	private void ExecuteLoop()
 	{
 		_loopStackDepth++;
-		_shouldBreak = false;
 	}
 
 	private void ExecuteBreakLoop()
 	{
 		if (_loopStackDepth > 0)
 		{
-			_shouldBreak = true;
 			_loopStackDepth--;
 		}
-	}
-
-	private void ExecuteSetMoveRoute(byte[] pParams)
-	{
-		// Move route is encoded in RM2K format
-		// Skip for now - map movement is K-022
 	}
 }
