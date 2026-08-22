@@ -183,6 +183,13 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Add positive, negative, malformed, and oversized metadata regression coverage.
 - Update detection/security documentation with the exact supported boundary.
 
+**Progress evidence (2026-08-22)**
+- Added MZ-specific validation on top of the shared web detector: `rmmz_core.js`, `rmmz_managers.js`, and bounded `data/System.json` JSON-object validation are required.
+- MV remains on the generic `rpg_core.js` path and is not affected by the MZ-only checks.
+- Added positive, missing-manager, malformed-JSON, and oversized-metadata fixtures; no JavaScript, HTML, native binary, or external runtime is executed.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `171/171` C# tests and smoke validation.
+- K-016 remains `IN PROGRESS`; next MZ slice is a typed bounded metadata result and explicit encrypted-asset diagnostics, still without runtime execution.
+
 ### K-013 — LMU events/pages
 
 **Acceptance criteria**

@@ -44,11 +44,11 @@ EnginePluginRegistry -> IEnginePlugin -> runtime
 | `rpg-maker-vx` | RPG Maker VX / RGSS2 | Detection/parsing plus bounded RGSS metadata runtime |
 | `rpg-maker-vx-ace` | RPG Maker VX Ace / RGSS3 | Detection/parsing plus bounded RGSS metadata runtime |
 | `rpg-maker-mv` | RPG Maker MV | Detection/parsing only until an embedded JavaScript VM exists |
-| `rpg-maker-mz` | RPG Maker MZ | Detection/parsing only until an embedded JavaScript VM exists |
+| `rpg-maker-mz` | RPG Maker MZ | Prioritized bounded detection/metadata inspection; detection-only until an embedded JavaScript VM exists |
 | `wolf-rpg` | WOLF RPG Editor | Bounded unencrypted plain-data runtime slice |
 | `rpg-maker-unite` | Unity/RPG Maker Unite candidate | Detection only; arbitrary Unity exports are not treated as Unite games |
 
-Detection-only means the project can be identified and reported, but `EngineRuntimeSelector` refuses to launch it until a plugin advertises the required `Runtime` capability and passes its compatibility probe. RM95, MV, MZ, and Unite remain detection-only. RM2K/RM2K3 parse LDB/LMT/LMU data; RGSS and WOLF expose bounded metadata/plain-data lifecycle slices. None of these slices provides full event, Ruby/JavaScript VM, rendering, audio, menu, save, or battle behavior.
+Detection-only means the project can be identified and reported, but `EngineRuntimeSelector` refuses to launch it until a plugin advertises the required `Runtime` capability and passes its compatibility probe. RM95, MV, MZ, and Unite remain detection-only. The current MZ boundary requires `rmmz_core.js`, `rmmz_managers.js`, and valid non-truncated `data/System.json` metadata; it never executes `index.html`, `rmmz_*.js`, `plugins.js`, native binaries, or external runtimes. RM2K/RM2K3 parse LDB/LMT/LMU data; RGSS and WOLF expose bounded metadata/plain-data lifecycle slices. None of these slices provides full event, Ruby/JavaScript VM, rendering, audio, menu, save, or battle behavior.
 
 ### Research boundaries
 

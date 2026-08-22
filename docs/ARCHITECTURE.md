@@ -135,7 +135,7 @@ See [ROADMAP.md](ROADMAP.md) for the complete phase breakdown.
 
 ### Language boundary
 
-The tested implementation is pure C#/.NET under the Godot .NET editor. Migration and plugin-wiring validation passed `dotnet build` and the headless C# regression suite at `170/170`. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
+The tested implementation is pure C#/.NET under the Godot .NET editor. Migration and plugin-wiring validation passed `dotnet build` and the headless C# regression suite at `171/171`. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
 
 ## Security Model
 

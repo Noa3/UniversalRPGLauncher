@@ -9,7 +9,7 @@ K-016 is IN PROGRESS — prioritize RPG Maker MZ detection and bounded metadata 
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`: headless C# suite `170/170`, exit 0, `.NET` build with `0` warnings and `0` errors.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`: headless C# suite `171/171`, exit 0, `.NET` build with `0` warnings and `0` errors.
 
 ## Validated stabilization changes
 
@@ -49,11 +49,11 @@ K-016 is IN PROGRESS — prioritize RPG Maker MZ detection and bounded metadata 
 
 ## Current action
 
-K-015 is complete: all accepted scalar LDB sections plus bounded battle-command metadata decode with verified liblcf IDs, unknown-field retention, and real-fixture parity. The explicit next priority is MZ.
+K-015 is complete: all accepted scalar LDB sections plus bounded battle-command metadata decode with verified liblcf IDs, unknown-field retention, and real-fixture parity. K-016's first MZ detection hardening slice is complete and validated; the card remains active for typed bounded metadata and encrypted-asset diagnostics.
 
 ## Next action
 
-Commit/push the verified K-015 completion, then work on K-016 until the MZ detection/metadata acceptance criteria are verified. Do not advertise MZ as runnable.
+Commit/push the verified K-016 detection hardening slice, then continue with typed bounded MZ metadata and explicit encrypted-asset diagnostics. Do not advertise MZ as runnable or execute foreign JavaScript.
 
 ## Completed K-012
 
@@ -69,6 +69,7 @@ Commit/push the verified K-015 completion, then work on K-016 until the MZ detec
 - 2026-08-22 | K-015 | Signature: new combat-section regression -> `The given key was not present in the dictionary` in `Test_ParseDatabaseDecodesTypedEnemyTerrainAndAttributeEntries`. Hypothesis: parser output still exposed only the previous typed batches. Action: added verified scalar contracts and result arrays for enemies/terrains/attributes. Result: `167/167` tests and smoke validation passed.
 - 2026-08-22 | K-015 | Signature: new presentation-section regression -> `The given key was not present in the dictionary` in `Test_ParseDatabaseDecodesTypedTroopAnimationAndChipsetEntries`. Hypothesis: parser output still exposed only the previous typed batches. Action: added verified scalar contracts and result arrays for troops/animations/chipsets. Result: `168/168` tests and smoke validation passed.
 
+- 2026-08-22 | K-016 | Signature: existing `SmokeMzDetection` failed after MZ validation required `rmmz_managers.js`. Hypothesis: the new MZ boundary was correct but the legacy smoke fixture was incomplete. Action: added the manager signature to the synthetic smoke fixture. Result: full validation passed at `171/171`.
 - 2026-08-21 | C# migration | Signature: Godot Mono headless -> `Cannot instantiate C# script because the associated class could not be found. Script: 'res://tests/csharp_runner.cs'`. Hypothesis 1: stale incremental build skipped source generators. Evidence: forced `-t:Rebuild -p:EmitCompilerGeneratedFiles=true` ran ScriptMethods/Properties/Signals generators for all classes, but `ScriptPathAttributeGenerator` produced no output and `UniversalRPG.dll` contains zero `[ScriptPath]` attributes (only 5 unrelated `res://` strings). GodotSharp 4.7.2 defines `ScriptPathAttribute`; SDK targets disable nothing; generator class exists in the package. Attempt 1 (rebuild) did not resolve. Next attempt: manual `[ScriptPathAttribute]` annotation on scene-referenced classes; if that fails, decompile the generator for its emission condition.
 - 2026-08-21 | C# migration | Manual `[ScriptPathAttribute]` annotations did not register scene scripts. Root cause: `ScriptPathAttributeGenerator` requires case-sensitive file/class name equality and emits `AssemblyHasScriptsAttribute`; `main.cs`/`Main` and `csharp_runner.cs`/`CSharpRunner` were skipped. Renamed files to `Main.cs` and `CSharpRunner.cs`, updated scenes, rebuilt, and verified generated script-path registry.
 - 2026-08-21 | C# migration | C# runner initially failed 5 database assertions because `List<int>` and typed dictionary lists do not implement `IEnumerable<object>`, and test cast `List<Dictionary<...>>` to `List<object>`. Changed deserialization to non-generic `IEnumerable`; test now uses `ICollection`. Result: `128/128` passed, exit `0`.

@@ -439,6 +439,10 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
         {
             return EngineDetectionProbe.NoMatch("The web runtime, index, and data signatures are incomplete.");
         }
+        if (!ValidateMetadata(snapshot, out var metadataFailure))
+        {
+            return EngineDetectionProbe.NoMatch(metadataFailure);
+        }
         var evidence = new List<string> { "index.html", "data/", $"JavaScript runtime: {_runtimeLabel}" };
         var score = 850;
         if (nestedRuntime)
@@ -454,7 +458,13 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
         return Match(snapshot, score, $"{_runtimeLabel} and web-game layout matched.", evidence, title, version);
     }
 
-    private static bool IsWebRootPath(string pPath)
+    protected virtual bool ValidateMetadata(GameInspectionSnapshot pSnapshot, out string pFailure)
+    {
+        pFailure = "";
+        return true;
+    }
+
+    protected static bool IsWebRootPath(string pPath)
     {
         return !pPath.Contains('/', StringComparison.Ordinal)
             || pPath.StartsWith("js/", StringComparison.OrdinalIgnoreCase)
@@ -477,6 +487,54 @@ public sealed class RpgMakerMvPlugin : WebRpgPlugin
 public sealed class RpgMakerMzPlugin : WebRpgPlugin
 {
     public RpgMakerMzPlugin() : base(EnginePluginIds.RpgMakerMz, "RPG Maker MZ", "mz", "rmmz_core.js", "js/rmmz_core.js", 30) { }
+
+    protected override bool ValidateMetadata(GameInspectionSnapshot pSnapshot, out string pFailure)
+    {
+        var managers = pSnapshot.Files.Any(pFile =>
+            pFile.RelativePath.Equals("js/rmmz_managers.js", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.Equals("www/js/rmmz_managers.js", StringComparison.OrdinalIgnoreCase));
+        if (!managers)
+        {
+            pFailure = "The MZ manager runtime signature is missing.";
+            return false;
+        }
+
+        var system = pSnapshot.Files.FirstOrDefault(pFile =>
+            pFile.RelativePath.Equals("data/System.json", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.Equals("www/data/System.json", StringComparison.OrdinalIgnoreCase));
+        if (system == null)
+        {
+            pFailure = "The MZ data/System.json metadata file is missing.";
+            return false;
+        }
+        if (system.IsTruncated)
+        {
+            pFailure = "The MZ data/System.json metadata file exceeds the bounded inspection limit.";
+            return false;
+        }
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(system.Data);
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                pFailure = "The MZ data/System.json metadata root must be a JSON object.";
+                return false;
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            pFailure = "The MZ data/System.json metadata is malformed JSON.";
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            pFailure = "The MZ data/System.json metadata could not be decoded safely.";
+            return false;
+        }
+
+        pFailure = "";
+        return true;
+    }
 }
 
 public class WolfRpgPlugin : BuiltInEnginePlugin

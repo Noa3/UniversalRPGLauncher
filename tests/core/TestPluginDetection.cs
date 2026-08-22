@@ -23,7 +23,12 @@ public partial class TestPluginDetection : TestBase
         CreateRgss("RMVX", "RGSS202E.dll", ".rvdata", "");
         CreateRgss("RMVXA", "RGSS302A.dll", ".rvdata2", "");
         CreateWeb("RMMV", "rpg_core.js");
-        CreateWeb("RMMZ", "rmmz_core.js");
+        CreateWeb("RMMZ", "rmmz_core.js", true);
+        CreateWeb("MZWeak", "rmmz_core.js");
+        CreateWeb("MZMalformed", "rmmz_core.js", true);
+        WriteText(TempBase.PathJoin("MZMalformed/data/System.json"), "{not valid json");
+        CreateWeb("MZOversized", "rmmz_core.js", true);
+        WriteText(TempBase.PathJoin("MZOversized/data/System.json"), "{\"gameTitle\":\"" + new string('x', 1_100_000) + "\"}");
         WriteText(TempBase.PathJoin("WOLF/Data/Game.dat"), "wolf data");
         WriteText(TempBase.PathJoin("WOLF/Data/BasicData/System.db"), "wolf database");
         WriteText(TempBase.PathJoin("WOLF/Data/MapData/Map001.mps"), "wolf map");
@@ -54,6 +59,21 @@ public partial class TestPluginDetection : TestBase
         AssertEq(Analyze("RMMZ").SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerMz);
         AssertEq(Analyze("WOLF").SelectedCandidate?.EngineId, EnginePluginIds.WolfRpg);
         AssertEq(Analyze("Unite").SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerUnite);
+    }
+
+    public void Test_MzRequiresManagersAndValidBoundedSystemMetadata()
+    {
+        var positive = Analyze("RMMZ");
+        AssertEq(positive.SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerMz);
+
+        var weak = Analyze("MZWeak");
+        AssertTrue(weak.SelectedCandidate == null || weak.SelectedCandidate.EngineId != EnginePluginIds.RpgMakerMz);
+
+        var malformed = Analyze("MZMalformed");
+        AssertTrue(malformed.SelectedCandidate == null || malformed.SelectedCandidate.EngineId != EnginePluginIds.RpgMakerMz);
+
+        var oversized = Analyze("MZOversized");
+        AssertTrue(oversized.SelectedCandidate == null || oversized.SelectedCandidate.EngineId != EnginePluginIds.RpgMakerMz);
     }
 
     public void Test_AmbiguousAndUnknownResultsAreSafe()
@@ -239,12 +259,16 @@ public partial class TestPluginDetection : TestBase
         }
     }
 
-    private static void CreateWeb(string pName, string pRuntime)
+    private static void CreateWeb(string pName, string pRuntime, bool pIncludeMzManagers = false)
     {
         var root = TempBase.PathJoin(pName);
         WriteText(root.PathJoin("index.html"), "<!doctype html>");
         WriteText(root.PathJoin("data/System.json"), $"{{\"gameTitle\":\"{pName}\"}}");
         WriteText(root.PathJoin("js/" + pRuntime), "runtime metadata");
+        if (pIncludeMzManagers)
+        {
+            WriteText(root.PathJoin("js/rmmz_managers.js"), "runtime metadata");
+        }
         WriteText(root.PathJoin("package.json"), "{\"version\":\"1.6.0\"}");
     }
 

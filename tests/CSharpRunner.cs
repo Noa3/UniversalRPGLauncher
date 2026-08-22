@@ -159,6 +159,7 @@ public partial class CSharpRunner : Node
 		DirAccess.MakeDirRecursiveAbsolute(gameDir.PathJoin("data"));
 		WriteText(gameDir.PathJoin("index.html"), "<!doctype html>");
 		WriteText(gameDir.PathJoin("js/rmmz_core.js"), "// runtime");
+		WriteText(gameDir.PathJoin("js/rmmz_managers.js"), "// runtime");
 		WriteText(gameDir.PathJoin("data/System.json"), "{\"gameTitle\":\"MZ Test\"}");
 		var result = new GameDetector().Analyze(ProjectSettings.GlobalizePath(gameDir));
 		Check(result.Engine == GameDetector.EngineType.RpgMakerMz, "MZ detection");
