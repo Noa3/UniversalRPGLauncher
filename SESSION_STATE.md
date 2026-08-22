@@ -53,7 +53,7 @@ K-015 is complete: all accepted scalar LDB sections plus bounded battle-command 
 
 ## Next action
 
-|K-014 unknown-fields/preservation is complete. Next priority: K-020 (RM2K/2003 simulation state model) or K-021 (event interpreter first slice).|
+|K-020 simulation state model is complete. Next: K-021 (event interpreter first slice: message/switch/variable/branch/wait/transfer).|
 
 ## Completed K-012
 
