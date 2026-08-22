@@ -228,19 +228,31 @@ public sealed class RpgMaker95Plugin : BuiltInEnginePlugin
     public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
     {
         var snapshot = pContext.Snapshot;
-        var explicit95 = snapshot.Files.Any(pFile =>
-            !pFile.RelativePath.Contains('/', StringComparison.Ordinal)
-            && (pFile.RelativePath.Contains("rpg95", StringComparison.OrdinalIgnoreCase)
-                || pFile.RelativePath.Contains("maker95", StringComparison.OrdinalIgnoreCase)))
-            || IniText(snapshot).Contains("rm95", StringComparison.Ordinal);
-        if (!explicit95)
+        var rootFiles = snapshot.Files.Where(pFile => !pFile.RelativePath.Contains('/', StringComparison.Ordinal)).ToArray();
+        var descriptor = rootFiles.Any(pFile => pFile.RelativePath.EndsWith(".rpg", StringComparison.OrdinalIgnoreCase));
+        var companion = rootFiles.Any(pFile =>
         {
-            return EngineDetectionProbe.NoMatch("No RPG Maker 95-specific signature was found.");
+            var name = System.IO.Path.GetFileName(pFile.RelativePath);
+            return name.EndsWith(".atr", StringComparison.OrdinalIgnoreCase)
+                || (name.StartsWith("evt", StringComparison.OrdinalIgnoreCase)
+                    && name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
+                || name.Equals("strings.dat", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("swname.dat", StringComparison.OrdinalIgnoreCase);
+        });
+        if (!descriptor || !companion)
+        {
+            return EngineDetectionProbe.NoMatch("RPG Maker 95 requires a root .RPG descriptor and a documented companion data file.");
         }
-        var evidence = snapshot.Files.Where(pFile => pFile.RelativePath.Contains("95", StringComparison.OrdinalIgnoreCase))
-            .Select(pFile => $"signature: {pFile.RelativePath}").ToList();
-        evidence.Add("RPG Maker 95 metadata marker");
-        return Match(snapshot, 850, "Explicit RPG Maker 95 marker found.", evidence);
+        var evidence = rootFiles
+            .Where(pFile => pFile.RelativePath.EndsWith(".rpg", StringComparison.OrdinalIgnoreCase)
+                || pFile.RelativePath.EndsWith(".atr", StringComparison.OrdinalIgnoreCase)
+                || pFile.RelativePath.StartsWith("evt", StringComparison.OrdinalIgnoreCase)
+                || pFile.RelativePath.Equals("strings.dat", StringComparison.OrdinalIgnoreCase)
+                || pFile.RelativePath.Equals("swname.dat", StringComparison.OrdinalIgnoreCase))
+            .Select(pFile => $"signature: {pFile.RelativePath}")
+            .OrderBy(pPath => pPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return Match(snapshot, 850, "RPG Maker 95 descriptor and companion layout matched.", evidence);
     }
 }
 

@@ -15,8 +15,8 @@ public partial class TestPluginDetection : TestBase
     public override void Setup()
     {
         DirAccess.MakeDirRecursiveAbsolute(TempBase);
-        CreateLcf("RM95", "");
-        WriteText(TempBase.PathJoin("RM95/RPG95.exe"), "metadata only");
+        CreateRm95("RM95");
+        WriteText(TempBase.PathJoin("RM95Weak/RPG95.exe"), "metadata only");
         CreateLcf("RM2K", "RM2000");
         CreateLcf("RM2K3", "RM2003");
         CreateRgss("RMXP", "RGSS102A.dll", ".rxdata", "");
@@ -150,6 +150,17 @@ public partial class TestPluginDetection : TestBase
         var selection = selector.Select(report, "windows");
         AssertFalse(selection.Success);
         AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
+
+        var rm95Selection = selector.Select(Analyze("RM95"), "windows");
+        AssertFalse(rm95Selection.Success);
+        AssertEq(rm95Selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
+    }
+
+    public void Test_Rm95FilenameAloneDoesNotCreateCandidate()
+    {
+        var report = Analyze("RM95Weak");
+        AssertTrue(report.IsUnknown);
+        AssertTrue(report.SelectedCandidate == null);
     }
 
     public void Test_BuiltInMetadataUsesStableIndependentEngineRanges()
@@ -194,6 +205,15 @@ public partial class TestPluginDetection : TestBase
     private EngineDetectionReport Analyze(string pRelativePath)
     {
         return _detector.Analyze(ProjectSettings.GlobalizePath(TempBase.PathJoin(pRelativePath)));
+    }
+
+    private static void CreateRm95(string pName)
+    {
+        var root = TempBase.PathJoin(pName);
+        WriteText(root.PathJoin("GAME.RPG"), "synthetic RM95 descriptor");
+        WriteText(root.PathJoin("MAP0001.ATR"), "synthetic RM95 map metadata");
+        WriteText(root.PathJoin("EVT00001.DAT"), "synthetic RM95 event metadata");
+        WriteText(root.PathJoin("STRINGS.DAT"), "synthetic RM95 strings");
     }
 
     private static void CreateLcf(string pName, string pEngineId)

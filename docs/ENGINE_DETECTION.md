@@ -50,6 +50,19 @@ EnginePluginRegistry -> IEnginePlugin -> runtime
 
 Detection-only means the project can be identified and reported, but `EngineRuntimeSelector` refuses to launch it until a plugin advertises the required `Runtime` capability and passes its compatibility probe. RM95, MV, MZ, and Unite remain detection-only. RM2K/RM2K3 parse LDB/LMT/LMU data; RGSS and WOLF expose bounded metadata/plain-data lifecycle slices. None of these slices provides full event, Ruby/JavaScript VM, rendering, audio, menu, save, or battle behavior.
 
+### Research boundaries
+
+RM95 detection requires a root `*.RPG` descriptor plus a documented companion
+file such as `*.ATR`, `EVT*.DAT`, `STRINGS.DAT`, or `SWNAME.DAT`; a filename
+such as `RPG95.EXE` alone is insufficient. The current slice reports bounded
+metadata only and does not parse or execute the original runtime. The synthetic
+boundary follows the public format notes at
+<https://github.com/Ghabry/rpg95-fileformat>.
+
+The Unite detector identifies only generic Unity export metadata. Unity player
+files and `<game>_Data/` markers do not prove that the source project was made
+with RPG Maker Unite, so the result remains non-launchable research metadata.
+
 ## Extending detection
 
 Implement `IEngineDetectionPlugin` in the application, provide stable `EnginePluginMetadata` with the `Detection` capability and supported engine ranges, and register the compiled instance with `EngineDetectionRegistry`. A plugin must inspect `EngineInspectionContext.Snapshot` only. User-provided DLLs, executables, scripts, and native plugins are never loaded as detector extensions.
