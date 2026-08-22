@@ -23,7 +23,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-012 | 0 | DONE | Expand LDB decoding into typed core database sections | K-010 |
 | K-013 | 0 | BACKLOG | Expand LMU event/page metadata decoding without executing commands | K-010 |
 | K-014 | 0 | BACKLOG | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
-| K-015 | 0 | IN PROGRESS | Decode remaining LDB array sections into typed models | K-012 |
+| K-015 | 0 | DONE | Decode remaining LDB array sections into typed models | K-012 |
+| K-016 | 0 | IN PROGRESS | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
 | K-020 | 1 | BACKLOG | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | BACKLOG | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-022 | 1 | BACKLOG | Implement map/player movement and passability simulation | K-020 |
@@ -168,7 +169,19 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Implemented the third K-015 batch for troops (`0x0f`), animations (`0x13`), and chipsets (`0x14`). Scalar metadata is typed; nested members, frames, and tile arrays remain preserved as unknown fields.
 - Added synthetic typed-section coverage for presentation metadata, nested-field retention, and section-count parity.
 - `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `168/168` C# tests and smoke validation.
-- K-015 remains `IN PROGRESS`; next batch is the battle-command/system metadata boundary before nested arrays and event-command decoding.
+- Implemented the fourth K-015 batch for battle commands (`0x1d`). Scalar metadata uses verified liblcf field IDs; nested command data remains preserved as unknown fields and trailing data is rejected.
+- Added synthetic battle-command coverage and extended real-fixture count parity to every typed LDB array section.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `170/170` C# tests and smoke validation.
+- K-015 acceptance criteria are complete; K-015 is `DONE`. K-016 is now the active MZ-priority card.
+
+### K-016 — Prioritized RPG Maker MZ detection and bounded metadata inspection
+
+**Acceptance criteria**
+- Strengthen MZ detection using the MZ runtime layout and `data/System.json`; MV signatures must not be accepted as MZ.
+- Inspect bounded MZ metadata only; never execute `index.html`, `rmmz_*.js`, `plugins.js`, native binaries, or external runtimes.
+- Keep MZ detection-only and non-launchable until a separately verified JavaScript runtime exists.
+- Add positive, negative, malformed, and oversized metadata regression coverage.
+- Update detection/security documentation with the exact supported boundary.
 
 ### K-013 — LMU events/pages
 

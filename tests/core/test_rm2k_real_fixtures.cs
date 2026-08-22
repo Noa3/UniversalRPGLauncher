@@ -87,6 +87,16 @@ partial class TestRm2kRealFixtures : TestBase
 	{
 		AssertTypedSectionsMatchCounts("rm2000/RPG_RT.ldb");
 		AssertTypedSectionsMatchCounts("rm2003/RPG_RT.ldb");
+		var rm2003 = _parser.ParseDatabase(FixtureRoot.PathJoin("rm2003/RPG_RT.ldb"));
+		AssertTrue(rm2003.IsSuccess(), DescribeError(rm2003));
+		if (rm2003.IsSuccess())
+		{
+			var battleCommands = (Godot.Collections.Dictionary)rm2003.GetData()["battle_commands"];
+			AssertTrue(battleCommands.ContainsKey("death_handler"), "RM2003 battle command metadata");
+			AssertTrue(battleCommands.ContainsKey("unknown_fields"), "RM2003 battle command unknown fields");
+			AssertEq(((Godot.Collections.Dictionary)rm2003.GetData()["section_counts"])["battle_commands"].AsInt32(), 1,
+				"RM2003 battle command section count");
+		}
 	}
 
 	private void AssertTypedSectionsMatchCounts(string pRelativePath)
@@ -99,10 +109,22 @@ partial class TestRm2kRealFixtures : TestBase
 		}
 		var data = result.GetData();
 		var counts = (Godot.Collections.Dictionary)data["section_counts"];
-		foreach (var section in new[] { "actors", "switches", "variables" })
+		foreach (var section in new[]
 		{
+			"actors", "skills", "items", "enemies", "troops", "terrains", "attributes",
+			"states", "animations", "chipsets", "classes", "switches", "variables",
+		})
+		{
+			AssertTrue(data.ContainsKey(section), $"{pRelativePath} typed section key: {section}");
 			var entries = (Godot.Collections.Array)data[section];
-			AssertEq(entries.Count, counts[section].AsInt32(), $"{pRelativePath} {section} count");
+			if (counts.ContainsKey(section))
+			{
+				AssertEq(entries.Count, counts[section].AsInt32(), $"{pRelativePath} {section} count");
+			}
+			else
+			{
+				AssertEq(entries.Count, 0, $"{pRelativePath} absent {section} is empty");
+			}
 		}
 		var actors = (Godot.Collections.Array)data["actors"];
 		AssertTrue(actors.Count > 0, pRelativePath + " has actors");

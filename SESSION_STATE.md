@@ -5,11 +5,11 @@
 
 ## Current card
 
-K-015 is IN PROGRESS — decode the next verified LDB array-section slice into typed models. K-012 is DONE (actors/switches/variables). K-013/K-014 remain independent backlog work.
+K-016 is IN PROGRESS — prioritize RPG Maker MZ detection and bounded metadata inspection. K-015 is DONE (all accepted scalar LDB sections); K-013/K-014 remain independent backlog work.
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`: headless C# suite `168/168`, exit 0, `.NET` build with `0` warnings and `0` errors.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`: headless C# suite `170/170`, exit 0, `.NET` build with `0` warnings and `0` errors.
 
 ## Validated stabilization changes
 
@@ -49,11 +49,11 @@ K-015 is IN PROGRESS — decode the next verified LDB array-section slice into t
 
 ## Current action
 
-K-015 third batch is complete for troop/animation/chipset metadata. Continue with the battle-command/system metadata boundary using verified EasyRPG liblcf field IDs, add synthetic coverage, then rerun full validation. Nested arrays and event commands remain data-only until separately decoded.
+K-015 is complete: all accepted scalar LDB sections plus bounded battle-command metadata decode with verified liblcf IDs, unknown-field retention, and real-fixture parity. The explicit next priority is MZ.
 
 ## Next action
 
-Commit/push the verified third K-015 batch, then continue the same card with battle-command/system metadata. Do not mark K-015 DONE until its remaining section acceptance criteria are met.
+Commit/push the verified K-015 completion, then work on K-016 until the MZ detection/metadata acceptance criteria are verified. Do not advertise MZ as runnable.
 
 ## Completed K-012
 

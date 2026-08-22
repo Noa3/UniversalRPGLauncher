@@ -247,6 +247,18 @@ public partial class Rm2kParser : RefCounted
 		{ 0x1e, new HashSet<int> { 0x01 } },
 	};
 
+	private static readonly Dictionary<int, string> LdbBattleCommandsFieldNames = new()
+	{
+		{ 0x02, "placement" }, { 0x04, "death_handler_unused" }, { 0x06, "row" },
+		{ 0x07, "battle_type" }, { 0x09, "unused_display_normal_parameters" },
+		{ 0x0f, "death_handler" }, { 0x10, "death_event" }, { 0x14, "window_size" },
+		{ 0x18, "transparency" }, { 0x19, "death_teleport" }, { 0x1a, "death_teleport_id" },
+		{ 0x1b, "death_teleport_x" }, { 0x1c, "death_teleport_y" }, { 0x1d, "death_teleport_face" },
+		{ 0xc8, "default_atb_mode" }, { 0xc9, "enable_battle_row_command" },
+		{ 0xca, "sequential_order" }, { 0xcb, "disable_row_feature" },
+		{ 0xcc, "fixed_actor_facing_direction" }, { 0xcd, "fixed_enemy_facing_direction" },
+	};
+
 	private readonly LegacyTextDecoder _textDecoder = new();
 
 	public class ParseError
@@ -368,6 +380,7 @@ public partial class Rm2kParser : RefCounted
 		var classes = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var switches = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var variables = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var battleCommands = new Godot.Collections.Dictionary();
 		var engineFamily = "RPG Maker 2000";
 		var version = 0;
 
@@ -459,6 +472,18 @@ public partial class Rm2kParser : RefCounted
 					}
 				}
 			}
+			if (id == 0x1d)
+			{
+				var battleResult = DecodeLdbBattleCommands((byte[])chunk["data"]);
+				if (!battleResult.Success)
+				{
+					return Failure($"{sectionName} section: {battleResult.Error!.Message}",
+						(int)chunk["payload_offset"] + Math.Max(battleResult.Error.Offset, 0));
+				}
+				battleCommands = (Godot.Collections.Dictionary)battleResult.Data["entry"];
+				section["count"] = 1;
+				sectionCounts[sectionName] = 1;
+			}
 			if (id == 0x1a)
 			{
 				var integer = DecodeLcfInteger((byte[])chunk["data"]);
@@ -498,6 +523,7 @@ public partial class Rm2kParser : RefCounted
 			{ "classes", classes },
 			{ "switches", switches },
 			{ "variables", variables },
+			{ "battle_commands", battleCommands },
 			{ "version", version },
 			{ "engine_family", engineFamily },
 		});
@@ -517,6 +543,42 @@ public partial class Rm2kParser : RefCounted
 			return DecodeLdbNamedEntries(pObjects);
 		}
 		return DecodeLdbScalarEntries(pSectionId, pObjects);
+	}
+
+	private static ParseResult DecodeLdbBattleCommands(byte[] pData)
+	{
+		var reader = new LcfBinaryReader(pData);
+		var fieldsResult = ReadStructFields(reader, true);
+		if (!fieldsResult.Success)
+		{
+			return fieldsResult;
+		}
+		if (!reader.IsEof())
+		{
+			return Failure("Battle commands section has trailing data", reader.GetPosition());
+		}
+
+		var entry = new Godot.Collections.Dictionary
+		{
+			{ "unknown_fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+		};
+		var unknownFields = (Godot.Collections.Array<Godot.Collections.Dictionary>)entry["unknown_fields"];
+		foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)fieldsResult.Data["fields"])
+		{
+			var fieldId = (int)field["id"];
+			if (!LdbBattleCommandsFieldNames.TryGetValue(fieldId, out var fieldName))
+			{
+				unknownFields.Add(field);
+				continue;
+			}
+			var integerResult = DecodeLdbIntegerField((byte[])field["data"], $"battle command {fieldName}");
+			if (!integerResult.Success)
+			{
+				return integerResult;
+			}
+			entry[fieldName] = integerResult.Data["value"];
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entry", entry } });
 	}
 
 	private ParseResult DecodeLdbScalarEntries(

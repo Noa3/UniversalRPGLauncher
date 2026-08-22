@@ -531,6 +531,61 @@ partial class TestRm2kParser : TestBase
 		}
 	}
 
+	public void Test_ParseDatabaseDecodesBattleCommandMetadata()
+	{
+		var battleCommands = Struct(
+			Chunk(0x02, Ber(1)),
+			Chunk(0x06, Ber(2)),
+			Chunk(0x07, Ber(3)),
+			Chunk(0x0A, new byte[] { 0x01 }),
+			Chunk(0x0F, Ber(1)),
+			Chunk(0x10, Ber(42)),
+			Chunk(0x99, new byte[] { 0x07 })
+		);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x1D, battleCommands),
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("TypedBattleCommands.rdata"), database);
+
+		var result = _parser.ParseDatabase(Dir.PathJoin("TypedBattleCommands.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var commands = (Godot.Collections.Dictionary)data["battle_commands"];
+		AssertEq(commands["placement"].AsInt32(), 1, "battle placement");
+		AssertEq(commands["row"].AsInt32(), 2, "battle row");
+		AssertEq(commands["battle_type"].AsInt32(), 3, "battle type");
+		AssertEq(commands["death_handler"].AsInt32(), 1, "death handler");
+		AssertEq(commands["death_event"].AsInt32(), 42, "death event");
+		AssertEq(((Godot.Collections.Array)commands["unknown_fields"]).Count, 2,
+			"nested command array and unknown field retained");
+		var sectionCounts = (Godot.Collections.Dictionary)data["section_counts"];
+		AssertEq(sectionCounts["battle_commands"].AsInt32(), 1, "battle command section count");
+	}
+
+	public void Test_ParseDatabaseRejectsBattleCommandDataAfterTerminator()
+	{
+		var payload = new List<byte>(Struct(Chunk(0x02, Ber(1))));
+		payload.AddRange(Chunk(0x06, Ber(2)));
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x1D, payload.ToArray()),
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("BattleCommandsTrailing.rdata"), database);
+		var result = _parser.ParseDatabase(Dir.PathJoin("BattleCommandsTrailing.rdata"));
+		AssertFalse(result.IsSuccess());
+		AssertTrue(result.GetError()!.Message.Contains("trailing", System.StringComparison.OrdinalIgnoreCase),
+			"battle command trailing data error");
+	}
+
 	public void Test_ParseDatabaseDecodesSwitchAndVariableNames()
 	{
 		var switchA = Struct(

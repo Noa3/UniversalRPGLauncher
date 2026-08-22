@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `168/168` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `170/170` tests.
 
 ## Phase Status Overview
 
@@ -148,7 +148,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 
 ## Next Immediate Tasks
 
-1. Decode remaining LDB array/struct sections (battle commands and remaining nested content) into typed models with verified field IDs; skills/items/states/classes/enemies/terrains/attributes/troops/animations/chipsets now have scalar metadata slices
+1. K-016: strengthen RPG Maker MZ detection and bounded metadata inspection; keep MZ detection-only until a safe JavaScript runtime boundary is separately verified
 2. Expand typed LMU decoding incrementally; do not guess undocumented offsets/fields
 3. Test CP932/Shift-JIS behavior on target platforms and add malicious-input fixtures
 4. Implement LMU event/page metadata decoding without executing commands
@@ -189,9 +189,9 @@ Changes prepared in this pass:
 
 - `ParseDatabase` now decodes the actors section into typed entries: name/title/character_name/face_name strings plus character_index, transparent, initial_level, final_level, critical_hit, critical_hit_chance, face_index integers; defaults mirror liblcf `rpg::Actor` initializers.
 - Switches and variables sections decode to id/name entries; duplicate structure IDs are rejected.
-- K-015 now additionally decodes scalar metadata for skills/items/states/classes/enemies/terrains/attributes using field IDs verified against EasyRPG liblcf; nested arrays remain data-only and are retained as unknown fields.
+- K-015 now additionally decodes scalar metadata for skills/items/states/classes/enemies/terrains/attributes/troops/animations/chipsets/battle_commands using field IDs verified against EasyRPG liblcf; nested arrays remain data-only and are retained as unknown fields.
 - Field IDs are verified against EasyRPG liblcf `src/generated/lcf/ldb/chunks.h`; unknown actor/entry fields remain preserved per entry for diagnostics.
-- Synthetic fixtures cover defaults, unknown-field retention, duplicate IDs, and missing terminators; real-fixture tests assert typed entry counts equal section counts on both pinned TestGame LDBs.
-- Validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`; headless suite `168/168`.
+- Synthetic fixtures cover defaults, unknown-field retention, duplicate IDs, missing terminators, and battle-command trailing data; real-fixture tests assert typed entry counts equal section counts on both pinned TestGame LDBs.
+- Validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`; headless suite `170/170`.
 
-The C# migration and plugin application wiring have been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `159/159` at that time (now `167/167`). The only remaining known output is Godot's non-fatal internal `EditorSettings` message during headless editor shutdown.
+The C# migration and plugin application wiring have been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `159/159` at that time (now `170/170`).
