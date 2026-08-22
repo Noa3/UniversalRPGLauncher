@@ -412,8 +412,8 @@ public sealed class RpgMakerVxAcePlugin : RgssPlugin
 
 public abstract class WebRpgPlugin : BuiltInEnginePlugin
 {
-    private readonly string _runtimeFile;
-    private readonly string _runtimeLabel;
+    protected readonly string _runtimeFile;
+    protected readonly string _runtimeLabel;
 
     protected WebRpgPlugin(string pId, string pName, string pGeneration, string pRuntimeFile, string pRuntimeLabel, int pPriority)
         : base(pId, pName, $"Detection-only {pName} boundary until an embedded JavaScript runtime is available.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing)
@@ -472,7 +472,7 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
             || pPath.StartsWith("www/", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static Version? ExtractVersion(string pText)
+    protected static Version? ExtractVersion(string pText)
     {
         var match = Regex.Match(pText, "\\\"version\\\"\\s*:\\s*\\\"(?<version>\\d+(?:\\.\\d+){1,3})", RegexOptions.CultureInvariant);
         return match.Success && Version.TryParse(match.Groups["version"].Value, out var version) ? version : null;
@@ -484,12 +484,69 @@ public sealed class RpgMakerMvPlugin : WebRpgPlugin
     public RpgMakerMvPlugin() : base(EnginePluginIds.RpgMakerMv, "RPG Maker MV", "mv", "rpg_core.js", "js/rpg_core.js", 30) { }
 }
 
+/// <summary>
+/// Bounded metadata extracted from MZ's data/System.json without executing any JavaScript.
+/// Fields are read with explicit size limits and validated against known MZ structure.
+/// </summary>
+public sealed class MzMetadataResult
+{
+    public string GameTitle { get; init; } = "";
+    public string SystemVersion { get; init; } = "";
+    public IReadOnlyList<string> AudioBrowsers { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> MainCommands { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> ContextCommands { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> WindowSkinTypes { get; init; } = Array.Empty<string>();
+    public bool HasEncryptedFiles { get; init; }
+    public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
+}
+
 public sealed class RpgMakerMzPlugin : WebRpgPlugin
 {
     public RpgMakerMzPlugin() : base(EnginePluginIds.RpgMakerMz, "RPG Maker MZ", "mz", "rmmz_core.js", "js/rmmz_core.js", 30) { }
 
+    private const int MaxSystemJsonBytes = 512 * 1024; // 512 KiB cap
+
+    public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
+    {
+        var snapshot = pContext.Snapshot;
+        var hasIndex = snapshot.Files.Any(pFile => IsWebRootPath(pFile.RelativePath)
+            && System.IO.Path.GetFileName(pFile.RelativePath).Equals("index.html", StringComparison.OrdinalIgnoreCase));
+        var hasData = snapshot.Files.Any(pFile =>
+            IsWebRootPath(pFile.RelativePath)
+            && (pFile.RelativePath.StartsWith("data/", StringComparison.OrdinalIgnoreCase)
+                || pFile.RelativePath.Contains("/data/", StringComparison.OrdinalIgnoreCase)));
+        var runtime = snapshot.Files.Any(pFile => IsWebRootPath(pFile.RelativePath)
+            && System.IO.Path.GetFileName(pFile.RelativePath).Equals(_runtimeFile, StringComparison.OrdinalIgnoreCase));
+        var nestedRuntime = snapshot.Files.Any(pFile => pFile.RelativePath.StartsWith("www/", StringComparison.OrdinalIgnoreCase)
+            && pFile.RelativePath.EndsWith("/" + _runtimeFile, StringComparison.OrdinalIgnoreCase));
+        if (!hasIndex || !hasData || !runtime)
+        {
+            return EngineDetectionProbe.NoMatch("The web runtime, index, and data signatures are incomplete.");
+        }
+        if (!ValidateMetadata(snapshot, out var metadataFailure))
+        {
+            return EngineDetectionProbe.NoMatch(metadataFailure);
+        }
+
+        var evidence = new List<string> { "index.html", "data/", $"JavaScript runtime: {_runtimeLabel}" };
+        var score = 850;
+        if (nestedRuntime)
+        {
+            evidence.Add("www/ web-game root");
+            score += 30;
+        }
+
+        var title = JsonTitle(snapshot);
+        var package = Find(snapshot, "package.json");
+        var version = package == null || package.IsTruncated
+            ? null
+            : ExtractVersion(System.Text.Encoding.UTF8.GetString(package.Data));
+        return Match(snapshot, score, $"{_runtimeLabel} and web-game layout matched.", evidence, title, version);
+    }
+
     protected override bool ValidateMetadata(GameInspectionSnapshot pSnapshot, out string pFailure)
     {
+        pFailure = "";
         var managers = pSnapshot.Files.Any(pFile =>
             pFile.RelativePath.Equals("js/rmmz_managers.js", StringComparison.OrdinalIgnoreCase)
             || pFile.RelativePath.Equals("www/js/rmmz_managers.js", StringComparison.OrdinalIgnoreCase));
@@ -499,41 +556,115 @@ public sealed class RpgMakerMzPlugin : WebRpgPlugin
             return false;
         }
 
-        var system = pSnapshot.Files.FirstOrDefault(pFile =>
-            pFile.RelativePath.Equals("data/System.json", StringComparison.OrdinalIgnoreCase)
-            || pFile.RelativePath.Equals("www/data/System.json", StringComparison.OrdinalIgnoreCase));
-        if (system == null)
+        var systemJson = Find(pSnapshot, "System.json");
+        if (systemJson == null)
         {
-            pFailure = "The MZ data/System.json metadata file is missing.";
+            return true; // optional metadata; detection can still succeed without it
+        }
+        if (systemJson.IsTruncated)
+        {
+            pFailure = "data/System.json is truncated beyond the bounded inspection limit.";
             return false;
         }
-        if (system.IsTruncated)
+        if (systemJson.Data.Length > MaxSystemJsonBytes)
         {
-            pFailure = "The MZ data/System.json metadata file exceeds the bounded inspection limit.";
+            pFailure = "data/System.json exceeds the bounded inspection limit.";
             return false;
         }
-        try
+        var text = System.Text.Encoding.UTF8.GetString(systemJson.Data);
+        if (!text.StartsWith("{", StringComparison.Ordinal) || !text.EndsWith("}", StringComparison.Ordinal))
         {
-            using var document = System.Text.Json.JsonDocument.Parse(system.Data);
-            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
-            {
-                pFailure = "The MZ data/System.json metadata root must be a JSON object.";
-                return false;
-            }
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            pFailure = "The MZ data/System.json metadata is malformed JSON.";
+            pFailure = "data/System.json has invalid JSON boundaries.";
             return false;
         }
-        catch (ArgumentException)
+        if (text.Length > MaxSystemJsonBytes)
         {
-            pFailure = "The MZ data/System.json metadata could not be decoded safely.";
+            pFailure = "data/System.json exceeds the bounded inspection limit.";
             return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Extract bounded typed metadata from a System.json snapshot. Never executes JavaScript.
+    /// Returns null if the snapshot is missing or truncated beyond safe reading.
+    /// </summary>
+    public static MzMetadataResult? ExtractMetadata(GameInspectionSnapshot pSnapshot)
+    {
+        var systemJson = Find(pSnapshot, "System.json");
+        if (systemJson == null || systemJson.IsTruncated)
+        {
+            return null;
+        }
+        var data = systemJson.Data;
+        if (data.Length == 0 || data.Length > MaxSystemJsonBytes)
+        {
+            return null;
+        }
+        var text = System.Text.Encoding.UTF8.GetString(data);
+        if (text.Length == 0 || !text.StartsWith("{", StringComparison.Ordinal) || !text.EndsWith("}", StringComparison.Ordinal))
+        {
+            return null;
         }
 
-        pFailure = "";
-        return true;
+        var title = ExtractJsonString(text, "gameTitle");
+        var version = ExtractJsonString(text, "systemVersion");
+        var audioBrowsers = ExtractJsonStringArray(text, "audioBrowsers");
+
+        var diagnostics = new List<string>();
+        var hasEncrypted = pSnapshot.Files.Any(pFile =>
+            pFile.RelativePath.EndsWith(".encrypted", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.Contains("/encrypted/", StringComparison.OrdinalIgnoreCase));
+
+        if (hasEncrypted)
+        {
+            diagnostics.Add("Encrypted game files detected; metadata is from unencrypted System.json only.");
+        }
+
+        // Check for known MZ structure indicators
+        var hasJsDir = pSnapshot.Files.Any(pFile => pFile.RelativePath.StartsWith("js/", StringComparison.OrdinalIgnoreCase));
+        var hasDataDir = pSnapshot.Files.Any(pFile => pFile.RelativePath.StartsWith("data/", StringComparison.OrdinalIgnoreCase));
+        var hasHtml = pSnapshot.Files.Any(pFile =>
+            pFile.RelativePath.Equals("index.html", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.EndsWith("/index.html", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasJsDir) diagnostics.Add("No js/ directory found in snapshot.");
+        if (!hasDataDir) diagnostics.Add("No data/ directory found in snapshot.");
+        if (!hasHtml) diagnostics.Add("No index.html found in snapshot.");
+
+        return new MzMetadataResult
+        {
+            GameTitle = title ?? "",
+            SystemVersion = version ?? "",
+            AudioBrowsers = audioBrowsers,
+            Diagnostics = diagnostics,
+            HasEncryptedFiles = hasEncrypted,
+        };
+    }
+
+    private static string? ExtractJsonString(string pText, string pKey)
+    {
+        var pattern = $"\"{pKey}\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"";
+        var match = System.Text.RegularExpressions.Regex.Match(pText, pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    private static IReadOnlyList<string> ExtractJsonStringArray(string pText, string pKey)
+    {
+        var pattern = $"\"{pKey}\"\\s*:\\s*\\[([^\\]]*)\\]";
+        var match = System.Text.RegularExpressions.Regex.Match(pText, pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        if (!match.Success)
+        {
+            return Array.Empty<string>();
+        }
+        var arrText = match.Groups[1].Value;
+        var result = new List<string>();
+        var inner = System.Text.RegularExpressions.Regex.Matches(arrText, "\"((?:[^\"\\\\]|\\\\.)*)\"");
+        foreach (System.Text.RegularExpressions.Match m in inner)
+        {
+            result.Add(m.Groups[1].Value);
+        }
+        return result;
     }
 }
 

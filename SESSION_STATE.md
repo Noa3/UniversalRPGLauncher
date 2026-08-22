@@ -5,7 +5,7 @@
 
 ## Current card
 
-K-016 is IN PROGRESS — prioritize RPG Maker MZ detection and bounded metadata inspection. K-015 is DONE (all accepted scalar LDB sections); K-013/K-014 remain independent backlog work.
+|K-016 is IN PROGRESS — typed bounded MZ metadata result and encrypted-asset diagnostics. K-015 is DONE (all accepted scalar LDB sections); K-013/K-014 remain independent backlog work.|
 
 ## Last verified baseline
 
@@ -53,7 +53,7 @@ K-015 is complete: all accepted scalar LDB sections plus bounded battle-command 
 
 ## Next action
 
-Commit/push the verified K-016 detection hardening slice, then continue with typed bounded MZ metadata and explicit encrypted-asset diagnostics. Do not advertise MZ as runnable or execute foreign JavaScript.
+|Implement typed bounded MZ metadata (gameTitle, systemVersion, audioBrowsers, etc.) and encrypted-asset diagnostics; update K-016 progress, validate at 171+, commit, and push.|
 
 ## Completed K-012
 
