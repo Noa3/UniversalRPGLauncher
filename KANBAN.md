@@ -22,7 +22,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-011 | 0 | DONE | Implement LMT map-tree parser with bounded BER/structure handling | K-010 |
 | K-012 | 0 | DONE | Expand LDB decoding into typed core database sections | K-010 |
 | K-013 | 0 | BACKLOG | Expand LMU event/page metadata decoding without executing commands | K-010 |
-| K-014 | 0 | BACKLOG | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
+|| K-014 | 0 | DONE | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
 | K-015 | 0 | DONE | Decode remaining LDB array sections into typed models | K-012 |
 | K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
 | K-020 | 1 | BACKLOG | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |

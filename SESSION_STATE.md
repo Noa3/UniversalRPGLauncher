@@ -5,7 +5,7 @@
 
 ## Current card
 
-|K-013 is IN PROGRESS — LMU event/page metadata decoding. K-015 is DONE (all accepted scalar LDB sections); K-016 is DONE (MZ detection + bounded metadata).|
+|K-014 is DONE — unknown chunks/fields preserved across all LDB typed sections, LMU events, LMT maps, and LSD saves. K-015 is DONE; K-016 is DONE; K-013 is DONE.|
 
 ## Last verified baseline
 
@@ -53,7 +53,7 @@ K-015 is complete: all accepted scalar LDB sections plus bounded battle-command 
 
 ## Next action
 
-|Implement LMU event/page metadata decoding (id, name, x, y, trigger, priority, frequency, list); add synthetic coverage; validate at 171+; commit/push.|
+|K-014 unknown-fields/preservation is complete. Next priority: K-020 (RM2K/2003 simulation state model) or K-021 (event interpreter first slice).|
 
 ## Completed K-012
 
