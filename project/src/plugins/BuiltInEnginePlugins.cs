@@ -722,3 +722,139 @@ public sealed class RpgMakerUnitePlugin : BuiltInEnginePlugin
             pDiagnostics: new[] { PluginDiagnostic.Warning("unite.not-provable", "Arbitrary Unity exports are not treated as playable RPG Maker Unite projects.", Metadata.Id) });
     }
 }
+
+/// <summary>
+/// Bounded metadata from an MZ game's data/ directory (Actors.json, MapInfos.json),
+/// decoded without executing any JavaScript. Entry counts and names only.
+/// </summary>
+public sealed class MzDataDirectoryResult
+{
+    public const int MaxDataJsonBytes = 256 * 1024;
+    public const int MaxActorEntries = 5000;
+    public const int MaxMapEntries = 2000;
+    public const int MaxListedNames = 32;
+    public const int MaxNameLength = 64;
+    private static readonly string[] EncryptedExtensions =
+    {
+        ".rpgmvp", ".rpgmvo", ".rpgmvm", ".png_", ".ogg_", ".m4a_", ".encrypted",
+    };
+
+    public int ActorCount { get; init; }
+    public IReadOnlyList<string> ActorNames { get; init; } = Array.Empty<string>();
+    public int MapCount { get; init; }
+    public IReadOnlyList<string> MapNames { get; init; } = Array.Empty<string>();
+    public bool HasEncryptedAssets { get; init; }
+    public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Extract bounded data-directory metadata from a validated MZ snapshot.
+    /// Returns null when the snapshot lacks the MZ runtime signature or the
+    /// requested files are truncated/oversized; partial results keep diagnostics.
+    /// </summary>
+    public static MzDataDirectoryResult? Extract(GameInspectionSnapshot pSnapshot)
+    {
+        var runtime = pSnapshot.Files.FirstOrDefault(pFile =>
+            pFile.RelativePath.EndsWith("/rmmz_core.js", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.Equals("rmmz_core.js", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.EndsWith("/rmmz_managers.js", StringComparison.OrdinalIgnoreCase));
+        if (runtime == null)
+        {
+            return null;
+        }
+
+        var diagnostics = new List<string>();
+        var actors = ReadNamedEntries(pSnapshot, "data/Actors.json", MaxActorEntries, MaxDataJsonBytes, "Actors", diagnostics);
+        var maps = ReadNamedEntries(pSnapshot, "data/MapInfos.json", MaxMapEntries, MaxDataJsonBytes, "MapInfos", diagnostics);
+        var encrypted = pSnapshot.Files.Any(pFile => EncryptedExtensions.Any(pExtension =>
+            pFile.RelativePath.EndsWith(pExtension, StringComparison.OrdinalIgnoreCase)));
+        if (encrypted)
+        {
+            diagnostics.Add("Encrypted assets detected (.rpgmv*); names come from unencrypted JSON only.");
+        }
+        if (!pSnapshot.Contains("data/Actors.json"))
+        {
+            diagnostics.Add("data/Actors.json not found in snapshot.");
+        }
+        if (!pSnapshot.Contains("data/MapInfos.json"))
+        {
+            diagnostics.Add("data/MapInfos.json not found in snapshot.");
+        }
+
+        return new MzDataDirectoryResult
+        {
+            ActorCount = actors.Count,
+            ActorNames = actors.Names,
+            MapCount = maps.Count,
+            MapNames = maps.Names,
+            HasEncryptedAssets = encrypted,
+            Diagnostics = diagnostics,
+        };
+    }
+
+    private static (int Count, IReadOnlyList<string> Names) ReadNamedEntries(
+        GameInspectionSnapshot pSnapshot, string pPath, int pMaxEntries, int pMaxBytes,
+        string pLabel, List<string> pDiagnostics)
+    {
+        if (!pSnapshot.TryGet(pPath, out var file))
+        {
+            return (0, Array.Empty<string>());
+        }
+        if (file.IsTruncated)
+        {
+            pDiagnostics.Add($"{pPath} is truncated beyond the bounded inspection limit.");
+            return (0, Array.Empty<string>());
+        }
+        if (file.Data.Length > pMaxBytes)
+        {
+            pDiagnostics.Add($"{pPath} exceeds the bounded inspection limit ({pMaxBytes} bytes).");
+            return (0, Array.Empty<string>());
+        }
+
+        var text = System.Text.Encoding.UTF8.GetString(file.Data);
+        var trimmed = text.TrimStart();
+        if (!trimmed.StartsWith("[", StringComparison.Ordinal))
+        {
+            pDiagnostics.Add($"{pPath} is not a bounded JSON array.");
+            return (0, Array.Empty<string>());
+        }
+
+        var parsed = Godot.Json.ParseString(text);
+        if (parsed.VariantType != Godot.Variant.Type.Array)
+        {
+            pDiagnostics.Add($"{pPath} contains malformed JSON; skipped.");
+            return (0, Array.Empty<string>());
+        }
+
+        var array = parsed.AsGodotArray();
+        if (array.Count > pMaxEntries)
+        {
+            pDiagnostics.Add($"{pLabel}: entry count {array.Count} exceeds the bounded limit ({pMaxEntries}); count reported as the limit.");
+        }
+
+        var count = Math.Min(array.Count, pMaxEntries);
+        var names = new List<string>();
+        foreach (var element in array)
+        {
+            if (names.Count >= MaxListedNames)
+            {
+                break;
+            }
+            if (element.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+            var dictionary = element.AsGodotDictionary();
+            if (!dictionary.TryGetValue("name", out var nameVariant))
+            {
+                continue;
+            }
+            var name = nameVariant.AsString();
+            if (name.Length > MaxNameLength)
+            {
+                name = name[..MaxNameLength];
+            }
+            names.Add(name);
+        }
+        return (count, names);
+    }
+}

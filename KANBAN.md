@@ -25,6 +25,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-014 | 0 | DONE | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
 | K-015 | 0 | DONE | Decode remaining LDB array sections into typed models | K-012 |
 | K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
+| K-017 | 2 | DONE | Bounded MZ data-directory metadata inspection (Actors/MapInfos/encrypted assets) | K-016 |
 | K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
@@ -218,6 +219,22 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Moved project files via `git mv`; `.godot` cache regenerated inside `project/`.
 - `validate.sh` now builds and runs Godot with `--path "$ROOT_DIR/project"`; Godot binary discovery still uses root `tools/godot/editors/4.7.2/`.
 - Full validation green: `199/199`.
+
+### K-017 — Bounded MZ data-directory metadata inspection
+
+User-directed MZ slice (extends the K-016 line); stays detection/metadata-only.
+
+**Acceptance criteria**
+- Decode bounded metadata from `data/Actors.json` and `data/MapInfos.json` via a real JSON parser: entry counts plus the first 32 names, name length capped.
+- Per-file size cap with truncation/oversize rejection; malformed or non-array JSON yields a per-file diagnostic instead of failing detection.
+- MZ-specific encrypted assets are detected by their real extensions (`.rpgmvp`, `.rpgmvo`, `.rpgmvm`) and reported diagnostically; no decryption, no execution.
+- Snapshots without the `rmmz_core.js`/`rmmz_managers.js` runtime signature are refused (MV folders cannot be inspected as MZ).
+- Regression coverage for happy path, missing files, malformed JSON, non-array JSON, encrypted assets, and MV-refusal.
+
+**Progress evidence (2026-08-23)**
+- Added `MzDataDirectoryResult.Extract(GameInspectionSnapshot)` in `project/src/plugins/BuiltInEnginePlugins.cs`; JSON parsed with Godot's `Json` parser under strict bounds (256 KiB/file, 5000 actors, 2000 maps).
+- Added `TestMzDataDirectory` suite with five tests over synthetic MZ/MV game folders; suite total `203/203`.
+- `bash scripts/validate.sh` — passed; `203/203` C# tests and smoke validation.
 
 ### K-023 — Verified RM2K/2003 command codes
 
