@@ -107,6 +107,81 @@ public partial class Rm2kParser : RefCounted
 		{ 0x01, "name" },
 	};
 
+	// Scalar fields verified against EasyRPG liblcf's generated LDB contract.
+	// Nested arrays/structures are intentionally left in unknown_fields until a
+	// dedicated bounded decoder exists for their element type.
+	private static readonly Dictionary<int, Dictionary<int, string>> LdbScalarFieldNames = new()
+	{
+		{
+			0x0c,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "description" }, { 0x03, "using_message1" }, { 0x04, "using_message2" },
+				{ 0x07, "failure_message" }, { 0x08, "type" }, { 0x09, "sp_type" }, { 0x0a, "sp_percent" },
+				{ 0x0b, "sp_cost" }, { 0x0c, "scope" }, { 0x0d, "switch_id" }, { 0x0e, "animation_id" },
+				{ 0x12, "occasion_field" }, { 0x13, "occasion_battle" }, { 0x14, "reverse_state_effect" },
+				{ 0x15, "physical_rate" }, { 0x16, "magical_rate" }, { 0x17, "variance" }, { 0x18, "power" },
+				{ 0x19, "hit" }, { 0x1f, "affect_hp" }, { 0x20, "affect_sp" }, { 0x21, "affect_attack" },
+				{ 0x22, "affect_defense" }, { 0x23, "affect_spirit" }, { 0x24, "affect_agility" },
+				{ 0x25, "absorb_damage" }, { 0x26, "ignore_defense" }, { 0x2d, "affect_attr_defence" },
+			}
+		},
+		{
+			0x0d,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "description" }, { 0x03, "type" }, { 0x05, "price" }, { 0x06, "uses" },
+				{ 0x0b, "atk_points1" }, { 0x0c, "def_points1" }, { 0x0d, "spi_points1" }, { 0x0e, "agi_points1" },
+				{ 0x0f, "two_handed" }, { 0x10, "sp_cost" }, { 0x11, "hit" }, { 0x12, "critical_hit" },
+				{ 0x14, "animation_id" }, { 0x15, "preemptive" }, { 0x16, "dual_attack" }, { 0x17, "attack_all" },
+				{ 0x18, "ignore_evasion" }, { 0x19, "prevent_critical" }, { 0x1a, "raise_evasion" },
+				{ 0x1b, "half_sp_cost" }, { 0x1c, "no_terrain_damage" }, { 0x1d, "cursed" }, { 0x1f, "entire_party" },
+				{ 0x20, "recover_hp_rate" }, { 0x21, "recover_hp" }, { 0x22, "recover_sp_rate" }, { 0x23, "recover_sp" },
+				{ 0x25, "occasion_field1" }, { 0x26, "ko_only" }, { 0x29, "max_hp_points" }, { 0x2a, "max_sp_points" },
+				{ 0x2b, "atk_points2" }, { 0x2c, "def_points2" }, { 0x2d, "spi_points2" }, { 0x2e, "agi_points2" },
+				{ 0x33, "using_message" }, { 0x35, "skill_id" }, { 0x37, "switch_id" }, { 0x39, "occasion_field2" },
+				{ 0x3a, "occasion_battle" }, { 0x3d, "actor_set_size" }, { 0x3f, "state_set_size" },
+				{ 0x41, "attribute_set_size" }, { 0x43, "state_chance" }, { 0x45, "weapon_animation" },
+				{ 0x4b, "ranged_trajectory" }, { 0x4c, "ranged_target" },
+			}
+		},
+		{
+			0x12,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "type" }, { 0x03, "color" }, { 0x04, "priority" }, { 0x05, "restriction" },
+				{ 0x0b, "a_rate" }, { 0x0c, "b_rate" }, { 0x0d, "c_rate" }, { 0x0e, "d_rate" }, { 0x0f, "e_rate" },
+				{ 0x15, "hold_turn" }, { 0x16, "auto_release_prob" }, { 0x17, "release_by_damage" },
+				{ 0x1e, "affect_type" }, { 0x1f, "affect_attack" }, { 0x20, "affect_defense" }, { 0x21, "affect_spirit" },
+				{ 0x22, "affect_agility" }, { 0x23, "reduce_hit_ratio" }, { 0x24, "avoid_attacks" }, { 0x25, "reflect_magic" },
+				{ 0x26, "cursed" }, { 0x27, "battler_animation_id" }, { 0x29, "restrict_skill" },
+				{ 0x2a, "restrict_skill_level" }, { 0x2b, "restrict_magic" }, { 0x2c, "restrict_magic_level" },
+				{ 0x2d, "hp_change_type" }, { 0x2e, "sp_change_type" }, { 0x33, "message_actor" }, { 0x34, "message_enemy" },
+				{ 0x35, "message_already" }, { 0x36, "message_affected" }, { 0x37, "message_recovery" },
+				{ 0x3d, "hp_change_max" }, { 0x3e, "hp_change_val" }, { 0x3f, "hp_change_map_steps" },
+				{ 0x40, "hp_change_map_val" }, { 0x41, "sp_change_max" }, { 0x42, "sp_change_val" },
+				{ 0x43, "sp_change_map_steps" }, { 0x44, "sp_change_map_val" },
+			}
+		},
+		{
+			0x1e,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x15, "two_weapon" }, { 0x16, "lock_equipment" }, { 0x17, "auto_battle" },
+				{ 0x18, "super_guard" }, { 0x29, "exp_base" }, { 0x2a, "exp_inflation" }, { 0x2b, "exp_correction" },
+				{ 0x3e, "battler_animation" }, { 0x47, "state_ranks_size" }, { 0x49, "attribute_ranks_size" },
+			}
+		},
+	};
+
+	private static readonly Dictionary<int, HashSet<int>> LdbScalarStringFields = new()
+	{
+		{ 0x0c, new HashSet<int> { 0x01, 0x02, 0x03, 0x04 } },
+		{ 0x0d, new HashSet<int> { 0x01, 0x02 } },
+		{ 0x12, new HashSet<int> { 0x01, 0x33, 0x34, 0x35, 0x36, 0x37 } },
+		{ 0x1e, new HashSet<int> { 0x01 } },
+	};
+
 	private readonly LegacyTextDecoder _textDecoder = new();
 
 	public class ParseError
@@ -216,6 +291,10 @@ public partial class Rm2kParser : RefCounted
 		var sectionCounts = new Godot.Collections.Dictionary();
 		var unknownChunks = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var actors = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var skills = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var items = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var states = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var classes = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var switches = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var variables = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var engineFamily = "RPG Maker 2000";
@@ -237,7 +316,7 @@ public partial class Rm2kParser : RefCounted
 			};
 			if (Array.IndexOf(LdbArraySections, id) >= 0)
 			{
-				var typed = id == 0x0b || id == 0x17 || id == 0x18;
+				var typed = id == 0x0b || id == 0x17 || id == 0x18 || LdbScalarFieldNames.ContainsKey(id);
 				var arrayResult = ParseStructArray((byte[])chunk["data"], typed);
 				if (!arrayResult.Success)
 				{
@@ -246,24 +325,43 @@ public partial class Rm2kParser : RefCounted
 				}
 				section["count"] = (int)arrayResult.Data["count"];
 				sectionCounts[sectionName] = (int)arrayResult.Data["count"];
-				var decodeResult = DecodeTypedLdbSection(id,
-					(Godot.Collections.Array<Godot.Collections.Dictionary>)arrayResult.Data["objects"]);
-				if (!decodeResult.Success)
+				if (typed)
 				{
-					return Failure($"{sectionName} section: {decodeResult.Error!.Message}",
-						(int)chunk["payload_offset"] + Math.Max(decodeResult.Error.Offset, 0));
-				}
-				if (id == 0x0b)
-				{
-					actors = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
-				}
-				else if (id == 0x17)
-				{
-					switches = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
-				}
-				else if (id == 0x18)
-				{
-					variables = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					var decodeResult = DecodeTypedLdbSection(id,
+						(Godot.Collections.Array<Godot.Collections.Dictionary>)arrayResult.Data["objects"]);
+					if (!decodeResult.Success)
+					{
+						return Failure($"{sectionName} section: {decodeResult.Error!.Message}",
+							(int)chunk["payload_offset"] + Math.Max(decodeResult.Error.Offset, 0));
+					}
+					if (id == 0x0b)
+					{
+						actors = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x17)
+					{
+						switches = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x18)
+					{
+						variables = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x0c)
+					{
+						skills = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x0d)
+					{
+						items = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x12)
+					{
+						states = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x1e)
+					{
+						classes = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
 				}
 			}
 			if (id == 0x1a)
@@ -293,6 +391,10 @@ public partial class Rm2kParser : RefCounted
 			{ "section_counts", sectionCounts },
 			{ "unknown_chunks", unknownChunks },
 			{ "actors", actors },
+			{ "skills", skills },
+			{ "items", items },
+			{ "states", states },
+			{ "classes", classes },
 			{ "switches", switches },
 			{ "variables", variables },
 			{ "version", version },
@@ -305,7 +407,73 @@ public partial class Rm2kParser : RefCounted
 		Godot.Collections.Array<Godot.Collections.Dictionary> pObjects
 	)
 	{
-		return pSectionId == 0x0b ? DecodeLdbActorEntries(pObjects) : DecodeLdbNamedEntries(pObjects);
+		if (pSectionId == 0x0b)
+		{
+			return DecodeLdbActorEntries(pObjects);
+		}
+		if (pSectionId == 0x17 || pSectionId == 0x18)
+		{
+			return DecodeLdbNamedEntries(pObjects);
+		}
+		return DecodeLdbScalarEntries(pSectionId, pObjects);
+	}
+
+	private ParseResult DecodeLdbScalarEntries(
+		int pSectionId,
+		Godot.Collections.Array<Godot.Collections.Dictionary> pObjects
+	)
+	{
+		if (!LdbScalarFieldNames.TryGetValue(pSectionId, out var fieldNames))
+		{
+			return Failure($"No scalar field contract exists for LDB section 0x{pSectionId:X}");
+		}
+		var stringFields = LdbScalarStringFields[pSectionId];
+		var entries = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var seenIds = new HashSet<int>();
+		foreach (var pObject in pObjects)
+		{
+			var objectId = (int)pObject["id"];
+			if (!seenIds.Add(objectId))
+			{
+				return Failure($"Duplicate structure ID {objectId}", 0);
+			}
+			var entry = new Godot.Collections.Dictionary
+			{
+				{ "id", objectId },
+				{ "unknown_fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+			};
+			var unknownFields = (Godot.Collections.Array<Godot.Collections.Dictionary>)entry["unknown_fields"];
+			foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)pObject["fields"])
+			{
+				var fieldId = (int)field["id"];
+				if (!fieldNames.TryGetValue(fieldId, out var fieldName))
+				{
+					unknownFields.Add(field);
+					continue;
+				}
+				var fieldData = (byte[])field["data"];
+				if (stringFields.Contains(fieldId))
+				{
+					var textResult = DecodeLdbString(fieldData, $"{fieldName} {objectId}");
+					if (!textResult.Success)
+					{
+						return textResult;
+					}
+					entry[fieldName] = textResult.Data["value"];
+				}
+				else
+				{
+					var integerResult = DecodeLdbIntegerField(fieldData, $"{fieldName} {objectId}");
+					if (!integerResult.Success)
+					{
+						return integerResult;
+					}
+					entry[fieldName] = integerResult.Data["value"];
+				}
+			}
+			entries.Add(entry);
+		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entries", entries } });
 	}
 
 	private ParseResult DecodeLdbActorEntries(

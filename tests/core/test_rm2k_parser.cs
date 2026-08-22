@@ -329,6 +329,74 @@ partial class TestRm2kParser : TestBase
 		AssertEq(sectionCounts["actors"].AsInt32(), 2, "section count matches entries");
 	}
 
+	public void Test_ParseDatabaseDecodesTypedSkillItemStateAndClassEntries()
+	{
+		var skill = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Fire")),
+			Chunk(0x02, System.Text.Encoding.ASCII.GetBytes("Burns one target")),
+			Chunk(0x0B, Ber(5)),
+			Chunk(0xF0, new byte[] { 0x01 })
+		);
+		var item = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Potion")),
+			Chunk(0x05, Ber(50)),
+			Chunk(0x1F, Ber(1)),
+			Chunk(0x33, Ber(2))
+		);
+		var state = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Poison")),
+			Chunk(0x17, Ber(20)),
+			Chunk(0x33, System.Text.Encoding.ASCII.GetBytes("is poisoned"))
+		);
+		var cls = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Hero")),
+			Chunk(0x15, Ber(1)),
+			Chunk(0x29, Ber(30))
+		);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x0C, StructArray(skill)),
+			Chunk(0x0D, StructArray(item)),
+			Chunk(0x12, StructArray(state)),
+			Chunk(0x1E, StructArray(cls)),
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("TypedCoreSections.rdata"), database);
+
+		var result = _parser.ParseDatabase(Dir.PathJoin("TypedCoreSections.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var skills = (Godot.Collections.Array)data["skills"];
+		var items = (Godot.Collections.Array)data["items"];
+		var states = (Godot.Collections.Array)data["states"];
+		var classes = (Godot.Collections.Array)data["classes"];
+		AssertEq(skills.Count, 1, "skill entry count");
+		AssertEq(items.Count, 1, "item entry count");
+		AssertEq(states.Count, 1, "state entry count");
+		AssertEq(classes.Count, 1, "class entry count");
+		AssertEq(((Godot.Collections.Dictionary)skills[0])["name"].AsString(), "Fire", "skill name");
+		AssertEq(((Godot.Collections.Dictionary)skills[0])["sp_cost"].AsInt32(), 5, "skill SP cost");
+		AssertEq(((Godot.Collections.Array)((Godot.Collections.Dictionary)skills[0])["unknown_fields"]).Count, 1,
+			"skill unknown field retained");
+		AssertEq(((Godot.Collections.Dictionary)items[0])["price"].AsInt32(), 50, "item price");
+		AssertEq(((Godot.Collections.Dictionary)items[0])["entire_party"].AsInt32(), 1, "item flag");
+		AssertEq(((Godot.Collections.Dictionary)items[0])["using_message"].AsInt32(), 2, "item using message");
+		AssertEq(((Godot.Collections.Dictionary)states[0])["release_by_damage"].AsInt32(), 20, "state release chance");
+		AssertEq(((Godot.Collections.Dictionary)states[0])["message_actor"].AsString(), "is poisoned", "state message");
+		AssertEq(((Godot.Collections.Dictionary)classes[0])["name"].AsString(), "Hero", "class name");
+		AssertEq(((Godot.Collections.Dictionary)classes[0])["exp_base"].AsInt32(), 30, "class exp base");
+		var sectionCounts = (Godot.Collections.Dictionary)data["section_counts"];
+		foreach (var section in new[] { "skills", "items", "states", "classes" })
+		{
+			AssertEq(sectionCounts[section].AsInt32(), 1, section + " section count");
+		}
+	}
+
 	public void Test_ParseDatabaseDecodesSwitchAndVariableNames()
 	{
 		var switchA = Struct(

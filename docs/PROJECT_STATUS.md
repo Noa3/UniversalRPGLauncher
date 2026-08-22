@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `165/165` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.godot` names the `UniversalRPG` assembly, `UniversalRPG.csproj` and `UniversalRPG.sln` describe the .NET project, and `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `166/166` tests.
 
 ## Phase Status Overview
 
@@ -148,7 +148,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. `project.g
 
 ## Next Immediate Tasks
 
-1. Decode remaining LDB array sections (skills, items, enemies, troops, terrains, attributes, states, animations, chipsets, classes) into typed models with verified field IDs
+1. Decode remaining LDB array sections (enemies, troops, terrains, attributes, animations, chipsets, battle commands) into typed models with verified field IDs; skills/items/states/classes now have scalar metadata slices
 2. Expand typed LMU decoding incrementally; do not guess undocumented offsets/fields
 3. Test CP932/Shift-JIS behavior on target platforms and add malicious-input fixtures
 4. Implement LMU event/page metadata decoding without executing commands
@@ -185,7 +185,7 @@ Changes prepared in this pass:
 - added provenance-pinned EasyRPG TestGame RM2000/RM2003 LDB/LMT/LMU fixtures and real-framing regression tests;
 - accepted valid zero-length LDB struct-array sections while preserving bounded malformed-input rejection.
 
-## 2026-08-22 Typed LDB Slice (K-012)
+## 2026-08-22 Typed LDB Slice (K-012/K-015)
 
 - `ParseDatabase` now decodes the actors section into typed entries: name/title/character_name/face_name strings plus character_index, transparent, initial_level, final_level, critical_hit, critical_hit_chance, face_index integers; defaults mirror liblcf `rpg::Actor` initializers.
 - Switches and variables sections decode to id/name entries; duplicate structure IDs are rejected.

@@ -23,7 +23,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-012 | 0 | DONE | Expand LDB decoding into typed core database sections | K-010 |
 | K-013 | 0 | BACKLOG | Expand LMU event/page metadata decoding without executing commands | K-010 |
 | K-014 | 0 | BACKLOG | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
-| K-015 | 0 | BACKLOG | Decode remaining LDB array sections into typed models | K-012 |
+| K-015 | 0 | IN PROGRESS | Decode remaining LDB array sections into typed models | K-012 |
 | K-020 | 1 | BACKLOG | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | BACKLOG | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-022 | 1 | BACKLOG | Implement map/player movement and passability simulation | K-020 |
@@ -156,6 +156,13 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Decode skills, items, enemies, troops, terrains, attributes, states, animations, chipsets, classes, and battle commands incrementally using field IDs verified against liblcf `ldb/chunks.h`.
 - Nested structures stay data-only; unknown fields remain preserved.
 - Synthetic malformed-input fixtures and real-fixture count comparisons exist per section batch.
+
+**Progress evidence (2026-08-22)**
+- Implemented the first K-015 batch for skills (`0x0c`), items (`0x0d`), states (`0x12`), and classes (`0x1e`). Scalar field IDs are verified against EasyRPG liblcf; nested arrays remain preserved as unknown fields.
+- Added synthetic typed-section coverage for names, scalar values, unknown-field retention, duplicate-safe framing, and section-count parity.
+- `dotnet build --no-restore` — passed with `0` warnings and `0` errors.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `166/166` C# tests and smoke validation.
+- K-015 remains `IN PROGRESS`; next batch is enemy/terrain/attribute scalar metadata before nested arrays and battle/event structures.
 
 ### K-013 — LMU events/pages
 
