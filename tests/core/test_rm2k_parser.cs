@@ -462,6 +462,75 @@ partial class TestRm2kParser : TestBase
 		}
 	}
 
+	public void Test_ParseDatabaseDecodesTypedTroopAnimationAndChipsetEntries()
+	{
+		var troop = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Slime Group")),
+			Chunk(0x03, Ber(1)),
+			Chunk(0x04, Ber(3)),
+			Chunk(0x06, Ber(0)),
+			Chunk(0x02, new byte[] { 0x01 })
+		);
+		var animation = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Fire Hit")),
+			Chunk(0x02, System.Text.Encoding.ASCII.GetBytes("Fire")),
+			Chunk(0x03, Ber(1)),
+			Chunk(0x09, Ber(2)),
+			Chunk(0x0A, Ber(3)),
+			Chunk(0x06, new byte[] { 0x01 })
+		);
+		var chipset = Struct(
+			Chunk(0x01, System.Text.Encoding.ASCII.GetBytes("Outdoor")),
+			Chunk(0x02, System.Text.Encoding.ASCII.GetBytes("Chipset01")),
+			Chunk(0x0B, Ber(1)),
+			Chunk(0x0C, Ber(2)),
+			Chunk(0x03, new byte[] { 0x01 })
+		);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x0F, StructArray(troop)),
+			Chunk(0x13, StructArray(animation)),
+			Chunk(0x14, StructArray(chipset)),
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("TypedPresentationSections.rdata"), database);
+
+		var result = _parser.ParseDatabase(Dir.PathJoin("TypedPresentationSections.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var troops = (Godot.Collections.Array)data["troops"];
+		var animations = (Godot.Collections.Array)data["animations"];
+		var chipsets = (Godot.Collections.Array)data["chipsets"];
+		AssertEq(troops.Count, 1, "troop entry count");
+		AssertEq(animations.Count, 1, "animation entry count");
+		AssertEq(chipsets.Count, 1, "chipset entry count");
+		var troopEntry = (Godot.Collections.Dictionary)troops[0];
+		AssertEq(troopEntry["name"].AsString(), "Slime Group", "troop name");
+		AssertEq(troopEntry["auto_alignment"].AsInt32(), 1, "troop auto alignment");
+		AssertEq(troopEntry["terrain_set_size"].AsInt32(), 3, "troop terrain set size");
+		AssertEq(((Godot.Collections.Array)troopEntry["unknown_fields"]).Count, 1, "troop nested field retained");
+		var animationEntry = (Godot.Collections.Dictionary)animations[0];
+		AssertEq(animationEntry["name"].AsString(), "Fire Hit", "animation name");
+		AssertEq(animationEntry["animation_name"].AsString(), "Fire", "animation asset name");
+		AssertEq(animationEntry["scope"].AsInt32(), 2, "animation scope");
+		AssertEq(((Godot.Collections.Array)animationEntry["unknown_fields"]).Count, 1, "animation nested field retained");
+		var chipsetEntry = (Godot.Collections.Dictionary)chipsets[0];
+		AssertEq(chipsetEntry["name"].AsString(), "Outdoor", "chipset name");
+		AssertEq(chipsetEntry["chipset_name"].AsString(), "Chipset01", "chipset asset name");
+		AssertEq(chipsetEntry["animation_speed"].AsInt32(), 2, "chipset animation speed");
+		AssertEq(((Godot.Collections.Array)chipsetEntry["unknown_fields"]).Count, 1, "chipset nested field retained");
+		var sectionCounts = (Godot.Collections.Dictionary)data["section_counts"];
+		foreach (var section in new[] { "troops", "animations", "chipsets" })
+		{
+			AssertEq(sectionCounts[section].AsInt32(), 1, section + " section count");
+		}
+	}
+
 	public void Test_ParseDatabaseDecodesSwitchAndVariableNames()
 	{
 		var switchA = Struct(

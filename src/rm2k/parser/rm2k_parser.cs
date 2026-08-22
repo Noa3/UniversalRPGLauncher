@@ -158,6 +158,14 @@ public partial class Rm2kParser : RefCounted
 			}
 		},
 		{
+			0x0f,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x03, "auto_alignment" }, { 0x04, "terrain_set_size" },
+				{ 0x06, "appear_randomly" },
+			}
+		},
+		{
 			0x10,
 			new Dictionary<int, string>
 			{
@@ -178,6 +186,22 @@ public partial class Rm2kParser : RefCounted
 			{
 				{ 0x01, "name" }, { 0x02, "type" }, { 0x0b, "a_rate" }, { 0x0c, "b_rate" },
 				{ 0x0d, "c_rate" }, { 0x0e, "d_rate" }, { 0x0f, "e_rate" },
+			}
+		},
+		{
+			0x13,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "animation_name" }, { 0x03, "large" },
+				{ 0x09, "scope" }, { 0x0a, "position" },
+			}
+		},
+		{
+			0x14,
+			new Dictionary<int, string>
+			{
+				{ 0x01, "name" }, { 0x02, "chipset_name" }, { 0x0b, "animation_type" },
+				{ 0x0c, "animation_speed" },
 			}
 		},
 		{
@@ -214,9 +238,12 @@ public partial class Rm2kParser : RefCounted
 		{ 0x0c, new HashSet<int> { 0x01, 0x02, 0x03, 0x04 } },
 		{ 0x0d, new HashSet<int> { 0x01, 0x02 } },
 		{ 0x0e, new HashSet<int> { 0x01, 0x02 } },
+		{ 0x0f, new HashSet<int> { 0x01 } },
 		{ 0x10, new HashSet<int> { 0x01, 0x04 } },
 		{ 0x11, new HashSet<int> { 0x01 } },
 		{ 0x12, new HashSet<int> { 0x01, 0x33, 0x34, 0x35, 0x36, 0x37 } },
+		{ 0x13, new HashSet<int> { 0x01, 0x02 } },
+		{ 0x14, new HashSet<int> { 0x01, 0x02 } },
 		{ 0x1e, new HashSet<int> { 0x01 } },
 	};
 
@@ -334,6 +361,9 @@ public partial class Rm2kParser : RefCounted
 		var enemies = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var terrains = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var attributes = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var troops = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var animations = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var chipsets = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var states = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var classes = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var switches = new Godot.Collections.Array<Godot.Collections.Dictionary>();
@@ -407,6 +437,18 @@ public partial class Rm2kParser : RefCounted
 					{
 						attributes = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
 					}
+					else if (id == 0x0f)
+					{
+						troops = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x13)
+					{
+						animations = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
+					else if (id == 0x14)
+					{
+						chipsets = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
+					}
 					else if (id == 0x12)
 					{
 						states = (Godot.Collections.Array<Godot.Collections.Dictionary>)decodeResult.Data["entries"];
@@ -449,6 +491,9 @@ public partial class Rm2kParser : RefCounted
 			{ "enemies", enemies },
 			{ "terrains", terrains },
 			{ "attributes", attributes },
+			{ "troops", troops },
+			{ "animations", animations },
+			{ "chipsets", chipsets },
 			{ "states", states },
 			{ "classes", classes },
 			{ "switches", switches },

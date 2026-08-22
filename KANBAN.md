@@ -165,7 +165,10 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 - Implemented the second K-015 batch for enemies (`0x0e`), terrains (`0x10`), and attributes (`0x11`). Scalar field IDs are verified against EasyRPG liblcf; nested arrays remain preserved as unknown fields.
 - Added synthetic typed-section coverage for names, combat/environment scalar values, unknown-field retention, and section-count parity.
 - `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `167/167` C# tests and smoke validation.
-- K-015 remains `IN PROGRESS`; next batch is troop/animation/chipset metadata before nested arrays and battle/event structures.
+- Implemented the third K-015 batch for troops (`0x0f`), animations (`0x13`), and chipsets (`0x14`). Scalar metadata is typed; nested members, frames, and tile arrays remain preserved as unknown fields.
+- Added synthetic typed-section coverage for presentation metadata, nested-field retention, and section-count parity.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `168/168` C# tests and smoke validation.
+- K-015 remains `IN PROGRESS`; next batch is the battle-command/system metadata boundary before nested arrays and event-command decoding.
 
 ### K-013 — LMU events/pages
 
