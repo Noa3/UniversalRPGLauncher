@@ -849,15 +849,59 @@ public partial class Rm2kParser : RefCounted
 						return Failure($"Invalid event pages: {pages.Error!.Message}", (int)eventChunkData["payload_offset"]);
 					}
 					pageCount = (int)pages.Data["count"];
+
+					var pageList = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+					foreach (var pageObj in (Godot.Collections.Array<Godot.Collections.Dictionary>)pages.Data["objects"])
+					{
+						var pageFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)pageObj["fields"]);
+						var triggerResult = IntegerFromFields(pageFields, 0x09, 0);
+						var priorityResult = IntegerFromFields(pageFields, 0x08, 0);
+						var freqResult = IntegerFromFields(pageFields, 0x06, 0);
+
+						if (!triggerResult.Success || !priorityResult.Success || !freqResult.Success)
+						{
+							return Failure($"Invalid page metadata", (int)pageChunkData["payload_offset"]);
+						}
+
+						var hasList = pageFields.ContainsKey(0x0b);
+						byte[]? pageData = null;
+						if (hasList)
+						{
+							var pg = (Godot.Collections.Dictionary)pageFields[0x0b];
+							pageData = (byte[]?)pg["data"];
+						}
+
+						pageList.Add(new Godot.Collections.Dictionary
+						{
+							{ "trigger", (int)triggerResult.Data["value"] },
+							{ "priority", (int)priorityResult.Data["value"] },
+							{ "move_frequency", (int)freqResult.Data["value"] },
+							{ "has_move_list", hasList },
+							{ "has_command_list", hasList },
+						});
+					}
+					events.Add(new Godot.Collections.Dictionary
+					{
+						{ "id", (int)eventObject["id"] },
+						{ "name", DecodeTextField(eventFields, 0x01) },
+						{ "x", (int)xResult.Data["value"] },
+						{ "y", (int)yResult.Data["value"] },
+						{ "page_count", pageCount },
+						{ "pages", pageList },
+					});
 				}
-				events.Add(new Godot.Collections.Dictionary
+				else
 				{
-					{ "id", (int)eventObject["id"] },
-					{ "name", DecodeTextField(eventFields, 0x01) },
-					{ "x", (int)xResult.Data["value"] },
-					{ "y", (int)yResult.Data["value"] },
-					{ "page_count", pageCount },
-				});
+					events.Add(new Godot.Collections.Dictionary
+					{
+						{ "id", (int)eventObject["id"] },
+						{ "name", DecodeTextField(eventFields, 0x01) },
+						{ "x", (int)xResult.Data["value"] },
+						{ "y", (int)yResult.Data["value"] },
+						{ "page_count", 0 },
+						{ "pages", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+					});
+				}
 			}
 		}
 

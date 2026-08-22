@@ -5,7 +5,7 @@
 
 ## Current card
 
-|K-016 is IN PROGRESS — typed bounded MZ metadata result and encrypted-asset diagnostics. K-015 is DONE (all accepted scalar LDB sections); K-013/K-014 remain independent backlog work.|
+|K-013 is IN PROGRESS — LMU event/page metadata decoding. K-015 is DONE (all accepted scalar LDB sections); K-016 is DONE (MZ detection + bounded metadata).|
 
 ## Last verified baseline
 
@@ -53,7 +53,7 @@ K-015 is complete: all accepted scalar LDB sections plus bounded battle-command 
 
 ## Next action
 
-|Implement typed bounded MZ metadata (gameTitle, systemVersion, audioBrowsers, etc.) and encrypted-asset diagnostics; update K-016 progress, validate at 171+, commit, and push.|
+|Implement LMU event/page metadata decoding (id, name, x, y, trigger, priority, frequency, list); add synthetic coverage; validate at 171+; commit/push.|
 
 ## Completed K-012
 

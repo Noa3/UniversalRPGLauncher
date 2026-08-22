@@ -24,7 +24,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-013 | 0 | BACKLOG | Expand LMU event/page metadata decoding without executing commands | K-010 |
 | K-014 | 0 | BACKLOG | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
 | K-015 | 0 | DONE | Decode remaining LDB array sections into typed models | K-012 |
-| K-016 | 0 | IN PROGRESS | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
+| K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
 | K-020 | 1 | BACKLOG | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | BACKLOG | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-022 | 1 | BACKLOG | Implement map/player movement and passability simulation | K-020 |
@@ -191,6 +191,18 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 |- K-016 remains `IN PROGRESS`; next MZ slice is a typed bounded metadata result (gameTitle, systemVersion, audioBrowsers, etc.) and explicit encrypted-asset diagnostics, still without runtime execution.
 
 ### K-013 — LMU events/pages
+
+**Acceptance criteria**
+- Decode event metadata (id, name, x, y) and page metadata (trigger, priority, frequency, list framing).
+- Do not execute event commands while parsing.
+- Bound page/command counts and payload sizes.
+- Preserve raw/unknown commands for later interpreter work.
+- Synthetic fixtures cover valid, empty, truncated and oversized payloads.
+
+**Validation evidence**
+- TBD
+
+### K-014 — Preserve unknown LCF fields/chunks
 
 **Acceptance criteria**
 - Decode event/page structures as data only.
