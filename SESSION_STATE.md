@@ -6,6 +6,7 @@
 ## Current card
 
 |K-019 (ConditionalBranch evaluation) is implemented and builds clean but is VERIFY: the headless suite was not re-run successfully after the change (stale assembly 14/14, then one timed-out run). Last verified suite count 205/205. First action on restart: run the csharp_runner once per SESSION_HANDOFF restart procedure; expect TestEventInterpreter 19/19 and All 210; then flip K-019 to DONE, update counts, run scripts/validate.sh, commit.|
+|midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). Launchable via the installer's own Electron host or any MZ player/browser on the extracted folder; UniversalRPG detection-only boundary still applies (no JS runtime yet).|
 
 ## Last verified baseline
 
