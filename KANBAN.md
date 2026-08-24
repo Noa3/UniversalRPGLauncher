@@ -45,6 +45,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-039 | 1 | DONE | Expose explicit runtime stop control and hide stale presentation controls | K-037,K-038 |
 | K-040 | 1 | BACKLOG | RTP registry/resolver without bundled proprietary RTP data | K-012 |
 | K-041 | 1 | BACKLOG | Missing-asset diagnostics and per-game RTP profile | K-040 |
+| K-042 | 1 | DONE | RM2K event-page selection and bounded trigger scheduler | K-020,K-021 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
 | K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |

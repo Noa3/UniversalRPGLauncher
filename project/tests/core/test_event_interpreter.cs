@@ -26,6 +26,57 @@ public partial class TestEventInterpreter : TestBase
 		AssertFalse(interpreter.IsRunning);
 	}
 
+	public void Test_EventPageSelectorUsesHighestEligiblePage()
+	{
+		var state = new GameSimulationState();
+		state.Switches.Add(true);
+		var eventData = new Rm2kMap.Event(7, 3, 4);
+		eventData.Pages.Add(new Rm2kMap.EventPage { Trigger = 0 });
+		eventData.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = 2,
+			Conditions = new Dictionary<string, object> { ["switch_id"] = 1, ["switch_value"] = true },
+		});
+
+		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Action);
+
+		AssertTrue(page != null);
+		AssertEq(page!.Trigger, 2);
+	}
+
+	public void Test_EventPageSelectorRejectsUnsatisfiedConditions()
+	{
+		var state = new GameSimulationState();
+		var eventData = new Rm2kMap.Event(8, 1, 1);
+		eventData.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = 0,
+			Conditions = new Dictionary<string, object> { ["switch_id"] = 2, ["switch_value"] = true },
+		});
+
+		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun);
+
+		AssertTrue(page == null);
+	}
+
+	public void Test_EventSchedulerRunsAutorunInterpreter()
+	{
+		var state = new GameSimulationState();
+		var eventData = new Rm2kMap.Event(9, 0, 0);
+		var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Autorun };
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches, new List<int> { 1, 1, 0, EventInterpreter.SwitchModeOn }));
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+		eventData.Pages.Add(page);
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new[] { eventData });
+
+		scheduler.ExecuteFrame();
+		scheduler.ExecuteFrame();
+
+		AssertTrue(state.Switches.Count >= 1);
+		AssertTrue(state.Switches[0]);
+	}
+
 	public void Test_ConstantValuesMatchVerifiedLiblcfCodes()
 	{
 		AssertEq(EventInterpreter.End, 0);

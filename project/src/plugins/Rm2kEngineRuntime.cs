@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UniversalRPG.Core;
+using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Rm2k.Presentation;
 using UniversalRPG.Rm2k.Simulation;
@@ -22,11 +23,13 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
     private readonly PluginGameInfo _game;
     private readonly Rm2kParser _parser = new();
     private readonly VirtualClock _clock = new();
+    private readonly Rm2kEventScheduler _eventScheduler;
 
     public Rm2kEngineRuntime(string pPluginId, PluginGameInfo pGame)
     {
         _pluginId = pPluginId;
         _game = pGame;
+        _eventScheduler = new Rm2kEventScheduler(Simulation, Presentation);
     }
 
     public PluginRuntimeState State { get; private set; } = PluginRuntimeState.Created;
@@ -35,6 +38,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
     public Godot.Collections.Dictionary? CurrentMapData { get; private set; }
     public PresentationState Presentation { get; } = new();
     public GameSimulationState Simulation { get; } = new();
+    public Rm2kEventScheduler EventScheduler => _eventScheduler;
     public int SimulationTicks => _clock.GetSimulationTicks();
 
     public PluginOperationResult Initialize(EnginePluginRuntimeContext pContext)
@@ -128,6 +132,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
         if (elapsedTicks > 0)
         {
             Simulation.FrameCount += elapsedTicks;
+            for (var tick = 0; tick < elapsedTicks; tick++)
+            {
+                _eventScheduler.ExecuteFrame();
+            }
         }
         return PluginOperationResult.Succeeded();
     }
