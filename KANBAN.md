@@ -39,6 +39,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-033 | 1 | DONE | Visible RM2K map/framebuffer and sprite overlay in runtime UI | K-030,K-031,K-032 |
 | K-034 | 1 | DONE | Safe keyboard movement handoff to RM2K simulation | K-022,K-033 |
 | K-035 | 1 | DONE | Keyboard message dismissal, choice navigation, and numeric input handoff | K-032,K-034 |
+| K-036 | 1 | DONE | Advance deterministic runtime simulation frame count from virtual clock | K-020,K-034 |
 | K-040 | 1 | BACKLOG | RTP registry/resolver without bundled proprietary RTP data | K-012 |
 | K-041 | 1 | BACKLOG | Missing-asset diagnostics and per-game RTP profile | K-040 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |

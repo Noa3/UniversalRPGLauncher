@@ -122,7 +122,13 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
             return Fail(PluginErrorCode.InvalidLifecycleTransition,
                 "Delta time must be finite and non-negative.", "update");
         }
+        var beforeTicks = _clock.GetSimulationTicks();
         _clock.ProcessFrame(pDeltaSeconds);
+        var elapsedTicks = _clock.GetSimulationTicks() - beforeTicks;
+        if (elapsedTicks > 0)
+        {
+            Simulation.FrameCount += elapsedTicks;
+        }
         return PluginOperationResult.Succeeded();
     }
 
