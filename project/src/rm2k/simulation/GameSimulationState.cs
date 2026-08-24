@@ -45,6 +45,9 @@ public sealed class GameSimulationState
     // Variables (int)
     public Godot.Collections.Array<int> Variables { get; init; } = new();
 
+    // Inventory counts keyed by RM2K item ID.
+    public Godot.Collections.Dictionary<int, int> ItemCounts { get; init; } = new();
+
     // Party members (max 4)
     public Godot.Collections.Array<int> PartyMemberIds { get; init; } = new();
     public int ActiveActorIndex { get; set; } = 0;

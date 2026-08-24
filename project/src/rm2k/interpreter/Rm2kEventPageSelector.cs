@@ -65,7 +65,19 @@ public static class Rm2kEventPageSelector
             if (condition.Key is "switch_id" or "switch_value" or "switch_a_enabled" or "switch_a_id"
                 or "switch_b_enabled" or "switch_b_id" or "variable_enabled" or "variable_id"
                 or "variable_value" or "compare_operator") continue;
-            if (condition.Key is "item_enabled" or "actor_enabled" or "timer_enabled" or "timer2_enabled")
+            if (condition.Key == "item_enabled" && condition.Value is bool itemEnabled)
+            {
+                if (itemEnabled && (!TryInt(conditions, "item_id", out var itemId) || itemId < 1
+                    || !pState.ItemCounts.TryGetValue(itemId, out var itemCount) || itemCount <= 0)) return false;
+                continue;
+            }
+            if (condition.Key == "actor_enabled" && condition.Value is bool actorEnabled)
+            {
+                if (actorEnabled && (!TryInt(conditions, "actor_id", out var actorId) || actorId < 1 || !pState.PartyMemberIds.Contains(actorId))) return false;
+                continue;
+            }
+            if (condition.Key is "item_id" or "actor_id") continue;
+            if (condition.Key is "timer_enabled" or "timer2_enabled")
             {
                 if (condition.Value is bool enabled && enabled) return false;
                 continue;

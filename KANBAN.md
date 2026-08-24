@@ -52,6 +52,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-046 | 1 | DONE | Complete selector evaluation for switch B and variable comparisons | K-045 |
 | K-047 | 1 | DONE | Diagnose unsupported RM2K commands without execution | K-043 |
 | K-048 | 1 | DONE | Separate LMU move-route and event-command presence metadata | K-045 |
+| K-049 | 1 | DONE | Evaluate bounded RM2K item and actor page conditions | K-045 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
 | K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |

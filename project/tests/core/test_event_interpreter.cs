@@ -82,6 +82,25 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(page != null);
 	}
 
+	public void Test_EventPageSelectorEvaluatesItemAndActorConditions()
+	{
+		var state = new GameSimulationState();
+		state.ItemCounts[12] = 2;
+		state.PartyMemberIds.Add(4);
+		var eventData = new Rm2kMap.Event(12, 1, 1);
+		eventData.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Autorun,
+			Conditions = new Dictionary<string, object>
+			{
+				["item_enabled"] = true, ["item_id"] = 12,
+				["actor_enabled"] = true, ["actor_id"] = 4,
+			},
+		});
+
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun) != null);
+	}
+
 	public void Test_EventSchedulerRunsAutorunInterpreter()
 	{
 		var state = new GameSimulationState();
