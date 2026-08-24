@@ -875,6 +875,7 @@ public partial class Rm2kParser : RefCounted
 							conditionData = conditionResult.Data;
 						}
 
+						var hasMoveList = pageFields.ContainsKey(0x29);
 						var commandChunk = pageFields.ContainsKey(0x34)
 							? (Godot.Collections.Dictionary)pageFields[0x34]
 							: pageFields.ContainsKey(0x0b) ? (Godot.Collections.Dictionary)pageFields[0x0b] : null;
@@ -897,7 +898,7 @@ public partial class Rm2kParser : RefCounted
 							{ "priority", (int)priorityResult.Data["value"] },
 							{ "move_frequency", (int)freqResult.Data["value"] },
 							{ "conditions", conditionData },
-							{ "has_move_list", hasList },
+							{ "has_move_list", hasMoveList },
 							{ "has_command_list", hasList },
 							{ "commands", commands },
 						});
