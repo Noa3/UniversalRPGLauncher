@@ -59,6 +59,29 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(page == null);
 	}
 
+	public void Test_EventPageSelectorEvaluatesSwitchBAndVariableComparison()
+	{
+		var state = new GameSimulationState();
+		state.Switches.Add(false);
+		state.Switches.Add(true);
+		state.Variables.Add(10);
+		var eventData = new Rm2kMap.Event(11, 1, 1);
+		eventData.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Autorun,
+			Conditions = new Dictionary<string, object>
+			{
+				["switch_b_enabled"] = true, ["switch_b_id"] = 2,
+				["variable_enabled"] = true, ["variable_id"] = 1,
+				["variable_value"] = 5, ["compare_operator"] = 3,
+			},
+		});
+
+		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun);
+
+		AssertTrue(page != null);
+	}
+
 	public void Test_EventSchedulerRunsAutorunInterpreter()
 	{
 		var state = new GameSimulationState();

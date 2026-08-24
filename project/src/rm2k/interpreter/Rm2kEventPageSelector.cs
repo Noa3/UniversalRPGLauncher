@@ -40,43 +40,64 @@ public static class Rm2kEventPageSelector
 
     private static bool ConditionsMatch(Rm2kMap.EventPage pPage, GameSimulationState pState)
     {
-        if (pPage.Conditions.Count == 0)
+        var conditions = pPage.Conditions;
+        if (conditions.Count == 0) return true;
+
+        if (conditions.TryGetValue("switch_id", out var legacySwitchId))
         {
-            return true;
+            if (!TryInt(legacySwitchId, out var id) || !TryBool(conditions, "switch_value", out var expected)
+                || !ReadSwitch(pState, id, out var actual) || actual != expected) return false;
         }
 
-        foreach (var condition in pPage.Conditions)
+        if (!EvaluateSwitchCondition(conditions, "a", pState)
+            || !EvaluateSwitchCondition(conditions, "b", pState)) return false;
+
+        if (TryBool(conditions, "variable_enabled", out var variableEnabled) && variableEnabled)
         {
-            switch (condition.Key)
+            if (!TryInt(conditions, "variable_id", out var variableId)
+                || variableId < 1 || variableId > GameSimulationState.MaxVariables
+                || !TryInt(conditions, "variable_value", out var expectedValue)
+                || !Compare(ReadVariable(pState, variableId), expectedValue, conditions)) return false;
+        }
+
+        foreach (var condition in conditions)
+        {
+            if (condition.Key is "switch_id" or "switch_value" or "switch_a_enabled" or "switch_a_id"
+                or "switch_b_enabled" or "switch_b_id" or "variable_enabled" or "variable_id"
+                or "variable_value" or "compare_operator") continue;
+            if (condition.Key is "item_enabled" or "actor_enabled" or "timer_enabled" or "timer2_enabled")
             {
-                case "switch_id":
-                    if (!TryInt(condition.Value, out var switchId)
-                        || switchId < 1 || switchId > GameSimulationState.MaxSwitches
-                        || !TryBool(pPage.Conditions, "switch_value", out var switchValue)
-                        || !ReadSwitch(pState, switchId, out var actualSwitch)
-                        || actualSwitch != switchValue)
-                    {
-                        return false;
-                    }
-                    break;
-                case "switch_value":
-                    break;
-                case "variable_id":
-                    if (!TryInt(condition.Value, out var variableId)
-                        || variableId < 1 || variableId > GameSimulationState.MaxVariables
-                        || !TryInt(pPage.Conditions, "variable_value", out var expectedValue)
-                        || ReadVariable(pState, variableId) != expectedValue)
-                    {
-                        return false;
-                    }
-                    break;
-                case "variable_value":
-                    break;
-                default:
-                    return false;
+                if (condition.Value is bool enabled && enabled) return false;
+                continue;
             }
+            return false;
         }
         return true;
+    }
+
+    private static bool EvaluateSwitchCondition(System.Collections.Generic.Dictionary<string, object> pConditions, string pSuffix, GameSimulationState pState)
+    {
+        var enabledKey = $"switch_{pSuffix}_enabled";
+        if (!TryBool(pConditions, enabledKey, out var enabled) || !enabled) return true;
+        if (!TryInt(pConditions, $"switch_{pSuffix}_id", out var id) || id < 1 || id > GameSimulationState.MaxSwitches
+            || !ReadSwitch(pState, id, out var actual)) return false;
+        return actual;
+    }
+
+    private static bool Compare(int pActual, int pExpected, System.Collections.Generic.Dictionary<string, object> pConditions)
+    {
+        var op = 0;
+        if (pConditions.TryGetValue("compare_operator", out var rawOperator) && !TryInt(rawOperator, out op)) return false;
+        return op switch
+        {
+            0 => pActual == pExpected,
+            1 => pActual >= pExpected,
+            2 => pActual <= pExpected,
+            3 => pActual > pExpected,
+            4 => pActual < pExpected,
+            5 => pActual != pExpected,
+            _ => false,
+        };
     }
 
     private static bool ReadSwitch(GameSimulationState pState, int pId, out bool pValue)

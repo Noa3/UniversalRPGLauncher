@@ -204,6 +204,21 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
                         var pageData = rawPage.AsGodotDictionary();
                         if (!TryReadInt(pageData, "trigger", out var trigger)) continue;
                         var page = new Rm2kMap.EventPage { Trigger = trigger };
+                        if (pageData.TryGetValue("conditions", out var rawConditions) && rawConditions.VariantType == Godot.Variant.Type.Dictionary)
+                        {
+                            foreach (var pair in rawConditions.AsGodotDictionary())
+                            {
+                                var key = pair.Key.ToString();
+                                if (pair.Value.VariantType == Godot.Variant.Type.Bool)
+                                {
+                                    page.Conditions[key] = pair.Value.AsBool();
+                                }
+                                else if (pair.Value.VariantType == Godot.Variant.Type.Int)
+                                {
+                                    page.Conditions[key] = pair.Value.AsInt32();
+                                }
+                            }
+                        }
                         if (pageData.TryGetValue("commands", out var rawCommands) && rawCommands.VariantType == Godot.Variant.Type.Array)
                         {
                             foreach (var rawCommand in rawCommands.AsGodotArray())
