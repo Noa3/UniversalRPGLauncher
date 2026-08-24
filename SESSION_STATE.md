@@ -1,16 +1,16 @@
 # UniversalRPG Autonomous Session State
 
-> Updated: 2026-08-23
+> Updated: 2026-08-24
 > Purpose: small durable checkpoint for Hermes/other autonomous agents.
 
 ## Current card
 
-|K-019 is DONE — headless suite re-run green on Windows (Godot 4.7.2 Mono): All 210 tests passed, exit 0, build 0 warnings/0 errors. Fixed test-side defects: OOR reads of never-written variables and wrong diagnostic-count expectations in the three ConditionalBranch branch tests (successful switch/var ops are traced per K-021 semantics). Next ready cards: K-022 (map/player movement + passability), K-030 (renderer adapter).|
+|K-022 is VERIFY — bounded cardinal movement and passability are implemented and tested; LMU/chipset integration remains open. Keep MZ detection-only.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
 
-`bash scripts/validate.sh` passed on Linux with the pinned `tools/godot/editors/4.7.2/linux-x86_64/...mono...x86_64` editor: headless C# suite `205/205`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `213/213`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
 
 ## Layout note (2026-08-23)
 
@@ -54,11 +54,13 @@ Godot project files (`project.godot`, csproj/sln, app/, src/, tests/, assets/, l
 
 ## Current action
 
-K-015 is complete: all accepted scalar LDB sections plus bounded battle-command metadata decode with verified liblcf IDs, unknown-field retention, and real-fixture parity. K-016's first MZ detection hardening slice is complete and validated; the card remains active for typed bounded metadata and encrypted-asset diagnostics.
+K-022 movement slice is implemented and verified. `GameSimulationState` now supports bounded map configuration, cardinal movement, facing updates, passability blocking, bounds blocking, and diagnostics. LMU/chipset passability integration remains open.
+
+Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure` is an unencrypted RPG Maker MZ tree (`index.html`, `js/rmmz_core.js`, `js/rmmz_managers.js`, `data/System.json`, title `Skie's Inflatable Adventures (v0.30.001)`, 7,039 files). `D:\NextCloud\Games\PornGames\IntheHamletofLoliBigtits_v103a` is not an MZ web tree at its root: no `index.html`, `js/rmmz_*`, or `data/System.json`; Japanese locale remains unconfirmed and no encrypted marker was found in the bounded filename scan. Both were inspected detection-only; no game code executed.
 
 ## Next action
 
-|K-021 event interpreter first slice (CmdShowMessage/CmdWait/CmdIf/CmdElse/CmdEndIf/CmdLoop/CmdBreakLoop) partially implemented. EventInterpreter.cs written, test file written. Build errors: Godot.Variant pattern-matching in GetCmdParams — needs explicit cast or TypeCheck instead of `is`. K-020 DONE.|
+|Complete K-022 integration slice: map/passability data from parsed LMU/chipset structures into `GameSimulationState`, or document the missing verified RM2K passability field and move to K-030 without inventing semantics.|
 
 ## Completed K-012
 

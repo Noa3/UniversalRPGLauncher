@@ -32,7 +32,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
 | K-024 | 2 | DONE | Move Godot project into `project/` and keep runtime/tooling at repo root | — |
-| K-022 | 1 | BACKLOG | Implement map/player movement and passability simulation | K-020 |
+| K-022 | 1 | VERIFY | Implement map/player movement and passability simulation | K-020 |
 | K-030 | 1 | BACKLOG | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | BACKLOG | Character/event sprite renderer and camera | K-030 |
 | K-032 | 1 | BACKLOG | Message/window/picture presentation layer | K-030,K-021 |
@@ -48,6 +48,21 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
 
 ## Card details
+
+### K-022 — Map/player movement and passability simulation
+
+**Acceptance criteria**
+- Configure bounded map dimensions and row-major passability data.
+- Move only one cardinal tile per call; update facing using RM direction codes 2/4/6/8.
+- Reject map bounds, impassable tiles, malformed passability lengths, diagonal moves, and invalid map dimensions without changing position.
+- Increment `Steps` only after successful movement; retain bounded diagnostics for blocked/rejected movement.
+
+**Progress evidence (2026-08-24)**
+- Added `GameSimulationState.ConfigureMap` and `TryMove`.
+- Added regression coverage for successful movement, facing, blocked tiles, map bounds, diagonal rejection, and passability-shape validation.
+- `dotnet build project/UniversalRPG.csproj --no-restore` — passed, 0 warnings, 0 errors.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `213/213` tests.
+- Next slice: connect parsed LMU tile/passability metadata to this state; current implementation intentionally does not invent RM2K chipset passability rules.
 
 ### K-001 — Validate stabilization changes
 

@@ -1,3 +1,4 @@
+using System;
 using Godot;
 using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
@@ -139,5 +140,42 @@ public partial class TestGameSimulationState : TestBase
 	public void Test_CommonEventIdsInitialized()
 	{
 		AssertEq(_state.CommonEventIds.Count, 0);
+	}
+
+	public void Test_MapMovementUpdatesPositionFacingAndSteps()
+	{
+		_state.ConfigureMap(3, 3, 2, new[] { true, true, true, true, true, true });
+		AssertTrue(_state.TryMove(1, 0));
+		AssertEq(_state.MapX, 1);
+		AssertEq(_state.MapY, 0);
+		AssertEq(_state.FacingDirection, 6);
+		AssertEq(_state.Steps, 1);
+	}
+
+	public void Test_MapMovementBlocksImpassableAndBounds()
+	{
+		_state.ConfigureMap(3, 2, 2, new[] { true, false, true, true });
+		AssertFalse(_state.TryMove(1, 0));
+		AssertEq(_state.MapX, 0);
+		AssertEq(_state.Steps, 0);
+		AssertFalse(_state.TryMove(0, -1));
+		AssertEq(_state.FacingDirection, 8);
+	}
+
+	public void Test_MapMovementRejectsDiagonalAndInvalidPassabilityShape()
+	{
+		_state.ConfigureMap(3, 2, 2, new[] { true, true, true, true });
+		AssertFalse(_state.TryMove(1, 1));
+		AssertEq(_state.Diagnostics.Count, 1);
+		var threw = false;
+		try
+		{
+			_state.ConfigureMap(3, 2, 2, new[] { true });
+		}
+		catch (ArgumentException)
+		{
+			threw = true;
+		}
+		AssertTrue(threw);
 	}
 }

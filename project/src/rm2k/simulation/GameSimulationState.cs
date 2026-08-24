@@ -35,6 +35,10 @@ public sealed class GameSimulationState
     public int PendingX { get; set; } = 0;
     public int PendingY { get; set; } = 0;
 
+    public int MapWidth { get; private set; }
+    public int MapHeight { get; private set; }
+    public Godot.Collections.Array<bool> PassableTiles { get; init; } = new();
+
     // Switches (bool or byte for RM2000 compatibility)
     public Godot.Collections.Array<bool> Switches { get; init; } = new();
 
@@ -89,12 +93,71 @@ public sealed class GameSimulationState
         Diagnostics.Clear();
     }
 
+    public void ConfigureMap(int pMapId, int pWidth, int pHeight, IEnumerable<bool> pPassableTiles)
+    {
+        if (pMapId < 0 || pMapId > MaxMapId || pWidth <= 0 || pHeight <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pWidth), "Map identity and dimensions are outside simulation bounds.");
+        }
+        var expected = checked(pWidth * pHeight);
+        var tiles = new List<bool>(expected);
+        foreach (var passable in pPassableTiles)
+        {
+            if (tiles.Count == expected)
+            {
+                throw new ArgumentException("Passability data contains more tiles than the map.", nameof(pPassableTiles));
+            }
+            tiles.Add(passable);
+        }
+        if (tiles.Count != expected)
+        {
+            throw new ArgumentException("Passability data does not cover the complete map.", nameof(pPassableTiles));
+        }
+        MapId = pMapId;
+        MapWidth = pWidth;
+        MapHeight = pHeight;
+        PassableTiles.Clear();
+        foreach (var passable in tiles)
+        {
+            PassableTiles.Add(passable);
+        }
+        MapX = Math.Clamp(MapX, 0, pWidth - 1);
+        MapY = Math.Clamp(MapY, 0, pHeight - 1);
+    }
+
+    public bool TryMove(int pDeltaX, int pDeltaY)
+    {
+        if (Math.Abs(pDeltaX) + Math.Abs(pDeltaY) != 1)
+        {
+            AddDiagnostic("Movement requires exactly one cardinal tile step.");
+            return false;
+        }
+        var targetX = MapX + pDeltaX;
+        var targetY = MapY + pDeltaY;
+        FacingDirection = (byte)(pDeltaX > 0 ? 6 : pDeltaX < 0 ? 4 : pDeltaY > 0 ? 2 : 8);
+        if (MapWidth <= 0 || MapHeight <= 0 || targetX < 0 || targetX >= MapWidth || targetY < 0 || targetY >= MapHeight)
+        {
+            AddDiagnostic("Movement blocked by map bounds.");
+            return false;
+        }
+        if (!PassableTiles[targetY * MapWidth + targetX])
+        {
+            AddDiagnostic("Movement blocked by tile passability.");
+            return false;
+        }
+        MapX = targetX;
+        MapY = targetY;
+        Steps += 1;
+        return true;
+    }
+
     public void Reset()
     {
         MapId = 0; MapX = 0; MapY = 0; FacingDirection = 2;
         Gold = 0; FrameCount = 0; Steps = 0;
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; ActiveActorIndex = 0;
+        MapWidth = 0; MapHeight = 0; PassableTiles.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;
         SceneStack.Clear(); SceneStack.Add("Menu"); CurrentScene = "Menu";
