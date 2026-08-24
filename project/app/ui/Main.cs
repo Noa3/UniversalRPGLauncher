@@ -49,6 +49,11 @@ public partial class Main : Control
 	private Label _runtimeState = null!;
 	private Label _presentationState = null!;
 	private Rm2kMapPreview _mapPreview = null!;
+	private VBoxContainer _presentationControls = null!;
+	private Button _dismissMessageButton = null!;
+	private HBoxContainer _choiceButtons = null!;
+	private SpinBox _inputSpinBox = null!;
+	private Button _submitInputButton = null!;
 	private Button _launchButton = null!;
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
@@ -246,6 +251,24 @@ public partial class Main : Control
 		_presentationState.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		_presentationState.AddThemeColorOverride("font_color", ColorAccent);
 		details.AddChild(_presentationState);
+		_presentationControls = new VBoxContainer();
+		_presentationControls.Visible = false;
+		details.AddChild(_presentationControls);
+		_dismissMessageButton = new Button();
+		_dismissMessageButton.Text = "Continue";
+		_dismissMessageButton.Pressed += DismissRuntimeMessage;
+		_presentationControls.AddChild(_dismissMessageButton);
+		_choiceButtons = new HBoxContainer();
+		_presentationControls.AddChild(_choiceButtons);
+		_inputSpinBox = new SpinBox();
+		_inputSpinBox.MinValue = 0;
+		_inputSpinBox.MaxValue = int.MaxValue;
+		_inputSpinBox.Step = 1;
+		_presentationControls.AddChild(_inputSpinBox);
+		_submitInputButton = new Button();
+		_submitInputButton.Text = "Submit input";
+		_submitInputButton.Pressed += SubmitRuntimeInput;
+		_presentationControls.AddChild(_submitInputButton);
 		_launchButton = new Button();
 		_launchButton.Text = Tr("ACTION_NOT_PLAYABLE");
 		_launchButton.CustomMinimumSize = new Vector2(0, 50);
@@ -479,6 +502,7 @@ public partial class Main : Control
 		_status.Text = $"Runtime running: {_launcher.ActiveRuntime?.GetType().Name}";
 		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
 		{
+			UpdatePresentationControls(rm2k);
 			var presentation = rm2k.Presentation;
 			if (presentation.MessageVisible)
 			{
@@ -506,6 +530,55 @@ public partial class Main : Control
 		}
 	}
 
+
+	private void UpdatePresentationControls(Rm2kEngineRuntime pRuntime)
+	{
+		var presentation = pRuntime.Presentation;
+		_presentationControls.Visible = presentation.MessageVisible
+			|| presentation.ActiveChoice != null
+			|| presentation.PendingInputVariableId != null;
+		_dismissMessageButton.Visible = presentation.MessageVisible;
+		_choiceButtons.Visible = presentation.ActiveChoice != null;
+		_inputSpinBox.Visible = presentation.PendingInputVariableId != null;
+		_submitInputButton.Visible = presentation.PendingInputVariableId != null;
+
+		foreach (var child in _choiceButtons.GetChildren())
+		{
+			child.QueueFree();
+		}
+		if (presentation.ActiveChoice != null)
+		{
+			for (var index = 0; index < presentation.ActiveChoice.Options.Count; index++)
+			{
+				var choiceIndex = index;
+				var button = new Button { Text = presentation.ActiveChoice.Options[index] };
+				button.ToggleMode = true;
+				button.ButtonPressed = presentation.ActiveChoice.SelectedIndex == index;
+				button.Pressed += () => presentation.SelectChoice(choiceIndex);
+				_choiceButtons.AddChild(button);
+			}
+		}
+		if (presentation.PendingInputVariableId != null)
+		{
+			_inputSpinBox.Value = presentation.InputValue ?? 0;
+		}
+	}
+
+	private void DismissRuntimeMessage()
+	{
+		if (_launcher.ActiveRuntime is Rm2kEngineRuntime runtime)
+		{
+			runtime.Presentation.DismissMessage();
+		}
+	}
+
+	private void SubmitRuntimeInput()
+	{
+		if (_launcher.ActiveRuntime is Rm2kEngineRuntime runtime)
+		{
+			runtime.Presentation.SetInputValue((int)_inputSpinBox.Value);
+		}
+	}
 
 	private void LaunchSelectedGame()
 	{
