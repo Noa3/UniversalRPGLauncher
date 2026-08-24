@@ -374,6 +374,39 @@ public partial class Main : Control
 		RefreshLibrary();
 	}
 
+	public override void _UnhandledInput(InputEvent pEvent)
+	{
+		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running
+			|| _launcher.ActiveRuntime is not Rm2kEngineRuntime rm2k
+			|| rm2k.Presentation.MessageVisible
+			|| rm2k.Presentation.ActiveChoice != null
+			|| rm2k.Presentation.PendingInputVariableId != null)
+		{
+			return;
+		}
+		if (pEvent is not InputEventKey keyEvent || !keyEvent.Pressed || keyEvent.Echo)
+		{
+			return;
+		}
+		var movement = keyEvent.Keycode switch
+		{
+			Key.Up or Key.W => (0, -1),
+			Key.Down or Key.S => (0, 1),
+			Key.Left or Key.A => (-1, 0),
+			Key.Right or Key.D => (1, 0),
+			_ => (0, 0),
+		};
+		if (movement == (0, 0))
+		{
+			return;
+		}
+		if (_launcher.ActiveRuntime is Rm2kEngineRuntime activeRm2k)
+		{
+			activeRm2k.Simulation.TryMove(movement.Item1, movement.Item2);
+		}
+		GetViewport().SetInputAsHandled();
+	}
+
 	public override void _Process(double pDelta)
 	{
 		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running)
