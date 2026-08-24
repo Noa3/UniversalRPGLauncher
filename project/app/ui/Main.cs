@@ -54,6 +54,7 @@ public partial class Main : Control
 	private HBoxContainer _choiceButtons = null!;
 	private SpinBox _inputSpinBox = null!;
 	private Button _submitInputButton = null!;
+	private string _choiceSignature = "";
 	private Button _launchButton = null!;
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
@@ -542,20 +543,27 @@ public partial class Main : Control
 		_inputSpinBox.Visible = presentation.PendingInputVariableId != null;
 		_submitInputButton.Visible = presentation.PendingInputVariableId != null;
 
-		foreach (var child in _choiceButtons.GetChildren())
+		var choiceSignature = presentation.ActiveChoice == null
+			? ""
+			: $"{presentation.ActiveChoice.SelectedIndex}:{string.Join("\u001f", presentation.ActiveChoice.Options)}";
+		if (choiceSignature != _choiceSignature)
 		{
-			child.QueueFree();
-		}
-		if (presentation.ActiveChoice != null)
-		{
-			for (var index = 0; index < presentation.ActiveChoice.Options.Count; index++)
+			foreach (var child in _choiceButtons.GetChildren())
 			{
-				var choiceIndex = index;
-				var button = new Button { Text = presentation.ActiveChoice.Options[index] };
-				button.ToggleMode = true;
-				button.ButtonPressed = presentation.ActiveChoice.SelectedIndex == index;
-				button.Pressed += () => presentation.SelectChoice(choiceIndex);
-				_choiceButtons.AddChild(button);
+				child.QueueFree();
+			}
+			_choiceSignature = choiceSignature;
+			if (presentation.ActiveChoice != null)
+			{
+				for (var index = 0; index < presentation.ActiveChoice.Options.Count; index++)
+				{
+					var choiceIndex = index;
+					var button = new Button { Text = presentation.ActiveChoice.Options[index] };
+					button.ToggleMode = true;
+					button.ButtonPressed = presentation.ActiveChoice.SelectedIndex == index;
+					button.Pressed += () => presentation.SelectChoice(choiceIndex);
+					_choiceButtons.AddChild(button);
+				}
 			}
 		}
 		if (presentation.PendingInputVariableId != null)
