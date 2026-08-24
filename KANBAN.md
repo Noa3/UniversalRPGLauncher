@@ -35,7 +35,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-022 | 1 | DONE | Implement map/player movement and passability simulation | K-020 |
 | K-030 | 1 | DONE | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | DONE | Character/event sprite renderer and camera | K-030 |
-| K-032 | 1 | IN PROGRESS | Message/window/picture/choice/input presentation and runtime/UI handoff | K-030,K-021 |
+| K-032 | 1 | DONE | Message/window/picture/choice/input presentation and runtime/UI handoff | K-030,K-021 |
 | K-033 | 1 | DONE | Visible RM2K map/framebuffer and sprite overlay in runtime UI | K-030,K-031,K-032 |
 | K-034 | 1 | DONE | Safe keyboard movement handoff to RM2K simulation | K-022,K-033 |
 | K-035 | 1 | DONE | Keyboard message dismissal, choice navigation, and numeric input handoff | K-032,K-034 |
@@ -43,8 +43,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-037 | 1 | DONE | Clickable message, choice, and numeric-input presentation controls | K-032,K-035 |
 | K-038 | 1 | DONE | Avoid per-frame choice-control reconstruction in runtime UI | K-037 |
 | K-039 | 1 | DONE | Expose explicit runtime stop control and hide stale presentation controls | K-037,K-038 |
-| K-040 | 1 | BACKLOG | RTP registry/resolver without bundled proprietary RTP data | K-012 |
-| K-041 | 1 | BACKLOG | Missing-asset diagnostics and per-game RTP profile | K-040 |
+| K-040 | 1 | DONE | RTP registry/resolver without bundled proprietary RTP data | K-012 |
+| K-041 | 1 | DONE | Missing-asset diagnostics and per-game RTP profile | K-040 |
 | K-042 | 1 | DONE | RM2K event-page selection and bounded trigger scheduler | K-020,K-021 |
 | K-043 | 1 | DONE | Decode LMU event-command vectors and feed native scheduler | K-042 |
 | K-044 | 1 | DONE | Dispatch action/touch events from player input and movement | K-042,K-043 |
@@ -112,6 +112,34 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 - Build: `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors.
 - Full validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `225/225` tests passed.
 - Scope boundary: no texture loading, external scripts, native plugins, or game executables are invoked.
+
+### K-040 — RTP registry/resolver without bundled proprietary RTP data
+
+**Acceptance criteria**
+- Register only explicit user-provided RTP roots; do not bundle, download, or auto-discover proprietary RTP data.
+- Resolve assets by engine, generation, dependency name, and bounded relative path in deterministic registration order.
+- Reject absolute paths, traversal, NUL bytes, invalid identifiers, missing roots, duplicate profile IDs, and reparse-point escapes.
+- Return structured status for no profile, missing asset, invalid path, and successful resolution without opening or executing the asset.
+
+**Validation evidence (2026-08-24)**
+- Added `project/src/rm2k/assets/RtpRegistry.cs` and `project/tests/core/test_rtp_registry.cs`.
+- Build: `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors.
+- Full validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `254/254` tests passed.
+- Scope boundary: K-040 is an in-memory explicit registry only; diagnostics integration and persisted per-game RTP profiles remain K-041.
+
+### K-041 — Missing-asset diagnostics and per-game RTP profile
+
+**Acceptance criteria**
+- Represent a bounded per-game RTP profile without copying or embedding RTP data.
+- Serialize and deserialize profile metadata through a bounded JSON codec with validation.
+- Report required assets as `Available`, `MissingAsset`, `NoMatchingProfile`, or `InvalidPath`.
+- Keep diagnostics data-only; no asset opening, parsing, downloading, or execution.
+
+**Validation evidence (2026-08-24)**
+- Added `project/src/rm2k/assets/RtpDiagnostics.cs` and `project/tests/core/test_rtp_diagnostics.cs`.
+- Build: `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors.
+- Full validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `258/258` tests passed.
+- Scope boundary: profile metadata is not yet wired into persisted `GameLibrary` records; that integration remains a follow-up if required by the save/runtime UI.
 
 ### K-030 — Godot renderer adapter
 
