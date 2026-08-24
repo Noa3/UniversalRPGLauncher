@@ -34,7 +34,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-024 | 2 | DONE | Move Godot project into `project/` and keep runtime/tooling at repo root | — |
 | K-022 | 1 | DONE | Implement map/player movement and passability simulation | K-020 |
 | K-030 | 1 | DONE | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
-| K-031 | 1 | BACKLOG | Character/event sprite renderer and camera | K-030 |
+| K-031 | 1 | DONE | Character/event sprite renderer and camera | K-030 |
 | K-032 | 1 | BACKLOG | Message/window/picture presentation layer | K-030,K-021 |
 | K-040 | 1 | BACKLOG | RTP registry/resolver without bundled proprietary RTP data | K-012 |
 | K-041 | 1 | BACKLOG | Missing-asset diagnostics and per-game RTP profile | K-040 |
@@ -63,6 +63,20 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 - `dotnet build project/UniversalRPG.csproj --no-restore` — passed, 0 warnings, 0 errors.
 - `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `213/213` tests.
 - RM2K-specific chipset passability decoding remains separate: current implementation intentionally does not invent unverified chipset rules.
+
+### K-031 — Character/event sprite renderer and camera
+
+**Acceptance criteria**
+- Produce bounded player and map-event sprite descriptors from parsed map data.
+- Reject malformed events and coordinates outside map bounds.
+- Maintain camera center clamped to map and viewport bounds.
+- Keep texture loading and foreign game-code execution outside this data adapter.
+
+**Validation evidence (2026-08-24)**
+- Added `project/src/rm2k/rendering/Rm2kSpriteRenderer.cs` and `project/tests/core/test_rm2k_sprite_renderer.cs`.
+- Build: `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors.
+- Full validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `221/221` tests passed.
+- Scope boundary: descriptors/camera only; no untrusted asset/script/native execution.
 
 ### K-030 — Godot renderer adapter
 

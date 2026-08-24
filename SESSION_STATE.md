@@ -5,7 +5,7 @@
 
 ## Current card
 
-|K-030 is DONE — renderer-neutral virtual framebuffer and lower/upper tile-layer adapter implemented and verified. Next card: K-031 character/event sprite renderer and camera. Keep MZ detection-only.|
+|K-031 is DONE — bounded character/event sprite descriptors and camera state implemented and verified. Next card: K-032 message/window/picture presentation layer. Keep MZ detection-only.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
@@ -54,7 +54,7 @@ Godot project files (`project.godot`, csproj/sln, app/, src/, tests/, assets/, l
 
 ## Current action
 
-K-022 and K-030 are complete for their bounded slices. `GameSimulationState` supports bounded map configuration and movement. `VirtualFramebuffer` and `Rm2kRendererAdapter` now assemble validated lower/upper tile layers without invoking Godot drawing or foreign game code.
+K-022, K-030, and K-031 are complete for their bounded slices. `GameSimulationState` supports bounded map configuration and movement. `VirtualFramebuffer`/`Rm2kRendererAdapter` assemble validated lower/upper layers; `Rm2kSpriteAdapter` and `Rm2kCameraState` provide bounded player/event descriptors and camera state without invoking foreign game code.
 
 Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure` is an unencrypted RPG Maker MZ tree (`index.html`, `js/rmmz_core.js`, `js/rmmz_managers.js`, `data/System.json`, title `Skie's Inflatable Adventures (v0.30.001)`, 7,039 files). `D:\NextCloud\Games\PornGames\IntheHamletofLoliBigtits_v103a` is not an MZ web tree at its root: no `index.html`, `js/rmmz_*`, or `data/System.json`; Japanese locale remains unconfirmed and no encrypted marker was found in the bounded filename scan. Both were inspected detection-only; no game code executed.
 
