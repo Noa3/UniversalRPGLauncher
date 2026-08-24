@@ -400,6 +400,11 @@ public partial class Main : Control
 			{
 				_presentationState.Text = "Runtime presentation idle";
 			}
+			if (rm2k.CurrentMapData != null && rm2k.CurrentMapData.TryGetValue("width", out var width)
+				&& rm2k.CurrentMapData.TryGetValue("height", out var height))
+			{
+				_presentationState.Text += $"\nMap framebuffer: {width.AsInt32()}x{height.AsInt32()}";
+			}
 		}
 	}
 

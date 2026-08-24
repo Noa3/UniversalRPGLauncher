@@ -5,7 +5,7 @@
 
 ## Current card
 
-|K-032 runtime/UI wiring is IN PROGRESS — RuntimeLauncher exposes active runtime/update/stop, Rm2kEngineRuntime owns simulation and presentation state, and Main renders active RM2K message/choice/input presentation state each frame. Full map/tile/sprite composition remains next; keep MZ detection-only.|
+|K-032 runtime/UI wiring is IN PROGRESS; K-033 is IN PROGRESS — Main now displays active RM2K presentation state and reports parsed framebuffer dimensions. Full tile-cell and sprite composition remains next; keep MZ detection-only.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
