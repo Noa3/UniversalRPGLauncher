@@ -73,6 +73,27 @@ partial class TestRm2kParser : TestBase
 		AssertTrue(result.Error != null);
 	}
 
+	public void Test_EventPageConditionDecoderReadsSwitchAndVariableFlags()
+	{
+		var fields = new Godot.Collections.Dictionary
+		{
+			{ 0x01, new Godot.Collections.Dictionary { { "data", new byte[] { 0b00000101 } } } },
+			{ 0x02, new Godot.Collections.Dictionary { { "data", Ber(3) } } },
+			{ 0x04, new Godot.Collections.Dictionary { { "data", Ber(7) } } },
+			{ 0x05, new Godot.Collections.Dictionary { { "data", Ber(42) } } },
+		};
+
+		var result = Rm2kEventPageConditionDecoder.Decode(fields);
+
+		AssertTrue(result.Success);
+		var conditions = result.Data;
+		AssertTrue((bool)conditions["switch_a_enabled"]);
+		AssertTrue((bool)conditions["variable_enabled"]);
+		AssertEq((int)conditions["switch_a_id"], 3);
+		AssertEq((int)conditions["variable_id"], 7);
+		AssertEq((int)conditions["variable_value"], 42);
+	}
+
 	internal static byte[] Chunk(int pId, byte[] pPayload)
 	{
 		var bytes = new List<byte>();

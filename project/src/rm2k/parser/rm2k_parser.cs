@@ -854,20 +854,35 @@ public partial class Rm2kParser : RefCounted
 					foreach (var pageObj in (Godot.Collections.Array<Godot.Collections.Dictionary>)pages.Data["objects"])
 					{
 						var pageFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)pageObj["fields"]);
-						var triggerResult = IntegerFromFields(pageFields, 0x09, 0);
-						var priorityResult = IntegerFromFields(pageFields, 0x08, 0);
-						var freqResult = IntegerFromFields(pageFields, 0x06, 0);
+						var triggerResult = IntegerFromFields(pageFields, 0x21, 0);
+						if (!triggerResult.Success) triggerResult = IntegerFromFields(pageFields, 0x09, 0);
+						var priorityResult = IntegerFromFields(pageFields, 0x22, 0);
+						if (!priorityResult.Success) priorityResult = IntegerFromFields(pageFields, 0x08, 0);
+						var freqResult = IntegerFromFields(pageFields, 0x20, 0);
+						if (!freqResult.Success) freqResult = IntegerFromFields(pageFields, 0x06, 0);
 
 						if (!triggerResult.Success || !priorityResult.Success || !freqResult.Success)
 						{
 							return Failure($"Invalid page metadata", (int)pageChunkData["payload_offset"]);
 						}
 
-						var hasList = pageFields.ContainsKey(0x0b);
+						var conditionData = new Godot.Collections.Dictionary();
+						if (pageFields.TryGetValue(0x02, out var conditionChunk))
+						{
+							var conditionFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)((Godot.Collections.Dictionary)conditionChunk)["fields"]);
+							var conditionResult = Rm2kEventPageConditionDecoder.Decode(conditionFields);
+							if (!conditionResult.Success) return conditionResult;
+							conditionData = conditionResult.Data;
+						}
+
+						var commandChunk = pageFields.ContainsKey(0x34)
+							? (Godot.Collections.Dictionary)pageFields[0x34]
+							: pageFields.ContainsKey(0x0b) ? (Godot.Collections.Dictionary)pageFields[0x0b] : null;
+						var hasList = commandChunk != null;
 						Godot.Collections.Array<Godot.Collections.Dictionary> commands = new();
 						if (hasList)
 						{
-							var pg = (Godot.Collections.Dictionary)pageFields[0x0b];
+							var pg = commandChunk!;
 							var commandResult = Rm2kEventCommandDecoder.Decode((byte[])pg["data"]);
 							if (!commandResult.Success)
 							{
@@ -881,6 +896,7 @@ public partial class Rm2kParser : RefCounted
 							{ "trigger", (int)triggerResult.Data["value"] },
 							{ "priority", (int)priorityResult.Data["value"] },
 							{ "move_frequency", (int)freqResult.Data["value"] },
+							{ "conditions", conditionData },
 							{ "has_move_list", hasList },
 							{ "has_command_list", hasList },
 							{ "commands", commands },
