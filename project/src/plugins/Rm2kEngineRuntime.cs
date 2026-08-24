@@ -18,13 +18,15 @@ namespace UniversalRPG.Plugins;
 /// remain separate follow-up work, but launching no longer requires the
 /// original RPG_RT executable.
 /// </summary>
-public sealed class Rm2kEngineRuntime : IEngineRuntime
+public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRuntimeDebugTools
 {
+    private const int MaxGold = 999999;
     private readonly string _pluginId;
     private readonly PluginGameInfo _game;
     private readonly Rm2kParser _parser = new();
     private readonly VirtualClock _clock = new();
     private readonly Rm2kEventScheduler _eventScheduler;
+    private bool _debugToolsEnabled;
 
     public Rm2kEngineRuntime(string pPluginId, PluginGameInfo pGame)
     {
@@ -41,6 +43,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
     public GameSimulationState Simulation { get; } = new();
     public Rm2kEventScheduler EventScheduler => _eventScheduler;
     public int SimulationTicks => _clock.GetSimulationTicks();
+    public bool DebugToolsEnabled => _debugToolsEnabled;
 
     public PluginOperationResult Initialize(EnginePluginRuntimeContext pContext)
     {
@@ -141,6 +144,69 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
             }
         }
         return PluginOperationResult.Succeeded();
+    }
+
+    public PluginResult<string> ExportSaveSnapshot()
+    {
+        try
+        {
+            return PluginResult<string>.Succeeded(Rm2kSimulationSaveCodec.Serialize(Simulation));
+        }
+        catch (InvalidOperationException exception)
+        {
+            return PluginResult<string>.Failed(PluginError.Create(PluginErrorCode.LifecycleFailure,
+                exception.Message, _pluginId, "save-export", exception));
+        }
+    }
+
+    public PluginOperationResult ImportSaveSnapshot(string pSnapshot)
+    {
+        if (!Rm2kSimulationSaveCodec.TryRestore(pSnapshot, Simulation, out var error))
+        {
+            return Fail(PluginErrorCode.InvalidGame, error, "save-import");
+        }
+        return PluginOperationResult.Succeeded(new[]
+        {
+            PluginDiagnostic.Info("rm2k.save-imported", "Bounded RM2K simulation snapshot imported in memory.", _pluginId),
+        });
+    }
+
+    public PluginOperationResult SetDebugToolsEnabled(bool pEnabled)
+    {
+        _debugToolsEnabled = pEnabled;
+        return PluginOperationResult.Succeeded(new[]
+        {
+            PluginDiagnostic.Info("rm2k.debug-tools", pEnabled ? "Local RM2K debug tools enabled." : "Local RM2K debug tools disabled.", _pluginId),
+        });
+    }
+
+    public PluginOperationResult TrySetGold(int pGold)
+    {
+        if (!_debugToolsEnabled) return DebugToolsDisabled();
+        if (pGold < 0 || pGold > MaxGold)
+        {
+            return Fail(PluginErrorCode.InvalidGame, $"Gold must be between 0 and {MaxGold}.", "debug-gold");
+        }
+        Simulation.Gold = pGold;
+        return PluginOperationResult.Succeeded();
+    }
+
+    public PluginOperationResult TrySetSwitch(int pSwitchId, bool pValue)
+    {
+        if (!_debugToolsEnabled) return DebugToolsDisabled();
+        if (pSwitchId < 1 || pSwitchId > GameSimulationState.MaxSwitches)
+        {
+            return Fail(PluginErrorCode.InvalidGame, $"Switch ID must be between 1 and {GameSimulationState.MaxSwitches}.", "debug-switch");
+        }
+        while (Simulation.Switches.Count < pSwitchId) Simulation.Switches.Add(false);
+        Simulation.Switches[pSwitchId - 1] = pValue;
+        return PluginOperationResult.Succeeded();
+    }
+
+    private PluginOperationResult DebugToolsDisabled()
+    {
+        return Fail(PluginErrorCode.InvalidLifecycleTransition,
+            "Local debug tools require explicit opt-in.", "debug-tools");
     }
 
     public PluginOperationResult Stop()

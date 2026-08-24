@@ -319,7 +319,7 @@ public sealed class RpgMaker2000Plugin : LcfPlugin
 {
     public RpgMaker2000Plugin()
         : base(EnginePluginIds.RpgMaker2000, "RPG Maker 2000", "rm2k", "rm2000", 50,
-            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime) { }
+            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime | PluginCapability.SaveLoad | PluginCapability.Debugging) { }
 
     public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
         => PluginResult<IEngineRuntime>.Succeeded(new Rm2kEngineRuntime(Metadata.Id, pContext.Game));
@@ -329,7 +329,7 @@ public sealed class RpgMaker2003Plugin : LcfPlugin
 {
     public RpgMaker2003Plugin()
         : base(EnginePluginIds.RpgMaker2003, "RPG Maker 2003", "rm2k3", "rm2003", 50,
-            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime) { }
+            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime | PluginCapability.SaveLoad | PluginCapability.Debugging) { }
 
     public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
         => PluginResult<IEngineRuntime>.Succeeded(new Rm2kEngineRuntime(Metadata.Id, pContext.Game));

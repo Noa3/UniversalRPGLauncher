@@ -591,6 +591,23 @@ public interface IEnginePlugin
 	PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext);
 }
 
+public interface IRuntimeSaveTools
+{
+	/// <summary>Exports a bounded runtime-owned snapshot; this never writes a game save file.</summary>
+	PluginResult<string> ExportSaveSnapshot();
+	/// <summary>Imports a bounded runtime-owned snapshot already supplied by the user or editor.</summary>
+	PluginOperationResult ImportSaveSnapshot(string pSnapshot);
+}
+
+public interface IRuntimeDebugTools
+{
+	bool DebugToolsEnabled { get; }
+	/// <summary>Explicit opt-in gate for local single-player debug mutations.</summary>
+	PluginOperationResult SetDebugToolsEnabled(bool pEnabled);
+	PluginOperationResult TrySetGold(int pGold);
+	PluginOperationResult TrySetSwitch(int pSwitchId, bool pValue);
+}
+
 public interface IEngineRuntime : IDisposable
 {
 	PluginRuntimeState State { get; }

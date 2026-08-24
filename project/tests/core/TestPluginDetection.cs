@@ -163,6 +163,29 @@ public partial class TestPluginDetection : TestBase
         AssertTrue(stopped.Success);
     }
 
+    public void Test_Rm2kRuntimeToolsRequireExplicitDebugOptIn()
+    {
+        var runtime = new Rm2kEngineRuntime(EnginePluginIds.RpgMaker2000, new PluginGameInfo
+        {
+            GameDirectory = ProjectSettings.GlobalizePath(TempBase),
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+        });
+
+        AssertTrue(runtime is IRuntimeSaveTools);
+        AssertTrue(runtime is IRuntimeDebugTools);
+        AssertFalse(((IRuntimeDebugTools)runtime).TrySetGold(999).Success);
+        AssertTrue(((IRuntimeDebugTools)runtime).SetDebugToolsEnabled(true).Success);
+        runtime.Simulation.ConfigureMap(1, 1, 1, new[] { true });
+        AssertTrue(((IRuntimeDebugTools)runtime).TrySetGold(999).Success);
+        AssertEq(runtime.Simulation.Gold, 999);
+        var snapshot = ((IRuntimeSaveTools)runtime).ExportSaveSnapshot();
+        AssertTrue(snapshot.Success);
+        runtime.Simulation.Gold = 1;
+        AssertTrue(((IRuntimeSaveTools)runtime).ImportSaveSnapshot(snapshot.Value ?? "").Success);
+        AssertEq(runtime.Simulation.Gold, 999);
+    }
+
     public void Test_BuiltInDetectionOnlyRuntimeRefusesLaunch()
     {
         var report = Analyze("RMMV");
