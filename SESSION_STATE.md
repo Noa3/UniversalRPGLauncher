@@ -5,7 +5,7 @@
 
 ## Current card
 
-|K-022 is VERIFY — bounded cardinal movement and passability are implemented and tested; LMU/chipset integration remains open. Keep MZ detection-only.|
+|K-022 is DONE — bounded cardinal movement and passability are implemented and tested. Next card: K-030 renderer adapter. Keep MZ detection-only.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
@@ -54,13 +54,13 @@ Godot project files (`project.godot`, csproj/sln, app/, src/, tests/, assets/, l
 
 ## Current action
 
-K-022 movement slice is implemented and verified. `GameSimulationState` now supports bounded map configuration, cardinal movement, facing updates, passability blocking, bounds blocking, and diagnostics. LMU/chipset passability integration remains open.
+K-022 is complete for the deterministic simulation boundary. `GameSimulationState` supports bounded map configuration, cardinal movement, facing updates, passability blocking, bounds blocking, and diagnostics. RM2K-specific chipset passability decoding remains separate because no verified field semantics were added here.
 
 Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure` is an unencrypted RPG Maker MZ tree (`index.html`, `js/rmmz_core.js`, `js/rmmz_managers.js`, `data/System.json`, title `Skie's Inflatable Adventures (v0.30.001)`, 7,039 files). `D:\NextCloud\Games\PornGames\IntheHamletofLoliBigtits_v103a` is not an MZ web tree at its root: no `index.html`, `js/rmmz_*`, or `data/System.json`; Japanese locale remains unconfirmed and no encrypted marker was found in the bounded filename scan. Both were inspected detection-only; no game code executed.
 
 ## Next action
 
-|Complete K-022 integration slice: map/passability data from parsed LMU/chipset structures into `GameSimulationState`, or document the missing verified RM2K passability field and move to K-030 without inventing semantics.|
+|Start K-030: Godot renderer adapter with virtual framebuffer and lower/upper tile layers.|
 
 ## Completed K-012
 

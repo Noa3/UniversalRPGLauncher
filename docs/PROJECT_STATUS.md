@@ -1,13 +1,13 @@
 # UniversalRPG — Project Status
 
-> **Last Updated:** 2026-08-21
+> **Last Updated:** 2026-08-24
 > **Current Phase:** Phase 2 — RM2000/2003 Parser in progress
 
 ## Executive Summary
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `205/205` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `213/213` tests.
 
 ## Phase Status Overview
 
@@ -117,7 +117,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot 
 | No export pipeline | Medium | Presets exist; signed/release exports are not automated |
 | Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
 | No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
-| Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads data and ticks deterministically; events/presentation/systems remain planned |
+- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads data and ticks deterministically; movement state is bounded and tested, while renderer/events/presentation/systems remain planned |
 
 ## Missing Core Components (Planned)
 
