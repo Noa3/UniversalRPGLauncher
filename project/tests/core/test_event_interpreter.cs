@@ -118,6 +118,21 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(state.Switches[1]);
 	}
 
+	public void Test_EventInterpreterDiagnosesUnknownCommandWithoutExecutingIt()
+	{
+		var state = new GameSimulationState();
+		var interpreter = new EventInterpreter(state, 77, new[]
+		{
+			new Rm2kMap.EventCommand(99999),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		interpreter.ExecuteFrame();
+
+		AssertTrue(state.Diagnostics.Count == 1);
+		AssertTrue(state.Diagnostics[0].Contains("99999"));
+	}
+
 	public void Test_ConstantValuesMatchVerifiedLiblcfCodes()
 	{
 		AssertEq(EventInterpreter.End, 0);

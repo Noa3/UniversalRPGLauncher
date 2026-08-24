@@ -183,7 +183,7 @@ public sealed class EventInterpreter
 				return true; // index points at the matching Loop command
 
 			default:
-				// Unknown or not-yet-implemented command: skip safely.
+				_state.AddDiagnostic($"[Event {_eventId}] Unsupported RM2K command {cmd.Code} skipped");
 				return Advance();
 		}
 	}

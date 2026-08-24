@@ -50,6 +50,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-044 | 1 | DONE | Dispatch action/touch events from player input and movement | K-042,K-043 |
 | K-045 | 1 | DONE | Decode LMU event-page switch and variable conditions | K-042,K-043 |
 | K-046 | 1 | DONE | Complete selector evaluation for switch B and variable comparisons | K-045 |
+| K-047 | 1 | DONE | Diagnose unsupported RM2K commands without execution | K-043 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
 | K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |
