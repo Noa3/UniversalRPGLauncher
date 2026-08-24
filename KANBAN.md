@@ -47,6 +47,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-041 | 1 | BACKLOG | Missing-asset diagnostics and per-game RTP profile | K-040 |
 | K-042 | 1 | DONE | RM2K event-page selection and bounded trigger scheduler | K-020,K-021 |
 | K-043 | 1 | DONE | Decode LMU event-command vectors and feed native scheduler | K-042 |
+| K-044 | 1 | DONE | Dispatch action/touch events from player input and movement | K-042,K-043 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
 | K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |

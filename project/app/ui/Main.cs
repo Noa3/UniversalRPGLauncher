@@ -3,6 +3,8 @@ using Godot;
 using UniversalRPG.App.Launcher;
 using UniversalRPG.App.Library;
 using UniversalRPG.Plugins;
+using UniversalRPG.Rm2k.Interpreter;
+using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.App.Ui;
 
@@ -483,15 +485,37 @@ public partial class Main : Control
 			Key.Right or Key.D => (1, 0),
 			_ => (0, 0),
 		};
+		if (keyEvent.Keycode is Key.Enter or Key.Space)
+		{
+			var actionTarget = GetFacingTarget(rm2k.Simulation);
+			rm2k.EventScheduler.TriggerAt(actionTarget.Item1, actionTarget.Item2, Rm2kEventTrigger.Action);
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		if (movement == (0, 0))
 		{
 			return;
 		}
 		if (_launcher.ActiveRuntime is Rm2kEngineRuntime activeRm2k)
 		{
-			activeRm2k.Simulation.TryMove(movement.Item1, movement.Item2);
+			if (activeRm2k.Simulation.TryMove(movement.Item1, movement.Item2))
+			{
+				activeRm2k.EventScheduler.TriggerAt(activeRm2k.Simulation.MapX, activeRm2k.Simulation.MapY, Rm2kEventTrigger.Touch);
+			}
 		}
 		GetViewport().SetInputAsHandled();
+	}
+
+	private static (int X, int Y) GetFacingTarget(GameSimulationState pSimulation)
+	{
+		return pSimulation.FacingDirection switch
+		{
+			2 => (pSimulation.MapX, pSimulation.MapY + 1),
+			4 => (pSimulation.MapX - 1, pSimulation.MapY),
+			6 => (pSimulation.MapX + 1, pSimulation.MapY),
+			8 => (pSimulation.MapX, pSimulation.MapY - 1),
+			_ => (pSimulation.MapX, pSimulation.MapY),
+		};
 	}
 
 	public override void _Process(double pDelta)

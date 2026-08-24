@@ -50,6 +50,12 @@ public sealed class Rm2kEventScheduler
 
     public bool TriggerAction(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Action);
 
+    public bool TriggerAt(int pX, int pY, Rm2kEventTrigger pTrigger)
+    {
+        var eventData = _events.FirstOrDefault(pEvent => pEvent.X == pX && pEvent.Y == pY);
+        return eventData != null && Trigger(eventData.Id, pTrigger);
+    }
+
     public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touch);
 
     private bool Trigger(int pEventId, Rm2kEventTrigger pTrigger)

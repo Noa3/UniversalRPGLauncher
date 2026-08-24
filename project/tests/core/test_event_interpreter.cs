@@ -77,6 +77,24 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(state.Switches[0]);
 	}
 
+	public void Test_EventSchedulerTriggersActionAtPosition()
+	{
+		var state = new GameSimulationState();
+		var eventData = new Rm2kMap.Event(10, 5, 6);
+		var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Action };
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches, new List<int> { 2, 2, 0, EventInterpreter.SwitchModeOn }));
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+		eventData.Pages.Add(page);
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new[] { eventData });
+
+		AssertTrue(scheduler.TriggerAt(5, 6, Rm2kEventTrigger.Action));
+		scheduler.ExecuteFrame();
+
+		AssertTrue(state.Switches.Count >= 2);
+		AssertTrue(state.Switches[1]);
+	}
+
 	public void Test_ConstantValuesMatchVerifiedLiblcfCodes()
 	{
 		AssertEq(EventInterpreter.End, 0);
