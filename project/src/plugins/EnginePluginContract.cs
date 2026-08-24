@@ -20,6 +20,7 @@ public static class EnginePluginIds
 	public const string RpgMakerMv = "rpg-maker-mv";
 	public const string RpgMakerMz = "rpg-maker-mz";
 	public const string RpgMaker95 = "rpg-maker-95";
+	public const string Dante98 = "rpg-tsukuru-dante-98";
 	public const string WolfRpg = "wolf-rpg";
 	public const string RpgMakerUnite = "rpg-maker-unite";
 
@@ -36,6 +37,7 @@ public static class EnginePluginIds
 			GameDetector.EngineType.RpgMakerMv => RpgMakerMv,
 			GameDetector.EngineType.RpgMakerMz => RpgMakerMz,
 			GameDetector.EngineType.RpgMaker95 => RpgMaker95,
+			GameDetector.EngineType.Dante98 => Dante98,
 			GameDetector.EngineType.WolfRpg => WolfRpg,
 			GameDetector.EngineType.RpgMakerUnite => RpgMakerUnite,
 			_ => "",

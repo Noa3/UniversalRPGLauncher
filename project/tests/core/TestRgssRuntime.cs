@@ -74,10 +74,15 @@ public partial class TestRgssRuntime : TestBase
                 $"{item.Name} runtime library is inspected");
             AssertEq(runtime.RuntimeInfo?.DataFileCount ?? -1, 2, $"{item.Name} data file count");
             AssertTrue(runtime.RuntimeInfo?.HasScriptPayload ?? false, $"{item.Name} script payload remains metadata");
+            var expectedSystem = item.Generation == "xp" ? "Data/System.rxdata" : item.Generation == "vx" ? "Data/System.rvdata" : "Data/System.rvdata2";
+            AssertEq(runtime.RuntimeInfo?.ExpectedSystemDataPath, expectedSystem, $"{item.Name} version-specific System path");
+            AssertFalse(runtime.RuntimeInfo?.HasSystemData ?? true, $"{item.Name} fixture records missing System data explicitly");
             AssertTrue(started.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "rgss.runtime-initialized"),
                 $"{item.Name} exposes bounded initialization diagnostics");
             AssertTrue(started.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "rgss.scripts-inspected-only"),
                 $"{item.Name} reports scripts as not executed");
+            AssertTrue(started.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "rgss.system-data-missing"),
+                $"{item.Name} reports version-specific System data requirements");
 
             AssertTrue(host.Update(1.0 / 30.0).Success, $"{item.Name} update succeeds");
             AssertTrue(runtime.SimulationTicks >= 2, $"{item.Name} advances deterministic simulation ticks");

@@ -17,6 +17,7 @@ public partial class GameDetector : RefCounted
     {
         Unknown,
         RpgMaker95,
+        Dante98,
         RpgMaker2000,
         RpgMaker2003,
         RpgMakerXp,
@@ -91,6 +92,7 @@ public partial class GameDetector : RefCounted
             return Engine switch
             {
                 EngineType.RpgMaker95 => "RPG Maker 95",
+                EngineType.Dante98 => "RPG Tsukūru Dante 98",
                 EngineType.RpgMaker2000 => "RPG Maker 2000",
                 EngineType.RpgMaker2003 => "RPG Maker 2003",
                 EngineType.RpgMaker2000_2003 => "RPG Maker 2000/2003",
@@ -211,6 +213,7 @@ public partial class GameDetector : RefCounted
         return pEngineId switch
         {
             EnginePluginIds.RpgMaker95 => EngineType.RpgMaker95,
+            EnginePluginIds.Dante98 => EngineType.Dante98,
             EnginePluginIds.RpgMaker2000 => EngineType.RpgMaker2000,
             EnginePluginIds.RpgMaker2003 => EngineType.RpgMaker2003,
             EnginePluginIds.RpgMakerXp => EngineType.RpgMakerXp,

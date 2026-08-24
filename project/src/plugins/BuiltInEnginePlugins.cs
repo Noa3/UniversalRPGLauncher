@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using UniversalRPG.Core;
 using UniversalRPG.Wolf;
@@ -45,6 +46,7 @@ public static class BuiltInEnginePluginCatalog
     public static IReadOnlyList<BuiltInEnginePlugin> CreatePlugins() => new BuiltInEnginePlugin[]
     {
         new RpgMaker95Plugin(),
+        new Dante98Plugin(),
         new RpgMaker2000Plugin(),
         new RpgMaker2003Plugin(),
         new RpgMakerXpPlugin(),
@@ -199,8 +201,28 @@ public abstract class BuiltInEnginePlugin : IEnginePlugin, IEngineDetectionPlugi
             return "";
         }
         var text = System.Text.Encoding.UTF8.GetString(file.Data);
-        var match = Regex.Match(text, "\\\"gameTitle\\\"\\s*:\\s*\\\"(?<title>(?:\\\\.|[^\\\"])*)\\\"", RegexOptions.CultureInvariant);
-        return match.Success ? match.Groups["title"].Value : "";
+        // Parse as JSON (bounded: the file is already size-capped) so a nested
+        // "gameTitle" key in an object cannot shadow the top-level property.
+        try
+        {
+            using var document = JsonDocument.Parse(text, new JsonDocumentOptions
+            {
+                MaxDepth = 64,
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+            });
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("gameTitle", out var title)
+                && title.ValueKind == JsonValueKind.String)
+            {
+                return title.GetString() ?? "";
+            }
+        }
+        catch (JsonException)
+        {
+            // Bounded metadata only: malformed JSON yields an empty title.
+        }
+        return "";
     }
 
     protected static Version? RuntimeVersion(string pLibrary)
@@ -253,6 +275,27 @@ public sealed class RpgMaker95Plugin : BuiltInEnginePlugin
             .OrderBy(pPath => pPath, StringComparer.OrdinalIgnoreCase)
             .ToList();
         return Match(snapshot, 850, "RPG Maker 95 descriptor and companion layout matched.", evidence);
+    }
+}
+
+public sealed class Dante98Plugin : BuiltInEnginePlugin
+{
+    public Dante98Plugin()
+        : base(EnginePluginIds.Dante98, "RPG Tsukūru Dante 98", "Detection-only PC-98 research boundary; no runtime or format aliasing.", "dante98", 21, PluginCapability.Detection)
+    {
+    }
+
+    public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
+    {
+        var marker = pContext.Snapshot.Files.FirstOrDefault(pFile =>
+            pFile.RelativePath.Equals("DANTE98.MRK", StringComparison.OrdinalIgnoreCase));
+        if (marker == null)
+        {
+            return EngineDetectionProbe.NoMatch("No explicit Dante 98 project marker was found; PC-98 media formats remain unclassified.");
+        }
+        return Match(pContext.Snapshot, 900,
+            "Explicit Dante 98 research marker matched; project remains detection-only.",
+            new[] { "DANTE98.MRK (marker only; content is not executed)" });
     }
 }
 
@@ -482,6 +525,71 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
 public sealed class RpgMakerMvPlugin : WebRpgPlugin
 {
     public RpgMakerMvPlugin() : base(EnginePluginIds.RpgMakerMv, "RPG Maker MV", "mv", "rpg_core.js", "js/rpg_core.js", 30) { }
+
+    /// <summary>
+    /// Extracts the small, useful subset of MV System.json metadata without
+    /// loading the browser runtime or evaluating plugin JavaScript.
+    /// </summary>
+    public static MvMetadataResult? ExtractMetadata(GameInspectionSnapshot pSnapshot)
+    {
+        var system = pSnapshot.Files.FirstOrDefault(pFile =>
+            pFile.RelativePath.Equals("data/System.json", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.Equals("www/data/System.json", StringComparison.OrdinalIgnoreCase));
+        if (system == null || system.IsTruncated || system.Data.Length == 0 || system.Data.Length > 512 * 1024)
+        {
+            return null;
+        }
+
+        var text = System.Text.Encoding.UTF8.GetString(system.Data);
+        if (!text.TrimStart().StartsWith("{", StringComparison.Ordinal)
+            || !text.TrimEnd().EndsWith("}", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // Parse as JSON (bounded by the 512 KiB cap above) so a nested
+        // "gameTitle" key inside an object cannot shadow the top-level field.
+        var title = "";
+        try
+        {
+            using var document = JsonDocument.Parse(text, new JsonDocumentOptions
+            {
+                MaxDepth = 64,
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+            });
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("gameTitle", out var gameTitle)
+                && gameTitle.ValueKind == JsonValueKind.String)
+            {
+                title = gameTitle.GetString() ?? "";
+            }
+        }
+        catch (JsonException)
+        {
+            // Bounded metadata only: malformed JSON yields an empty title.
+        }
+
+        var encrypted = pSnapshot.Files.Any(pFile =>
+            pFile.RelativePath.EndsWith(".rpgmvp", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.EndsWith(".rpgmvo", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.EndsWith(".rpgmvm", StringComparison.OrdinalIgnoreCase));
+        return new MvMetadataResult
+        {
+            GameTitle = title,
+            HasEncryptedFiles = encrypted,
+            Diagnostics = encrypted
+                ? new[] { "Encrypted MV assets detected; files remain metadata-only." }
+                : Array.Empty<string>(),
+        };
+    }
+}
+
+public sealed class MvMetadataResult
+{
+    public string GameTitle { get; init; } = "";
+    public bool HasEncryptedFiles { get; init; }
+    public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>

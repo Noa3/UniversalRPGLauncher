@@ -10,7 +10,15 @@
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `244/244`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `248/248`, exit 0, .NET build clean. The Godot project now lives under `project/`; validate.sh handles both.
+
+## Cross-engine QA pass (t_1b2292d4) — completed 2026-08-24
+
+All four parent tracks (t_ae3e01c0 docs-only, t_ba1d255d RGSS XP/VX/Ace, t_dbb7d1bd Dante98/RM95, t_a37367ee WOLF) merged on base `1da7e2a`; full matrix + defect fixes in `docs/CROSS_ENGINE_QA_REPORT.md`. Defects fixed with regression tests (suite 245 → 248):
+- D1: `GameDetector.FromPluginId()` was missing the Dante98 mapping — facade reported Unknown. Added case; test `Test_Dante98FacadeEngineResolution`.
+- D2: bounded inspection flagged >4096-entry well-formed games as malformed, hard-failing runtime init (real XP/MZ trees are 7k+). New `partial` advisory flag distinct from malformed in `EngineDetectionContract.cs`; `RgssEngineRuntime`/`EngineBootstrapRuntime` accept partial with a Warning. Test `Test_PartialEntryBudgetDoesNotRefuseDetection`.
+- D3: MV `ExtractMetadata` + shared `JsonTitle` used first-match regex for `"gameTitle"`, so nested keys could shadow the top-level title. Switched to bounded System.Text.Json root-property read (MaxDepth 64, malformed → empty). Test `Test_MvMetadataTitleIgnoresNestedGameTitleKeys`.
+Residual: RM95/Dante/WOLF have no live on-disk fixtures (plugin tests + audit doc only); RGSS/MV/MZ real-fixture runs were detection/metadata-only this pass.
 
 ## Layout note (2026-08-23)
 
@@ -68,7 +76,7 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 
 ## Next action
 
-|Continue K-032 integration: wire presentation state into the Godot runtime/UI entry point, then add safe choice/input presentation before claiming gameplay is fully functional.|
+MV/MZ/WOLF broad feature-completion remains unverified. This slice added bounded MV System.json metadata extraction and encrypted-asset diagnostics only; JavaScript execution, browser APIs, rendering, audio, input, saves, and plugins remain intentionally unsupported. Continue K-032 integration for the active RM2K path, then create focused runtime cards for any future bounded MV/MZ/WOLF capabilities.|
 
 ## Completed K-012
 
