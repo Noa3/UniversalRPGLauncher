@@ -68,6 +68,22 @@ public partial class TestEventInterpreter : TestBase
 		AssertFalse(result);
 	}
 
+	public void Test_ShowMessageUpdatesPresentationState()
+	{
+		var state = new GameSimulationState();
+		var presentation = new UniversalRPG.Rm2k.Presentation.PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ShowMessage, null, "Presented"),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 2, commands, presentation);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(presentation.MessageVisible);
+		AssertEq(presentation.MessageText, "Presented");
+	}
+
 	public void Test_WaitConvertsTenthsToFrames()
 	{
 		var state = new GameSimulationState();

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UniversalRPG.Rm2k.Simulation;
+using UniversalRPG.Rm2k.Presentation;
 
 namespace UniversalRPG.Rm2k.Interpreter;
 
@@ -70,15 +71,17 @@ public sealed class EventInterpreter
 	private readonly int _eventId;
 	private readonly IReadOnlyList<Rm2kMap.EventCommand> _commands;
 	private readonly Stack<int> _loopStack = new();
+	private readonly PresentationState? _presentation;
 	private int _commandIndex;
 	private int _waitFramesRemaining;
 
 	public EventInterpreter(GameSimulationState state, int eventId,
-		IReadOnlyList<Rm2kMap.EventCommand> commands)
+		IReadOnlyList<Rm2kMap.EventCommand> commands, PresentationState? presentation = null)
 	{
 		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
 		_commands = commands ?? throw new ArgumentNullException(nameof(commands));
+		_presentation = presentation;
 		_commandIndex = 0;
 	}
 
@@ -193,6 +196,13 @@ public sealed class EventInterpreter
 		{
 			_commandIndex++;
 			text += "\n" + _commands[_commandIndex].Text;
+		}
+		if (pCmd.Code == ShowMessage && _presentation != null)
+		{
+			if (!_presentation.ShowMessage(text))
+			{
+				_state.AddDiagnostic($"[Event {_eventId}] Presentation rejected message: exceeds bounds");
+			}
 		}
 		_state.AddDiagnostic($"[Event {_eventId}] {kind}: {Truncate(text)}");
 	}

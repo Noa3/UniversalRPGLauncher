@@ -35,7 +35,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-022 | 1 | DONE | Implement map/player movement and passability simulation | K-020 |
 | K-030 | 1 | DONE | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | DONE | Character/event sprite renderer and camera | K-030 |
-| K-032 | 1 | BACKLOG | Message/window/picture presentation layer | K-030,K-021 |
+| K-032 | 1 | DONE | Message/window/picture presentation layer | K-030,K-021 |
 | K-040 | 1 | BACKLOG | RTP registry/resolver without bundled proprietary RTP data | K-012 |
 | K-041 | 1 | BACKLOG | Missing-asset diagnostics and per-game RTP profile | K-040 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
@@ -77,6 +77,21 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 - Build: `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors.
 - Full validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `221/221` tests passed.
 - Scope boundary: descriptors/camera only; no untrusted asset/script/native execution.
+
+### K-032 — Message/window/picture presentation layer
+
+**Acceptance criteria**
+- Store bounded message state and continuation text.
+- Store, replace, and erase bounded picture descriptors.
+- Allow `EventInterpreter` to publish ShowMessage output into presentation state through explicit dependency injection.
+- Reject oversized or malformed presentation data without executing foreign code.
+
+**Validation evidence (2026-08-24)**
+- Added `project/src/rm2k/presentation/PresentationState.cs` and `project/tests/core/test_presentation_state.cs`.
+- `EventInterpreter` now optionally receives `PresentationState`; ShowMessage updates it while retaining existing diagnostics behavior.
+- Build: `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors.
+- Full validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `225/225` tests passed.
+- Scope boundary: no texture loading, external scripts, native plugins, or game executables are invoked.
 
 ### K-030 — Godot renderer adapter
 

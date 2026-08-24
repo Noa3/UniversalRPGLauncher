@@ -5,12 +5,12 @@
 
 ## Current card
 
-|K-031 is DONE — bounded character/event sprite descriptors and camera state implemented and verified. Next card: K-032 message/window/picture presentation layer. Keep MZ detection-only.|
+|K-032 is DONE — bounded message, picture, and presentation state implemented and verified. Next focus: integrate presentation state into EventInterpreter and Godot UI without executing foreign scripts. Keep MZ detection-only.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `217/217`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `225/225`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
 
 ## Layout note (2026-08-23)
 
@@ -60,7 +60,7 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 
 ## Next action
 
-|Start K-031: character/event sprite renderer and camera, after verifying available asset references and lifecycle boundaries.|
+|Continue K-032 integration: wire presentation state into the Godot runtime/UI entry point, then add safe choice/input presentation before claiming gameplay is fully functional.|
 
 ## Completed K-012
 
