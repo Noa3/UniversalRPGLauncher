@@ -33,7 +33,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
 | K-024 | 2 | DONE | Move Godot project into `project/` and keep runtime/tooling at repo root | — |
 | K-022 | 1 | DONE | Implement map/player movement and passability simulation | K-020 |
-| K-030 | 1 | BACKLOG | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
+| K-030 | 1 | DONE | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | BACKLOG | Character/event sprite renderer and camera | K-030 |
 | K-032 | 1 | BACKLOG | Message/window/picture presentation layer | K-030,K-021 |
 | K-040 | 1 | BACKLOG | RTP registry/resolver without bundled proprietary RTP data | K-012 |
@@ -63,6 +63,20 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 - `dotnet build project/UniversalRPG.csproj --no-restore` — passed, 0 warnings, 0 errors.
 - `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `213/213` tests.
 - RM2K-specific chipset passability decoding remains separate: current implementation intentionally does not invent unverified chipset rules.
+
+### K-030 — Godot renderer adapter
+
+**Acceptance criteria**
+- Store lower and upper RM2K tile IDs in a deterministic virtual framebuffer.
+- Convert bounded parser map output into the framebuffer without executing game code.
+- Reject malformed dimensions, layer lengths, non-integer tile IDs, and negative tile IDs.
+- Keep Godot rendering APIs out of the parser-facing adapter; actual texture/tile drawing remains a later presentation slice.
+
+**Validation evidence (2026-08-24)**
+- Added `project/src/rm2k/rendering/VirtualFramebuffer.cs` and `project/tests/core/test_rm2k_renderer.cs`.
+- Build: `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors.
+- Full validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `217/217` tests passed.
+- Scope boundary: this is renderer-neutral framebuffer assembly; no chipset passability inference, texture loading, camera, or native/game-script execution was added.
 
 ### K-001 — Validate stabilization changes
 

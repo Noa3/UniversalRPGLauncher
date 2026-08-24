@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `213/213` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `217/217` tests.
 
 ## Phase Status Overview
 
@@ -17,7 +17,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot 
 | 1 | Runtime foundation | ✅ Complete | Core abstractions implemented |
 | 1.5 | Application foundation | ✅ Complete | Library, plugin detection/selection wiring, persistence, localization, import safety |
 | 2 | RM2000/2003 parser | 🚧 In progress | Real LCF reader + initial LDB/LMU/LSD decoding |
-| 3 | RM2000/2003 rendering | 📋 Planned | Depends on Phase 2 |
+| 3 | RM2000/2003 rendering | 🚧 In progress | Renderer-neutral framebuffer adapter implemented; Godot presentation, sprites, and camera remain |
 | 4 | Event interpreter | 📋 Planned | Depends on Phase 2 |
 | 5 | Full RM2000/2003 systems | 📋 Planned | Depends on Phase 4 |
 | 6 | Compatibility work | 📋 Planned | Real-world testing |
