@@ -178,4 +178,28 @@ public partial class TestGameSimulationState : TestBase
 		}
 		AssertTrue(threw);
 	}
+
+	public void Test_SaveCodecRoundTripsBoundedSimulationState()
+	{
+		_state.ConfigureMap(7, 2, 2, new[] { true, false, true, true });
+		_state.MapX = 1; _state.MapY = 1; _state.Gold = 1234; _state.FrameCount = 77;
+		_state.Switches.Add(true); _state.Variables.Add(42); _state.ItemCounts[3] = 2;
+		_state.PartyMemberIds.Add(5); _state.SceneStack.Add("Map"); _state.CurrentScene = "Map";
+		_state.SetTimer(1, 9);
+
+		var json = Rm2kSimulationSaveCodec.Serialize(_state);
+		var restored = new GameSimulationState();
+
+		AssertTrue(Rm2kSimulationSaveCodec.TryRestore(json, restored, out var error));
+		AssertEq(error, ""); AssertEq(restored.MapId, 7); AssertEq(restored.MapX, 1);
+		AssertEq(restored.Gold, 1234); AssertEq(restored.Variables[0], 42);
+		AssertEq(restored.ItemCounts[3], 2); AssertTrue(restored.Timer1Active); AssertEq(restored.Timer1Seconds, 9);
+	}
+
+	public void Test_SaveCodecRejectsMalformedAndOversizedPayloads()
+	{
+		var restored = new GameSimulationState();
+		AssertFalse(Rm2kSimulationSaveCodec.TryRestore("{not-json", restored, out _));
+		AssertFalse(Rm2kSimulationSaveCodec.TryRestore(new string('x', Rm2kSimulationSaveCodec.MaxPayloadBytes + 1), restored, out _));
+	}
 }
