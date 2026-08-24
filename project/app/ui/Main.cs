@@ -37,6 +37,7 @@ public partial class Main : Control
 	private readonly EnginePluginRegistry _pluginRegistry = BuiltInEnginePluginCatalog.CreateRuntimeRegistry();
 	private readonly GameLibrary _library;
 	private readonly RuntimeLauncher _launcher;
+	private int _appliedRenderFps = -1;
 	private GameLibrary.GameEntry? _selectedGame;
 
 	private MarginContainer _pageMargin = null!;
@@ -73,6 +74,7 @@ public partial class Main : Control
 	{
 		ProcessMode = ProcessModeEnum.Always;
 		SetProcess(true);
+		ApplyRenderFrameRate(30);
 		LoadLocale();
 		BuildTheme();
 		BuildInterface();
@@ -518,15 +520,24 @@ public partial class Main : Control
 		};
 	}
 
+	private void ApplyRenderFrameRate(int pFramesPerSecond)
+	{
+		if (pFramesPerSecond <= 0 || _appliedRenderFps == pFramesPerSecond) return;
+		Engine.MaxFps = pFramesPerSecond;
+		_appliedRenderFps = pFramesPerSecond;
+	}
+
 	public override void _Process(double pDelta)
 	{
 		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running)
 		{
+			ApplyRenderFrameRate(30);
 			_stopButton.Disabled = true;
 			_presentationControls.Visible = false;
 			return;
 		}
 		_stopButton.Disabled = false;
+		ApplyRenderFrameRate(60);
 		var update = _launcher.Update(pDelta);
 		if (!update.Success)
 		{

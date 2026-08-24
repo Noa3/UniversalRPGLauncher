@@ -5,7 +5,7 @@
 
 ## Current card
 
-|K-032 remains IN PROGRESS; K-033 through K-039 and K-042/K-051 are DONE — RM2K Timer 1 and Timer 2 now have bounded active state, deterministic 60-Hz countdown, start/stop operations, and selector semantics matching EasyRPG (`remaining_seconds <= condition_limit`). Inactive timers fail closed. RM2K page switch slots remain exactly A/B with arbitrary global IDs.|
+|K-032 remains IN PROGRESS; K-033 through K-039, K-042/K-051 and K-053 are DONE — the app caps rendering at 30 FPS when no RM2K runtime is active and 60 FPS while runtime is active. This does not alter the deterministic 60-Hz simulation and does not change the operating-system monitor refresh rate. The approach reduces rendering work without affecting other applications.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline

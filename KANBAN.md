@@ -54,6 +54,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-048 | 1 | DONE | Separate LMU move-route and event-command presence metadata | K-045 |
 | K-049 | 1 | DONE | Evaluate bounded RM2K item and actor page conditions | K-045 |
 | K-051 | 1 | DONE | Add deterministic RM2K Timer 1/Timer 2 conditions | K-045 |
+| K-053 | 1 | DONE | Adaptive application render FPS without changing simulation Hz | K-036 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
 | K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |
