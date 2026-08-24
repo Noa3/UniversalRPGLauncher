@@ -129,6 +129,14 @@ public sealed class EventInterpreter
 				ExecuteMessageOrComment(cmd);
 				return Advance();
 
+			case ShowChoice:
+				if (!ExecuteShowChoice(cmd)) return true;
+				return Advance();
+
+			case InputNumber:
+				if (!ExecuteInputNumber(cmd)) return true;
+				return Advance();
+
 			case ShowMessage2:
 			case Comment2:
 				// Continuation line without a preceding ShowMessage/Comment: skip.
@@ -184,6 +192,54 @@ public sealed class EventInterpreter
 	{
 		_commandIndex++;
 		return IsRunning;
+	}
+
+	private bool ExecuteShowChoice(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null)
+		{
+			Malformed("Show choice: presentation state unavailable");
+			return true;
+		}
+		if (_presentation.ActiveChoice == null)
+		{
+			var options = pCmd.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+			if (!_presentation.ShowChoices(options))
+			{
+				Malformed("Show choice: invalid options");
+				return true;
+			}
+			return false;
+		}
+		if (_presentation.ActiveChoice.SelectedIndex < 0)
+		{
+			return false;
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Choice selected: {_presentation.ActiveChoice.SelectedIndex}");
+		return true;
+	}
+
+	private bool ExecuteInputNumber(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null || pCmd.Parameters.Count < 1 || pCmd.Parameters[0] < 1 || pCmd.Parameters[0] > GameSimulationState.MaxVariables)
+		{
+			Malformed("Input number");
+			return true;
+		}
+		var variableId = pCmd.Parameters[0];
+		if (_presentation.PendingInputVariableId == null && !_presentation.BeginInput(variableId))
+		{
+			Malformed("Input number");
+			return true;
+		}
+		if (!_presentation.TryConsumeInput(out _, out var value))
+		{
+			return false;
+		}
+		while (_state.Variables.Count < variableId) _state.Variables.Add(0);
+		_state.Variables[variableId - 1] = value;
+		_state.AddDiagnostic($"[Event {_eventId}] Input number -> variable {variableId}");
+		return true;
 	}
 
 	private void ExecuteMessageOrComment(Rm2kMap.EventCommand pCmd)

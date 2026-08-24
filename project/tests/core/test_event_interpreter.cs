@@ -84,6 +84,60 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(presentation.MessageText, "Presented");
 	}
 
+	public void Test_ShowChoicePausesUntilSelection()
+	{
+		var state = new GameSimulationState();
+		var presentation = new UniversalRPG.Rm2k.Presentation.PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ShowChoice, null, "Yes\nNo"),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+		var interpreter = new EventInterpreter(state, 3, commands, presentation);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(presentation.ActiveChoice != null);
+		AssertEq(interpreter.CurrentCommandIndex, 0);
+		AssertTrue(presentation.SelectChoice(1));
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(interpreter.CurrentCommandIndex, 1);
+	}
+
+	public void Test_InputNumberPausesThenStoresSubmittedValue()
+	{
+		var state = new GameSimulationState();
+		var presentation = new UniversalRPG.Rm2k.Presentation.PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.InputNumber, new List<int> { 4 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+		var interpreter = new EventInterpreter(state, 4, commands, presentation);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(interpreter.CurrentCommandIndex, 0);
+		AssertTrue(presentation.SetInputValue(123));
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Variables[3], 123);
+		AssertEq(interpreter.CurrentCommandIndex, 1);
+	}
+
+	public void Test_MalformedChoiceIsSkippedSafely()
+	{
+		var state = new GameSimulationState();
+		var presentation = new UniversalRPG.Rm2k.Presentation.PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ShowChoice, null, ""),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+		var interpreter = new EventInterpreter(state, 5, commands, presentation);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(interpreter.CurrentCommandIndex, 1);
+		AssertTrue(state.Diagnostics.Count > 0);
+	}
+
 	public void Test_WaitConvertsTenthsToFrames()
 	{
 		var state = new GameSimulationState();

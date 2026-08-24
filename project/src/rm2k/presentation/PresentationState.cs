@@ -3,6 +3,19 @@ using System.Collections.Generic;
 
 namespace UniversalRPG.Rm2k.Presentation;
 
+public sealed class ChoiceState
+{
+    public IReadOnlyList<string> Options { get; init; } = Array.Empty<string>();
+    public int SelectedIndex { get; private set; } = -1;
+
+    public bool Select(int pIndex)
+    {
+        if (pIndex < 0 || pIndex >= Options.Count) return false;
+        SelectedIndex = pIndex;
+        return true;
+    }
+}
+
 public sealed class PictureState
 {
     public int Id { get; init; }
@@ -17,12 +30,47 @@ public sealed class PresentationState
 {
     public const int MaxMessageCharacters = 4096;
     public const int MaxPictures = 100;
+    public const int MaxChoices = 4;
+    public const int MaxChoiceCharacters = 128;
     public const int MaxPictureNameCharacters = 256;
     public const int MaxPictureDimension = 8192;
 
     public bool MessageVisible { get; private set; }
     public string MessageText { get; private set; } = "";
+    public ChoiceState? ActiveChoice { get; private set; }
+    public int? PendingInputVariableId { get; private set; }
+    public int? InputValue { get; private set; }
     public Dictionary<int, PictureState> Pictures { get; } = new();
+
+    public bool BeginInput(int pVariableId)
+    {
+        if (pVariableId <= 0) return false;
+        PendingInputVariableId = pVariableId;
+        InputValue = null;
+        return true;
+    }
+
+    public bool SetInputValue(int pValue)
+    {
+        if (PendingInputVariableId == null) return false;
+        InputValue = pValue;
+        return true;
+    }
+
+    public bool TryConsumeInput(out int pVariableId, out int pValue)
+    {
+        if (PendingInputVariableId is not int variableId || InputValue is not int value)
+        {
+            pVariableId = 0;
+            pValue = 0;
+            return false;
+        }
+        pVariableId = variableId;
+        pValue = value;
+        PendingInputVariableId = null;
+        InputValue = null;
+        return true;
+    }
 
     public bool ShowMessage(string pText)
     {
@@ -39,7 +87,26 @@ public sealed class PresentationState
     {
         MessageText = "";
         MessageVisible = false;
+        ActiveChoice = null;
     }
+
+    public bool ShowChoices(IEnumerable<string> pOptions)
+    {
+        var options = new List<string>();
+        foreach (var option in pOptions)
+        {
+            if (options.Count >= MaxChoices || string.IsNullOrWhiteSpace(option) || option.Length > MaxChoiceCharacters)
+            {
+                return false;
+            }
+            options.Add(option);
+        }
+        if (options.Count == 0) return false;
+        ActiveChoice = new ChoiceState { Options = options };
+        return true;
+    }
+
+    public bool SelectChoice(int pIndex) => ActiveChoice?.Select(pIndex) == true;
 
     public bool ShowPicture(int pId, string pName, int pX, int pY, int pWidth, int pHeight)
     {

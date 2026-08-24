@@ -34,4 +34,14 @@ public partial class TestPresentationState : TestBase
         AssertTrue(presentation.ErasePicture(3));
         AssertEq(presentation.Pictures.Count, 0);
     }
+
+    public void Test_ChoicesAreBoundedAndSelectable()
+    {
+        var presentation = new PresentationState();
+        AssertTrue(presentation.ShowChoices(new[] { "Yes", "No" }));
+        AssertTrue(presentation.SelectChoice(1));
+        AssertEq(presentation.ActiveChoice!.SelectedIndex, 1);
+        AssertFalse(presentation.SelectChoice(2));
+        AssertFalse(presentation.ShowChoices(new[] { "1", "2", "3", "4", "5" }));
+    }
 }
