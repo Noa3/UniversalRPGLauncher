@@ -864,11 +864,16 @@ public partial class Rm2kParser : RefCounted
 						}
 
 						var hasList = pageFields.ContainsKey(0x0b);
-						byte[]? pageData = null;
+						Godot.Collections.Array<Godot.Collections.Dictionary> commands = new();
 						if (hasList)
 						{
 							var pg = (Godot.Collections.Dictionary)pageFields[0x0b];
-							pageData = (byte[]?)pg["data"];
+							var commandResult = Rm2kEventCommandDecoder.Decode((byte[])pg["data"]);
+							if (!commandResult.Success)
+							{
+								return Failure($"Invalid event command list: {commandResult.Error!.Message}", (int)pg["payload_offset"] + Math.Max(commandResult.Error.Offset, 0));
+							}
+							commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)commandResult.Data["commands"];
 						}
 
 						pageList.Add(new Godot.Collections.Dictionary
@@ -878,6 +883,7 @@ public partial class Rm2kParser : RefCounted
 							{ "move_frequency", (int)freqResult.Data["value"] },
 							{ "has_move_list", hasList },
 							{ "has_command_list", hasList },
+							{ "commands", commands },
 						});
 					}
 					events.Add(new Godot.Collections.Dictionary

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UniversalRPG.Core;
+using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Rm2k.Presentation;
@@ -91,6 +92,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
         DatabaseData = database.Data;
         MapTreeData = mapTree.Data;
         CurrentMapData = currentMap;
+        LoadCurrentMapEvents(currentMap);
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded(new[]
         {
@@ -180,6 +182,70 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
     {
         return Directory.EnumerateFiles(pRoot, "*", SearchOption.TopDirectoryOnly)
             .FirstOrDefault(pPath => Path.GetFileName(pPath).Equals(pName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void LoadCurrentMapEvents(Godot.Collections.Dictionary? pMapData)
+    {
+        var events = new List<Rm2kMap.Event>();
+        if (pMapData != null && pMapData.TryGetValue("events", out var rawEvents)
+            && rawEvents.VariantType == Godot.Variant.Type.Array)
+        {
+            foreach (var rawEvent in rawEvents.AsGodotArray())
+            {
+                if (rawEvent.VariantType != Godot.Variant.Type.Dictionary) continue;
+                var data = rawEvent.AsGodotDictionary();
+                if (!TryReadInt(data, "id", out var id) || !TryReadInt(data, "x", out var x) || !TryReadInt(data, "y", out var y)) continue;
+                var mapEvent = new Rm2kMap.Event(id, x, y);
+                if (data.TryGetValue("pages", out var rawPages) && rawPages.VariantType == Godot.Variant.Type.Array)
+                {
+                    foreach (var rawPage in rawPages.AsGodotArray())
+                    {
+                        if (rawPage.VariantType != Godot.Variant.Type.Dictionary) continue;
+                        var pageData = rawPage.AsGodotDictionary();
+                        if (!TryReadInt(pageData, "trigger", out var trigger)) continue;
+                        var page = new Rm2kMap.EventPage { Trigger = trigger };
+                        if (pageData.TryGetValue("commands", out var rawCommands) && rawCommands.VariantType == Godot.Variant.Type.Array)
+                        {
+                            foreach (var rawCommand in rawCommands.AsGodotArray())
+                            {
+                                if (rawCommand.VariantType != Godot.Variant.Type.Dictionary) continue;
+                                var command = rawCommand.AsGodotDictionary();
+                                if (!TryReadInt(command, "code", out var code)) continue;
+                                var text = command.TryGetValue("text", out var rawText) ? rawText.ToString() : "";
+                                var parameters = new List<int>();
+                                if (command.TryGetValue("parameters", out var rawParameters) && rawParameters.VariantType == Godot.Variant.Type.PackedInt32Array)
+                                {
+                                    foreach (var parameter in rawParameters.AsInt32Array()) parameters.Add(parameter);
+                                }
+                                page.Commands.Add(new Rm2kMap.EventCommand(code, parameters, text));
+                            }
+                        }
+                        mapEvent.Pages.Add(page);
+                    }
+                }
+                events.Add(mapEvent);
+            }
+        }
+        _eventScheduler.SetEvents(events);
+    }
+
+    private static bool TryReadInt(Godot.Collections.Dictionary pData, string pKey, out int pValue)
+    {
+        if (!pData.TryGetValue(pKey, out var rawValue))
+        {
+            pValue = 0;
+            return false;
+        }
+        try
+        {
+            pValue = (int)rawValue;
+            return true;
+        }
+        catch (InvalidCastException)
+        {
+            pValue = 0;
+            return false;
+        }
     }
 
     private PluginOperationResult Fail(PluginErrorCode pCode, string pMessage, string pPhase)

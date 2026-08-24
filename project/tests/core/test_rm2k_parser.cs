@@ -45,6 +45,34 @@ partial class TestRm2kParser : TestBase
 		return bytes.ToArray();
 	}
 
+	public void Test_EventCommandDecoderReadsTerminatedCommandVector()
+	{
+		var bytes = new List<byte>();
+		bytes.AddRange(Ber(10110));
+		bytes.AddRange(Ber(0));
+		bytes.AddRange(Ber(5));
+		bytes.AddRange(System.Text.Encoding.ASCII.GetBytes("Hello"));
+		bytes.AddRange(Ber(1));
+		bytes.AddRange(Ber(7));
+		bytes.AddRange(new byte[] { 0, 0, 0, 0 });
+
+		var result = Rm2kEventCommandDecoder.Decode(bytes.ToArray());
+
+		AssertTrue(result.Success);
+		var commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)result.Data["commands"];
+		AssertEq(commands.Count, 1);
+		AssertEq((int)commands[0]["code"], 10110);
+		AssertEq((string)commands[0]["text"], "Hello");
+	}
+
+	public void Test_EventCommandDecoderRejectsTrailingBytes()
+	{
+		var result = Rm2kEventCommandDecoder.Decode(new byte[] { 0, 0, 0, 0, 1 });
+
+		AssertFalse(result.Success);
+		AssertTrue(result.Error != null);
+	}
+
 	internal static byte[] Chunk(int pId, byte[] pPayload)
 	{
 		var bytes = new List<byte>();
