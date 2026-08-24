@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UniversalRPG.Core;
 
 namespace UniversalRPG.Plugins;
@@ -48,13 +49,21 @@ public sealed class EngineBootstrapRuntime : IEngineRuntime
         }
         InspectedFileCount = inspection.Value.Files.Count;
         State = PluginRuntimeState.Initialized;
-        return PluginOperationResult.Succeeded(new[]
+        var diagnostics = new List<PluginDiagnostic>
         {
             PluginDiagnostic.Info(
                 "runtime.bootstrap-initialized",
                 $"Initialized {_pluginId} bootstrap with {InspectedFileCount} bounded metadata files; engine scripts and binaries were not executed.",
                 _pluginId),
-        });
+        };
+        if (inspection.Value.IsPartial)
+        {
+            diagnostics.Add(PluginDiagnostic.Warning(
+                "runtime.bootstrap-partial-scan",
+                $"The project exceeded the bounded inspection entry budget ({InspectedFileCount} files scanned); metadata is advisory for files outside the covered set.",
+                _pluginId));
+        }
+        return PluginOperationResult.Succeeded(diagnostics.ToArray());
     }
 
     public PluginOperationResult Start()

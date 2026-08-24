@@ -86,6 +86,23 @@ public sealed class GameInspectionSnapshot
         SourcePath = pSourcePath;
         IsArchive = pArchive;
         IsMalformed = pMalformed;
+        IsPartial = false;
+        _files = pFiles;
+        Diagnostics = pDiagnostics;
+    }
+
+    internal GameInspectionSnapshot(
+        string pSourcePath,
+        bool pArchive,
+        bool pMalformed,
+        bool pPartial,
+        Dictionary<string, InspectedGameFile> pFiles,
+        List<EngineInspectionDiagnostic> pDiagnostics)
+    {
+        SourcePath = pSourcePath;
+        IsArchive = pArchive;
+        IsMalformed = pMalformed;
+        IsPartial = pPartial;
         _files = pFiles;
         Diagnostics = pDiagnostics;
     }
@@ -93,6 +110,12 @@ public sealed class GameInspectionSnapshot
     public string SourcePath { get; }
     public bool IsArchive { get; }
     public bool IsMalformed { get; }
+    /// <summary>
+    /// True when the bounded scan stopped at its entry budget: well-formed but
+    /// not fully covered. Detection treats this as advisory, while parsers that
+    /// require complete input can still fail on it explicitly.
+    /// </summary>
+    public bool IsPartial { get; }
     public IReadOnlyList<InspectedGameFile> Files => _files.Values
         .OrderBy(pFile => pFile.RelativePath, StringComparer.OrdinalIgnoreCase)
         .ThenBy(pFile => pFile.RelativePath, StringComparer.Ordinal)
@@ -217,6 +240,7 @@ public static class SafeGameInspector
         var files = new Dictionary<string, InspectedGameFile>(StringComparer.OrdinalIgnoreCase);
         var diagnostics = new List<EngineInspectionDiagnostic>();
         var malformed = false;
+        var partial = false;
         var pending = new Stack<(string Path, int Depth)>();
         pending.Push((pRoot, 0));
 
@@ -242,11 +266,11 @@ public static class SafeGameInspector
                 {
                     if (files.Count >= pLimits.MaxEntries)
                     {
-                        malformed = true;
-                        diagnostics.Add(EngineInspectionDiagnostic.Error(
-                            "inspect.entry-limit", "The imported folder exceeded the inspection entry limit."));
+                        partial = true;
+                        diagnostics.Add(EngineInspectionDiagnostic.Info(
+                            "inspect.entry-limit", "The imported folder exceeded the inspection entry budget; results remain advisory."));
                         return PluginResult<GameInspectionSnapshot>.Succeeded(
-                            CreateSnapshot(pRoot, false, malformed, files, diagnostics));
+                            CreateSnapshot(pRoot, false, malformed, partial, files, diagnostics));
                     }
                     if (child.Attributes.HasFlag(FileAttributes.ReparsePoint))
                     {
@@ -307,6 +331,7 @@ public static class SafeGameInspector
         }
 
         var malformed = false;
+        var partial = false;
         long totalBytes = 0;
         try
         {
@@ -318,9 +343,9 @@ public static class SafeGameInspector
             {
                 if (files.Count >= pLimits.MaxEntries)
                 {
-                    malformed = true;
-                    diagnostics.Add(EngineInspectionDiagnostic.Error(
-                        "inspect.archive-entry-limit", "The archive exceeded the inspection entry limit."));
+                    partial = true;
+                    diagnostics.Add(EngineInspectionDiagnostic.Info(
+                        "inspect.archive-entry-limit", "The archive exceeded the inspection entry budget; results remain advisory."));
                     break;
                 }
                 if (string.IsNullOrEmpty(entry.Name))
@@ -369,7 +394,7 @@ public static class SafeGameInspector
         }
 
         return PluginResult<GameInspectionSnapshot>.Succeeded(
-            CreateSnapshot(pArchivePath, true, malformed, files, diagnostics));
+            CreateSnapshot(pArchivePath, true, malformed, partial, files, diagnostics));
     }
 
     private static void AddFile(
@@ -432,7 +457,18 @@ public static class SafeGameInspector
         Dictionary<string, InspectedGameFile> pFiles,
         List<EngineInspectionDiagnostic> pDiagnostics)
     {
-        return new GameInspectionSnapshot(pSourcePath, pArchive, pMalformed, pFiles, pDiagnostics);
+        return new GameInspectionSnapshot(pSourcePath, pArchive, pMalformed, false, pFiles, pDiagnostics);
+    }
+
+    private static GameInspectionSnapshot CreateSnapshot(
+        string pSourcePath,
+        bool pArchive,
+        bool pMalformed,
+        bool pPartial,
+        Dictionary<string, InspectedGameFile> pFiles,
+        List<EngineInspectionDiagnostic> pDiagnostics)
+    {
+        return new GameInspectionSnapshot(pSourcePath, pArchive, pMalformed, pPartial, pFiles, pDiagnostics);
     }
 
     private static bool TryNormalizeArchivePath(string pPath, out string pRelativePath)
@@ -701,6 +737,11 @@ public sealed class PluginGameDetector
         {
             diagnostics.Add(PluginDiagnostic.Warning(
                 "detection.malformed-input", "Inspection found malformed or bounded-out input; results are advisory only."));
+        }
+        else if (snapshot.IsPartial)
+        {
+            diagnostics.Add(PluginDiagnostic.Info(
+                "detection.partial-scan", "The source exceeded the inspection entry budget and was scanned partially; detection evidence remains valid for the covered files."));
         }
 
         return new EngineDetectionReport

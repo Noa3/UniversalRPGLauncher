@@ -1,7 +1,9 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using Godot;
+using UniversalRPG.GameDetectorNs;
 using UniversalRPG.Plugins;
 using UniversalRPG.Tests.Framework;
 
@@ -16,6 +18,7 @@ public partial class TestPluginDetection : TestBase
     {
         DirAccess.MakeDirRecursiveAbsolute(TempBase);
         CreateRm95("RM95");
+        WriteText(TempBase.PathJoin("Dante98/DANTE98.MRK"), "DANTE98 research fixture");
         WriteText(TempBase.PathJoin("RM95Weak/RPG95.exe"), "metadata only");
         CreateLcf("RM2K", "RM2000");
         CreateLcf("RM2K3", "RM2003");
@@ -50,6 +53,7 @@ public partial class TestPluginDetection : TestBase
     public void Test_DetectRepresentativeLegacyAndModernEngines()
     {
         AssertEq(Analyze("RM95").SelectedCandidate?.EngineId, EnginePluginIds.RpgMaker95);
+        AssertEq(Analyze("Dante98").SelectedCandidate?.EngineId, EnginePluginIds.Dante98);
         AssertEq(Analyze("RM2K").SelectedCandidate?.EngineId, EnginePluginIds.RpgMaker2000);
         AssertEq(Analyze("RM2K3").SelectedCandidate?.EngineId, EnginePluginIds.RpgMaker2003);
         AssertEq(Analyze("RMXP").SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerXp);
@@ -74,6 +78,25 @@ public partial class TestPluginDetection : TestBase
 
         var oversized = Analyze("MZOversized");
         AssertTrue(oversized.SelectedCandidate == null || oversized.SelectedCandidate.EngineId != EnginePluginIds.RpgMakerMz);
+    }
+
+    public void Test_MvMetadataIsBoundedAndReportsEncryptedAssets()
+    {
+        var system = new InspectedGameFile("data/System.json", 27,
+            System.Text.Encoding.UTF8.GetBytes("{\"gameTitle\":\"MV Fixture\"}"), false, false);
+        var encrypted = new InspectedGameFile("img/system/Window.png.rpgmvp", 0,
+            Array.Empty<byte>(), false, false);
+        var snapshot = new GameInspectionSnapshot("mv-fixture", false, false,
+            new System.Collections.Generic.Dictionary<string, InspectedGameFile>
+            {
+                [system.RelativePath] = system,
+                [encrypted.RelativePath] = encrypted,
+            }, new System.Collections.Generic.List<EngineInspectionDiagnostic>());
+        var metadata = RpgMakerMvPlugin.ExtractMetadata(snapshot);
+        AssertTrue(metadata != null);
+        AssertEq(metadata!.GameTitle, "MV Fixture");
+        AssertTrue(metadata.HasEncryptedFiles);
+        AssertTrue(metadata.Diagnostics.Count == 1);
     }
 
     public void Test_AmbiguousAndUnknownResultsAreSafe()
@@ -206,10 +229,83 @@ public partial class TestPluginDetection : TestBase
         AssertTrue(report.SelectedCandidate == null);
     }
 
+    public void Test_Dante98DoesNotAliasGenericPc98Files()
+    {
+        WriteText(TempBase.PathJoin("GenericPc98/DANTE2"), "pc98 data");
+        var report = Analyze("GenericPc98");
+        AssertTrue(report.SelectedCandidate == null || report.SelectedCandidate.EngineId != EnginePluginIds.Dante98);
+    }
+
+    public void Test_Dante98FacadeEngineResolution()
+    {
+        WriteText(TempBase.PathJoin("DanteFacade/DANTE98.MRK"), "facade fixture");
+        var result = new GameDetector().Analyze(ProjectSettings.GlobalizePath(TempBase.PathJoin("DanteFacade")));
+        AssertEq(result.Engine, GameDetector.EngineType.Dante98);
+        AssertEq(result.GetEngineName(), "RPG Tsukūru Dante 98");
+    }
+
+    public void Test_PartialEntryBudgetDoesNotRefuseDetection()
+    {
+        var root = TempBase.PathJoin("PartialBudget");
+        WriteText(root.PathJoin("index.html"), "<!doctype html>");
+        WriteText(root.PathJoin("js/rpg_core.js"), "runtime metadata");
+        WriteText(root.PathJoin("data/System.json"), "{\"gameTitle\":\"Partial Budget\"}");
+        for (var index = 0; index < 50; index++)
+        {
+            WriteText(root.PathJoin($"audio/Bgm/track{index:D3}.ogg"), "pad");
+        }
+
+        var limitedDetector = new PluginGameDetector(
+            BuiltInEnginePluginCatalog.CreateDetectionRegistry(),
+            new GameInspectionLimits { MaxEntries = 40 });
+        var report = limitedDetector.Analyze(ProjectSettings.GlobalizePath(root));
+        AssertTrue(report.Inspection?.IsPartial ?? false, "entry budget marks the snapshot partial");
+        AssertFalse(report.IsMalformed, "partial scan is not malformed");
+        AssertEq(report.SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerMv);
+        AssertTrue(report.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "detection.partial-scan"),
+            "partial scan is reported diagnostically");
+
+        var selector = new EngineRuntimeSelector();
+        var selection = selector.Select(report, "windows");
+        AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine,
+            "selection still refuses MV (detection-only) but not for being malformed");
+    }
+
+    public void Test_MvMetadataTitleIgnoresNestedGameTitleKeys()
+    {
+        // The nested "gameTitle" appears earlier in the document than the real
+        // top-level one, so a naive first-match regex would pick the trap value.
+        var system = new InspectedGameFile("data/System.json", 0,
+            System.Text.Encoding.UTF8.GetBytes(
+                "{\"sounds\":{\"gameTitle\":\"Nested Trap\"},\"gameTitle\":\"Top Level Title\",\"title\":\"Other\"}"), false, false);
+        var snapshot = new GameInspectionSnapshot("mv-nested-fixture", false, false,
+            new System.Collections.Generic.Dictionary<string, InspectedGameFile>
+            {
+                [system.RelativePath] = system,
+            }, new System.Collections.Generic.List<EngineInspectionDiagnostic>());
+        var metadata = RpgMakerMvPlugin.ExtractMetadata(snapshot);
+        AssertTrue(metadata != null, "MV metadata parses the nested-key fixture");
+        AssertEq(metadata!.GameTitle, "Top Level Title", "top-level gameTitle wins over a nested one");
+
+        // The shared detection title helper (used by WebRpgPlugin.Detect for both
+        // MV and MZ candidate titles) must resolve the top-level key too. Verify it
+        // end-to-end through a real on-disk MV fixture so JsonTitle is exercised, not
+        // just the standalone metadata API above.
+        var webRoot = TempBase.PathJoin("MvNestedWeb");
+        WriteText(webRoot.PathJoin("index.html"), "<!doctype html>");
+        WriteText(webRoot.PathJoin("js/rpg_core.js"), "runtime metadata");
+        WriteText(webRoot.PathJoin("data/System.json"),
+            "{\"sounds\":{\"gameTitle\":\"Nested Trap\"},\"gameTitle\":\"Top Level Title\",\"title\":\"Other\"}");
+        var webReport = Analyze("MvNestedWeb");
+        AssertEq(webReport.SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerMv);
+        AssertEq(webReport.SelectedCandidate?.Title, "Top Level Title",
+            "detection candidate title comes from the top-level gameTitle");
+    }
+
     public void Test_BuiltInMetadataUsesStableIndependentEngineRanges()
     {
         var plugins = BuiltInEnginePluginCatalog.CreatePlugins();
-        AssertEq(plugins.Count, 10);
+        AssertEq(plugins.Count, 11);
         foreach (var plugin in plugins)
         {
             AssertTrue(plugin.Metadata.Validate().Success, $"Metadata validates for {plugin.Metadata.Id}");

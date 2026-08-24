@@ -26,6 +26,8 @@ public sealed class RgssRuntimeInfo
     public int InspectedFileCount { get; init; }
     public bool IsArchiveSource { get; init; }
     public bool HasScriptPayload { get; init; }
+    public string ExpectedSystemDataPath { get; init; } = "";
+    public bool HasSystemData { get; init; }
 
     public int DataFileCount => DataFilePaths.Count;
 }
@@ -42,6 +44,7 @@ public sealed class RgssEngineRuntime : IEngineRuntime
     private readonly string _runtimePrefix;
     private readonly string _dataExtension;
     private readonly string _archiveExtension;
+    private readonly string _systemDataPath;
     private readonly PluginGameInfo _game;
     private readonly VirtualClock _clock = new();
 
@@ -58,6 +61,13 @@ public sealed class RgssEngineRuntime : IEngineRuntime
         _runtimePrefix = pRuntimePrefix ?? "";
         _dataExtension = pDataExtension ?? "";
         _archiveExtension = pArchiveExtension ?? "";
+        _systemDataPath = _generation switch
+        {
+            "xp" => "Data/System.rxdata",
+            "vx" => "Data/System.rvdata",
+            "vx-ace" => "Data/System.rvdata2",
+            _ => ""
+        };
         _game = pGame ?? throw new ArgumentNullException(nameof(pGame));
     }
 
@@ -131,6 +141,9 @@ public sealed class RgssEngineRuntime : IEngineRuntime
             var name = Path.GetFileName(pFile.RelativePath);
             return name.StartsWith("Scripts.", StringComparison.OrdinalIgnoreCase);
         });
+        var hasSystemData = files.Any(pFile =>
+            GameInspectionSnapshot.NormalizeRelativePath(pFile.RelativePath)
+                .Equals(_systemDataPath, StringComparison.OrdinalIgnoreCase));
         var libraryName = ReadIniValue(snapshot, "Library");
         var runtimeVersion = ParseRuntimeVersion(Path.GetFileName(runtimeFile.RelativePath));
         if (!string.IsNullOrEmpty(libraryName)
@@ -159,6 +172,8 @@ public sealed class RgssEngineRuntime : IEngineRuntime
             InspectedFileCount = files.Count,
             IsArchiveSource = snapshot.IsArchive,
             HasScriptPayload = scriptPayload,
+            ExpectedSystemDataPath = _systemDataPath,
+            HasSystemData = hasSystemData,
         };
         State = PluginRuntimeState.Initialized;
 
@@ -169,11 +184,25 @@ public sealed class RgssEngineRuntime : IEngineRuntime
                 $"Initialized bounded {_generation} RGSS backend with {files.Count} inspected files; Ruby, Game.exe, RGSS DLLs, and external runtimes were not executed.",
                 _pluginId),
         };
+        if (snapshot.IsPartial)
+        {
+            diagnostics.Add(PluginDiagnostic.Warning(
+                "rgss.partial-scan",
+                $"The project exceeded the bounded inspection entry budget ({files.Count} files scanned); metadata is advisory for files outside the covered set.",
+                _pluginId));
+        }
         if (scriptPayload)
         {
             diagnostics.Add(PluginDiagnostic.Info(
                 "rgss.scripts-inspected-only",
                 "RGSS script payload metadata was detected but was not loaded or executed.",
+                _pluginId));
+        }
+        if (!hasSystemData)
+        {
+            diagnostics.Add(PluginDiagnostic.Warning(
+                "rgss.system-data-missing",
+                $"Expected {_systemDataPath} for {_generation}, but it was not present in the bounded project snapshot; runtime initialization remains metadata-only.",
                 _pluginId));
         }
         if (!string.IsNullOrEmpty(archivePath))
