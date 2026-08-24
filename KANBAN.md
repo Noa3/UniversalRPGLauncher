@@ -21,13 +21,13 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-010 | 0 | DONE | Validate LCF reader/parser against legal real-world RM2K/2003 fixtures | K-001 |
 | K-011 | 0 | DONE | Implement LMT map-tree parser with bounded BER/structure handling | K-010 |
 | K-012 | 0 | DONE | Expand LDB decoding into typed core database sections | K-010 |
-|| K-013 | 0 | DONE | Expand LMU event/page metadata decoding without executing commands | K-010 |
+| K-013 | 0 | DONE | Expand LMU event/page metadata decoding without executing commands | K-010 |
 | K-014 | 0 | DONE | Preserve unknown LCF fields/chunks for diagnostics and forward compatibility | K-010 |
 | K-015 | 0 | DONE | Decode remaining LDB array sections into typed models | K-012 |
 | K-016 | 0 | DONE | Prioritized RPG Maker MZ detection and bounded metadata inspection | K-004 |
 | K-017 | 2 | DONE | Bounded MZ data-directory metadata inspection (Actors/MapInfos/encrypted assets) | K-016 |
 | K-018 | 2 | DONE | Complete MZ database inventory (section counts, system name arrays, map files) | K-017 |
-| K-019 | 1 | VERIFY | ConditionalBranch condition evaluation (switch/variable comparisons) | K-023 |
+| K-019 | 1 | DONE | ConditionalBranch condition evaluation (switch/variable comparisons) | K-023 |
 | K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
 | K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
@@ -238,7 +238,7 @@ User-directed MZ slice (extends the K-016 line); stays detection/metadata-only.
 - Added `TestMzDataDirectory` suite with five tests over synthetic MZ/MV game folders; suite total `205/205`.
 - `bash scripts/validate.sh` — passed; `203/203` C# tests and smoke validation.
 
-### K-019 — ConditionalBranch condition evaluation (VERIFY)
+### K-019 — ConditionalBranch condition evaluation (DONE)
 
 Implements EasyRPG `CommandConditionalBranch` (code 12010) semantics for the two condition types the deterministic core can model.
 

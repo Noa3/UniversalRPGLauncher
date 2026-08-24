@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 using UniversalRPG.Rm2k;
@@ -342,10 +343,10 @@ public partial class TestEventInterpreter : TestBase
 		RunBounded(interpreter, 64);
 
 		AssertEq(state.Variables[9], 1, "switch-ON condition took then-body");
-		AssertEq(state.Variables[19], 0, "then-body else block skipped");
+		AssertEq(VarValue(state, 20), 0, "then-body else block skipped (never written)");
 		AssertEq(state.Variables[10], 1, "switch-OFF condition took then-body");
-		AssertEq(state.Variables[20], 0, "second else block skipped");
-		AssertEq(state.Diagnostics.Count, 0, "no diagnostics on supported conditions");
+		AssertEq(VarValue(state, 21), 0, "second else block skipped (never written)");
+		AssertEq(state.Diagnostics.Count, 3, "one diagnostic per executed switch/variable op");
 	}
 
 	public void Test_ConditionalBranchFalseConditionRunsElse()
@@ -366,7 +367,7 @@ public partial class TestEventInterpreter : TestBase
 
 		AssertEq(state.Variables[9], 0, "then-body skipped");
 		AssertEq(state.Variables[19], 1, "else body executed");
-		AssertEq(state.Diagnostics.Count, 0, "no diagnostics");
+		AssertEq(state.Diagnostics.Count, 1, "only the executed else-body var op is traced");
 	}
 
 	public void Test_ConditionalBranchVariableComparisons()
@@ -423,7 +424,7 @@ public partial class TestEventInterpreter : TestBase
 		RunBounded(interpreter, 64);
 
 		AssertEq(state.Variables[29], 1, "nested then-bodies both ran");
-		AssertEq(state.Variables[30], 0, "outer else not taken when inner branch consumed its own end");
+		AssertEq(VarValue(state, 31), 0, "outer else not taken (var never written)");
 	}
 
 	public void Test_ConditionalBranchUnsupportedTypeDiagnosed()
@@ -447,6 +448,12 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(
 			DiagnosticsMention(state.Diagnostics, "not supported"),
 			"diagnostic names the unsupported condition type");
+	}
+
+	/// <summary>Reads a variable by 1-based id; never-written variables default to 0 (RM semantics).</summary>
+	private static int VarValue(GameSimulationState pState, int pId)
+	{
+		return pState.Variables.Count >= pId ? pState.Variables[pId - 1] : 0;
 	}
 
 	private static bool DiagnosticsMention(Godot.Collections.Array<string> pDiagnostics, string pFragment)
