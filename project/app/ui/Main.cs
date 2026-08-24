@@ -47,6 +47,7 @@ public partial class Main : Control
 	private Label _detailsPath = null!;
 	private Label _detailsEvidence = null!;
 	private Label _runtimeState = null!;
+	private Label _presentationState = null!;
 	private Button _launchButton = null!;
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
@@ -236,6 +237,10 @@ public partial class Main : Control
 		_runtimeState = new Label();
 		_runtimeState.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		details.AddChild(_runtimeState);
+		_presentationState = new Label();
+		_presentationState.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		_presentationState.AddThemeColorOverride("font_color", ColorAccent);
+		details.AddChild(_presentationState);
 		_launchButton = new Button();
 		_launchButton.Text = Tr("ACTION_NOT_PLAYABLE");
 		_launchButton.CustomMinimumSize = new Vector2(0, 50);
@@ -340,6 +345,7 @@ public partial class Main : Control
 		_detailsPath.Text = _library.RootPath;
 		_detailsEvidence.Text = Tr("DETAIL_DETECTION_SUPPORT");
 		_runtimeState.Text = Tr("DETAIL_RUNTIME_DEVELOPMENT");
+		_presentationState.Text = "";
 		_launchButton.Disabled = true;
 		_launchButton.Text = Tr("ACTION_NOT_PLAYABLE");
 	}
@@ -375,7 +381,28 @@ public partial class Main : Control
 			return;
 		}
 		_status.Text = $"Runtime running: {_launcher.ActiveRuntime?.GetType().Name}";
+		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
+		{
+			var presentation = rm2k.Presentation;
+			if (presentation.MessageVisible)
+			{
+				_presentationState.Text = $"Message:\n{presentation.MessageText}";
+			}
+			else if (presentation.ActiveChoice != null)
+			{
+				_presentationState.Text = $"Choice: {string.Join(" / ", presentation.ActiveChoice.Options)}";
+			}
+			else if (presentation.PendingInputVariableId != null)
+			{
+				_presentationState.Text = $"Input variable {presentation.PendingInputVariableId}";
+			}
+			else
+			{
+				_presentationState.Text = "Runtime presentation idle";
+			}
+		}
 	}
+
 
 	private void LaunchSelectedGame()
 	{
