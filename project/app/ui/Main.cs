@@ -56,6 +56,7 @@ public partial class Main : Control
 	private Button _submitInputButton = null!;
 	private string _choiceSignature = "";
 	private Button _launchButton = null!;
+	private Button _stopButton = null!;
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
 	private OptionButton _languageMenu = null!;
@@ -279,6 +280,11 @@ public partial class Main : Control
 		_launchButton.AddThemeStyleboxOverride("hover", MakeStyleBox(ColorAccent.Lightened(0.08f), Colors.White, 1, 9));
 		_launchButton.Pressed += LaunchSelectedGame;
 		details.AddChild(_launchButton);
+		_stopButton = new Button();
+		_stopButton.Text = "Stop runtime";
+		_stopButton.Disabled = true;
+		_stopButton.Pressed += StopActiveRuntime;
+		details.AddChild(_stopButton);
 
 		_status = new Label();
 		_status.AddThemeColorOverride("font_color", ColorMuted);
@@ -492,8 +498,11 @@ public partial class Main : Control
 	{
 		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running)
 		{
+			_stopButton.Disabled = true;
+			_presentationControls.Visible = false;
 			return;
 		}
+		_stopButton.Disabled = false;
 		var update = _launcher.Update(pDelta);
 		if (!update.Success)
 		{
@@ -586,6 +595,14 @@ public partial class Main : Control
 		{
 			runtime.Presentation.SetInputValue((int)_inputSpinBox.Value);
 		}
+	}
+
+	private void StopActiveRuntime()
+	{
+		var result = _launcher.Stop();
+		_status.Text = result.Success ? "Runtime stopped." : result.Error?.Message ?? "Runtime stop failed.";
+		_stopButton.Disabled = true;
+		_presentationControls.Visible = false;
 	}
 
 	private void LaunchSelectedGame()
