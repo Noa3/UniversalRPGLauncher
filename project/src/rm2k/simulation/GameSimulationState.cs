@@ -27,6 +27,10 @@ public sealed class GameSimulationState
     public int FrameCount { get; set; } = 0;
     public int Steps { get; set; } = 0;
     public int FrameRate { get; set; } = 60;
+    public bool Timer1Active { get; private set; }
+    public bool Timer2Active { get; private set; }
+    public int Timer1Seconds { get; private set; }
+    public int Timer2Seconds { get; private set; }
     public bool IsPaused { get; set; }
     public bool IsMenuOpen { get; set; }
     public bool IsSaveEnabled { get; set; } = true;
@@ -96,6 +100,51 @@ public sealed class GameSimulationState
         Diagnostics.Clear();
     }
 
+    private int _timer1TickRemainder;
+    private int _timer2TickRemainder;
+
+    public void SetTimer(int pTimerId, int pSeconds)
+    {
+        if (pTimerId is not (1 or 2) || pSeconds < 0 || pSeconds > 86400)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pSeconds));
+        }
+        if (pTimerId == 1) { Timer1Seconds = pSeconds; Timer1Active = true; _timer1TickRemainder = 0; }
+        else { Timer2Seconds = pSeconds; Timer2Active = true; _timer2TickRemainder = 0; }
+    }
+
+    public void StopTimer(int pTimerId)
+    {
+        if (pTimerId == 1) Timer1Active = false;
+        else if (pTimerId == 2) Timer2Active = false;
+        else throw new ArgumentOutOfRangeException(nameof(pTimerId));
+    }
+
+    public void AdvanceTimers(int pSimulationTicks)
+    {
+        if (pSimulationTicks < 0) throw new ArgumentOutOfRangeException(nameof(pSimulationTicks));
+        var timer1Seconds = Timer1Seconds;
+        var timer1Active = Timer1Active;
+        AdvanceTimer(ref timer1Seconds, ref timer1Active, ref _timer1TickRemainder, pSimulationTicks);
+        Timer1Seconds = timer1Seconds;
+        Timer1Active = timer1Active;
+        var timer2Seconds = Timer2Seconds;
+        var timer2Active = Timer2Active;
+        AdvanceTimer(ref timer2Seconds, ref timer2Active, ref _timer2TickRemainder, pSimulationTicks);
+        Timer2Seconds = timer2Seconds;
+        Timer2Active = timer2Active;
+    }
+
+    private static void AdvanceTimer(ref int pSeconds, ref bool pActive, ref int pRemainder, int pTicks)
+    {
+        if (!pActive) return;
+        pRemainder += pTicks;
+        var elapsedSeconds = pRemainder / 60;
+        pRemainder %= 60;
+        pSeconds = Math.Max(0, pSeconds - elapsedSeconds);
+        if (pSeconds == 0) pActive = false;
+    }
+
     public void ConfigureMap(int pMapId, int pWidth, int pHeight, IEnumerable<bool> pPassableTiles)
     {
         if (pMapId < 0 || pMapId > MaxMapId || pWidth <= 0 || pHeight <= 0)
@@ -158,6 +207,7 @@ public sealed class GameSimulationState
     {
         MapId = 0; MapX = 0; MapY = 0; FacingDirection = 2;
         Gold = 0; FrameCount = 0; Steps = 0;
+        Timer1Active = false; Timer2Active = false; Timer1Seconds = 0; Timer2Seconds = 0; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; ActiveActorIndex = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear();

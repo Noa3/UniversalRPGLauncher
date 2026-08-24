@@ -101,6 +101,28 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun) != null);
 	}
 
+	public void Test_EventPageSelectorEvaluatesDeterministicTimerConditions()
+	{
+		var state = new GameSimulationState();
+		state.SetTimer(1, 2);
+		state.SetTimer(2, 4);
+		var eventData = new Rm2kMap.Event(13, 1, 1);
+		eventData.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Autorun,
+			Conditions = new Dictionary<string, object>
+			{
+				["timer_enabled"] = true, ["timer_sec"] = 2,
+				["timer2_enabled"] = true, ["timer2_sec"] = 4,
+			},
+		});
+
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun) != null);
+		state.AdvanceTimers(60);
+		AssertTrue(state.Timer1Seconds == 1);
+		AssertTrue(state.Timer2Seconds == 3);
+	}
+
 	public void Test_EventSchedulerRunsAutorunInterpreter()
 	{
 		var state = new GameSimulationState();

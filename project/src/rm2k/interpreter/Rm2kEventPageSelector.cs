@@ -60,6 +60,15 @@ public static class Rm2kEventPageSelector
                 || !Compare(ReadVariable(pState, variableId), expectedValue, conditions)) return false;
         }
 
+        if (TryBool(conditions, "timer_enabled", out var timerEnabled) && timerEnabled)
+        {
+            if (!TryInt(conditions, "timer_sec", out var timerLimit) || !pState.Timer1Active || pState.Timer1Seconds > timerLimit) return false;
+        }
+        if (TryBool(conditions, "timer2_enabled", out var timer2Enabled) && timer2Enabled)
+        {
+            if (!TryInt(conditions, "timer2_sec", out var timer2Limit) || !pState.Timer2Active || pState.Timer2Seconds > timer2Limit) return false;
+        }
+
         foreach (var condition in conditions)
         {
             if (condition.Key is "switch_id" or "switch_value" or "switch_a_enabled" or "switch_a_id"
@@ -76,12 +85,8 @@ public static class Rm2kEventPageSelector
                 if (actorEnabled && (!TryInt(conditions, "actor_id", out var actorId) || actorId < 1 || !pState.PartyMemberIds.Contains(actorId))) return false;
                 continue;
             }
-            if (condition.Key is "item_id" or "actor_id") continue;
-            if (condition.Key is "timer_enabled" or "timer2_enabled")
-            {
-                if (condition.Value is bool enabled && enabled) return false;
-                continue;
-            }
+            if (condition.Key is "item_id" or "actor_id" or "timer_sec" or "timer2_sec") continue;
+            if (condition.Key is "timer_enabled" or "timer2_enabled") continue;
             return false;
         }
         return true;

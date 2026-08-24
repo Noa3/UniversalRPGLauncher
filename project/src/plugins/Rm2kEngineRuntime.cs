@@ -134,6 +134,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
         if (elapsedTicks > 0)
         {
             Simulation.FrameCount += elapsedTicks;
+            Simulation.AdvanceTimers(elapsedTicks);
             for (var tick = 0; tick < elapsedTicks; tick++)
             {
                 _eventScheduler.ExecuteFrame();
