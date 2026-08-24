@@ -48,6 +48,7 @@ public partial class Main : Control
 	private Label _detailsEvidence = null!;
 	private Label _runtimeState = null!;
 	private Label _presentationState = null!;
+	private Rm2kMapPreview _mapPreview = null!;
 	private Button _launchButton = null!;
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
@@ -230,6 +231,10 @@ public partial class Main : Control
 		_detailsPath.AddThemeColorOverride("font_color", ColorMuted.Darkened(0.08f));
 		_detailsPath.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		details.AddChild(_detailsPath);
+		_mapPreview = new Rm2kMapPreview();
+		_mapPreview.CustomMinimumSize = new Vector2(0, 180);
+		_mapPreview.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		details.AddChild(_mapPreview);
 		_detailsEvidence = new Label();
 		_detailsEvidence.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		_detailsEvidence.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -299,6 +304,7 @@ public partial class Main : Control
 			.Replace("{engine}", detection.GetEngineName())
 			.Replace("{confidence}", detection.GetConfidenceString());
 		_detailsPath.Text = _selectedGame.Path;
+		_mapPreview.SetMapData(null);
 		var facts = new List<string>
 		{
 			$"Plugin: {(_selectedGame.SelectedPluginId == "" ? "none" : _selectedGame.SelectedPluginId)}",
@@ -400,6 +406,8 @@ public partial class Main : Control
 			{
 				_presentationState.Text = "Runtime presentation idle";
 			}
+			_mapPreview.SetMapData(rm2k.CurrentMapData);
+			_mapPreview.SetPlayerPosition(rm2k.Simulation.MapX, rm2k.Simulation.MapY);
 			if (rm2k.CurrentMapData != null && rm2k.CurrentMapData.TryGetValue("width", out var width)
 				&& rm2k.CurrentMapData.TryGetValue("height", out var height))
 			{

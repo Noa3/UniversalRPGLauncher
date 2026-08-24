@@ -36,7 +36,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-030 | 1 | DONE | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | DONE | Character/event sprite renderer and camera | K-030 |
 | K-032 | 1 | IN PROGRESS | Message/window/picture/choice/input presentation and runtime/UI handoff | K-030,K-021 |
-| K-033 | 1 | IN PROGRESS | Visible RM2K map/framebuffer and sprite overlay in runtime UI | K-030,K-031,K-032 |
+| K-033 | 1 | DONE | Visible RM2K map/framebuffer and sprite overlay in runtime UI | K-030,K-031,K-032 |
 | K-040 | 1 | BACKLOG | RTP registry/resolver without bundled proprietary RTP data | K-012 |
 | K-041 | 1 | BACKLOG | Missing-asset diagnostics and per-game RTP profile | K-040 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
