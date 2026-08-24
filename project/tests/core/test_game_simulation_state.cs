@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Godot;
 using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
@@ -201,5 +202,26 @@ public partial class TestGameSimulationState : TestBase
 		var restored = new GameSimulationState();
 		AssertFalse(Rm2kSimulationSaveCodec.TryRestore("{not-json", restored, out _));
 		AssertFalse(Rm2kSimulationSaveCodec.TryRestore(new string('x', Rm2kSimulationSaveCodec.MaxPayloadBytes + 1), restored, out _));
+	}
+
+	public void Test_SaveCodecWritesAndReadsBoundedSaveDirectorySlot()
+	{
+		var directory = ProjectSettings.GlobalizePath("user://rm2k-save-slots");
+		try
+		{
+			if (Directory.Exists(directory)) Directory.Delete(directory, true);
+			_state.ConfigureMap(2, 1, 1, new[] { true });
+			_state.Gold = 99;
+			AssertTrue(Rm2kSimulationSaveCodec.TryWriteFile(directory, "slot1", _state, out var writeError));
+			AssertEq(writeError, "");
+			var restored = new GameSimulationState();
+			AssertTrue(Rm2kSimulationSaveCodec.TryReadFile(directory, "slot1", restored, out var readError));
+			AssertEq(readError, ""); AssertEq(restored.Gold, 99);
+			AssertFalse(Rm2kSimulationSaveCodec.TryWriteFile(directory, "../escape", _state, out _));
+		}
+		finally
+		{
+			if (Directory.Exists(directory)) Directory.Delete(directory, true);
+		}
 	}
 }

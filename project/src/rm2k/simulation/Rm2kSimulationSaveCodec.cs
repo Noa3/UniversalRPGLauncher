@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.Json;
 
 namespace UniversalRPG.Rm2k.Simulation;
@@ -70,6 +71,150 @@ public static class Rm2kSimulationSaveCodec
         catch (JsonException) { pError = "Save payload is not valid JSON."; return false; }
         catch (ArgumentException exception) { pError = exception.Message; return false; }
         catch (InvalidOperationException exception) { pError = exception.Message; return false; }
+    }
+
+    /// <summary>
+    /// Writes one runtime-owned JSON slot below the explicitly supplied directory.
+    /// This is not an implementation of the original RM2K/RM2K3 LSD format.
+    /// </summary>
+    public static bool TryWriteFile(string pSaveDirectory, string pSlot, GameSimulationState pState, out string pError)
+    {
+        pError = "";
+        if (!TryResolveSlot(pSaveDirectory, pSlot, out var path, out pError))
+        {
+            return false;
+        }
+
+        var temporary = path + ".tmp";
+        try
+        {
+            ArgumentNullException.ThrowIfNull(pState);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(temporary, Serialize(pState), System.Text.Encoding.UTF8);
+            File.Move(temporary, path, true);
+            return true;
+        }
+        catch (IOException exception)
+        {
+            pError = $"Could not write save slot: {exception.Message}";
+            return false;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            pError = $"Could not write save slot: {exception.Message}";
+            return false;
+        }
+        catch (ArgumentException exception)
+        {
+            pError = exception.Message;
+            return false;
+        }
+        catch (InvalidOperationException exception)
+        {
+            pError = exception.Message;
+            return false;
+        }
+        finally
+        {
+            TryDeleteTemporary(temporary);
+        }
+    }
+
+    /// <summary>Reads one bounded runtime-owned JSON slot without executing its contents.</summary>
+    public static bool TryReadFile(string pSaveDirectory, string pSlot, GameSimulationState pState, out string pError)
+    {
+        pError = "";
+        if (!TryResolveSlot(pSaveDirectory, pSlot, out var path, out pError))
+        {
+            return false;
+        }
+
+        try
+        {
+            ArgumentNullException.ThrowIfNull(pState);
+            if (!File.Exists(path))
+            {
+                pError = "Save slot does not exist.";
+                return false;
+            }
+            return TryRestore(File.ReadAllText(path), pState, out pError);
+        }
+        catch (IOException exception)
+        {
+            pError = $"Could not read save slot: {exception.Message}";
+            return false;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            pError = $"Could not read save slot: {exception.Message}";
+            return false;
+        }
+        catch (ArgumentException exception)
+        {
+            pError = exception.Message;
+            return false;
+        }
+    }
+
+    private static bool TryResolveSlot(string pSaveDirectory, string pSlot, out string pPath, out string pError)
+    {
+        pPath = "";
+        pError = "";
+        if (string.IsNullOrWhiteSpace(pSaveDirectory) || string.IsNullOrWhiteSpace(pSlot)
+            || pSlot.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || pSlot is "." or "..")
+        {
+            pError = "Save directory or slot name is invalid.";
+            return false;
+        }
+
+        try
+        {
+            var root = Path.GetFullPath(pSaveDirectory);
+            var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            var candidate = Path.GetFullPath(Path.Combine(root, pSlot + ".json"));
+            if (!candidate.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                pError = "Save slot escapes the save directory.";
+                return false;
+            }
+            pPath = candidate;
+            return true;
+        }
+        catch (ArgumentException exception)
+        {
+            pError = exception.Message;
+            return false;
+        }
+        catch (NotSupportedException exception)
+        {
+            pError = exception.Message;
+            return false;
+        }
+        catch (PathTooLongException exception)
+        {
+            pError = exception.Message;
+            return false;
+        }
+    }
+
+    private static void TryDeleteTemporary(string pPath)
+    {
+        try
+        {
+            if (File.Exists(pPath))
+            {
+                File.Delete(pPath);
+            }
+        }
+        catch (IOException)
+        {
+            // The primary write error is more useful than cleanup failure.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The primary write error is more useful than cleanup failure.
+        }
     }
 
     private static SaveData Capture(GameSimulationState pState)

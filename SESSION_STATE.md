@@ -1,16 +1,16 @@
 # UniversalRPG Autonomous Session State
 
-> Updated: 2026-08-24
+> Updated: 2026-08-24 10:34
 > Purpose: small durable checkpoint for Hermes/other autonomous agents.
 
 ## Current card
 
-|K-032 remains IN PROGRESS; K-033 through K-039, K-042/K-054 are DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` now gate in-memory save snapshots and local debug mutations. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; their debug tools are off by default and reject mutations until explicit opt-in. Detection-only engines expose neither runtime nor tools. No original game save is read or written by this slice.|
+|K-032 remains IN PROGRESS; K-033 through K-039, K-042/K-055 are DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-055 adds confined runtime-owned JSON slot-file persistence with traversal rejection and temporary-file replacement. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default. Original `LSD` compatibility and save-menu UI remain separate work.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `225/225`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `244/244`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
 
 ## Layout note (2026-08-23)
 
@@ -57,6 +57,14 @@ Godot project files (`project.godot`, csproj/sln, app/, src/, tests/, assets/, l
 K-022, K-030, and K-031 are complete for their bounded slices. `GameSimulationState` supports bounded map configuration and movement. `VirtualFramebuffer`/`Rm2kRendererAdapter` assemble validated lower/upper layers; `Rm2kSpriteAdapter` and `Rm2kCameraState` provide bounded player/event descriptors and camera state without invoking foreign game code.
 
 Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure` is an unencrypted RPG Maker MZ tree (`index.html`, `js/rmmz_core.js`, `js/rmmz_managers.js`, `data/System.json`, title `Skie's Inflatable Adventures (v0.30.001)`, 7,039 files). `D:\NextCloud\Games\PornGames\IntheHamletofLoliBigtits_v103a` is not an MZ web tree at its root: no `index.html`, `js/rmmz_*`, or `data/System.json`; Japanese locale remains unconfirmed and no encrypted marker was found in the bounded filename scan. Both were inspected detection-only; no game code executed.
+
+## Completed K-055
+
+- Added bounded `TryWriteFile`/`TryReadFile` APIs to the JSON-only `Rm2kSimulationSaveCodec` for runtime-owned slot files.
+- Slot paths are confined under the caller-supplied directory; invalid names and traversal are rejected before I/O.
+- Writes serialize to a temporary file and replace the target; temporary cleanup is attempted after success/failure.
+- Regression coverage verifies slot round-trip, gold preservation, traversal rejection, and cleanup.
+- This does not parse or write original RM2K/RM2K3 `LSD` saves.
 
 ## Next action
 

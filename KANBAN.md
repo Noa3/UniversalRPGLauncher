@@ -1,6 +1,6 @@
 # UniversalRPG Autonomous Kanban
 
-> Updated: 2026-08-22
+> Updated: 2026-08-24
 > Owner: autonomous agent/Hermes
 > Ordering: lowest priority number first, then card ID.
 
@@ -57,6 +57,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-053 | 1 | DONE | Adaptive application render FPS without changing simulation Hz | K-036 |
 | K-052 | 1 | DONE | Add bounded JSON simulation save/load roundtrip | K-020 |
 | K-054 | 1 | DONE | Add capability-gated RM2K save/debug tool contracts | K-052 |
+| K-055 | 1 | DONE | Add bounded runtime-owned RM2K JSON save-directory slots | K-052 |
 | K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
 | K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |
@@ -347,6 +348,21 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - Extended `MzDataDirectoryResult` with `SectionCounts`, `SwitchNameCount`, `VariableNameCount`, and `MapFileCount`.
 - Added two inventory tests; malformed-JSON engine log lines from `Json.ParseString` on deliberately broken fixtures are expected and asserted via diagnostics.
 - `bash scripts/validate.sh` — passed; `205/205` C# tests and smoke validation.
+
+### K-055 — Bounded runtime-owned RM2K JSON save-directory slots
+
+**Acceptance criteria**
+- Write and read the existing bounded JSON simulation snapshot through an explicitly supplied save directory and slot name.
+- Reject empty/invalid slot names and path traversal without touching files outside the save directory.
+- Use a temporary file followed by replacement, clean up temporary files after the operation, and return I/O/validation failures as diagnostics.
+- Keep this separate from original RM2K/RM2K3 `LSD` compatibility; do not overwrite original game saves.
+
+**Validation evidence (2026-08-24)**
+- Added `TryWriteFile` and `TryReadFile` to `project/src/rm2k/simulation/Rm2kSimulationSaveCodec.cs`.
+- Added bounded slot round-trip/traversal regression coverage in `project/tests/core/test_game_simulation_state.cs`.
+- `dotnet build project/UniversalRPG.csproj --no-restore /p:RunAnalyzers=true /p:RunAnalyzersDuringBuild=true` — passed with 0 warnings and 0 errors.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `244/244` tests.
+- Original `LSD` parsing/writing and UI save-menu integration remain separate backlog work (`K-050`).
 
 ### K-023 — Verified RM2K/2003 command codes
 
