@@ -378,14 +378,71 @@ public partial class Main : Control
 	{
 		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running
 			|| _launcher.ActiveRuntime is not Rm2kEngineRuntime rm2k
-			|| rm2k.Presentation.MessageVisible
-			|| rm2k.Presentation.ActiveChoice != null
-			|| rm2k.Presentation.PendingInputVariableId != null)
+			|| pEvent is not InputEventKey keyEvent || !keyEvent.Pressed || keyEvent.Echo)
 		{
 			return;
 		}
-		if (pEvent is not InputEventKey keyEvent || !keyEvent.Pressed || keyEvent.Echo)
+		if (rm2k.Presentation.MessageVisible && keyEvent.Keycode is Key.Enter or Key.Space)
 		{
+			rm2k.Presentation.DismissMessage();
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (rm2k.Presentation.ActiveChoice != null)
+		{
+			var choice = rm2k.Presentation.ActiveChoice;
+			var index = choice.SelectedIndex < 0 ? 0 : choice.SelectedIndex;
+			if (keyEvent.Keycode is Key.Up or Key.Left) index--;
+			if (keyEvent.Keycode is Key.Down or Key.Right) index++;
+			if (keyEvent.Keycode is Key.Up or Key.Left or Key.Down or Key.Right)
+			{
+				index = Mathf.PosMod(index, choice.Options.Count);
+				choice.Select(index);
+				GetViewport().SetInputAsHandled();
+			}
+			else if (keyEvent.Keycode is Key.Enter or Key.Space)
+			{
+				if (choice.SelectedIndex < 0)
+				{
+					choice.Select(0);
+				}
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+		if (rm2k.Presentation.PendingInputVariableId != null)
+		{
+			if (keyEvent.Keycode == Key.Backspace)
+			{
+				var currentText = (rm2k.Presentation.InputValue ?? 0).ToString();
+				if (currentText.Length > 1)
+				{
+					rm2k.Presentation.SetInputValue(int.Parse(currentText[..^1]));
+				}
+				else
+				{
+					rm2k.Presentation.SetInputValue(0);
+				}
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+			if (keyEvent.Keycode is Key.Enter or Key.KpEnter)
+			{
+				rm2k.Presentation.SetInputValue(rm2k.Presentation.InputValue ?? 0);
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+			if (keyEvent.Unicode >= '0' && keyEvent.Unicode <= '9')
+			{
+				var current = rm2k.Presentation.InputValue ?? 0;
+				var digit = (int)(keyEvent.Unicode - '0');
+				var next = (long)current * 10 + digit;
+				if (next <= int.MaxValue)
+				{
+					rm2k.Presentation.SetInputValue((int)next);
+				}
+				GetViewport().SetInputAsHandled();
+			}
 			return;
 		}
 		var movement = keyEvent.Keycode switch

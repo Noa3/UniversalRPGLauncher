@@ -108,6 +108,11 @@ public sealed class PresentationState
 
     public bool SelectChoice(int pIndex) => ActiveChoice?.Select(pIndex) == true;
 
+    public void ClearChoice()
+    {
+        ActiveChoice = null;
+    }
+
     public bool ShowPicture(int pId, string pName, int pX, int pY, int pWidth, int pHeight)
     {
         if (pId <= 0 || pId > MaxPictures || string.IsNullOrWhiteSpace(pName) ||
