@@ -60,6 +60,8 @@ public partial class Main : Control
 
 	public override void _Ready()
 	{
+		ProcessMode = ProcessModeEnum.Always;
+		SetProcess(true);
 		LoadLocale();
 		BuildTheme();
 		BuildInterface();
@@ -358,6 +360,21 @@ public partial class Main : Control
 		}
 		_folderPath.Text = _library.RootPath;
 		RefreshLibrary();
+	}
+
+	public override void _Process(double pDelta)
+	{
+		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running)
+		{
+			return;
+		}
+		var update = _launcher.Update(pDelta);
+		if (!update.Success)
+		{
+			_status.Text = update.Error?.Message ?? "Runtime update failed.";
+			return;
+		}
+		_status.Text = $"Runtime running: {_launcher.ActiveRuntime?.GetType().Name}";
 	}
 
 	private void LaunchSelectedGame()

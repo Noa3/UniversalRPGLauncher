@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using UniversalRPG.Core;
 using UniversalRPG.Rm2k.Parser;
+using UniversalRPG.Rm2k.Presentation;
+using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Plugins;
 
@@ -31,6 +33,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime
     public Godot.Collections.Dictionary? DatabaseData { get; private set; }
     public Godot.Collections.Dictionary? MapTreeData { get; private set; }
     public Godot.Collections.Dictionary? CurrentMapData { get; private set; }
+    public PresentationState Presentation { get; } = new();
+    public GameSimulationState Simulation { get; } = new();
     public int SimulationTicks => _clock.GetSimulationTicks();
 
     public PluginOperationResult Initialize(EnginePluginRuntimeContext pContext)

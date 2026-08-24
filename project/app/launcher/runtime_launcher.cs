@@ -40,6 +40,9 @@ public partial class RuntimeLauncher : RefCounted
 	private readonly EngineRuntimeSelector _selector;
 	private EnginePluginHost? _activeHost;
 
+	public IEngineRuntime? ActiveRuntime => _activeHost?.Runtime;
+	public PluginRuntimeState ActiveRuntimeState => _activeHost?.State ?? PluginRuntimeState.NotStarted;
+
 	public RuntimeLauncher()
 		: this(BuiltInEnginePluginCatalog.CreateRuntimeRegistry())
 	{
@@ -49,6 +52,19 @@ public partial class RuntimeLauncher : RefCounted
 	{
 		_registry = pRegistry ?? throw new ArgumentNullException(nameof(pRegistry));
 		_selector = new EngineRuntimeSelector(_registry);
+	}
+
+	public PluginOperationResult Update(double pDeltaSeconds)
+	{
+		return _activeHost?.Update(pDeltaSeconds) ?? PluginOperationResult.Failed(PluginError.Create(
+			PluginErrorCode.InvalidLifecycleTransition,
+			"No runtime is active.",
+			pPhase: "update"));
+	}
+
+	public PluginOperationResult Stop()
+	{
+		return _activeHost?.Stop() ?? PluginOperationResult.Succeeded();
 	}
 
 	public SupportInfo GetSupport(GameLibrary.GameEntry pGame)
