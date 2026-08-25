@@ -5,12 +5,12 @@
 
 ## Current card
 
-|K-032 and K-040/K-041/K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-055 adds confined runtime-owned JSON slot-file persistence with traversal rejection and temporary-file replacement. K-040/K-041 add explicit RTP registry, bounded per-game metadata, and missing-asset diagnostics without bundled proprietary data. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default. Original `LSD` compatibility and save-menu UI remain separate work.|
+|K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `258/258`, exit 0, .NET build clean. The Godot project now lives under `project/`; validate.sh handles both.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `261/261`, exit 0, .NET build clean. The Godot project now lives under `project/`; validate.sh handles both.
 
 ## Cross-engine QA pass (t_1b2292d4) — completed 2026-08-24
 
@@ -88,9 +88,16 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Diagnostics use the explicit registry only and never open, parse, download, or execute RTP assets.
 - Profile metadata is not yet persisted into `GameLibrary` records; that remains a separate integration decision.
 
+## Completed K-050
+
+- Added read-only `Rm2kLsdSaveCodec` and typed `Rm2kLsdSaveModel` over the existing bounded LCF reader.
+- Preserves chunk IDs, lengths, offsets, payload bytes, and unknown-chunk count; rejects invalid paths, malformed/truncated framing, missing terminators, oversized files, and oversized chunks.
+- No event commands, scripts, plugins, or native content are executed; original saves are never written.
+- Validation: analyzer build clean and full headless suite `261/261` passed.
+
 ## Next action
 
-MV/MZ/WOLF broad feature-completion remains unverified. This slice added bounded MV System.json metadata extraction and encrypted-asset diagnostics only; JavaScript execution, browser APIs, rendering, audio, input, saves, and plugins remain intentionally unsupported. Continue with K-050 original-format RM2K/RM2K3 save modeling, then create focused runtime cards for any future bounded MV/MZ/WOLF capabilities.|
+MV/MZ/WOLF broad feature-completion remains unverified. JavaScript execution, browser APIs, rendering, audio, input, saves, and plugins remain intentionally unsupported. The next primary runtime work should remain RM2K/2003 parser/runtime progression; K-050 semantic LSD field mapping and save/UI mutation are separate follow-up slices.
 
 ## Completed K-012
 

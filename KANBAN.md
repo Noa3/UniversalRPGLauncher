@@ -58,7 +58,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-052 | 1 | DONE | Add bounded JSON simulation save/load roundtrip | K-020 |
 | K-054 | 1 | DONE | Add capability-gated RM2K save/debug tool contracts | K-052 |
 | K-055 | 1 | DONE | Add bounded runtime-owned RM2K JSON save-directory slots | K-052 |
-| K-050 | 2 | BACKLOG | Original-format save model and safe save directory integration | K-020 |
+| K-050 | 2 | DONE | Original-format read-only LSD save model and safe save directory integration | K-020 |
 | K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |
 | K-070 | 3 | BACKLOG | Faithful-vs-Enhanced profile and integer scaling controls | K-030 |
@@ -390,7 +390,20 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - Added bounded slot round-trip/traversal regression coverage in `project/tests/core/test_game_simulation_state.cs`.
 - `dotnet build project/UniversalRPG.csproj --no-restore /p:RunAnalyzers=true /p:RunAnalyzersDuringBuild=true` — passed with 0 warnings and 0 errors.
 - `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — passed; `244/244` tests.
-- Original `LSD` parsing/writing and UI save-menu integration remain separate backlog work (`K-050`).
+### K-050 — Original-format read-only LSD save model
+
+**Acceptance criteria**
+- Read original `LcfSaveData` framing from an explicitly supplied save directory and slot.
+- Preserve chunk ID, length, offsets, payload bytes, and unknown-chunk count without executing save contents.
+- Reject invalid slot paths, traversal, malformed/truncated framing, missing terminators, oversized files, and oversized chunks.
+- Keep this reader read-only; original saves are never overwritten and no speculative Gold/party/inventory mapping is claimed.
+
+**Validation evidence (2026-08-24)**
+- Added `project/src/rm2k/parser/rm2k_lsd_save_codec.cs` and `project/tests/core/test_rm2k_lsd_save_model.cs`.
+- Synthetic tests cover raw unknown-chunk preservation, BER framing, traversal/absolute-path rejection, size limits, malformed headers, and missing terminators.
+- `dotnet build project/UniversalRPG.csproj --no-restore /p:RunAnalyzers=true /p:RunAnalyzersDuringBuild=true` — 0 warnings, 0 errors.
+- `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` — exit 0, `261/261` tests passed.
+- Save mutation, UI integration, and field-level semantic mapping remain separate follow-up work; this card does not claim full native gameplay save restoration.
 
 ### K-023 — Verified RM2K/2003 command codes
 
