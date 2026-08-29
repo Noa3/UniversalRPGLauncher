@@ -223,6 +223,9 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(EventInterpreter.ShowMessage, 10110);
 		AssertEq(EventInterpreter.ShowChoice, 10140);
 		AssertEq(EventInterpreter.InputNumber, 10150);
+		AssertEq(EventInterpreter.ChangeGold, 10310);
+		AssertEq(EventInterpreter.GoldOpAdd, 0);
+		AssertEq(EventInterpreter.GoldOpSubtract, 1);
 		AssertEq(EventInterpreter.ControlSwitches, 10210);
 		AssertEq(EventInterpreter.ControlVars, 10220);
 		AssertEq(EventInterpreter.Teleport, 10810);
@@ -331,6 +334,75 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(state.Variables.Count, 0, "conflicting input is not written to another variable");
 		AssertEq(presentation.PendingInputVariableId, 4, "original pending variable is preserved");
 		AssertEq(presentation.InputValue, 123, "original pending value is preserved");
+	}
+
+	public void Test_ChangeGoldAddsConstantOperand()
+	{
+		var state = new GameSimulationState { Gold = 100 };
+		var interpreter = new EventInterpreter(state, 6, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeGold, new List<int> { EventInterpreter.GoldOpAdd, EventInterpreter.VarOperandConstant, 25 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Gold, 125, "ChangeGold adds a constant operand");
+	}
+
+	public void Test_ChangeGoldClampsToBoundedRange()
+	{
+		var state = new GameSimulationState { Gold = EventInterpreter.MaxGold - 1 };
+		var interpreter = new EventInterpreter(state, 7, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeGold, new List<int> { EventInterpreter.GoldOpAdd, EventInterpreter.VarOperandConstant, 100 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Gold, EventInterpreter.MaxGold, "ChangeGold clamps above the RM2K gold limit");
+	}
+
+	public void Test_ChangeGoldSubtractsAndClampsBelowZero()
+	{
+		var state = new GameSimulationState { Gold = 100 };
+		var interpreter = new EventInterpreter(state, 8, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeGold, new List<int> { EventInterpreter.GoldOpSubtract, EventInterpreter.VarOperandConstant, 25 }),
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeGold, new List<int> { EventInterpreter.GoldOpSubtract, EventInterpreter.VarOperandConstant, 200 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Gold, 0, "ChangeGold clamps subtraction below zero");
+	}
+
+	public void Test_ChangeGoldReadsVariableOperand()
+	{
+		var state = new GameSimulationState { Gold = 100 };
+		state.Variables.Add(40);
+		var interpreter = new EventInterpreter(state, 9, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeGold, new List<int> { EventInterpreter.GoldOpSubtract, EventInterpreter.VarOperandVariable, 1 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Gold, 60, "ChangeGold reads the selected variable operand");
+	}
+
+	public void Test_ChangeGoldRejectsInvalidParametersFailClosed()
+	{
+		var state = new GameSimulationState { Gold = 100 };
+		var interpreter = new EventInterpreter(state, 10, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeGold, new List<int> { 2, EventInterpreter.VarOperandConstant, 50 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Gold, 100, "unsupported ChangeGold operation does not mutate state");
+		AssertTrue(state.Diagnostics.Count > 0, "unsupported ChangeGold operation is diagnosed");
 	}
 
 	public void Test_MalformedChoiceIsSkippedSafely()

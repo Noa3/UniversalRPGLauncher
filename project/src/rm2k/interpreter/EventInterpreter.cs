@@ -18,12 +18,16 @@ public sealed class EventInterpreter
 {
 	public const int MaxScriptRecursion = 256;
 	public const int MaxWaitFrames = 600; // 10 seconds at 60fps
+	public const int MaxGold = 999999;
+	public const int GoldOpAdd = 0;
+	public const int GoldOpSubtract = 1;
 
 	// Verified RM2K/2003 event command codes (liblcf lcf::rpg::Cmd).
 	public const int End = 0;
 	public const int ShowMessage = 10110;
 	public const int ShowChoice = 10140;
 	public const int InputNumber = 10150;
+	public const int ChangeGold = 10310;
 	public const int ControlSwitches = 10210;
 	public const int ControlVars = 10220;
 	public const int Teleport = 10810;
@@ -148,6 +152,10 @@ public sealed class EventInterpreter
 
 			case ControlSwitches:
 				ExecuteControlSwitches(cmd);
+				return Advance();
+
+			case ChangeGold:
+				ExecuteChangeGold(cmd);
 				return Advance();
 
 			case ControlVars:
@@ -335,6 +343,52 @@ public sealed class EventInterpreter
 			_ => "FLIP",
 		};
 		_state.AddDiagnostic($"[Event {_eventId}] Switches {startId}-{endId} -> {effect}");
+	}
+
+	private void ExecuteChangeGold(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Change gold");
+			return;
+		}
+		var operation = pCmd.Parameters[0];
+		var operandType = pCmd.Parameters[1];
+		var operandValue = pCmd.Parameters[2];
+		if (operation is not (0 or 1))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change gold: unsupported operation {operation} skipped");
+			return;
+		}
+
+		int operand;
+		switch (operandType)
+		{
+			case VarOperandConstant:
+				operand = operandValue;
+				break;
+			case VarOperandVariable:
+				if (operandValue < 1 || operandValue > GameSimulationState.MaxVariables)
+				{
+					_state.AddDiagnostic($"[Event {_eventId}] Change gold: invalid variable operand {operandValue} skipped");
+					return;
+				}
+				operand = GetVariable(operandValue);
+				break;
+			default:
+				_state.AddDiagnostic($"[Event {_eventId}] Change gold: unsupported operand type {operandType} skipped");
+				return;
+		}
+
+		var current = (long)_state.Gold;
+		var result = operation switch
+		{
+			GoldOpAdd => current + operand,
+			GoldOpSubtract => current - operand,
+			_ => current,
+		};
+		_state.Gold = (int)Math.Clamp(result, 0L, (long)MaxGold);
+		_state.AddDiagnostic($"[Event {_eventId}] Gold <- op {operation} {operand}: {_state.Gold}");
 	}
 
 	private void ExecuteControlVars(Rm2kMap.EventCommand pCmd)
