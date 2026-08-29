@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
@@ -133,12 +134,54 @@ public partial class TestEventInterpreter : TestBase
 		eventData.Pages.Add(page);
 		var scheduler = new Rm2kEventScheduler(state);
 		scheduler.SetEvents(new[] { eventData });
+		AssertEq(scheduler.EventCount, 1);
 
 		scheduler.ExecuteFrame();
 		scheduler.ExecuteFrame();
 
 		AssertTrue(state.Switches.Count >= 1);
 		AssertTrue(state.Switches[0]);
+	}
+
+	public void Test_EventSchedulerDiagnosesEventCap()
+	{
+		var state = new GameSimulationState();
+		var events = new List<Rm2kMap.Event>();
+		for (var index = 0; index < 1001; index++)
+		{
+			events.Add(new Rm2kMap.Event(index + 1, 0, 0));
+		}
+
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(events);
+
+		AssertEq(scheduler.EventCount, 1000);
+		AssertTrue(state.Diagnostics.Any(pEntry => pEntry.Contains(
+			"event limit", StringComparison.OrdinalIgnoreCase)),
+			"RM2K scheduler diagnoses event truncation at its bounded limit");
+	}
+
+	public void Test_EventSchedulerDoesNotFullyEnumerateBeyondEventCap()
+	{
+		var state = new GameSimulationState();
+		var consumed = 0;
+		IEnumerable<Rm2kMap.Event> Events()
+		{
+			for (var index = 0; index < 2000; index++)
+			{
+				consumed++;
+				yield return new Rm2kMap.Event(index + 1, 0, 0);
+			}
+		}
+
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(Events());
+
+		AssertEq(scheduler.EventCount, Rm2kEventScheduler.MaxEvents);
+		AssertEq(consumed, Rm2kEventScheduler.MaxEvents + 1);
+		AssertTrue(state.Diagnostics.Any(pEntry => pEntry.Contains(
+			"event limit", StringComparison.OrdinalIgnoreCase)),
+			"RM2K scheduler diagnoses bounded source inspection");
 	}
 
 	public void Test_EventSchedulerTriggersActionAtPosition()
@@ -249,6 +292,7 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(presentation.SelectChoice(1));
 		AssertTrue(interpreter.ExecuteFrame());
 		AssertEq(interpreter.CurrentCommandIndex, 1);
+		AssertTrue(presentation.ActiveChoice == null, "choice state is cleared after confirmation");
 	}
 
 	public void Test_InputNumberPausesThenStoresSubmittedValue()
@@ -268,6 +312,25 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(interpreter.ExecuteFrame());
 		AssertEq(state.Variables[3], 123);
 		AssertEq(interpreter.CurrentCommandIndex, 1);
+	}
+
+	public void Test_InputNumberDoesNotConsumePendingValueForDifferentVariable()
+	{
+		var state = new GameSimulationState();
+		var presentation = new UniversalRPG.Rm2k.Presentation.PresentationState();
+		AssertTrue(presentation.BeginInput(4));
+		AssertTrue(presentation.SetInputValue(123));
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.InputNumber, new List<int> { 5 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+		var interpreter = new EventInterpreter(state, 5, commands, presentation);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Variables.Count, 0, "conflicting input is not written to another variable");
+		AssertEq(presentation.PendingInputVariableId, 4, "original pending variable is preserved");
+		AssertEq(presentation.InputValue, 123, "original pending value is preserved");
 	}
 
 	public void Test_MalformedChoiceIsSkippedSafely()
@@ -466,6 +529,59 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(state.PendingX, 30, "pending x");
 		AssertEq(state.PendingY, 44, "pending y");
 		AssertTrue(state.Diagnostics[0].Contains("Transfer pending"));
+	}
+
+	public void Test_TeleportRejectsInvalidMapIdsWithoutOverwritingPendingState()
+	{
+		var state = new GameSimulationState();
+		state.IsTransferPending = true;
+		state.PendingMapId = 12;
+		state.PendingX = 30;
+		state.PendingY = 44;
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.Teleport, new List<int> { 0, 1, 2 }),
+			new Rm2kMap.EventCommand(EventInterpreter.Teleport, new List<int> { GameSimulationState.MaxMapId + 1, 3, 4 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 3, commands);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.PendingMapId, 12, "invalid map IDs preserve pending map");
+		AssertEq(state.PendingX, 30, "invalid map IDs preserve pending x");
+		AssertEq(state.PendingY, 44, "invalid map IDs preserve pending y");
+		AssertTrue(state.IsTransferPending, "invalid map IDs preserve pending flag");
+		AssertEq(state.Diagnostics.Count, 2, "one diagnostic per invalid map ID");
+		AssertFalse(state.Diagnostics[0].Contains("Transfer pending"));
+		AssertFalse(state.Diagnostics[1].Contains("Transfer pending"));
+	}
+
+	public void Test_TeleportAppliesValidFacingAndRejectsInvalidFacingAtomically()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.Teleport, new List<int> { 12, 30, 44, 6 }),
+			new Rm2kMap.EventCommand(EventInterpreter.Teleport, new List<int> { 13, 31, 45, 5 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 3, commands);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.FacingDirection, 6, "valid transfer facing is applied");
+		AssertEq(state.PendingMapId, 12, "valid transfer map is pending");
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.FacingDirection, 6, "invalid facing preserves direction");
+		AssertEq(state.PendingMapId, 12, "invalid facing preserves pending map");
+		AssertEq(state.PendingX, 30, "invalid facing preserves pending x");
+		AssertEq(state.PendingY, 44, "invalid facing preserves pending y");
+		AssertTrue(state.IsTransferPending, "invalid facing preserves pending flag");
+		AssertEq(state.Diagnostics.Count, 2, "valid and invalid transfer diagnostics");
+		AssertTrue(state.Diagnostics[0].Contains("Transfer pending"));
+		AssertFalse(state.Diagnostics[1].Contains("Transfer pending"));
 	}
 
 	public void Test_LoopExecutesUntilBreakThenContinuesPastEndLoop()

@@ -129,10 +129,10 @@ See [ROADMAP.md](ROADMAP.md) for the complete phase breakdown.
 - initial LDB/LMU/LSD decoding exists;
 - synthetic and provenance-pinned real parser regression fixtures exist;
 - registry-driven engine plugin detection and safe runtime-selection boundaries exist;
-- built-in engine entries cover RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection;
+- Built-in detection covers RM95, Dante98, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite. Library scans use a cheap direct-entry preflight, search nested collection folders to a bounded depth of 4, cap visited directories at 4096, and skip common bulk asset/runtime folders. MV/MZ runtime versions are extracted from bounded package/runtime metadata when available; missing versions remain explicitly unknown.
 - RM2K/RM2K3 have a parser-backed bootstrap runtime that loads validated data and advances the shared deterministic clock;
 - LMT is fully parsed; LDB actors/switches/variables plus scalar skills/items/states/classes/enemies/terrains/attributes/troops/animations/chipsets/battle_commands metadata decode into typed models with verified liblcf field IDs and per-entry unknown-field retention;
-- remaining nested LDB content and LMU event/page metadata typing are next; K-015's accepted scalar/battle-command slice is complete.
+- remaining nested LDB content and chipset passability decoding are next; LMU event/page metadata is decoded into the bounded native scheduler path, while K-015's accepted scalar/battle-command slice is complete.
 
 ### Language boundary
 

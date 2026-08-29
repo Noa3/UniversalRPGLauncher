@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -385,23 +386,13 @@ public abstract class RgssPlugin : BuiltInEnginePlugin
     private readonly string _archiveExtension;
 
     protected RgssPlugin(string pId, string pName, string pGeneration, string pPrefix, string pDataExtension, string pArchiveExtension, int pPriority)
-        : base(pId, pName, $"Bounded {pName} runtime bootstrap.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime)
+        : base(pId, pName, $"Detection-only {pName} boundary until a bounded Ruby runtime is available.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing)
     {
         _runtimePrefix = pPrefix;
         _dataExtension = pDataExtension;
         _archiveExtension = pArchiveExtension;
     }
 
-    public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
-    {
-        return PluginResult<IEngineRuntime>.Succeeded(new RgssEngineRuntime(
-            Metadata.Id,
-            Generation,
-            _runtimePrefix,
-            _dataExtension,
-            _archiveExtension,
-            pContext.Game));
-    }
 
     public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
     {
@@ -498,6 +489,7 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
         var version = package == null || package.IsTruncated
             ? null
             : ExtractVersion(System.Text.Encoding.UTF8.GetString(package.Data));
+        version ??= ExtractRuntimeVersion(snapshot, _runtimeFile);
         return Match(snapshot, score, $"{_runtimeLabel} and web-game layout matched.", evidence, title, version);
     }
 
@@ -513,6 +505,19 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
             || pPath.StartsWith("js/", StringComparison.OrdinalIgnoreCase)
             || pPath.StartsWith("data/", StringComparison.OrdinalIgnoreCase)
             || pPath.StartsWith("www/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    protected static Version? ExtractRuntimeVersion(GameInspectionSnapshot pSnapshot, string pRuntimeFile)
+    {
+        var file = pSnapshot.Files.FirstOrDefault(pItem =>
+            Path.GetFileName(pItem.RelativePath).Equals(pRuntimeFile, StringComparison.OrdinalIgnoreCase));
+        if (file == null || file.Data.Length == 0)
+        {
+            return null;
+        }
+        var text = System.Text.Encoding.UTF8.GetString(file.Data);
+        var match = Regex.Match(text, $"{Regex.Escape(pRuntimeFile)}\\s+v(?<version>\\d+(?:\\.\\d+){{1,3}})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success && Version.TryParse(match.Groups["version"].Value, out var version) ? version : null;
     }
 
     protected static Version? ExtractVersion(string pText)
@@ -649,6 +654,7 @@ public sealed class RpgMakerMzPlugin : WebRpgPlugin
         var version = package == null || package.IsTruncated
             ? null
             : ExtractVersion(System.Text.Encoding.UTF8.GetString(package.Data));
+        version ??= ExtractRuntimeVersion(snapshot, _runtimeFile);
         return Match(snapshot, score, $"{_runtimeLabel} and web-game layout matched.", evidence, title, version);
     }
 

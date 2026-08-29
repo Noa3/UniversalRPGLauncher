@@ -14,6 +14,8 @@ namespace UniversalRPG.Rm2k.Interpreter;
 /// </summary>
 public sealed class Rm2kEventScheduler
 {
+    public const int MaxEvents = 1000;
+
     private readonly GameSimulationState _state;
     private readonly List<Rm2kMap.Event> _events = new();
     private readonly Dictionary<int, EventInterpreter> _active = new();
@@ -28,12 +30,41 @@ public sealed class Rm2kEventScheduler
     }
 
     public int ActiveInterpreterCount => _active.Count;
+    public int EventCount => _events.Count;
 
     public void SetEvents(IEnumerable<Rm2kMap.Event> pEvents)
     {
         if (pEvents == null) throw new ArgumentNullException(nameof(pEvents));
         _events.Clear();
-        _events.AddRange(pEvents.Where(pEvent => pEvent != null).Take(1000));
+        var inspected = 0;
+        var inputExceeded = false;
+        foreach (var eventData in pEvents)
+        {
+            inspected++;
+            if (inspected > MaxEvents)
+            {
+                inputExceeded = true;
+                break;
+            }
+
+            if (eventData != null)
+            {
+                _events.Add(eventData);
+            }
+        }
+
+        if (inputExceeded)
+        {
+            _state.AddDiagnostic($"RM2K event limit reached; input inspection stopped after {MaxEvents} entries.");
+        }
+        _active.Clear();
+        _autorunStarted.Clear();
+        _parallelStarted.Clear();
+    }
+
+    public void Clear()
+    {
+        _events.Clear();
         _active.Clear();
         _autorunStarted.Clear();
         _parallelStarted.Clear();

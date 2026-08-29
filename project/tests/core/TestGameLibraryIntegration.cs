@@ -4,6 +4,7 @@ using System.IO;
 using Godot;
 using UniversalRPG.App.Launcher;
 using UniversalRPG.App.Library;
+using UniversalRPG.Compatibility;
 using UniversalRPG.GameDetectorNs;
 using UniversalRPG.Plugins;
 using UniversalRPG.Tests.Framework;
@@ -17,6 +18,7 @@ public partial class TestGameLibraryIntegration : TestBase
     private string _rm2kPath = "";
     private string _ambiguousPath = "";
     private string _detectionOnlyPath = "";
+    private string _nestedMvPath = "";
 
     public override void Setup()
     {
@@ -26,8 +28,13 @@ public partial class TestGameLibraryIntegration : TestBase
         _rm2kPath = TempBase.PathJoin("RM2K");
         _ambiguousPath = TempBase.PathJoin("Ambiguous");
         _detectionOnlyPath = TempBase.PathJoin(".unsupported/Unite");
+        _nestedMvPath = TempBase.PathJoin("Collection/Pack01/Playable");
         CreateLcf(_rm2kPath, "RM2000");
         CreateLcf(_ambiguousPath, "");
+        WriteText(_nestedMvPath.PathJoin("index.html"), "<!doctype html>");
+        WriteText(_nestedMvPath.PathJoin("js/rpg_core.js"), "// MV core");
+        WriteText(_nestedMvPath.PathJoin("js/rpg_managers.js"), "// MV managers");
+        WriteText(_nestedMvPath.PathJoin("data/System.json"), "{\"gameTitle\":\"Nested MV\"}");
         WriteText(_detectionOnlyPath.PathJoin("UnityPlayer.dll"), "metadata only");
         WriteText(_detectionOnlyPath.PathJoin("GameAssembly.dll"), "metadata only");
         WriteText(_detectionOnlyPath.PathJoin("Demo_Data/globalgamemanagers"), "metadata only");
@@ -74,7 +81,7 @@ public partial class TestGameLibraryIntegration : TestBase
         relaunched.LoadSettings();
         var entries = relaunched.Scan();
 
-        AssertEq(entries.Count, 2);
+        AssertEq(entries.Count, 3);
         var importedEntry = imported!;
         var restored = entries.Find(pEntry => pEntry.Path.Equals(importedEntry.Path, StringComparison.OrdinalIgnoreCase));
         AssertTrue(restored != null);
@@ -83,6 +90,32 @@ public partial class TestGameLibraryIntegration : TestBase
         AssertEq(restored.CompatibilityStatus, importedEntry.CompatibilityStatus);
         AssertEq(restored.Candidates.Count, importedEntry.Candidates.Count);
         AssertTrue(restored.Detection.Evidence.Count > 0);
+    }
+
+    public void Test_ScanFindsRecognizedGameBelowNestedCollectionFolders()
+    {
+        var library = NewLibrary();
+        library.SetRootPath(ProjectSettings.GlobalizePath(TempBase), false);
+
+        var entries = library.Scan();
+
+        var nested = entries.Find(pEntry => pEntry.Path.EndsWith("Collection/Pack01/Playable", StringComparison.OrdinalIgnoreCase));
+        AssertTrue(nested != null);
+        AssertEq(nested?.Detection.Engine, GameDetector.EngineType.RpgMakerMv);
+        AssertEq(nested?.Title, "Nested MV");
+    }
+
+    public void Test_CompatibilityReportExporterProducesIssueReadyMetadata()
+    {
+        var library = NewLibrary();
+        var entry = library.Import(ProjectSettings.GlobalizePath(_rm2kPath));
+
+        var report = CompatibilityReportExporter.ToMarkdown(entry!);
+
+        AssertTrue(report.Contains("# UniversalRPG Compatibility Report", StringComparison.Ordinal));
+        AssertTrue(report.Contains("RPG Maker 2000", StringComparison.Ordinal));
+        AssertTrue(report.Contains("## Security boundary", StringComparison.Ordinal));
+        AssertTrue(report.Contains("No game code was executed", StringComparison.Ordinal));
     }
 
     public void Test_AmbiguousDetectionIsPersistedWithoutUnsafeSelection()

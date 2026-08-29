@@ -1,16 +1,18 @@
 # UniversalRPG Autonomous Session State
 
-> Updated: 2026-08-24
+> Updated: 2026-08-26
 > Purpose: small durable checkpoint for Hermes/other autonomous agents.
 
 ## Current card
+
+K-060, K-061, K-070, and K-071 are DONE. Compatibility profiles validate bounded schema versions, reports export deterministic redacted Markdown, the UI exposes Faithful/Enhanced rendering plus bounded integer scaling, and the RM2K input mapper handles keyboard, joypad, and bounded touch input.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `261/261`, exit 0, .NET build clean. The Godot project now lives under `project/`; validate.sh handles both.
+`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: latest headless C# suite `284/284`, exit 0, .NET build clean. The Godot project now lives under `project/`; validate.sh handles both.
 
 ## Cross-engine QA pass (t_1b2292d4) — completed 2026-08-24
 
@@ -54,15 +56,15 @@ Godot project files (`project.godot`, csproj/sln, app/, src/, tests/, assets/, l
 - Added trusted in-process plugin contracts, deterministic registries, typed probe/lifecycle errors, and runtime host cleanup under `src/plugins/`.
 - Added bounded read-only folder/ZIP inspection and built-in detection plugins for RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection.
 - Added the first functional parser-backed RM2K/RM2K3 runtime bootstrap: validated LDB/LMT/LMU loading, deterministic clock updates, and safe lifecycle start/stop without `RPG_RT.exe`.
-- RM95, MV, MZ, and Unite remain detection-only; RGSS exposes bounded metadata lifecycle slices, WOLF exposes an explicitly unencrypted plain-data slice, and RM2K/RM2K3 retain the parser-backed runtime bootstrap.
+- RM95, RGSS, MV, MZ, and Unite remain detection-only; WOLF exposes an explicitly unencrypted plain-data slice, and RM2K/RM2K3 retain the parser-backed runtime bootstrap.
 - Rewired `GameDetector`, `GameLibrary`, `RuntimeLauncher`, and the Godot UI to preserve ranked detection reports, persist import metadata, and refuse unsafe/unsupported runtime selection without external fallback.
 - Added contract, detection, archive, persistence, ambiguity, platform, and lifecycle regression coverage.
-- Added RGSS and WOLF regression fixtures/tests; validation passes with Godot 4.7.2 Mono: `159/159` tests.
+- Added RGSS and WOLF regression fixtures/tests; RGSS selector refusal is verified and validation passes with Godot 4.7.2 Mono: `279/279` tests.
 - Nullable contracts were hardened across C# core/UI/test code; `.NET` build now reports `0` warnings and `0` errors.
 
 ## Current action
 
-K-022, K-030, and K-031 are complete for their bounded slices. `GameSimulationState` supports bounded map configuration and movement. `VirtualFramebuffer`/`Rm2kRendererAdapter` assemble validated lower/upper layers; `Rm2kSpriteAdapter` and `Rm2kCameraState` provide bounded player/event descriptors and camera state without invoking foreign game code.
+K-022, K-030, and K-031 are complete for their bounded slices; the runtime update/scheduler integration and lifecycle reset evidence were extended in the current slice. `GameSimulationState` supports bounded map configuration and movement. `Rm2kEngineRuntime` now bridges LMU geometry/map ID/start-map diagnostics into simulation, creates a bounded `VirtualFramebuffer` from validated lower/upper layers, builds bounded player/event sprite descriptors through `Rm2kSpriteAdapter`, and forwards decoded events to `Rm2kEventScheduler`; `Update()` drives native autorun commands through the deterministic clock; `Stop()` clears scheduler, clock, presentation, simulation, loaded map data, framebuffer, and sprite-descriptor state. `VirtualFramebuffer`/`Rm2kRendererAdapter` assemble validated lower/upper layers; sprite/camera adapters remain bounded and data-only.
 
 Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure` is an unencrypted RPG Maker MZ tree (`index.html`, `js/rmmz_core.js`, `js/rmmz_managers.js`, `data/System.json`, title `Skie's Inflatable Adventures (v0.30.001)`, 7,039 files). `D:\NextCloud\Games\PornGames\IntheHamletofLoliBigtits_v103a` is not an MZ web tree at its root: no `index.html`, `js/rmmz_*`, or `data/System.json`; Japanese locale remains unconfirmed and no encrypted marker was found in the bounded filename scan. Both were inspected detection-only; no game code executed.
 
@@ -93,11 +95,56 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Added read-only `Rm2kLsdSaveCodec` and typed `Rm2kLsdSaveModel` over the existing bounded LCF reader.
 - Preserves chunk IDs, lengths, offsets, payload bytes, and unknown-chunk count; rejects invalid paths, malformed/truncated framing, missing terminators, oversized files, and oversized chunks.
 - No event commands, scripts, plugins, or native content are executed; original saves are never written.
-- Validation: analyzer build clean and full headless suite `261/261` passed.
+- Validation: analyzer build clean and full headless suite `279/279` passed.
+
+## Latest completed lifecycle slice (2026-08-28)
+
+- `EnginePluginHost` now permits `Stopped → Start`.
+- A stopped runtime is disposed exactly once before a fresh runtime is selected and initialized; stopped runtime objects are never re-initialized.
+- `Test_Rm2kRuntimeCanRestartAfterStopWithFreshRuntimeState` verifies `Start → Update → Stop → Start`, fresh framebuffer/map state, clock reset, scheduler reload, and distinct runtime identity against the real RM2K fixture.
+- Focused result: `TestPluginDetection 22/22`; canonical result: `All 280 tests passed`.
+
+## Latest completed sprite synchronization slice (2026-08-28)
+
+- `Main._UnhandledInput` now routes movement through `Rm2kEngineRuntime.TryMove()`.
+- The runtime refreshes bounded player/event descriptors only after successful movement, preserving the parser map as the event-data source and avoiding direct UI mutation of simulation/render state.
+- `Test_Rm2kRuntimeMovementSynchronizesPlayerSpriteDescriptor` covers movement and descriptor position synchronization against the real RM2K fixture.
+- Focused result: `TestPluginDetection 23/23`; canonical result: `All 281 tests passed`.
+
+## Latest completed pending-transfer validation slice (2026-08-28)
+
+- `EventInterpreter` rejects map IDs outside `1..GameSimulationState.MaxMapId` and negative transfer coordinates before mutating pending state.
+- Invalid requests preserve an existing pending transfer and emit bounded diagnostics.
+- `Test_TeleportRejectsInvalidMapIdsWithoutOverwritingPendingState` covers the contract.
+- Focused result: `TestEventInterpreter 34/34`; canonical result: `All 282 tests passed`.
+
+## Latest completed transfer-facing validation slice (2026-08-28)
+
+- `EventInterpreter` validates the optional transfer facing parameter against RM2K directions `2/4/6/8` before mutating state.
+- Valid facing is applied; invalid facing preserves the existing direction and pending transfer atomically.
+- `Test_TeleportAppliesValidFacingAndRejectsInvalidFacingAtomically` covers the contract.
+- Focused result: `TestEventInterpreter 35/35`; canonical result: `All 283 tests passed`.
+
+## Latest completed choice lifecycle slice (2026-08-28)
+
+- `EventInterpreter` clears `PresentationState.ActiveChoice` after a valid selection is confirmed and logged.
+- `Test_ShowChoicePausesUntilSelection` verifies that the interpreter advances without leaving stale choice UI state.
+- Focused result: `TestEventInterpreter 35/35`; canonical result: `All 283 tests passed`.
+
+## Latest completed InputNumber lifecycle slice (2026-08-29)
+
+- `EventInterpreter` pauses an `InputNumber` command when a different variable already owns the pending presentation input.
+- The existing pending variable/value remain unchanged; no conflicting variable is created or mutated.
+- `Test_InputNumberDoesNotConsumePendingValueForDifferentVariable` covers the conflict contract.
+- Focused result: `TestEventInterpreter 36/36`; canonical result: `All 284 tests passed`.
 
 ## Next action
 
-MV/MZ/WOLF broad feature-completion remains unverified. JavaScript execution, browser APIs, rendering, audio, input, saves, and plugins remain intentionally unsupported. The next primary runtime work should remain RM2K/2003 parser/runtime progression; K-050 semantic LSD field mapping and save/UI mutation are separate follow-up slices.
+Continue with the next RM2K/2003 runtime slice. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.
+
+## Audit note 2026-08-26
+
+The completed-card audit found and corrected an unsafe RGSS capability claim: XP/VX/VX Ace were marked `Runtime` even though no bounded Ruby interpreter exists. `RgssPlugin` now exposes only `Detection | Parsing`, and `TestRgssRuntime` verifies selector refusal with `UnsupportedEngine`. Current canonical validation is `279/279`. The scheduler now stops source enumeration at its bounded event cap and diagnoses truncation.
 
 ## Completed K-012
 

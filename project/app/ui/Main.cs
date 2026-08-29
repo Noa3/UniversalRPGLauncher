@@ -4,6 +4,8 @@ using UniversalRPG.App.Launcher;
 using UniversalRPG.App.Library;
 using UniversalRPG.Plugins;
 using UniversalRPG.Rm2k.Interpreter;
+using UniversalRPG.Rm2k.Input;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.App.Ui;
@@ -63,6 +65,8 @@ public partial class Main : Control
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
 	private OptionButton _languageMenu = null!;
+	private readonly RenderProfile _renderProfile = new();
+	private readonly Rm2kInputMapper _inputMapper = new();
 
 	public Main()
 	{
@@ -81,6 +85,7 @@ public partial class Main : Control
 		_library.LoadSettings();
 		_folderPath.Text = _library.RootPath;
 		GetViewport().SizeChanged += ApplyResponsiveLayout;
+		_inputMapper.SetTouchViewport(GetViewportRect().Size);
 		ApplyResponsiveLayout();
 		RefreshLibrary();
 	}
@@ -157,6 +162,32 @@ public partial class Main : Control
 		_languageMenu.Select(GetLocaleMenuIndex());
 		_languageMenu.ItemSelected += ChangeLocale;
 		header.AddChild(_languageMenu);
+		var renderMode = new OptionButton();
+		renderMode.TooltipText = "Rendering compatibility mode";
+		renderMode.AddItem("Faithful");
+		renderMode.AddItem("Enhanced");
+		renderMode.ItemSelected += pIndex => _renderProfile.TrySetMode(
+			pIndex == 0 ? RenderCompatibilityMode.Faithful : RenderCompatibilityMode.Enhanced);
+		header.AddChild(renderMode);
+		var integerScale = new CheckButton();
+		integerScale.Text = "Integer scale";
+		integerScale.ButtonPressed = _renderProfile.IntegerScaling;
+		integerScale.Toggled += pEnabled =>
+		{
+			if (!_renderProfile.TrySetIntegerScaling(pEnabled))
+			{
+				integerScale.ButtonPressed = true;
+			}
+		};
+		header.AddChild(integerScale);
+		var scale = new SpinBox();
+		scale.TooltipText = "Integer scale factor (1-8)";
+		scale.MinValue = RenderProfile.MinIntegerScale;
+		scale.MaxValue = RenderProfile.MaxIntegerScale;
+		scale.Step = 1;
+		scale.Value = _renderProfile.IntegerScale;
+		scale.ValueChanged += pValue => _renderProfile.TrySetIntegerScale((int)pValue);
+		header.AddChild(scale);
 
 		var folderPanel = new PanelContainer();
 		page.AddChild(folderPanel);
@@ -337,6 +368,10 @@ public partial class Main : Control
 		_detailsEngine.Text = Tr("DETAIL_ENGINE_CONFIDENCE")
 			.Replace("{engine}", detection.GetEngineName())
 			.Replace("{confidence}", detection.GetConfidenceString());
+		if (detection.EngineVersion != null)
+		{
+			_detailsEngine.Text += $" · Runtime {detection.EngineVersion}";
+		}
 		_detailsPath.Text = _selectedGame.Path;
 		_mapPreview.SetMapData(null);
 		var facts = new List<string>
@@ -411,12 +446,15 @@ public partial class Main : Control
 	public override void _UnhandledInput(InputEvent pEvent)
 	{
 		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running
-			|| _launcher.ActiveRuntime is not Rm2kEngineRuntime rm2k
-			|| pEvent is not InputEventKey keyEvent || !keyEvent.Pressed || keyEvent.Echo)
+			|| _launcher.ActiveRuntime is not Rm2kEngineRuntime rm2k)
 		{
 			return;
 		}
-		if (rm2k.Presentation.MessageVisible && keyEvent.Keycode is Key.Enter or Key.Space)
+		var keyEvent = pEvent as InputEventKey;
+		if (keyEvent != null && (!keyEvent.Pressed || keyEvent.Echo)) return;
+		var action = _inputMapper.Resolve(pEvent);
+		if (keyEvent == null && action == Rm2kInputAction.None) return;
+		if (rm2k.Presentation.MessageVisible && action == Rm2kInputAction.Confirm)
 		{
 			rm2k.Presentation.DismissMessage();
 			GetViewport().SetInputAsHandled();
@@ -426,15 +464,15 @@ public partial class Main : Control
 		{
 			var choice = rm2k.Presentation.ActiveChoice;
 			var index = choice.SelectedIndex < 0 ? 0 : choice.SelectedIndex;
-			if (keyEvent.Keycode is Key.Up or Key.Left) index--;
-			if (keyEvent.Keycode is Key.Down or Key.Right) index++;
-			if (keyEvent.Keycode is Key.Up or Key.Left or Key.Down or Key.Right)
+			if (action is Rm2kInputAction.MoveUp or Rm2kInputAction.MoveLeft) index--;
+			if (action is Rm2kInputAction.MoveDown or Rm2kInputAction.MoveRight) index++;
+			if (action is Rm2kInputAction.MoveUp or Rm2kInputAction.MoveLeft or Rm2kInputAction.MoveDown or Rm2kInputAction.MoveRight)
 			{
 				index = Mathf.PosMod(index, choice.Options.Count);
 				choice.Select(index);
 				GetViewport().SetInputAsHandled();
 			}
-			else if (keyEvent.Keycode is Key.Enter or Key.Space)
+			else if (action == Rm2kInputAction.Confirm)
 			{
 				if (choice.SelectedIndex < 0)
 				{
@@ -446,6 +484,12 @@ public partial class Main : Control
 		}
 		if (rm2k.Presentation.PendingInputVariableId != null)
 		{
+			if (keyEvent == null)
+			{
+				if (action == Rm2kInputAction.Confirm) rm2k.Presentation.SetInputValue(rm2k.Presentation.InputValue ?? 0);
+				GetViewport().SetInputAsHandled();
+				return;
+			}
 			if (keyEvent.Keycode == Key.Backspace)
 			{
 				var currentText = (rm2k.Presentation.InputValue ?? 0).ToString();
@@ -460,7 +504,7 @@ public partial class Main : Control
 				GetViewport().SetInputAsHandled();
 				return;
 			}
-			if (keyEvent.Keycode is Key.Enter or Key.KpEnter)
+			if (action == Rm2kInputAction.Confirm)
 			{
 				rm2k.Presentation.SetInputValue(rm2k.Presentation.InputValue ?? 0);
 				GetViewport().SetInputAsHandled();
@@ -479,15 +523,15 @@ public partial class Main : Control
 			}
 			return;
 		}
-		var movement = keyEvent.Keycode switch
+		var movement = action switch
 		{
-			Key.Up or Key.W => (0, -1),
-			Key.Down or Key.S => (0, 1),
-			Key.Left or Key.A => (-1, 0),
-			Key.Right or Key.D => (1, 0),
+			Rm2kInputAction.MoveUp => (0, -1),
+			Rm2kInputAction.MoveDown => (0, 1),
+			Rm2kInputAction.MoveLeft => (-1, 0),
+			Rm2kInputAction.MoveRight => (1, 0),
 			_ => (0, 0),
 		};
-		if (keyEvent.Keycode is Key.Enter or Key.Space)
+		if (action == Rm2kInputAction.Confirm)
 		{
 			var actionTarget = GetFacingTarget(rm2k.Simulation);
 			rm2k.EventScheduler.TriggerAt(actionTarget.Item1, actionTarget.Item2, Rm2kEventTrigger.Action);
@@ -500,7 +544,7 @@ public partial class Main : Control
 		}
 		if (_launcher.ActiveRuntime is Rm2kEngineRuntime activeRm2k)
 		{
-			if (activeRm2k.Simulation.TryMove(movement.Item1, movement.Item2))
+			if (activeRm2k.TryMove(movement.Item1, movement.Item2))
 			{
 				activeRm2k.EventScheduler.TriggerAt(activeRm2k.Simulation.MapX, activeRm2k.Simulation.MapY, Rm2kEventTrigger.Touch);
 			}
@@ -534,6 +578,7 @@ public partial class Main : Control
 			ApplyRenderFrameRate(30);
 			_stopButton.Disabled = true;
 			_presentationControls.Visible = false;
+			_mapPreview.SetFramebuffer(null);
 			return;
 		}
 		_stopButton.Disabled = false;
@@ -542,9 +587,13 @@ public partial class Main : Control
 		if (!update.Success)
 		{
 			_status.Text = update.Error?.Message ?? "Runtime update failed.";
+			_mapPreview.SetMapData(null);
+			_mapPreview.SetFramebuffer(null);
 			return;
 		}
 		_status.Text = $"Runtime running: {_launcher.ActiveRuntime?.GetType().Name}";
+		_mapPreview.SetMapData(null);
+		_mapPreview.SetFramebuffer(null);
 		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
 		{
 			UpdatePresentationControls(rm2k);
@@ -566,6 +615,7 @@ public partial class Main : Control
 				_presentationState.Text = "Runtime presentation idle";
 			}
 			_mapPreview.SetMapData(rm2k.CurrentMapData);
+			_mapPreview.SetFramebuffer(rm2k.Framebuffer);
 			_mapPreview.SetPlayerPosition(rm2k.Simulation.MapX, rm2k.Simulation.MapY);
 			if (rm2k.CurrentMapData != null && rm2k.CurrentMapData.TryGetValue("width", out var width)
 				&& rm2k.CurrentMapData.TryGetValue("height", out var height))
@@ -661,6 +711,7 @@ public partial class Main : Control
 		_gamesPanel.CustomMinimumSize = new Vector2(compact ? 0 : 390, _gamesPanel.CustomMinimumSize.Y);
 		var margin = compact ? 14 : 28;
 		SetMargins(_pageMargin, margin);
+		_inputMapper.SetTouchViewport(GetViewportRect().Size);
 	}
 
 	private void LoadLocale()

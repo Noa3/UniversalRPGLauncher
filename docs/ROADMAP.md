@@ -74,7 +74,7 @@
 - [x] Persistent user-selected games directory
 - [x] Bounded library scan with link/junction avoidance
 - [x] Real LCF, RGSS, MV, and MZ detection signals
-- [x] Honest runtime-support state and disabled launch action
+- [x] Honest runtime-support state and disabled launch action (RGSS/XP/VX/VX Ace, RM95, MV/MZ, and Unite remain detection-only)
 - [x] English-default localized UI with German, Spanish, French, Japanese, Korean, and Simplified Chinese
 - [x] Bundled CJK-capable font
 - [x] Initial UTF-8/CP932/Shift-JIS metadata decoder

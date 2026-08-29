@@ -30,9 +30,20 @@ public sealed class EnginePluginHost : IDisposable
 		{
 			return TransitionFailure("start", "The plugin host has already been disposed.");
 		}
-		if (State != PluginRuntimeState.NotStarted)
+		if (State != PluginRuntimeState.NotStarted && State != PluginRuntimeState.Stopped)
 		{
 			return TransitionFailure("start", $"Cannot start a host in state {State}.");
+		}
+		if (State == PluginRuntimeState.Stopped)
+		{
+			if (!DisposeStoppedRuntime())
+			{
+				return PluginOperationResult.Failed(LastError!);
+			}
+			Plugin = null;
+			Runtime = null;
+			_runtimeDisposed = false;
+			State = PluginRuntimeState.NotStarted;
 		}
 
 		var selection = _registry.Select(pGame);
@@ -269,6 +280,35 @@ public sealed class EnginePluginHost : IDisposable
 					exception
 				);
 			}
+		}
+		finally
+		{
+			_runtimeDisposed = true;
+		}
+	}
+
+	private bool DisposeStoppedRuntime()
+	{
+		if (Runtime == null || _runtimeDisposed)
+		{
+			return true;
+		}
+		try
+		{
+			Runtime.Dispose();
+			return true;
+		}
+		catch (Exception exception)
+		{
+			LastError = PluginError.Create(
+				PluginErrorCode.LifecycleFailure,
+				$"Plugin '{Plugin?.Metadata.Id}' threw while disposing its stopped runtime.",
+				Plugin?.Metadata.Id ?? "",
+				"dispose",
+				exception
+			);
+			State = PluginRuntimeState.Faulted;
+			return false;
 		}
 		finally
 		{

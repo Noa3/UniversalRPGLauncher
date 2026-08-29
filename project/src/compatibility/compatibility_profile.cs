@@ -10,6 +10,15 @@ namespace UniversalRPG.Compatibility;
 /// </summary>
 public partial class CompatibilityProfile : RefCounted
 {
+	public const int CurrentSchemaVersion = 1;
+	public const int LegacySchemaVersion = 0;
+	public const long MaxProfileBytes = 4 * 1024 * 1024;
+	public const int MaxEntries = 4096;
+	public const int MaxFlagsPerScope = 1024;
+
+	public int LastLoadedSchemaVersion { get; private set; } = LegacySchemaVersion;
+	public string LastError { get; private set; } = "";
+
 	public enum FlagType
 	{
 		String,
@@ -136,9 +145,10 @@ public partial class CompatibilityProfile : RefCounted
 	/// <summary>Load a compatibility profile from JSON file.</summary>
 	public bool LoadProfile(string pPath)
 	{
+		LastError = "";
 		if (!FileAccess.FileExists(pPath))
 		{
-			GD.PrintErr("[CompatibilityProfile] File not found: ", pPath);
+			SetLoadError("file-not-found", "File not found: " + pPath);
 			return false;
 		}
 
@@ -147,7 +157,12 @@ public partial class CompatibilityProfile : RefCounted
 		{
 			if (file == null)
 			{
-				GD.PrintErr("[CompatibilityProfile] Cannot open file: ", pPath);
+				SetLoadError("open-failed", "Cannot open file: " + pPath);
+				return false;
+			}
+			if (file.GetLength() > MaxProfileBytes)
+			{
+				SetLoadError("size-limit", $"Profile exceeds the {MaxProfileBytes} byte limit: {pPath}");
 				return false;
 			}
 			jsonString = file.GetAsText();
@@ -157,20 +172,94 @@ public partial class CompatibilityProfile : RefCounted
 		var parseError = json.Parse(jsonString);
 		if (parseError != Error.Ok)
 		{
-			GD.PrintErr("[CompatibilityProfile] JSON parse error: ", json.GetErrorMessage(), " in ", pPath);
+			SetLoadError("json-invalid", $"JSON parse error: {json.GetErrorMessage()} in {pPath}");
 			return false;
 		}
 
 		var data = json.Data;
 		if (data.VariantType != Variant.Type.Dictionary)
 		{
-			GD.PrintErr("[CompatibilityProfile] Invalid profile format in ", pPath);
+			SetLoadError("root-invalid", "Profile root must be a dictionary: " + pPath);
 			return false;
 		}
 
-		ParseProfileData(data.AsGodotDictionary());
+		var profileData = data.AsGodotDictionary();
+		if (!TryReadSchemaVersion(profileData, out var schemaVersion))
+		{
+			return false;
+		}
+		if (schemaVersion > CurrentSchemaVersion)
+		{
+			SetLoadError("schema-unsupported", $"Profile schema {schemaVersion} is newer than supported schema {CurrentSchemaVersion}.");
+			return false;
+		}
+		if (!ValidateCollectionLimits(profileData))
+		{
+			return false;
+		}
+
+		ParseProfileData(profileData);
+		LastLoadedSchemaVersion = schemaVersion;
 		_loadedFiles.Add(pPath);
 		return true;
+	}
+
+	private bool TryReadSchemaVersion(Godot.Collections.Dictionary pData, out int pSchemaVersion)
+	{
+		pSchemaVersion = LegacySchemaVersion;
+		if (!pData.TryGetValue("schema_version", out var schemaVariant))
+		{
+			return true;
+		}
+		if (schemaVariant.VariantType == Variant.Type.Int)
+		{
+			pSchemaVersion = schemaVariant.AsInt32();
+		}
+		else if (schemaVariant.VariantType == Variant.Type.Float)
+		{
+			var numericVersion = schemaVariant.AsDouble();
+			if (numericVersion < int.MinValue || numericVersion > int.MaxValue
+				|| Math.Truncate(numericVersion) != numericVersion)
+			{
+				SetLoadError("schema-invalid", "schema_version must be an integer.");
+				return false;
+			}
+			pSchemaVersion = (int)numericVersion;
+		}
+		else
+		{
+			SetLoadError("schema-invalid", "schema_version must be an integer.");
+			return false;
+		}
+		if (pSchemaVersion < LegacySchemaVersion)
+		{
+			SetLoadError("schema-invalid", "schema_version must not be negative.");
+			return false;
+		}
+		return true;
+	}
+
+	private bool ValidateCollectionLimits(Godot.Collections.Dictionary pData)
+	{
+		if (pData.TryGetValue("entries", out var entries) && entries.VariantType == Variant.Type.Array
+			&& entries.AsGodotArray().Count > MaxEntries)
+		{
+			SetLoadError("entries-limit", $"Profile exceeds the {MaxEntries} entry limit.");
+			return false;
+		}
+		if (pData.TryGetValue("flags", out var flags) && flags.VariantType == Variant.Type.Array
+			&& flags.AsGodotArray().Count > MaxFlagsPerScope)
+		{
+			SetLoadError("flags-limit", $"Profile exceeds the {MaxFlagsPerScope} global flag limit.");
+			return false;
+		}
+		return true;
+	}
+
+	private void SetLoadError(string pCode, string pMessage)
+	{
+		LastError = pCode + ": " + pMessage;
+		GD.PrintErr("[CompatibilityProfile] ", LastError);
 	}
 
 	/// <summary>Load profiles from a directory.</summary>

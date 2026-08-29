@@ -1,4 +1,5 @@
 using Godot;
+using UniversalRPG.App.Ui;
 using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Tests.Framework;
 
@@ -69,5 +70,39 @@ public partial class TestRm2kRenderer : TestBase
 
         AssertFalse(result.Success);
         AssertTrue(result.Framebuffer == null);
+    }
+
+    public void Test_MapPreviewUsesRuntimeFramebufferAsAuthoritativeTileSource()
+    {
+        var preview = new Rm2kMapPreview();
+        try
+        {
+            var mapData = new Godot.Collections.Dictionary
+            {
+                { "width", 1 },
+                { "height", 1 },
+                { "lower_layer", new[] { 11 } },
+                { "upper_layer", new[] { 22 } },
+            };
+            var framebuffer = new VirtualFramebuffer(1, 1);
+            framebuffer.SetTile(RenderLayer.Lower, 0, 0, 101);
+            framebuffer.SetTile(RenderLayer.Upper, 0, 0, 202);
+
+            preview.SetMapData(mapData);
+            preview.SetFramebuffer(framebuffer);
+
+            AssertTrue(preview.TryGetPreviewTile(RenderLayer.Lower, 0, 0, out var lowerTile));
+            AssertTrue(preview.TryGetPreviewTile(RenderLayer.Upper, 0, 0, out var upperTile));
+            AssertEq(lowerTile, 101, "map preview prefers runtime lower framebuffer tile");
+            AssertEq(upperTile, 202, "map preview prefers runtime upper framebuffer tile");
+
+            preview.SetFramebuffer(null);
+            AssertTrue(preview.TryGetPreviewTile(RenderLayer.Lower, 0, 0, out lowerTile));
+            AssertEq(lowerTile, 11, "map preview falls back to parsed lower layer when detached");
+        }
+        finally
+        {
+            preview.Free();
+        }
     }
 }

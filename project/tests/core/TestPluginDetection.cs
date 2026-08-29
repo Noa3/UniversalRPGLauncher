@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using Godot;
 using UniversalRPG.GameDetectorNs;
 using UniversalRPG.Plugins;
+using UniversalRPG.Rm2k;
+using UniversalRPG.Rm2k.Interpreter;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Tests.Framework;
 
 namespace UniversalRPG.Tests.Core;
@@ -179,11 +183,212 @@ public partial class TestPluginDetection : TestBase
         var started = host.Start(game);
         AssertTrue(started.Success, started.Error?.Message ?? "RM2K runtime start failed");
         AssertEq(host.State, PluginRuntimeState.Running);
+        AssertTrue(host.Runtime is Rm2kEngineRuntime initializedRuntime
+            && initializedRuntime.Simulation.MapWidth > 0
+            && initializedRuntime.Simulation.MapHeight > 0,
+            "RM2K runtime configures the loaded map geometry");
+        if (host.Runtime is Rm2kEngineRuntime runtimeWithMap)
+        {
+            AssertEq(runtimeWithMap.Simulation.MapId, 1,
+                "RM2K runtime derives the loaded map ID from Map0001.lmu");
+            AssertEq(runtimeWithMap.Simulation.PassableTiles.Count,
+                runtimeWithMap.Simulation.MapWidth * runtimeWithMap.Simulation.MapHeight,
+                "RM2K runtime configures bounded passability data");
+            AssertEq(runtimeWithMap.Simulation.MapX, 0,
+                "RM2K runtime does not apply a start position from another map");
+            AssertEq(runtimeWithMap.Simulation.MapY, 0,
+                "RM2K runtime does not apply a start position from another map");
+            AssertTrue(runtimeWithMap.Simulation.Diagnostics.Any(pEntry => pEntry.Contains(
+                    "start map", StringComparison.OrdinalIgnoreCase)),
+                "RM2K runtime diagnoses unavailable start map data");
+            AssertEq(runtimeWithMap.EventScheduler.EventCount,
+                runtimeWithMap.CurrentMapData!["event_count"].AsInt32(),
+                "RM2K runtime forwards decoded map events to the scheduler");
+        }
         var updated = host.Update(1.0 / 30.0);
         AssertTrue(updated.Success, updated.Error?.Message ?? "RM2K runtime update failed");
         AssertTrue(host.Runtime is Rm2kEngineRuntime runtime && runtime.SimulationTicks >= 2);
         var stopped = host.Stop();
         AssertTrue(stopped.Success);
+        if (host.Runtime is Rm2kEngineRuntime stoppedRuntime)
+        {
+            AssertEq(stoppedRuntime.EventScheduler.EventCount, 0,
+                "RM2K runtime clears scheduled map events on stop");
+            AssertTrue(stoppedRuntime.CurrentMapData == null,
+                "RM2K runtime releases current map data on stop");
+            AssertEq(stoppedRuntime.SimulationTicks, 0,
+                "RM2K runtime resets the virtual clock on stop");
+            AssertFalse(stoppedRuntime.Presentation.MessageVisible,
+                "RM2K runtime clears presentation state on stop");
+        }
+    }
+
+    public void Test_Rm2kRuntimeCanRestartAfterStopWithFreshRuntimeState()
+    {
+        var fixture = ProjectSettings.GlobalizePath("res://tests/fixtures/easyrpg-testgame/rm2000");
+        var game = new PluginGameInfo
+        {
+            GameDirectory = fixture,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        };
+        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+
+        AssertTrue(host.Start(game).Success, "RM2K runtime must start before restart regression");
+        AssertTrue(host.Runtime is Rm2kEngineRuntime firstRuntime && firstRuntime.Framebuffer != null,
+            "first RM2K runtime owns a framebuffer");
+        var firstRuntimeReference = host.Runtime;
+        AssertTrue(host.Update(1.0 / 60.0).Success);
+        AssertTrue(host.Stop().Success);
+        AssertEq(host.State, PluginRuntimeState.Stopped);
+        AssertTrue(firstRuntimeReference is Rm2kEngineRuntime stoppedRuntime
+            && stoppedRuntime.Framebuffer == null
+            && stoppedRuntime.CurrentMapData == null,
+            "stopped RM2K runtime has no stale map state");
+
+        var restarted = host.Start(game);
+
+        AssertTrue(restarted.Success, restarted.Error?.Message ?? "RM2K runtime restart failed");
+        AssertEq(host.State, PluginRuntimeState.Running);
+        AssertTrue(host.Runtime is Rm2kEngineRuntime secondRuntime
+            && secondRuntime.Framebuffer != null
+            && secondRuntime.CurrentMapData != null,
+            "restart creates a fresh RM2K runtime state");
+        AssertTrue(!ReferenceEquals(firstRuntimeReference, host.Runtime),
+            "restart does not reuse the stopped runtime instance");
+        if (host.Runtime is Rm2kEngineRuntime restartedRuntime)
+        {
+            AssertEq(restartedRuntime.SimulationTicks, 0,
+                "restart resets the RM2K virtual clock");
+            AssertEq(restartedRuntime.EventScheduler.EventCount,
+                restartedRuntime.CurrentMapData!["event_count"].AsInt32(),
+                "restart reloads map events into the fresh scheduler");
+        }
+    }
+
+    public void Test_Rm2kRuntimeLoadsMapIntoVirtualFramebufferAndClearsItOnStop()
+    {
+        var fixture = ProjectSettings.GlobalizePath("res://tests/fixtures/easyrpg-testgame/rm2000");
+        var game = new PluginGameInfo
+        {
+            GameDirectory = fixture,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        };
+        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+
+        var started = host.Start(game);
+        AssertTrue(started.Success, started.Error?.Message ?? "RM2K runtime start failed");
+        AssertTrue(host.Runtime is Rm2kEngineRuntime runtime && runtime.Framebuffer != null,
+            "RM2K runtime creates a framebuffer for the loaded map");
+        if (host.Runtime is Rm2kEngineRuntime runtimeWithFramebuffer && runtimeWithFramebuffer.Framebuffer != null)
+        {
+            AssertEq(runtimeWithFramebuffer.Framebuffer.Width, runtimeWithFramebuffer.Simulation.MapWidth,
+                "RM2K framebuffer width matches simulation map width");
+            AssertEq(runtimeWithFramebuffer.Framebuffer.Height, runtimeWithFramebuffer.Simulation.MapHeight,
+                "RM2K framebuffer height matches simulation map height");
+            var lowerLayer = ReadLayerTileValues(runtimeWithFramebuffer.CurrentMapData!, "lower_layer");
+            var upperLayer = ReadLayerTileValues(runtimeWithFramebuffer.CurrentMapData!, "upper_layer");
+            AssertEq(runtimeWithFramebuffer.Framebuffer.GetTile(RenderLayer.Lower, 0, 0), lowerLayer[0],
+                "RM2K framebuffer copies lower map layer");
+            AssertEq(runtimeWithFramebuffer.Framebuffer.GetTile(RenderLayer.Upper, 0, 0), upperLayer[0],
+                "RM2K framebuffer copies upper map layer");
+            var lastX = runtimeWithFramebuffer.Framebuffer.Width - 1;
+            var lastY = runtimeWithFramebuffer.Framebuffer.Height - 1;
+            var lastIndex = lastY * runtimeWithFramebuffer.Framebuffer.Width + lastX;
+            AssertEq(runtimeWithFramebuffer.Framebuffer.GetTile(RenderLayer.Lower, lastX, lastY), lowerLayer[lastIndex],
+                "RM2K framebuffer copies final lower tile");
+            AssertEq(runtimeWithFramebuffer.Framebuffer.GetTile(RenderLayer.Upper, lastX, lastY), upperLayer[lastIndex],
+                "RM2K framebuffer copies final upper tile");
+        }
+
+        var stopped = host.Stop();
+        AssertTrue(stopped.Success);
+        if (host.Runtime is Rm2kEngineRuntime stoppedRuntime)
+        {
+            AssertTrue(stoppedRuntime.Framebuffer == null,
+                "RM2K runtime releases framebuffer on stop");
+        }
+    }
+
+    public void Test_Rm2kRuntimeBuildsSpriteDescriptorsAndClearsThemOnStop()
+    {
+        var fixture = ProjectSettings.GlobalizePath("res://tests/fixtures/easyrpg-testgame/rm2000");
+        var game = new PluginGameInfo
+        {
+            GameDirectory = fixture,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        };
+        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+
+        var started = host.Start(game);
+        AssertTrue(started.Success, started.Error?.Message ?? "RM2K runtime start failed");
+        AssertTrue(host.Runtime is Rm2kEngineRuntime runtime && runtime.SpriteDescriptors.Count > 0,
+            "RM2K runtime creates bounded sprite descriptors");
+        if (host.Runtime is Rm2kEngineRuntime runtimeWithSprites)
+        {
+            var player = runtimeWithSprites.SpriteDescriptors.FirstOrDefault(
+                pDescriptor => pDescriptor.Kind == Rm2kSpriteKind.Player);
+            AssertTrue(player != null, "RM2K runtime exposes a player sprite descriptor");
+            if (player != null)
+            {
+                AssertEq(player.X, runtimeWithSprites.Simulation.MapX,
+                    "RM2K player sprite uses simulation X");
+                AssertEq(player.Y, runtimeWithSprites.Simulation.MapY,
+                    "RM2K player sprite uses simulation Y");
+            }
+        }
+
+        var stopped = host.Stop();
+        AssertTrue(stopped.Success);
+        if (host.Runtime is Rm2kEngineRuntime stoppedRuntime)
+        {
+            AssertEq(stoppedRuntime.SpriteDescriptors.Count, 0,
+                "RM2K runtime clears sprite descriptors on stop");
+        }
+    }
+
+    public void Test_Rm2kRuntimeMovementSynchronizesPlayerSpriteDescriptor()
+    {
+        var fixture = ProjectSettings.GlobalizePath("res://tests/fixtures/easyrpg-testgame/rm2000");
+        var game = new PluginGameInfo
+        {
+            GameDirectory = fixture,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        };
+        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        AssertTrue(host.Start(game).Success, "RM2K runtime must start for sprite synchronization test");
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            throw new InvalidOperationException("RM2K runtime was not created for sprite synchronization test.");
+        }
+
+        var passability = Enumerable.Repeat(true,
+            runtime.Simulation.MapWidth * runtime.Simulation.MapHeight).ToArray();
+        runtime.Simulation.ConfigureMap(
+            runtime.Simulation.MapId,
+            runtime.Simulation.MapWidth,
+            runtime.Simulation.MapHeight,
+            passability);
+        AssertTrue(runtime.TryMove(0, 1),
+            "runtime movement wrapper must move the player down");
+
+        var player = runtime.SpriteDescriptors.FirstOrDefault(
+            pDescriptor => pDescriptor.Kind == Rm2kSpriteKind.Player);
+        AssertTrue(player != null, "runtime movement retains a player sprite descriptor");
+        if (player != null)
+        {
+            AssertEq(player.X, runtime.Simulation.MapX,
+                "player descriptor X follows runtime movement");
+            AssertEq(player.Y, runtime.Simulation.MapY,
+                "player descriptor Y follows runtime movement");
+        }
     }
 
     public void Test_Rm2kRuntimeToolsRequireExplicitDebugOptIn()
@@ -207,6 +412,40 @@ public partial class TestPluginDetection : TestBase
         runtime.Simulation.Gold = 1;
         AssertTrue(((IRuntimeSaveTools)runtime).ImportSaveSnapshot(snapshot.Value ?? "").Success);
         AssertEq(runtime.Simulation.Gold, 999);
+    }
+
+    public void Test_Rm2kRuntimeUpdateDrivesAutorunScheduler()
+    {
+        var fixture = ProjectSettings.GlobalizePath("res://tests/fixtures/easyrpg-testgame/rm2000");
+        var game = new PluginGameInfo
+        {
+            GameDirectory = fixture,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        };
+        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        AssertTrue(host.Start(game).Success, "RM2K runtime must start for scheduler integration test");
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            throw new InvalidOperationException("RM2K runtime was not created for scheduler integration test.");
+        }
+
+        var eventData = new Rm2kMap.Event(900, 0, 0);
+        var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Autorun };
+        page.Commands.Add(new Rm2kMap.EventCommand(
+            EventInterpreter.ControlSwitches,
+            new List<int> { 7, 7, 0, EventInterpreter.SwitchModeOn }));
+        page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+        eventData.Pages.Add(page);
+        runtime.EventScheduler.SetEvents(new[] { eventData });
+
+        var updated = host.Update(1.0 / 60.0);
+
+        AssertTrue(updated.Success, updated.Error?.Message ?? "RM2K runtime update failed");
+        AssertTrue(runtime.Simulation.Switches.Count >= 7);
+        AssertTrue(runtime.Simulation.Switches[6],
+            "RM2K host update must execute native autorun commands");
     }
 
     public void Test_BuiltInDetectionOnlyRuntimeRefusesLaunch()
@@ -314,9 +553,6 @@ public partial class TestPluginDetection : TestBase
             var hasRuntimeBootstrap = plugin.Metadata.Id is
                             EnginePluginIds.RpgMaker2000 or
                             EnginePluginIds.RpgMaker2003 or
-                            EnginePluginIds.RpgMakerXp or
-                            EnginePluginIds.RpgMakerVx or
-                            EnginePluginIds.RpgMakerVxAce or
                 EnginePluginIds.WolfRpg;
             AssertTrue(hasRuntimeBootstrap
                 == ((plugin.Metadata.Capabilities & PluginCapability.Runtime) != 0),
@@ -406,6 +642,33 @@ public partial class TestPluginDetection : TestBase
     {
         using var writer = new StreamWriter(pArchive.CreateEntry(pPath).Open());
         writer.Write(pText);
+    }
+
+    private static int[] ReadLayerTileValues(Godot.Collections.Dictionary pMapData, string pKey)
+    {
+        if (!pMapData.TryGetValue(pKey, out var raw))
+        {
+            throw new InvalidOperationException($"Missing map layer '{pKey}'.");
+        }
+        if (raw.VariantType == Variant.Type.PackedInt32Array)
+        {
+            return raw.AsInt32Array();
+        }
+        if (raw.VariantType == Variant.Type.Array)
+        {
+            var values = raw.AsGodotArray();
+            var result = new int[values.Count];
+            for (var index = 0; index < values.Count; index++)
+            {
+                if (values[index].VariantType != Variant.Type.Int)
+                {
+                    throw new InvalidOperationException($"Map layer '{pKey}' contains a non-integer value.");
+                }
+                result[index] = values[index].AsInt32();
+            }
+            return result;
+        }
+        throw new InvalidOperationException($"Map layer '{pKey}' has unsupported representation.");
     }
 
     private static void WriteText(string pPath, string pText)

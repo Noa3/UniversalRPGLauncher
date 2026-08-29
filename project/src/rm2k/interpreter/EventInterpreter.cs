@@ -216,6 +216,7 @@ public sealed class EventInterpreter
 			return false;
 		}
 		_state.AddDiagnostic($"[Event {_eventId}] Choice selected: {_presentation.ActiveChoice.SelectedIndex}");
+		_presentation.ClearChoice();
 		return true;
 	}
 
@@ -227,6 +228,11 @@ public sealed class EventInterpreter
 			return true;
 		}
 		var variableId = pCmd.Parameters[0];
+		if (_presentation.PendingInputVariableId != null && _presentation.PendingInputVariableId != variableId)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] InputNumber for variable {variableId} paused: pending input for different variable {_presentation.PendingInputVariableId}");
+			return false;
+		}
 		if (_presentation.PendingInputVariableId == null && !_presentation.BeginInput(variableId))
 		{
 			Malformed("Input number");
@@ -410,11 +416,13 @@ public sealed class EventInterpreter
 		var mapId = pCmd.Parameters[0];
 		var x = pCmd.Parameters[1];
 		var y = pCmd.Parameters[2];
-		if (mapId < 0 || mapId > GameSimulationState.MaxMapId || x < 0 || y < 0)
+		var facing = pCmd.Parameters.Count >= 4 ? pCmd.Parameters[3] : (int)_state.FacingDirection;
+		if (mapId < 1 || mapId > GameSimulationState.MaxMapId || x < 0 || y < 0 || facing is not (2 or 4 or 6 or 8))
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Transfer player: invalid target ({mapId}, {x}, {y}) skipped");
 			return;
 		}
+		_state.FacingDirection = (byte)facing;
 		_state.PendingMapId = mapId;
 		_state.PendingX = x;
 		_state.PendingY = y;

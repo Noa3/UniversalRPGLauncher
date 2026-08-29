@@ -42,6 +42,7 @@ partial class TestCompatibilityProfile : TestBase
 
 	private const string ValidProfile = """
 		{
+		  "schema_version": 1,
 		  "flags": [
 		    {"name": "PreserveLegacyPictureTiming", "type": "BOOLEAN", "value": true},
 		    {"name": "LegacyTextEncoding", "type": "STRING", "value": "CP932"},
@@ -80,6 +81,29 @@ partial class TestCompatibilityProfile : TestBase
 		var path = CreateTestProfile("test_global", ValidProfile);
 		AssertTrue(compat.LoadProfile(path));
 		AssertEq(compat.GetLoadedFiles().Count, 1);
+		AssertEq(compat.LastLoadedSchemaVersion, CompatibilityProfile.CurrentSchemaVersion);
+	}
+
+	public void Test_LegacyProfileWithoutSchemaVersionRemainsCompatible()
+	{
+		var compat = new CompatibilityProfile();
+		var path = CreateTestProfile("legacy_schema", "{\"flags\":[],\"entries\":[]}");
+
+		AssertTrue(compat.LoadProfile(path));
+		AssertEq(compat.LastLoadedSchemaVersion, CompatibilityProfile.LegacySchemaVersion);
+		AssertEq(compat.LastError, "");
+	}
+
+	public void Test_FutureOrInvalidSchemaIsRejectedWithDiagnostic()
+	{
+		var compat = new CompatibilityProfile();
+		var future = CreateTestProfile("future_schema", "{\"schema_version\":99,\"flags\":[],\"entries\":[]}");
+		AssertFalse(compat.LoadProfile(future));
+		AssertTrue(compat.LastError.StartsWith("schema-unsupported:", System.StringComparison.Ordinal));
+
+		var invalid = CreateTestProfile("invalid_schema", "{\"schema_version\":\"one\",\"flags\":[],\"entries\":[]}");
+		AssertFalse(compat.LoadProfile(invalid));
+		AssertTrue(compat.LastError.StartsWith("schema-invalid:", System.StringComparison.Ordinal));
 	}
 
 	public void Test_LoadNonexistentProfile()

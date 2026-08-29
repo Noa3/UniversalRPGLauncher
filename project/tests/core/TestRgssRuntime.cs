@@ -36,7 +36,7 @@ public partial class TestRgssRuntime : TestBase
         CleanupDir(TempBase);
     }
 
-    public void Test_XpVxAndVxAceUseTheSharedRgssBackend()
+    public void Test_XpVxAndVxAceRemainDetectionOnly()
     {
         var cases = new[]
         {
@@ -49,44 +49,11 @@ public partial class TestRgssRuntime : TestBase
         {
             var report = Analyze(item.Name);
             AssertEq(report.SelectedCandidate?.EngineId, item.Id, $"Detection selects {item.Name}");
-            AssertEq(report.SelectedCandidate?.Status, EngineDetectionStatus.Supported, $"{item.Name} is runtime-supported");
+            AssertEq(report.SelectedCandidate?.Status, EngineDetectionStatus.DetectionOnly, $"{item.Name} is detection-only");
             var selector = new EngineRuntimeSelector();
             var selection = selector.Select(report, "windows");
-            AssertTrue(selection.Success, selection.Error?.Message ?? $"{item.Name} runtime selection failed");
-            if (!selection.Success || selection.Value == null)
-            {
-                continue;
-            }
-
-            using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
-            var started = host.Start(selection.Value.Game);
-            AssertTrue(started.Success, started.Error?.Message ?? $"{item.Name} runtime start failed");
-            AssertEq(host.Plugin?.Metadata.Id, item.Id, $"{item.Name} selects its own plugin");
-            AssertTrue(host.Runtime is RgssEngineRuntime, $"{item.Name} uses RgssEngineRuntime");
-            if (host.Runtime is not RgssEngineRuntime runtime)
-            {
-                continue;
-            }
-
-            AssertEq(runtime.RuntimeInfo?.Generation, item.Generation, $"{item.Name} generation metadata");
-            AssertEq(runtime.RuntimeInfo?.RuntimeVersion?.Major ?? -1, item.Major, $"{item.Name} RGSS major version");
-            AssertTrue(runtime.RuntimeInfo?.RuntimeLibraryPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ?? false,
-                $"{item.Name} runtime library is inspected");
-            AssertEq(runtime.RuntimeInfo?.DataFileCount ?? -1, 2, $"{item.Name} data file count");
-            AssertTrue(runtime.RuntimeInfo?.HasScriptPayload ?? false, $"{item.Name} script payload remains metadata");
-            var expectedSystem = item.Generation == "xp" ? "Data/System.rxdata" : item.Generation == "vx" ? "Data/System.rvdata" : "Data/System.rvdata2";
-            AssertEq(runtime.RuntimeInfo?.ExpectedSystemDataPath, expectedSystem, $"{item.Name} version-specific System path");
-            AssertFalse(runtime.RuntimeInfo?.HasSystemData ?? true, $"{item.Name} fixture records missing System data explicitly");
-            AssertTrue(started.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "rgss.runtime-initialized"),
-                $"{item.Name} exposes bounded initialization diagnostics");
-            AssertTrue(started.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "rgss.scripts-inspected-only"),
-                $"{item.Name} reports scripts as not executed");
-            AssertTrue(started.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "rgss.system-data-missing"),
-                $"{item.Name} reports version-specific System data requirements");
-
-            AssertTrue(host.Update(1.0 / 30.0).Success, $"{item.Name} update succeeds");
-            AssertTrue(runtime.SimulationTicks >= 2, $"{item.Name} advances deterministic simulation ticks");
-            AssertTrue(host.Stop().Success, $"{item.Name} stops cleanly");
+            AssertFalse(selection.Success, $"{item.Name} runtime selection must be refused");
+            AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine, $"{item.Name} refusal code");
         }
     }
 
@@ -97,23 +64,8 @@ public partial class TestRgssRuntime : TestBase
         AssertEq(report.SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerVx);
         var selector = new EngineRuntimeSelector();
         var selection = selector.Select(report, "windows");
-        AssertTrue(selection.Success, selection.Error?.Message ?? "RGSS archive selection failed");
-        if (!selection.Success || selection.Value == null)
-        {
-            return;
-        }
-
-        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
-        var started = host.Start(selection.Value.Game);
-        AssertTrue(started.Success, started.Error?.Message ?? "RGSS archive runtime start failed");
-        AssertTrue(host.Runtime is RgssEngineRuntime);
-        if (host.Runtime is RgssEngineRuntime runtime)
-        {
-            AssertTrue(runtime.RuntimeInfo?.IsArchiveSource ?? false);
-            AssertEq(runtime.RuntimeInfo?.ArchivePath, "Game.rgss2a");
-            AssertTrue(started.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "rgss.archive-inspected-only"));
-        }
-        AssertTrue(host.Stop().Success);
+        AssertFalse(selection.Success, "RGSS archive runtime selection must be refused");
+        AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
     }
 
     public void Test_MissingRgssLibraryFailsBeforeRuntimeStarts()
@@ -121,19 +73,8 @@ public partial class TestRgssRuntime : TestBase
         var report = Analyze("MissingRuntime");
         AssertEq(report.SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerXp);
         var selection = new EngineRuntimeSelector().Select(report, "windows");
-        AssertTrue(selection.Success, selection.Error?.Message ?? "Missing-runtime fixture was not detected");
-        if (!selection.Success || selection.Value == null)
-        {
-            return;
-        }
-
-        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
-        var started = host.Start(selection.Value.Game);
-        AssertFalse(started.Success);
-        AssertEq(started.Error?.Code, PluginErrorCode.LifecycleFailure);
-        AssertEq(started.Error?.Phase, "initialize");
-        AssertEq(host.State, PluginRuntimeState.Faulted);
-        AssertEq(host.Runtime?.State, PluginRuntimeState.Disposed);
+        AssertFalse(selection.Success, "Missing-runtime RGSS selection must be refused");
+        AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
     }
 
     private EngineDetectionReport Analyze(string pName)

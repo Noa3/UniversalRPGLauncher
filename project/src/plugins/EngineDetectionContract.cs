@@ -259,7 +259,8 @@ public static class SafeGameInspector
                 }
 
                 var children = directory.EnumerateFileSystemInfos()
-                    .OrderBy(pChild => pChild.Name, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(pChild => pChild is DirectoryInfo ? DirectoryPriority(pChild.Name) : 100)
+                    .ThenBy(pChild => pChild.Name, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(pChild => pChild.Name, StringComparer.Ordinal)
                     .ToArray();
                 foreach (var child in children)
@@ -293,9 +294,9 @@ public static class SafeGameInspector
                         }
                         else
                         {
-                            malformed = true;
-                            diagnostics.Add(EngineInspectionDiagnostic.Error(
-                                "inspect.depth-limit", $"Inspection depth limit reached at '{childDirectory.Name}'."));
+                            partial = true;
+                            diagnostics.Add(EngineInspectionDiagnostic.Info(
+                                "inspect.depth-limit", $"Inspection depth limit reached at '{childDirectory.Name}'; results remain advisory."));
                         }
                         continue;
                     }
@@ -397,6 +398,30 @@ public static class SafeGameInspector
             CreateSnapshot(pArchivePath, true, malformed, partial, files, diagnostics));
     }
 
+    private static bool IsMetadataPath(string pRelativePath)
+    {
+        var fileName = Path.GetFileName(pRelativePath);
+        return fileName.Equals("System.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("MapInfos.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("Actors.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("Game.ini", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("RPG_RT.ini", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("package.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("plugins.js", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("RPG_RT.ldb", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("RPG_RT.lmt", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".lmu", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int DirectoryPriority(string pName)
+    {
+        return pName.Equals("data", StringComparison.OrdinalIgnoreCase) ? 10
+            : pName.Equals("www", StringComparison.OrdinalIgnoreCase) ? 9
+            : pName.Equals("js", StringComparison.OrdinalIgnoreCase) ? 8
+            : pName.Equals("scripts", StringComparison.OrdinalIgnoreCase) ? 7
+            : 0;
+    }
+
     private static void AddFile(
         Dictionary<string, InspectedGameFile> pFiles,
         string pRelativePath,
@@ -413,14 +438,16 @@ public static class SafeGameInspector
         }
         try
         {
-            var amount = (int)Math.Min(Math.Max(0, pLength), pLimits.MaxFileBytes);
+            var fullMetadataRead = IsMetadataPath(relative);
+            var readLimit = fullMetadataRead ? pLimits.MaxFileBytes : pLimits.MaxPrefixBytes;
+            var amount = (int)Math.Min(Math.Max(0, pLength), readLimit);
             using var stream = File.OpenRead(pFullPath);
             var data = ReadStream(stream, amount);
-            pFiles.Add(relative, new InspectedGameFile(relative, pLength, data, pLength > pLimits.MaxFileBytes, pArchiveEntry));
-            if (pLength > pLimits.MaxFileBytes)
+            pFiles.Add(relative, new InspectedGameFile(relative, pLength, data, pLength > readLimit, pArchiveEntry));
+            if (fullMetadataRead && pLength > readLimit)
             {
                 pDiagnostics.Add(EngineInspectionDiagnostic.Info(
-                    "inspect.file-truncated", $"Metadata file '{relative}' was read only up to the file-size limit."));
+                    "inspect.file-truncated", $"Metadata file '{relative}' was read only up to the bounded inspection limit."));
             }
         }
         catch (Exception exception)

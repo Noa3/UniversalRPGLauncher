@@ -44,4 +44,23 @@ public partial class TestPresentationState : TestBase
         AssertFalse(presentation.SelectChoice(2));
         AssertFalse(presentation.ShowChoices(new[] { "1", "2", "3", "4", "5" }));
     }
+
+    public void Test_ResetClearsAllPendingPresentationState()
+    {
+        var presentation = new PresentationState();
+        AssertTrue(presentation.ShowMessage("stale"));
+        AssertTrue(presentation.ShowChoices(new[] { "Yes", "No" }));
+        AssertTrue(presentation.BeginInput(4));
+        AssertTrue(presentation.SetInputValue(12));
+        AssertTrue(presentation.ShowPicture(1, "Picture", 0, 0, 16, 16));
+
+        presentation.Reset();
+
+        AssertFalse(presentation.MessageVisible);
+        AssertEq(presentation.MessageText, "");
+        AssertTrue(presentation.ActiveChoice == null);
+        AssertTrue(presentation.PendingInputVariableId == null);
+        AssertTrue(presentation.InputValue == null);
+        AssertEq(presentation.Pictures.Count, 0);
+    }
 }

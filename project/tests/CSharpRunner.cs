@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using Godot;
@@ -101,6 +102,26 @@ public partial class CSharpRunner : Node
 		SmokeLibraryScan();
 		SmokeTranslation();
 		SmokeUiScene();
+		SmokeConfiguredExternalGame();
+	}
+
+	private void SmokeConfiguredExternalGame()
+	{
+		var path = System.Environment.GetEnvironmentVariable("URPG_EXTERNAL_GAME_PATH");
+		if (string.IsNullOrWhiteSpace(path))
+		{
+			return;
+		}
+		var result = new GameDetector().Analyze(path);
+		GD.Print($"External detection: engine={result.GetEngineName()}, title={result.Title}, version={result.EngineVersion?.ToString() ?? "unknown"}, confidence={result.Confidence}, candidates={result.Candidates.Count}, partial={result.Report.Inspection?.IsPartial}");
+		foreach (var candidate in result.Candidates)
+		{
+			GD.Print($"External candidate: {candidate.DisplayName} score={candidate.Score} status={candidate.Status}");
+		}
+		foreach (var diagnostic in result.Diagnostics)
+		{
+			GD.Print($"External diagnostic: {diagnostic.Code}: {diagnostic.Message}");
+		}
 	}
 
 	private void SmokeCp932()
@@ -191,20 +212,42 @@ public partial class CSharpRunner : Node
 
 	private void SmokeUiScene()
 	{
+		var settingsPath = ProjectSettings.GlobalizePath(GameLibrary.SettingsPath);
+		var settingsBackup = File.Exists(settingsPath) ? File.ReadAllBytes(settingsPath) : null;
+		if (File.Exists(settingsPath))
+		{
+			File.Delete(settingsPath);
+		}
 		var packedScene = GD.Load<PackedScene>("res://scenes/main.tscn");
 		Check(packedScene != null, "Load main scene");
 		if (packedScene == null)
 		{
+			RestoreSettings(settingsPath, settingsBackup);
 			return;
 		}
 		var instance = packedScene.Instantiate();
 		Check(instance != null, "Instantiate main scene");
 		if (instance == null)
 		{
+			RestoreSettings(settingsPath, settingsBackup);
 			return;
 		}
 		AddChild(instance);
 		instance.QueueFree();
+		RestoreSettings(settingsPath, settingsBackup);
+	}
+
+	private static void RestoreSettings(string pPath, byte[]? pBackup)
+	{
+		if (pBackup == null)
+		{
+			if (File.Exists(pPath))
+			{
+				File.Delete(pPath);
+			}
+			return;
+		}
+		File.WriteAllBytes(pPath, pBackup);
 	}
 
 	private static byte[] Ber(int pValue)
@@ -257,7 +300,7 @@ public partial class CSharpRunner : Node
 
 	private static void WriteBytes(string pPath, byte[] pBytes)
 	{
-		using var file = FileAccess.Open(pPath, FileAccess.ModeFlags.Write);
+		using var file = Godot.FileAccess.Open(pPath, Godot.FileAccess.ModeFlags.Write);
 		if (file == null)
 		{
 			GD.PushError("Create fixture failed: " + pPath);

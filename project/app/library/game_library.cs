@@ -12,7 +12,8 @@ namespace UniversalRPG.App.Library;
 public partial class GameLibrary : RefCounted
 {
 	public const string SettingsPath = "user://library.cfg";
-	public const int MaxScanDepth = 2;
+	public const int MaxScanDepth = 4;
+	public const int MaxScanDirectories = 4096;
 
 	public enum GameCompatibilityStatus
 	{
@@ -62,6 +63,7 @@ public partial class GameLibrary : RefCounted
 	private readonly string _settingsPath;
 	private readonly Dictionary<string, StoredGameRecord> _persistedRecords = new(StringComparer.Ordinal);
 	private bool _persistedRecordsLoaded;
+	private int _scannedDirectories;
 
 	private static readonly JsonSerializerOptions JsonOptions = new()
 	{
@@ -125,6 +127,7 @@ public partial class GameLibrary : RefCounted
 	{
 		EnsurePersistedRecordsLoaded();
 		Games.Clear();
+		_scannedDirectories = 0;
 		if (!DirAccess.DirExistsAbsolute(RootPath))
 		{
 			return Games;
@@ -161,11 +164,20 @@ public partial class GameLibrary : RefCounted
 
 	private void ScanDirectory(string pPath, int pDepth)
 	{
-		var entry = ImportInternal(pPath);
-		if (entry != null && IsRecognized(entry.Detection))
+		if (_scannedDirectories >= MaxScanDirectories)
 		{
-			Games.Add(entry);
 			return;
+		}
+		_scannedDirectories += 1;
+
+		if (LooksLikeGameRoot(pPath))
+		{
+			var entry = ImportInternal(pPath);
+			if (entry != null && IsRecognized(entry.Detection))
+			{
+				Games.Add(entry);
+				return;
+			}
 		}
 		if (pDepth >= MaxScanDepth)
 		{
@@ -178,16 +190,50 @@ public partial class GameLibrary : RefCounted
 		}
 		foreach (var directoryName in directory.GetDirectories())
 		{
-			if (directoryName.StartsWith("."))
-			{
-				continue;
-			}
-			if (directory.IsLink(directoryName))
+			if (ShouldSkipDirectory(directoryName) || directory.IsLink(directoryName))
 			{
 				continue;
 			}
 			ScanDirectory(pPath.PathJoin(directoryName), pDepth + 1);
 		}
+	}
+
+	private static bool LooksLikeGameRoot(string pPath)
+	{
+		try
+		{
+			var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			foreach (var entry in new DirectoryInfo(pPath).EnumerateFileSystemInfos())
+			{
+				if (!entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+				{
+					names.Add(entry.Name);
+				}
+			}
+			return names.Contains("RPG_RT.ldb") || names.Contains("RPG_RT.lmt")
+				|| names.Contains("RPG_RT.ini") || names.Contains("Game.ini")
+				|| names.Contains("Game.exe") || names.Contains("index.html")
+				|| names.Contains("package.json") || names.Contains("Game.dat")
+				|| names.Contains("BasicData") || names.Contains("Data")
+				|| names.Contains("data") || names.Contains("www") || names.Contains("Scripts");
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static bool ShouldSkipDirectory(string pName)
+	{
+		return pName.StartsWith(".", StringComparison.Ordinal)
+			|| pName.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
+			|| pName.Equals("locales", StringComparison.OrdinalIgnoreCase)
+			|| pName.Equals("pnacl", StringComparison.OrdinalIgnoreCase)
+			|| pName.Equals("swiftshader", StringComparison.OrdinalIgnoreCase)
+			|| pName.Equals("img", StringComparison.OrdinalIgnoreCase)
+			|| pName.Equals("audio", StringComparison.OrdinalIgnoreCase)
+			|| pName.Equals("fonts", StringComparison.OrdinalIgnoreCase)
+			|| pName.Equals("effects", StringComparison.OrdinalIgnoreCase);
 	}
 
 	private void SaveSettings()

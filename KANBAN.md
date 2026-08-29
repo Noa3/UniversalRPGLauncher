@@ -59,10 +59,10 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-054 | 1 | DONE | Add capability-gated RM2K save/debug tool contracts | K-052 |
 | K-055 | 1 | DONE | Add bounded runtime-owned RM2K JSON save-directory slots | K-052 |
 | K-050 | 2 | DONE | Original-format read-only LSD save model and safe save directory integration | K-020 |
-| K-060 | 2 | BACKLOG | Game compatibility profile schema versioning/validation | K-002 |
-| K-061 | 2 | BACKLOG | Compatibility report export for GitHub issues | K-060 |
-| K-070 | 3 | BACKLOG | Faithful-vs-Enhanced profile and integer scaling controls | K-030 |
-| K-071 | 3 | BACKLOG | Controller/touch remapping layer | K-020 |
+| K-060 | 2 | DONE | Game compatibility profile schema versioning/validation | K-002 |
+| K-061 | 2 | DONE | Compatibility report export for GitHub issues | K-060 |
+| K-070 | 3 | DONE | Faithful-vs-Enhanced profile and integer scaling controls | K-030 |
+| K-071 | 3 | DONE | Controller/touch remapping layer | K-020 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -208,7 +208,7 @@ Do not remove new regression tests to restore green status. Use the anti-loop po
 
 **Acceptance criteria**
 - Trusted compiled plugin contracts expose metadata, capabilities, probe results, runtime lifecycle, and typed diagnostics.
-- Built-in descriptors cover RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection. RM95/MV/MZ/Unite remain detection-only; RGSS has a bounded metadata lifecycle slice, WOLF has an explicitly unencrypted plain-data slice, and RM2K/RM2K3 additionally parse LDB/LMT/LMU data.
+- Built-in descriptors cover RM95, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite research detection. RM95/RGSS/MV/MZ/Unite remain detection-only; WOLF has an explicitly unencrypted plain-data slice, and RM2K/RM2K3 additionally parse LDB/LMT/LMU data.
 - Detection uses bounded read-only folder/ZIP inspection and retains ranked candidates, evidence, ambiguity, malformed-input, and unknown diagnostics.
 - Library import/scan persists versioned detection metadata and revalidates persisted selections on relaunch.
 - Runtime selection refuses ambiguous, unknown, malformed, detection-only, missing, capability-incompatible, platform-incompatible, and probe-failing candidates without external fallback.
@@ -355,12 +355,10 @@ Implements EasyRPG `CommandConditionalBranch` (code 12010) semantics for the two
 - True path runs then-body and skips else via matching EndBranch; false path jumps to ElseBranch or EndBranch; nesting handled by depth counting, not indent.
 - Regression coverage: switch polarity, false-runs-else, variable operators, var-vs-var operand with nested branch, unsupported-type diagnostic.
 
-**Status (2026-08-23) — VERIFY, not DONE**
-- Implementation complete in `project/src/rm2k/interpreter/EventInterpreter.cs`; builds clean (0 warnings/errors). Five new tests exist (`Test_ConditionalBranch*`, suite file now has 19 `Test_*` methods).
-- NOT yet verified in the headless suite: the last runner invocations returned a stale assembly (14/14) and then timed out after a full rebuild. Last verified suite count remains **205/205**.
-- Unblock action: run once with a fresh shell:
-  `cd project && "$GODOT" --headless --path . res://tests/csharp_runner.tscn` (GODOT = `tools/godot/editors/4.7.2/linux-x86_64/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64`)
-  Expected: `TestEventInterpreter: 19/19 passed`, `All 210 tests passed`. If green, flip this card to DONE and update counts in PROJECT_STATUS/SESSION_STATE/handoff. If a test fails, fix before any further card work.
+**Status (audited 2026-08-26) — DONE**
+- Implementation is complete in `project/src/rm2k/interpreter/EventInterpreter.cs`; current suite executes the five conditional-branch regression tests.
+- Current canonical validation: `All 279 tests passed`.
+- Remaining boundary: timer/gold/item/actor conditions outside the modeled state remain diagnostic-only.
 
 ### K-018 — Complete MZ database inventory
 
@@ -417,8 +415,8 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 **Progress evidence (2026-08-23)**
 - Verified code table extracted from liblcf `src/generated/lcf/rpg/eventcommand.h`; parameter semantics cross-checked against EasyRPG Player `game_interpreter.cpp` and `game_interpreter_map.cpp` (CommandControlSwitches, CommandControlVariables, CommandTeleport 10810, SetupWait).
 - Rewrote `EventInterpreter` on the typed model: message continuation (20110), comment continuation (22410), tenths-based waits with frame clamp, switch flip mode, variable operand type (const/var), bounded loop stack with EndLoop jump-back and BreakLoop jump-past.
-- Known limitations documented in code: conditional branch always takes the true branch until condition decoding lands; ShowChoice/InputNumber remain skipped pending presentation/input slices.
-- `bash scripts/validate.sh` — passed; `198/198` C# tests and smoke validation.
+- Known limitations documented in code: ShowChoice/InputNumber remain skipped pending presentation/input slices; unsupported commands remain diagnostic-only.
+- Current canonical validation: `All 279 tests passed`.
 
 ### K-013 — LMU events/pages
 
@@ -429,8 +427,12 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - Preserve raw/unknown commands for later interpreter work.
 - Synthetic fixtures cover valid, empty, truncated and oversized payloads.
 
-**Validation evidence**
-- TBD
+**Validation evidence (audited 2026-08-26)**
+- `Rm2kParser.ParseMap` decodes bounded event IDs/names/coordinates, page metadata, page conditions, move-list presence, command-list presence, and data-only command vectors.
+- `Rm2kEventCommandDecoder` enforces command, parameter, string, terminator, and trailing-byte bounds; it never executes commands.
+- `TestEventInterpreter` and `test_rm2k_parser.cs` cover event/page selection, command-vector framing, malformed input, and condition decoding.
+- Current canonical validation: `All 279 tests passed`.
+- Remaining limit: complete RM2K field-semantic coverage for every event/page subfield is not claimed.
 
 ### K-014 — Preserve unknown LCF fields/chunks
 
@@ -439,6 +441,74 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - Do not execute event commands while parsing.
 - Bound page/command counts and payload sizes.
 - Preserve raw/unknown commands for later interpreter work.
+
+**Validation evidence (audited 2026-08-26)**
+- `Rm2kParser` retains unknown top-level and per-entry fields as raw bounded dictionaries with IDs, payloads, offsets, and lengths.
+- `Rm2kEventCommandDecoder` retains command data as typed data objects; unsupported command codes are diagnosed by the native interpreter rather than executed during parsing.
+- `Rm2kEngineRuntime.Update()` is covered by a native autorun integration test that proves Clock → Scheduler → EventInterpreter execution; map initialization now creates a bounded `VirtualFramebuffer` through `Rm2kRendererAdapter`, and `Stop()` reset coverage includes clock/presentation/framebuffer cleanup.
+- `Rm2kEventScheduler` caps imported map events at 1000 and emits a bounded diagnostic when additional events are skipped; this is regression-tested.
+- Regression coverage exists in `test_rm2k_parser.cs`, `test_rm2k_lsd_save_model.cs`, `test_event_interpreter.cs`, and `TestPluginDetection.cs`.
+- Current canonical validation: `All 279 tests passed`.
+
+### K-071 — Controller/touch remapping layer
+
+**Status (audited 2026-08-26) — DONE**
+- `Rm2kInputMapper` maps keyboard, joypad buttons, and bounded touch zones to engine-neutral actions.
+- `Main._UnhandledInput` consumes the mapper for movement, confirmation, choices, and numeric-input confirmation without executing imported scripts.
+- Custom key bindings replace defaults for the selected action; released and unbound events are ignored.
+- Regression coverage: `TestRm2kInputMapper` (`3/3`); current canonical validation: `All 280 tests passed`.
+
+### K-072 — Reusable RM2K host lifecycle
+
+**Status (2026-08-28) — DONE for bounded lifecycle slice**
+- `EnginePluginHost` accepts `Stopped → Start` and disposes the previous stopped runtime exactly once before selecting and creating a fresh runtime.
+- `Rm2kEngineRuntime.Stop()` remains a full cleanup boundary; the restart test verifies cleared map/framebuffer state and a fresh clock/scheduler.
+- No stopped runtime is re-initialized. The second start follows the normal selection → creation → initialization → start path.
+- Regression coverage: `Test_Rm2kRuntimeCanRestartAfterStopWithFreshRuntimeState` in `TestPluginDetection`.
+- Fresh canonical validation: `All 280 tests passed`.
+
+### K-073 — Synchronize runtime sprite descriptors after movement
+
+**Status (2026-08-28) — DONE for bounded movement/render-state slice**
+- `Main._UnhandledInput` routes RM2K movement through `Rm2kEngineRuntime.TryMove()` instead of mutating `Simulation` directly.
+- Successful movement rebuilds bounded player/event sprite descriptors from the current map data; blocked or invalid movement leaves descriptors unchanged.
+- Regression coverage: `Test_Rm2kRuntimeMovementSynchronizesPlayerSpriteDescriptor` in `TestPluginDetection`.
+- Fresh canonical validation: `All 281 tests passed`.
+
+### K-074 — Fail-closed pending transfer parameters
+
+**Status (2026-08-28) — DONE for bounded transfer-request slice**
+- `EventInterpreter` accepts pending transfer requests only for map IDs `1..GameSimulationState.MaxMapId` and nonnegative coordinates.
+- Invalid transfer payloads produce one diagnostic and cannot overwrite an existing pending transfer.
+- This remains a data-only `PendingTransfer` request; no target map is loaded or executed.
+- Regression coverage: `Test_TeleportRejectsInvalidMapIdsWithoutOverwritingPendingState` in `TestEventInterpreter`.
+- Fresh canonical validation: `All 282 tests passed`.
+
+### K-075 — Transfer facing direction validation
+
+**Status (2026-08-28) — DONE for bounded transfer-request slice**
+- The optional RM2K3 transfer facing parameter is accepted only for directions `2/4/6/8`.
+- Transfer validation is atomic: invalid facing values do not alter the facing direction or an existing pending transfer.
+- Transfers remain data-only `PendingTransfer` requests; no target map is loaded or executed.
+- Regression coverage: `Test_TeleportAppliesValidFacingAndRejectsInvalidFacingAtomically` in `TestEventInterpreter`.
+- Fresh canonical validation: `All 283 tests passed`.
+
+### K-076 — Clear confirmed choice presentation state
+
+**Status (2026-08-28) — DONE for bounded choice lifecycle slice**
+- A confirmed `ShowChoice` selection is logged and then clears `PresentationState.ActiveChoice` before the interpreter advances.
+- The UI therefore cannot keep displaying or consuming a stale choice after confirmation.
+- Regression coverage: `Test_ShowChoicePausesUntilSelection` in `TestEventInterpreter`.
+- Fresh canonical validation: `All 283 tests passed`.
+
+### K-077 — Preserve pending InputNumber state across variable conflicts
+
+**Status (2026-08-29) — DONE for bounded input lifecycle slice**
+- `EventInterpreter` pauses an `InputNumber` command when a different variable already owns the pending presentation input.
+- The existing pending variable/value remain unchanged; no conflicting variable is created or mutated.
+- This does not execute foreign scripts and does not broaden the bounded input model.
+- Regression coverage: `Test_InputNumberDoesNotConsumePendingValueForDifferentVariable` in `TestEventInterpreter`.
+- Fresh canonical validation: `All 284 tests passed`.
 
 ## Agent maintenance rules
 

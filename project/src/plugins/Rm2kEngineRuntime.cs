@@ -7,6 +7,7 @@ using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Rm2k.Presentation;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Plugins;
@@ -14,9 +15,9 @@ namespace UniversalRPG.Plugins;
 /// <summary>
 /// Minimal native RM2K/RM2K3 runtime backend. It loads the validated LDB/LMT
 /// and first LMU through the existing bounded parser, then advances a
-/// deterministic 60 Hz simulation clock. Event interpretation and presentation
-/// remain separate follow-up work, but launching no longer requires the
-/// original RPG_RT executable.
+/// deterministic 60 Hz simulation clock. Decoded native event pages are driven
+/// by the scheduler during Update(); unsupported commands remain data-only and
+/// diagnostic. Launching no longer requires the original RPG_RT executable.
 /// </summary>
 public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRuntimeDebugTools
 {
@@ -26,6 +27,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Rm2kParser _parser = new();
     private readonly VirtualClock _clock = new();
     private readonly Rm2kEventScheduler _eventScheduler;
+    private readonly Rm2kRendererAdapter _rendererAdapter = new();
+    private readonly Rm2kSpriteAdapter _spriteAdapter = new();
     private bool _debugToolsEnabled;
 
     public Rm2kEngineRuntime(string pPluginId, PluginGameInfo pGame)
@@ -39,6 +42,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     public Godot.Collections.Dictionary? DatabaseData { get; private set; }
     public Godot.Collections.Dictionary? MapTreeData { get; private set; }
     public Godot.Collections.Dictionary? CurrentMapData { get; private set; }
+    public VirtualFramebuffer? Framebuffer { get; private set; }
+    public IReadOnlyList<Rm2kSpriteDescriptor> SpriteDescriptors { get; private set; } = Array.Empty<Rm2kSpriteDescriptor>();
     public PresentationState Presentation { get; } = new();
     public GameSimulationState Simulation { get; } = new();
     public Rm2kEventScheduler EventScheduler => _eventScheduler;
@@ -95,6 +100,33 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         DatabaseData = database.Data;
         MapTreeData = mapTree.Data;
         CurrentMapData = currentMap;
+        try
+        {
+            ConfigureSimulationMap(currentMap, mapTree.Data, mapPath);
+        }
+        catch (InvalidDataException exception)
+        {
+            return Fail(PluginErrorCode.InvalidGame, exception.Message, "initialize-map");
+        }
+        if (currentMap != null)
+        {
+            var renderResult = _rendererAdapter.CreateFramebuffer(currentMap);
+            if (!renderResult.Success || renderResult.Framebuffer == null)
+            {
+                return Fail(PluginErrorCode.InvalidGame,
+                    $"Could not create RM2K map framebuffer: {renderResult.Error}", "initialize-render");
+            }
+            Framebuffer = renderResult.Framebuffer;
+
+            var spriteResult = _spriteAdapter.BuildDescriptors(
+                currentMap, Simulation.MapX, Simulation.MapY);
+            if (!spriteResult.Success)
+            {
+                return Fail(PluginErrorCode.InvalidGame,
+                    $"Could not create RM2K sprite descriptors: {spriteResult.Error}", "initialize-sprites");
+            }
+            SpriteDescriptors = spriteResult.Descriptors;
+        }
         LoadCurrentMapEvents(currentMap);
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded(new[]
@@ -117,6 +149,24 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         State = PluginRuntimeState.Running;
         return PluginOperationResult.Succeeded();
+    }
+
+    public bool TryMove(int pDeltaX, int pDeltaY)
+    {
+        if (State != PluginRuntimeState.Running || !Simulation.TryMove(pDeltaX, pDeltaY))
+        {
+            return false;
+        }
+        if (CurrentMapData != null)
+        {
+            var spriteResult = _spriteAdapter.BuildDescriptors(
+                CurrentMapData, Simulation.MapX, Simulation.MapY);
+            if (spriteResult.Success)
+            {
+                SpriteDescriptors = spriteResult.Descriptors;
+            }
+        }
+        return true;
     }
 
     public PluginOperationResult Update(double pDeltaSeconds)
@@ -216,6 +266,15 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             return Fail(PluginErrorCode.InvalidLifecycleTransition,
                 $"RM2K runtime cannot stop from state {State}.", "stop");
         }
+        _eventScheduler.Clear();
+        _clock.Reset();
+        Presentation.Reset();
+        Simulation.Reset();
+        DatabaseData = null;
+        MapTreeData = null;
+        CurrentMapData = null;
+        Framebuffer = null;
+        SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
         State = PluginRuntimeState.Stopped;
         return PluginOperationResult.Succeeded();
     }
@@ -226,6 +285,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         DatabaseData = null;
         MapTreeData = null;
         CurrentMapData = null;
+        Framebuffer = null;
+        SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
     }
 
     private string? ResolveGameDirectory()
@@ -249,6 +310,67 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     {
         return Directory.EnumerateFiles(pRoot, "*", SearchOption.TopDirectoryOnly)
             .FirstOrDefault(pPath => Path.GetFileName(pPath).Equals(pName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ConfigureSimulationMap(
+        Godot.Collections.Dictionary? pMapData,
+        Godot.Collections.Dictionary pMapTreeData,
+        string? pMapPath)
+    {
+        if (pMapData == null)
+        {
+            Simulation.AddDiagnostic("RM2K map simulation is unavailable because no LMU map was loaded.");
+            return;
+        }
+        if (!TryReadInt(pMapData, "width", out var width)
+            || !TryReadInt(pMapData, "height", out var height)
+            || width <= 0 || height <= 0
+            || (long)width * height > Rm2kParser.MaxMapTiles)
+        {
+            throw new InvalidDataException("Loaded RM2K map dimensions are outside simulation bounds.");
+        }
+
+        var mapId = ParseMapId(pMapPath);
+        var mapX = 0;
+        var mapY = 0;
+        var startMapId = 0;
+        if (pMapTreeData.TryGetValue("start", out var rawStart)
+            && rawStart.VariantType == Godot.Variant.Type.Dictionary)
+        {
+            var start = rawStart.AsGodotDictionary();
+            TryReadInt(start, "party_map_id", out startMapId);
+            if (startMapId == mapId)
+            {
+                TryReadInt(start, "party_x", out mapX);
+                TryReadInt(start, "party_y", out mapY);
+            }
+            else if (startMapId > 0)
+            {
+                Simulation.AddDiagnostic($"RM2K start map {startMapId} is not the loaded map {mapId}; using bounded map origin.");
+            }
+        }
+
+        var passability = new bool[checked(width * height)];
+        Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, passability);
+        Simulation.MapX = Math.Clamp(mapX, 0, width - 1);
+        Simulation.MapY = Math.Clamp(mapY, 0, height - 1);
+        Simulation.AddDiagnostic(
+            "RM2K chipset passability is not decoded yet; movement remains fail-closed until the chipset parser slice is available.");
+    }
+
+    private static int ParseMapId(string? pMapPath)
+    {
+        if (string.IsNullOrWhiteSpace(pMapPath)) return 0;
+        var fileName = Path.GetFileNameWithoutExtension(pMapPath);
+        if (fileName.Length != 7
+            || !fileName.StartsWith("Map", StringComparison.OrdinalIgnoreCase)
+            || !int.TryParse(fileName[3..], out var mapId)
+            || mapId < 1
+            || mapId > GameSimulationState.MaxMapId)
+        {
+            return 0;
+        }
+        return mapId;
     }
 
     private void LoadCurrentMapEvents(Godot.Collections.Dictionary? pMapData)

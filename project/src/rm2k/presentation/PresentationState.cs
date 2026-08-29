@@ -42,6 +42,16 @@ public sealed class PresentationState
     public int? InputValue { get; private set; }
     public Dictionary<int, PictureState> Pictures { get; } = new();
 
+    public void Reset()
+    {
+        MessageVisible = false;
+        MessageText = "";
+        ActiveChoice = null;
+        PendingInputVariableId = null;
+        InputValue = null;
+        Pictures.Clear();
+    }
+
     public bool BeginInput(int pVariableId)
     {
         if (pVariableId <= 0) return false;

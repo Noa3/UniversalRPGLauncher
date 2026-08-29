@@ -5,9 +5,9 @@
 
 ## Executive Summary
 
-The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
+The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, chipset passability, and renderer/system coverage beyond the bounded native event path.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `261/261` tests.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `284/284` tests.
 
 ## Phase Status Overview
 
@@ -77,13 +77,16 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot 
 - Compatibility facade over registered, deterministic detection plugins
 - Bounded folder/ZIP inspection with ranked candidates and confidence scoring
 - Version, evidence, ambiguity, malformed-input, and structured diagnostics
+- Compatibility profile schema validation (legacy schema 0, current schema 1, future-schema rejection) and bounded profile sizes
+- Deterministic Markdown compatibility-report export for GitHub issues without upload or external execution
+- Explicit Faithful/Enhanced render policy with bounded integer scaling controls
 - Persisted candidate/selection/evidence/compatibility records in `user://library.cfg`
 - RTP dependency, custom script/plugin, and native library metadata
 - Explicit user-provided RTP registry/resolution is bounded, deterministic, and data-only; no proprietary RTP data is bundled or auto-discovered
 - Runtime selection through exact plugin IDs, capability checks, platform checks, and no-fallback errors
 
 **Limitations:**
-- All built-in targets except Unite have a safe bounded bootstrap; RM2K/RM2K3 additionally parse LDB/LMT/LMU; full gameplay runtime is not implemented
+- RM2K/RM2K3 have a safe bounded bootstrap that loads LDB/LMT/LMU into simulation and scheduler state; full gameplay runtime is not implemented. RGSS/XP/VX/VX Ace, RM95, MV/MZ, and Unite remain detection-only.
 - Bounded inspection now distinguishes *partial* scans (entry budget reached on a well-formed tree, advisory Info) from truly malformed input (Error); large real games no longer hard-fail runtime initialization for exceeding the 4096-entry budget
 - MV metadata extraction now reads bounded `data/System.json` title data and reports `.rpgmvp`/`.rpgmvo`/`.rpgmvm` encrypted assets without executing JavaScript; MV remains detection/metadata-only
 - Executables and libraries are inspected as bounded data only, never loaded or executed
@@ -121,7 +124,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot 
 | No export pipeline | Medium | Presets exist; signed/release exports are not automated |
 | Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
 | No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
-- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads data and ticks deterministically; movement state is bounded and tested, while renderer/events/presentation/systems remain planned |
+- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads bounded map geometry/start-map diagnostics, decoded events, and scheduler state; chipset passability, complete rendering, and full systems remain incomplete |
 
 ## Missing Core Components (Planned)
 
@@ -135,7 +138,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot 
 | Win32 API shim | 10 | Medium |
 | Save state system | 5 | High |
 | Asset override system | 7 | Medium |
-| Input abstraction | 1 | Low (planned) |
+| Input abstraction | 1 | Implemented for RM2K keyboard/controller/touch mapping; broader platform abstraction remains open |
 | Audio abstraction | 1 | Low (planned) |
 | Renderer interface | 1 | Low (planned) |
 

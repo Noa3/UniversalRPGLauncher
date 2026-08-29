@@ -209,7 +209,7 @@ public sealed class GameSimulationState
         Gold = 0; FrameCount = 0; Steps = 0;
         Timer1Active = false; Timer2Active = false; Timer1Seconds = 0; Timer2Seconds = 0; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
-        IsTransferPending = false; ActiveActorIndex = 0;
+        IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;

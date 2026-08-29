@@ -46,6 +46,10 @@ public partial class TestGameSimulationState : TestBase
 		_state.IsPaused = true;
 		_state.IsMenuOpen = true;
 		_state.IsSaveEnabled = false;
+		_state.IsTransferPending = true;
+		_state.PendingMapId = 42;
+		_state.PendingX = 12;
+		_state.PendingY = 34;
 		_state.ActiveTroopId = 5;
 		_state.IsBattleActive = true;
 		_state.BattlePhase = 3;
@@ -63,6 +67,10 @@ public partial class TestGameSimulationState : TestBase
 		AssertFalse(_state.IsPaused);
 		AssertFalse(_state.IsMenuOpen);
 		AssertTrue(_state.IsSaveEnabled);
+		AssertFalse(_state.IsTransferPending);
+		AssertEq(_state.PendingMapId, 0);
+		AssertEq(_state.PendingX, 0);
+		AssertEq(_state.PendingY, 0);
 		AssertEq(_state.ActiveTroopId, -1);
 		AssertFalse(_state.IsBattleActive);
 		AssertEq(_state.BattlePhase, -1);
