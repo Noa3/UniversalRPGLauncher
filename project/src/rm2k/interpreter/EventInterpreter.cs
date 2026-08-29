@@ -19,8 +19,14 @@ public sealed class EventInterpreter
 	public const int MaxScriptRecursion = 256;
 	public const int MaxWaitFrames = 600; // 10 seconds at 60fps
 	public const int MaxGold = 999999;
+	public const int MaxItemId = 50000;
+	public const int MaxItemCount = 999999;
 	public const int GoldOpAdd = 0;
 	public const int GoldOpSubtract = 1;
+	public const int ItemOpAdd = 0;
+	public const int ItemOpSubtract = 1;
+	public const int ItemIdConstant = 0;
+	public const int ItemIdVariable = 1;
 
 	// Verified RM2K/2003 event command codes (liblcf lcf::rpg::Cmd).
 	public const int End = 0;
@@ -28,6 +34,7 @@ public sealed class EventInterpreter
 	public const int ShowChoice = 10140;
 	public const int InputNumber = 10150;
 	public const int ChangeGold = 10310;
+	public const int ChangeItems = 10320;
 	public const int ControlSwitches = 10210;
 	public const int ControlVars = 10220;
 	public const int Teleport = 10810;
@@ -156,6 +163,10 @@ public sealed class EventInterpreter
 
 			case ChangeGold:
 				ExecuteChangeGold(cmd);
+				return Advance();
+
+			case ChangeItems:
+				ExecuteChangeItems(cmd);
 				return Advance();
 
 			case ControlVars:
@@ -389,6 +400,65 @@ public sealed class EventInterpreter
 		};
 		_state.Gold = (int)Math.Clamp(result, 0L, (long)MaxGold);
 		_state.AddDiagnostic($"[Event {_eventId}] Gold <- op {operation} {operand}: {_state.Gold}");
+	}
+
+	private void ExecuteChangeItems(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Change items");
+			return;
+		}
+
+		var operation = pCmd.Parameters[0];
+		var itemMode = pCmd.Parameters[1];
+		var itemValue = pCmd.Parameters[2];
+		var operandType = pCmd.Parameters[3];
+		var operandValue = pCmd.Parameters[4];
+		if (operation is not (ItemOpAdd or ItemOpSubtract))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change items: unsupported operation {operation} skipped");
+			return;
+		}
+
+		var itemId = itemMode switch
+		{
+			ItemIdConstant => itemValue,
+			ItemIdVariable => GetVariable(itemValue),
+			_ => -1,
+		};
+		if (itemMode is not (ItemIdConstant or ItemIdVariable) || itemId < 1 || itemId > MaxItemId)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change items: invalid item id {itemId} skipped");
+			return;
+		}
+		if (itemMode == ItemIdVariable && (itemValue < 1 || itemValue > GameSimulationState.MaxVariables))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change items: invalid item variable {itemValue} skipped");
+			return;
+		}
+		if (operandType == VarOperandVariable && (operandValue < 1 || operandValue > GameSimulationState.MaxVariables))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change items: invalid amount variable {operandValue} skipped");
+			return;
+		}
+		if (operandType is not (VarOperandConstant or VarOperandVariable))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change items: invalid operand type {operandType} skipped");
+			return;
+		}
+		var amount = operandType == VarOperandVariable ? GetVariable(operandValue) : operandValue;
+		if (amount < 0)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change items: negative amount {amount} skipped");
+			return;
+		}
+
+		var current = _state.ItemCounts.TryGetValue(itemId, out var count) ? count : 0;
+		var delta = operation == ItemOpSubtract ? -(long)amount : amount;
+		var result = Math.Clamp((long)current + delta, 0L, (long)MaxItemCount);
+		_state.ItemCounts[itemId] = (int)result;
+		_state.AddDiagnostic($"[Event {_eventId}] Item {itemId} count <- op {operation} {amount}: {result}");
 	}
 
 	private void ExecuteControlVars(Rm2kMap.EventCommand pCmd)

@@ -510,6 +510,16 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - Regression coverage: `Test_InputNumberDoesNotConsumePendingValueForDifferentVariable` in `TestEventInterpreter`.
 - Fresh canonical validation: `All 284 tests passed`.
 
+### K-078 — Implement bounded RM2K ChangeItems command
+
+**Status (2026-08-29) — DONE for bounded inventory mutation slice**
+- `EventInterpreter` handles verified command `10320` with five parameters: operation, item-ID mode/value, and amount operand mode/value.
+- EasyRPG semantics are preserved: operation `0` adds and operation `1` subtracts; constant and variable item IDs/amounts are supported.
+- Counts are clamped to `0..999999`; malformed parameters, invalid IDs/variables, negative amounts, unsupported operand types, and unsupported operations fail closed with bounded diagnostics.
+- Regression coverage: `Test_ChangeItemsAddsConstantItemCount`, `Test_ChangeItemsSubtractsAndReadsVariableOperands`, and `Test_ChangeItemsClampsAndRejectsInvalidOperation` in `TestEventInterpreter`.
+- Fresh canonical validation: `TestEventInterpreter 44/44`; `All 292 tests passed`; build and `scripts/validate.sh` passed.
+- Remaining boundary: chipset passability remains blocked until a verified LMU/Chipset field mapping and distinguishing fixtures exist.
+
 ## Agent maintenance rules
 
 - Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.

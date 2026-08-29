@@ -146,6 +146,14 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Focused result: `TestEventInterpreter 41/41`; canonical result: `All 289 tests passed`; build and `scripts/validate.sh` passed.
 - Chipset passability remains intentionally fail-closed: `PassabilityLayer` has no verified LMU/Chipset parser source yet. Unblock requires a verified liblcf/EasyRPG field mapping plus a fixture distinguishing passable and impassable tiles.
 
+## Latest completed ChangeItems interpreter slice (2026-08-29)
+
+- `EventInterpreter` now handles verified RM2K command `10320` (`ChangeItems`) with EasyRPG semantics: operation `0` adds and operation `1` subtracts; item IDs and amounts may be constants or bounded variables.
+- Item counts are clamped to the modeled range `0..999999`; negative amounts, invalid IDs/variables, unsupported operand types, malformed parameters, and unsupported operations fail closed with bounded diagnostics.
+- Regression coverage includes constant addition, variable item/amount subtraction, lower-bound clamping, invalid-operation rejection, and verified opcode/mode constants.
+- Focused result: `TestEventInterpreter 44/44`; canonical result: `All 292 tests passed`; build and `scripts/validate.sh` passed.
+- Chipset passability remains intentionally fail-closed: `PassabilityLayer` has no verified LMU/Chipset parser source yet. Unblock requires a verified liblcf/EasyRPG field mapping plus a fixture distinguishing passable and impassable tiles.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.

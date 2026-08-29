@@ -224,8 +224,13 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(EventInterpreter.ShowChoice, 10140);
 		AssertEq(EventInterpreter.InputNumber, 10150);
 		AssertEq(EventInterpreter.ChangeGold, 10310);
+		AssertEq(EventInterpreter.ChangeItems, 10320);
 		AssertEq(EventInterpreter.GoldOpAdd, 0);
 		AssertEq(EventInterpreter.GoldOpSubtract, 1);
+		AssertEq(EventInterpreter.ItemOpAdd, 0);
+		AssertEq(EventInterpreter.ItemOpSubtract, 1);
+		AssertEq(EventInterpreter.ItemIdConstant, 0);
+		AssertEq(EventInterpreter.ItemIdVariable, 1);
 		AssertEq(EventInterpreter.ControlSwitches, 10210);
 		AssertEq(EventInterpreter.ControlVars, 10220);
 		AssertEq(EventInterpreter.Teleport, 10810);
@@ -334,6 +339,64 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(state.Variables.Count, 0, "conflicting input is not written to another variable");
 		AssertEq(presentation.PendingInputVariableId, 4, "original pending variable is preserved");
 		AssertEq(presentation.InputValue, 123, "original pending value is preserved");
+	}
+
+	public void Test_ChangeItemsAddsConstantItemCount()
+	{
+		var state = new GameSimulationState();
+		var interpreter = new EventInterpreter(state, 11, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeItems, new List<int>
+			{
+				EventInterpreter.ItemOpAdd, EventInterpreter.ItemIdConstant, 7,
+				EventInterpreter.VarOperandConstant, 3
+			}),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.ItemCounts[7], 3, "ChangeItems adds a constant item count");
+	}
+
+	public void Test_ChangeItemsSubtractsAndReadsVariableOperands()
+	{
+		var state = new GameSimulationState();
+		state.Variables.Add(7);
+		state.Variables.Add(2);
+		state.ItemCounts[7] = 5;
+		var interpreter = new EventInterpreter(state, 12, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeItems, new List<int>
+			{
+				EventInterpreter.ItemOpSubtract, EventInterpreter.ItemIdVariable, 1,
+				EventInterpreter.VarOperandVariable, 2
+			}),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.ItemCounts[7], 3, "ChangeItems subtracts a variable amount from a variable item");
+	}
+
+	public void Test_ChangeItemsClampsAndRejectsInvalidOperation()
+	{
+		var state = new GameSimulationState();
+		state.ItemCounts[7] = 1;
+		var interpreter = new EventInterpreter(state, 13, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeItems, new List<int>
+			{
+				EventInterpreter.ItemOpSubtract, EventInterpreter.ItemIdConstant, 7,
+				EventInterpreter.VarOperandConstant, 10
+			}),
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeItems, new List<int> { 2, EventInterpreter.ItemIdConstant, 7, EventInterpreter.VarOperandConstant, 5 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.ItemCounts[7], 0, "ChangeItems clamps subtraction below zero and ignores invalid operation");
+		AssertTrue(state.Diagnostics.Count > 0, "invalid ChangeItems operation is diagnosed");
 	}
 
 	public void Test_ChangeGoldAddsConstantOperand()
