@@ -154,6 +154,15 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Focused result: `TestEventInterpreter 44/44`; canonical result: `All 292 tests passed`; build and `scripts/validate.sh` passed.
 - Chipset passability remains intentionally fail-closed: `PassabilityLayer` has no verified LMU/Chipset parser source yet. Unblock requires a verified liblcf/EasyRPG field mapping plus a fixture distinguishing passable and impassable tiles.
 
+## Latest completed ChangePartyMembers interpreter slice (2026-08-29)
+
+- `EventInterpreter` now handles verified RM2K command `10330` (`ChangePartyMembers`) with EasyRPG semantics: parameter layout `[operation, actor_mode, actor_id]`; operation `0` adds and operation `1` removes; actor IDs may be constant or bounded variables.
+- Party mutations are bounded by `GameSimulationState.MaxPartyMembers` (`4`) and `MaxActorId` (`50000`); duplicate additions, removal of absent actors, invalid operands, malformed parameters, and unsupported operations fail closed with diagnostics.
+- Regression coverage includes constant addition, variable-ID removal, duplicate rejection, invalid actor rejection, and verified opcode/mode constants.
+- EasyRPG source verification: `CommandChangePartyMember` uses command code `10330`, resolves `ValueOrVariable(com.parameters[1], com.parameters[2])`, then adds for operation `0` and removes otherwise.
+- Focused result: `TestEventInterpreter 47/47`; canonical result: `All 296 tests passed`; build and `scripts/validate.sh` passed.
+- Chipset passability remains intentionally fail-closed: `PassabilityLayer` has no verified LMU/Chipset parser source yet. Unblock requires a verified liblcf/EasyRPG field mapping plus a fixture distinguishing passable and impassable tiles.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.

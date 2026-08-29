@@ -27,6 +27,10 @@ public sealed class EventInterpreter
 	public const int ItemOpSubtract = 1;
 	public const int ItemIdConstant = 0;
 	public const int ItemIdVariable = 1;
+	public const int PartyOpAdd = 0;
+	public const int PartyOpRemove = 1;
+	public const int ActorIdConstant = 0;
+	public const int ActorIdVariable = 1;
 
 	// Verified RM2K/2003 event command codes (liblcf lcf::rpg::Cmd).
 	public const int End = 0;
@@ -35,6 +39,7 @@ public sealed class EventInterpreter
 	public const int InputNumber = 10150;
 	public const int ChangeGold = 10310;
 	public const int ChangeItems = 10320;
+	public const int ChangePartyMembers = 10330;
 	public const int ControlSwitches = 10210;
 	public const int ControlVars = 10220;
 	public const int Teleport = 10810;
@@ -167,6 +172,10 @@ public sealed class EventInterpreter
 
 			case ChangeItems:
 				ExecuteChangeItems(cmd);
+				return Advance();
+
+			case ChangePartyMembers:
+				ExecuteChangePartyMembers(cmd);
 				return Advance();
 
 			case ControlVars:
@@ -459,6 +468,89 @@ public sealed class EventInterpreter
 		var result = Math.Clamp((long)current + delta, 0L, (long)MaxItemCount);
 		_state.ItemCounts[itemId] = (int)result;
 		_state.AddDiagnostic($"[Event {_eventId}] Item {itemId} count <- op {operation} {amount}: {result}");
+	}
+
+	private void ExecuteChangePartyMembers(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Change party members");
+			return;
+		}
+
+		var operation = pCmd.Parameters[0];
+		var actorMode = pCmd.Parameters[1];
+		var actorValue = pCmd.Parameters[2];
+		if (operation is not (PartyOpAdd or PartyOpRemove))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change party members: unsupported operation {operation} skipped");
+			return;
+		}
+
+		int actorId;
+		switch (actorMode)
+		{
+			case ActorIdConstant:
+				actorId = actorValue;
+				break;
+			case ActorIdVariable:
+				if (actorValue < 1 || actorValue > GameSimulationState.MaxVariables)
+				{
+					_state.AddDiagnostic($"[Event {_eventId}] Change party members: invalid actor variable {actorValue} skipped");
+					return;
+				}
+				actorId = GetVariable(actorValue);
+				break;
+			default:
+				_state.AddDiagnostic($"[Event {_eventId}] Change party members: unsupported actor mode {actorMode} skipped");
+				return;
+		}
+
+		if (actorId < 1 || actorId > GameSimulationState.MaxActorId)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change party members: invalid actor id {actorId} skipped");
+			return;
+		}
+
+		var existingIndex = -1;
+		for (var index = 0; index < _state.PartyMemberIds.Count; index++)
+		{
+			if (_state.PartyMemberIds[index] == actorId)
+			{
+				existingIndex = index;
+				break;
+			}
+		}
+
+		if (operation == PartyOpAdd)
+		{
+			if (existingIndex >= 0)
+			{
+				_state.AddDiagnostic($"[Event {_eventId}] Change party members: actor {actorId} already in party");
+				return;
+			}
+			if (_state.PartyMemberIds.Count >= GameSimulationState.MaxPartyMembers)
+			{
+				_state.AddDiagnostic($"[Event {_eventId}] Change party members: party full, actor {actorId} skipped");
+				return;
+			}
+			_state.PartyMemberIds.Add(actorId);
+		}
+		else
+		{
+			if (existingIndex < 0)
+			{
+				_state.AddDiagnostic($"[Event {_eventId}] Change party members: actor {actorId} not in party");
+				return;
+			}
+			_state.PartyMemberIds.RemoveAt(existingIndex);
+			if (_state.ActiveActorIndex >= _state.PartyMemberIds.Count)
+			{
+				_state.ActiveActorIndex = Math.Max(0, _state.PartyMemberIds.Count - 1);
+			}
+		}
+
+		_state.AddDiagnostic($"[Event {_eventId}] Party <- op {operation} actor {actorId}");
 	}
 
 	private void ExecuteControlVars(Rm2kMap.EventCommand pCmd)

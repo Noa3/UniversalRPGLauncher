@@ -225,6 +225,7 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(EventInterpreter.InputNumber, 10150);
 		AssertEq(EventInterpreter.ChangeGold, 10310);
 		AssertEq(EventInterpreter.ChangeItems, 10320);
+		AssertEq(EventInterpreter.ChangePartyMembers, 10330);
 		AssertEq(EventInterpreter.GoldOpAdd, 0);
 		AssertEq(EventInterpreter.GoldOpSubtract, 1);
 		AssertEq(EventInterpreter.ItemOpAdd, 0);
@@ -339,6 +340,59 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(state.Variables.Count, 0, "conflicting input is not written to another variable");
 		AssertEq(presentation.PendingInputVariableId, 4, "original pending variable is preserved");
 		AssertEq(presentation.InputValue, 123, "original pending value is preserved");
+	}
+
+	public void Test_ChangePartyMembersAddsConstantActor()
+	{
+		var state = new GameSimulationState();
+		var interpreter = new EventInterpreter(state, 14, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangePartyMembers, new List<int> { EventInterpreter.PartyOpAdd, EventInterpreter.ActorIdConstant, 3 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.PartyMemberIds.Count, 1, "ChangePartyMembers adds one actor");
+		AssertEq(state.PartyMemberIds[0], 3, "ChangePartyMembers stores the actor id");
+	}
+
+	public void Test_ChangePartyMembersRemovesVariableActor()
+	{
+		var state = new GameSimulationState();
+		state.PartyMemberIds.Add(3);
+		state.PartyMemberIds.Add(7);
+		state.Variables.Add(7);
+		var interpreter = new EventInterpreter(state, 15, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangePartyMembers, new List<int> { EventInterpreter.PartyOpRemove, EventInterpreter.ActorIdVariable, 1 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.PartyMemberIds.Count, 1, "ChangePartyMembers removes one actor");
+		AssertEq(state.PartyMemberIds[0], 3, "ChangePartyMembers keeps remaining actor");
+	}
+
+	public void Test_ChangePartyMembersRejectsDuplicateAndInvalidActor()
+	{
+		var state = new GameSimulationState();
+		state.PartyMemberIds.Add(3);
+		var duplicate = new EventInterpreter(state, 16, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangePartyMembers, new List<int> { EventInterpreter.PartyOpAdd, EventInterpreter.ActorIdConstant, 3 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+		AssertTrue(duplicate.ExecuteFrame());
+		AssertEq(state.PartyMemberIds.Count, 1, "duplicate actor is not added");
+
+		var invalid = new EventInterpreter(state, 17, new[]
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangePartyMembers, new List<int> { EventInterpreter.PartyOpAdd, EventInterpreter.ActorIdConstant, 0 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		});
+		AssertTrue(invalid.ExecuteFrame());
+		AssertEq(state.PartyMemberIds.Count, 1, "invalid actor does not mutate party");
+		AssertTrue(state.Diagnostics.Count >= 2, "party failures are diagnosed");
 	}
 
 	public void Test_ChangeItemsAddsConstantItemCount()

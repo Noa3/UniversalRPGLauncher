@@ -721,9 +721,29 @@ public sealed class RpgMakerMzPlugin : WebRpgPlugin
             return null;
         }
 
-        var title = ExtractJsonString(text, "gameTitle");
-        var version = ExtractJsonString(text, "systemVersion");
-        var audioBrowsers = ExtractJsonStringArray(text, "audioBrowsers");
+        var title = "";
+        var version = "";
+        var audioBrowsers = Array.Empty<string>();
+        try
+        {
+            using var document = JsonDocument.Parse(text, new JsonDocumentOptions
+            {
+                MaxDepth = 64,
+                AllowTrailingCommas = false,
+                CommentHandling = JsonCommentHandling.Disallow,
+            });
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+            title = ReadTopLevelString(document.RootElement, "gameTitle");
+            version = ReadTopLevelString(document.RootElement, "systemVersion");
+            audioBrowsers = ReadTopLevelStringArray(document.RootElement, "audioBrowsers");
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
 
         var diagnostics = new List<string>();
         var hasEncrypted = pSnapshot.Files.Any(pFile =>
@@ -756,29 +776,28 @@ public sealed class RpgMakerMzPlugin : WebRpgPlugin
         };
     }
 
-    private static string? ExtractJsonString(string pText, string pKey)
+    private static string ReadTopLevelString(JsonElement pRoot, string pName)
     {
-        var pattern = $"\"{pKey}\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"";
-        var match = System.Text.RegularExpressions.Regex.Match(pText, pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-        return match.Success ? match.Groups[1].Value : null;
+        return pRoot.TryGetProperty(pName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
     }
 
-    private static IReadOnlyList<string> ExtractJsonStringArray(string pText, string pKey)
+    private static string[] ReadTopLevelStringArray(JsonElement pRoot, string pName)
     {
-        var pattern = $"\"{pKey}\"\\s*:\\s*\\[([^\\]]*)\\]";
-        var match = System.Text.RegularExpressions.Regex.Match(pText, pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-        if (!match.Success)
+        if (!pRoot.TryGetProperty(pName, out var value) || value.ValueKind != JsonValueKind.Array)
         {
             return Array.Empty<string>();
         }
-        var arrText = match.Groups[1].Value;
         var result = new List<string>();
-        var inner = System.Text.RegularExpressions.Regex.Matches(arrText, "\"((?:[^\"\\\\]|\\\\.)*)\"");
-        foreach (System.Text.RegularExpressions.Match m in inner)
+        foreach (var item in value.EnumerateArray())
         {
-            result.Add(m.Groups[1].Value);
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                result.Add(item.GetString() ?? "");
+            }
         }
-        return result;
+        return result.ToArray();
     }
 }
 

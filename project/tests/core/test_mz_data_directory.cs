@@ -41,6 +41,9 @@ public partial class TestMzDataDirectory : TestBase
             "[]");
         CreateMzGame("MZEncrypted");
         WriteText(TempBase.PathJoin("MZEncrypted/img/Actor1.rpgmvp"), new string('x', 32));
+        CreateMzGame("MZNestedSystem");
+        WriteText(TempBase.PathJoin("MZNestedSystem/data/System.json"),
+            "{\"nested\":{\"gameTitle\":\"Nested Trap\",\"systemVersion\":\"0.0.0\",\"audioBrowsers\":[\"trap\"]},\"gameTitle\":\"Top Level Title\",\"systemVersion\":\"1.9.0\",\"audioBrowsers\":[\"ogg\",\"m4a\"]}");
         CreateWebOnly("MVFolder", "rpg_core.js");
     }
 
@@ -95,6 +98,19 @@ public partial class TestMzDataDirectory : TestBase
         AssertTrue(result != null, "encrypted snapshot returns result");
         AssertTrue(result!.HasEncryptedAssets, ".rpgmvp asset detected");
         AssertTrue(HasDiagnostic(result.Diagnostics, "Encrypted assets detected"), "encryption diagnostic");
+    }
+
+    public void Test_SystemMetadataReadsTopLevelJsonProperties()
+    {
+        var analysis = _detector.Analyze(ProjectSettings.GlobalizePath(TempBase.PathJoin("MZNestedSystem")));
+        var metadata = RpgMakerMzPlugin.ExtractMetadata(analysis.Inspection!);
+
+        AssertTrue(metadata != null, "MZ System.json metadata is extracted");
+        AssertEq(metadata!.GameTitle, "Top Level Title", "nested gameTitle cannot shadow top-level title");
+        AssertEq(metadata.SystemVersion, "1.9.0", "nested systemVersion cannot shadow top-level version");
+        AssertEq(metadata.AudioBrowsers.Count, 2, "top-level audioBrowsers are extracted");
+        AssertEq(metadata.AudioBrowsers[0], "ogg", "first top-level audio browser");
+        AssertEq(metadata.AudioBrowsers[1], "m4a", "second top-level audio browser");
     }
 
     public void Test_DatabaseInventoryCounts()
