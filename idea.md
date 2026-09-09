@@ -1,103 +1,318 @@
-# UniversalRPG Brief for Hermes
+# UniversalRPG Product and Engineering Brief
+
+> **Last reviewed:** 2026-09-09
 
 ## Mission
 
-Build one self-contained application that safely discovers and eventually runs legally obtained RPG Maker games on Windows, Linux, macOS, Android, and iOS. Preserve original game behavior first; add optional modern features without mutating original game files.
+Build one self-contained application that safely discovers and eventually runs legally obtained games from supported RPG Maker generations and WOLF RPG Editor on modern platforms.
 
-## Non-Negotiable Requirements
+UniversalRPG should interpret supported game data through its own compatibility runtimes instead of requiring the user to launch original engine executables or install external replacement runtimes.
 
-1. Targets: Windows x86-64, Linux x86-64, macOS universal, Android ARM64, and iOS ARM64.
-2. App starts in a game library, scans a user-selected root, and shows every recognized game before any runtime starts.
-3. Supported RPG Maker families: 2000, 2003, XP, VX, VX Ace, MV, and MZ.
-4. Imported games are untrusted. Detection must never execute game binaries or scripts.
-5. Runtime is an independent compatibility implementation. Do not bundle Enterbrain/Kadokawa runtime code, RTP, or game assets.
-6. English is the default/fallback UI language. Ship German, Spanish, French, Japanese, Korean, and Simplified Chinese. Adding a PO catalog and one locale registry entry must be enough to add another language.
-7. Preserve raw source bytes where round-tripping matters. Decode into Unicode only at parser boundaries.
-8. Original game directories stay read-only. Saves, cache, patches, translations, and settings live in app-owned directories.
+Correct game behavior comes first. Modern enhancements are optional and must not silently break compatibility.
 
-## Current Baseline (2026-08-20)
+## Product Targets
 
-- Godot 4.7.2 project and start scene load successfully.
-- Responsive game library chooses and persists a directory.
-- Scanner checks two subdirectory levels, skips hidden folders and filesystem links, and limits metadata reads to 1 MiB.
-- Detector recognizes real LCF, RGSS, MV, and MZ file signals without executing them.
-- UTF-8, UTF BOM, CP932, and Shift-JIS metadata decoding exists through Godot's multibyte decoder.
-- Seven UI locales and bundled Noto Sans CJK glyph coverage exist.
-- Export presets exist for all target platforms.
-- Runtime launch button accurately remains disabled because no gameplay backend is complete.
-- Existing RM2K parser is a prototype and must not be treated as a correct LCF implementation.
+Primary platforms:
 
-## Runtime Priority
+- Windows x86-64
+- Linux x86-64
+- Android ARM64
 
-1. Complete RM2000/2003 LCF reader for `RPG_RT.ldb`, `RPG_RT.lmt`, and `MapXXXX.lmu` using real fixtures and public format documentation.
-2. Build map renderer, input/audio adapters, event interpreter, save system, menus, and battles.
-3. Validate real games and encode quirks in data-driven compatibility profiles.
-4. Add RGSS1/2/3 using a sandboxed Ruby VM and explicit RGSS/Win32API compatibility APIs.
-5. Add MV/MZ using a sandboxed JavaScript VM plus only the browser/Node APIs games need.
+Secondary/export targets:
 
-Do not jump to broad engine support before one runtime is playable end to end.
+- macOS
+- iOS
+- future Linux ARM64/handhelds where practical
+
+## Engine Scope
+
+Primary runtime targets:
+
+- RPG Maker 2000
+- RPG Maker 2003
+- RPG Maker XP
+- RPG Maker VX
+- RPG Maker VX Ace
+- RPG Maker MV
+- RPG Maker MZ
+- WOLF RPG Editor
+
+Research targets:
+
+- RPG Maker 95
+- RPG Tsukūru Dante 98
+- RPG Maker Unite
+
+Console RPG Maker products and generic Unity/HTML engines are outside the normal runtime scope.
+
+## User Experience Goal
+
+The intended flow is:
+
+```text
+Install UniversalRPG
+        |
+        v
+Choose/import game
+        |
+        v
+Safe bounded inspection
+        |
+        v
+Detect engine/version/dependencies
+        |
+        v
+Resolve required RTP/user resources
+        |
+        v
+Select internal engine plugin
+        |
+        v
+Run in UniversalRPG
+```
+
+Users should not normally need to install:
+
+- EasyRPG
+- mkxp/mkxp-z
+- JoiPlay
+- NW.js
+- Wine
+- separate Ruby/JavaScript runtimes
+- original RPG Maker runtime executables
+
+Internal open-source libraries may be embedded when licensing/security/compatibility justify them.
+
+## Architecture
+
+Use a shared core and engine-specific compiled plugins.
+
+Shared services should include:
+
+- game library/import
+- bounded detection
+- virtual filesystem
+- deterministic/virtual clock
+- input
+- audio
+- rendering/presentation interfaces
+- save/cache storage
+- compatibility profiles
+- diagnostics
+- security/capability policy
+
+Engine plugins own their format/runtime semantics.
+
+Do not force WOLF, RGSS or MV/MZ into RM2K event/data models merely to share code.
+
+## Current Baseline
+
+Reviewed `main` baseline: commit `782ea66141e494d32929a9cc41056523177888eb`.
+
+Recorded canonical validation:
+
+- clean .NET build
+- `scripts/validate.sh` passed
+- 296/296 headless tests passed
+
+Current implementation:
+
+- Godot 4.7.2 stable .NET host
+- C#/.NET canonical implementation
+- Godot project under `project/`
+- persistent localized game library
+- bounded folder/ZIP inspection
+- deterministic plugin-based engine detection
+- depth 4 / 4096-entry default inspection limits
+- partial-vs-malformed scan distinction
+- compatibility profiles/reports
+- RM2000/2003 partial parser-backed runtime
+- WOLF experimental unencrypted/plain-data runtime slice
+- RGSS XP/VX/VX Ace detection/parsing only
+- MV/MZ detection/metadata parsing only
+- RM95/Dante/Unite research detection boundaries
+
+No engine is yet claimed as broadly compatible.
+
+## Runtime Development Priority
+
+1. Keep build, tests and import security green.
+2. Reach a representative RM2000/2003 playable milestone.
+3. Complete verified passability/rendering/event/audio/menu/save prerequisites.
+4. Add RM2000 vs RM2003 version-specific parity where required.
+5. Expand WOLF only from verified/authorized native-format evidence.
+6. Build a shared embedded Ruby/RGSS core, then XP → VX → VX Ace.
+7. Build a shared embedded JavaScript/browser compatibility core, then MV → MZ.
+8. Deepen RM95/Dante only from verified file-format evidence.
+9. Keep Unite as research unless a realistic conversion/runtime strategy is proven.
+10. Investigate native DLL/Win32 execution only after normal runtimes are stable.
+
+Do not substitute engine count for runtime quality.
+
+## RM2000 / RM2003 Milestone
+
+The first meaningful end-to-end milestone should demonstrate, without `RPG_RT.exe`:
+
+- load legal/authorized real LCF data
+- render a representative map
+- resolve chipset/passability correctly
+- move the player
+- interact with events
+- display dialogue/choices
+- transfer between maps
+- play basic audio
+- use a minimal menu/system path
+- save/load safely
+- recover/report unsupported commands without hanging/crashing
+
+## WOLF Milestone
+
+WOLF is a separate runtime family.
+
+Initial goal:
+
+- explicit supported version range
+- authorized unencrypted/native-format fixtures
+- database/map/event readers
+- deterministic event VM
+- map presentation
+- input/audio/UI/save path
+
+Do not bypass protected/encrypted data as a compatibility shortcut.
+
+## RGSS Milestone
+
+XP/VX/VX Ace require:
+
+```text
+IRubyVm
++ shared RGSS core
++ RGSS1/RGSS2/RGSS3 profiles
+```
+
+The embedded VM must not grant unrestricted host filesystem/process/network/native access.
+
+A modern Ruby interpreter is not automatically RGSS compatible; historical semantics/API behavior require tests.
+
+## MV / MZ Milestone
+
+MV/MZ require:
+
+```text
+IJavaScriptVm
++ sandbox
++ browser/RPG Maker compatibility APIs
++ MV/MZ profiles
+```
+
+Implement only the browser/Node APIs required by supported games/plugins, but report unsupported calls explicitly.
+
+Do not use an external browser/NW.js process as the normal compatibility path.
 
 ## Legacy Text and Paths
 
-Japanese games frequently use CP932/Windows-31J/Shift-JIS in INI files, LCF strings, scripts, and filenames. Korean and Chinese translations may introduce CP949/EUC-KR, GBK/GB18030, or Big5. Western games may use Windows-1252.
+Games may rely on:
 
-Required design:
+- CP932/Windows-31J/Shift-JIS
+- Windows-1252
+- Korean/Chinese legacy encodings
+- Windows-style separators
+- case-insensitive paths
 
-- `ITextDecoder`-style boundary with strict UTF-8 first, BOM handling, engine/profile hint, then legacy fallback.
-- Encoding selection per file and, where formats require it, per field.
-- Preserve undecodable raw bytes and emit diagnostics; never silently replace data needed for identifiers.
-- Internal text is Unicode. Do not normalize game identifiers unless the original engine did.
-- Test CP932 half-width kana, combining marks, invalid byte sequences, and mixed encodings.
-- Resolve game paths case-insensitively while preserving original spelling.
-- Detect case collisions and Unicode-normalization collisions instead of choosing nondeterministically.
+Required behavior:
+
+- internal Unicode representation
+- explicit decoder boundary
+- preserve raw bytes where round-trip identity matters
+- deterministic encoding/profile decisions
+- case-insensitive compatibility without nondeterministic collisions
+- detect unsafe/ambiguous case or Unicode-normalization collisions
 
 ## Import and Runtime Security
 
-- Canonicalize every path and prove it remains below its mount root.
-- Reject `..`, absolute archive paths, drive/UNC prefixes, NUL/control characters, reserved device names, and filesystem links during import.
-- Set limits for directory entries, recursion, individual file size, total bytes, archive expansion ratio, image dimensions, parser nesting, and script execution.
-- Inspect archives before extraction; extract only into a fresh app-owned staging directory.
-- Hash source files and bind profiles, patches, saves, and translations to game/version identity.
-- Never call host process execution for `Game.exe`, DLLs, scripts, or plugin helpers.
-- Ruby and JavaScript VMs get virtual filesystem, input, audio, rendering, clock, and optional network capabilities only.
-- Network, clipboard, external links, and native plugin behavior require per-game policy and visible user consent.
-- Crash containment, watchdogs, deterministic limits, and actionable compatibility reports are required.
+Imported games are untrusted.
 
-## Game Translation Feature
+Detection/parsing must never execute imported:
 
-Plan a non-destructive translation overlay after the first runtime is playable:
+- EXE
+- DLL/SO
+- Ruby
+- JavaScript
+- shell/batch files
+- native plugins
 
-1. Extract translatable database, dialogue, choice, item, skill, map, and plugin strings with stable context IDs.
-2. Export/import PO and XLIFF; support translation memory and glossary metadata.
-3. Bind a translation pack to engine, game hash, and source version.
-4. Apply translated text through the VFS override layer. Never rewrite original archives.
-5. Support per-pack fonts, fallback chains, line-breaking rules, vertical metrics, and text-box overflow diagnostics.
-6. Allow image/audio replacement only as explicit patch assets with provenance.
-7. Machine translation is optional and opt-in. It must disclose external network use and never upload whole games.
-8. Translation packs must not redistribute copyrighted source text or assets without permission.
+Runtime script/native support requires:
 
-## JoiPlay-Parity Product Goals
+- VFS containment
+- read-only game mount
+- separate writable save/cache/temp roots
+- bounded memory/time/recursion/output
+- watchdog/cancellation
+- process/native loading denied by default
+- network/clipboard/external links denied or explicitly permissioned
+- actionable diagnostics
 
-Use JoiPlay as a capability reference, not as a code source or branding dependency. UniversalRPG remains RPG-Maker-focused.
+Original game directories stay read-only by default.
 
-- Friendly library with manual add, directory scan, cover/icon, favorites, search, sorting, and recent play time.
-- Modular runtime/backend updates with explicit compatibility versions.
-- Per-game profiles for renderer, engine quirks, locale/encoding, input, audio, and performance.
-- Configurable touch gamepad: move/resize/hide buttons, opacity, dead zones, layouts, and per-game presets.
-- Physical keyboard/gamepad mapping, mouse/touch emulation, vibration, and accessibility controls.
-- Save discovery, backup, import/export, conflict-safe sync, and desktop/mobile transfer.
-- Integer scaling, aspect modes, filters/shaders, orientation, FPS limits, fast-forward, and screenshot controls.
-- Patch/translation overlays, compatibility fixes, and rollback without modifying the game.
-- Diagnostics, script console for developers, logs, compatibility reports, and optional safe cheat/debug tools.
-- Archive/folder import through Android Storage Access Framework and iOS document picker.
+## RTP and Proprietary Assets
 
-Ren'Py, TyranoBuilder, Construct, Flash, and generic HTML5 support are outside current scope. Architecture may stay extensible, but RPG Maker runtime quality wins over engine count.
+Do not bundle proprietary RPG Maker/WOLF runtimes, game assets or RTP data unless explicit redistribution rights permit it.
 
-## Near-Term Acceptance Criteria
+Users may configure legally obtained RTP resources. URPG should resolve them through its own bounded resource layer rather than requiring registry-only Windows installation behavior.
 
-1. App starts without parser/runtime errors in all seven UI locales.
-2. Real sample folders for each RPG Maker generation are detected with expected title, engine, evidence, and warnings.
-3. CP932 Japanese titles decode identically on Windows, Linux, macOS, Android, and iOS.
-4. A malicious corpus cannot escape selected roots, follow links, over-expand archives, execute code, or overwrite game files.
-5. RM2000/2003 parser reads real LCF database/map fixtures and rejects malformed input with bounded work.
-6. First playable milestone renders a map, moves the player, displays Japanese dialogue, runs basic events, and saves/loads without external runtimes.
+## Translation / Mod Overlays
+
+After runtime foundations are stable, support non-destructive overlays for:
+
+- translated text
+- fonts
+- graphics
+- audio
+- compatibility patches
+- optional HD assets
+
+Bind overlays to a stable game/version identity and do not mutate original archives.
+
+External assets may be sourced only when their license clearly permits the intended modification and redistribution. Track provenance/license/attribution.
+
+## Enhanced Mode
+
+Potential optional improvements:
+
+- integer/pixel-perfect scaling
+- high-resolution output
+- high-refresh presentation without changing simulation Hz
+- shaders
+- controller/touch remapping
+- fast-forward/slow-motion
+- screenshots
+- accessibility
+- asset/translation overrides
+- save states/rewind where safe
+- experimental widescreen
+
+Faithful Mode remains the compatibility baseline.
+
+## Library / Launcher Product Goals
+
+- manual add and bounded directory scan
+- covers/icons
+- favorites
+- search/sorting
+- recent play time
+- per-game compatibility status
+- engine/version/dependency report
+- RTP status
+- control profiles
+- enhancement profiles
+- diagnostics/exportable compatibility report
+
+## Acceptance Philosophy
+
+A feature is complete when it is implemented and validated, not when a class or document exists.
+
+A runtime engine becomes “playable” only after an authorized representative end-to-end path succeeds.
+
+A compatibility claim must identify its scope and limitations.
+
+The project should favor one trustworthy playable runtime over many misleading detection-only “supported” badges.
