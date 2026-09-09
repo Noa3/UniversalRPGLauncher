@@ -1,182 +1,251 @@
-# UniversalRPG - Architecture
+# UniversalRPG — Architecture
 
-> **Status:** Phase 2 — RM2000/2003 Parser
-> **Last Updated:** 2026-08-20
+> **Status:** Active implementation  
+> **Last reviewed:** 2026-09-09  
+> **Primary milestone:** RM2000/2003 faithful runtime foundation  
+> **Secondary maintained boundaries:** cross-engine detection and experimental WOLF plain-data runtime
 
-## Design Philosophy
+## Design Principles
 
-UniversalRPG is a self-contained cross-platform RPG Maker compatibility runtime.
-The goal is to interpret RPG Maker games natively, preserve original behavior,
-and optionally enhance presentation on modern hardware.
+Priority order:
 
-### Core Principles
+1. correct game behavior
+2. compatibility
+3. security
+4. stability
+5. maintainability
+6. performance
+7. optional enhancements
 
-1. **Correct game behavior** — Original behavior takes priority
-2. **Compatibility** — Support as many games as possible
-3. **Stability** — Never crash on malformed input
-4. **Security** — Treat imported games as untrusted
-5. **Performance** — Run efficiently on mobile hardware
-6. **Enhancements** — Graphics/UI improvements are secondary
+Engine recognition must never be presented as playable compatibility.
 
-## Architecture Overview
+## Repository Boundary
 
-The repository currently uses this concrete layout. Planned interfaces should be
-added only when implementation reaches them; this document must not pretend empty
-future directories already exist.
+The canonical implementation is C#/.NET under Godot 4.7.2 .NET.
 
 ```text
-UniversalRPG/
-├── project/                 # Godot project root (project.godot, csproj/sln)
-│   ├── app/
-│   │   ├── launcher/        # Runtime availability/launch workflow
-│   │   ├── library/         # Game library scan/settings
-│   │   └── ui/              # Godot application UI
+/
+├── project/
+│   ├── app/                  # launcher, library, UI
 │   ├── src/
-│   │   ├── core/            # VFS, clock, legacy text decoding
-│   │   ├── compatibility/   # Compatibility profiles/database
-│   │   ├── game_detector/   # Compatibility facade over plugin detection
-│   │   ├── plugins/          # Trusted engine contracts, inspection, registry
-│   │   ├── rm2k/
-│   │   │   ├── parser/      # LCF reader + LDB/LMU/LSD parser
-│   │   │   ├── database/    # Serializable RM2K/2003 models
-│   │   │   ├── interpreter/ # Event interpreter (first slice done)
-│   │   │   └── rendering/   # Future faithful renderer
-│   │   ├── rgss/            # Future XP/VX/VX Ace runtime
-│   │   ├── mv/              # Future MV runtime
-│   │   └── mz/              # Future MZ runtime
-│   ├── platform/godot/      # Future explicit Godot adapter boundary
-│   ├── enhancement/         # Future optional Enhanced Mode features
-│   ├── plugins/             # Optional integration/plugin surfaces
-│   └── tests/               # Core, fixtures, integration, rendering
-├── scripts/                 # Validation/development automation
-├── docs/                    # Architecture, roadmap, compatibility/security docs
-└── tools/                   # Pinned Godot editor binaries (runtime stays at root)
+│   │   ├── core/             # shared deterministic/runtime services
+│   │   ├── compatibility/    # profiles and compatibility rules
+│   │   ├── game_detector/    # UI/library compatibility facade
+│   │   ├── plugins/          # engine contracts, registries and runtimes
+│   │   ├── rm2k/             # RM2000/2003 parser/simulation/presentation
+│   │   └── wolf/             # experimental WOLF plain-data slice
+│   └── tests/
+├── docs/
+├── scripts/
+└── tools/
 ```
 
-## Runtime Abstractions
+Future RGSS and MV/MZ runtimes should be added behind the existing plugin/runtime boundaries rather than coupled directly to launcher UI code.
 
-The RPG Maker runtime core must be independent of Godot. All platform-specific
-code flows through clear interfaces:
+## Layered Runtime Model
 
-```
-┌─────────────────────────────────────────────────┐
-│              RPG Maker Runtime Core              │
-│  (platform-independent, no Godot dependencies)   │
-├─────────────────────────────────────────────────┤
-│  IRenderer  │  IAudioBackend  │  IInputBackend  │
-│  IFileSystem│  IClock         │  INetworkBackend│
-└──────────┬──────────────────────────────────────┘
-           │ implements
-           ▼
-┌─────────────────────────────────────────────────┐
-│           Godot Platform Adapter                 │
-│  (Godot-specific implementations of interfaces)  │
-└─────────────────────────────────────────────────┘
-```
-
-## Game Detection Flow
-
-```
-User selects a game directory or ZIP archive
-        │
-        ▼
-  SafeGameInspector
-        │ bounded, read-only snapshot
-        ▼
-  EngineDetectionRegistry
-        │ ranked plugin candidates
-        ▼
-  GameDetector compatibility facade
-        │ DetectionResult + full report
-        ▼
-  EngineRuntimeSelector
-        │ exact plugin/capability/platform checks
-        ▼
-  EnginePluginRegistry -> IEnginePlugin -> IEngineRuntime
+```text
+Imported game folder / ZIP
+        |
+        v
+SafeGameInspector
+  bounded + read-only
+        |
+        v
+EngineDetectionRegistry
+        |
+        v
+EngineDetectionReport
+        |
+        v
+EngineRuntimeSelector
+        |
+        v
+IEnginePlugin / IEngineRuntime
+        |
+        +-----------------------------+
+        | engine-specific subsystem   |
+        | parser / VM / simulation    |
+        +-----------------------------+
+        |
+        v
+Shared runtime services
+ VFS / clock / diagnostics / saves / compatibility
+        |
+        v
+Godot application/platform presentation
 ```
 
-Detection and runtime selection are implemented as trusted, compiled in-process
-plugins. Imported EXE, DLL, Ruby, JavaScript, and native plugin files are data
-only; they are never executed during inspection. See
-[ENGINE_DETECTION.md](ENGINE_DETECTION.md) and
-[ENGINE_PLUGINS.md](ENGINE_PLUGINS.md).
+Imported executables, DLLs and scripts are **data during inspection**. Detection does not dynamically load user-provided detector plugins.
 
-## Compatibility Database
+## Plugin Capability Model
 
-The compatibility database is extensible and data-driven:
+Capabilities are explicit and must match real implementation.
 
-```json
-{
-  "id": "profile.identifier",
-  "sha256": "game_or_plugin_hash",
-  "engine": "RPGMaker2003",
-  "type": "game_profile",
-  "compatibility": "full",
-  "flags": ["PreserveLegacyPictureTiming", "LegacyTextEncoding"],
-  "notes": "Known quirks and workarounds"
-}
+Current high-level boundaries:
+
+| Engine | Capabilities / boundary |
+|---|---|
+| Dante 98 | Detection only |
+| RPG Maker 95 | Detection only |
+| RPG Maker 2000 | Detection + parsing + partial runtime/save/debug foundation |
+| RPG Maker 2003 | Detection + parsing + partial runtime/save/debug foundation |
+| XP / VX / VX Ace | Detection + parsing only; no Ruby VM |
+| MV / MZ | Detection + parsing/metadata only; no JavaScript VM |
+| WOLF RPG | Detection + parsing + experimental unencrypted plain-data runtime |
+| Unite | Detection/research only |
+
+A generic lifecycle object is not proof of engine compatibility. Runtime capability must only be advertised when an engine plugin can safely create the repository's declared runtime boundary.
+
+See [ENGINE_PLUGINS.md](ENGINE_PLUGINS.md).
+
+## Detection
+
+Default bounded inspection limits are defined by `GameInspectionLimits`:
+
+- depth: 4
+- entries: 4096
+- metadata bytes per file: 1 MiB
+- archive total uncompressed budget: 64 MiB
+- archive entry metadata budget: 1 MiB
+- bounded executable/data prefix reads
+
+When the entry budget is reached on otherwise valid input, the snapshot is marked **partial**, not automatically malformed.
+
+Detection order is deterministic by score, plugin priority and plugin ID. Ambiguous top candidates remain unresolved rather than being silently forced to a runtime.
+
+## RM2000/2003 Runtime
+
+The LCF runtime is currently the most developed engine path.
+
+Implemented foundations include:
+
+- bounded LCF framing/BER parsing
+- LDB/LMT/LMU/LSD-related structured readers
+- typed portions of the database model
+- parser-backed runtime initialization
+- deterministic `VirtualClock`
+- `GameSimulationState`
+- event scheduler and a growing verified command subset
+- map movement/transfer state
+- renderer-neutral framebuffer and sprite descriptors
+- presentation state for messages/choices/pictures
+- RTP registry/diagnostics primitives
+- runtime-owned save codec and read-only original-LSD framing model
+- compatibility diagnostics and regression tests
+
+Important incomplete areas include:
+
+- complete LDB/LMU semantics
+- verified chipset/passability mapping
+- complete RM2K/RM2K3 event command parity
+- actual faithful Godot tile/sprite/window rendering
+- audio
+- menu/system scenes
+- battle parity
+- original save semantic compatibility
+- broad real-game end-to-end testing
+
+RM2000 and RM2003 share infrastructure but must gain version-specific tests where behavior diverges.
+
+## WOLF Runtime
+
+WOLF is a separate engine family, not an RPG Maker mode.
+
+Current code contains a deliberately narrow, bounded, unencrypted plain-data reader/runtime/VM used to establish architecture and tests. It is **not** native-format-complete and does not support protected/encrypted game data.
+
+Future WOLF work must keep its database/event semantics independent from RM2K assumptions.
+
+## RGSS Runtime Boundary
+
+XP, VX and VX Ace currently expose detection/parsing metadata only.
+
+Future architecture:
+
+```text
+XP/VX/VX Ace plugin
+        |
+        v
+IRubyVm
+        |
+        v
+RGSS1 / RGSS2 / RGSS3 profile
+        |
+        v
+URPG graphics/audio/input/filesystem services
 ```
 
-Game-specific behavior uses centralized flags, not scattered conditionals.
+No Ruby implementation has been selected or embedded yet. Existing RGSS metadata/runtime experimentation must not be described as playable RGSS execution.
 
-## Development Phases
+## MV/MZ Runtime Boundary
 
-See [ROADMAP.md](ROADMAP.md) for the complete phase breakdown.
+MV and MZ currently perform bounded web-game detection and metadata inspection. MZ additionally has bounded database inventory helpers.
 
-### Current Phase: Phase 2 — RM2000/2003 Parser
+Future architecture:
 
-- real bounded LCF container/BER parsing exists;
-- initial LDB/LMU/LSD decoding exists;
-- synthetic and provenance-pinned real parser regression fixtures exist;
-- registry-driven engine plugin detection and safe runtime-selection boundaries exist;
-- Built-in detection covers RM95, Dante98, RM2K, RM2K3, XP, VX, VX Ace, MV, MZ, WOLF, and Unite. Library scans use a cheap direct-entry preflight, search nested collection folders to a bounded depth of 4, cap visited directories at 4096, and skip common bulk asset/runtime folders. MV/MZ runtime versions are extracted from bounded package/runtime metadata when available; missing versions remain explicitly unknown.
-- RM2K/RM2K3 have a parser-backed bootstrap runtime that loads validated data and advances the shared deterministic clock;
-- LMT is fully parsed; LDB actors/switches/variables plus scalar skills/items/states/classes/enemies/terrains/attributes/troops/animations/chipsets/battle_commands metadata decode into typed models with verified liblcf field IDs and per-entry unknown-field retention;
-- remaining nested LDB content and chipset passability decoding are next; LMU event/page metadata is decoded into the bounded native scheduler path, while K-015's accepted scalar/battle-command slice is complete.
-
-### Language boundary
-
-The tested implementation is pure C#/.NET under the Godot .NET editor. Migration and plugin-wiring validation passed `dotnet build` and the headless C# regression suite at `171/171`. Performance-critical components may later move behind GDExtension/native interfaces without forcing the whole application into one language.
-
-## Security Model
-
-Imported games are treated as untrusted:
-
-- Virtual filesystem sandbox
-- No arbitrary process execution
-- No system directory access
-- Network access configurable per-game
-- Clipboard access configurable per-game
-- Plugin loading requires explicit compatibility policy
-
-## Legal Considerations
-
-- No proprietary RPG Maker code included
-- No RTP assets bundled without redistribution rights
-- Independent implementation of behavior
-- All third-party components documented in THIRD_PARTY_LICENSES.md
-
-## Error Philosophy
-
-Errors must be actionable:
-
-**Bad:** `Failed to load game`
-
-**Good:**
+```text
+MV/MZ plugin
+    |
+    v
+IJavaScriptVm
+    |
+    v
+Browser/RPG Maker compatibility layer
+    |
+    v
+URPG services
 ```
-Unable to initialize RPG Maker VX Ace runtime.
 
-Reason:
-RGSS script requested unsupported Win32 API function.
+No imported JavaScript is currently executed.
 
-Library:
-user32.dll
+## Compatibility Profiles
 
-Function:
-GetKeyboardLayout
+Game-specific fixes belong in centralized, validated compatibility profiles keyed by reliable identity such as hashes/signatures. Unknown hashes must not inherit unrelated same-engine fixes.
 
-Script:
-InputExtension
+Compatibility data should describe:
 
-Compatibility report saved.
+- engine/generation
+- game/plugin hash
+- supported capability
+- flags/workarounds
+- diagnostics
+- regression-test reference
+
+## Security Boundary
+
+Imported games are untrusted.
+
+Required rules include:
+
+- no arbitrary process execution
+- no unrestricted host filesystem
+- no automatic native-library loading
+- no network/clipboard by default for future script runtimes
+- bounded parser allocations/depth/counts
+- VFS containment for runtime file access
+- explicit permission/capability policy for dangerous functionality
+
+See [IMPORT_SECURITY.md](IMPORT_SECURITY.md).
+
+## Validation
+
+Canonical repository validation:
+
+```bash
+./scripts/validate.sh
 ```
+
+Last recorded canonical result before this documentation refresh: **296/296** headless tests passed with clean build. Any new implementation change requires fresh validation; this document does not turn historical evidence into a current test guarantee.
+
+## Sources of Truth
+
+For current work, use in this order:
+
+1. actual source and tests
+2. `KANBAN.md`
+3. `SESSION_STATE.md`
+4. `docs/PROJECT_STATUS.md`
+5. this document
+6. roadmap/research documents
+
+Historical session handoffs are evidence, not current architecture authority.
