@@ -1,155 +1,243 @@
-# UniversalRPG — Compatibility Guide
+# UniversalRPG — Compatibility Policy
 
-> **Last Updated:** 2026-08-17
+> **Last reviewed:** 2026-09-09
 
-## Compatibility Philosophy
+## Principle
 
-The priority order is:
+Compatibility claims must describe what the repository can actually execute, not merely what it can recognize.
 
-1. **Correct game behavior** — Original behavior takes absolute priority
-2. **Compatibility** — Support as many games as possible
-3. **Stability** — Never crash on malformed input
-4. **Security** — Treat imported games as untrusted
-5. **Performance** — Run efficiently on mobile hardware
-6. **Enhancements** — Graphics/UI improvements are secondary
+Priority order:
 
-## Compatibility Modes
+1. correct engine/game behavior
+2. compatibility
+3. security
+4. stability
+5. maintainability
+6. performance
+7. optional enhancements
+
+## Capability Levels
+
+Use explicit language:
+
+- **Detection-only** — identifies the engine; cannot run it.
+- **Parsing-only** — safely reads a bounded subset of data; cannot execute the engine.
+- **Experimental runtime** — executes a deliberately narrow subset.
+- **Partial runtime** — meaningful runtime exists, but representative compatibility is incomplete.
+- **Playable** — a representative authorized end-to-end game path works.
+- **Broad compatibility** — requires substantial real-world conformance evidence.
+
+Current state:
+
+| Engine | Compatibility level |
+|---|---|
+| Dante 98 | Detection-only research |
+| RPG Maker 95 | Detection-only research |
+| RPG Maker 2000 | Partial runtime |
+| RPG Maker 2003 | Partial runtime |
+| RPG Maker XP | Parsing-only |
+| RPG Maker VX | Parsing-only |
+| RPG Maker VX Ace | Parsing-only |
+| RPG Maker MV | Parsing-only |
+| RPG Maker MZ | Parsing-only |
+| WOLF RPG Editor | Experimental unencrypted/plain-data runtime |
+| RPG Maker Unite | Detection-only research |
+
+## Faithful and Enhanced Behavior
 
 ### Faithful Mode
 
-Default mode for all games. Reproduces original RPG Maker behavior as accurately as practical.
+Faithful behavior is the compatibility baseline.
 
-- Disables potentially incompatible improvements
-- Uses original timing where possible
-- Preserves original rendering behavior
-- No enhanced scaling by default
-- No shader effects by default
+It should preserve, where known:
+
+- logical timing
+- map/event semantics
+- coordinate system
+- rendering order
+- input semantics
+- save/game state behavior
+- engine quirks required by real games
+
+A feature is not “faithful” merely because it looks similar.
 
 ### Enhanced Mode
 
-Optional mode that adds modern improvements without altering gameplay semantics.
+Enhanced behavior is optional and capability-gated.
 
-- Integer scaling
-- High-resolution presentation
-- Shader effects (CRT, scanlines, etc.)
-- Modern controller support
-- Touch controls (Android)
-- Fast-forward/slow-motion
-- Save states
-- Asset overrides
+Examples:
 
-Every enhancement is individually disableable.
+- integer/pixel-perfect scaling
+- high-resolution presentation
+- higher display refresh without changing simulation speed
+- shaders
+- controller/touch improvements
+- fast-forward/slow-motion
+- asset/translation overrides
+- accessibility features
+- save states/rewind when technically safe
 
-## Compatibility Database
+Each enhancement must be individually disableable and must not silently change game logic.
 
-The compatibility database is data-driven. Game-specific behavior uses centralized flags:
+## Compatibility Profiles
 
-```json
-{
-  "id": "game.title",
-  "sha256": "hash_of_game_files",
-  "engine": "RPGMaker2003",
-  "type": "game_profile",
-  "compatibility": "full",
-  "flags": [
-    {"name": "PreserveLegacyPictureTiming", "type": "BOOLEAN", "value": true},
-    {"name": "LegacyTextEncoding", "type": "STRING", "value": "CP932"},
-    {"name": "DisableEnhancedRenderer", "type": "BOOLEAN", "value": true}
-  ],
-  "notes": "Known quirks and workarounds"
-}
+Game-specific behavior belongs in centralized validated profiles rather than scattered hard-coded checks.
+
+Profiles should be keyed by reliable identity such as:
+
+- game hash/signature
+- engine/generation
+- plugin/native dependency hash
+- verified version metadata
+
+Unknown hashes must **not** inherit another game's profile merely because the engine matches.
+
+A profile may contain:
+
+- compatibility flags
+- encoding overrides
+- disabled enhancements
+- known unsupported dependencies
+- plugin HLE selection
+- notes and regression-test references
+
+Profile schemas must remain bounded and versioned.
+
+## RM2000 / RM2003
+
+Current compatibility strengths:
+
+- bounded LCF parsing
+- deterministic simulation infrastructure
+- growing verified event-command coverage
+- presentation/framebuffer/sprite state
+- RTP/save/debug foundations
+
+Current major risks:
+
+- chipset/passability semantics
+- incomplete command coverage
+- RM2003-specific differences
+- incomplete visible renderer/audio/menu/battle/save parity
+- insufficient end-to-end real-game evidence
+
+Compatibility fixes should be backed by verified format/runtime semantics and a regression fixture.
+
+## XP / VX / VX Ace
+
+Current plugins do not advertise Runtime.
+
+Future compatibility concerns include:
+
+- Ruby version differences
+- RGSS1/2/3 API differences
+- serialized data/archive formats
+- Win32API calls
+- native DLL dependencies
+- default and third-party script assumptions
+
+A Ruby VM choice alone is not enough; the RGSS API surface must be reproduced.
+
+## MV / MZ
+
+Current plugins do not advertise Runtime.
+
+Future compatibility concerns include:
+
+- JavaScript language/runtime behavior
+- browser API expectations
+- Canvas/WebGL/WebAudio
+- RPG Maker engine scripts
+- third-party plugins
+- Node/NW.js assumptions
+- native Node modules
+- encrypted-asset policy
+
+Imported JavaScript must only execute inside the future explicit sandbox/runtime boundary.
+
+## WOLF RPG Editor
+
+Current WOLF compatibility is an experimental unencrypted/plain-data slice.
+
+Do not equate the synthetic/plain-data VM with complete WOLF format compatibility.
+
+Future compatibility requires:
+
+- supported version definition
+- authorized native-format fixtures
+- native database/map/event parsing
+- broader VM semantics
+- renderer/input/audio/UI/save/game-system layers
+
+Do not bypass protected/encrypted data merely to increase a compatibility percentage.
+
+## Native Plugins / DLLs
+
+Prefer this order:
+
+1. inspect as data
+2. identify by hash/signature
+3. implement high-level compatible replacement when possible
+4. implement narrow portable API shims
+5. consider controlled native execution only after a security boundary exists
+
+A native dependency that patches original executable memory may be fundamentally incompatible with a replacement runtime and should be reported honestly.
+
+## Diagnostics
+
+Compatibility failures should be actionable.
+
+Prefer:
+
+```text
+Engine: RPG Maker VX Ace
+Status: Unsupported runtime
+Reason: RGSS script execution is not implemented
+Detected runtime: RGSS3
+Native dependencies: 2
+Next supported boundary: metadata inspection only
 ```
 
-### Compatibility Flags
+over generic errors such as:
 
-| Flag | Type | Description |
-|------|------|-------------|
-| PreserveLegacyPictureTiming | BOOLEAN | Keep original picture update timing |
-| LegacyTextEncoding | STRING | Force legacy encoding (CP932, Shift_JIS, etc.) |
-| DisableEnhancedRenderer | BOOLEAN | Disable enhanced rendering for this game |
-| AlternateBattleAnimationTiming | BOOLEAN | Fix battle animation timing quirks |
-| MaxMapCount | INTEGER | Override maximum map count |
-| ForceWindowedMode | BOOLEAN | Force windowed mode |
-| DisableFastForward | BOOLEAN | Prevent fast-forward for this game |
-
-## Common Compatibility Issues
-
-### RM2000/2003
-
-- **Text encoding**: CP932/Shift_JIS handling
-- **Picture timing**: Original games update pictures on specific frames
-- **Battle transitions**: Some games use custom transition timing
-- **Random number generation**: Not all games use standard RNG
-
-### RMXP/VX/VXAce (RGSS)
-
-- **Ruby version differences**: Each RGSS version targets different Ruby
-- **Win32API calls**: Some games call Windows APIs directly
-- **DLL dependencies**: Some games use native DLLs
-- **Script errors**: RGSS script errors must be captured and reported
-
-### RMV/MZ
-
-- **JavaScript engine**: Different games may expect different JS features
-- **Plugin compatibility**: Plugins may use unsupported browser APIs
-- **Node.js dependencies**: Some games rely on Node-specific APIs
-- **Canvas/WebGL**: Rendering compatibility varies by game
-
-## Diagnostic Mode
-
-Built-in debugging overlays show:
-
-- FPS / simulation FPS
-- Frame time
-- Current map and event
-- Switch/variable changes
-- Script errors
-- Missing assets
-- Audio state
-- Draw calls
-- Memory usage
-- Runtime warnings
+```text
+Failed to load game
+```
 
 ## Compatibility Reports
 
-Users can export compatibility reports without distributing copyrighted files:
+Reports should contain only bounded diagnostic metadata needed for troubleshooting:
 
-```
-Runtime version: 0.2.0
-Platform: Windows x86_64
-Game hash: abc123...
-Engine: RPG Maker VX Ace
-Plugin hashes: [def456..., ghi789...]
-DLL metadata: RGSS302A.dll v3.02
-Script errors: [list]
-Unsupported APIs: [list]
-Missing assets: [list]
-Runtime warnings: [list]
-Crash information: [if applicable]
-```
+- URPG/runtime version
+- platform
+- engine/plugin ID
+- game hash/signature where available
+- detected dependencies
+- compatibility flags
+- unsupported APIs/commands
+- missing assets
+- bounded errors/warnings
 
-## Reporting Compatibility Issues
+Do not include unrelated private filesystem/user data.
 
-When reporting issues, include:
+## Regression Policy
 
-1. Game name and version
-2. Engine type (auto-detected or manual)
-3. Compatibility mode (Faithful/Enhanced)
-4. Exported compatibility report
-5. Reproduction steps
-6. Expected vs. actual behavior
+For a compatibility bug:
 
-## Adding New Compatibility Entries
+1. reproduce it
+2. identify the real semantic/root cause
+3. add a legal/synthetic/minimized regression fixture where practical
+4. implement the narrow correct fix
+5. run focused validation
+6. run the canonical suite
+7. update compatibility/profile documentation only after validation
 
-1. Test the game in Faithful Mode
-2. Document quirks and workarounds
-3. Create a compatibility profile entry
-4. Add regression tests if possible
-5. Update this document
+Do not weaken assertions or silently skip unsupported behavior to make a test green.
 
-## Legal Notes
+## Legal Boundary
 
-- Never bundle proprietary RPG Maker code or RTP assets
-- Implement behavior independently
-- Document all third-party components
-- Respect game licenses and redistribution rights
+- no proprietary engine binaries in URPG
+- no bundled RTP unless redistribution rights explicitly permit it
+- no copied proprietary game assets
+- third-party code/assets must have documented licenses
+- users supply legally obtained games and RTP resources
