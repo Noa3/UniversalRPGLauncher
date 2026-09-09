@@ -1,86 +1,163 @@
 # UniversalRPG Agent Instructions
 
-These instructions apply to autonomous coding agents working in this repository.
+> **Last reviewed:** 2026-09-09
 
-## Source of truth
+These rules apply to autonomous coding agents working in this repository.
 
-Read these files at the start of every session, in this order:
+## Source of Truth
+
+At the start of a session read:
 
 1. `AGENTS.md`
 2. `KANBAN.md`
 3. `SESSION_STATE.md`
 4. `docs/PROJECT_STATUS.md`
 5. `docs/ARCHITECTURE.md`
-6. `docs/ROADMAP.md`
-7. relevant code/tests for the selected card
+6. relevant source/tests
+7. the relevant roadmap/engine documentation
 
-`KANBAN.md` is the work queue. `SESSION_STATE.md` is the crash/restart checkpoint.
-Do not invent a parallel private roadmap and do not spend a session only rewriting plans when a ready implementation card exists.
+Actual source and passing tests override stale prose. If documentation disagrees with source, correct the documentation rather than implementing toward an obsolete claim.
 
-## Current implementation policy
+`KANBAN.md` is the single work queue. `SESSION_STATE.md` is the durable restart checkpoint.
 
-- C#/.NET is the validated/canonical implementation. The user-directed migration passed `dotnet build` and the Godot .NET headless suite with `128/128` tests.
-- Superseded `.gd` files were removed after migration validation. Keep future C# changes covered by equivalent regression tests.
-- Do not continue broad language migration work; focus on RM2000/2003 runtime progress behind Kanban cards and acceptance tests.
-- Godot 4.7.2 stable is the pinned engine line for this repository unless a deliberate upgrade card changes it.
-- Imported games are untrusted input. Never execute game EXEs, DLLs, Ruby, JavaScript, shell commands, or native plugins during detection/parsing tests.
+## Canonical Implementation
 
-## Autonomous work loop
+- C#/.NET is canonical.
+- Godot 4.7.2 stable .NET is the pinned host engine unless a deliberate upgrade card changes it.
+- The Godot project root is `project/`.
+- Do not restart or recreate a superseded GDScript implementation.
+- Native/GDExtension code may be introduced later behind explicit interfaces when justified by measured requirements.
+
+## Current Engine Boundaries
+
+Do not overstate capabilities.
+
+- RM2000/RM2003: partial parser-backed runtime and primary implementation track.
+- WOLF: experimental unencrypted/plain-data runtime slice.
+- XP/VX/VX Ace: detection + parsing only; no Ruby/RGSS execution.
+- MV/MZ: detection + parsing/metadata only; no JavaScript execution.
+- RM95: detection/research only.
+- Dante 98: detection/research only.
+- Unite: research/detection only.
+
+A source file named `*Runtime.cs` is not enough to claim support. The compiled plugin's declared capabilities plus validated behavior define the supported boundary.
+
+## Autonomous Work Loop
 
 For each cycle:
 
-1. Select the highest-priority `READY` card whose dependencies are satisfied.
-2. Move it to `IN PROGRESS` and record it in `SESSION_STATE.md`.
-3. Inspect existing implementation before editing.
-4. Make the smallest coherent implementation that satisfies the acceptance criteria.
-5. Add or update regression tests.
-6. Run the narrowest relevant tests, then `./scripts/validate.sh` before declaring the card done when Godot is available.
-7. If validation passes, move the card to `DONE`, update docs/status only where behavior actually changed, checkpoint `SESSION_STATE.md`, and select the next card.
-8. Continue without asking for permission unless a destructive action, missing credential, legal decision, or genuinely ambiguous product choice makes progress unsafe.
+1. select the highest-priority READY card with satisfied dependencies
+2. move it to IN PROGRESS
+3. record the card and immediate next action in `SESSION_STATE.md`
+4. inspect existing implementation/tests before editing
+5. make the smallest coherent implementation
+6. add/update regression tests
+7. run the narrowest relevant validation
+8. run `./scripts/validate.sh` before DONE when tooling is available
+9. update only documentation affected by verified behavior
+10. mark DONE/VERIFY/BLOCKED accurately
+11. continue with the next independent READY card
 
-## Failure recovery and anti-loop rules
+Do not stop merely to ask whether to continue.
 
-A failure is identified by its normalized signature: failing command/test + primary error type/message + relevant file/function.
+## Kanban Maintenance
 
-For one signature:
+Hermes/agents may generate missing tasks from the project goals, but:
 
-- Attempt at most **3 materially different fixes** before declaring the card blocked.
-- Never run the identical failing command more than **2 times in a row** without changing code/config/input or gathering new evidence.
-- A materially different attempt must change the hypothesis, implementation strategy, fixture, dependency/tooling path, or scope. Cosmetic edits do not count.
-- After each failed attempt, write a short entry under `SESSION_STATE.md -> Failure log` with hypothesis, change, and result.
-- If the same signature appears after 3 different attempts, stop modifying that subsystem. Revert only the speculative changes that made the state worse, keep verified improvements, mark the card `BLOCKED`, record exact evidence and a concrete unblock condition, then continue with the next independent `READY` card.
-- If a command hangs or makes no useful progress, terminate it, record the command and last output, and do not immediately rerun it unchanged.
-- If an agent notices it is repeating the same reasoning/action sequence, treat that as a loop even without an explicit error. Checkpoint state, mark the current approach exhausted, choose a different approach or another card.
-- Do not solve a local build failure by deleting tests, weakening assertions, swallowing exceptions, disabling validation, or silently changing compatibility requirements.
+- preserve stable existing card IDs
+- split oversized work into bounded cards
+- create detailed cards mainly for the next 1–2 milestones
+- keep distant engine tracks coarse until dependencies are actionable
+- use dependencies and concrete acceptance criteria
+- do not create a second competing Kanban
 
-## Context/restart recovery
+Priorities:
 
-Update `SESSION_STATE.md` after every completed card and before risky/refactor-heavy work.
-If the agent/process restarts, do not begin from memory. Read the checkpoint and Kanban, verify the working tree, rerun the last relevant validation if possible, and continue from the recorded next action.
+- P0: broken build/runtime/security regression
+- P1: primary runtime correctness/foundation
+- P2: major compatibility
+- P3: enhancements/platform polish
+- P4+: research/future
 
-## Definition of done
+## Current Priority Order
 
-A card may be `DONE` only when:
+Unless a regression changes the order:
 
-- acceptance criteria are implemented,
-- relevant regression tests exist,
-- relevant tests pass when tooling is available,
-- no known regression was hidden or ignored,
-- documentation/status is not claiming functionality beyond what exists.
+1. keep build/tests/security green
+2. advance RM2000/2003 toward an authorized end-to-end playable milestone
+3. resolve verified passability/rendering/event/runtime gaps
+4. separate RM2000 vs RM2003 semantics where required
+5. improve WOLF native-format fidelity only where verified/authorized evidence exists
+6. build RGSS core after the primary milestone is sufficiently stable
+7. build shared MV/MZ JavaScript runtime after an explicit sandbox design exists
+8. deepen RM95/Dante research only from verified formats
+9. keep Unite as research
+10. native DLL/Win32 execution remains late-stage
 
-If tooling required for validation is unavailable, use `VERIFY` rather than `DONE` and state the exact command that still must run.
+Do not jump to native execution or broad polish while critical primary runtime cards are available.
 
-## Scope control
+## Failure Recovery / Anti-Loop
 
-Priority order remains:
+Normalize a failure signature from:
 
-1. RM2000/2003 faithful parsing/runtime correctness
-2. deterministic core/runtime infrastructure
-3. renderer/event interpreter
-4. broader compatibility and RTP handling
-5. enhancements
-6. RGSS
-7. MV/MZ
-8. native DLL/Win32 compatibility
+- failing command/test
+- primary error/message
+- relevant file/function or crash location
 
-Do not jump to DLL emulation, Ruby VM, JavaScript VM, AI translation, HD rendering, or broad UI polish while higher-priority runtime cards are ready.
+For the same signature:
+
+- maximum 3 materially different repair strategies
+- never run the identical failing command more than twice consecutively without code/config/input changes or new evidence
+- a different strategy requires a different hypothesis, implementation path, fixture, dependency/tooling path or scope
+
+After each failed strategy record concise evidence in `SESSION_STATE.md`.
+
+After three failed strategies:
+
+1. stop the repeating approach
+2. terminate hung processes if needed
+3. preserve verified improvements
+4. revert only clearly harmful speculative edits
+5. mark the card BLOCKED with evidence and a concrete unblock condition
+6. create a focused investigation card if useful
+7. continue with the next independent READY card
+
+Do not solve failures by deleting tests, weakening correct assertions, swallowing errors or disabling security checks.
+
+## Definition of Done
+
+A card is DONE only when:
+
+- acceptance criteria are implemented
+- relevant regression coverage exists
+- relevant tests pass when tooling is available
+- broader validation passes where required
+- no known regression is hidden
+- documentation does not claim more than the implementation provides
+
+If required tooling is unavailable, use VERIFY and record the exact pending validation command.
+
+## Security
+
+Imported games are untrusted.
+
+During detection/parsing never execute:
+
+- EXE
+- DLL/SO
+- Ruby
+- JavaScript
+- shell/batch scripts
+- native game plugins
+
+Keep parser/archive work bounded. Do not follow reparse points. Do not bypass protected WOLF data.
+
+Before future script/native execution, implement the explicit capability/sandbox policy in `docs/IMPORT_SECURITY.md`.
+
+## Documentation Hygiene
+
+Living documents must stay concise and current.
+
+Do not copy every historical test count into every file. Use the latest verified baseline in `SESSION_STATE.md` / `PROJECT_STATUS.md`, and keep per-card evidence in `KANBAN.md`.
+
+Dated handoffs and QA reports are historical snapshots and should not be rewritten as current status.
