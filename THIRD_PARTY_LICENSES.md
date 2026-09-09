@@ -1,94 +1,112 @@
-# Third Party Licenses
+# Third-Party Components and Licenses
 
-> **Last Updated:** 2026-08-20
+> **Last reviewed:** 2026-09-09
 
-This document tracks all third-party components used in UniversalRPG.
+This file records third-party components that are actually distributed with UniversalRPG and tracks prospective dependencies separately.
 
-## Current Third-Party Components
+A candidate listed below is **not** an approved dependency until its version, license, platform support and integration strategy are reviewed.
+
+## Currently Distributed
 
 ### Noto Sans CJK SC
 
-- **Component:** `assets/fonts/NotoSansCJKsc-Regular.otf`
-- **Purpose:** Bundled Latin, Japanese, Korean, and Simplified Chinese UI glyph coverage
-- **Source:** [notofonts/noto-cjk](https://github.com/notofonts/noto-cjk)
+- **Component:** `project/assets/fonts/NotoSansCJKsc-Regular.otf`
+- **Purpose:** launcher Latin/Japanese/Korean/Simplified-Chinese glyph coverage
+- **Upstream:** notofonts/noto-cjk
 - **License:** SIL Open Font License 1.1
-- **License text:** [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt)
+- **License text:** `project/assets/fonts/OFL.txt`
 
-## Planned Third-Party Components
+## Prospective Runtime Dependencies
 
-The following components are **planned** but not yet included:
+No Ruby VM, JavaScript VM or PE/native execution library is currently selected as the canonical dependency.
 
-### Ruby VM (for RGSS support)
+### Embedded Ruby / RGSS
 
-**Candidates:**
-- **mruby** — MIT License
-  - Small footprint, embeddable Ruby implementation
-  - Suitable for RGSS1/2/3 compatibility
-  - [https://mruby.org/](https://mruby.org/)
+Requirements before selection:
 
-- **Rubinius** — Apache License 2.0
-  - More complete Ruby implementation
-  - Larger footprint
-  - [https://rubini.us/](https://rubini.us/)
+- compatibility with the Ruby behavior required by RGSS1/2/3
+- embeddable without a user-installed runtime
+- Windows/Linux/Android feasibility
+- acceptable license and redistribution terms
+- controllable filesystem/process/network/native-extension boundaries
+- testable resource limits
 
-**Decision pending:** Will be evaluated based on RGSS compatibility requirements.
+Candidates must be evaluated when the RGSS architecture card becomes actionable. Do not describe a candidate as “suitable for RGSS1/2/3” without compatibility evidence.
 
-### JavaScript Engine (for MV/MZ support)
+### Embedded JavaScript / MV/MZ
 
-**Candidates:**
-- **QuickJS** — MIT License
-  - Small footprint (~300KB)
-  - Good ES2020 support
-  - [https://bellard.org/quickjs/](https://bellard.org/quickjs/)
+Requirements before selection:
 
-- **Duktape** — MIT License
-  - Very small footprint
-  - Good embeddability
-  - [https://duktape.org/](https://duktape.org/)
+- sufficient ECMAScript behavior for RPG Maker MV/MZ/default plugins
+- Windows/Linux/Android support
+- embeddable sandbox boundary
+- memory/interrupt/watchdog control
+- acceptable license and redistribution terms
+- practical bindings for Canvas/WebGL/WebAudio and host APIs
 
-- **V8** — BSD-style
-  - Full Chrome V8 engine
-  - Largest footprint, best compatibility
-  - [https://v8.dev/](https://v8.dev/)
+Potential families to research include QuickJS, Duktape and V8, but no choice is currently approved.
 
-**Decision pending:** Will be evaluated based on MV/MZ compatibility requirements.
+### PE / Native Binary Inspection
 
-### PE Parser (for native DLL inspection)
+Initial native work must remain metadata-only.
 
-**Candidates:**
-- **libpe-parse** — MIT License
-  - C++ PE format parser
-  - [https://github.com/avast/libpe-parse](https://github.com/avast/libpe-parse)
+A future library or self-implementation may be evaluated for:
 
-- **pe-parse** — BSD License
-  - C++ PE parser with Python bindings
-  - [https://github.com/avast/pe-parse](https://github.com/avast/pe-parse)
+- PE headers
+- architecture
+- imports/exports
+- version metadata
+- hashes
 
-**Decision pending:** Will be evaluated based on Win32 API compatibility requirements.
+Selecting a PE parser does not authorize native DLL execution.
+
+## Asset Licensing
+
+If future development sources textures, audio, fonts, UI graphics or other game assets externally, record at minimum:
+
+- exact asset
+- original author/source
+- source URL
+- license name/version
+- commercial-use permission
+- modification permission
+- redistribution permission
+- attribution requirement
+- local modifications
+
+Prefer assets with clear redistribution terms. “Free download” without a clear license is not sufficient.
+
+Do not use ripped assets, unofficial reposts or proprietary RPG Maker/WOLF/game assets without permission.
+
+A dedicated asset manifest may be added when external game-facing assets begin to be included.
 
 ## Licensing Principles
 
-1. **Prefer MIT/Apache 2.0/BSD** licensed libraries
-2. **Avoid copyleft licenses** (GPL, AGPL) unless absolutely necessary
-3. **Never bundle** proprietary RPG Maker code or RTP assets
-4. **Document** all third-party components with license text
-5. **Attribute** all third-party contributors
+1. Prefer permissive or clearly compatible licenses.
+2. Review copyleft obligations before introducing them; do not reject a license category solely by label without understanding its actual obligations.
+3. Never bundle proprietary RPG Maker/WOLF runtime binaries or RTP assets without explicit redistribution rights.
+4. Include required license text and attribution with distributed third-party components.
+5. Pin source/version information for reproducibility.
+6. Re-evaluate licensing when a dependency changes distribution mode (for example static vs dynamic linking).
+7. Keep planned candidates separate from components actually shipped.
 
-## Adding New Dependencies
+## Adding a Dependency
 
-Before adding any third-party dependency:
+Before merging:
 
-1. Evaluate license compatibility
-2. Assess footprint impact
-3. Consider self-implementation alternatives
-4. Document in this file
-5. Include license text in repository
+1. identify exact upstream project/version
+2. verify license from the original source
+3. confirm Windows/Linux/Android implications
+4. assess security/sandbox impact
+5. assess binary size/performance impact
+6. add regression/build coverage
+7. update this file and include required license texts
+8. ensure release packaging contains required notices
 
-## RPG Maker Engine & RTP
+## Proprietary Engine / RTP Data
 
-**Not included.** UniversalRPG implements RPG Maker behavior independently.
+Not distributed by UniversalRPG unless an explicit license permits it.
 
-- No proprietary RPG Maker engine code
-- No original runtime binaries
-- No RTP assets
-- Users must provide their own legally obtained games and RTP
+Users provide legally obtained games and required RTP resources.
+
+The project aims to implement compatible behavior independently rather than redistributing original engine runtimes.
