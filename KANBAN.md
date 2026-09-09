@@ -1,8 +1,10 @@
 # UniversalRPG Autonomous Kanban
 
-> Updated: 2026-08-24
+> Updated: 2026-09-09
 > Owner: autonomous agent/Hermes
 > Ordering: lowest priority number first, then card ID.
+>
+> **Capability baseline:** RM2000/2003 = partial parser-backed runtime; WOLF = experimental unencrypted/plain-data runtime; XP/VX/VX Ace and MV/MZ = detection/parsing only; RM95, Dante 98 and Unite = research/detection only. Source and tests override stale wording inside historical card evidence.
 
 ## Workflow states
 
@@ -64,7 +66,10 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-070 | 3 | DONE | Faithful-vs-Enhanced profile and integer scaling controls | K-030 |
 | K-071 | 3 | DONE | Controller/touch remapping layer | K-020 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
+| K-085 | 4 | BACKLOG | WOLF native-format/authorized-fixture expansion plan | Verified WOLF format evidence/fixtures |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
+| K-095 | 5 | BACKLOG | RM95/Dante 98 legacy format research tracks | Verified legal format evidence/fixtures |
+| K-096 | 5 | BACKLOG | RPG Maker Unite scope/provenance research | Authorized Unite fixture/strategy |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
 
 ## Card details
@@ -537,3 +542,5 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - New defects found during a card become `P0`/`P1` bug cards when they threaten correctness/security; otherwise add them to backlog.
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.
+- When a future engine becomes actionable, Hermes should split its coarse backlog card into bounded cards with dependencies and tests. Do not pre-expand every engine into hundreds of speculative tasks.
+- Never upgrade an engine's compatibility claim solely because a detector, metadata parser, bootstrap class, or experimental source file exists; declared plugin capability plus validated behavior defines the boundary.
