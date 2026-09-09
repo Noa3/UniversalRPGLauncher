@@ -1,206 +1,225 @@
 # UniversalRPG — Project Status
 
-> **Last Updated:** 2026-08-24
-> **Current Phase:** Phase 2 — RM2000/2003 Parser in progress
+> **Last reviewed:** 2026-09-09  
+> **Repository baseline reviewed:** `main` at commit `782ea66141e494d32929a9cc41056523177888eb`  
+> **Primary development focus:** RM2000/2003 faithful runtime foundation
 
 ## Executive Summary
 
-The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, chipset passability, and renderer/system coverage beyond the bounded native event path.
+UniversalRPG has a working Godot 4.7.2 C#/.NET application foundation, bounded game inspection, a registry-driven engine plugin architecture, persistent library metadata, compatibility diagnostics, and a substantial automated test harness.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `296/296` tests.
+It is **not yet a general playable replacement runtime**.
 
-The bounded RM2K interpreter now supports verified `ChangeGold` command `10310`, `ChangeItems` command `10320`, and `ChangePartyMembers` command `10330`. Gold and item counts are bounded to `0..999999`; party mutations support constant/variable actor IDs, add/remove operations, duplicate and capacity protection, and fail-closed diagnostics. Bounded MZ metadata extraction reads top-level `System.json` properties with a real JSON parser; no foreign JavaScript is executed. Chipset passability remains blocked until a verified LMU/Chipset field mapping and distinguishing fixtures are available.
+RM2000/2003 are the only RPG Maker generations with a meaningful parser-backed gameplay/runtime foundation. WOLF RPG Editor has a deliberately narrow experimental unencrypted plain-data runtime/VM slice. XP/VX/VX Ace and MV/MZ are currently detection/parsing/metadata boundaries only. RM95, Dante 98 and Unite are research-oriented detection boundaries.
 
-## Phase Status Overview
+The last recorded canonical validation on `main` is **296/296 headless tests passed**, with clean .NET build and `scripts/validate.sh`. That is historical evidence for the reviewed commit; run validation again after any code change.
 
-| Phase | Description | Status | Notes |
-|-------|-------------|--------|-------|
-| 0 | Repository audit | ✅ Complete | Initial setup |
-| 1 | Runtime foundation | ✅ Complete | Core abstractions implemented |
-| 1.5 | Application foundation | ✅ Complete | Library, plugin detection/selection wiring, persistence, localization, import safety |
-| 2 | RM2000/2003 parser | 🚧 In progress | Real LCF reader + initial LDB/LMU/LSD decoding |
-| 3 | RM2000/2003 rendering | 🚧 In progress | Renderer-neutral framebuffer adapter implemented; Godot presentation, sprites, and camera remain |
-| 4 | Event interpreter | 📋 Planned | Depends on Phase 2 |
-| 5 | Full RM2000/2003 systems | 📋 Planned | Depends on Phase 4 |
-| 6 | Compatibility work | 📋 Planned | Real-world testing |
-| 7 | Enhanced Mode | 📋 Planned | After Faithful Mode stable |
-| 8 | RGSS runtime | 📋 Planned | After Phase 5 |
-| 9 | MV/MZ runtime | 📋 Planned | After Phase 8 |
-| 10 | Native plugin compat | 🔬 Research | Long-term |
-| 11 | Android compat | 🔬 Research | Long-term |
+## Engine Status Matrix
 
-## Implemented Systems
+| Engine | Detection | Parsing/data | Runtime execution | Overall |
+|---|---:|---:|---:|---|
+| Dante 98 | Yes, explicit research marker | No | No | Research/detection-only |
+| RPG Maker 95 | Yes, conservative signatures | No native parser | No | Research/detection-only |
+| RPG Maker 2000 | Yes | Partial LCF | Partial deterministic runtime | **Primary active implementation** |
+| RPG Maker 2003 | Yes | Partial shared LCF | Partial shared deterministic runtime | **Primary active implementation** |
+| RPG Maker XP | Yes | Bounded metadata/signatures | No Ruby/RGSS execution | Detection/parsing-only |
+| RPG Maker VX | Yes | Bounded metadata/signatures | No Ruby/RGSS execution | Detection/parsing-only |
+| RPG Maker VX Ace | Yes | Bounded metadata/signatures | No Ruby/RGSS execution | Detection/parsing-only |
+| RPG Maker MV | Yes | Bounded metadata | No JavaScript execution | Detection/parsing-only |
+| RPG Maker MZ | Yes | Bounded metadata/database inventory | No JavaScript execution | Detection/parsing-only |
+| WOLF RPG Editor | Yes | Experimental plain-data readers | Experimental bounded VM/runtime | Partial research runtime |
+| RPG Maker Unite | Candidate detection | No | No | Research-only |
 
-### 1. VirtualFileSystem (`project/src/core/virtual_filesystem.cs`)
+## Current Shared Infrastructure
 
-**Status:** Implemented
+### Application/library
 
-**Features:**
-- Multi-mount merging (game, override, RTP, save, cache)
-- Case-insensitive path resolution
-- Path traversal protection
-- Path normalization
-- Archive access preparation
+Implemented:
 
-**Limitations:**
-- No archive (ZIP/RVData2) support yet
-- No symlink resolution
-- Case map rebuild on every mount change (O(n))
+- Godot launcher/application shell
+- persistent game library
+- bounded folder and ZIP inspection
+- deterministic ranked engine detection
+- ambiguous/unknown/malformed/partial diagnostics
+- engine/runtime registry and selector
+- persisted import metadata
+- multilingual launcher UI
+- compatibility report infrastructure
 
-**Test Coverage:** Partial (see tests below)
+### Bounded inspection
 
----
+Current defaults:
 
-### 2. VirtualClock (`project/src/core/virtual_clock.cs`)
+- maximum directory depth: 4
+- maximum inspected entries: 4096
+- maximum file metadata read: 1 MiB
+- maximum archive uncompressed inspection budget: 64 MiB
+- reparse points skipped
+- unsafe archive paths rejected
+- entry-budget exhaustion represented as a partial/advisory scan
 
-**Status:** Implemented
+### Core/runtime services
 
-**Features:**
-- Deterministic simulation timing (60 Hz base)
-- Speed control (0.5x–10x, pause)
-- Scheduled callbacks
-- Frame-rate decoupling
-- Single-step debugging
+Implemented or partially implemented:
 
-**Limitations:**
-- No save-state serialization yet
-- No rewind support
-- No deterministic RNG seeding
+- `VirtualClock`
+- virtual filesystem primitives
+- compatibility profile/database primitives
+- RTP registry and diagnostics
+- runtime capability checks
+- renderer-neutral RM2K framebuffer/sprite/presentation structures
+- runtime-owned bounded save codec infrastructure
+- structured diagnostics
 
-**Test Coverage:** 8 deterministic regression tests
+## RM2000/2003 Status
 
----
+### Implemented foundations
 
-### 3. GameDetector (`project/src/game_detector/game_detector.cs`)
+- real bounded LCF framing and BER decoding
+- LDB parsing with typed portions and unknown-field retention
+- LMT parsing
+- LMU map/event metadata parsing
+- read-only LSD framing model
+- parser-backed runtime initialization
+- deterministic simulation clock
+- map/player simulation state
+- event scheduling
+- action/touch/autorun/parallel-related runtime infrastructure
+- verified event-command slices including switches/variables, messages/choices/input, transfer validation, gold/items/party mutations and other bounded control flow
+- renderer-neutral tile layers
+- sprite descriptors/camera-related state
+- presentation state
+- RTP resolution/diagnostics primitives
+- bounded regression fixtures
 
-**Status:** Implemented
+### Main blockers / gaps
 
-**Features:**
-- Compatibility facade over registered, deterministic detection plugins
-- Bounded folder/ZIP inspection with ranked candidates and confidence scoring
-- Version, evidence, ambiguity, malformed-input, and structured diagnostics
-- Compatibility profile schema validation (legacy schema 0, current schema 1, future-schema rejection) and bounded profile sizes
-- Deterministic Markdown compatibility-report export for GitHub issues without upload or external execution
-- Explicit Faithful/Enhanced render policy with bounded integer scaling controls
-- Persisted candidate/selection/evidence/compatibility records in `user://library.cfg`
-- RTP dependency, custom script/plugin, and native library metadata
-- Explicit user-provided RTP registry/resolution is bounded, deterministic, and data-only; no proprietary RTP data is bundled or auto-discovered
-- Runtime selection through exact plugin IDs, capability checks, platform checks, and no-fallback errors
+- chipset/passability mapping still needs verified field semantics and distinguishing fixtures
+- event-command coverage is far from complete
+- RM2003-specific behavioral differences need dedicated parity tests
+- no complete faithful Godot renderer
+- audio path incomplete
+- menus/system scenes incomplete
+- battle system not compatible
+- original save semantics incomplete
+- no broad end-to-end real-game playable milestone yet
 
-**Limitations:**
-- RM2K/RM2K3 have a safe bounded bootstrap that loads LDB/LMT/LMU into simulation and scheduler state; full gameplay runtime is not implemented. RGSS/XP/VX/VX Ace, RM95, MV/MZ, and Unite remain detection-only.
-- Bounded inspection now distinguishes *partial* scans (entry budget reached on a well-formed tree, advisory Info) from truly malformed input (Error); large real games no longer hard-fail runtime initialization for exceeding the 4096-entry budget
-- MV metadata extraction now reads bounded `data/System.json` title data and reports `.rpgmvp`/`.rpgmvo`/`.rpgmvm` encrypted assets without executing JavaScript; MV remains detection/metadata-only
-- Executables and libraries are inspected as bounded data only, never loaded or executed
-- Archive import is read-only inspection; safe extraction/staging for future runtime assets remains separate work
-- Missing-asset diagnostics and bounded per-game RTP profile metadata are implemented in K-041; original RM2K/RM2K3 `LSD` saves now have a read-only bounded framing model from K-050, while semantic field mapping, save mutation, and UI integration remain separate work
+## WOLF Status
 
-**Test Coverage:** 15 deterministic detection tests
+Implemented:
 
----
+- WOLF detection
+- explicit protected-data refusal boundary
+- unencrypted synthetic/plain-data reader models
+- database/map/event reader foundation
+- bounded deterministic `WolfEventVm`
+- runtime lifecycle tests
 
-### 4. CompatibilityProfile (`project/src/compatibility/compatibility_profile.cs`)
+Not implemented:
 
-**Status:** Implemented
+- complete native WOLF file formats/version coverage
+- protected/encrypted data support
+- faithful renderer
+- audio/input/UI
+- save/battle parity
+- broad authorized real-game fixtures
 
-**Features:**
-- Extensible JSON-based profiles
-- SHA-256 hash matching
-- Engine-specific profiles
-- Per-game flags with global override
-- Profile loading from directory
+WOLF must remain a separate runtime family rather than being forced into RM2K data/event models.
 
-**Limitations:**
-- No versioned schema migration
-- No profile validation
-- No profile signing
+## RGSS Status — XP / VX / VX Ace
 
-**Test Coverage:** 19 deterministic profile tests
+Current plugins advertise **Detection + Parsing**, not Runtime.
 
-## Technical Debt
+Implemented:
 
-| Item | Severity | Description |
-|------|----------|-------------|
-| Headless Godot editor diagnostic | Low | Godot 4.7.2 emits an internal `EditorSettings` message during `--headless --editor --quit`; validation still exits successfully |
-| No CI | Medium | No automated build/testing |
-| No export pipeline | Medium | Presets exist; signed/release exports are not automated |
-| Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
-| No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
-- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads bounded map geometry/start-map diagnostics, decoded events, and scheduler state; chipset passability, complete rendering, and full systems remain incomplete |
+- generation-specific signatures
+- bounded metadata inspection
+- archive/runtime identification
+- runtime selection correctly refuses unsupported execution
 
-## Missing Core Components (Planned)
+Missing:
 
-| Component | Phase | Priority |
-|-----------|-------|----------|
-| Expand/validate RM2K parser | 2 | Critical |
-| RM2K interpreter | 4 | Critical |
-| RM2K renderer | 3 | High |
-| RGSS runtime | 8 | High |
-| JavaScript runtime | 9 | High |
-| Win32 API shim | 10 | Medium |
-| Save state system | 5 | High |
-| Asset override system | 7 | Medium |
-| Input abstraction | 1 | Implemented for RM2K keyboard/controller/touch mapping; broader platform abstraction remains open |
-| Audio abstraction | 1 | Low (planned) |
-| Renderer interface | 1 | Low (planned) |
+- embedded Ruby VM
+- RGSS1/2/3 APIs
+- serialized-data/archive decoding sufficient for gameplay
+- script execution
+- graphics/audio/input/window APIs
+- Win32API policy
+- save/gameplay compatibility
 
-## Current Build Status
+## MV / MZ Status
 
-| Target | Status | Notes |
-|--------|--------|-------|
-| Godot Editor | ✅ Runs | project.godot created |
-| Linux headless | ✅ Tested | Godot 4.7.2 import and all UI locales start |
-| Windows Export | ⏸️ Not tested | Preset present; templates/toolchain needed |
-| Linux Export | ⏸️ Not tested | Preset present; templates needed |
-| macOS/iOS Export | ⏸️ Not tested | Requires macOS, Xcode, signing, templates |
-| Android Export | ⏸️ Not tested | Preset present; Android SDK/templates needed |
+Current plugins advertise **Detection + Parsing**, not Runtime.
 
-## Next Immediate Tasks
+Implemented:
 
-1. K-016: typed bounded RPG Maker MZ metadata inspection and explicit encrypted-asset diagnostics; keep MZ detection-only until a safe JavaScript runtime boundary is separately verified
-2. Expand typed LMU decoding incrementally; do not guess undocumented offsets/fields
-3. Test CP932/Shift-JIS behavior on target platforms and add malicious-input fixtures
-4. Implement LMU event/page metadata decoding without executing commands
+- bounded web-game signatures
+- top-level JSON metadata parsing
+- MV encrypted-asset diagnostics
+- stricter MZ runtime signature validation
+- bounded MZ database inventory helpers
+- malformed/oversized metadata tests
 
-## Open Questions
+Missing:
 
-1. Which Ruby VM to embed for RGSS? (mruby, rbx, custom?)
-2. Which JavaScript engine for MV/MZ? (V8, QuickJS, Duktape?)
-3. Should we use C++ for the RM2K parser (performance)?
-4. How to handle large game databases efficiently?
-5. What is the target minimum hardware spec?
+- embedded JavaScript VM
+- RPG Maker browser API compatibility
+- plugin execution
+- rendering/audio/input scenes
+- save/load
+- Node/NW.js compatibility policy
 
-## Risk Assessment
+## Legacy / Research Boundaries
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Ruby VM embedding complexity | High | High | Start with mruby, evaluate later |
-| JavaScript engine size | Medium | Medium | Use QuickJS (small footprint) |
-| RM2K format reverse-engineering | Medium | High | Public documentation exists |
-| Performance on mobile | Medium | High | Profile early, optimize hot paths |
-| Legal issues with RTP | Low | High | Never bundle RTP, user provides |
-| Win32 compatibility scope creep | High | Medium | Strict scope control, phase gates |
+### Dante 98
 
+A compiled detection plugin exists and only recognizes an explicit research marker. No PC-98 media parser or runtime exists.
 
-## 2026-08-20 Stabilization Pass
+### RPG Maker 95
 
-Changes prepared in this pass:
+A conservative detector exists using documented companion data signatures. No runtime exists.
 
-- fixed repeating `VirtualClock` callbacks so they keep their requested interval instead of firing every tick after first expiry;
-- corrected slow-motion to use a real speed factor (`0.5 == half speed`), added stable callback IDs and monotonic FPS sampling;
-- fixed compatibility-profile precedence so per-game flags actually override global defaults;
-- repaired the previously non-compiling/incomplete `RM2KDatabase` data model and added round-trip regression tests;
-- added `scripts/validate.sh`, GitHub validation workflow, `KANBAN.md`, `AGENTS.md`, `SESSION_STATE.md`, and the Hermes autonomous-work prompt;
-- added provenance-pinned EasyRPG TestGame RM2000/RM2003 LDB/LMT/LMU fixtures and real-framing regression tests;
-- accepted valid zero-length LDB struct-array sections while preserving bounded malformed-input rejection.
+### RPG Maker Unite
 
-## 2026-08-22 Typed LDB Slice (K-012/K-015)
+Only candidate/research detection exists. Generic Unity exports do not prove RPG Maker Unite provenance.
 
-- `ParseDatabase` now decodes the actors section into typed entries: name/title/character_name/face_name strings plus character_index, transparent, initial_level, final_level, critical_hit, critical_hit_chance, face_index integers; defaults mirror liblcf `rpg::Actor` initializers.
-- Switches and variables sections decode to id/name entries; duplicate structure IDs are rejected.
-- K-015 now additionally decodes scalar metadata for skills/items/states/classes/enemies/terrains/attributes/troops/animations/chipsets/battle_commands using field IDs verified against EasyRPG liblcf; nested arrays remain data-only and are retained as unknown fields.
-- Field IDs are verified against EasyRPG liblcf `src/generated/lcf/ldb/chunks.h`; unknown actor/entry fields remain preserved per entry for diagnostics.
-- Synthetic fixtures cover defaults, unknown-field retention, duplicate IDs, missing terminators, and battle-command trailing data; real-fixture tests assert typed entry counts equal section counts on both pinned TestGame LDBs.
-- Validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`; headless suite `170/170`.
+## Validation and CI
 
-The C# migration and plugin application wiring have been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `159/159` at that time (now `171/171`).
+- `scripts/validate.sh` is the canonical local validation command.
+- A GitHub validation workflow exists; therefore old documentation that says “No CI” is obsolete.
+- Export presets exist, but release exports are not yet validated across all target platforms.
+- Historical counts in session handoffs should not be copied forward as current truth.
+
+## Immediate Priorities
+
+1. keep `main` build/test green and repair P0 regressions first
+2. finish RM2K/2003 passability and map-rendering prerequisites using verified semantics
+3. continue verified RM2K/2003 event/runtime slices toward a small real playable milestone
+4. separate RM2K vs RM2K3 behavior where required
+5. improve real authorized fixtures and end-to-end compatibility evidence
+6. continue WOLF native-format work only from authorized/verified specifications and fixtures
+7. select and prototype an embedded Ruby boundary for RGSS after the RM2K milestone is sufficiently stable
+8. select and sandbox a JavaScript VM for MV/MZ
+9. keep RM95/Dante/Unite as research tracks unless evidence justifies promotion
+
+## Important Documentation Rule
+
+Living documents:
+
+- `README.md`
+- `KANBAN.md`
+- `SESSION_STATE.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/ROADMAP.md`
+
+Historical documents such as `SESSION_HANDOFF_YYYY-MM-DD.md` and dated QA reports describe the repository at a particular time and should not override current source/tests.
+
+## Known Strategic Decisions Still Open
+
+- Ruby VM choice and Ruby-version compatibility strategy for RGSS1/2/3
+- JavaScript VM choice and browser/Node compatibility scope for MV/MZ
+- exact supported WOLF versions and native-format coverage
+- whether/how RM95 or Dante 98 move beyond research detection
+- long-term native Windows DLL/Win32 compatibility scope
+- release minimum hardware/platform requirements
