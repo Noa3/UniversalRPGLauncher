@@ -1,60 +1,125 @@
 # Engine Plugin Catalog and Lifecycle
 
-UniversalRPG uses a deterministic catalog of trusted, compiled, in-process engine plugins. The catalog is detection and runtime-selection infrastructure; it is not a dynamic loader and it never executes files from an imported game directory.
+> **Last reviewed:** 2026-09-09
 
-## Built-in entries
+UniversalRPG uses a deterministic catalog of trusted, compiled, in-process engine plugins. This is an internal architecture boundary, not a user-provided dynamic plugin loader.
 
-| Stable ID | Display name | Capabilities | Launch status |
+Imported game executables, DLLs and scripts are never loaded merely to detect an engine.
+
+## Built-in Catalog
+
+The following table reflects the capabilities currently declared by source code in `project/src/plugins/BuiltInEnginePlugins.cs`.
+
+| Stable ID | Engine | Declared capability boundary | Current meaning |
 |---|---|---|---|
-| `rpg-maker-95` | RPG Maker 95 | Detection, runtime bootstrap | Safe bounded bootstrap; no gameplay |
-| `rpg-maker-2000` | RPG Maker 2000 | Detection, parsing metadata, runtime bootstrap | Minimal bootstrap: LDB/LMT/LMU load and deterministic tick |
-| `rpg-maker-2003` | RPG Maker 2003 | Detection, parsing metadata, runtime bootstrap | Minimal bootstrap: LDB/LMT/LMU load and deterministic tick |
-| `rpg-maker-xp` | RPG Maker XP | Detection, parsing metadata, runtime bootstrap | Safe bounded bootstrap; RGSS execution not implemented |
-| `rpg-maker-vx` | RPG Maker VX | Detection, parsing metadata, runtime bootstrap | Safe bounded bootstrap; RGSS execution not implemented |
-| `rpg-maker-vx-ace` | RPG Maker VX Ace | Detection, parsing metadata, runtime bootstrap | Safe bounded bootstrap; RGSS execution not implemented |
-| `rpg-maker-mv` | RPG Maker MV | Detection, parsing metadata, runtime bootstrap | Safe bounded bootstrap; JavaScript execution not implemented |
-| `rpg-maker-mz` | RPG Maker MZ | Detection, parsing metadata, runtime bootstrap | Safe bounded bootstrap; JavaScript execution not implemented |
-| `wolf-rpg` | WOLF RPG Editor | Detection, parsing metadata, runtime bootstrap | Safe bounded bootstrap; WOLF VM not implemented |
-| `rpg-maker-unite` | RPG Maker Unite / Unity candidate | Detection | Detection only; generic Unity exports are not treated as Unite games |
+| `rpg-tsukuru-dante-98` | RPG Tsukūru Dante 98 | Detection | explicit research marker only |
+| `rpg-maker-95` | RPG Maker 95 | Detection | conservative research detector |
+| `rpg-maker-2000` | RPG Maker 2000 | Detection, Parsing, Runtime, SaveLoad, Debugging | partial parser-backed runtime foundation; not full compatibility |
+| `rpg-maker-2003` | RPG Maker 2003 | Detection, Parsing, Runtime, SaveLoad, Debugging | partial shared LCF runtime foundation; RM2K3-specific parity incomplete |
+| `rpg-maker-xp` | RPG Maker XP | Detection, Parsing | no Ruby/RGSS execution |
+| `rpg-maker-vx` | RPG Maker VX | Detection, Parsing | no Ruby/RGSS execution |
+| `rpg-maker-vx-ace` | RPG Maker VX Ace | Detection, Parsing | no Ruby/RGSS execution |
+| `rpg-maker-mv` | RPG Maker MV | Detection, Parsing | bounded metadata only; no JavaScript runtime |
+| `rpg-maker-mz` | RPG Maker MZ | Detection, Parsing | bounded metadata/database inventory only; no JavaScript runtime |
+| `wolf-rpg` | WOLF RPG Editor | Detection, Parsing, Runtime | experimental unencrypted plain-data runtime/VM slice |
+| `rpg-maker-unite` | RPG Maker Unite / Unity candidate | Detection | research-only candidate detection |
 
-RM2K and RM2K3 currently advertise a parser-backed `PluginCapability.Runtime` bootstrap. `Rm2kEngineRuntime` loads the bounded LDB/LMT/first-LMU data through the canonical parser. The other target entries use `EngineBootstrapRuntime`, which re-inspects the bounded source and provides the same safe lifecycle/clock boundary without executing engine scripts or binaries. These are integration bootstraps, not full gameplay: event interpretation, RGSS/JavaScript/WOLF VMs, rendering, audio, menus, saves, and battles are not implemented yet. Unite remains detection-only because generic Unity exports cannot prove RPG Maker Unite provenance. Console-only RPG Maker products are not part of this catalog.
+A capability flag describes an implemented URPG boundary, **not** feature completeness. For example, RM2K/3 `SaveLoad` currently includes runtime-owned save tooling and read-only original LSD framing work; it does not imply complete original save compatibility.
 
-## Application composition
+## Detection vs Runtime
 
-Create separate registries for detection and runtime selection from the same deterministic catalog:
+Detection and runtime selection use separate registries built from the same compiled catalog:
 
 ```csharp
-using UniversalRPG.Plugins;
-
 var detectionRegistry = BuiltInEnginePluginCatalog.CreateDetectionRegistry();
 var runtimeRegistry = BuiltInEnginePluginCatalog.CreateRuntimeRegistry();
+
 var detector = new GameDetector(detectionRegistry);
 var selector = new EngineRuntimeSelector(runtimeRegistry);
 ```
 
-`EnginePluginRegistry.Register()` validates metadata and rejects duplicate IDs with `PluginErrorCode.DuplicatePluginId`. Registry enumeration and runtime selection are deterministic: probe score, declared priority, then ordinal plugin ID. `EngineRuntimeSelector` additionally validates the exact detected plugin ID, required capabilities, platform, engine range, and the plugin compatibility probe. It never falls back to a different engine or an external executable.
+A plugin that lacks `PluginCapability.Runtime` must be rejected by runtime selection even if detection succeeded.
 
-`GameLibrary.Import()` and `Scan()` persist the detection report under `user://library.cfg`. Each entry records the schema version, candidate IDs and scores, evidence, selected plugin ID when unambiguous, confidence, diagnostics, and compatibility status. On relaunch the source is inspected again; persisted selections are reused only when the current bounded detection still reports that candidate.
+That currently applies to:
 
-## Lifecycle
+- Dante 98
+- RPG Maker 95
+- RPG Maker XP
+- RPG Maker VX
+- RPG Maker VX Ace
+- RPG Maker MV
+- RPG Maker MZ
+- RPG Maker Unite
 
-A playable plugin must provide an `IEngineRuntime`. `EnginePluginHost` owns the selected runtime and enforces:
+WOLF and RM2K/3 advertise a runtime boundary, but neither should be described as broadly compatible gameplay yet.
+
+## Runtime Families
+
+### RM2000 / RM2003
+
+`Rm2kEngineRuntime` loads bounded LCF data into deterministic simulation/scheduler/presentation structures. This is the primary active runtime.
+
+### WOLF
+
+`WolfEngineRuntime` is a deliberately narrow experimental runtime for the repository's unencrypted/plain-data slice. It is not proof of native-format-complete WOLF support.
+
+### RGSS
+
+`RgssEngineRuntime.cs` exists as experimental/research code, but XP/VX/VX Ace plugins do **not** currently advertise Runtime. Until an embedded Ruby VM and RGSS compatibility layer are implemented, UI/runtime selection must continue to refuse execution.
+
+### MV/MZ
+
+No JavaScript runtime is currently advertised. Bounded JSON/web metadata inspection is not runtime execution.
+
+### RM95 / Dante / Unite
+
+Research/detection only.
+
+## Plugin Lifecycle
+
+For plugins that advertise Runtime, `EnginePluginHost` owns lifecycle transitions and typed failure handling.
+
+Conceptual lifecycle:
 
 ```text
-NotStarted -> Created -> Initialized -> Running -> Stopped -> Disposed
-                                      \-> Faulted -> disposed
+NotStarted
+   |
+   v
+Created -> Initialized -> Running -> Stopped
+              |             |
+              +-> Faulted <-+
+                   |
+                   v
+                Disposed
 ```
 
-Initialization, start, update, stop, and disposal failures become typed `PluginError` values. Failed partial runtimes are disposed and cannot be reused accidentally.
+A stopped runtime may be replaced with a fresh runtime instance for restart; stale runtime state must not be silently reused.
 
-## Adding a future plugin
+## Adding an Engine Plugin
 
-1. Add a stable lowercase identifier to `EnginePluginIds` only when it is a public catalog target.
-2. Implement `IEngineDetectionPlugin` and declare `EnginePluginMetadata` with the real engine range, generation, priority, and `PluginCapability.Detection`.
-3. Inspect only `EngineInspectionContext.Snapshot`; keep entry count, depth, file, and archive limits in force. Never execute or load an EXE, DLL, script, shell command, or native plugin from the game.
-4. Register the compiled plugin in the detection registry. Add deterministic fixtures for positive, negative, ambiguous, malformed, and unknown cases.
-5. For a playable backend, implement `IEnginePlugin`, advertise `PluginCapability.Runtime`, declare platform/capability constraints, implement `IEngineRuntime`, and make the compatibility probe reject unsupported games.
-6. Add import persistence and runtime-selection tests for missing registry entries, missing capabilities, platform mismatch, probe failure, and lifecycle failure.
-7. Update `docs/ENGINE_DETECTION.md`, this catalog, and the user-facing status documentation; run `./scripts/validate.sh`.
+1. Create a stable engine/plugin ID only when the engine is an intentional catalog target.
+2. Implement bounded detection from `EngineInspectionContext.Snapshot`.
+3. Add positive, negative, malformed, partial and ambiguous fixtures as appropriate.
+4. Advertise only capabilities backed by real code/tests.
+5. Keep parsers/runtime code engine-specific behind shared core interfaces.
+6. Add `Runtime` only when `CreateRuntime` returns a meaningful, safe runtime boundary.
+7. Add runtime-selection and lifecycle tests.
+8. Update detection, coverage and status docs.
+9. Run `./scripts/validate.sh`.
 
-Imported games remain read-only untrusted input throughout detection and selection.
+## Security Rules
+
+Detection plugins may inspect bounded data but must not:
+
+- execute imported EXE/DLL/SO files
+- evaluate Ruby/JavaScript
+- spawn the original game
+- load arbitrary native libraries
+- follow untrusted reparse points
+- bypass protected/encrypted game formats
+
+Future script/native runtime plugins require explicit sandbox/capability policies before execution is allowed.
+
+## Documentation Rule
+
+When source and documentation disagree, source/tests win and the documentation must be corrected. Do not preserve a stale “bootstrap runtime” claim merely because an old handoff used that terminology.
