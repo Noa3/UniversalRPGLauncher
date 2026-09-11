@@ -26,24 +26,26 @@ The normal user experience must not depend on launching EasyRPG, mkxp, NW.js, Wi
 Read in this order:
 
 1. `AGENTS.md`
-2. `KANBAN.md`
-3. `SESSION_STATE.md`
-4. `docs/PROJECT_STATUS.md`
-5. `docs/ARCHITECTURE.md`
-6. relevant source/tests
-7. relevant engine/roadmap documentation
+2. `SESSION_STATE.md`
+3. `docs/PROJECT_STATUS.md`
+4. `docs/ARCHITECTURE.md`
+5. relevant source/tests
+6. relevant engine/roadmap documentation
 
 Inspect git status before changing files.
 
 Source/tests override stale documentation.
+
+There is intentionally no Kanban. Do not create or maintain a work board unless the user explicitly asks for one later.
 
 ## Current Technical Baseline
 
 - canonical language: C#/.NET
 - host: Godot 4.7.2 stable .NET
 - Godot project root: `project/`
-- one authoritative work board: `KANBAN.md`
-- one durable checkpoint: `SESSION_STATE.md`
+- durable restart checkpoint: `SESSION_STATE.md`
+- current-status source: `docs/PROJECT_STATUS.md`
+- long-term direction: `docs/ROADMAP.md`
 
 Do not recreate the old GDScript implementation.
 
@@ -89,57 +91,46 @@ Treat these boundaries as authoritative until source/tests deliberately change t
 - Dante 98: detection/research only.
 - Unite: detection/research only.
 
-## Kanban Ownership
+## How to Choose Work
 
-Maintain exactly one `KANBAN.md`.
+Do not wait for the user to assign every implementation step.
 
-You must generate missing tasks yourself when implementation reveals them.
+At each cycle:
 
-Each actionable card should have:
+1. check whether build/tests/security are broken; if so repair them first
+2. read `SESSION_STATE.md` for the current objective and next action
+3. verify that the checkpoint still matches the actual code
+4. inspect `docs/PROJECT_STATUS.md` immediate priorities
+5. inspect the relevant source/tests
+6. choose the smallest coherent implementation slice that advances the most important unresolved runtime problem
+7. if the recorded next action is stale, replace it with a better one and record why
 
-- stable ID
-- priority
-- state
-- dependencies
-- goal
-- acceptance criteria
-- validation/evidence
-- blocker/unblock condition when applicable
-
-States:
-
-`BACKLOG`, `READY`, `IN PROGRESS`, `VERIFY`, `BLOCKED`, `DONE`.
-
-Keep at most one primary implementation card IN PROGRESS.
-
-Do not fill the board with hundreds of speculative cards. Keep the next 1–2 milestones detailed and distant engine work coarse until dependencies become actionable.
+Do not create a task board. Do not spend a session only reorganizing plans while useful code work exists.
 
 ## Autonomous Execution Loop
 
 Repeat:
 
-1. inspect the board
-2. choose the highest-priority unblocked READY card
-3. mark IN PROGRESS
-4. checkpoint the immediate action in `SESSION_STATE.md`
-5. inspect relevant code/tests
-6. implement the smallest coherent slice
-7. add regression coverage
-8. run focused validation
-9. self-repair failures
-10. run `./scripts/validate.sh` before DONE when available
-11. update affected docs
-12. mark the card accurately
-13. checkpoint state
-14. immediately continue to the next READY card
+1. write the current objective and immediate next change into `SESSION_STATE.md`
+2. inspect the relevant implementation and tests
+3. implement the smallest coherent improvement
+4. add regression coverage
+5. run focused validation
+6. self-repair failures
+7. run `./scripts/validate.sh` before declaring the slice complete when Godot is available
+8. update only affected living documentation
+9. update `SESSION_STATE.md` with validation, blockers, discoveries and the next action
+10. immediately continue with another useful independent slice when possible
 
 Do not stop merely to ask what to work on next.
+
+Only ask the user when progress requires a destructive/irreversible decision, unavailable credential, legal/product choice with materially different outcomes, or external data that cannot reasonably be synthesized/replaced.
 
 ## Development Order
 
 Unless evidence justifies a change:
 
-1. fix P0 build/test/security regressions
+1. fix build/test/security regressions
 2. advance RM2000/2003 to a representative playable milestone
 3. finish verified passability/rendering/event/system prerequisites
 4. add RM2000/RM2003 version-specific parity
@@ -160,7 +151,7 @@ Independent research may proceed when it does not block primary work, but do not
 
 ### RM2000 / RM2003
 
-Continue existing code; do not rewrite it from scratch.
+Continue existing code; do not rewrite it from scratch without a concrete correctness/maintainability reason.
 
 Drive work from verified LCF/runtime semantics and regression fixtures.
 
@@ -230,6 +221,40 @@ Keep these as research tracks until verified formats/fixtures justify promotion.
 
 Do not alias different engines just because their era or host technology is similar.
 
+## Refactoring Permission
+
+You may significantly refactor or replace existing systems when there is a concrete architectural benefit.
+
+Good reasons include:
+
+- duplicated implementation paths
+- misleading/dead pseudo-runtime code
+- runtime capability leaks
+- engine-specific logic coupled into shared UI/core
+- unsafe fallback behavior
+- an abstraction that blocks multiple engine families
+- a design that is substantially harder to test than a simpler replacement
+
+For significant refactors:
+
+1. identify the current failure/design problem
+2. preserve existing working behavior with tests
+3. replace rather than stack redundant abstractions when possible
+4. keep unsupported functionality fail-closed
+5. remove dead code if it has no callers and creates false expectations
+6. run full validation before claiming success
+
+Do not rewrite functional code solely for stylistic preferences.
+
+## Runtime Capability Safety
+
+Engine recognition must never imply launchability.
+
+- runtime hosts must explicitly require `PluginCapability.Runtime`
+- runtime creation must defensively reject plugins without Runtime
+- generic metadata/bootstrap lifecycles must not be treated as engine implementations
+- detection-only games may be imported and inspected but remain non-launchable
+
 ## Security
 
 Imported games are untrusted.
@@ -275,10 +300,8 @@ After three failed strategies:
 2. preserve logs/evidence
 3. revert only harmful speculative edits
 4. keep verified improvements
-5. mark the affected card BLOCKED
-6. record exact unblock condition
-7. create an investigation card if useful
-8. continue with the next independent READY card
+5. record the blocker and exact unblock condition in `SESSION_STATE.md`
+6. switch to the next useful independent implementation area based on source/status/roadmap
 
 If a process hangs twice in the same way, terminate it and treat it as a loop signature.
 
@@ -294,25 +317,33 @@ Never obtain green status by:
 - changing documentation to claim unimplemented features
 - hardcoding game-specific hacks without profile/test rationale
 
-Use VERIFY if required validation tooling is unavailable.
+If required validation tooling is unavailable, record the pending command and state clearly that the change is unverified.
 
 ## Documentation
 
 After verified behavior changes, update only the affected living docs.
 
-Do not turn `SESSION_STATE.md` into an ever-growing history log. Keep it a concise restart checkpoint.
+Keep `SESSION_STATE.md` concise. It should contain:
+
+- current objective
+- last known validation
+- blockers
+- important discoveries
+- next action
+
+Do not turn it into a history log.
 
 Historical handoffs/QA reports remain snapshots.
 
-## Definition of Done
+## Completion Standard
 
-A card is DONE only when:
+A development slice is complete only when:
 
 - implementation exists
-- acceptance criteria are satisfied
+- intended behavior is covered
 - focused tests pass
 - broader validation passes when required
 - no known regression is hidden
 - docs match actual behavior
 
-Continue autonomously until no useful unblocked READY work remains.
+Continue autonomously while useful safe work remains.
