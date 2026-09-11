@@ -63,6 +63,7 @@ public static class Rm2kMap
             return new Dictionary<string, object>
             {
                 { "conditions", new Dictionary<string, object>(Conditions) },
+                { "commands_count", Commands.Count },
                 { "commands", serializedCommands },
                 { "graphic", new Dictionary<string, object>(Graphic) },
                 { "trigger", Trigger },
