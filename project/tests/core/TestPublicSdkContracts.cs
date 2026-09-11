@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using Godot;
 using UniversalRPG.Plugins;
@@ -111,5 +112,39 @@ public sealed class TestPublicSdkContracts : TestBase
         var created = library.CreateSession(analysis);
         AssertFalse(created.Success);
         AssertEq(created.Result.ErrorCode, "session.runtime-unavailable");
+    }
+
+    public void Test_LibraryAnalyzeExposesMzPluginInventoryWithoutExecutingIt()
+    {
+        var root = ProjectSettings.GlobalizePath("user://sdk_mz_script_analysis");
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "js", "plugins"));
+            Directory.CreateDirectory(Path.Combine(root, "data"));
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html>");
+            File.WriteAllText(Path.Combine(root, "js", "rmmz_core.js"), "// rmmz_core.js v1.9.0");
+            File.WriteAllText(Path.Combine(root, "js", "rmmz_managers.js"), "// managers");
+            File.WriteAllText(Path.Combine(root, "data", "System.json"), "{\"gameTitle\":\"SDK Script Test\"}");
+            File.WriteAllText(Path.Combine(root, "js", "plugins.js"),
+                "$plugins = [{\"name\":\"CustomFeature\",\"status\":true,\"description\":\"\",\"parameters\":{}}];");
+            File.WriteAllText(Path.Combine(root, "js", "plugins", "CustomFeature.js"),
+                "window.CustomFeature = true;");
+
+            var analysis = new UniversalRpgLibraryAdapter().Analyze(root);
+
+            AssertEq(analysis.EngineId, EnginePluginIds.RpgMakerMz);
+            AssertTrue(analysis.HasScripts);
+            AssertEq(analysis.Scripts.Count, 1);
+            AssertEq(analysis.Scripts[0].DisplayName, "CustomFeature");
+            AssertEq(analysis.Scripts[0].LanguageId, ScriptLanguageIds.RpgMakerMzJavaScript);
+            AssertEq(analysis.Scripts[0].Sha256.Length, 64);
+            AssertEq(analysis.SupportLevel, EngineSupportLevel.ParsingOnly,
+                "script inventory must not be confused with executable JS runtime support");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 }
