@@ -8,6 +8,8 @@ namespace UniversalRPG.Sdk;
 /// Deterministic trusted-provider registry for packed/protected game content.
 /// Providers are host/application components, never code loaded from imported
 /// games. The registry resolves by explicit scheme IDs and fails on ambiguity.
+/// Provider failures are isolated so one optional integration cannot crash game
+/// analysis or another provider.
 /// </summary>
 public sealed class ProtectedContentRegistry
 {
@@ -36,6 +38,8 @@ public sealed class ProtectedContentRegistry
                 "content-provider.no-schemes",
                 $"Protected-content provider '{pProvider.Id}' does not declare any scheme IDs.");
         }
+
+        var seenSchemes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var scheme in pProvider.SchemeIds)
         {
             if (!IsStableId(scheme))
@@ -43,6 +47,12 @@ public sealed class ProtectedContentRegistry
                 return SdkOperationResult.Failed(
                     "content-provider.invalid-scheme",
                     $"Provider '{pProvider.Id}' declares invalid scheme ID '{scheme}'.");
+            }
+            if (!seenSchemes.Add(scheme))
+            {
+                return SdkOperationResult.Failed(
+                    "content-provider.duplicate-scheme",
+                    $"Provider '{pProvider.Id}' declares scheme '{scheme}' more than once.");
             }
         }
 
@@ -54,7 +64,7 @@ public sealed class ProtectedContentRegistry
     public IReadOnlyList<string> MatchingProviderIds(ProtectedContentDescriptor pDescriptor)
     {
         if (pDescriptor == null || !IsStableId(pDescriptor.SchemeId)) return Array.Empty<string>();
-        return MatchingProviders(pDescriptor).Select(pProvider => pProvider.Id).ToArray();
+        return MatchingProviders(pDescriptor, out _).Select(pProvider => pProvider.Id).ToArray();
     }
 
     public ContentSourceResult Open(ProtectedContentDescriptor pDescriptor)
@@ -68,35 +78,73 @@ public sealed class ProtectedContentRegistry
             return ContentSourceResult.Failed("content.scheme-invalid", "Protected-content scheme ID is invalid.");
         }
 
-        var candidates = MatchingProviders(pDescriptor);
+        var candidates = MatchingProviders(pDescriptor, out var probeDiagnostics);
         if (candidates.Length == 0)
         {
             return ContentSourceResult.Failed(
                 "content.provider-unavailable",
-                $"No trusted provider is registered for protected-content scheme '{pDescriptor.SchemeId}'.");
+                $"No trusted provider is registered for protected-content scheme '{pDescriptor.SchemeId}'.",
+                probeDiagnostics);
         }
         if (candidates.Length > 1)
         {
             return ContentSourceResult.Failed(
                 "content.provider-ambiguous",
-                $"Multiple trusted providers accepted protected-content scheme '{pDescriptor.SchemeId}'.");
+                $"Multiple trusted providers accepted protected-content scheme '{pDescriptor.SchemeId}'.",
+                probeDiagnostics);
         }
-        return candidates[0].Open(pDescriptor);
+
+        try
+        {
+            var result = candidates[0].Open(pDescriptor);
+            if (result == null)
+            {
+                return ContentSourceResult.Failed(
+                    "content.provider-invalid-result",
+                    $"Protected-content provider '{candidates[0].Id}' returned no result.",
+                    probeDiagnostics);
+            }
+            return result;
+        }
+        catch (Exception exception)
+        {
+            return ContentSourceResult.Failed(
+                "content.provider-open-exception",
+                $"Protected-content provider '{candidates[0].Id}' failed while opening '{pDescriptor.SchemeId}': {exception.GetType().Name}: {exception.Message}",
+                probeDiagnostics);
+        }
     }
 
-    private IProtectedContentProvider[] MatchingProviders(ProtectedContentDescriptor pDescriptor)
+    private IProtectedContentProvider[] MatchingProviders(
+        ProtectedContentDescriptor pDescriptor,
+        out IReadOnlyList<SdkDiagnostic> pDiagnostics)
     {
-        return _providers
-            .Where(pProvider => ContainsOrdinal(pProvider.SchemeIds, pDescriptor.SchemeId))
-            .Where(pProvider => pProvider.CanOpen(pDescriptor))
-            .ToArray();
+        var matches = new List<IProtectedContentProvider>();
+        var diagnostics = new List<SdkDiagnostic>();
+        foreach (var provider in _providers)
+        {
+            if (!ContainsOrdinal(provider.SchemeIds, pDescriptor.SchemeId)) continue;
+            try
+            {
+                if (provider.CanOpen(pDescriptor)) matches.Add(provider);
+            }
+            catch (Exception exception)
+            {
+                diagnostics.Add(SdkDiagnostic.Warning(
+                    "content-provider.probe-exception",
+                    $"Provider '{provider.Id}' failed while probing '{pDescriptor.SchemeId}': {exception.GetType().Name}: {exception.Message}"));
+            }
+        }
+        pDiagnostics = diagnostics;
+        return matches.ToArray();
     }
 
     private static bool ContainsOrdinal(IReadOnlyList<string> pValues, string pValue)
     {
+        if (pValues == null) return false;
         for (var index = 0; index < pValues.Count; index++)
         {
-            if (pValues[index].Equals(pValue, StringComparison.Ordinal)) return true;
+            if (pValues[index]?.Equals(pValue, StringComparison.Ordinal) == true) return true;
         }
         return false;
     }
