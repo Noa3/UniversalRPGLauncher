@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>UniversalRPG.JavaScript.Jint</RootNamespace>
+    <AssemblyName>UniversalRPG.JavaScript.Jint</AssemblyName>
+    <Description>Optional pure-.NET Jint adapter for UniversalRPG's embedded JavaScript VM contract.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj" />
+    <PackageReference Include="Jint" Version="4.16.2" />
+  </ItemGroup>
+</Project>
