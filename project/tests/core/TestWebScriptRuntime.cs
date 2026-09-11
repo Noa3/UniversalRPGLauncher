@@ -37,7 +37,7 @@ public sealed class TestWebScriptRuntime : TestBase
     public void Test_SafePolicyRejectsProcessExecutionPluginBeforeVmLoad()
     {
         var vm = new RecordingVm(ScriptLanguageIds.RpgMakerMvJavaScript);
-        var source = new MemorySourceProvider();
+        var source = new MemorySourceProvider { LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript };
         var process = Entry(
             "process",
             0,
@@ -83,7 +83,7 @@ public sealed class TestWebScriptRuntime : TestBase
     public void Test_ExplicitPolicyCanPermitProcessCompatibilityPath()
     {
         var vm = new RecordingVm(ScriptLanguageIds.RpgMakerMvJavaScript);
-        var source = new MemorySourceProvider();
+        var source = new MemorySourceProvider { LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript };
         var process = Entry(
             "process",
             0,
