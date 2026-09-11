@@ -45,7 +45,7 @@ public sealed class TestMvMzEncryptedContent : TestBase
         var result = source.Read("img/Picture.png");
 
         AssertTrue(result.Success, result.ErrorMessage);
-        AssertEq(result.Data.ToArray(), plain);
+        AssertTrue(result.Data.Span.SequenceEqual(plain), "decrypted RPGMVP bytes match original plaintext");
         AssertEq(source.Protection, GameContentProtectionKind.EngineManagedEncryption);
         AssertFalse(File.Exists(Path.Combine(root, "img", "Picture.png")),
             "transparent runtime read must not extract a plaintext file");
@@ -62,7 +62,7 @@ public sealed class TestMvMzEncryptedContent : TestBase
         var result = source.Read("img/Face.png");
 
         AssertTrue(result.Success, result.ErrorMessage);
-        AssertEq(result.Data.ToArray(), plain);
+        AssertTrue(result.Data.Span.SequenceEqual(plain), "decrypted MZ underscore asset matches plaintext");
     }
 
     public void Test_PlainAssetTakesPrecedenceOverEncryptedVariant()
@@ -77,7 +77,7 @@ public sealed class TestMvMzEncryptedContent : TestBase
         var result = source.Read("img/Window.png");
 
         AssertTrue(result.Success);
-        AssertEq(result.Data.ToArray(), plain);
+        AssertTrue(result.Data.Span.SequenceEqual(plain), "plain asset has priority over encrypted fallback");
     }
 
     public void Test_RejectsTraversalOutsideGameRoot()
