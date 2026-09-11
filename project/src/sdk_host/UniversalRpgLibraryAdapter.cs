@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Godot;
 using UniversalRPG.GameDetectorNs;
 using UniversalRPG.Plugins;
+using UniversalRPG.Rgss;
 using UniversalRPG.Sdk;
 
 namespace UniversalRPG.SdkHost;
@@ -61,6 +63,8 @@ public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
             });
         }
 
+        var scripts = AnalyzeScripts(detection.GameDirectory, engineId, diagnostics);
+
         return new GameAnalysis
         {
             GameDirectory = detection.GameDirectory,
@@ -70,6 +74,7 @@ public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
             ConfidenceScore = selected?.Score ?? 0,
             SupportLevel = support?.SupportLevel ?? EngineSupportLevel.Unknown,
             Evidence = detection.Evidence,
+            Scripts = scripts,
             Diagnostics = diagnostics,
         };
     }
@@ -102,6 +107,118 @@ public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
             Evidence = pAnalysis.Evidence,
         };
         return SdkSessionResult.Succeeded(new UniversalRpgSessionAdapter(_runtimeRegistry, game));
+    }
+
+    private static IReadOnlyList<EngineScriptDescriptor> AnalyzeScripts(
+        string pGameDirectory,
+        string pEngineId,
+        List<SdkDiagnostic> pDiagnostics)
+    {
+        if (string.IsNullOrWhiteSpace(pGameDirectory)) return Array.Empty<EngineScriptDescriptor>();
+
+        if (pEngineId is EnginePluginIds.RpgMakerMv or EnginePluginIds.RpgMakerMz)
+        {
+            var inspection = SafeGameInspector.Inspect(pGameDirectory);
+            if (!inspection.Success || inspection.Value == null)
+            {
+                pDiagnostics.Add(SdkDiagnostic.Warning(
+                    "scripts.inspect-failed",
+                    inspection.Error?.Message ?? "Web plugin inventory could not inspect the game source."));
+                return Array.Empty<EngineScriptDescriptor>();
+            }
+            var inventory = WebScriptInventory.Inspect(
+                inspection.Value,
+                pEngineId == EnginePluginIds.RpgMakerMz);
+            pDiagnostics.AddRange(inventory.Diagnostics);
+            foreach (var entry in inventory.Entries)
+            {
+                if (entry.Compatibility == WebScriptCompatibility.RequiresNodeShim)
+                {
+                    pDiagnostics.Add(SdkDiagnostic.Warning(
+                        "scripts.node-shim-required",
+                        $"Plugin '{entry.Script.DisplayName}' uses Node/NW.js APIs and will require a compatibility shim."));
+                }
+                else if (entry.Compatibility == WebScriptCompatibility.RequiresProcessExecution)
+                {
+                    pDiagnostics.Add(SdkDiagnostic.Warning(
+                        "scripts.process-execution-required",
+                        $"Plugin '{entry.Script.DisplayName}' requests host process execution, which is denied by the safe default policy."));
+                }
+                else if (entry.Compatibility == WebScriptCompatibility.RequiresNativeAddon)
+                {
+                    pDiagnostics.Add(SdkDiagnostic.Warning(
+                        "scripts.native-addon-required",
+                        $"Plugin '{entry.Script.DisplayName}' references a native Node addon and needs a platform-specific compatibility strategy."));
+                }
+            }
+            return inventory.Entries.Select(pEntry => pEntry.Script).ToArray();
+        }
+
+        if (TryRgssGeneration(pEngineId, out var generation))
+        {
+            var archive = FindRgssScriptArchive(pGameDirectory, generation);
+            if (archive == null)
+            {
+                pDiagnostics.Add(SdkDiagnostic.Info(
+                    "scripts.rgss-archive-missing",
+                    "No unencrypted Data/Scripts archive was available for bounded RGSS script inventory."));
+                return Array.Empty<EngineScriptDescriptor>();
+            }
+            var result = RgssScriptArchiveReader.Read(archive, generation);
+            if (!result.Success)
+            {
+                pDiagnostics.Add(SdkDiagnostic.Warning("scripts.rgss-read-failed", result.Error));
+                return Array.Empty<EngineScriptDescriptor>();
+            }
+            return result.Scripts.Select(pScript => pScript.Descriptor).ToArray();
+        }
+
+        return Array.Empty<EngineScriptDescriptor>();
+    }
+
+    private static bool TryRgssGeneration(string pEngineId, out RgssGeneration pGeneration)
+    {
+        if (pEngineId == EnginePluginIds.RpgMakerXp)
+        {
+            pGeneration = RgssGeneration.Rgss1;
+            return true;
+        }
+        if (pEngineId == EnginePluginIds.RpgMakerVx)
+        {
+            pGeneration = RgssGeneration.Rgss2;
+            return true;
+        }
+        if (pEngineId == EnginePluginIds.RpgMakerVxAce)
+        {
+            pGeneration = RgssGeneration.Rgss3;
+            return true;
+        }
+        pGeneration = default;
+        return false;
+    }
+
+    private static string? FindRgssScriptArchive(string pGameDirectory, RgssGeneration pGeneration)
+    {
+        if (!Directory.Exists(pGameDirectory)) return null;
+        try
+        {
+            var dataDirectory = Directory.EnumerateDirectories(pGameDirectory, "*", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(pDirectory => Path.GetFileName(pDirectory).Equals("Data", StringComparison.OrdinalIgnoreCase));
+            if (dataDirectory == null) return null;
+
+            var expectedName = pGeneration switch
+            {
+                RgssGeneration.Rgss1 => "Scripts.rxdata",
+                RgssGeneration.Rgss2 => "Scripts.rvdata",
+                _ => "Scripts.rvdata2",
+            };
+            return Directory.EnumerateFiles(dataDirectory, "*", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(pFile => Path.GetFileName(pFile).Equals(expectedName, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private EngineSupportDescriptor? FindSupport(string pEngineId)
