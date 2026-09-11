@@ -139,6 +139,46 @@ public partial class TestRm2kEventSchedulerBehavior : TestBase
             "next eligible autorun starts only after the previous foreground event finishes");
     }
 
+    public void Test_ForegroundEventLocksPlayerMovementUntilCompletion()
+    {
+        var state = new GameSimulationState();
+        state.ConfigureMap(1, 2, 1, new[] { true, true });
+        var eventData = EventWithPage(20, 0, 0, Rm2kEventTrigger.Action, layer: 1, switchId: 3);
+        var scheduler = new Rm2kEventScheduler(state);
+        scheduler.SetEvents(new[] { eventData });
+
+        AssertTrue(scheduler.TriggerAt(0, 0, Rm2kEventTrigger.Action));
+        AssertTrue(scheduler.ForegroundBusy);
+        AssertTrue(state.PlayerInputLocked, "foreground interpreter owns the player input lock");
+        AssertFalse(state.TryMove(1, 0), "movement is rejected while foreground event is active");
+        AssertEq(state.MapX, 0, "locked input does not move the player");
+
+        scheduler.ExecuteFrame(); // switch command
+        AssertTrue(state.PlayerInputLocked, "input stays locked until End is consumed");
+        scheduler.ExecuteFrame(); // End
+
+        AssertFalse(scheduler.ForegroundBusy);
+        AssertFalse(state.PlayerInputLocked, "input lock is released when foreground execution completes");
+        AssertTrue(state.TryMove(1, 0), "movement resumes after foreground completion");
+        AssertEq(state.MapX, 1);
+    }
+
+    public void Test_ParallelEventDoesNotLockPlayerMovement()
+    {
+        var state = new GameSimulationState();
+        state.ConfigureMap(1, 2, 1, new[] { true, true });
+        var parallel = EventWithPage(21, 0, 0, Rm2kEventTrigger.Parallel, layer: 0, switchId: 4);
+        var scheduler = new Rm2kEventScheduler(state);
+        scheduler.SetEvents(new[] { parallel });
+
+        scheduler.ExecuteFrame();
+
+        AssertTrue(scheduler.ActiveInterpreterCount >= 1, "parallel interpreter is active");
+        AssertFalse(scheduler.ForegroundBusy, "parallel interpreter does not occupy foreground slot");
+        AssertFalse(state.PlayerInputLocked, "parallel interpreter does not lock player input");
+        AssertTrue(state.TryMove(1, 0), "player may move while parallel event runs");
+    }
+
     private static Rm2kMap.Event EventWithPage(
         int pId,
         int pX,
