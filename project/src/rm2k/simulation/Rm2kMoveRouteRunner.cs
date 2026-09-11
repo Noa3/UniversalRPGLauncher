@@ -152,8 +152,17 @@ public sealed class Rm2kMoveRouteRunner
                 if (targetX == pState.PlayerX && targetY == pState.PlayerY)
                 {
                     var triggered = pScheduler.TriggerCollision(EventId);
-                    if (Route.Skippable) AdvanceCursor();
-                    return triggered ? Rm2kMoveRouteStepStatus.CollisionTriggered : HandleBlockedWithoutAdvance();
+                    if (Route.Skippable)
+                    {
+                        AdvanceCursor();
+                        if (triggered) return Rm2kMoveRouteStepStatus.CollisionTriggered;
+                        return IsCompleted
+                            ? Rm2kMoveRouteStepStatus.Completed
+                            : Rm2kMoveRouteStepStatus.SkippedBlockedMove;
+                    }
+                    return triggered
+                        ? Rm2kMoveRouteStepStatus.CollisionTriggered
+                        : Rm2kMoveRouteStepStatus.Blocked;
                 }
                 if (pScheduler.HasBlockingSameLayerEventAt(targetX, targetY, EventId))
                 {
@@ -163,7 +172,6 @@ public sealed class Rm2kMoveRouteRunner
         }
         else if (targetX < 0 || targetX >= pPassability.Width || targetY < 0 || targetY >= pPassability.Height)
         {
-            // Through ignores tile/event collision, not map bounds.
             return HandleBlocked();
         }
 
@@ -239,11 +247,6 @@ public sealed class Rm2kMoveRouteRunner
             return IsCompleted ? Rm2kMoveRouteStepStatus.Completed : Rm2kMoveRouteStepStatus.SkippedBlockedMove;
         }
         return Rm2kMoveRouteStepStatus.Blocked;
-    }
-
-    private Rm2kMoveRouteStepStatus HandleBlockedWithoutAdvance()
-    {
-        return Route.Skippable ? HandleBlocked() : Rm2kMoveRouteStepStatus.Blocked;
     }
 
     private Rm2kMoveRouteStepStatus Advance()
