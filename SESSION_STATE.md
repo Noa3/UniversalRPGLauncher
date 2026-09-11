@@ -5,7 +5,7 @@
 
 ## Current Objective
 
-Continue RM2000/2003 toward a representative playable map while keeping the shared plugin/runtime boundary fail-closed and engine-agnostic.
+Continue RM2000/2003 toward a representative playable map while keeping engine detection/parsing/runtime boundaries explicit and fail-closed.
 
 ## Repository Baseline
 
@@ -19,7 +19,7 @@ Last recorded canonical validation on that baseline:
 - .NET build: clean
 - headless suite: **296/296 passed**
 
-The current branch contains runtime code changes and requires fresh validation before merge. Do not reuse 296/296 as proof that the branch is green.
+The current branch contains substantial runtime changes and still requires fresh validation before merge. Do not reuse 296/296 as proof that the branch is green.
 
 ## Branch Work Completed So Far
 
@@ -41,25 +41,28 @@ The current branch contains runtime code changes and requires fresh validation b
 - unused `RgssEngineRuntime.cs` pseudo-runtime removed
 - regression coverage added proving detection-only plugins cannot create/start runtimes
 
-### RM2000/2003 passability cleanup
+### RM2000/2003 passability and interaction
 
-- verified chipset passage field IDs and defaults against liblcf/EasyRPG
-- hardened `Rm2kPassabilityMap` with bounded map dimensions/tile counts
-- typed `passable_data_lower` / `passable_data_upper` fields are preferred when present
-- legacy raw `unknown_fields` remain supported temporarily during parser migration
-- oversized or malformed passage vectors fail closed
-- obsolete byte-based `Rm2kMap.TileLayer` / whole-map container state removed; real RM2K tile IDs are not constrained to 8-bit
-- dedicated passability regression tests added
+- verified chipset passage IDs/defaults against liblcf/EasyRPG
+- hardened `Rm2kPassabilityMap` bounds and malformed vector handling
+- typed passage fields are preferred when available, with legacy raw-field fallback during parser migration
+- obsolete byte-based `Rm2kMap.TileLayer`/whole-map representation removed
+- directional map passage behavior is modeled separately from event collision
+- upper-layer Counter flag (`0x40`) is now exposed per map coordinate
+- runtime action interaction supports the RPG_RT sequence:
+  - action event on player's own coordinate
+  - action event directly in front
+  - up to three consecutive counter tiles, then event behind the counter
 
 Remaining passability work:
 
 - promote chipset passage vectors to first-class typed fields in `rm2k_parser.cs`
-- remove legacy raw-field fallback after parser/real-fixture validation
-- add runtime tile substitution, looping-map and vehicle/event-specific passage behavior
+- remove legacy `unknown_fields` fallback after parser/fixture validation
+- implement runtime tile substitution, loop-map behavior and vehicle-specific passage rules
 
 ### RM2000/2003 event/runtime correctness
 
-Verified liblcf LMU trigger encoding:
+Verified raw LMU trigger encoding:
 
 - Action = 0
 - Player Touch = 1
@@ -67,30 +70,44 @@ Verified liblcf LMU trigger encoding:
 - Autorun = 3
 - Parallel = 4
 
-Changes:
+Implemented:
 
-- added `Rm2kEventTriggerCodec` so raw LMU values map correctly to the existing internal scheduler semantics
-- invalid trigger values are diagnosed and skipped
-- runtime now imports verified event-page layer and move-frequency metadata
-- EventPage model now stores layer and move-frequency explicitly
-- scheduler now searches all events sharing a coordinate instead of allowing the first non-matching event to mask later matches
-- active same-layer events are exposed as blocking collision geometry
-- player movement now stops on active same-layer events; a matching Player Touch page is queued without moving the player into the event tile
-- below/above-layer events remain non-blocking in the current geometry model
-- autorun pages restart after completion while their conditions remain active
-- foreground execution is serialized: at most one autorun/action/touch/collision interpreter runs at once
-- parallel pages remain independently concurrent
-- scheduler exposes `ForegroundBusy` for the next input-lock integration step
+- `Rm2kEventTriggerCodec` maps raw LMU values to runtime trigger semantics
+- invalid raw trigger values are diagnosed and skipped
+- event page layer and move-frequency metadata are retained
+- active-page selection is used for collision
+- multiple events sharing one coordinate are searched correctly
+- same-layer active events block player movement
+- Player Touch can start on blocked same-layer collision
+- Player Touch can start after a successful step onto a non-blocking event
+- autorun pages restart while their conditions remain active
+- one serialized foreground interpreter is used for autorun/action/touch/collision
+- parallel event interpreters remain independently concurrent
+- foreground execution owns `GameSimulationState.PlayerInputLocked`
+- parallel execution does not lock player movement
+- runtime rejects movement/interact input before facing/position mutation while locked
+- `Rm2kEngineRuntime.TryMove()` owns movement/touch semantics
+- `Rm2kEngineRuntime.TryInteract()` owns decision-key map targeting
 
-New regression suites cover:
+### RM2000/2003 map transfer
 
-- LMU trigger mapping and invalid trigger rejection
-- multiple events sharing one coordinate
-- active-page layer collision queries
-- repeating autorun behavior
-- serialized foreground autoruns
-- same-layer Player Touch collision through the real RM2K fixture
-- same-layer Action events blocking without being incorrectly started as Player Touch
+`Teleport`/Place Hero is no longer only a pending-state placeholder.
+
+Runtime update now:
+
+1. observes `IsTransferPending`
+2. resolves the requested LMU with `Rm2kMapLocator.SelectMapById`
+3. parses the destination map
+4. validates target coordinates
+5. prepares destination framebuffer/sprite descriptors
+6. configures destination passability/simulation state
+7. preserves requested facing
+8. replaces current map/event scheduler/presentation state
+9. clears pending transfer fields only after successful application
+
+Missing/invalid destination maps fail closed and leave the transfer pending rather than pretending completion.
+
+Regression coverage now includes successful same-map transfer and a missing-target failure case.
 
 ## Current Architecture State
 
@@ -106,33 +123,35 @@ New regression suites cover:
 
 ## CI / Validation State
 
-`.github/workflows/validate.yml` on this branch is already configured for:
+`.github/workflows/validate.yml` on this branch is configured for:
 
 - .NET 8
 - Godot 4.7.2 Mono/.NET Linux build
 - `./scripts/validate.sh`
 
-GitHub currently reports no workflow/status run for the latest branch commits through the connected API. Local container network access also cannot clone the repository. Therefore the new branch changes are **not yet claimed as validated**.
+The connected GitHub API still reports no workflow/status run for the current branch commits. Local container network access cannot clone GitHub either. Therefore the branch changes are **not yet claimed as validated**.
 
 Required next validation when a runner is available:
 
 1. `dotnet build project/UniversalRPG.csproj --no-restore`
-2. focused C# test runner, especially:
+2. focused C# suites, especially:
    - `TestEnginePluginContract`
    - `TestRm2kEventTriggerCodec`
    - `TestRm2kEventSchedulerBehavior`
    - `TestRm2kRuntimeInteraction`
-   - existing RM2K parser/passability/plugin tests
+   - `TestPluginDetection` passability/counter tests
+   - existing RM2K parser/runtime tests
 3. `./scripts/validate.sh`
 4. update this baseline only after all results are green
 
 ## Next Automatic Development Priorities
 
-1. lock player movement/action input while `Rm2kEventScheduler.ForegroundBusy` is true, while allowing parallel events to coexist with player input
-2. move action/touch interaction decisions out of `Main.cs` into the RM2K runtime so keyboard/controller/touch frontends share identical engine semantics
-3. promote chipset passage arrays to typed parser output and validate them against the pinned real fixtures
-4. implement target-map application for pending transfers instead of only storing transfer requests
-5. continue map presentation/audio/menu work after movement/event flow is stable
+1. promote chipset `terrain_data`, `passable_data_lower`, and `passable_data_upper` to typed LDB parser output and remove runtime dependence on `unknown_fields`
+2. simplify `Main.cs` so normal map movement/action calls only `Rm2kEngineRuntime.TryMove/TryInteract`; presentation controls stay frontend-side
+3. add a fixture with a real second LMU and validate cross-map transfer, target event loading and passability changes
+4. implement Event Touch/Collision semantics for moving events separately from Player Touch
+5. add runtime tile substitution and looping-map passage behavior
+6. continue faithful map presentation/audio/menu work once movement/event/transfer flow is validated
 
 ## Documentation Recovery Rule
 
