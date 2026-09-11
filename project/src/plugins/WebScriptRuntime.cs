@@ -78,6 +78,25 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         | ScriptRuntimeCapability.HostHooks;
     public IReadOnlyList<EngineScriptDescriptor> Scripts => _entries.Select(pEntry => pEntry.Script).ToArray();
 
+    /// <summary>
+    /// Returns configured plugin parameters using RPG Maker's case-insensitive
+    /// name lookup and last-configured-entry-wins behavior. This is the data a
+    /// future PluginManager.parameters() compatibility shim should expose.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> GetPluginParameters(string pPluginName)
+    {
+        if (string.IsNullOrWhiteSpace(pPluginName)) return new Dictionary<string, string>();
+        for (var index = _entries.Count - 1; index >= 0; index--)
+        {
+            var entry = _entries[index];
+            if (entry.Script.DisplayName.Equals(pPluginName, StringComparison.OrdinalIgnoreCase))
+            {
+                return entry.Parameters;
+            }
+        }
+        return new Dictionary<string, string>();
+    }
+
     public SdkOperationResult DiscoverScripts()
     {
         if (_disposed) return Disposed();
