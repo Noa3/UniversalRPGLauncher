@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using UniversalRPG.Rm2k.Parser;
 
 namespace UniversalRPG.Rm2k.Simulation;
 
@@ -11,9 +12,9 @@ namespace UniversalRPG.Rm2k.Simulation;
 /// separate runtime layers.
 ///
 /// Field IDs, defaults and tile/passability constants are verified against
-/// liblcf and EasyRPG Player. Typed chipset passage fields are preferred; the
-/// raw unknown-field fallback is retained so older parser output stays usable
-/// while the LDB parser is migrated to first-class vector fields.
+/// liblcf and EasyRPG Player. Runtime passability consumes only the canonical
+/// typed chipset vectors. Older parser output is promoted once through
+/// Rm2kChipsetDataNormalizer before the vectors are read.
 /// </summary>
 public sealed class Rm2kPassabilityMap
 {
@@ -25,8 +26,8 @@ public sealed class Rm2kPassabilityMap
     public const byte Wall = 0x20;
     public const byte Counter = 0x40;
 
-    public const int LowerPassageCount = 162;
-    public const int UpperPassageCount = 144;
+    public const int LowerPassageCount = Rm2kChipsetDataNormalizer.LowerPassageCount;
+    public const int UpperPassageCount = Rm2kChipsetDataNormalizer.UpperPassageCount;
 
     private const int MaxMapDimension = 500;
     private const int MaxMapTiles = 250_000;
@@ -145,15 +146,21 @@ public sealed class Rm2kPassabilityMap
             return false;
         }
 
+        if (!Rm2kChipsetDataNormalizer.TryNormalizeDatabase(pDatabase, out var normalizeError))
+        {
+            pError = $"Chipset vector normalization failed: {normalizeError}";
+            return false;
+        }
+
         if (!TryFindChipset(pDatabase, chipsetId, out var chipset))
         {
             pError = $"Chipset {chipsetId} is not present in the parsed database.";
             return false;
         }
 
-        if (!TryReadPassages(chipset, LowerPassageField, 0x04, LowerPassageCount, false,
+        if (!TryReadPassages(chipset, LowerPassageField, LowerPassageCount,
                 out var lowerPassages, out pError)
-            || !TryReadPassages(chipset, UpperPassageField, 0x05, UpperPassageCount, true,
+            || !TryReadPassages(chipset, UpperPassageField, UpperPassageCount,
                 out var upperPassages, out pError))
         {
             return false;
@@ -210,40 +217,23 @@ public sealed class Rm2kPassabilityMap
     private static bool TryReadPassages(
         Godot.Collections.Dictionary pChipset,
         string pTypedField,
-        int pRawFieldId,
         int pExpectedLength,
-        bool pUpper,
         out byte[] pPassages,
         out string pError)
     {
         pError = "";
-
-        var found = TryReadByteVector(pChipset, pTypedField, out var rawData);
-        if (!found)
+        pPassages = Array.Empty<byte>();
+        if (!TryReadByteVector(pChipset, pTypedField, out var data))
         {
-            found = TryFindRawField(pChipset, pRawFieldId, out rawData);
-        }
-
-        // liblcf defaults: lower=[15]*162, upper=[31]+[15]*143.
-        // EasyRPG pads an explicitly present short vector with 0x0F, so an
-        // explicit empty upper vector differs from an omitted upper vector.
-        pPassages = new byte[pExpectedLength];
-        Array.Fill(pPassages, (byte)0x0F);
-        if (!found)
-        {
-            if (pUpper && pPassages.Length > 0)
-            {
-                pPassages[0] = 0x1F;
-            }
-            return true;
-        }
-
-        if (rawData.Length > pExpectedLength)
-        {
-            pError = $"Chipset field '{pTypedField}' has {rawData.Length} bytes, expected at most {pExpectedLength}.";
+            pError = $"Normalized chipset field '{pTypedField}' is missing or invalid.";
             return false;
         }
-        Array.Copy(rawData, pPassages, rawData.Length);
+        if (data.Length != pExpectedLength)
+        {
+            pError = $"Normalized chipset field '{pTypedField}' has {data.Length} bytes, expected exactly {pExpectedLength}.";
+            return false;
+        }
+        pPassages = data;
         return true;
     }
 
@@ -284,40 +274,6 @@ public sealed class Rm2kPassabilityMap
         }
         pBytes = result;
         return true;
-    }
-
-    private static bool TryFindRawField(
-        Godot.Collections.Dictionary pChipset,
-        int pFieldId,
-        out byte[] pData)
-    {
-        pData = Array.Empty<byte>();
-        if (!pChipset.TryGetValue("unknown_fields", out var rawUnknown)
-            || rawUnknown.VariantType != Variant.Type.Array)
-        {
-            return false;
-        }
-
-        foreach (var rawField in rawUnknown.AsGodotArray())
-        {
-            if (rawField.VariantType != Variant.Type.Dictionary)
-            {
-                continue;
-            }
-            var field = rawField.AsGodotDictionary();
-            if (!TryReadInt(field, "id", out var id) || id != pFieldId)
-            {
-                continue;
-            }
-            if (!field.TryGetValue("data", out var rawData)
-                || rawData.VariantType != Variant.Type.PackedByteArray)
-            {
-                return false;
-            }
-            pData = rawData.AsByteArray();
-            return true;
-        }
-        return false;
     }
 
     private static bool IsPassableTile(
