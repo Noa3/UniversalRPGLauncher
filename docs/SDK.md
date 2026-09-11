@@ -49,21 +49,26 @@ External application
 UniversalRPG.Sdk
  IUniversalRpgLibrary
         |
-        v
-Analyze(game)
+        +--> Analyze(game)
+        |       |
+        |       v
+        |   GameAnalysis
+        |   - engine/support
+        |   - scripts/plugins
+        |   - protected content
+        |   - diagnostics
         |
-        v
-GameAnalysis
+        +--> OpenProtectedContent(...)
+        |       |
+        |       v
+        |   IGameContentSource
         |
-        v
-CreateSession(...)
-        |
-        v
-IUniversalRpgSession
-        |
-        +--> Start / Update / Stop
-        |
-        +--> optional IEngineScriptingRuntime
+        +--> CreateSession(...)
+                |
+                v
+        IUniversalRpgSession
+        - Start / Update / Stop
+        - optional IEngineScriptingRuntime
 ```
 
 External consumers should not depend on `Main.cs`, Godot scene nodes, or launcher-specific classes.
@@ -89,6 +94,21 @@ The current implementation adapter therefore reports, at a high level:
 - MV/MZ — parsing only
 - RM95/Dante98/Unite — detection/research only
 
+## Script and Plugin Inventory
+
+`GameAnalysis.Scripts` exposes bounded script/plugin metadata where available.
+
+Current inventory paths include:
+
+- XP `Data/Scripts.rxdata`
+- VX `Data/Scripts.rvdata`
+- VX Ace `Data/Scripts.rvdata2`
+- MV/MZ `js/plugins.js` + `js/plugins/*.js`
+
+The inventory contains stable script IDs, names, load order, logical source path, language ID, origin, and SHA-256 where available.
+
+Inventory does not imply execution support. XP/VX/VX Ace and MV/MZ still remain parsing-only until their embedded VMs and compatibility APIs are validated.
+
 ## Scripting
 
 A session may expose:
@@ -101,7 +121,74 @@ This must remain `null` until that engine actually has a compatible script VM an
 
 For example, RPG Maker XP being detected as RGSS1 does **not** mean Ruby scripts can currently run.
 
-See [SCRIPT_COMPATIBILITY.md](SCRIPT_COMPATIBILITY.md).
+Shared public script contracts include:
+
+- `IEmbeddedScriptVm`
+- `IEmbeddedScriptVmFactory`
+- `EngineScriptDescriptor`
+- `ScriptModule`
+- `ScriptExecutionPolicy`
+- `IEngineScriptingRuntime`
+
+This keeps engine boot/load semantics separate from the concrete Ruby/JavaScript VM implementation.
+
+See [SCRIPT_COMPATIBILITY.md](SCRIPT_COMPATIBILITY.md) and [VM_EVALUATION.md](VM_EVALUATION.md).
+
+## Logical Game Content
+
+The SDK now exposes a Godot-free read-only content abstraction:
+
+```text
+IGameContentSource
+```
+
+Implementations currently include:
+
+- `DirectoryGameContentSource`
+- `ZipGameContentSource`
+- `LayeredGameContentSource`
+- the host-side MV/MZ encrypted asset source
+
+This layer exists so engine/runtime code can ask for a normal logical path without caring whether the bytes come from:
+
+```text
+override/translation layer
+        ↓
+engine-protected game content
+        ↓
+plain game directory or ZIP
+        ↓
+RTP/fallback layer
+```
+
+`DirectoryGameContentSource` provides Windows-style case-insensitive path resolution on all platforms while rejecting traversal and reparse/symlink paths.
+
+`ZipGameContentSource` is read-only and does not extract archives. It validates entry count, per-entry size, total uncompressed size, expansion ratio, traversal paths, and case-colliding logical names.
+
+`LayeredGameContentSource` is ordered highest-priority first. If a higher layer claims a file but fails to read it, the error is returned rather than silently hiding a malformed override/archive with lower-priority data.
+
+## Protected / Encrypted Content
+
+`GameAnalysis.ProtectedContent` distinguishes recognized protected content from ordinary files and reports whether the current trusted runtime providers can read it.
+
+Public contracts include:
+
+- `ProtectedContentDescriptor`
+- `ProtectedContentStatus`
+- `IProtectedContentProvider`
+- `ProtectedContentRegistry`
+- `IUniversalRpgLibrary.OpenProtectedContent(...)`
+
+Current behavior:
+
+- MV/MZ built-in encrypted image/audio deployment assets: transparent read-only in-memory support implemented
+- XP/VX/VX Ace encrypted archives: detected and represented, provider not enabled yet
+- WOLF protected `.wolf`: detected/reported, no protection-bypass provider
+- third-party DRM: no generic bypass
+
+External clients can take a readable descriptor from `GameAnalysis.ProtectedContent`, call `OpenProtectedContent(...)`, and read logical files through `IGameContentSource` without implementing engine-specific decryption themselves.
+
+See [PROTECTED_CONTENT.md](PROTECTED_CONTENT.md).
 
 ## Trusted Host Extensions vs Game Scripts
 
@@ -150,7 +237,7 @@ Current SDK API version:
 1
 ```
 
-Breaking public contract changes must increment `UniversalRpgSdkVersion.ApiVersion`.
+Breaking public contract changes must increment `UniversalRpgSdkVersion.ApiVersion` once the API leaves its current alpha design phase. During `0.1.0-alpha`, contracts are still expected to evolve together with the in-tree runtime and are validated from the same source files.
 
 The contract assembly is pre-release and does not imply that all engines are playable.
 
@@ -173,6 +260,8 @@ Until then, the SDK is an internal/public-contract boundary available from sourc
 
 ## Validation
 
-`scripts/validate.sh` now builds the SDK independently before building the Godot application.
+`scripts/validate.sh` builds the SDK independently before building the Godot application.
 
 That ensures accidental Godot dependencies or invalid public contracts are caught separately from launcher/runtime compilation.
+
+New SDK/content/script work should always be covered by tests in the main C# suite in addition to the standalone SDK build.
