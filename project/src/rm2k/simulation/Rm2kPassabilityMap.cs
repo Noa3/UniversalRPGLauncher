@@ -72,11 +72,6 @@ public sealed class Rm2kPassabilityMap
         return (_directionMasks[pY * Width + pX] & pDirection) != 0;
     }
 
-    /// <summary>
-    /// Returns whether the upper-layer tile at this coordinate carries the
-    /// RPG_RT counter flag. Action-key interaction may traverse up to three
-    /// consecutive counter tiles before looking for an event beyond them.
-    /// </summary>
     public bool IsCounter(int pX, int pY)
     {
         return IsInside(pX, pY) && _counterTiles[pY * Width + pX];
@@ -402,7 +397,7 @@ public sealed class Rm2kPassabilityMap
     private static bool TryReadInt(Godot.Collections.Dictionary pData, string pKey, out int pValue)
     {
         pValue = 0;
-        if (!pData.TryGetValue("" + pKey, out var rawValue))
+        if (!pData.TryGetValue(pKey, out var rawValue))
         {
             return false;
         }
