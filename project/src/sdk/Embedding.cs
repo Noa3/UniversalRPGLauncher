@@ -34,7 +34,9 @@ public sealed class GameAnalysis
     public int ConfidenceScore { get; init; }
     public EngineSupportLevel SupportLevel { get; init; }
     public IReadOnlyList<string> Evidence { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<EngineScriptDescriptor> Scripts { get; init; } = Array.Empty<EngineScriptDescriptor>();
     public IReadOnlyList<SdkDiagnostic> Diagnostics { get; init; } = Array.Empty<SdkDiagnostic>();
+    public bool HasScripts => Scripts.Count > 0;
 }
 
 /// <summary>
