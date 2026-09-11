@@ -56,19 +56,52 @@ public static class ProtectedContentAnalyzer
         List<SdkDiagnostic> pDiagnostics,
         List<ProtectedContentStatus> pResult)
     {
-        var systemPath = FindSystemJson(pGameDirectory);
-        if (systemPath == null) return;
+        MvMzEncryptedAssetCodec.EncryptionMetadata? value = null;
+        try
+        {
+            using var root = new DirectoryGameContentSource(
+                pGameDirectory,
+                "mv-mz-analysis-root",
+                MvMzEncryptedAssetCodec.MaxSystemJsonBytes);
+            IGameContentSource source = root;
+            PrefixedGameContentSource? prefixed = null;
+            try
+            {
+                if (root.Exists("www/data/System.json"))
+                {
+                    prefixed = new PrefixedGameContentSource(root, "www", "mv-mz-analysis-www");
+                    source = prefixed;
+                }
 
-        var metadata = MvMzEncryptedAssetCodec.ReadMetadata(systemPath);
-        if (!metadata.Success || metadata.Value == null)
+                var systemJson = source.Read("data/System.json");
+                if (!systemJson.Success)
+                {
+                    return;
+                }
+                var metadata = MvMzEncryptedAssetCodec.ReadMetadata(systemJson.Data, "data/System.json");
+                if (!metadata.Success || metadata.Value == null)
+                {
+                    pDiagnostics.Add(SdkDiagnostic.Warning(
+                        "protected-content.mv-mz-metadata",
+                        metadata.Result.ErrorMessage));
+                    return;
+                }
+                value = metadata.Value;
+            }
+            finally
+            {
+                prefixed?.Dispose();
+            }
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException)
         {
             pDiagnostics.Add(SdkDiagnostic.Warning(
-                "protected-content.mv-mz-metadata",
-                metadata.Result.ErrorMessage));
+                "protected-content.mv-mz-inspect",
+                $"Could not inspect MV/MZ encryption metadata: {exception.Message}"));
             return;
         }
 
-        if (!metadata.Value.HasEncryptedImages && !metadata.Value.HasEncryptedAudio)
+        if (value == null || (!value.HasEncryptedImages && !value.HasEncryptedAudio))
         {
             return;
         }
@@ -83,13 +116,13 @@ public static class ProtectedContentAnalyzer
             Protection = GameContentProtectionKind.EngineManagedEncryption,
             Metadata = new Dictionary<string, string>
             {
-                ["encryptedImages"] = metadata.Value.HasEncryptedImages ? "true" : "false",
-                ["encryptedAudio"] = metadata.Value.HasEncryptedAudio ? "true" : "false",
-                ["keyPresent"] = metadata.Value.HasUsableKey ? "true" : "false",
+                ["encryptedImages"] = value.HasEncryptedImages ? "true" : "false",
+                ["encryptedAudio"] = value.HasEncryptedAudio ? "true" : "false",
+                ["keyPresent"] = value.HasUsableKey ? "true" : "false",
             },
         };
         var providers = pRegistry.MatchingProviderIds(descriptor);
-        var readable = metadata.Value.HasUsableKey && providers.Count == 1;
+        var readable = value.HasUsableKey && providers.Count == 1;
         pResult.Add(new ProtectedContentStatus
         {
             Descriptor = descriptor,
@@ -172,14 +205,6 @@ public static class ProtectedContentAnalyzer
                     : "Protected WOLF archive recognized; protection bypass is not part of the built-in runtime.",
             });
         }
-    }
-
-    private static string? FindSystemJson(string pGameDirectory)
-    {
-        var www = Path.Combine(pGameDirectory, "www", "data", "System.json");
-        if (File.Exists(www)) return www;
-        var root = Path.Combine(pGameDirectory, "data", "System.json");
-        return File.Exists(root) ? root : null;
     }
 
     private static IEnumerable<string> EnumerateTopLevelFiles(string pDirectory)
