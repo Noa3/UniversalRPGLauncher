@@ -5,11 +5,14 @@
 
 ## Current Objective
 
-Continue RM2000/2003 toward a representative playable map while keeping engine detection/parsing/runtime boundaries explicit and fail-closed.
+Advance two first-class goals in parallel without overstating support:
+
+1. RM2000/2003 toward a representative playable runtime path.
+2. Custom RPG Maker script/plugin compatibility plus a Godot-free external SDK/library.
 
 ## Repository Baseline
 
-Reviewed `main` commit before this branch:
+Reviewed `main` baseline before this branch:
 
 `782ea66141e494d32929a9cc41056523177888eb`
 
@@ -19,141 +22,187 @@ Last recorded canonical validation on that baseline:
 - .NET build: clean
 - headless suite: **296/296 passed**
 
-The current branch contains substantial runtime changes and still requires fresh validation before merge. Do not reuse 296/296 as proof that the branch is green.
+The current branch contains substantial runtime/SDK/script changes and requires fresh validation before merge. Never reuse 296/296 as proof that this branch is green.
 
-## Branch Work Completed So Far
-
-### Project/workflow cleanup
-
-- removed `KANBAN.md` and all active Kanban dependencies
-- removed obsolete undated `SESSION_REPORT.md`
-- reduced this file to a restart checkpoint
-- agents/Hermes choose coherent work directly from source/tests, project status and roadmap
-- larger refactors are allowed when they materially improve correctness, safety or maintainability
-- living documentation was refreshed against actual source/test capability boundaries
-
-### Runtime capability hardening
-
-- `EnginePluginRegistry` can select by required capabilities
-- `EnginePluginHost` explicitly requires `PluginCapability.Runtime`
-- runtime creation defensively refuses plugins without Runtime capability
-- generic `EngineBootstrapRuntime` fails closed instead of masquerading as engine support
-- unused `RgssEngineRuntime.cs` pseudo-runtime removed
-- regression coverage added proving detection-only plugins cannot create/start runtimes
-
-### RM2000/2003 passability and interaction
-
-- verified chipset passage IDs/defaults against liblcf/EasyRPG
-- hardened `Rm2kPassabilityMap` bounds and malformed vector handling
-- typed passage fields are preferred when available, with legacy raw-field fallback during parser migration
-- obsolete byte-based `Rm2kMap.TileLayer`/whole-map representation removed
-- directional map passage behavior is modeled separately from event collision
-- upper-layer Counter flag (`0x40`) is now exposed per map coordinate
-- runtime action interaction supports the RPG_RT sequence:
-  - action event on player's own coordinate
-  - action event directly in front
-  - up to three consecutive counter tiles, then event behind the counter
-
-Remaining passability work:
-
-- promote chipset passage vectors to first-class typed fields in `rm2k_parser.cs`
-- remove legacy `unknown_fields` fallback after parser/fixture validation
-- implement runtime tile substitution, loop-map behavior and vehicle-specific passage rules
-
-### RM2000/2003 event/runtime correctness
-
-Verified raw LMU trigger encoding:
-
-- Action = 0
-- Player Touch = 1
-- Collision/Event Touch = 2
-- Autorun = 3
-- Parallel = 4
+## Public SDK / External Library
 
 Implemented:
 
-- `Rm2kEventTriggerCodec` maps raw LMU values to runtime trigger semantics
-- invalid raw trigger values are diagnosed and skipped
-- event page layer and move-frequency metadata are retained
-- active-page selection is used for collision
-- multiple events sharing one coordinate are searched correctly
-- same-layer active events block player movement
-- Player Touch can start on blocked same-layer collision
-- Player Touch can start after a successful step onto a non-blocking event
-- autorun pages restart while their conditions remain active
-- one serialized foreground interpreter is used for autorun/action/touch/collision
-- parallel event interpreters remain independently concurrent
-- foreground execution owns `GameSimulationState.PlayerInputLocked`
-- parallel execution does not lock player movement
-- runtime rejects movement/interact input before facing/position mutation while locked
-- `Rm2kEngineRuntime.TryMove()` owns movement/touch semantics
-- `Rm2kEngineRuntime.TryInteract()` owns decision-key map targeting
+- Godot-free `sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj` targeting .NET 8
+- shared contract sources under `project/src/sdk/` compile into both main app and standalone SDK
+- `IUniversalRpgLibrary` / `GameAnalysis`
+- `IUniversalRpgSession`
+- support-level descriptors separating detection/parsing/runtime truth
+- `IEngineScriptingRuntime`
+- `IEmbeddedScriptVm` / `IEmbeddedScriptVmFactory`
+- `ScriptExecutionPolicy.SafeDefault`
+- `EngineScriptDescriptor` / `ScriptModule`
+- trusted host extension and script-library-provider contracts
+- `UniversalRpgLibraryAdapter` bridges current detector/plugin host to SDK
+- SDK analysis exposes discovered RGSS and MV/MZ script/plugin descriptors
+- parsing-only engines are still refused executable sessions
+- `scripts/validate.sh` now builds standalone SDK before Godot project/tests
 
-### RM2000/2003 map transfer
+Packaging remains disabled until the repository chooses an explicit source license/versioning policy.
 
-`Teleport`/Place Hero is no longer only a pending-state placeholder.
+## Custom Script / Plugin Compatibility
 
-Runtime update now:
+Custom game-authored scripts are a core compatibility requirement.
 
-1. observes `IsTransferPending`
-2. resolves the requested LMU with `Rm2kMapLocator.SelectMapById`
-3. parses the destination map
-4. validates target coordinates
-5. prepares destination framebuffer/sprite descriptors
-6. configures destination passability/simulation state
-7. preserves requested facing
-8. replaces current map/event scheduler/presentation state
-9. clears pending transfer fields only after successful application
+### Security baseline
 
-Missing/invalid destination maps fail closed and leave the transfer pending rather than pretending completion.
+Safe script policy allows normal game/save/cache access but denies by default:
 
-Regression coverage now includes successful same-map transfer and a missing-target failure case.
+- arbitrary host filesystem
+- network
+- clipboard
+- process execution
+- native interop
 
-## Current Architecture State
+Metadata inventory never executes game code.
 
-- Canonical implementation: **C#/.NET**
-- Host engine: **Godot 4.7.2 stable .NET**
-- Godot project root: `project/`
-- Primary runtime track: RM2000/2003
-- Secondary experimental track: WOLF unencrypted/plain-data runtime
-- RGSS XP/VX/VX Ace: detection + parsing only
-- MV/MZ: detection + metadata parsing only
-- RM95/Dante/Unite: research/detection boundaries
-- no project Kanban/work-board file is used
+### RGSS — XP / VX / VX Ace
+
+Implemented foundations:
+
+- bounded Ruby Marshal 4.8 subset reader for `Scripts.rxdata`, `Scripts.rvdata`, `Scripts.rvdata2`
+- array/fixnum/string/symbol/link/IVAR support sufficient for script archive shape
+- bounded zlib decompression
+- archive/script-editor load order preservation
+- SHA-256 source identity
+- public SDK script descriptors
+- `RgssScriptRuntime` loads/executes modules in archive order over `IEmbeddedScriptVm`
+- explicit bootstrap; loading alone does not execute code
+- first script failure stops bootstrap with script identity
+- generation-specific VM profiles:
+  - RGSS1 -> `rgss1-ruby18`
+  - RGSS2 -> `rgss2-ruby18`
+  - RGSS3 -> `rgss3-ruby192`
+- VM factory cannot silently substitute another language/profile
+- synthetic fake-VM regression coverage
+
+Not yet implemented:
+
+- actual embedded Ruby VM
+- RGSS1/2/3 host APIs
+- full RPG serialized object/runtime support
+- Win32API compatibility
+- runtime registration for XP/VX/VXA
+
+Current Ruby direction: CRuby-family embedding behind the VM factory, with historical compatibility profiles kept distinct. Do not assume a current Ruby release is automatically RGSS-compatible.
+
+### MV / MZ
+
+Implemented foundations:
+
+- bounded non-executing `plugins.js` inventory
+- enabled/disabled state and plugin order
+- `js/plugins/*.js` discovery and SHA-256 identity
+- unlisted plugin discovery without silent enablement
+- conservative requirements classification:
+  - browser-style
+  - Node/NW.js shim
+  - process execution
+  - native `.node` addon
+  - truncated/missing source
+- `WebScriptRuntime` loads only enabled plugins in configured order
+- executable source comes through explicit `IWebScriptSourceProvider`, not metadata inspector
+- safe policy blocks process/native requirements before VM load
+- MV/MZ-specific VM compatibility profiles
+- public SDK analysis exposes plugin descriptors and compatibility diagnostics
+- `GameDetector.HasCustomScripts` is now engine-aware; engine-core JS no longer counts as a custom plugin
+- synthetic fake-VM and detector regression coverage
+
+Not yet implemented:
+
+- actual embedded JavaScript VM
+- browser/RPG Maker API host environment
+- Node/NW.js safe shims
+- runtime registration for MV/MZ
+
+Current first JS VM spike candidate: QuickJS / QuickJS-ng behind `IEmbeddedScriptVm`.
+
+See:
+
+- `docs/SDK.md`
+- `docs/SCRIPT_COMPATIBILITY.md`
+- `docs/VM_EVALUATION.md`
+
+## RM2000/2003 Runtime Progress
+
+Implemented on this branch:
+
+- plugin/runtime capability hardening and fail-closed selection
+- verified directional chipset passability foundation
+- Counter tile metadata
+- correct LMU trigger conversion
+- active-page selection and same-layer event collision
+- serialized foreground interpreter; parallel interpreters remain concurrent
+- repeating autoruns while conditions remain active
+- simulation-owned player-input lock for foreground events
+- runtime-owned `TryMove()` / `TryInteract()` interaction semantics
+- Player Touch on collision and successful movement
+- action events on current tile/front tile/across up to three Counter tiles
+- real pending-transfer application to target LMU with validation, passability/framebuffer/event replacement and fail-closed errors
+- extensive new regression suites for these paths
+
+Important remaining RM2K/3 work:
+
+- promote chipset passage vectors fully to typed parser output and remove legacy raw-field fallback after fixture validation
+- moving-event collision / Event Touch
+- loop maps, tile substitution and vehicles
+- broader event commands and RM2K/RM2K3 semantic differences
+- faithful rendering/audio/menu/save/battle coverage
+- authorized end-to-end real-game validation
+
+## Engine Capability Truth
+
+- RM2000/2003: partial runtime
+- WOLF: experimental unencrypted/plain-data runtime
+- XP/VX/VX Ace: detection/parsing + script inventory/pipeline, **no executable Ruby runtime**
+- MV/MZ: detection/parsing + plugin inventory/pipeline, **no executable JavaScript runtime**
+- RM95/Dante98/Unite: research/detection only
+
+Do not set Runtime or scripting-execution support merely because scripts can be inventoried/decoded.
 
 ## CI / Validation State
 
-`.github/workflows/validate.yml` on this branch is configured for:
+`.github/workflows/validate.yml` is configured for .NET 8 + Godot 4.7.2 Mono/.NET, but the connected GitHub API still reports no workflow/status run for the current head.
 
-- .NET 8
-- Godot 4.7.2 Mono/.NET Linux build
-- `./scripts/validate.sh`
+Current `scripts/validate.sh` sequence:
 
-The connected GitHub API still reports no workflow/status run for the current branch commits. Local container network access cannot clone GitHub either. Therefore the branch changes are **not yet claimed as validated**.
+1. standalone SDK restore/build
+2. Godot .NET restore/build
+3. Godot headless import
+4. C# core/SDK/script/runtime/smoke tests
 
-Required next validation when a runner is available:
+Fresh validation is mandatory before merge.
 
-1. `dotnet build project/UniversalRPG.csproj --no-restore`
-2. focused C# suites, especially:
-   - `TestEnginePluginContract`
-   - `TestRm2kEventTriggerCodec`
-   - `TestRm2kEventSchedulerBehavior`
-   - `TestRm2kRuntimeInteraction`
-   - `TestPluginDetection` passability/counter tests
-   - existing RM2K parser/runtime tests
-3. `./scripts/validate.sh`
-4. update this baseline only after all results are green
+Focused suites now include at least:
+
+- `TestEnginePluginContract`
+- `TestPublicSdkContracts`
+- `TestWebScriptInventory`
+- `TestWebScriptRuntime`
+- `TestRgssScriptArchiveReader`
+- `TestRgssScriptRuntime`
+- `TestScriptVmProfiles`
+- `TestGameDetectorScriptContent`
+- RM2K trigger/scheduler/runtime/passability/transfer suites
 
 ## Next Automatic Development Priorities
 
-1. promote chipset `terrain_data`, `passable_data_lower`, and `passable_data_upper` to typed LDB parser output and remove runtime dependence on `unknown_fields`
-2. simplify `Main.cs` so normal map movement/action calls only `Rm2kEngineRuntime.TryMove/TryInteract`; presentation controls stay frontend-side
-3. add a fixture with a real second LMU and validate cross-map transfer, target event loading and passability changes
-4. implement Event Touch/Collision semantics for moving events separately from Player Touch
-5. add runtime tile substitution and looping-map passage behavior
-6. continue faithful map presentation/audio/menu work once movement/event/transfer flow is validated
+1. obtain a fresh SDK + Godot build/test run; fix compile/test regressions first
+2. keep RM2K/2003 playable-path work advancing independently
+3. implement first concrete native JS VM spike behind `IEmbeddedScriptVm` (QuickJS-family candidate), proving lifecycle/memory/interrupt/errors before browser APIs
+4. perform CRuby-family embedding/build spike for Windows/Linux/Android and historical RGSS compatibility profiles
+5. add RGSS host API skeleton only after a real Ruby VM session works
+6. add minimal MV/MZ browser/RPG Maker APIs only after the embedded JS VM is isolated and tested
+7. resolve custom `Game.ini` script archive paths for RGSS rather than assuming only default `Data/Scripts.*`
+8. keep Node/process/native addon support policy-gated and late-stage; prefer HLE/shims
+9. select an explicit source license before enabling NuGet packaging
 
-## Documentation Recovery Rule
+## Recovery Rule
 
 At session start read:
 
@@ -161,17 +210,19 @@ At session start read:
 2. this file
 3. `docs/PROJECT_STATUS.md`
 4. `docs/ARCHITECTURE.md`
-5. relevant source/tests
-6. `docs/ROADMAP.md` when choosing a new area
+5. `docs/SDK.md`
+6. `docs/SCRIPT_COMPATIBILITY.md`
+7. relevant source/tests
+8. `docs/ROADMAP.md` when choosing a new area
 
-Historical `SESSION_HANDOFF_*.md` and dated QA reports are snapshots, not current authority.
+Historical handoffs/dated QA reports are snapshots, not current authority.
 
-## Failure / Anti-Loop Rule
+## Anti-Loop Rule
 
 For the same normalized failure signature:
 
 - at most 3 materially different repair strategies
-- do not rerun the exact same failed command more than twice without new evidence/change
-- after threshold: preserve useful work, document the blocker here, and continue with an independent useful area when possible
+- do not rerun the identical failure without changed evidence/input
+- after threshold preserve evidence, isolate/block that path, and continue with an independent useful area
 
-Never delete/disable correct tests to make validation green.
+Never delete/disable correct tests or weaken security checks to obtain a green result.
