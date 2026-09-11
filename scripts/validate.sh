@@ -3,17 +3,25 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="$ROOT_DIR/project"
-cd "$PROJECT_DIR"
+SDK_PROJECT="$ROOT_DIR/sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj"
 
 if ! command -v dotnet >/dev/null 2>&1; then
-  echo "ERROR: dotnet SDK is required for the .NET project." >&2
+  echo "ERROR: dotnet SDK is required for UniversalRPG." >&2
   exit 2
 fi
 
-echo "[1/4] .NET restore"
+echo "[1/6] Public SDK restore"
+dotnet restore "$SDK_PROJECT"
+
+echo "[2/6] Public SDK build"
+dotnet build "$SDK_PROJECT" --no-restore
+
+cd "$PROJECT_DIR"
+
+echo "[3/6] Godot .NET project restore"
 dotnet restore
 
-echo "[2/4] .NET build"
+echo "[4/6] Godot .NET project build"
 dotnet build --no-restore
 
 find_godot() {
@@ -64,10 +72,10 @@ if [[ "$GODOT" == *.exe ]] && command -v cygpath >/dev/null 2>&1; then
   GODOT_PROJECT_PATH="$(cygpath -m "$PROJECT_DIR")"
 fi
 
-echo "[3/4] Godot import validation"
+echo "[5/6] Godot import validation"
 "$GODOT" --headless --editor --quit --path "$GODOT_PROJECT_PATH"
 
-echo "[4/4] C# core and smoke tests"
+echo "[6/6] C# core, SDK-adapter and smoke tests"
 "$GODOT" --headless --path "$GODOT_PROJECT_PATH" res://tests/csharp_runner.tscn
 
 echo "UniversalRPG validation passed."
