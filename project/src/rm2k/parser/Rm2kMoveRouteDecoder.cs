@@ -153,11 +153,11 @@ public static class Rm2kMoveRouteDecoder
                     commandBytes = data;
                     break;
                 case FieldRepeat:
-                    if (!TryReadFlag(data, defaultValue: true, out repeat))
+                    if (!TryReadBoolean(data, out repeat))
                         return Rm2kMoveRouteDecodeResult.Failed("RM2K move route repeat flag is malformed.");
                     break;
                 case FieldSkippable:
-                    if (!TryReadFlag(data, defaultValue: false, out skippable))
+                    if (!TryReadBoolean(data, out skippable))
                         return Rm2kMoveRouteDecodeResult.Failed("RM2K move route skippable flag is malformed.");
                     break;
                 default:
@@ -285,7 +285,7 @@ public static class Rm2kMoveRouteDecoder
             pError = $"RM2K move command string length error at 0x{pReader.ErrorOffset:X}: {pReader.ErrorMessage}";
             return false;
         }
-        if (length < 0 || length > MaxParameterStringBytes || length > pReader.Remaining())
+        if (length < 0 || length > MaxParameterStringBytes || length > pReader.GetRemaining())
         {
             pError = "RM2K move command string exceeds the bounded/remaining payload.";
             return false;
@@ -314,21 +314,16 @@ public static class Rm2kMoveRouteDecoder
         return !reader.HasError() && reader.IsEof();
     }
 
-    private static bool TryReadFlag(byte[] pData, bool pDefaultValue, out bool pValue)
+    private static bool TryReadBoolean(byte[] pData, out bool pValue)
     {
-        if (pData.Length == 0)
+        // liblcf's Primitive<bool> reads an LCF compressed integer and expects
+        // a one-byte field for normal true/false values.
+        pValue = false;
+        if (pData.Length != 1 || !TryReadSingleBer(pData, out var raw))
         {
-            // Flag chunks may encode truth by presence. This preserves the
-            // field's declared default when no scalar payload is present.
-            pValue = pDefaultValue;
-            return true;
-        }
-        if (!TryReadSingleBer(pData, out var raw) || raw is not (0 or 1))
-        {
-            pValue = pDefaultValue;
             return false;
         }
-        pValue = raw != 0;
+        pValue = raw > 0;
         return true;
     }
 
