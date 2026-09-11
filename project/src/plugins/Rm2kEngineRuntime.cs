@@ -156,9 +156,15 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return PluginOperationResult.Succeeded();
     }
 
+    /// <summary>
+    /// Attempts one cardinal player step and owns the RM2K interaction side
+    /// effects of that step. Same-layer events block before map geometry is
+    /// evaluated; Player Touch pages may start on collision. After a successful
+    /// step, Player Touch pages on the destination coordinate are evaluated.
+    /// </summary>
     public bool TryMove(int pDeltaX, int pDeltaY)
     {
-        if (State != PluginRuntimeState.Running)
+        if (State != PluginRuntimeState.Running || Simulation.PlayerInputLocked)
         {
             return false;
         }
@@ -204,7 +210,27 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 SpriteDescriptors = spriteResult.Descriptors;
             }
         }
+
+        // Below-player touch pages can be entered successfully. Keep this
+        // engine semantic in the runtime so all frontends behave identically.
+        _eventScheduler.TriggerAt(Simulation.MapX, Simulation.MapY, Rm2kEventTrigger.Touch);
         return true;
+    }
+
+    /// <summary>
+    /// Runs the normal decision-key interaction against the tile immediately in
+    /// front of the player. Presentation controls remain frontend concerns, but
+    /// map-event targeting belongs to the engine runtime.
+    /// </summary>
+    public bool TryInteract()
+    {
+        if (State != PluginRuntimeState.Running || Simulation.PlayerInputLocked)
+        {
+            return false;
+        }
+
+        var (targetX, targetY) = GetFacingTarget();
+        return _eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Action);
     }
 
     public PluginOperationResult Update(double pDeltaSeconds)
@@ -500,6 +526,18 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
         }
         _eventScheduler.SetEvents(events);
+    }
+
+    private (int X, int Y) GetFacingTarget()
+    {
+        return Simulation.FacingDirection switch
+        {
+            2 => (Simulation.MapX, Simulation.MapY + 1),
+            4 => (Simulation.MapX - 1, Simulation.MapY),
+            6 => (Simulation.MapX + 1, Simulation.MapY),
+            8 => (Simulation.MapX, Simulation.MapY - 1),
+            _ => (Simulation.MapX, Simulation.MapY),
+        };
     }
 
     private static bool TryReadInt(Godot.Collections.Dictionary pData, string pKey, out int pValue)
