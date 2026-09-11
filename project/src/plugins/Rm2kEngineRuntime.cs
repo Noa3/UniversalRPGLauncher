@@ -85,9 +85,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
 
         Godot.Collections.Dictionary? currentMap = null;
-        var mapPath = Directory.EnumerateFiles(root, "*.lmu", SearchOption.TopDirectoryOnly)
-            .OrderBy(pPath => Path.GetFileName(pPath), StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
+        var mapSelection = Rm2kMapLocator.SelectInitialMap(root, mapTree.Data);
+        var mapPath = mapSelection.Path;
+        if (!string.IsNullOrEmpty(mapSelection.Diagnostic))
+        {
+            Simulation.AddDiagnostic(mapSelection.Diagnostic);
+        }
         if (mapPath != null)
         {
             var map = _parser.ParseMap(mapPath);
@@ -368,10 +371,6 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             {
                 TryReadInt(start, "party_x", out mapX);
                 TryReadInt(start, "party_y", out mapY);
-            }
-            else if (startMapId > 0)
-            {
-                Simulation.AddDiagnostic($"RM2K start map {startMapId} is not the loaded map {mapId}; using bounded map origin.");
             }
         }
 
