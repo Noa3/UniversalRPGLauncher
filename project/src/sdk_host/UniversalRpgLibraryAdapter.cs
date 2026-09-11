@@ -32,6 +32,9 @@ public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
     public int ApiVersion => UniversalRpgSdkVersion.ApiVersion;
     public IReadOnlyList<EngineSupportDescriptor> Engines => _engines;
 
+    public ContentSourceResult OpenGameContent(GameAnalysis pAnalysis)
+        => GameContentMountFactory.Open(pAnalysis, _contentRegistry);
+
     public ContentSourceResult OpenProtectedContent(ProtectedContentDescriptor pDescriptor)
         => _contentRegistry.Open(pDescriptor);
 
