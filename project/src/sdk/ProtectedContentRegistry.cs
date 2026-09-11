@@ -51,6 +51,12 @@ public sealed class ProtectedContentRegistry
         return SdkOperationResult.Succeeded();
     }
 
+    public IReadOnlyList<string> MatchingProviderIds(ProtectedContentDescriptor pDescriptor)
+    {
+        if (pDescriptor == null || !IsStableId(pDescriptor.SchemeId)) return Array.Empty<string>();
+        return MatchingProviders(pDescriptor).Select(pProvider => pProvider.Id).ToArray();
+    }
+
     public ContentSourceResult Open(ProtectedContentDescriptor pDescriptor)
     {
         if (pDescriptor == null)
@@ -62,10 +68,7 @@ public sealed class ProtectedContentRegistry
             return ContentSourceResult.Failed("content.scheme-invalid", "Protected-content scheme ID is invalid.");
         }
 
-        var candidates = _providers
-            .Where(pProvider => ContainsOrdinal(pProvider.SchemeIds, pDescriptor.SchemeId))
-            .Where(pProvider => pProvider.CanOpen(pDescriptor))
-            .ToArray();
+        var candidates = MatchingProviders(pDescriptor);
         if (candidates.Length == 0)
         {
             return ContentSourceResult.Failed(
@@ -79,6 +82,14 @@ public sealed class ProtectedContentRegistry
                 $"Multiple trusted providers accepted protected-content scheme '{pDescriptor.SchemeId}'.");
         }
         return candidates[0].Open(pDescriptor);
+    }
+
+    private IProtectedContentProvider[] MatchingProviders(ProtectedContentDescriptor pDescriptor)
+    {
+        return _providers
+            .Where(pProvider => ContainsOrdinal(pProvider.SchemeIds, pDescriptor.SchemeId))
+            .Where(pProvider => pProvider.CanOpen(pDescriptor))
+            .ToArray();
     }
 
     private static bool ContainsOrdinal(IReadOnlyList<string> pValues, string pValue)
