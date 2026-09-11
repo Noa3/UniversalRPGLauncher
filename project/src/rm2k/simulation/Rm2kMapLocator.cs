@@ -6,10 +6,9 @@ using Godot;
 namespace UniversalRPG.Rm2k.Simulation;
 
 /// <summary>
-/// Resolves the initial LMU deterministically. RPG Maker stores the party start
-/// map in LMT start data; falling back to the first map is only appropriate when
-/// that referenced LMU is unavailable (for example in deliberately reduced test
-/// fixtures).
+/// Resolves LMU files deterministically. RPG Maker stores the party start map
+/// in LMT start data; falling back to the first map is only appropriate when
+/// that referenced LMU is unavailable (for example in reduced test fixtures).
 /// </summary>
 public static class Rm2kMapLocator
 {
@@ -23,27 +22,21 @@ public static class Rm2kMapLocator
 
     public static Selection SelectInitialMap(string pRoot, Godot.Collections.Dictionary pMapTree)
     {
-        if (string.IsNullOrWhiteSpace(pRoot) || !Directory.Exists(pRoot))
-        {
-            return new Selection { Diagnostic = "RM2K game directory is unavailable." };
-        }
-
-        var maps = Directory.EnumerateFiles(pRoot, "*", SearchOption.TopDirectoryOnly)
-            .Where(pPath => Path.GetExtension(pPath).Equals(".lmu", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(pPath => Path.GetFileName(pPath), StringComparer.OrdinalIgnoreCase)
-            .ThenBy(pPath => Path.GetFileName(pPath), StringComparer.Ordinal)
-            .ToArray();
+        var maps = EnumerateMaps(pRoot);
         if (maps.Length == 0)
         {
-            return new Selection { Diagnostic = "No LMU map is present in the imported game directory." };
+            return new Selection
+            {
+                Diagnostic = Directory.Exists(pRoot)
+                    ? "No LMU map is present in the imported game directory."
+                    : "RM2K game directory is unavailable."
+            };
         }
 
         var requestedMapId = ReadPartyMapId(pMapTree);
         if (requestedMapId > 0)
         {
-            var expectedName = $"Map{requestedMapId:D4}.lmu";
-            var requested = maps.FirstOrDefault(pPath =>
-                Path.GetFileName(pPath).Equals(expectedName, StringComparison.OrdinalIgnoreCase));
+            var requested = FindMap(maps, requestedMapId);
             if (requested != null)
             {
                 return new Selection
@@ -58,7 +51,7 @@ public static class Rm2kMapLocator
                 Path = maps[0],
                 RequestedMapId = requestedMapId,
                 UsedFallback = true,
-                Diagnostic = $"Start map {requestedMapId} ({expectedName}) is unavailable; using {Path.GetFileName(maps[0])} as a deterministic fallback.",
+                Diagnostic = $"Start map {requestedMapId} (Map{requestedMapId:D4}.lmu) is unavailable; using {Path.GetFileName(maps[0])} as a deterministic fallback.",
             };
         }
 
@@ -68,6 +61,48 @@ public static class Rm2kMapLocator
             UsedFallback = true,
             Diagnostic = $"LMT start-map metadata is unavailable; using {Path.GetFileName(maps[0])} as a deterministic fallback.",
         };
+    }
+
+    public static Selection SelectMapById(string pRoot, int pMapId)
+    {
+        if (pMapId < 1 || pMapId > GameSimulationState.MaxMapId)
+        {
+            return new Selection
+            {
+                RequestedMapId = pMapId,
+                Diagnostic = $"Map ID {pMapId} is outside the supported RM2K simulation range.",
+            };
+        }
+
+        var maps = EnumerateMaps(pRoot);
+        var requested = FindMap(maps, pMapId);
+        return requested != null
+            ? new Selection { Path = requested, RequestedMapId = pMapId }
+            : new Selection
+            {
+                RequestedMapId = pMapId,
+                Diagnostic = $"Map{pMapId:D4}.lmu is not present in the imported game directory.",
+            };
+    }
+
+    private static string[] EnumerateMaps(string pRoot)
+    {
+        if (string.IsNullOrWhiteSpace(pRoot) || !Directory.Exists(pRoot))
+        {
+            return Array.Empty<string>();
+        }
+        return Directory.EnumerateFiles(pRoot, "*", SearchOption.TopDirectoryOnly)
+            .Where(pPath => Path.GetExtension(pPath).Equals(".lmu", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(pPath => Path.GetFileName(pPath), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(pPath => Path.GetFileName(pPath), StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static string? FindMap(string[] pMaps, int pMapId)
+    {
+        var expectedName = $"Map{pMapId:D4}.lmu";
+        return pMaps.FirstOrDefault(pPath =>
+            Path.GetFileName(pPath).Equals(expectedName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static int ReadPartyMapId(Godot.Collections.Dictionary pMapTree)
