@@ -7,8 +7,8 @@ namespace UniversalRPG.Plugins;
 
 public sealed class MvMzProtectedContentProvider : IProtectedContentProvider
 {
-    public const string MvScheme = "rpg-maker-mv-assets";
-    public const string MzScheme = "rpg-maker-mz-assets";
+    public const string MvScheme = ProtectedContentSchemes.RpgMakerMvAssets;
+    public const string MzScheme = ProtectedContentSchemes.RpgMakerMzAssets;
 
     private static readonly string[] Schemes = { MvScheme, MzScheme };
 
