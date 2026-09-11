@@ -9,10 +9,10 @@ permissions:
   contents: read
 
 jobs:
-  sdk:
-    name: Standalone SDK
+  portable:
+    name: Portable SDK and JavaScript VM
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,16 +21,28 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+          cache: true
+          cache-dependency-path: |
+            sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
+            runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj
+            runtime/UniversalRPG.JavaScript.Jint.Smoke/UniversalRPG.JavaScript.Jint.Smoke.csproj
 
-      - name: Restore SDK
-        run: dotnet restore sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
+      - name: Restore and build SDK
+        run: |
+          dotnet restore sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
+          dotnet build sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj --no-restore --configuration Release
 
-      - name: Build SDK
-        run: dotnet build sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj --no-restore --configuration Release
+      - name: Restore and build Jint adapter
+        run: |
+          dotnet restore runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj
+          dotnet build runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj --no-restore --configuration Release
+
+      - name: Run Jint VM smoke
+        run: dotnet run --project runtime/UniversalRPG.JavaScript.Jint.Smoke/UniversalRPG.JavaScript.Jint.Smoke.csproj --configuration Release
 
   validate:
     name: Godot runtime and tests
-    needs: sdk
+    needs: portable
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
