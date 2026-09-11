@@ -55,28 +55,19 @@ public sealed class PrefixedGameContentSource : IGameContentSource
     private bool TryCombine(string pLogicalPath, out string pCombined)
     {
         pCombined = "";
-        if (string.IsNullOrWhiteSpace(pLogicalPath) || pLogicalPath.IndexOf('\0') >= 0) return false;
-        var path = pLogicalPath.Replace('\\', '/').TrimStart('/');
-        if (path.Length == 0 || path == "." || path == ".." || path.StartsWith("../", StringComparison.Ordinal)
-            || path.Contains("/../", StringComparison.Ordinal))
-        {
-            return false;
-        }
-        pCombined = _prefix + path;
+        if (!LogicalGamePath.TryNormalize(pLogicalPath, out var path)) return false;
+        pCombined = string.IsNullOrEmpty(_prefix) ? path : _prefix + "/" + path;
         return true;
     }
 
     private static string NormalizePrefix(string pPrefix)
     {
         if (string.IsNullOrWhiteSpace(pPrefix)) return "";
-        var prefix = pPrefix.Replace('\\', '/').Trim('/');
-        if (prefix.Length == 0) return "";
-        var parts = prefix.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
+        if (!LogicalGamePath.TryNormalize(pPrefix, out var prefix))
         {
-            if (part is "." or "..") throw new ArgumentException("Content prefix cannot contain traversal segments.", nameof(pPrefix));
+            throw new ArgumentException("Content prefix is unsafe.", nameof(pPrefix));
         }
-        return string.Join('/', parts) + "/";
+        return prefix;
     }
 
     private void ThrowIfDisposed()
