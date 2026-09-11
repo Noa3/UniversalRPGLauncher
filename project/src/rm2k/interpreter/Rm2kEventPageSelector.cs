@@ -4,23 +4,76 @@ using UniversalRPG.Rm2k.Simulation;
 namespace UniversalRPG.Rm2k.Interpreter;
 
 /// <summary>
-/// Verified RPG Maker 2000/2003 LMU event-page trigger values.
-/// These numeric values intentionally match liblcf/RPG_RT so parsed pages can
-/// flow into the scheduler without an additional translation layer.
+/// Internal semantic trigger identifiers used by the scheduler. Serialized LMU
+/// values are converted at the parser/runtime boundary through
+/// <see cref="Rm2kEventTriggerCodec"/>.
 /// </summary>
 public enum Rm2kEventTrigger
 {
-    Action = 0,
-    Touch = 1,
-    Collision = 2,
-    Autorun = 3,
-    Parallel = 4,
+    Autorun = 0,
+    Parallel = 1,
+    Action = 2,
+    Touch = 3,
+    Collision = 4,
+}
+
+/// <summary>
+/// Converts verified RPG Maker 2000/2003 LMU trigger values into URPG's stable
+/// semantic trigger identifiers. liblcf defines Action=0, Touched=1,
+/// Collision=2, AutoStart=3 and Parallel=4.
+/// </summary>
+public static class Rm2kEventTriggerCodec
+{
+    public const int RawAction = 0;
+    public const int RawTouched = 1;
+    public const int RawCollision = 2;
+    public const int RawAutorun = 3;
+    public const int RawParallel = 4;
+
+    public static bool TryDecode(int pRawTrigger, out Rm2kEventTrigger pTrigger)
+    {
+        switch (pRawTrigger)
+        {
+            case RawAction:
+                pTrigger = Rm2kEventTrigger.Action;
+                return true;
+            case RawTouched:
+                pTrigger = Rm2kEventTrigger.Touch;
+                return true;
+            case RawCollision:
+                pTrigger = Rm2kEventTrigger.Collision;
+                return true;
+            case RawAutorun:
+                pTrigger = Rm2kEventTrigger.Autorun;
+                return true;
+            case RawParallel:
+                pTrigger = Rm2kEventTrigger.Parallel;
+                return true;
+            default:
+                pTrigger = default;
+                return false;
+        }
+    }
+
+    public static int Encode(Rm2kEventTrigger pTrigger)
+    {
+        return pTrigger switch
+        {
+            Rm2kEventTrigger.Action => RawAction,
+            Rm2kEventTrigger.Touch => RawTouched,
+            Rm2kEventTrigger.Collision => RawCollision,
+            Rm2kEventTrigger.Autorun => RawAutorun,
+            Rm2kEventTrigger.Parallel => RawParallel,
+            _ => -1,
+        };
+    }
 }
 
 /// <summary>
 /// Selects the active RM2K event page without executing imported scripts.
 /// RM2K resolves pages from highest index to lowest index; the first matching
-/// page wins. Unknown condition fields fail closed instead of being ignored.
+/// page wins. EventPage.Trigger stores the internal semantic value after LMU
+/// decoding. Unknown condition fields fail closed instead of being ignored.
 /// </summary>
 public static class Rm2kEventPageSelector
 {
@@ -45,8 +98,8 @@ public static class Rm2kEventPageSelector
     }
 
     /// <summary>
-    /// Returns the highest active page regardless of trigger. This is used by
-    /// collision and presentation code that needs page layer/graphic metadata
+    /// Returns the highest active page regardless of trigger. Runtime collision
+    /// and presentation code can use this to inspect layer/graphic metadata
     /// before deciding whether an event command should start.
     /// </summary>
     public static Rm2kMap.EventPage? SelectActive(
