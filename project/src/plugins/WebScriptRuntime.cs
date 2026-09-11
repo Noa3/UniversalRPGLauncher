@@ -36,9 +36,9 @@ public sealed class ScriptSourceResult
 
 /// <summary>
 /// Engine-level MV/MZ custom-plugin loader independent from the concrete
-/// JavaScript implementation. Only plugins enabled by plugins.js are loaded,
-/// in configured order. Static compatibility classification is enforced against
-/// the explicit host security policy before game-authored JavaScript is loaded.
+/// JavaScript implementation. Trusted compatibility preludes may be supplied by
+/// the host and are loaded/executed before enabled game plugins. The normal
+/// source-provider path is used only for game-authored plugin files.
 /// </summary>
 public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
 {
@@ -46,6 +46,7 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
     private readonly IWebScriptSourceProvider _sourceProvider;
     private readonly string _languageId;
     private readonly IReadOnlyList<WebScriptInventoryEntry> _entries;
+    private readonly IReadOnlyList<ScriptModule> _preludeModules;
     private bool _loaded;
     private bool _bootstrapped;
     private bool _disposed;
@@ -54,7 +55,8 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         string pLanguageId,
         IEmbeddedScriptVm pVm,
         IWebScriptSourceProvider pSourceProvider,
-        IEnumerable<WebScriptInventoryEntry> pEntries)
+        IEnumerable<WebScriptInventoryEntry> pEntries,
+        IEnumerable<ScriptModule>? pPreludeModules = null)
     {
         if (pLanguageId is not (ScriptLanguageIds.RpgMakerMvJavaScript or ScriptLanguageIds.RpgMakerMzJavaScript))
         {
@@ -68,6 +70,7 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
             .Where(pEntry => pEntry.Enabled)
             .OrderBy(pEntry => pEntry.Script.LoadOrder)
             .ToArray();
+        _preludeModules = (pPreludeModules ?? Array.Empty<ScriptModule>()).ToArray();
     }
 
     public IReadOnlyList<string> LanguageIds => new[] { _languageId };
@@ -76,12 +79,14 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         | ScriptRuntimeCapability.OrderedLoad
         | ScriptRuntimeCapability.Bootstrap
         | ScriptRuntimeCapability.HostHooks;
-    public IReadOnlyList<EngineScriptDescriptor> Scripts => _entries.Select(pEntry => pEntry.Script).ToArray();
+    public IReadOnlyList<EngineScriptDescriptor> Scripts => _preludeModules
+        .Select(pModule => pModule.Descriptor)
+        .Concat(_entries.Select(pEntry => pEntry.Script))
+        .ToArray();
 
     /// <summary>
     /// Returns configured plugin parameters using RPG Maker's case-insensitive
-    /// name lookup and last-configured-entry-wins behavior. This is the data a
-    /// future PluginManager.parameters() compatibility shim should expose.
+    /// name lookup and last-configured-entry-wins behavior.
     /// </summary>
     public IReadOnlyDictionary<string, string> GetPluginParameters(string pPluginName)
     {
@@ -100,6 +105,33 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
     public SdkOperationResult DiscoverScripts()
     {
         if (_disposed) return Disposed();
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var module in _preludeModules)
+        {
+            if (module == null)
+            {
+                return SdkOperationResult.Failed("web.prelude-null", "Web compatibility prelude list contains a null module.");
+            }
+            var validation = module.Validate();
+            if (!validation.Success)
+            {
+                return SdkOperationResult.Failed(
+                    "web.invalid-prelude",
+                    $"Compatibility prelude '{module.Descriptor.Id}' is invalid: {validation.ErrorMessage}");
+            }
+            if (!module.Descriptor.LanguageId.Equals(_languageId, StringComparison.Ordinal))
+            {
+                return SdkOperationResult.Failed(
+                    "web.prelude-language-mismatch",
+                    $"Compatibility prelude '{module.Descriptor.Id}' targets '{module.Descriptor.LanguageId}' instead of '{_languageId}'.");
+            }
+            if (!ids.Add(module.Descriptor.Id))
+            {
+                return SdkOperationResult.Failed("web.duplicate-script-id", $"Duplicate script ID '{module.Descriptor.Id}'.");
+            }
+        }
+
         foreach (var entry in _entries)
         {
             var validation = entry.Script.Validate();
@@ -114,6 +146,10 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
                 return SdkOperationResult.Failed(
                     "web.language-mismatch",
                     $"Plugin '{entry.Script.DisplayName}' targets '{entry.Script.LanguageId}' instead of '{_languageId}'.");
+            }
+            if (!ids.Add(entry.Script.Id))
+            {
+                return SdkOperationResult.Failed("web.duplicate-script-id", $"Duplicate script ID '{entry.Script.Id}'.");
             }
             if (entry.Compatibility == WebScriptCompatibility.MissingFile)
             {
@@ -157,6 +193,18 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         var configured = _vm.Configure(pPolicy);
         if (!configured.Success) return configured;
 
+        foreach (var module in _preludeModules)
+        {
+            var loaded = _vm.LoadModule(module);
+            if (!loaded.Success)
+            {
+                return SdkOperationResult.Failed(
+                    "web.prelude-load-failed",
+                    $"Failed to load compatibility prelude '{module.Descriptor.DisplayName}': {loaded.ErrorMessage}",
+                    loaded.Diagnostics);
+            }
+        }
+
         foreach (var entry in _entries)
         {
             var source = _sourceProvider.Read(entry.Script);
@@ -186,7 +234,9 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         _loaded = true;
         return SdkOperationResult.Succeeded(new[]
         {
-            SdkDiagnostic.Info("web.plugins-loaded", $"Loaded {_entries.Count} enabled {_languageId} plugins in configured order."),
+            SdkDiagnostic.Info(
+                "web.plugins-loaded",
+                $"Loaded {_preludeModules.Count} compatibility preludes and {_entries.Count} enabled {_languageId} plugins in configured order."),
         });
     }
 
@@ -195,6 +245,18 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         if (_disposed) return Disposed();
         if (!_loaded) return SdkOperationResult.Failed("web.not-loaded", "Web plugins must be loaded before bootstrap execution.");
         if (_bootstrapped) return SdkOperationResult.Failed("web.already-bootstrapped", "Web plugin bootstrap already ran for this session.");
+
+        foreach (var module in _preludeModules)
+        {
+            var executed = _vm.ExecuteModule(module.Descriptor.Id);
+            if (!executed.Success)
+            {
+                return SdkOperationResult.Failed(
+                    "web.prelude-execution-failed",
+                    $"Compatibility prelude '{module.Descriptor.DisplayName}' failed: {executed.ErrorMessage}",
+                    executed.Diagnostics);
+            }
+        }
 
         foreach (var entry in _entries)
         {
@@ -210,7 +272,9 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         _bootstrapped = true;
         return SdkOperationResult.Succeeded(new[]
         {
-            SdkDiagnostic.Info("web.bootstrap-complete", $"Executed {_entries.Count} enabled {_languageId} plugins in configured order."),
+            SdkDiagnostic.Info(
+                "web.bootstrap-complete",
+                $"Executed {_preludeModules.Count} compatibility preludes and {_entries.Count} enabled {_languageId} plugins in configured order."),
         });
     }
 
