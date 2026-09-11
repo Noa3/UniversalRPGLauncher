@@ -6,14 +6,14 @@ namespace UniversalRPG.Rm2k.Simulation;
 
 /// <summary>
 /// Directional map-geometry passability derived from RPG Maker 2000/2003
-/// chipset passage flags. This deliberately models only chipset/map geometry;
-/// event collision, vehicles, looping maps and runtime tile substitution remain
-/// separate layers.
+/// chipset passage flags. This models chipset/map geometry only; event
+/// collision, vehicles, looping maps and runtime tile substitution remain
+/// separate runtime layers.
 ///
-/// Field IDs and tile/passability constants are verified against liblcf and
-/// EasyRPG Player. The parsed LDB currently retains chipset vector fields as
-/// bounded unknown fields; this class consumes those raw fields until the
-/// parser exposes them as first-class typed arrays.
+/// Field IDs, defaults and tile/passability constants are verified against
+/// liblcf and EasyRPG Player. Typed chipset passage fields are preferred; the
+/// raw unknown-field fallback is retained so older parser output stays usable
+/// while the LDB parser is migrated to first-class vector fields.
 /// </summary>
 public sealed class Rm2kPassabilityMap
 {
@@ -28,6 +28,8 @@ public sealed class Rm2kPassabilityMap
     public const int LowerPassageCount = 162;
     public const int UpperPassageCount = 144;
 
+    private const int MaxMapDimension = 500;
+    private const int MaxMapTiles = 250_000;
     private const int BlockC = 3000;
     private const int BlockCStride = 50;
     private const int BlockCIndex = 3;
@@ -37,6 +39,9 @@ public sealed class Rm2kPassabilityMap
     private const int BlockE = 5000;
     private const int BlockEIndex = 18;
     private const int BlockF = 10000;
+
+    private const string LowerPassageField = "passable_data_lower";
+    private const string UpperPassageField = "passable_data_upper";
 
     private readonly byte[] _directionMasks;
 
@@ -89,11 +94,21 @@ public sealed class Rm2kPassabilityMap
         if (!TryReadInt(pMap, "width", out var width)
             || !TryReadInt(pMap, "height", out var height)
             || !TryReadInt(pMap, "chipset_id", out var chipsetId)
-            || width <= 0 || height <= 0 || chipsetId <= 0)
+            || width <= 0 || width > MaxMapDimension
+            || height <= 0 || height > MaxMapDimension
+            || chipsetId <= 0)
         {
             pError = "Map dimensions or chipset ID are missing/invalid.";
             return false;
         }
+
+        var tileCountLong = (long)width * height;
+        if (tileCountLong <= 0 || tileCountLong > MaxMapTiles)
+        {
+            pError = "Map tile count is outside the bounded passability limit.";
+            return false;
+        }
+        var expectedTiles = (int)tileCountLong;
 
         int[] lowerLayer;
         int[] upperLayer;
@@ -108,7 +123,6 @@ public sealed class Rm2kPassabilityMap
             return false;
         }
 
-        var expectedTiles = checked(width * height);
         if (lowerLayer.Length != expectedTiles || upperLayer.Length != expectedTiles)
         {
             pError = "Map tile layers do not match the declared dimensions.";
@@ -121,8 +135,10 @@ public sealed class Rm2kPassabilityMap
             return false;
         }
 
-        if (!TryReadPassages(chipset, 0x04, LowerPassageCount, false, out var lowerPassages, out pError)
-            || !TryReadPassages(chipset, 0x05, UpperPassageCount, true, out var upperPassages, out pError))
+        if (!TryReadPassages(chipset, LowerPassageField, 0x04, LowerPassageCount, false,
+                out var lowerPassages, out pError)
+            || !TryReadPassages(chipset, UpperPassageField, 0x05, UpperPassageCount, true,
+                out var upperPassages, out pError))
         {
             return false;
         }
@@ -175,14 +191,20 @@ public sealed class Rm2kPassabilityMap
 
     private static bool TryReadPassages(
         Godot.Collections.Dictionary pChipset,
-        int pFieldId,
+        string pTypedField,
+        int pRawFieldId,
         int pExpectedLength,
         bool pUpper,
         out byte[] pPassages,
         out string pError)
     {
         pError = "";
-        var found = TryFindRawField(pChipset, pFieldId, out var rawData);
+
+        var found = TryReadByteVector(pChipset, pTypedField, out var rawData);
+        if (!found)
+        {
+            found = TryFindRawField(pChipset, pRawFieldId, out rawData);
+        }
 
         // liblcf defaults: lower=[15]*162, upper=[31]+[15]*143.
         // EasyRPG pads an explicitly present short vector with 0x0F, so an
@@ -200,10 +222,49 @@ public sealed class Rm2kPassabilityMap
 
         if (rawData.Length > pExpectedLength)
         {
-            pError = $"Chipset field 0x{pFieldId:X2} has {rawData.Length} bytes, expected at most {pExpectedLength}.";
+            pError = $"Chipset field '{pTypedField}' has {rawData.Length} bytes, expected at most {pExpectedLength}.";
             return false;
         }
         Array.Copy(rawData, pPassages, rawData.Length);
+        return true;
+    }
+
+    private static bool TryReadByteVector(
+        Godot.Collections.Dictionary pData,
+        string pKey,
+        out byte[] pBytes)
+    {
+        pBytes = Array.Empty<byte>();
+        if (!pData.TryGetValue(pKey, out var rawValue))
+        {
+            return false;
+        }
+        if (rawValue.VariantType == Variant.Type.PackedByteArray)
+        {
+            pBytes = rawValue.AsByteArray();
+            return true;
+        }
+        if (rawValue.VariantType != Variant.Type.Array)
+        {
+            return false;
+        }
+
+        var source = rawValue.AsGodotArray();
+        var result = new byte[source.Count];
+        for (var index = 0; index < source.Count; index += 1)
+        {
+            if (source[index].VariantType != Variant.Type.Int)
+            {
+                return false;
+            }
+            var value = source[index].AsInt32();
+            if (value < byte.MinValue || value > byte.MaxValue)
+            {
+                return false;
+            }
+            result[index] = (byte)value;
+        }
+        pBytes = result;
         return true;
     }
 
