@@ -6,6 +6,35 @@ using UniversalRPG.Sdk;
 namespace UniversalRPG.Plugins;
 
 /// <summary>
+/// Supplies executable plugin source to the runtime from an authorized game/VFS
+/// mount. Metadata inspection deliberately does not carry executable bytes.
+/// </summary>
+public interface IWebScriptSourceProvider
+{
+    ScriptSourceResult Read(EngineScriptDescriptor pScript);
+}
+
+public sealed class ScriptSourceResult
+{
+    private ScriptSourceResult(bool pSuccess, ReadOnlyMemory<byte> pSource, string pError)
+    {
+        Success = pSuccess;
+        Source = pSource;
+        Error = pError;
+    }
+
+    public bool Success { get; }
+    public ReadOnlyMemory<byte> Source { get; }
+    public string Error { get; }
+
+    public static ScriptSourceResult Succeeded(ReadOnlyMemory<byte> pSource)
+        => new(true, pSource, "");
+
+    public static ScriptSourceResult Failed(string pError)
+        => new(false, ReadOnlyMemory<byte>.Empty, pError ?? "Plugin source unavailable.");
+}
+
+/// <summary>
 /// Engine-level MV/MZ custom-plugin loader independent from the concrete
 /// JavaScript implementation. Only plugins enabled by plugins.js are loaded,
 /// in configured order. Static compatibility classification is enforced against
@@ -14,6 +43,7 @@ namespace UniversalRPG.Plugins;
 public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
 {
     private readonly IEmbeddedScriptVm _vm;
+    private readonly IWebScriptSourceProvider _sourceProvider;
     private readonly string _languageId;
     private readonly IReadOnlyList<WebScriptInventoryEntry> _entries;
     private bool _loaded;
@@ -23,6 +53,7 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
     public WebScriptRuntime(
         string pLanguageId,
         IEmbeddedScriptVm pVm,
+        IWebScriptSourceProvider pSourceProvider,
         IEnumerable<WebScriptInventoryEntry> pEntries)
     {
         if (pLanguageId is not (ScriptLanguageIds.RpgMakerMvJavaScript or ScriptLanguageIds.RpgMakerMzJavaScript))
@@ -31,6 +62,7 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         }
         _languageId = pLanguageId;
         _vm = pVm ?? throw new ArgumentNullException(nameof(pVm));
+        _sourceProvider = pSourceProvider ?? throw new ArgumentNullException(nameof(pSourceProvider));
         if (pEntries == null) throw new ArgumentNullException(nameof(pEntries));
         _entries = pEntries
             .Where(pEntry => pEntry.Enabled)
@@ -108,17 +140,17 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
 
         foreach (var entry in _entries)
         {
-            var source = ReadSource(entry);
-            if (!source.Success || source.Value == null)
+            var source = _sourceProvider.Read(entry.Script);
+            if (!source.Success)
             {
                 return SdkOperationResult.Failed(
                     "web.plugin-source-unavailable",
-                    $"Plugin '{entry.Script.DisplayName}' source is unavailable to the runtime.");
+                    $"Plugin '{entry.Script.DisplayName}' source is unavailable: {source.Error}");
             }
             var module = new ScriptModule
             {
                 Descriptor = entry.Script,
-                Source = source.Value,
+                Source = source.Source,
             };
             var validation = module.Validate();
             if (!validation.Success) return validation;
@@ -206,29 +238,6 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         };
     }
 
-    private static ScriptSourceResult ReadSource(WebScriptInventoryEntry pEntry)
-    {
-        // Inventory is intentionally metadata-only. Executable source is supplied
-        // by an engine/VFS integration later; this placeholder makes the boundary
-        // explicit and prevents the metadata analyzer from becoming an executor.
-        if (pEntry is IExecutableWebScriptInventoryEntry executable)
-        {
-            return new ScriptSourceResult(true, executable.Source);
-        }
-        return new ScriptSourceResult(false, null);
-    }
-
     private static SdkOperationResult Disposed()
         => SdkOperationResult.Failed("web.disposed", "The web script runtime has been disposed.");
-
-    private sealed record ScriptSourceResult(bool Success, ReadOnlyMemory<byte>? Value);
-}
-
-/// <summary>
-/// Optional internal bridge used by the future VFS-backed runtime inventory.
-/// Public metadata inventories intentionally do not expose executable bytes.
-/// </summary>
-public interface IExecutableWebScriptInventoryEntry
-{
-    ReadOnlyMemory<byte> Source { get; }
 }
