@@ -19,7 +19,7 @@ public sealed class TestWebScriptInventory : TestBase
         Directory.CreateDirectory(Path.Combine(root, "js", "plugins"));
         File.WriteAllText(Path.Combine(root, "js", "plugins.js"),
             "$plugins = [\n" +
-            "  {\"name\":\"StandardPlugin\",\"status\":true,\"description\":\"\",\"parameters\":{}},\n" +
+            "  {\"name\":\"StandardPlugin\",\"status\":true,\"description\":\"\",\"parameters\":{\"Text\":\"hello\",\"Count\":3,\"Flag\":true,\"Struct\":\"{\\\"x\\\":1}\"}},\n" +
             "  {\"name\":\"NodePlugin\",\"status\":true,\"description\":\"\",\"parameters\":{}},\n" +
             "  {\"name\":\"ProcessPlugin\",\"status\":false,\"description\":\"\",\"parameters\":{}},\n" +
             "  {\"name\":\"NativePlugin\",\"status\":true,\"description\":\"\",\"parameters\":{}}\n" +
@@ -55,6 +55,18 @@ public sealed class TestWebScriptInventory : TestBase
         AssertTrue(result.Entries.All(pEntry => pEntry.Script.Validate().Success));
     }
 
+    public void Test_InventoryPreservesConfiguredPluginParameters()
+    {
+        var result = WebScriptInventory.Inspect(ProjectSettings.GlobalizePath(Root), pMZ: true);
+        var standard = Find(result, "StandardPlugin");
+
+        AssertEq(standard.Parameters.Count, 4);
+        AssertEq(standard.Parameters["Text"], "hello");
+        AssertEq(standard.Parameters["Count"], "3");
+        AssertEq(standard.Parameters["Flag"], "true");
+        AssertEq(standard.Parameters["Struct"], "{\"x\":1}");
+    }
+
     public void Test_InventoryClassifiesHostApiRequirementsWithoutExecutingScripts()
     {
         var result = WebScriptInventory.Inspect(ProjectSettings.GlobalizePath(Root), pMZ: false);
@@ -76,17 +88,18 @@ public sealed class TestWebScriptInventory : TestBase
             (pCharacter >= '0' && pCharacter <= '9') || (pCharacter >= 'a' && pCharacter <= 'f')));
     }
 
-    public void Test_MissingConfiguredPluginIsReportedNotExecuted()
+    public void Test_MissingConfiguredPluginKeepsItsParameters()
     {
         var root = ProjectSettings.GlobalizePath(Root);
-        File.Delete(Path.Combine(root, "js", "plugins", "NativePlugin.js"));
+        File.Delete(Path.Combine(root, "js", "plugins", "StandardPlugin.js"));
 
         var result = WebScriptInventory.Inspect(root, pMZ: true);
-        var missing = Find(result, "NativePlugin");
+        var missing = Find(result, "StandardPlugin");
 
         AssertTrue(missing.Enabled);
         AssertEq(missing.Compatibility, WebScriptCompatibility.MissingFile);
         AssertEq(missing.Script.Sha256, "");
+        AssertEq(missing.Parameters["Text"], "hello");
         AssertTrue(missing.Reasons.Count > 0);
     }
 
