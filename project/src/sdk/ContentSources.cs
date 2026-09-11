@@ -109,8 +109,6 @@ public sealed class DirectoryGameContentSource : IGameContentSource
             }
             else
             {
-                // Multiple entries differ only by case. Windows games cannot
-                // address this deterministically, so fail rather than guess.
                 return false;
             }
 
@@ -147,10 +145,6 @@ public sealed class LayeredGameContentSource : IGameContentSource
     private readonly bool _disposeLayers;
     private bool _disposed;
 
-    /// <summary>
-    /// Layers are passed highest-priority first. A typical runtime order is:
-    /// translation/override, protected-or-plain game data, configured RTP.
-    /// </summary>
     public LayeredGameContentSource(IEnumerable<Layer> pLayers, bool pDisposeLayers = true)
     {
         if (pLayers == null) throw new ArgumentNullException(nameof(pLayers));
@@ -168,11 +162,7 @@ public sealed class LayeredGameContentSource : IGameContentSource
     }
 
     public string SourceId => "layered-content";
-    public GameContentProtectionKind Protection =>
-        _layers.Any(pLayer => pLayer.Source.Protection != GameContentProtectionKind.None)
-            ? GameContentProtectionKind.EngineManagedEncryption
-            : GameContentProtectionKind.None;
-
+    public GameContentProtectionKind Protection => AggregateProtection(_layers);
     public IReadOnlyList<string> LayerIds => _layers.Select(pLayer => pLayer.Id).ToArray();
 
     public bool Exists(string pLogicalPath)
@@ -193,9 +183,6 @@ public sealed class LayeredGameContentSource : IGameContentSource
             if (!layer.Source.Exists(pLogicalPath)) continue;
             var result = layer.Source.Read(pLogicalPath);
             if (result.Success) return result;
-            // A selected higher-priority layer must not silently fall through
-            // after claiming the logical path; malformed override/archive data
-            // should be diagnosed instead of hidden by a lower layer.
             return result;
         }
         return ContentReadResult.Failed("content.not-found", $"Content '{pLogicalPath}' was not found in any layer.");
@@ -210,6 +197,21 @@ public sealed class LayeredGameContentSource : IGameContentSource
         {
             layer.Source.Dispose();
         }
+    }
+
+    private static GameContentProtectionKind AggregateProtection(IEnumerable<Layer> pLayers)
+    {
+        var kinds = pLayers
+            .Select(pLayer => pLayer.Source.Protection)
+            .Where(pKind => pKind != GameContentProtectionKind.None)
+            .Distinct()
+            .ToArray();
+        return kinds.Length switch
+        {
+            0 => GameContentProtectionKind.None,
+            1 => kinds[0],
+            _ => GameContentProtectionKind.Unknown,
+        };
     }
 
     private void ThrowIfDisposed()
