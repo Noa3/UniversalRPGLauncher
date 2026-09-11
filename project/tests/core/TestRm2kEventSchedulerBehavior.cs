@@ -68,6 +68,38 @@ public partial class TestRm2kEventSchedulerBehavior : TestBase
         AssertFalse(scheduler.HasBlockingSameLayerEventAt(9, 10));
     }
 
+    public void Test_AutorunPageRestartsWhileConditionsRemainActive()
+    {
+        var state = new GameSimulationState();
+        var eventData = new Rm2kMap.Event(6, 0, 0);
+        var page = new Rm2kMap.EventPage
+        {
+            Trigger = (int)Rm2kEventTrigger.Autorun,
+            Layer = 1,
+        };
+        page.Commands.Add(new Rm2kMap.EventCommand(
+            EventInterpreter.ControlVars,
+            new List<int>
+            {
+                1, 1, 0,
+                EventInterpreter.VarOpAdd,
+                EventInterpreter.VarOperandConstant,
+                1,
+            }));
+        page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+        eventData.Pages.Add(page);
+        var scheduler = new Rm2kEventScheduler(state);
+        scheduler.SetEvents(new[] { eventData });
+
+        scheduler.ExecuteFrame(); // starts autorun, executes +1
+        scheduler.ExecuteFrame(); // executes End and removes interpreter
+        scheduler.ExecuteFrame(); // active page starts again, executes +1
+
+        AssertTrue(state.Variables.Count >= 1);
+        AssertEq(state.Variables[0], 2,
+            "autorun page restarts after completing while its page remains active");
+    }
+
     private static Rm2kMap.Event EventWithPage(
         int pId,
         int pX,
