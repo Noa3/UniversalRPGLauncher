@@ -51,7 +51,22 @@ public interface IUniversalRpgLibrary
     int ApiVersion { get; }
     IReadOnlyList<EngineSupportDescriptor> Engines { get; }
     GameAnalysis Analyze(string pGameDirectory);
+
+    /// <summary>
+    /// Opens the logical read-only game filesystem selected from the analysis.
+    /// The caller sees normal logical paths regardless of whether bytes come
+    /// from a directory, ZIP archive, or a supported engine-managed encrypted
+    /// content source.
+    /// </summary>
+    ContentSourceResult OpenGameContent(GameAnalysis pAnalysis);
+
+    /// <summary>
+    /// Opens one explicit protected-content descriptor using a trusted provider.
+    /// Most consumers should prefer OpenGameContent unless they intentionally
+    /// need access to a particular archive/protection layer.
+    /// </summary>
     ContentSourceResult OpenProtectedContent(ProtectedContentDescriptor pDescriptor);
+
     SdkSessionResult CreateSession(GameAnalysis pAnalysis);
 }
 
