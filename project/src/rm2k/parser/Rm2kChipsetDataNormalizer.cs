@@ -1,14 +1,13 @@
 using System;
-using System.Collections.Generic;
 using Godot;
 
 namespace UniversalRPG.Rm2k.Parser;
 
 /// <summary>
 /// Promotes the verified Chipset vector fields that older parser output kept in
-/// unknown_fields into first-class typed values. This is a transitional parser
-/// boundary: runtime code consumes only the typed fields, while unrelated
-/// unknown LDB chunks remain preserved losslessly.
+/// unknown_fields into first-class typed values. The operation is idempotent:
+/// already-typed parser output is validated and normalized to the canonical
+/// bounded vector lengths, while unrelated unknown fields remain preserved.
 ///
 /// Verified liblcf fields:
 /// 0x03 terrain_data          Vector&lt;Int16&gt; length 162, default 1
@@ -43,8 +42,7 @@ public static class Rm2kChipsetDataNormalizer
                 pError = "RM2K chipset array contains a non-dictionary entry.";
                 return false;
             }
-            var entry = rawEntry.AsGodotDictionary();
-            if (!TryNormalizeChipset(entry, out pError))
+            if (!TryNormalizeChipset(rawEntry.AsGodotDictionary(), out pError))
             {
                 return false;
             }
@@ -61,10 +59,8 @@ public static class Rm2kChipsetDataNormalizer
             return false;
         }
 
-        var unknownFields = ReadUnknownFields(pChipset);
-        if (unknownFields == null)
+        if (!TryReadUnknownFields(pChipset, out var unknownFields, out pError))
         {
-            pError = "Chipset unknown_fields is missing or malformed.";
             return false;
         }
 
@@ -72,7 +68,6 @@ public static class Rm2kChipsetDataNormalizer
         byte[]? terrainRaw = null;
         byte[]? lowerRaw = null;
         byte[]? upperRaw = null;
-
         foreach (var field in unknownFields)
         {
             if (!TryReadField(field, out var id, out var data))
@@ -112,9 +107,45 @@ public static class Rm2kChipsetDataNormalizer
             }
         }
 
-        if (!TryDecodeTerrain(terrainRaw, out var terrain, out pError)
-            || !TryDecodeByteVector(lowerRaw, LowerPassageCount, 0x0F, 0x0F, false, "passable_data_lower", out var lower, out pError)
-            || !TryDecodeByteVector(upperRaw, UpperPassageCount, 0x0F, 0x1F, true, "passable_data_upper", out var upper, out pError))
+        int[] terrain;
+        if (pChipset.ContainsKey("terrain_data"))
+        {
+            if (!TryNormalizeTypedIntVector(pChipset["terrain_data"], TerrainCount, 1, "terrain_data", out terrain, out pError))
+            {
+                return false;
+            }
+        }
+        else if (!TryDecodeTerrain(terrainRaw, out terrain, out pError))
+        {
+            return false;
+        }
+
+        byte[] lower;
+        if (pChipset.ContainsKey("passable_data_lower"))
+        {
+            if (!TryNormalizeTypedByteVector(pChipset["passable_data_lower"], LowerPassageCount, 0x0F, 0x0F, false,
+                    "passable_data_lower", out lower, out pError))
+            {
+                return false;
+            }
+        }
+        else if (!TryDecodeByteVector(lowerRaw, LowerPassageCount, 0x0F, 0x0F, false,
+                     "passable_data_lower", out lower, out pError))
+        {
+            return false;
+        }
+
+        byte[] upper;
+        if (pChipset.ContainsKey("passable_data_upper"))
+        {
+            if (!TryNormalizeTypedByteVector(pChipset["passable_data_upper"], UpperPassageCount, 0x0F, 0x1F, true,
+                    "passable_data_upper", out upper, out pError))
+            {
+                return false;
+            }
+        }
+        else if (!TryDecodeByteVector(upperRaw, UpperPassageCount, 0x0F, 0x1F, true,
+                     "passable_data_upper", out upper, out pError))
         {
             return false;
         }
@@ -126,21 +157,31 @@ public static class Rm2kChipsetDataNormalizer
         return true;
     }
 
-    private static Godot.Collections.Array<Godot.Collections.Dictionary>? ReadUnknownFields(
-        Godot.Collections.Dictionary pChipset)
+    private static bool TryReadUnknownFields(
+        Godot.Collections.Dictionary pChipset,
+        out Godot.Collections.Array<Godot.Collections.Dictionary> pFields,
+        out string pError)
     {
-        if (!pChipset.TryGetValue("unknown_fields", out var rawUnknown)
-            || rawUnknown.VariantType != Variant.Type.Array)
+        pError = "";
+        pFields = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+        if (!pChipset.TryGetValue("unknown_fields", out var rawUnknown))
         {
-            return null;
+            return true;
+        }
+        if (rawUnknown.VariantType != Variant.Type.Array)
+        {
+            pError = "Chipset unknown_fields is malformed.";
+            return false;
         }
         try
         {
-            return (Godot.Collections.Array<Godot.Collections.Dictionary>)rawUnknown;
+            pFields = (Godot.Collections.Array<Godot.Collections.Dictionary>)rawUnknown;
+            return true;
         }
         catch
         {
-            return null;
+            pError = "Chipset unknown_fields contains incompatible entries.";
+            return false;
         }
     }
 
@@ -193,9 +234,7 @@ public static class Rm2kChipsetDataNormalizer
         out string pError)
     {
         pError = "";
-        pData = new byte[pLength];
-        Array.Fill(pData, pFill);
-        if (pDistinctFirstDefault && pData.Length > 0) pData[0] = pFirstDefault;
+        pData = CreateDefaultByteVector(pLength, pFill, pFirstDefault, pDistinctFirstDefault);
         if (pRaw == null) return true;
         if (pRaw.Length > pLength)
         {
@@ -204,5 +243,112 @@ public static class Rm2kChipsetDataNormalizer
         }
         Array.Copy(pRaw, pData, pRaw.Length);
         return true;
+    }
+
+    private static bool TryNormalizeTypedIntVector(
+        Variant pRaw,
+        int pLength,
+        int pFill,
+        string pName,
+        out int[] pData,
+        out string pError)
+    {
+        pError = "";
+        pData = new int[pLength];
+        Array.Fill(pData, pFill);
+        int[] source;
+        if (pRaw.VariantType == Variant.Type.PackedInt32Array)
+        {
+            source = pRaw.AsInt32Array();
+        }
+        else if (pRaw.VariantType == Variant.Type.Array)
+        {
+            var array = pRaw.AsGodotArray();
+            source = new int[array.Count];
+            for (var index = 0; index < array.Count; index++)
+            {
+                if (array[index].VariantType != Variant.Type.Int)
+                {
+                    pError = $"Chipset {pName} contains a non-integer value.";
+                    return false;
+                }
+                source[index] = array[index].AsInt32();
+            }
+        }
+        else
+        {
+            pError = $"Chipset {pName} is not an integer vector.";
+            return false;
+        }
+        if (source.Length > pLength)
+        {
+            pError = $"Chipset {pName} has {source.Length} values, expected at most {pLength}.";
+            return false;
+        }
+        Array.Copy(source, pData, source.Length);
+        return true;
+    }
+
+    private static bool TryNormalizeTypedByteVector(
+        Variant pRaw,
+        int pLength,
+        byte pFill,
+        byte pFirstDefault,
+        bool pDistinctFirstDefault,
+        string pName,
+        out byte[] pData,
+        out string pError)
+    {
+        pError = "";
+        pData = CreateDefaultByteVector(pLength, pFill, pFirstDefault, pDistinctFirstDefault);
+        byte[] source;
+        if (pRaw.VariantType == Variant.Type.PackedByteArray)
+        {
+            source = pRaw.AsByteArray();
+        }
+        else if (pRaw.VariantType == Variant.Type.Array)
+        {
+            var array = pRaw.AsGodotArray();
+            source = new byte[array.Count];
+            for (var index = 0; index < array.Count; index++)
+            {
+                if (array[index].VariantType != Variant.Type.Int)
+                {
+                    pError = $"Chipset {pName} contains a non-integer value.";
+                    return false;
+                }
+                var value = array[index].AsInt32();
+                if (value < byte.MinValue || value > byte.MaxValue)
+                {
+                    pError = $"Chipset {pName} contains byte value {value} outside 0..255.";
+                    return false;
+                }
+                source[index] = (byte)value;
+            }
+        }
+        else
+        {
+            pError = $"Chipset {pName} is not a byte vector.";
+            return false;
+        }
+        if (source.Length > pLength)
+        {
+            pError = $"Chipset {pName} has {source.Length} values, expected at most {pLength}.";
+            return false;
+        }
+        Array.Copy(source, pData, source.Length);
+        return true;
+    }
+
+    private static byte[] CreateDefaultByteVector(
+        int pLength,
+        byte pFill,
+        byte pFirstDefault,
+        bool pDistinctFirstDefault)
+    {
+        var result = new byte[pLength];
+        Array.Fill(result, pFill);
+        if (pDistinctFirstDefault && result.Length > 0) result[0] = pFirstDefault;
+        return result;
     }
 }
