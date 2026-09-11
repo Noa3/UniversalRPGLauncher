@@ -72,11 +72,8 @@ public sealed class DirectoryGameContentSource : IGameContentSource
     private bool TryResolve(string pLogicalPath, out string pResolved)
     {
         pResolved = "";
-        if (string.IsNullOrWhiteSpace(pLogicalPath) || pLogicalPath.IndexOf('\0') >= 0) return false;
-        var normalized = pLogicalPath.Replace('\\', '/');
-        if (normalized.StartsWith('/', StringComparison.Ordinal) || Path.IsPathRooted(normalized)) return false;
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0 || parts.Any(pPart => pPart is "." or "..")) return false;
+        if (!LogicalGamePath.TryNormalize(pLogicalPath, out var normalized)) return false;
+        var parts = normalized.Split('/');
 
         var current = _root;
         if (IsReparsePoint(current)) return false;
