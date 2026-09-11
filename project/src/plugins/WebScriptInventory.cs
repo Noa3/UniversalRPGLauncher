@@ -24,6 +24,12 @@ public sealed class WebScriptInventoryEntry
     public bool Enabled { get; init; }
     public WebScriptCompatibility Compatibility { get; init; }
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
+    /// <summary>
+    /// Plugin parameters from plugins.js. String values are preserved exactly;
+    /// non-string JSON values are preserved as their bounded raw JSON text so a
+    /// later compatibility layer can reproduce project behavior deliberately.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Parameters { get; init; } = new Dictionary<string, string>();
 }
 
 public sealed class WebScriptInventoryResult
@@ -41,6 +47,16 @@ public sealed class WebScriptInventoryResult
 public static class WebScriptInventory
 {
     public const int MaxPlugins = 2048;
+    public const int MaxParametersPerPlugin = 4096;
+    public const int MaxParameterNameLength = 512;
+    public const int MaxParameterValueLength = 64 * 1024;
+
+    private sealed class PluginConfiguration
+    {
+        public string Name { get; init; } = "";
+        public bool Enabled { get; init; }
+        public IReadOnlyDictionary<string, string> Parameters { get; init; } = new Dictionary<string, string>();
+    }
 
     public static WebScriptInventoryResult Inspect(string pGamePath, bool pMZ)
     {
@@ -95,13 +111,14 @@ public static class WebScriptInventory
                     Enabled = plugin.Enabled,
                     Compatibility = WebScriptCompatibility.MissingFile,
                     Reasons = new[] { $"Configured plugin file '{expectedName}' was not found in js/plugins/." },
+                    Parameters = plugin.Parameters,
                     Script = Descriptor(plugin.Name, language, $"js/plugins/{expectedName}", "", loadOrder++, plugin.Enabled),
                 });
                 continue;
             }
 
             seenPaths.Add(GameInspectionSnapshot.NormalizeRelativePath(file.RelativePath));
-            entries.Add(BuildEntry(file, plugin.Name, language, plugin.Enabled, loadOrder++));
+            entries.Add(BuildEntry(file, plugin.Name, language, plugin.Enabled, loadOrder++, plugin.Parameters));
         }
 
         foreach (var file in pluginFiles)
@@ -117,7 +134,7 @@ public static class WebScriptInventory
                 continue;
             }
             var name = System.IO.Path.GetFileNameWithoutExtension(file.RelativePath);
-            entries.Add(BuildEntry(file, name, language, false, loadOrder++));
+            entries.Add(BuildEntry(file, name, language, false, loadOrder++, new Dictionary<string, string>()));
         }
 
         if (pSnapshot.IsPartial)
@@ -139,7 +156,8 @@ public static class WebScriptInventory
         string pName,
         string pLanguage,
         bool pEnabled,
-        int pLoadOrder)
+        int pLoadOrder,
+        IReadOnlyDictionary<string, string> pParameters)
     {
         var reasons = new List<string>();
         var compatibility = Classify(pFile, reasons);
@@ -149,6 +167,7 @@ public static class WebScriptInventory
             Enabled = pEnabled,
             Compatibility = compatibility,
             Reasons = reasons,
+            Parameters = pParameters,
             Script = Descriptor(
                 pName,
                 pLanguage,
@@ -208,7 +227,7 @@ public static class WebScriptInventory
         return WebScriptCompatibility.StandardBrowserApi;
     }
 
-    private static List<(string Name, bool Enabled)> ReadPluginConfiguration(
+    private static List<PluginConfiguration> ReadPluginConfiguration(
         GameInspectionSnapshot pSnapshot,
         List<SdkDiagnostic> pDiagnostics)
     {
@@ -218,12 +237,12 @@ public static class WebScriptInventory
         if (config == null)
         {
             pDiagnostics.Add(SdkDiagnostic.Info("scripts.plugins-config-missing", "No js/plugins.js configuration was found; plugin files are inventoried as disabled/unordered."));
-            return new List<(string, bool)>();
+            return new List<PluginConfiguration>();
         }
         if (config.IsTruncated)
         {
             pDiagnostics.Add(SdkDiagnostic.Warning("scripts.plugins-config-truncated", "js/plugins.js is truncated; configured plugin order cannot be trusted."));
-            return new List<(string, bool)>();
+            return new List<PluginConfiguration>();
         }
 
         var text = Encoding.UTF8.GetString(config.Data);
@@ -232,7 +251,7 @@ public static class WebScriptInventory
         if (start < 0 || end <= start)
         {
             pDiagnostics.Add(SdkDiagnostic.Warning("scripts.plugins-config-invalid", "js/plugins.js does not contain a bounded plugin array."));
-            return new List<(string, bool)>();
+            return new List<PluginConfiguration>();
         }
 
         try
@@ -245,10 +264,10 @@ public static class WebScriptInventory
             });
             if (document.RootElement.ValueKind != JsonValueKind.Array)
             {
-                return new List<(string, bool)>();
+                return new List<PluginConfiguration>();
             }
 
-            var result = new List<(string, bool)>();
+            var result = new List<PluginConfiguration>();
             foreach (var item in document.RootElement.EnumerateArray())
             {
                 if (result.Count >= MaxPlugins) break;
@@ -266,15 +285,71 @@ public static class WebScriptInventory
                 }
                 var enabled = item.TryGetProperty("status", out var statusElement)
                     && statusElement.ValueKind == JsonValueKind.True;
-                result.Add((name, enabled));
+                var parameters = ReadParameters(item, name, pDiagnostics);
+                result.Add(new PluginConfiguration
+                {
+                    Name = name,
+                    Enabled = enabled,
+                    Parameters = parameters,
+                });
             }
             return result;
         }
         catch (JsonException)
         {
             pDiagnostics.Add(SdkDiagnostic.Warning("scripts.plugins-config-invalid", "js/plugins.js plugin array could not be parsed as bounded JSON data."));
-            return new List<(string, bool)>();
+            return new List<PluginConfiguration>();
         }
+    }
+
+    private static IReadOnlyDictionary<string, string> ReadParameters(
+        JsonElement pPlugin,
+        string pPluginName,
+        List<SdkDiagnostic> pDiagnostics)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (!pPlugin.TryGetProperty("parameters", out var parameters)
+            || parameters.ValueKind != JsonValueKind.Object)
+        {
+            return result;
+        }
+
+        foreach (var parameter in parameters.EnumerateObject())
+        {
+            if (result.Count >= MaxParametersPerPlugin)
+            {
+                pDiagnostics.Add(SdkDiagnostic.Warning(
+                    "scripts.plugin-parameter-limit",
+                    $"Plugin '{pPluginName}' parameter inventory stopped at {MaxParametersPerPlugin} entries."));
+                break;
+            }
+            if (parameter.Name.Length == 0 || parameter.Name.Length > MaxParameterNameLength)
+            {
+                pDiagnostics.Add(SdkDiagnostic.Warning(
+                    "scripts.plugin-parameter-name",
+                    $"Plugin '{pPluginName}' contains an empty or oversized parameter name that was ignored."));
+                continue;
+            }
+
+            string value;
+            if (parameter.Value.ValueKind == JsonValueKind.String)
+            {
+                value = parameter.Value.GetString() ?? "";
+            }
+            else
+            {
+                value = parameter.Value.GetRawText();
+            }
+            if (value.Length > MaxParameterValueLength)
+            {
+                pDiagnostics.Add(SdkDiagnostic.Warning(
+                    "scripts.plugin-parameter-value",
+                    $"Plugin '{pPluginName}' parameter '{parameter.Name}' exceeds the bounded value limit and was ignored."));
+                continue;
+            }
+            result[parameter.Name] = value;
+        }
+        return result;
     }
 
     private static bool IsPluginFile(string pRelativePath)
