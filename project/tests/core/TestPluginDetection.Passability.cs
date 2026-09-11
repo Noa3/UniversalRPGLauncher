@@ -69,10 +69,63 @@ public partial class TestPluginDetection
         AssertTrue(invalidError.Contains("expected at most", StringComparison.Ordinal));
     }
 
+    public void Test_Rm2kPassabilityAcceptsLegacyRawPassageFieldsDuringParserMigration()
+    {
+        var lower = new byte[Rm2kPassabilityMap.LowerPassageCount];
+        Array.Fill(lower, (byte)0x0F);
+        lower[2] = (byte)(Rm2kPassabilityMap.Down | Rm2kPassabilityMap.Left | Rm2kPassabilityMap.Up);
+
+        var database = LegacyRawPassabilityDatabase(1, lower, null);
+        var map = PassabilityMap(
+            2, 1, 1,
+            new[] { 2000, 2000 },
+            new[] { 10000, 10000 });
+
+        AssertTrue(Rm2kPassabilityMap.TryCreate(database, map, out var passability, out var error), error);
+        AssertTrue(passability != null);
+        AssertFalse(passability!.CanMove(0, 0, 1, 0),
+            "legacy unknown-field chipset data retains the same directional semantics");
+    }
+
+    public void Test_Rm2kPassabilityRejectsInvalidMapBoundsBeforeAllocation()
+    {
+        var database = PassabilityDatabase(1);
+        var map = PassabilityMap(
+            501, 1, 1,
+            Array.Empty<int>(),
+            Array.Empty<int>());
+
+        AssertFalse(Rm2kPassabilityMap.TryCreate(database, map, out _, out var error));
+        AssertTrue(error.Contains("dimensions", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static Godot.Collections.Dictionary PassabilityDatabase(
         int pChipsetId,
         byte[]? pLower = null,
         byte[]? pUpper = null)
+    {
+        var chipset = new Godot.Collections.Dictionary
+        {
+            { "id", pChipsetId },
+            { "unknown_fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+        };
+        if (pLower != null)
+        {
+            chipset["passable_data_lower"] = pLower;
+        }
+        if (pUpper != null)
+        {
+            chipset["passable_data_upper"] = pUpper;
+        }
+
+        var chipsets = new Godot.Collections.Array<Godot.Collections.Dictionary> { chipset };
+        return new Godot.Collections.Dictionary { { "chipsets", chipsets } };
+    }
+
+    private static Godot.Collections.Dictionary LegacyRawPassabilityDatabase(
+        int pChipsetId,
+        byte[]? pLower,
+        byte[]? pUpper)
     {
         var unknownFields = new Godot.Collections.Array<Godot.Collections.Dictionary>();
         if (pLower != null)
