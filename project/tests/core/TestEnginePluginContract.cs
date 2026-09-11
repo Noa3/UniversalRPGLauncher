@@ -120,6 +120,38 @@ public partial class TestEnginePluginContract : TestBase
 		runtime.Value?.Dispose();
 	}
 
+	public void Test_RuntimeSelectionRequiresExplicitRuntimeCapability()
+	{
+		var registry = new EnginePluginRegistry();
+		var plugin = new FakePlugin(new EnginePluginMetadata
+		{
+			Id = "detection-only",
+			DisplayName = "Detection only",
+			Description = "Detection-only test plugin.",
+			Capabilities = PluginCapability.Detection,
+			SupportedEngines = new[] { SupportedRange() },
+		});
+		AssertTrue(registry.Register(plugin).Success);
+
+		var genericSelection = registry.Select(CreateGame());
+		AssertTrue(genericSelection.Success, "generic plugin selection may inspect a detection-only plugin");
+
+		var runtimeSelection = registry.Select(CreateGame(), PluginCapability.Runtime);
+		AssertFalse(runtimeSelection.Success, "runtime selection must reject a detection-only plugin");
+		AssertEq(runtimeSelection.Error?.Code, PluginErrorCode.UnsupportedEngine);
+
+		var runtimeCreation = registry.CreateRuntime(genericSelection.Value!);
+		AssertFalse(runtimeCreation.Success, "runtime creation must enforce Runtime capability defensively");
+		AssertEq(runtimeCreation.Error?.Code, PluginErrorCode.UnsupportedEngine);
+		AssertTrue(plugin.LastRuntime == null, "detection-only plugin runtime factory must not be invoked");
+
+		using var host = new EnginePluginHost(registry);
+		var started = host.Start(CreateGame());
+		AssertFalse(started.Success, "runtime host must fail before creating a detection-only runtime");
+		AssertEq(started.Error?.Code, PluginErrorCode.UnsupportedEngine);
+		AssertTrue(plugin.LastRuntime == null, "host must not invoke a detection-only runtime factory");
+	}
+
 	public void Test_UnsupportedEngineReturnsTypedError()
 	{
 		var registry = new EnginePluginRegistry();
