@@ -10,7 +10,7 @@ namespace UniversalRPG.Rm2k.Interpreter;
 /// Owns bounded interpreters for the current RM2K map. Imported commands are
 /// still data; only the native EventInterpreter receives them. Autorun pages
 /// are started once, parallel pages may be restarted after completion, and
-/// action/touch pages require an explicit trigger call from the host.
+/// action/touch/collision pages require an explicit runtime trigger.
 /// </summary>
 public sealed class Rm2kEventScheduler
 {
@@ -81,13 +81,51 @@ public sealed class Rm2kEventScheduler
 
     public bool TriggerAction(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Action);
 
+    /// <summary>
+    /// Triggers the first event at the coordinate that actually has an eligible
+    /// page for the requested trigger. Multiple events may legally share a map
+    /// coordinate, so a non-matching earlier event must not mask a later one.
+    /// </summary>
     public bool TriggerAt(int pX, int pY, Rm2kEventTrigger pTrigger)
     {
-        var eventData = _events.FirstOrDefault(pEvent => pEvent.X == pX && pEvent.Y == pY);
-        return eventData != null && Trigger(eventData.Id, pTrigger);
+        foreach (var eventData in _events)
+        {
+            if (eventData.X != pX || eventData.Y != pY)
+            {
+                continue;
+            }
+            if (Trigger(eventData.Id, pTrigger))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touch);
+
+    /// <summary>
+    /// Returns whether an active same-layer event occupies the coordinate.
+    /// This is geometry/collision information only; it does not start commands.
+    /// Through/move-route overrides are not modeled yet and must be added before
+    /// this becomes a complete RPG_RT collision implementation.
+    /// </summary>
+    public bool HasBlockingSameLayerEventAt(int pX, int pY)
+    {
+        foreach (var eventData in _events)
+        {
+            if (eventData.X != pX || eventData.Y != pY)
+            {
+                continue;
+            }
+            var page = Rm2kEventPageSelector.SelectActive(eventData, _state);
+            if (page != null && page.Layer == 1)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private bool Trigger(int pEventId, Rm2kEventTrigger pTrigger)
     {
