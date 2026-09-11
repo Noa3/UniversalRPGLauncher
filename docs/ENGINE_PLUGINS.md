@@ -1,6 +1,6 @@
 # Engine Plugin Catalog and Lifecycle
 
-> **Last reviewed:** 2026-09-09
+> **Last reviewed:** 2026-09-11
 
 UniversalRPG uses a deterministic catalog of trusted, compiled, in-process engine plugins. This is an internal architecture boundary, not a user-provided dynamic plugin loader.
 
@@ -40,7 +40,14 @@ var selector = new EngineRuntimeSelector(runtimeRegistry);
 
 A plugin that lacks `PluginCapability.Runtime` must be rejected by runtime selection even if detection succeeded.
 
-That currently applies to:
+The runtime boundary is enforced redundantly:
+
+- `EngineRuntimeSelector` validates required capabilities
+- `EnginePluginHost` calls registry selection with `PluginCapability.Runtime`
+- `EnginePluginRegistry.CreateRuntime()` re-checks Runtime capability before invoking a plugin factory
+- `EngineBootstrapRuntime` is deliberately fail-closed and cannot simulate a playable engine lifecycle
+
+That currently keeps these engines non-launchable:
 
 - Dante 98
 - RPG Maker 95
@@ -65,7 +72,9 @@ WOLF and RM2K/3 advertise a runtime boundary, but neither should be described as
 
 ### RGSS
 
-`RgssEngineRuntime.cs` exists as experimental/research code, but XP/VX/VX Ace plugins do **not** currently advertise Runtime. Until an embedded Ruby VM and RGSS compatibility layer are implemented, UI/runtime selection must continue to refuse execution.
+XP/VX/VX Ace plugins intentionally advertise Detection + Parsing only. The old unused metadata-only `RgssEngineRuntime.cs` class was removed because it was not a real Ruby/RGSS runtime and could create misleading architecture/support expectations.
+
+Future RGSS runtime work should begin with an explicit embedded Ruby VM and RGSS1/2/3 compatibility layer.
 
 ### MV/MZ
 
@@ -74,6 +83,14 @@ No JavaScript runtime is currently advertised. Bounded JSON/web metadata inspect
 ### RM95 / Dante / Unite
 
 Research/detection only.
+
+## Generic Bootstrap Guard
+
+`BuiltInEnginePlugin.CreateRuntime()` historically had a generic bootstrap fallback for a plugin that advertised Runtime without overriding runtime creation.
+
+That fallback object now fails closed during initialization. It exists only as a defensive guard until the built-in plugin base is further simplified; it must never be used as evidence of engine support.
+
+Concrete Runtime-capable plugins should always return a real engine-specific implementation.
 
 ## Plugin Lifecycle
 
@@ -102,8 +119,8 @@ A stopped runtime may be replaced with a fresh runtime instance for restart; sta
 3. Add positive, negative, malformed, partial and ambiguous fixtures as appropriate.
 4. Advertise only capabilities backed by real code/tests.
 5. Keep parsers/runtime code engine-specific behind shared core interfaces.
-6. Add `Runtime` only when `CreateRuntime` returns a meaningful, safe runtime boundary.
-7. Add runtime-selection and lifecycle tests.
+6. Add `Runtime` only when `CreateRuntime` returns a meaningful, safe engine runtime.
+7. Add runtime-capability, runtime-selection and lifecycle tests.
 8. Update detection, coverage and status docs.
 9. Run `./scripts/validate.sh`.
 
