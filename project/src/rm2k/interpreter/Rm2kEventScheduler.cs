@@ -7,14 +7,14 @@ using UniversalRPG.Rm2k.Simulation;
 namespace UniversalRPG.Rm2k.Interpreter;
 
 /// <summary>
-/// Owns bounded interpreters for the current RM2K map. Imported commands are
-/// still data; only the native EventInterpreter receives them.
+/// Owns bounded interpreters and runtime event positions for the current RM2K
+/// map. Imported commands remain data; only EventInterpreter executes the
+/// verified native command subset.
 ///
 /// RPG_RT has one foreground interpreter (autorun/action/touch/collision) while
-/// parallel pages run independently. This scheduler preserves that separation:
-/// at most one foreground event is active, while multiple parallel pages may be
-/// active at the same time. Active autorun and parallel pages are re-evaluated
-/// after completion.
+/// parallel pages run independently. Event coordinates are runtime state rather
+/// than immutable LMU metadata so movement routes can evolve without mutating
+/// parsed map data.
 /// </summary>
 public sealed class Rm2kEventScheduler
 {
@@ -24,6 +24,7 @@ public sealed class Rm2kEventScheduler
     private readonly List<Rm2kMap.Event> _events = new();
     private readonly Dictionary<int, EventInterpreter> _active = new();
     private readonly Dictionary<int, Rm2kEventTrigger> _activeTriggers = new();
+    private readonly Dictionary<int, (int X, int Y)> _positions = new();
     private PresentationState? _presentation;
 
     public Rm2kEventScheduler(GameSimulationState pState, PresentationState? pPresentation = null)
@@ -40,6 +41,7 @@ public sealed class Rm2kEventScheduler
     {
         if (pEvents == null) throw new ArgumentNullException(nameof(pEvents));
         _events.Clear();
+        _positions.Clear();
         var inspected = 0;
         var inputExceeded = false;
         foreach (var eventData in pEvents)
@@ -50,11 +52,17 @@ public sealed class Rm2kEventScheduler
                 inputExceeded = true;
                 break;
             }
-
-            if (eventData != null)
+            if (eventData == null)
             {
-                _events.Add(eventData);
+                continue;
             }
+            if (eventData.Id <= 0 || _positions.ContainsKey(eventData.Id))
+            {
+                _state.AddDiagnostic($"RM2K event with invalid/duplicate ID {eventData.Id} was ignored.");
+                continue;
+            }
+            _events.Add(eventData);
+            _positions[eventData.Id] = (eventData.X, eventData.Y);
         }
 
         if (inputExceeded)
@@ -69,6 +77,7 @@ public sealed class Rm2kEventScheduler
     public void Clear()
     {
         _events.Clear();
+        _positions.Clear();
         _active.Clear();
         _activeTriggers.Clear();
         SyncPlayerInputLock();
@@ -85,20 +94,10 @@ public sealed class Rm2kEventScheduler
 
     public bool TriggerAction(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Action);
     public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touch);
-
-    /// <summary>
-    /// Starts an Event Touch/Collision page for a moving event that collided
-    /// with the player. Event movement itself is owned by the future movement
-    /// controller; this scheduler method only establishes the correct serialized
-    /// foreground trigger path and page selection.
-    /// </summary>
     public bool TriggerCollision(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Collision);
 
-    public bool TriggerCollisionAt(int pX, int pY)
-        => TriggerAt(pX, pY, Rm2kEventTrigger.Collision);
-
     /// <summary>
-    /// Triggers the first event at the coordinate that actually has an eligible
+    /// Triggers the first event at the runtime coordinate that has an eligible
     /// page for the requested trigger. Multiple events may legally share a map
     /// coordinate, so a non-matching earlier event must not mask a later one.
     /// </summary>
@@ -106,7 +105,8 @@ public sealed class Rm2kEventScheduler
     {
         foreach (var eventData in _events)
         {
-            if (eventData.X != pX || eventData.Y != pY)
+            if (!_positions.TryGetValue(eventData.Id, out var position)
+                || position.X != pX || position.Y != pY)
             {
                 continue;
             }
@@ -118,17 +118,57 @@ public sealed class Rm2kEventScheduler
         return false;
     }
 
+    public bool TryGetEventPosition(int pEventId, out int pX, out int pY)
+    {
+        if (_positions.TryGetValue(pEventId, out var position))
+        {
+            pX = position.X;
+            pY = position.Y;
+            return true;
+        }
+        pX = 0;
+        pY = 0;
+        return false;
+    }
+
+    public bool TrySetEventPosition(int pEventId, int pX, int pY)
+    {
+        if (!_positions.ContainsKey(pEventId))
+        {
+            return false;
+        }
+        _positions[pEventId] = (pX, pY);
+        return true;
+    }
+
+    public IReadOnlyDictionary<int, (int X, int Y)> SnapshotEventPositions()
+        => new Dictionary<int, (int X, int Y)>(_positions);
+
+    public bool TryGetActiveLayer(int pEventId, out int pLayer)
+    {
+        var eventData = _events.FirstOrDefault(pEvent => pEvent.Id == pEventId);
+        var page = eventData == null ? null : Rm2kEventPageSelector.SelectActive(eventData, _state);
+        if (page == null)
+        {
+            pLayer = 0;
+            return false;
+        }
+        pLayer = page.Layer;
+        return true;
+    }
+
     /// <summary>
-    /// Returns whether an active same-layer event occupies the coordinate.
-    /// This is geometry/collision information only; it does not start commands.
-    /// Through/move-route overrides are not modeled yet and must be added before
-    /// this becomes a complete RPG_RT collision implementation.
+    /// Returns whether an active same-layer event occupies the runtime
+    /// coordinate. pIgnoreEventId allows a moving event to exclude itself.
+    /// Through/move-route overrides are not modeled yet.
     /// </summary>
-    public bool HasBlockingSameLayerEventAt(int pX, int pY)
+    public bool HasBlockingSameLayerEventAt(int pX, int pY, int pIgnoreEventId = 0)
     {
         foreach (var eventData in _events)
         {
-            if (eventData.X != pX || eventData.Y != pY)
+            if (eventData.Id == pIgnoreEventId
+                || !_positions.TryGetValue(eventData.Id, out var position)
+                || position.X != pX || position.Y != pY)
             {
                 continue;
             }
