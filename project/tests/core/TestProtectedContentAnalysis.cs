@@ -83,6 +83,7 @@ public sealed class TestProtectedContentAnalysis : TestBase
         var root = ProjectSettings.GlobalizePath(Root.PathJoin("wolf"));
         Directory.CreateDirectory(Path.Combine(root, "BasicData"));
         File.WriteAllText(Path.Combine(root, "Game.dat"), "WOLF");
+        File.WriteAllText(Path.Combine(root, "BasicData", "SystemDatabase.dat"), "plain metadata marker");
         File.WriteAllBytes(Path.Combine(root, "Data.wolf"), new byte[] { 1, 2, 3, 4 });
         var library = new UniversalRpgLibraryAdapter();
         var analysis = library.Analyze(root);
