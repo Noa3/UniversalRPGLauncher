@@ -12,6 +12,16 @@ public enum GameContentProtectionKind
     Unknown,
 }
 
+public static class ProtectedContentSchemes
+{
+    public const string RpgMakerMvAssets = "rpg-maker-mv-assets";
+    public const string RpgMakerMzAssets = "rpg-maker-mz-assets";
+    public const string Rgss1Archive = "rpg-maker-rgss1-archive";
+    public const string Rgss2Archive = "rpg-maker-rgss2-archive";
+    public const string Rgss3Archive = "rpg-maker-rgss3-archive";
+    public const string WolfProtectedArchive = "wolf-protected-archive";
+}
+
 public sealed class GameContentEntry
 {
     public string LogicalPath { get; init; } = "";
