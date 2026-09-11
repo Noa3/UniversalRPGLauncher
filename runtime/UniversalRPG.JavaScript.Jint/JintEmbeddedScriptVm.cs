@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using Jint;
 using UniversalRPG.Sdk;
 
@@ -82,20 +81,21 @@ public sealed class JintScriptVmFactory : IEmbeddedScriptVmFactory
 
 /// <summary>
 /// Constrained Jint-backed implementation of UniversalRPG's VM contract.
-/// CLR exposure is never enabled. Game-authored JavaScript is decoded as strict
-/// UTF-8 and each host entry runs under Jint's untrusted-code operation budget.
+/// CLR exposure is never enabled. The adapter intentionally targets the
+/// published Jint 4.16.2 constraint surface rather than unreleased main-branch
+/// security APIs. Game-authored JavaScript is strict UTF-8 and every top-level
+/// execute/invoke entry is bounded by Jint's statement, memory, timeout,
+/// recursion and native stack guards.
 /// </summary>
 public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
 {
     private const int MaxStoredModules = 4096;
     private const int DefaultMaxStatements = 5_000_000;
-    private const uint DefaultMaxArraySize = 1_000_000;
 
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     private readonly Dictionary<string, string> _modules = new(StringComparer.Ordinal);
     private Engine? _engine;
-    private UntrustedCodeLimits? _limits;
     private ScriptExecutionPolicy _policy = ScriptExecutionPolicy.SafeDefault;
     private bool _disposed;
 
@@ -178,17 +178,14 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         {
             return SdkOperationResult.Failed("jint.module-missing", $"JavaScript module '{pScriptId}' is not loaded.");
         }
-        if (_engine == null || _limits == null)
+        if (_engine == null)
         {
             return SdkOperationResult.Failed("jint.not-configured", "Jint engine is unavailable.");
         }
 
         try
         {
-            using (_limits.BeginOperation(_engine, CancellationToken.None))
-            {
-                _engine.Execute(source);
-            }
+            _engine.Execute(source);
             State = ScriptVmState.Running;
             return SdkOperationResult.Succeeded();
         }
@@ -212,7 +209,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         {
             return SdkOperationResult.Failed("jint.invocation-invalid", "JavaScript invocation requires a bounded member name.");
         }
-        if (_engine == null || _limits == null)
+        if (_engine == null)
         {
             return SdkOperationResult.Failed("jint.not-configured", "Jint engine is unavailable.");
         }
@@ -222,19 +219,16 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
             .ToArray();
         try
         {
-            using (_limits.BeginOperation(_engine, CancellationToken.None))
+            if (string.IsNullOrWhiteSpace(pInvocation.Target)
+                || pInvocation.Target.Equals("globalThis", StringComparison.Ordinal))
             {
-                if (string.IsNullOrWhiteSpace(pInvocation.Target)
-                    || pInvocation.Target.Equals("globalThis", StringComparison.Ordinal))
-                {
-                    _engine.Invoke(pInvocation.Member, arguments);
-                }
-                else
-                {
-                    var target = _engine.GetValue(pInvocation.Target);
-                    var member = _engine.GetValue(target, pInvocation.Member);
-                    _engine.Invoke(member, arguments);
-                }
+                _engine.Invoke(pInvocation.Member, arguments);
+            }
+            else
+            {
+                var target = _engine.GetValue(pInvocation.Target);
+                var member = _engine.GetValue(target, pInvocation.Member);
+                _engine.Invoke(member, arguments);
             }
             return SdkOperationResult.Succeeded();
         }
@@ -285,20 +279,37 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         DisposeEngine();
         _modules.Clear();
         _policy = pPolicy;
-        _limits = CreateLimits(pPolicy);
         try
         {
-            var options = new Options().ForUntrustedCode(_limits);
+            var timeout = TimeSpan.FromMilliseconds(pPolicy.MaxExecutionMillisecondsPerTick);
+            var memoryBytes = checked((long)pPolicy.MaxMemoryMegabytes * 1024L * 1024L);
+            var requestedStatements = (long)pPolicy.MaxExecutionMillisecondsPerTick * 100_000L;
+            var maxStatements = (int)Math.Clamp(requestedStatements, 10_000L, DefaultMaxStatements);
+
+            var options = new Options()
+                .LimitMemory(memoryBytes)
+                .TimeoutInterval(timeout)
+                .MaxStatements(maxStatements)
+                .LimitRecursion(pPolicy.MaxCallDepth)
+                .DisableStringCompilation();
+            options.Interop.Enabled = false;
+            options.Interop.AllowGetType = false;
+            options.Interop.AllowSystemReflection = false;
+            options.Interop.AllowWrite = false;
+            options.AgentCanSuspend = false;
+            options.Constraints.StackOverflowGuard = true;
+
             _engine = new Engine(options);
             State = ScriptVmState.Configured;
             return SdkOperationResult.Succeeded(new[]
             {
-                SdkDiagnostic.Info("jint.configured", "Jint VM configured with untrusted-code resource limits and CLR access disabled."),
+                SdkDiagnostic.Info(
+                    "jint.configured",
+                    "Jint 4.16.2 VM configured with memory/time/statement/recursion/native-stack limits, dynamic string compilation disabled, and CLR access disabled."),
             });
         }
         catch (Exception exception) when (!IsCritical(exception))
         {
-            _limits = null;
             State = ScriptVmState.Faulted;
             return SdkOperationResult.Failed("jint.configure-failed", exception.Message);
         }
@@ -308,27 +319,6 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     {
         _engine?.Dispose();
         _engine = null;
-        _limits = null;
-    }
-
-    private static UntrustedCodeLimits CreateLimits(ScriptExecutionPolicy pPolicy)
-    {
-        var timeout = TimeSpan.FromMilliseconds(pPolicy.MaxExecutionMillisecondsPerTick);
-        var operationTimeout = TimeSpan.FromMilliseconds(Math.Max(2L, (long)pPolicy.MaxExecutionMillisecondsPerTick * 2L));
-        var memoryBytes = checked((long)pPolicy.MaxMemoryMegabytes * 1024L * 1024L);
-        var requestedStatements = (long)pPolicy.MaxExecutionMillisecondsPerTick * 100_000L;
-        var maxStatements = (int)Math.Clamp(requestedStatements, 10_000L, DefaultMaxStatements);
-        return new UntrustedCodeLimits
-        {
-            TimeoutInterval = timeout,
-            MaxStatements = maxStatements,
-            MemoryLimit = memoryBytes,
-            MaxRecursionDepth = pPolicy.MaxCallDepth,
-            MaxArraySize = DefaultMaxArraySize,
-            RegexTimeout = TimeSpan.FromMilliseconds(Math.Max(1, Math.Min(250, pPolicy.MaxExecutionMillisecondsPerTick))),
-            PromiseTimeout = operationTimeout,
-            MaxOperationDuration = operationTimeout,
-        };
     }
 
     private static string ConstraintErrorCode(Exception pException)
