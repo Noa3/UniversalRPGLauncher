@@ -100,6 +100,45 @@ public partial class TestRm2kEventSchedulerBehavior : TestBase
             "autorun page restarts after completing while its page remains active");
     }
 
+    public void Test_ForegroundAutorunsRunSerially()
+    {
+        var state = new GameSimulationState();
+        state.Switches.Add(true); // condition for event 10
+
+        var first = new Rm2kMap.Event(10, 0, 0);
+        var firstPage = new Rm2kMap.EventPage
+        {
+            Trigger = (int)Rm2kEventTrigger.Autorun,
+            Layer = 1,
+            Conditions = new Dictionary<string, object>
+            {
+                ["switch_id"] = 1,
+                ["switch_value"] = true,
+            },
+        };
+        firstPage.Commands.Add(new Rm2kMap.EventCommand(
+            EventInterpreter.ControlSwitches,
+            new List<int> { 1, 1, 0, EventInterpreter.SwitchModeOff }));
+        firstPage.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+        first.Pages.Add(firstPage);
+
+        var second = EventWithPage(11, 0, 0, Rm2kEventTrigger.Autorun, layer: 1, switchId: 2);
+        var scheduler = new Rm2kEventScheduler(state);
+        scheduler.SetEvents(new[] { first, second });
+
+        scheduler.ExecuteFrame();
+        AssertFalse(state.Switches[0], "first autorun executed and disabled its own condition");
+        AssertEq(state.Switches.Count, 1, "second foreground autorun did not run concurrently");
+        AssertTrue(scheduler.ForegroundBusy, "first foreground interpreter remains active until End");
+
+        scheduler.ExecuteFrame(); // End first interpreter
+        AssertFalse(scheduler.ForegroundBusy, "foreground slot clears after End");
+
+        scheduler.ExecuteFrame(); // second autorun may now start
+        AssertTrue(state.Switches.Count >= 2 && state.Switches[1],
+            "next eligible autorun starts only after the previous foreground event finishes");
+    }
+
     private static Rm2kMap.Event EventWithPage(
         int pId,
         int pX,
