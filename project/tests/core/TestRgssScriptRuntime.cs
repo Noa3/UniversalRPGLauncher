@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using UniversalRPG.Rgss;
 using UniversalRPG.Sdk;
@@ -18,9 +17,9 @@ public sealed class TestRgssScriptRuntime : TestBase
             vm,
             new[]
             {
-                Entry(2, 200, "Second", "SECOND"),
-                Entry(0, 100, "First", "FIRST"),
-                Entry(1, 150, "Patch", "PATCH"),
+                Entry(2, 200, "Second", "SECOND", ScriptLanguageIds.Rgss3Ruby),
+                Entry(0, 100, "First", "FIRST", ScriptLanguageIds.Rgss3Ruby),
+                Entry(1, 150, "Patch", "PATCH", ScriptLanguageIds.Rgss3Ruby),
             });
 
         AssertTrue(runtime.DiscoverScripts().Success);
@@ -40,7 +39,7 @@ public sealed class TestRgssScriptRuntime : TestBase
         using var runtime = new RgssScriptRuntime(
             RgssGeneration.Rgss3,
             vm,
-            new[] { Entry(0, 1, "Main", "nil") });
+            new[] { Entry(0, 1, "Main", "nil", ScriptLanguageIds.Rgss3Ruby) });
 
         var result = runtime.LoadScripts(ScriptExecutionPolicy.SafeDefault);
 
@@ -55,7 +54,7 @@ public sealed class TestRgssScriptRuntime : TestBase
         using var runtime = new RgssScriptRuntime(
             RgssGeneration.Rgss1,
             vm,
-            new[] { Entry(0, 1, "Main", "puts 'x'") });
+            new[] { Entry(0, 1, "Main", "puts 'x'", ScriptLanguageIds.Rgss1Ruby) });
 
         AssertTrue(runtime.LoadScripts(ScriptExecutionPolicy.SafeDefault).Success);
         AssertEq(vm.ExecutedIds.Count, 0, "loading game-authored code does not silently execute it");
@@ -74,9 +73,9 @@ public sealed class TestRgssScriptRuntime : TestBase
             vm,
             new[]
             {
-                Entry(0, 1, "A", "a"),
-                Entry(1, 2, "B", "b"),
-                Entry(2, 3, "C", "c"),
+                Entry(0, 1, "A", "a", ScriptLanguageIds.Rgss2Ruby),
+                Entry(1, 2, "B", "b", ScriptLanguageIds.Rgss2Ruby),
+                Entry(2, 3, "C", "c", ScriptLanguageIds.Rgss2Ruby),
             });
 
         AssertTrue(runtime.LoadScripts(ScriptExecutionPolicy.SafeDefault).Success);
@@ -93,7 +92,7 @@ public sealed class TestRgssScriptRuntime : TestBase
         using var runtime = new RgssScriptRuntime(
             RgssGeneration.Rgss3,
             vm,
-            new[] { Entry(0, 1, "Main", "nil") });
+            new[] { Entry(0, 1, "Main", "nil", ScriptLanguageIds.Rgss3Ruby) });
         AssertTrue(runtime.LoadScripts(ScriptExecutionPolicy.SafeDefault).Success);
 
         var result = runtime.InvokeHook(new ScriptHookRequest
@@ -112,9 +111,20 @@ public sealed class TestRgssScriptRuntime : TestBase
         AssertEq(vm.Invocations[0].Arguments.Count, 2);
     }
 
-    private static RgssScriptEntry Entry(int pIndex, int pId, string pName, string pSource)
+    private static RgssScriptEntry Entry(
+        int pIndex,
+        int pId,
+        string pName,
+        string pSource,
+        string pLanguageId)
     {
         var source = Encoding.UTF8.GetBytes(pSource);
+        var relativePath = pLanguageId switch
+        {
+            ScriptLanguageIds.Rgss1Ruby => "Data/Scripts.rxdata",
+            ScriptLanguageIds.Rgss2Ruby => "Data/Scripts.rvdata",
+            _ => "Data/Scripts.rvdata2",
+        };
         return new RgssScriptEntry
         {
             ArchiveIndex = pIndex,
@@ -125,8 +135,8 @@ public sealed class TestRgssScriptRuntime : TestBase
             {
                 Id = $"rgss-script:{pIndex}",
                 DisplayName = pName,
-                LanguageId = ScriptLanguageIds.Rgss3Ruby,
-                RelativePath = "Data/Scripts.rvdata2",
+                LanguageId = pLanguageId,
+                RelativePath = relativePath,
                 Sha256 = new string('a', 64),
                 Origin = ScriptOrigin.Game,
                 Required = true,
