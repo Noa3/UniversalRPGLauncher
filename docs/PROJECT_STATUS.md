@@ -1,7 +1,7 @@
 # UniversalRPG — Project Status
 
-> **Last reviewed:** 2026-09-09  
-> **Repository baseline reviewed:** `main` at commit `782ea66141e494d32929a9cc41056523177888eb`  
+> **Last reviewed:** 2026-09-11  
+> **Reviewed main baseline:** `782ea66141e494d32929a9cc41056523177888eb`  
 > **Primary development focus:** RM2000/2003 faithful runtime foundation
 
 ## Executive Summary
@@ -12,7 +12,23 @@ It is **not yet a general playable replacement runtime**.
 
 RM2000/2003 are the only RPG Maker generations with a meaningful parser-backed gameplay/runtime foundation. WOLF RPG Editor has a deliberately narrow experimental unencrypted plain-data runtime/VM slice. XP/VX/VX Ace and MV/MZ are currently detection/parsing/metadata boundaries only. RM95, Dante 98 and Unite are research-oriented detection boundaries.
 
-The last recorded canonical validation on `main` is **296/296 headless tests passed**, with clean .NET build and `scripts/validate.sh`. That is historical evidence for the reviewed commit; run validation again after any code change.
+The last recorded canonical validation on `main` is **296/296 headless tests passed**, with clean .NET build and `scripts/validate.sh`. The current branch includes runtime-selection refactoring and requires fresh validation before merge.
+
+## Current Branch Changes
+
+The current branch is no longer documentation-only.
+
+Architecture hardening now includes:
+
+- project Kanban/work-board removed; agents work directly from source/tests, `SESSION_STATE.md`, project status and roadmap
+- `EnginePluginRegistry.Select()` can require explicit capabilities
+- `EnginePluginHost` requires `PluginCapability.Runtime` before selecting a launch target
+- `EnginePluginRegistry.CreateRuntime()` defensively re-checks Runtime capability
+- generic `EngineBootstrapRuntime` now fails closed instead of presenting a successful metadata-only lifecycle as runtime support
+- unused `RgssEngineRuntime.cs` pseudo-runtime removed
+- regression coverage added to ensure a detection-only plugin cannot be launched or have its runtime factory invoked
+
+This makes the code match the documented principle that detection, parsing and runtime execution are separate capabilities.
 
 ## Engine Status Matrix
 
@@ -66,7 +82,7 @@ Implemented or partially implemented:
 - virtual filesystem primitives
 - compatibility profile/database primitives
 - RTP registry and diagnostics
-- runtime capability checks
+- explicit plugin capability checks
 - renderer-neutral RM2K framebuffer/sprite/presentation structures
 - runtime-owned bounded save codec infrastructure
 - structured diagnostics
@@ -137,6 +153,8 @@ Implemented:
 - archive/runtime identification
 - runtime selection correctly refuses unsupported execution
 
+The old metadata-only `RgssEngineRuntime` class has been removed because it had no active runtime registration and could imply support that did not exist.
+
 Missing:
 
 - embedded Ruby VM
@@ -186,34 +204,37 @@ Only candidate/research detection exists. Generic Unity exports do not prove RPG
 ## Validation and CI
 
 - `scripts/validate.sh` is the canonical local validation command.
-- A GitHub validation workflow exists; therefore old documentation that says “No CI” is obsolete.
-- Export presets exist, but release exports are not yet validated across all target platforms.
-- Historical counts in session handoffs should not be copied forward as current truth.
+- a GitHub validation workflow exists
+- export presets exist, but release exports are not yet validated across all target platforms
+- historical counts in session handoffs should not be copied forward as current truth
+- **current branch validation is pending after runtime capability hardening**
 
 ## Immediate Priorities
 
-1. keep `main` build/test green and repair P0 regressions first
-2. finish RM2K/2003 passability and map-rendering prerequisites using verified semantics
-3. continue verified RM2K/2003 event/runtime slices toward a small real playable milestone
-4. separate RM2K vs RM2K3 behavior where required
-5. improve real authorized fixtures and end-to-end compatibility evidence
-6. continue WOLF native-format work only from authorized/verified specifications and fixtures
-7. select and prototype an embedded Ruby boundary for RGSS after the RM2K milestone is sufficiently stable
-8. select and sandbox a JavaScript VM for MV/MZ
-9. keep RM95/Dante/Unite as research tracks unless evidence justifies promotion
+1. run focused plugin-contract tests and full validation for the current branch
+2. repair any regression found by the capability-gating refactor
+3. once green, finish RM2K/2003 passability and map-rendering prerequisites using verified semantics
+4. continue verified RM2K/2003 event/runtime slices toward a small real playable milestone
+5. separate RM2K vs RM2K3 behavior where required
+6. improve real authorized fixtures and end-to-end compatibility evidence
+7. continue WOLF native-format work only from authorized/verified specifications and fixtures
+8. select and prototype an embedded Ruby boundary for RGSS after the RM2K milestone is sufficiently stable
+9. select and sandbox a JavaScript VM for MV/MZ
+10. keep RM95/Dante/Unite as research tracks unless evidence justifies promotion
 
 ## Important Documentation Rule
 
 Living documents:
 
 - `README.md`
-- `KANBAN.md`
 - `SESSION_STATE.md`
+- `AGENTS.md`
+- `HERMES_AUTONOMOUS_PROMPT.md`
 - `docs/PROJECT_STATUS.md`
 - `docs/ARCHITECTURE.md`
 - `docs/ROADMAP.md`
 
-Historical documents such as `SESSION_HANDOFF_YYYY-MM-DD.md` and dated QA reports describe the repository at a particular time and should not override current source/tests.
+There is intentionally no Kanban/work-board file. Historical documents such as `SESSION_HANDOFF_YYYY-MM-DD.md` and dated QA reports describe the repository at a particular time and should not override current source/tests.
 
 ## Known Strategic Decisions Still Open
 
