@@ -13,11 +13,11 @@ using UniversalRPG.Rm2k.Simulation;
 namespace UniversalRPG.Plugins;
 
 /// <summary>
-/// Minimal native RM2K/RM2K3 runtime backend. It loads the validated LDB/LMT
-/// and first LMU through the existing bounded parser, then advances a
-/// deterministic 60 Hz simulation clock. Decoded native event pages are driven
-/// by the scheduler during Update(); unsupported commands remain data-only and
-/// diagnostic. Launching no longer requires the original RPG_RT executable.
+/// Native RM2K/RM2K3 runtime backend. It loads bounded LDB/LMT/LMU data,
+/// configures chipset-derived map geometry, and advances a deterministic 60 Hz
+/// simulation clock. Decoded native event pages are driven by the scheduler;
+/// unsupported commands remain diagnostic and no original RPG_RT executable is
+/// launched.
 /// </summary>
 public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRuntimeDebugTools
 {
@@ -29,6 +29,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Rm2kEventScheduler _eventScheduler;
     private readonly Rm2kRendererAdapter _rendererAdapter = new();
     private readonly Rm2kSpriteAdapter _spriteAdapter = new();
+    private Rm2kPassabilityMap? _passabilityMap;
     private bool _debugToolsEnabled;
 
     public Rm2kEngineRuntime(string pPluginId, PluginGameInfo pGame)
@@ -43,6 +44,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     public Godot.Collections.Dictionary? MapTreeData { get; private set; }
     public Godot.Collections.Dictionary? CurrentMapData { get; private set; }
     public VirtualFramebuffer? Framebuffer { get; private set; }
+    public Rm2kPassabilityMap? PassabilityMap => _passabilityMap;
     public IReadOnlyList<Rm2kSpriteDescriptor> SpriteDescriptors { get; private set; } = Array.Empty<Rm2kSpriteDescriptor>();
     public PresentationState Presentation { get; } = new();
     public GameSimulationState Simulation { get; } = new();
@@ -153,7 +155,27 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
     public bool TryMove(int pDeltaX, int pDeltaY)
     {
-        if (State != PluginRuntimeState.Running || !Simulation.TryMove(pDeltaX, pDeltaY))
+        if (State != PluginRuntimeState.Running)
+        {
+            return false;
+        }
+
+        var cardinal = Math.Abs(pDeltaX) + Math.Abs(pDeltaY) == 1;
+        if (cardinal && _passabilityMap != null)
+        {
+            Simulation.FacingDirection = (byte)(pDeltaX > 0 ? 6 : pDeltaX < 0 ? 4 : pDeltaY > 0 ? 2 : 8);
+            if (!_passabilityMap.CanMove(
+                    Simulation.MapX,
+                    Simulation.MapY,
+                    Simulation.MapX + pDeltaX,
+                    Simulation.MapY + pDeltaY))
+            {
+                Simulation.AddDiagnostic("Movement blocked by RM2K chipset passability.");
+                return false;
+            }
+        }
+
+        if (!Simulation.TryMove(pDeltaX, pDeltaY))
         {
             return false;
         }
@@ -274,6 +296,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         MapTreeData = null;
         CurrentMapData = null;
         Framebuffer = null;
+        _passabilityMap = null;
         SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
         State = PluginRuntimeState.Stopped;
         return PluginOperationResult.Succeeded();
@@ -286,6 +309,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         MapTreeData = null;
         CurrentMapData = null;
         Framebuffer = null;
+        _passabilityMap = null;
         SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
     }
 
@@ -317,6 +341,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         Godot.Collections.Dictionary pMapTreeData,
         string? pMapPath)
     {
+        _passabilityMap = null;
         if (pMapData == null)
         {
             Simulation.AddDiagnostic("RM2K map simulation is unavailable because no LMU map was loaded.");
@@ -351,11 +376,23 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
 
         var passability = new bool[checked(width * height)];
+        if (DatabaseData != null
+            && Rm2kPassabilityMap.TryCreate(DatabaseData, pMapData, out var decodedPassability, out var passabilityError)
+            && decodedPassability != null)
+        {
+            _passabilityMap = decodedPassability;
+            Array.Fill(passability, true);
+            Simulation.AddDiagnostic("RM2K chipset directional passability decoded for the loaded map.");
+        }
+        else
+        {
+            var reason = DatabaseData == null ? "database is unavailable" : passabilityError;
+            Simulation.AddDiagnostic($"RM2K chipset passability unavailable ({reason}); movement remains fail-closed.");
+        }
+
         Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, passability);
         Simulation.MapX = Math.Clamp(mapX, 0, width - 1);
         Simulation.MapY = Math.Clamp(mapY, 0, height - 1);
-        Simulation.AddDiagnostic(
-            "RM2K chipset passability is not decoded yet; movement remains fail-closed until the chipset parser slice is available.");
     }
 
     private static int ParseMapId(string? pMapPath)
