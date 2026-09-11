@@ -68,6 +68,32 @@ public sealed class SdkOperationResult
         => pDiagnostics == null ? Array.Empty<SdkDiagnostic>() : new List<SdkDiagnostic>(pDiagnostics);
 }
 
+public sealed class SdkValueResult<T>
+{
+    private SdkValueResult(bool pSuccess, T? pValue, SdkOperationResult pResult)
+    {
+        Success = pSuccess;
+        Value = pValue;
+        Result = pResult;
+    }
+
+    public bool Success { get; }
+    public T? Value { get; }
+    public SdkOperationResult Result { get; }
+
+    public static SdkValueResult<T> Succeeded(T pValue, IEnumerable<SdkDiagnostic>? pDiagnostics = null)
+    {
+        if (pValue is null) throw new ArgumentNullException(nameof(pValue));
+        return new SdkValueResult<T>(true, pValue, SdkOperationResult.Succeeded(pDiagnostics));
+    }
+
+    public static SdkValueResult<T> Failed(
+        string pErrorCode,
+        string pErrorMessage,
+        IEnumerable<SdkDiagnostic>? pDiagnostics = null)
+        => new(false, default, SdkOperationResult.Failed(pErrorCode, pErrorMessage, pDiagnostics));
+}
+
 public static class UniversalRpgSdkVersion
 {
     /// <summary>
