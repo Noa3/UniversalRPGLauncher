@@ -62,6 +62,8 @@ public sealed class RgssScriptArchiveResult
 /// </summary>
 public static class RgssScriptArchiveReader
 {
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+
     public static RgssScriptArchiveResult Read(
         string pPath,
         RgssGeneration pGeneration,
@@ -151,11 +153,7 @@ public static class RgssScriptArchiveReader
                     return Failure("Total RGSS script source exceeds the bounded decompression limit.");
                 }
 
-                var name = decoder.Decode(nameBytes.Data);
-                if (string.IsNullOrEmpty(name) && nameBytes.Data.Length > 0)
-                {
-                    name = $"Script {index}";
-                }
+                var name = DecodeScriptName(nameBytes, decoder, index);
                 var hash = Convert.ToHexString(SHA256.HashData(source)).ToLowerInvariant();
                 scripts.Add(new RgssScriptEntry
                 {
@@ -191,6 +189,29 @@ public static class RgssScriptArchiveReader
         {
             return Failure("RGSS script archive exceeded bounded integer limits.");
         }
+    }
+
+    private static string DecodeScriptName(MarshalBytes pBytes, LegacyTextDecoder pDecoder, int pIndex)
+    {
+        if (pBytes.Data.Length == 0) return "";
+        try
+        {
+            if (pBytes.EncodingName.Equals("UTF-8", StringComparison.OrdinalIgnoreCase))
+            {
+                return StrictUtf8.GetString(pBytes.Data);
+            }
+            if (pBytes.EncodingName.Equals("US-ASCII", StringComparison.OrdinalIgnoreCase))
+            {
+                return Encoding.ASCII.GetString(pBytes.Data);
+            }
+        }
+        catch (DecoderFallbackException)
+        {
+            return $"Script {pIndex}";
+        }
+
+        var decoded = pDecoder.Decode(pBytes.Data);
+        return string.IsNullOrEmpty(decoded) ? $"Script {pIndex}" : decoded;
     }
 
     private static string LanguageId(RgssGeneration pGeneration) => pGeneration switch
@@ -243,6 +264,7 @@ public static class RgssScriptArchiveReader
     {
         public MarshalBytes(byte[] pData) => Data = pData;
         public byte[] Data { get; }
+        public string EncodingName { get; set; } = "";
     }
 
     private sealed class RubyMarshalSubsetReader
@@ -332,10 +354,34 @@ public static class RgssScriptArchiveReader
             }
             for (var index = 0; index < count; index++)
             {
-                _ = ReadObject(pDepth);
-                _ = ReadObject(pDepth);
+                var key = ReadObject(pDepth);
+                var attribute = ReadObject(pDepth);
+                if (value is MarshalBytes bytes && key is string name)
+                {
+                    ApplyStringIvar(bytes, name, attribute);
+                }
             }
             return value;
+        }
+
+        private static void ApplyStringIvar(MarshalBytes pBytes, string pName, object? pValue)
+        {
+            if (pName == "E" && pValue is bool encoded)
+            {
+                pBytes.EncodingName = encoded ? "UTF-8" : "US-ASCII";
+                return;
+            }
+            if (pName.Equals("encoding", StringComparison.OrdinalIgnoreCase))
+            {
+                if (pValue is string symbol)
+                {
+                    pBytes.EncodingName = symbol;
+                }
+                else if (pValue is MarshalBytes nameBytes && nameBytes.Data.Length <= 128)
+                {
+                    pBytes.EncodingName = Encoding.ASCII.GetString(nameBytes.Data);
+                }
+            }
         }
 
         private string ReadSymbol()
