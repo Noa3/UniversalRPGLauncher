@@ -112,7 +112,7 @@ static class Smoke
         var policy = Policy(25);
         var created = factory.Create(new ScriptVmRequest
         {
-            LanguageId = ScriptLanguageIds.RpgMakerMzJavaScript,
+            LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript,
             CompatibilityProfile = "javascript-core",
             Policy = policy,
             RequiredFeatures = new[] { "javascript" },
