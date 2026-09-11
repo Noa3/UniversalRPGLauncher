@@ -376,8 +376,9 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
 
         var passability = new bool[checked(width * height)];
+        var passabilityError = "database is unavailable";
         if (DatabaseData != null
-            && Rm2kPassabilityMap.TryCreate(DatabaseData, pMapData, out var decodedPassability, out var passabilityError)
+            && Rm2kPassabilityMap.TryCreate(DatabaseData, pMapData, out var decodedPassability, out passabilityError)
             && decodedPassability != null)
         {
             _passabilityMap = decodedPassability;
@@ -386,8 +387,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         else
         {
-            var reason = DatabaseData == null ? "database is unavailable" : passabilityError;
-            Simulation.AddDiagnostic($"RM2K chipset passability unavailable ({reason}); movement remains fail-closed.");
+            Simulation.AddDiagnostic($"RM2K chipset passability unavailable ({passabilityError}); movement remains fail-closed.");
         }
 
         Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, passability);
