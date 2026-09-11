@@ -64,7 +64,11 @@ public sealed class SpriteDescriptorResult
 
 public sealed class Rm2kSpriteAdapter
 {
-    public SpriteDescriptorResult BuildDescriptors(Godot.Collections.Dictionary pMapData, int pPlayerX, int pPlayerY)
+    public SpriteDescriptorResult BuildDescriptors(
+        Godot.Collections.Dictionary pMapData,
+        int pPlayerX,
+        int pPlayerY,
+        IReadOnlyDictionary<int, (int X, int Y)>? pRuntimeEventPositions = null)
     {
         if (!ReadPositiveInt(pMapData, "width", out var width) || !ReadPositiveInt(pMapData, "height", out var height))
             return SpriteDescriptorResult.Failed("Sprite adapter requires positive map dimensions.");
@@ -82,8 +86,17 @@ public sealed class Rm2kSpriteAdapter
                 if (raw.VariantType != Godot.Variant.Type.Dictionary)
                     return SpriteDescriptorResult.Failed("Map event entry is not a dictionary.");
                 var item = raw.AsGodotDictionary();
-                if (!ReadInt(item, "id", out var id) || !ReadInt(item, "x", out var x) || !ReadInt(item, "y", out var y) || !Inside(x, y, width, height))
-                    return SpriteDescriptorResult.Failed("Map event descriptor is malformed or outside map bounds.");
+                if (!ReadInt(item, "id", out var id) || !ReadInt(item, "x", out var x) || !ReadInt(item, "y", out var y))
+                    return SpriteDescriptorResult.Failed("Map event descriptor is malformed.");
+
+                if (pRuntimeEventPositions != null && pRuntimeEventPositions.TryGetValue(id, out var runtimePosition))
+                {
+                    x = runtimePosition.X;
+                    y = runtimePosition.Y;
+                }
+                if (!Inside(x, y, width, height))
+                    return SpriteDescriptorResult.Failed($"Map event {id} runtime position is outside map bounds.");
+
                 var name = ReadString(item, "name");
                 result.Add(new() { Kind = Rm2kSpriteKind.Event, EventId = id, X = x, Y = y, Name = name });
             }
