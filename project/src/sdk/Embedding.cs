@@ -51,6 +51,7 @@ public interface IUniversalRpgLibrary
     int ApiVersion { get; }
     IReadOnlyList<EngineSupportDescriptor> Engines { get; }
     GameAnalysis Analyze(string pGameDirectory);
+    ContentSourceResult OpenProtectedContent(ProtectedContentDescriptor pDescriptor);
     SdkSessionResult CreateSession(GameAnalysis pAnalysis);
 }
 
