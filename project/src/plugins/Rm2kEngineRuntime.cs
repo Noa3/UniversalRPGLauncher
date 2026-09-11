@@ -201,15 +201,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             return false;
         }
-        if (CurrentMapData != null)
-        {
-            var spriteResult = _spriteAdapter.BuildDescriptors(
-                CurrentMapData, Simulation.MapX, Simulation.MapY);
-            if (spriteResult.Success)
-            {
-                SpriteDescriptors = spriteResult.Descriptors;
-            }
-        }
+        RefreshSpriteDescriptors();
 
         // Below-player touch pages can be entered successfully. Keep this
         // engine semantic in the runtime so all frontends behave identically.
@@ -289,6 +281,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             for (var tick = 0; tick < elapsedTicks; tick++)
             {
                 _eventScheduler.ExecuteFrame();
+                if (Simulation.IsTransferPending)
+                {
+                    var transfer = ApplyPendingTransfer();
+                    if (!transfer.Success)
+                    {
+                        return transfer;
+                    }
+                }
             }
         }
         return PluginOperationResult.Succeeded();
@@ -387,6 +387,100 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         Framebuffer = null;
         _passabilityMap = null;
         SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
+    }
+
+    private PluginOperationResult ApplyPendingTransfer()
+    {
+        if (!Simulation.IsTransferPending)
+        {
+            return PluginOperationResult.Succeeded();
+        }
+        if (DatabaseData == null || MapTreeData == null)
+        {
+            return Fail(PluginErrorCode.InvalidLifecycleTransition,
+                "RM2K transfer cannot be applied before database/map-tree initialization.", "transfer");
+        }
+        var root = ResolveGameDirectory();
+        if (root == null)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                "RM2K transfer cannot resolve the imported game directory.", "transfer");
+        }
+
+        var targetMapId = Simulation.PendingMapId;
+        var targetX = Simulation.PendingX;
+        var targetY = Simulation.PendingY;
+        var targetFacing = Simulation.FacingDirection;
+        var selection = Rm2kMapLocator.SelectMapById(root, targetMapId);
+        if (selection.Path == null)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                string.IsNullOrWhiteSpace(selection.Diagnostic)
+                    ? $"RM2K target map {targetMapId} is unavailable."
+                    : selection.Diagnostic,
+                "transfer");
+        }
+
+        var parsed = _parser.ParseMap(selection.Path);
+        if (!parsed.Success)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"Could not parse transfer target {Path.GetFileName(selection.Path)}: {parsed.Error?.Describe() ?? "unknown parser error"}",
+                "transfer");
+        }
+        var mapData = parsed.Data;
+        if (!TryReadInt(mapData, "width", out var width)
+            || !TryReadInt(mapData, "height", out var height)
+            || targetX < 0 || targetX >= width
+            || targetY < 0 || targetY >= height)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"RM2K transfer target ({targetMapId}, {targetX}, {targetY}) is outside the destination map.",
+                "transfer");
+        }
+
+        var renderResult = _rendererAdapter.CreateFramebuffer(mapData);
+        if (!renderResult.Success || renderResult.Framebuffer == null)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"Could not create framebuffer for transfer target: {renderResult.Error}", "transfer-render");
+        }
+        var spriteResult = _spriteAdapter.BuildDescriptors(mapData, targetX, targetY);
+        if (!spriteResult.Success)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"Could not create sprite descriptors for transfer target: {spriteResult.Error}", "transfer-sprites");
+        }
+
+        try
+        {
+            ConfigureSimulationMap(mapData, MapTreeData, selection.Path);
+        }
+        catch (InvalidDataException exception)
+        {
+            return Fail(PluginErrorCode.InvalidGame, exception.Message, "transfer-map");
+        }
+
+        Simulation.MapX = targetX;
+        Simulation.MapY = targetY;
+        Simulation.FacingDirection = targetFacing;
+        CurrentMapData = mapData;
+        Framebuffer = renderResult.Framebuffer;
+        SpriteDescriptors = spriteResult.Descriptors;
+        Presentation.Reset();
+        LoadCurrentMapEvents(mapData);
+        Simulation.IsTransferPending = false;
+        Simulation.PendingMapId = 0;
+        Simulation.PendingX = 0;
+        Simulation.PendingY = 0;
+        Simulation.AddDiagnostic($"RM2K transfer applied -> map {targetMapId} at ({targetX}, {targetY}).");
+        return PluginOperationResult.Succeeded(new[]
+        {
+            PluginDiagnostic.Info(
+                "rm2k.transfer-applied",
+                $"Loaded Map{targetMapId:D4}.lmu at ({targetX}, {targetY}).",
+                _pluginId),
+        });
     }
 
     private string? ResolveGameDirectory()
@@ -560,6 +654,20 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
         }
         _eventScheduler.SetEvents(events);
+    }
+
+    private void RefreshSpriteDescriptors()
+    {
+        if (CurrentMapData == null)
+        {
+            return;
+        }
+        var spriteResult = _spriteAdapter.BuildDescriptors(
+            CurrentMapData, Simulation.MapX, Simulation.MapY);
+        if (spriteResult.Success)
+        {
+            SpriteDescriptors = spriteResult.Descriptors;
+        }
     }
 
     private (int X, int Y) GetFacingStep()
