@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   script-semantics:
-    name: Embedded JavaScript semantic regressions
+    name: Script semantics and validation driver
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -24,6 +24,10 @@ jobs:
         run: node scripts/test-script-invocation-bridge.mjs
       - name: Test production PluginManager shim
         run: node scripts/test-web-plugin-shim.mjs
+      - name: Test PluginManager compatibility contract
+        run: node scripts/test-plugin-manager-contract.mjs
+      - name: Test validation failure gates with simulated tools
+        run: python3 scripts/test-validation-driver.py
 
   portable:
     name: Portable SDK and JavaScript VM

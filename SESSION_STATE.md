@@ -1,48 +1,52 @@
-# UniversalRPG Session Checkpoint
+# UniversalRPG session checkpoint
 
-Reviewed: 2026-09-12. Work branch: `docs/refresh-2026-09-09`, PR #1.
-There is intentionally no Kanban. Select coherent work from source, tests and project status.
+Updated: 2026-09-12. Branch: `docs/refresh-2026-09-09`, PR #1.
+No Kanban is maintained. Preserve unrelated source and choose work from actual code/tests.
 
-## Current objective
+## Latest work
 
-Stabilize the existing SDK, script adapter and RM2K runtime before adding more unvalidated subsystems. Custom game scripts and external SDK consumers remain first-class requirements.
+Parent: `e038cfb04d7ffc4cf4ff5e2d3eb8a4bfc5a7a880`.
 
-## Latest stabilization
+- MV/MZ and RGSS loaders now stop permanently after a failed external load, bootstrap or hook. A retry cannot replay earlier scripts into the partially initialized VM. Recovery requires a fresh runtime and VM.
+- Hooks require completed bootstrap; reentrant operations are refused. Ordinary provider/VM exceptions become explicit diagnostics. These guards are single-host-thread lifecycle rules, not general thread safety or rollback.
+- Shared `WebPluginLoadPlan` uses stable configured order and the first enabled exact plugin name. Loader and parameter shim share that plan. Selected parameter dictionaries are bounded snapshots.
+- PluginManager gained `setParameters` and scheduled `_scripts` names. Dynamic script loading, DOM/rendering/audio APIs remain unimplemented rather than faked.
+- Added 16 C# session-safety methods and 10 load-plan methods; existing RGSS hook test now bootstraps first.
+- `validate.sh` now verifies non-empty Jint/Godot completion summaries, rejects reported failures even with exit 0, requires the pinned .NET Godot build, and retains fresh per-stage logs.
+- CI includes the new JavaScript contract tests and simulated-tool validation-driver tests.
 
-- Fixed move-route references to nonexistent `PlayerX/PlayerY`; use canonical `MapX/MapY`.
-- Valid route switch IDs now expand lazy switch storage. Route inputs are snapshotted and invalid positions fail before arithmetic.
-- Added 14 movement-runner regression methods; corrected the old directional-passability test to check both adjacent edge flags over 256 mask pairs.
-- Jint invocation preserves the receiver (`this`), resolves getters inside one constrained call, and accepts only bounded primitive arguments rather than arbitrary CLR objects.
-- Aggregate stored script text now has a separate source-memory budget cleared on reset/dispose. This is not a total process-memory cap.
-- PluginManager configuration uses JSON.parse, preserving `__proto__` as data. MZ callbacks retain self and falsy arguments; real plugin-name whitespace is not trimmed.
-- Added four C#/Jint PluginManager regression methods and expanded the standalone Jint smoke program.
-- Added two executable Node semantic suites extracting the actual JavaScript constants from production C#; these do not substitute for Jint tests.
-- CI has independent JavaScript-semantic and portable .NET jobs followed by Godot validation. Node is a development-test tool, not a game/runtime dependency.
+## Validation evidence
 
-## Validation truth
+Executed locally on Node v22.16.0:
 
-Executed here: both Node semantic suites, **12/12 + 8/8 passed**, on Node v22.16.0. Workflow YAML syntax/dependency checks also passed.
-Not executed here: .NET build, Jint smoke, Godot import, C# regression suites, platform exports, or real-game playthrough.
+- new production PluginManager contract: **18/18 passed**;
+- existing production PluginManager regressions: **8/8 passed**.
 
-The editing environment has no .NET/Godot toolchain and could not retrieve/install it. No fresh PR-triggered validation run was returned for the pre-change head. This does not establish why Actions runs are absent. Do not describe this branch as green or merge it on the historical test count.
+Executed locally using Python's standard library and Bash:
 
-Detailed evidence and pending commands: `docs/VALIDATION_2026-09-12.md`.
+- actual validation driver with simulated tool processes: **18 test methods passed**;
+- Bash syntax and workflow YAML/dependency-key checks passed.
 
-## Actual engine boundary
+**Not executed:** the 26 new C# methods, SDK/Jint/Godot compilation, actual Jint/Godot suites, exports or real games. Toolchain installation remains unavailable; direct network access failed DNS resolution. No fresh canonical Actions result was available before the changes. Never reuse historical 296/296 main evidence as proof of this branch.
 
-- RM2000/2003: partial event/simulation runtime. Move-route decoder and runner exist, but automatic LMU page-route scheduling/timing and complete sprite synchronization remain to be connected.
-- WOLF: experimental understood plain-data subset, not broad native-game support.
-- XP/VX/VX Ace: script archive/inventory/pipeline; no embedded Ruby/RGSS execution backend.
-- MV/MZ: real Jint adapter source and PluginManager shim; no complete browser/render/audio host or registered playable MV/MZ runtime. C#/Jint integration is pending validation.
+Details: `docs/VALIDATION_SCRIPT_STARTUP_2026-09-12.md`.
+Script lifecycle/reference: `docs/SCRIPT_COMPATIBILITY.md`.
+
+## Engine boundary
+
+- RM2000/2003: partial runtime; automatic LMU movement-route scheduling/timing and complete runtime sprite synchronization still need integration.
+- WOLF: experimental understood plain-data subset.
+- XP/VX/VX Ace: archive/inventory/pipeline; no embedded Ruby backend.
+- MV/MZ: experimental Jint adapter and plugin shims; no complete browser/render/audio host or playable engine registration.
 - RM95/Dante98/Unite: detection/research.
-- Read-only VFS/archive and MV/MZ encrypted-asset readers exist. Full RGSS archive readers and protected WOLF execution are not implemented.
+- Existing content/VFS and engine-managed MV/MZ asset readers do not imply full game compatibility.
 
-## Next actions
+## Next useful work
 
-1. Run `./scripts/validate.sh` and resolve actual compiler/runtime failures before expanding the host API surface.
-2. Connect LMU event-page movement routes to the scheduler with explicit timing and active-page changes; wire runtime positions/facing into sprite refresh. Preserve parsed maps unchanged.
-3. Add a real two-map traversal/save regression before claiming a playable RM2K milestone.
-4. Verify the Jint smoke suite, then expand minimal browser APIs behind explicit capabilities. Do not turn missing rendering/audio into successful no-ops.
-5. Audit resolved dependency notices and platform packages before release.
+1. Run `./scripts/validate.sh` with .NET and pinned Godot Mono, inspect retained logs, and repair measured compiler/test failures first. No merge before fresh complete validation.
+2. Connect decoded LMU page movement routes to active-page lifecycle and explicit timing; publish runtime positions/facing to render descriptors without modifying parsed maps.
+3. Add a two-map traversal/save regression before claiming RM2K playability.
+4. After actual VM validation, extend browser/RPG Maker services behind truthful capabilities; retain the distinct RGSS profiles and source ordering.
+5. Audit dependency notices and actual target exports before release.
 
-Recover by reading AGENTS, this checkpoint, project status and relevant source/tests. Preserve unrelated changes. After three materially different unsuccessful strategies for one failure signature, record evidence/unblock conditions and choose an independent useful task; never delete correct tests to obtain green status.
+On recovery read AGENTS, this checkpoint, project status and relevant source/tests. After three materially different failed strategies for a failure signature, preserve evidence and continue an independent useful path. Do not disable correct tests, silently replay initialization, create a task board, or claim support from class names alone.

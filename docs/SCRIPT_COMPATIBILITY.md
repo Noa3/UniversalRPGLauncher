@@ -1,264 +1,106 @@
-# Game-Authored Script and Plugin Compatibility
+# Game-authored script and plugin compatibility
 
-> **Last reviewed:** 2026-09-11  
-> **Status:** architecture and inventory foundations; executable Ruby/JavaScript VMs not yet implemented
+Last reviewed: 2026-09-12.
 
-Running game-authored scripts is a core UniversalRPG compatibility requirement, not an optional enhancement.
+Custom scripts are a core compatibility requirement, not an optional graphical enhancement. Script inventory, an executable language adapter, and a playable engine are nevertheless different milestones.
 
-Many RPG Maker games depend on custom scripts/plugins as heavily as they depend on maps and database files. A replacement runtime that ignores those scripts is not broadly compatible.
+## Current boundary
 
-## Compatibility Principle
+| Family | Present source | Not yet established |
+|---|---|---|
+| RM2000/2003 | Partial event interpreter, movement-route decoder/runner and simulation | Full event/system parity and end-to-end playability |
+| XP / VX / VX Ace | RGSS script-archive reader, configured Game.ini script paths, generation-specific ordered pipeline | Embedded Ruby and RGSS1/2/3 engine APIs |
+| MV / MZ | Plugin inventory, load plan, PluginManager shim, ordered pipeline, Jint 4.16.2 adapter | Validated complete browser/render/audio/storage host and playable engine registration |
+| WOLF | Experimental understood plain-data event/database VM | Broad native-format and gameplay compatibility |
 
-UniversalRPG should execute the scripting model expected by each engine generation through an internal compatible runtime.
+The JavaScript adapter is no longer merely a proposed dependency. Its source exists, but the current branch still requires a complete .NET/Jint/Godot build and test run. Do not advertise full MV/MZ support because a standalone plugin probe can execute.
 
-The end user should not normally have to install Ruby, Node.js, NW.js, Wine, or the original RPG Maker executable separately.
+## Shared public interfaces
 
-Custom game scripts must run with the same ordering and engine-facing APIs expected by the original engine as far as practical.
+The Godot-free SDK defines `IEngineScriptingRuntime`, `IEmbeddedScriptVm`, `IEmbeddedScriptVmFactory`, `EngineScriptDescriptor`, `ScriptModule`, `ScriptExecutionPolicy` and trusted compatibility-library contracts.
 
-## Engine Families
+Concrete engine pipelines reproduce original ordering above the interchangeable VM. The application host still owns rendering, input and other engine services. End users are not expected to install Ruby, Node.js, NW.js, Wine or an original engine executable separately.
 
-### RPG Maker 2000 / 2003
+## Fail-stop startup
 
-These engines do not have RGSS/JavaScript-style built-in game scripting.
-
-Game-authored logic primarily comes from:
-
-- event commands
-- common events
-- move routes
-- variables/switches/database-driven systems
-- patched-runtime extensions
-- DynRPG / Maniacs / executable patches in some games
-
-UniversalRPG's RM2K/3 event interpreter is therefore the normal script-like compatibility layer.
-
-Patch/native plugin compatibility is a separate advanced track and should prefer known High-Level Emulation over arbitrary native execution.
-
-### RPG Maker XP — RGSS1
-
-Required long-term architecture:
+Both `WebScriptRuntime` and `RgssScriptRuntime` now enforce:
 
 ```text
-XP game
-  |
-  v
-Scripts.rxdata
-  |
-  v
-RGSS1 script archive reader
-  |
-  v
-embedded Ruby VM
-  |
-  v
-RGSS1 compatibility API
-  |
-  v
-UniversalRPG services
+metadata/policy checks -> load -> explicit bootstrap -> host hooks
+                            |            |                 |
+                            +------------+-----------------+
+                                         |
+                                    failure/exception
+                                         |
+                              refuse further execution
 ```
 
-Custom Ruby scripts must be loaded in the original project-defined order.
+Loading alone does not execute game code. Host hooks require successful bootstrap, not merely loaded source.
 
-Important API families include:
+A provider or VM may have mutated state before returning an error. Once an external load, bootstrap or hook operation fails, that pipeline is unusable for further execution. A repeated call returns `web.session-faulted` or `rgss.session-faulted` without configuring, loading or executing earlier scripts again.
 
-- Graphics
-- Input
-- Audio
-- Bitmap
-- Sprite
-- Viewport
-- Window
-- Tilemap
-- Plane
-- Font
-- Rect
-- Color
-- Tone
-- Table
-- RPG data classes
-- Win32API compatibility where required
+Recover by disposing the pipeline and creating a **fresh runtime and fresh VM**. Do not silently reset the same VM and replay initialization. This prevents additional duplicate startup side effects; it is not a transaction that undoes writes or other effects already performed by a script.
 
-### RPG Maker VX — RGSS2
+Metadata/policy rejection before the first external load call does not consume the untouched session. Ordinary provider/VM exceptions are returned as diagnostics with phase and script identity. Fatal memory/stack exceptions are not presented as successful recovery.
 
-Reuse the same embedded Ruby VM and shared RGSS core, with a dedicated RGSS2 compatibility profile.
+Use one host thread per pipeline. Reentrant load/bootstrap/hook calls return `*.operation-in-progress`; this guard is not a claim of general thread safety. Reentrant disposal is refused rather than destroying a VM while it is executing.
 
-Do not fork the complete XP runtime.
+## MV/MZ executable plugin selection
 
-### RPG Maker VX Ace — RGSS3
+`WebPluginLoadPlan.SelectEnabled` is shared by the loader and shim builder:
 
-Reuse the same architecture with an RGSS3 profile.
+1. Bound the input enumeration before sorting.
+2. Select enabled entries in stable configured order.
+3. Keep only the first enabled occurrence of an **exact, case-sensitive plugin name**.
+4. Preserve actual whitespace in names.
+5. Snapshot selected parameter dictionaries with per-field and aggregate limits.
 
-Custom scripts, aliases, monkey patches, class reopenings, and script load order are part of expected compatibility.
+This matches the inspected MV `PluginManager.setup` rule. De-duplicating names is distinct from parameter-key normalization: parameter access is lowercased, so distinct selected names differing only by case can share a parameter key. Duplicate SDK script IDs are still diagnosed rather than guessed away.
 
-Using a modern Ruby interpreter is not by itself sufficient: historical Ruby/RGSS behavior needs compatibility tests.
+`GetPluginParameters` returns the configured snapshot. It is not a readback of later mutations inside the live JavaScript realm.
 
-### RPG Maker MV
+### PluginManager surface
 
-Custom logic is commonly delivered through JavaScript plugins configured by:
+The VM-neutral shim supports:
 
-```text
-js/plugins.js
-js/plugins/*.js
-```
+- `parameters(name)` and `setParameters(name, values)`;
+- `_scripts` containing the selected/scheduled plugin names, in order;
+- MZ `registerCommand` / `callCommand`, retaining the supplied receiver and argument values.
 
-UniversalRPG now has a bounded, non-executing `WebScriptInventory` that:
+`_scripts` is scheduled-load metadata, not proof that every plugin initialized successfully. Configuration uses JSON parsing so special names such as `__proto__` remain data. JavaScript parameter objects can be changed by plugins through the setter as expected, without mutating the host's original configuration dictionary.
 
-- reads plugin ordering/enabled state from `plugins.js`
-- inventories plugin files
-- hashes complete inspected plugin sources
-- identifies unlisted plugins without silently enabling them
-- classifies obvious Node/NW.js/process/native-addon requirements
-- never evaluates JavaScript during inspection
+Dynamic `loadScript`, DOM setup, Canvas, WebGL, WebAudio, browser timers and full RPG Maker globals are not provided by this parameter shim. Missing functionality must not be replaced with successful no-ops.
 
-Future execution architecture:
+### Reference
 
-```text
-MV project
-   |
-   v
-plugin inventory/order
-   |
-   v
-embedded JavaScript VM
-   |
-   v
-MV browser/RPG Maker API profile
-   |
-   v
-UniversalRPG services
-```
+Behavioral reference inspected: the official/community MV CoreScript repository's `js/rpg_managers/PluginManager.js`:
 
-### RPG Maker MZ
+`https://github.com/rpgtkoolmv/corescript/blob/master/js/rpg_managers/PluginManager.js`
 
-MZ uses the same broad architecture as MV with a separate MZ compatibility profile.
+Inspected blob: `491e9fa141ccfc6422dd03de865a6dc91bbf49ce`.
 
-MV and MZ should share the JavaScript VM and web compatibility infrastructure while preserving engine-specific API differences.
+This pass does not import that implementation or add a runtime dependency on it. MZ-specific and full browser conformance still require their own fixtures.
 
-### WOLF RPG Editor
+## RGSS ordering and compatibility
 
-WOLF should be treated as its own event/database runtime rather than forced into Ruby or JavaScript abstractions.
+Scripts execute in archive order so aliases, reopened classes and patches retain their intended sequence. The loader rejects unknown generation values, duplicate script IDs, and negative/duplicate archive indices before VM configuration. It bounds caller-supplied entry enumeration.
 
-Its common events and database-driven systems are the primary programmable layer.
+RGSS1/2/3 retain separate profiles. No actual Ruby backend is installed by `RgssScriptRuntime`; tests using a recording VM verify orchestration only. A future Ruby backend must address historical language semantics, RGSS APIs, cooperative execution and optional Win32API compatibility rather than simply executing modern Ruby syntax.
 
-## Public SDK Contracts
+## Security and external libraries
 
-The Godot-free SDK defines:
+Static plugin classification is advisory. It does not prove that a source is harmless or that every API call has been found. Host filesystem, network, clipboard, process and native access remain explicit policy/host capabilities.
 
-```text
-IEngineScriptingRuntime
-IEmbeddedScriptVm
-EngineScriptDescriptor
-ScriptModule
-ScriptExecutionPolicy
-IScriptLibraryProvider
-```
+Jint's restricted host bindings and execution constraints are not an operating-system sandbox or a hard cap on total process memory. Dynamic string compilation remains disabled in the current adapter; plugins requiring `eval` or `Function` need an explicit future compatibility/security decision.
 
-These are implementation-independent contracts.
+Trusted embedding applications may provide prelude modules and compatibility libraries. Imported games cannot silently register arbitrary host-level .NET assemblies. Windows DLLs, native Node addons and runtime-patching plugins remain a separate compatibility class; prefer narrowly specified replacements where feasible.
 
-A future RGSS backend might wrap CRuby; an MV/MZ backend might wrap QuickJS, V8, or another suitable JavaScript engine. The public API should not expose the chosen VM directly.
+Archive/VFS access and engine-managed asset decoding do not imply script or engine playability. Inspecting or loading metadata must not execute the game.
 
-## VM Requirements
+## Validation
 
-Any embedded Ruby/JavaScript runtime must support:
+See [the startup validation report](VALIDATION_SCRIPT_STARTUP_2026-09-12.md) for executed versus pending checks.
 
-- deterministic engine-controlled lifecycle where practical
-- engine-defined script load order
-- bounded memory
-- watchdog/time limits
-- controlled call depth
-- VFS-backed file access
-- explicit save/cache write roots
-- diagnostics with script identity and stack information
-- controlled host callbacks
-- clean runtime reset/disposal
+The new JavaScript semantic suite runs the actual production shim constant under Node. The validation-driver tests run the actual shell driver with isolated simulated tools. Neither is proof of a .NET/Jint/Godot build or a playable game.
 
-The VM must not automatically inherit unrestricted application permissions.
-
-## Safe Default Policy
-
-`ScriptExecutionPolicy.SafeDefault` allows normal game-data access but denies host-impacting capabilities by default:
-
-- arbitrary host filesystem — denied
-- network — denied
-- clipboard — denied
-- process execution — denied
-- native interop — denied
-
-Compatibility exceptions should be explicit and visible.
-
-## MV/MZ Plugin Classification
-
-Current static classifications are advisory and intentionally conservative:
-
-### StandardBrowserApi
-
-No obvious Node/process/native requirement was found in the bounded inspected source.
-
-This does **not** guarantee runtime compatibility.
-
-### RequiresNodeShim
-
-The plugin references Node/NW.js-style APIs such as `require`, `process`, `Buffer`, `fs`, or `path`.
-
-UniversalRPG should implement only the required safe subset rather than embedding an unrestricted Node host by default.
-
-### RequiresProcessExecution
-
-The plugin appears to use APIs such as `child_process`, `spawn`, or `exec`.
-
-These should remain denied by default and require a deliberate compatibility/security decision.
-
-### RequiresNativeAddon
-
-The plugin references `.node` addons or native loading.
-
-This is a substantially harder compatibility class and may require a platform-specific replacement/HLE implementation rather than executing the original addon.
-
-### Truncated / MissingFile
-
-The inventory cannot safely make a complete compatibility assessment.
-
-## External Compatibility Libraries
-
-Trusted embedding applications may provide compatible libraries/shims through the SDK.
-
-Examples:
-
-- reimplementation of a popular RGSS utility library
-- known MV/MZ plugin API shim
-- compatibility replacement for a common native dependency
-
-These trusted host libraries are different from imported game code.
-
-UniversalRPG must never allow an imported game to silently register arbitrary host-level .NET modules.
-
-## Near-Term Implementation Order
-
-1. keep RM2K/3 event execution accurate
-2. maintain safe MV/MZ plugin inventory and compatibility diagnostics
-3. define serialized RGSS script/archive readers for XP/VX/VX Ace
-4. evaluate and select an embedded Ruby implementation
-5. implement `IEmbeddedScriptVm` adapter for Ruby
-6. implement shared RGSS API core + RGSS1 profile
-7. boot XP default/custom scripts
-8. extend to RGSS2 and RGSS3
-9. evaluate/select embedded JavaScript VM
-10. implement sandboxed MV/MZ browser runtime
-11. load plugins in `plugins.js` order
-12. add Node/NW.js shims only from real compatibility requirements
-13. address native addons/plugins with HLE first
-
-## Definition of Script Compatibility
-
-An engine should not advertise scripting support merely because script files can be found or parsed.
-
-Scripting support requires at minimum:
-
-- actual executable VM/runtime
-- correct engine API profile
-- correct script load order
-- failures surfaced with useful diagnostics
-- security policy enforced
-- representative custom-script/plugin fixtures passing
-
-Until that exists, the SDK/session `Scripting` property must remain unavailable for that engine.
+The C# session and load-plan tests must pass through `./scripts/validate.sh` before this development slice is treated as fully verified. Do not promote any engine capability based solely on these source changes.

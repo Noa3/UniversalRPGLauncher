@@ -94,6 +94,7 @@ public sealed class TestRgssScriptRuntime : TestBase
             vm,
             new[] { Entry(0, 1, "Main", "nil", ScriptLanguageIds.Rgss3Ruby) });
         AssertTrue(runtime.LoadScripts(ScriptExecutionPolicy.SafeDefault).Success);
+        AssertTrue(runtime.ExecuteBootstrap().Success);
 
         var result = runtime.InvokeHook(new ScriptHookRequest
         {

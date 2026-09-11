@@ -8,9 +8,9 @@ using UniversalRPG.Sdk;
 namespace UniversalRPG.Plugins;
 
 /// <summary>
-/// Small VM-neutral PluginManager surface. Configuration is JSON data, never a
-/// JavaScript object literal: a parameter named __proto__ must remain data too.
-/// No CLR object or host capability is exposed by this shim.
+/// VM-neutral PluginManager parameter and MZ command surface. The host supplies
+/// the same bounded load plan used by WebScriptRuntime. Dynamic script loading
+/// still requires a real VFS/DOM host and is not simulated here.
 /// </summary>
 public static class WebPluginManagerShimBuilder
 {
@@ -18,15 +18,20 @@ public static class WebPluginManagerShimBuilder
 
     // JS_PLUGIN_MANAGER_BEGIN
     internal const string FactorySource = """
-        ((rawParameters, isMZ) => {
+        ((rawParameters, isMZ, scheduledNames = []) => {
             const root = globalThis;
             const parameters = Object.create(null);
             for (const key of Object.keys(rawParameters)) parameters[key] = rawParameters[key];
             const manager = root.PluginManager || (root.PluginManager = {});
             manager._parameters = parameters;
+            // RPG Maker fills _scripts while scheduling loads, before plugin
+            // evaluation. This list is not proof of successful initialization.
+            manager._scripts = scheduledNames.slice();
             manager.parameters = function(name) {
-                const key = String(name == null ? '' : name).toLowerCase();
-                return this._parameters[key] || {};
+                return this._parameters[name.toLowerCase()] || {};
+            };
+            manager.setParameters = function(name, values) {
+                this._parameters[name.toLowerCase()] = values;
             };
             if (isMZ) {
                 manager._commands = Object.create(null);
@@ -48,26 +53,19 @@ public static class WebPluginManagerShimBuilder
     {
         if (pLanguageId is not (ScriptLanguageIds.RpgMakerMvJavaScript or ScriptLanguageIds.RpgMakerMzJavaScript))
             throw new ArgumentException("PluginManager shim requires an MV or MZ JavaScript language ID.", nameof(pLanguageId));
-        if (pEntries == null) throw new ArgumentNullException(nameof(pEntries));
-
-        var entries = pEntries.Take(WebScriptInventory.MaxPlugins + 1).ToArray();
-        if (entries.Length > WebScriptInventory.MaxPlugins || entries.Any(entry => entry == null || entry.Script == null || entry.Parameters == null))
-            throw new ArgumentException("PluginManager configuration is invalid or exceeds the plugin limit.", nameof(pEntries));
-
+        var entries = WebPluginLoadPlan.SelectEnabled(pEntries);
         var table = new SortedDictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
-        foreach (var entry in entries.Where(entry => entry.Enabled).OrderBy(entry => entry.Script.LoadOrder))
-        {
-            // Keep whitespace in a real filename. RPG Maker's lookup lowercases
-            // names but does not silently rename plugins by trimming them.
-            var name = entry.Script.DisplayName ?? "";
-            if (name.Length == 0) continue;
-            table[name.ToLowerInvariant()] = new Dictionary<string, string>(entry.Parameters, StringComparer.Ordinal);
-        }
+        foreach (var entry in entries)
+            table[entry.Script.DisplayName.ToLowerInvariant()] = entry.Parameters;
 
-        var json = JsonSerializer.Serialize(table);
-        var jsonStringLiteral = JsonSerializer.Serialize(json);
+        // JSON.parse preserves __proto__ as a data property, unlike an object
+        // literal. Names/values are serialized, never interpolated as code.
+        var jsonStringLiteral = JsonSerializer.Serialize(JsonSerializer.Serialize(table));
+        var namesJson = JsonSerializer.Serialize(entries.Select(entry => entry.Script.DisplayName).ToArray());
+        var namesStringLiteral = JsonSerializer.Serialize(namesJson);
         var isMZ = pLanguageId == ScriptLanguageIds.RpgMakerMzJavaScript;
-        var source = FactorySource + "(JSON.parse(" + jsonStringLiteral + "), " + (isMZ ? "true" : "false") + ");\n";
+        var source = FactorySource + "(JSON.parse(" + jsonStringLiteral + "), "
+            + (isMZ ? "true" : "false") + ", JSON.parse(" + namesStringLiteral + "));\n";
         return new ScriptModule
         {
             Descriptor = new EngineScriptDescriptor
