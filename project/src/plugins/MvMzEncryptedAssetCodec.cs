@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using UniversalRPG.Sdk;
 
@@ -18,6 +16,7 @@ public static class MvMzEncryptedAssetCodec
 {
     public const int HeaderLength = 16;
     public const int KeyLength = 16;
+    public const int MaxSystemJsonBytes = 4 * 1024 * 1024;
     public const long DefaultMaxAssetBytes = 256L * 1024 * 1024;
 
     private static readonly byte[] Header =
@@ -47,15 +46,36 @@ public static class MvMzEncryptedAssetCodec
         try
         {
             var info = new FileInfo(pSystemJsonPath);
-            if (info.Length <= 0 || info.Length > 4 * 1024 * 1024)
+            if (info.Length <= 0 || info.Length > MaxSystemJsonBytes)
             {
                 return SdkValueResult<EncryptionMetadata>.Failed(
                     "mv-mz.system-json-size",
                     "System.json is empty or exceeds the bounded metadata limit.");
             }
+            return ReadMetadata(File.ReadAllBytes(pSystemJsonPath), pSystemJsonPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return SdkValueResult<EncryptionMetadata>.Failed(
+                "mv-mz.system-json-read-failed",
+                $"Could not read encrypted asset metadata: {exception.Message}");
+        }
+    }
 
-            using var stream = File.OpenRead(pSystemJsonPath);
-            using var document = JsonDocument.Parse(stream, new JsonDocumentOptions
+    public static SdkValueResult<EncryptionMetadata> ReadMetadata(
+        ReadOnlyMemory<byte> pSystemJson,
+        string pSourceLabel = "data/System.json")
+    {
+        if (pSystemJson.Length <= 0 || pSystemJson.Length > MaxSystemJsonBytes)
+        {
+            return SdkValueResult<EncryptionMetadata>.Failed(
+                "mv-mz.system-json-size",
+                "System.json is empty or exceeds the bounded metadata limit.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(pSystemJson, new JsonDocumentOptions
             {
                 MaxDepth = 64,
                 AllowTrailingCommas = false,
@@ -71,14 +91,11 @@ public static class MvMzEncryptedAssetCodec
             var root = document.RootElement;
             var keyText = ReadString(root, "encryptionKey");
             var key = Array.Empty<byte>();
-            if (!string.IsNullOrWhiteSpace(keyText))
+            if (!string.IsNullOrWhiteSpace(keyText) && !TryParseHexKey(keyText, out key))
             {
-                if (!TryParseHexKey(keyText, out key))
-                {
-                    return SdkValueResult<EncryptionMetadata>.Failed(
-                        "mv-mz.encryption-key-invalid",
-                        "System.json encryptionKey must be exactly 16 bytes encoded as 32 hexadecimal characters.");
-                }
+                return SdkValueResult<EncryptionMetadata>.Failed(
+                    "mv-mz.encryption-key-invalid",
+                    "System.json encryptionKey must be exactly 16 bytes encoded as 32 hexadecimal characters.");
             }
 
             return SdkValueResult<EncryptionMetadata>.Succeeded(new EncryptionMetadata
@@ -86,14 +103,14 @@ public static class MvMzEncryptedAssetCodec
                 Key = key,
                 HasEncryptedImages = ReadBool(root, "hasEncryptedImages"),
                 HasEncryptedAudio = ReadBool(root, "hasEncryptedAudio"),
-                SystemJsonPath = pSystemJsonPath,
+                SystemJsonPath = pSourceLabel ?? "data/System.json",
             });
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        catch (JsonException exception)
         {
             return SdkValueResult<EncryptionMetadata>.Failed(
                 "mv-mz.system-json-read-failed",
-                $"Could not read encrypted asset metadata: {exception.Message}");
+                $"Could not parse encrypted asset metadata: {exception.Message}");
         }
     }
 
@@ -185,33 +202,43 @@ public static class MvMzEncryptedAssetCodec
 /// <summary>
 /// Read-only logical MV/MZ content source. Plain files win when present;
 /// otherwise well-known encrypted asset variants are resolved and decrypted in
-/// memory using the project's own System.json key.
+/// memory using the project's own System.json key. All path lookup is delegated
+/// to the shared SDK content layer, preserving Windows-style case semantics on
+/// Linux/Android and rejecting traversal/reparse-point access.
 /// </summary>
 public sealed class MvMzGameContentSource : IGameContentSource
 {
-    private readonly string _root;
-    private readonly string _rootPrefix;
-    private readonly StringComparison _pathComparison;
+    private readonly IGameContentSource _contentRoot;
     private readonly MvMzEncryptedAssetCodec.EncryptionMetadata _metadata;
-    private readonly long _maxAssetBytes;
 
     public MvMzGameContentSource(string pGameDirectory, long pMaxAssetBytes = MvMzEncryptedAssetCodec.DefaultMaxAssetBytes)
     {
         if (string.IsNullOrWhiteSpace(pGameDirectory)) throw new ArgumentException("Game directory is required.", nameof(pGameDirectory));
         if (pMaxAssetBytes <= 0) throw new ArgumentOutOfRangeException(nameof(pMaxAssetBytes));
 
-        var gameRoot = Path.GetFullPath(pGameDirectory);
-        var wwwSystem = Path.Combine(gameRoot, "www", "data", "System.json");
-        var rootSystem = Path.Combine(gameRoot, "data", "System.json");
-        var systemPath = File.Exists(wwwSystem) ? wwwSystem : rootSystem;
-        _root = File.Exists(wwwSystem) ? Path.Combine(gameRoot, "www") : gameRoot;
-        _rootPrefix = EnsureTrailingSeparator(Path.GetFullPath(_root));
-        _pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        _maxAssetBytes = pMaxAssetBytes;
+        var root = new DirectoryGameContentSource(
+            pGameDirectory,
+            "rpg-maker-mv-mz-root",
+            Math.Max(pMaxAssetBytes, MvMzEncryptedAssetCodec.MaxSystemJsonBytes));
+        if (root.Exists("www/data/System.json"))
+        {
+            _contentRoot = new PrefixedGameContentSource(root, "www", "rpg-maker-mv-mz-www", pDisposeInner: true);
+        }
+        else
+        {
+            _contentRoot = root;
+        }
 
-        var metadata = MvMzEncryptedAssetCodec.ReadMetadata(systemPath);
+        var metadataBytes = _contentRoot.Read("data/System.json");
+        if (!metadataBytes.Success)
+        {
+            _contentRoot.Dispose();
+            throw new InvalidDataException(metadataBytes.ErrorMessage);
+        }
+        var metadata = MvMzEncryptedAssetCodec.ReadMetadata(metadataBytes.Data, "data/System.json");
         if (!metadata.Success || metadata.Value == null)
         {
+            _contentRoot.Dispose();
             throw new InvalidDataException(metadata.Result.ErrorMessage);
         }
         _metadata = metadata.Value;
@@ -225,24 +252,30 @@ public sealed class MvMzGameContentSource : IGameContentSource
 
     public bool Exists(string pLogicalPath)
     {
-        if (!TryResolveLogical(pLogicalPath, out var plainPath)) return false;
-        if (File.Exists(plainPath)) return true;
-        return EncryptedCandidates(plainPath).Any(File.Exists);
+        if (_contentRoot.Exists(pLogicalPath)) return true;
+        foreach (var candidate in EncryptedCandidates(pLogicalPath))
+        {
+            if (_contentRoot.Exists(candidate)) return true;
+        }
+        return false;
     }
 
     public ContentReadResult Read(string pLogicalPath)
     {
-        if (!TryResolveLogical(pLogicalPath, out var plainPath))
+        if (_contentRoot.Exists(pLogicalPath))
         {
-            return ContentReadResult.Failed("content.path-invalid", "Logical content path is unsafe or outside the game root.");
+            return _contentRoot.Read(pLogicalPath);
         }
 
-        if (File.Exists(plainPath))
+        string? encrypted = null;
+        foreach (var candidate in EncryptedCandidates(pLogicalPath))
         {
-            return ReadBounded(plainPath);
+            if (_contentRoot.Exists(candidate))
+            {
+                encrypted = candidate;
+                break;
+            }
         }
-
-        var encrypted = EncryptedCandidates(plainPath).FirstOrDefault(File.Exists);
         if (encrypted == null)
         {
             return ContentReadResult.Failed("content.not-found", $"Game content '{pLogicalPath}' was not found.");
@@ -254,82 +287,33 @@ public sealed class MvMzGameContentSource : IGameContentSource
                 $"Encrypted asset '{pLogicalPath}' exists but System.json does not provide a usable 16-byte key.");
         }
 
-        var raw = ReadBounded(encrypted);
+        var raw = _contentRoot.Read(encrypted);
         if (!raw.Success) return raw;
         return MvMzEncryptedAssetCodec.Decrypt(raw.Data.Span, _metadata.Key);
     }
 
-    public void Dispose()
-    {
-        // No persistent streams or decrypted buffers are retained.
-    }
+    public void Dispose() => _contentRoot.Dispose();
 
-    private ContentReadResult ReadBounded(string pPath)
+    private static string[] EncryptedCandidates(string pLogicalPath)
     {
-        try
-        {
-            var info = new FileInfo(pPath);
-            if (info.Length < 0 || info.Length > _maxAssetBytes)
-            {
-                return ContentReadResult.Failed(
-                    "content.size-limit",
-                    $"Game content '{Path.GetFileName(pPath)}' exceeds the configured {_maxAssetBytes}-byte read limit.");
-            }
-            return ContentReadResult.Succeeded(File.ReadAllBytes(pPath));
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return ContentReadResult.Failed("content.read-failed", exception.Message);
-        }
-    }
-
-    private bool TryResolveLogical(string pLogicalPath, out string pFullPath)
-    {
-        pFullPath = "";
-        if (string.IsNullOrWhiteSpace(pLogicalPath) || pLogicalPath.IndexOf('\0') >= 0) return false;
+        if (string.IsNullOrWhiteSpace(pLogicalPath)) return Array.Empty<string>();
         var normalized = pLogicalPath.Replace('\\', '/');
-        if (normalized.StartsWith('/', StringComparison.Ordinal) || Path.IsPathRooted(normalized)) return false;
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Any(pPart => pPart == "..")) return false;
-
-        try
-        {
-            var full = Path.GetFullPath(Path.Combine(_root, string.Join(Path.DirectorySeparatorChar, parts)));
-            if (!full.StartsWith(_rootPrefix, _pathComparison)) return false;
-            pFullPath = full;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static IEnumerable<string> EncryptedCandidates(string pPlainPath)
-    {
-        var extension = Path.GetExtension(pPlainPath);
-        var stem = extension.Length == 0 ? pPlainPath : pPlainPath[..^extension.Length];
+        var extensionIndex = normalized.LastIndexOf('.');
+        if (extensionIndex < 0) return Array.Empty<string>();
+        var extension = normalized[extensionIndex..];
+        var stem = normalized[..extensionIndex];
         if (extension.Equals(".png", StringComparison.OrdinalIgnoreCase))
         {
-            yield return stem + ".rpgmvp";
-            yield return stem + ".png_";
+            return new[] { stem + ".rpgmvp", stem + ".png_" };
         }
-        else if (extension.Equals(".ogg", StringComparison.OrdinalIgnoreCase))
+        if (extension.Equals(".ogg", StringComparison.OrdinalIgnoreCase))
         {
-            yield return stem + ".rpgmvo";
-            yield return stem + ".ogg_";
+            return new[] { stem + ".rpgmvo", stem + ".ogg_" };
         }
-        else if (extension.Equals(".m4a", StringComparison.OrdinalIgnoreCase))
+        if (extension.Equals(".m4a", StringComparison.OrdinalIgnoreCase))
         {
-            yield return stem + ".rpgmvm";
-            yield return stem + ".m4a_";
+            return new[] { stem + ".rpgmvm", stem + ".m4a_" };
         }
-    }
-
-    private static string EnsureTrailingSeparator(string pPath)
-    {
-        return pPath.EndsWith(Path.DirectorySeparatorChar)
-            ? pPath
-            : pPath + Path.DirectorySeparatorChar;
+        return Array.Empty<string>();
     }
 }
