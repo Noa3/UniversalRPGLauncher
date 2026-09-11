@@ -44,12 +44,18 @@ public sealed class Rm2kPassabilityMap
     private const string UpperPassageField = "passable_data_upper";
 
     private readonly byte[] _directionMasks;
+    private readonly bool[] _counterTiles;
 
-    private Rm2kPassabilityMap(int pWidth, int pHeight, byte[] pDirectionMasks)
+    private Rm2kPassabilityMap(
+        int pWidth,
+        int pHeight,
+        byte[] pDirectionMasks,
+        bool[] pCounterTiles)
     {
         Width = pWidth;
         Height = pHeight;
         _directionMasks = pDirectionMasks;
+        _counterTiles = pCounterTiles;
     }
 
     public int Width { get; }
@@ -63,6 +69,16 @@ public sealed class Rm2kPassabilityMap
             return false;
         }
         return (_directionMasks[pY * Width + pX] & pDirection) != 0;
+    }
+
+    /// <summary>
+    /// Returns whether the upper-layer tile at this coordinate carries the
+    /// RPG_RT counter flag. Action-key interaction may traverse up to three
+    /// consecutive counter tiles before looking for an event beyond them.
+    /// </summary>
+    public bool IsCounter(int pX, int pY)
+    {
+        return IsInside(pX, pY) && _counterTiles[pY * Width + pX];
     }
 
     public bool CanMove(int pFromX, int pFromY, int pToX, int pToY)
@@ -144,6 +160,7 @@ public sealed class Rm2kPassabilityMap
         }
 
         var masks = new byte[expectedTiles];
+        var counters = new bool[expectedTiles];
         for (var index = 0; index < expectedTiles; index += 1)
         {
             byte mask = 0;
@@ -155,9 +172,10 @@ public sealed class Rm2kPassabilityMap
                 }
             }
             masks[index] = mask;
+            counters[index] = IsCounterTile(upperLayer[index], upperPassages);
         }
 
-        pPassability = new Rm2kPassabilityMap(width, height, masks);
+        pPassability = new Rm2kPassabilityMap(width, height, masks, counters);
         return true;
     }
 
@@ -326,6 +344,14 @@ public sealed class Rm2kPassabilityMap
         }
 
         return IsPassableLowerTile(pLowerRawId, pDirection, pLowerPassages);
+    }
+
+    private static bool IsCounterTile(int pUpperRawId, byte[] pUpperPassages)
+    {
+        var upperIndex = pUpperRawId - BlockF;
+        return upperIndex >= 0
+            && upperIndex < pUpperPassages.Length
+            && (pUpperPassages[upperIndex] & Counter) != 0;
     }
 
     private static bool IsPassableLowerTile(int pRawId, byte pDirection, byte[] pPassages)
