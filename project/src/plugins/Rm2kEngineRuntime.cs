@@ -427,8 +427,28 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     {
                         if (rawPage.VariantType != Godot.Variant.Type.Dictionary) continue;
                         var pageData = rawPage.AsGodotDictionary();
-                        if (!TryReadInt(pageData, "trigger", out var trigger)) continue;
-                        var page = new Rm2kMap.EventPage { Trigger = trigger };
+                        if (!TryReadInt(pageData, "trigger", out var rawTrigger)) continue;
+                        if (!Rm2kEventTriggerCodec.TryDecode(rawTrigger, out var trigger))
+                        {
+                            Simulation.AddDiagnostic($"Event {id} contains unsupported LMU trigger value {rawTrigger}; page skipped.");
+                            continue;
+                        }
+
+                        var page = new Rm2kMap.EventPage { Trigger = (int)trigger };
+                        if (TryReadInt(pageData, "priority", out var layer))
+                        {
+                            if (layer < 0 || layer > 2)
+                            {
+                                Simulation.AddDiagnostic($"Event {id} contains invalid LMU layer {layer}; page skipped.");
+                                continue;
+                            }
+                            page.Layer = layer;
+                        }
+                        if (TryReadInt(pageData, "move_frequency", out var moveFrequency))
+                        {
+                            page.MoveFrequency = moveFrequency;
+                        }
+
                         if (pageData.TryGetValue("conditions", out var rawConditions) && rawConditions.VariantType == Godot.Variant.Type.Dictionary)
                         {
                             foreach (var pair in rawConditions.AsGodotDictionary())
