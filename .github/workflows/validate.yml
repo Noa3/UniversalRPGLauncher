@@ -9,7 +9,28 @@ permissions:
   contents: read
 
 jobs:
+  sdk:
+    name: Standalone SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore SDK
+        run: dotnet restore sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
+
+      - name: Build SDK
+        run: dotnet build sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj --no-restore --configuration Release
+
   validate:
+    name: Godot runtime and tests
+    needs: sdk
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
