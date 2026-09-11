@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  script-semantics:
+    name: Embedded JavaScript semantic regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node for development tests only
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test production invocation bridge
+        run: node scripts/test-script-invocation-bridge.mjs
+      - name: Test production PluginManager shim
+        run: node scripts/test-web-plugin-shim.mjs
+
   portable:
     name: Portable SDK and JavaScript VM
     runs-on: ubuntu-latest
@@ -16,44 +32,33 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-          cache: true
-          cache-dependency-path: |
-            sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
-            runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj
-            runtime/UniversalRPG.JavaScript.Jint.Smoke/UniversalRPG.JavaScript.Jint.Smoke.csproj
-
       - name: Restore and build SDK
         run: |
           dotnet restore sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
           dotnet build sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj --no-restore --configuration Release
-
       - name: Restore and build Jint adapter
         run: |
           dotnet restore runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj
           dotnet build runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj --no-restore --configuration Release
-
       - name: Run Jint VM smoke
         run: dotnet run --project runtime/UniversalRPG.JavaScript.Jint.Smoke/UniversalRPG.JavaScript.Jint.Smoke.csproj --configuration Release
 
   validate:
     name: Godot runtime and tests
-    needs: portable
+    needs: [portable, script-semantics]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
       - name: Install Godot 4.7.2 .NET
         shell: bash
         run: |
@@ -69,6 +74,5 @@ jobs:
           chmod +x "$GODOT_BIN"
           echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
           "$GODOT_BIN" --version
-
       - name: Validate project and tests
         run: ./scripts/validate.sh

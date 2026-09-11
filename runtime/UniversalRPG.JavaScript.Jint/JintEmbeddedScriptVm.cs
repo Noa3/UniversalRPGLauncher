@@ -2,24 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Jint;
+using global::Jint;
+using global::Jint.Native;
 using UniversalRPG.Sdk;
 
 namespace UniversalRPG.JavaScript.Jint;
 
 /// <summary>
-/// Pure-.NET JavaScript VM factory used as the first UniversalRPG MV/MZ VM
-/// spike. This factory deliberately advertises only the JavaScript language
-/// layer. Browser, NW.js and RPG Maker APIs must be supplied by higher-level
-/// compatibility hosts before a full MV/MZ runtime profile can be accepted.
+/// JavaScript-only factory. Browser and RPG Maker host features must be
+/// implemented above this layer; recognizing a language is not a full runtime.
 /// </summary>
 public sealed class JintScriptVmFactory : IEmbeddedScriptVmFactory
 {
-    private static readonly string[] Languages =
+    private static readonly IReadOnlyList<string> Languages = Array.AsReadOnly(new[]
     {
         ScriptLanguageIds.RpgMakerMvJavaScript,
         ScriptLanguageIds.RpgMakerMzJavaScript,
-    };
+    });
 
     public string Id => "jint";
     public IReadOnlyList<string> LanguageIds => Languages;
@@ -27,27 +26,15 @@ public sealed class JintScriptVmFactory : IEmbeddedScriptVmFactory
     public SdkVmResult Create(ScriptVmRequest pRequest)
     {
         if (pRequest == null)
-        {
             return SdkVmResult.Failed("jint.request-required", "A JavaScript VM request is required.");
-        }
         if (!Languages.Contains(pRequest.LanguageId, StringComparer.Ordinal))
-        {
-            return SdkVmResult.Failed(
-                "jint.language-unsupported",
-                $"Jint adapter does not advertise language '{pRequest.LanguageId}'.");
-        }
+            return SdkVmResult.Failed("jint.language-unsupported", $"Jint does not advertise '{pRequest.LanguageId}'.");
         if (pRequest.Policy == null)
-        {
             return SdkVmResult.Failed("jint.policy-required", "A JavaScript execution policy is required.");
-        }
-        var policyValidation = pRequest.Policy.Validate();
-        if (!policyValidation.Success)
-        {
-            return SdkVmResult.Failed(
-                policyValidation.ErrorCode,
-                policyValidation.ErrorMessage,
-                policyValidation.Diagnostics);
-        }
+
+        var validation = pRequest.Policy.Validate();
+        if (!validation.Success)
+            return SdkVmResult.Failed(validation.ErrorCode, validation.ErrorMessage, validation.Diagnostics);
 
         var unsupported = (pRequest.RequiredFeatures ?? Array.Empty<string>())
             .Where(pFeature => !string.IsNullOrWhiteSpace(pFeature))
@@ -56,55 +43,38 @@ public sealed class JintScriptVmFactory : IEmbeddedScriptVmFactory
             .OrderBy(pFeature => pFeature, StringComparer.Ordinal)
             .ToArray();
         if (unsupported.Length > 0)
-        {
-            return SdkVmResult.Failed(
-                "jint.feature-unsupported",
-                "Raw Jint VM does not yet provide required host features: " + string.Join(", ", unsupported) + ".");
-        }
+            return SdkVmResult.Failed("jint.feature-unsupported", "Raw Jint VM does not provide: " + string.Join(", ", unsupported) + ".");
+        if ((pRequest.CompatibilityProfile?.Length ?? 0) > 128)
+            return SdkVmResult.Failed("jint.profile-invalid", "Compatibility profile name is too long.");
 
-        var profile = pRequest.CompatibilityProfile ?? "";
-        if (profile.Length > 128)
+        return SdkVmResult.Succeeded(new JintEmbeddedScriptVm(pRequest.LanguageId), new[]
         {
-            return SdkVmResult.Failed("jint.profile-invalid", "JavaScript compatibility profile name is too long.");
-        }
-
-        return SdkVmResult.Succeeded(
-            new JintEmbeddedScriptVm(pRequest.LanguageId),
-            new[]
-            {
-                SdkDiagnostic.Info(
-                    "jint.javascript-core",
-                    "Created a constrained JavaScript-only Jint VM. Browser/RPG Maker host APIs are not installed yet."),
-            });
+            SdkDiagnostic.Info("jint.javascript-core", "Created a JavaScript-only VM; browser/RPG Maker APIs are not installed."),
+        });
     }
 }
 
 /// <summary>
-/// Constrained Jint-backed implementation of UniversalRPG's VM contract.
-/// CLR exposure is never enabled. The adapter intentionally targets the
-/// published Jint 4.16.2 constraint surface rather than unreleased main-branch
-/// security APIs. Game-authored JavaScript is strict UTF-8 and every top-level
-/// execute/invoke entry is bounded by Jint's statement, memory, timeout,
-/// recursion and native stack guards.
+/// Jint 4.16.2 adapter. Each instance must be used by one host thread at a time.
+/// Constraints and restricted host values reduce risk; an in-process VM is not
+/// an operating-system sandbox. Dynamic string compilation remains disabled.
 /// </summary>
 public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
 {
     private const int MaxStoredModules = 4096;
     private const int DefaultMaxStatements = 5_000_000;
-
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-
     private readonly Dictionary<string, string> _modules = new(StringComparer.Ordinal);
     private Engine? _engine;
+    private JsValue? _invokeBridge;
     private ScriptExecutionPolicy _policy = ScriptExecutionPolicy.SafeDefault;
     private bool _disposed;
+    private long _storedSourceBytes;
 
     public JintEmbeddedScriptVm(string pLanguageId)
     {
         if (pLanguageId is not (ScriptLanguageIds.RpgMakerMvJavaScript or ScriptLanguageIds.RpgMakerMzJavaScript))
-        {
             throw new ArgumentException("Jint VM requires an MV or MZ JavaScript language ID.", nameof(pLanguageId));
-        }
         LanguageId = pLanguageId;
     }
 
@@ -116,9 +86,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     {
         if (_disposed) return Disposed();
         if (State is not (ScriptVmState.Created or ScriptVmState.Configured))
-        {
-            return SdkOperationResult.Failed("jint.configure-state", $"Jint VM cannot be configured from state {State}.");
-        }
+            return SdkOperationResult.Failed("jint.configure-state", $"Cannot configure from {State}.");
         return RebuildEngine(pPolicy);
     }
 
@@ -126,43 +94,37 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     {
         if (_disposed) return Disposed();
         if (State is not (ScriptVmState.Configured or ScriptVmState.Ready))
-        {
-            return SdkOperationResult.Failed("jint.load-state", $"Jint VM cannot load modules from state {State}.");
-        }
-        if (pModule == null)
-        {
-            return SdkOperationResult.Failed("jint.module-required", "A JavaScript module is required.");
-        }
+            return SdkOperationResult.Failed("jint.load-state", $"Cannot load modules from {State}.");
+        if (pModule == null || pModule.Descriptor == null)
+            return SdkOperationResult.Failed("jint.module-required", "A module and descriptor are required.");
         var validation = pModule.Validate();
         if (!validation.Success) return validation;
         if (!pModule.Descriptor.LanguageId.Equals(LanguageId, StringComparison.Ordinal))
-        {
-            return SdkOperationResult.Failed(
-                "jint.module-language",
-                $"Script '{pModule.Descriptor.Id}' targets '{pModule.Descriptor.LanguageId}', not '{LanguageId}'.");
-        }
-        if (_modules.Count >= MaxStoredModules && !_modules.ContainsKey(pModule.Descriptor.Id))
-        {
-            return SdkOperationResult.Failed("jint.module-limit", $"Jint VM cannot store more than {MaxStoredModules} modules.");
-        }
+            return SdkOperationResult.Failed("jint.module-language", $"Script '{pModule.Descriptor.Id}' targets a different language.");
         if (_modules.ContainsKey(pModule.Descriptor.Id))
-        {
-            return SdkOperationResult.Failed("jint.module-duplicate", $"Script module '{pModule.Descriptor.Id}' is already loaded.");
-        }
+            return SdkOperationResult.Failed("jint.module-duplicate", $"Script '{pModule.Descriptor.Id}' is already loaded.");
+        if (_modules.Count >= MaxStoredModules)
+            return SdkOperationResult.Failed("jint.module-limit", $"Cannot store more than {MaxStoredModules} modules.");
 
         string source;
+        long sourceBytes;
         try
         {
+            // Source text is stored outside Jint's per-execution allocation
+            // counter. Bound the aggregate before allocating the UTF-16 string.
+            sourceBytes = (long)StrictUtf8.GetCharCount(pModule.Source.Span) * sizeof(char);
+            var budget = (long)_policy.MaxMemoryMegabytes * 1024 * 1024;
+            if (sourceBytes > budget - _storedSourceBytes)
+                return SdkOperationResult.Failed("jint.source-memory-limit", "Stored module source exceeds the session source budget.");
             source = StrictUtf8.GetString(pModule.Source.Span);
         }
-        catch (DecoderFallbackException exception)
+        catch (DecoderFallbackException)
         {
-            return SdkOperationResult.Failed(
-                "jint.source-encoding",
-                $"Script '{pModule.Descriptor.Id}' is not valid UTF-8: {exception.Message}");
+            return SdkOperationResult.Failed("jint.source-encoding", $"Script '{pModule.Descriptor.Id}' is not valid UTF-8.");
         }
 
         _modules.Add(pModule.Descriptor.Id, source);
+        _storedSourceBytes += sourceBytes;
         State = ScriptVmState.Ready;
         return SdkOperationResult.Succeeded();
     }
@@ -171,18 +133,11 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     {
         if (_disposed) return Disposed();
         if (State is not (ScriptVmState.Ready or ScriptVmState.Running))
-        {
-            return SdkOperationResult.Failed("jint.execute-state", $"Jint VM cannot execute modules from state {State}.");
-        }
+            return SdkOperationResult.Failed("jint.execute-state", $"Cannot execute modules from {State}.");
         if (string.IsNullOrWhiteSpace(pScriptId) || !_modules.TryGetValue(pScriptId, out var source))
-        {
-            return SdkOperationResult.Failed("jint.module-missing", $"JavaScript module '{pScriptId}' is not loaded.");
-        }
+            return SdkOperationResult.Failed("jint.module-missing", $"Script '{pScriptId}' is not loaded.");
         if (_engine == null)
-        {
             return SdkOperationResult.Failed("jint.not-configured", "Jint engine is unavailable.");
-        }
-
         try
         {
             _engine.Execute(source);
@@ -191,10 +146,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         }
         catch (Exception exception) when (!IsCritical(exception))
         {
-            State = ScriptVmState.Faulted;
-            return SdkOperationResult.Failed(
-                ConstraintErrorCode(exception),
-                $"JavaScript module '{pScriptId}' failed: {exception.Message}");
+            return ExecutionFailed(exception, $"JavaScript module '{pScriptId}'");
         }
     }
 
@@ -202,42 +154,23 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     {
         if (_disposed) return Disposed();
         if (State != ScriptVmState.Running)
-        {
-            return SdkOperationResult.Failed("jint.invoke-state", $"Jint VM cannot invoke script from state {State}.");
-        }
-        if (pInvocation == null || string.IsNullOrWhiteSpace(pInvocation.Member) || pInvocation.Member.Length > 512)
-        {
-            return SdkOperationResult.Failed("jint.invocation-invalid", "JavaScript invocation requires a bounded member name.");
-        }
-        if (_engine == null)
-        {
+            return SdkOperationResult.Failed("jint.invoke-state", $"Cannot invoke script from {State}.");
+        if (_engine == null || _invokeBridge == null)
             return SdkOperationResult.Failed("jint.not-configured", "Jint engine is unavailable.");
-        }
 
-        var arguments = (pInvocation.Arguments ?? Array.Empty<ScriptValue>())
-            .Select(pValue => pValue?.Value)
-            .ToArray();
+        var validation = ScriptInvocationBridge.SerializeArguments(pInvocation, out var argumentsJson);
+        if (!validation.Success) return validation;
         try
         {
-            if (string.IsNullOrWhiteSpace(pInvocation.Target)
-                || pInvocation.Target.Equals("globalThis", StringComparison.Ordinal))
-            {
-                _engine.Invoke(pInvocation.Member, arguments);
-            }
-            else
-            {
-                var target = _engine.GetValue(pInvocation.Target);
-                var member = _engine.GetValue(target, pInvocation.Member);
-                _engine.Invoke(member, arguments);
-            }
+            // Resolve the receiver AND method inside the constrained call. A
+            // property getter is game code too. Never use host-side GetValue
+            // followed by Invoke(member), which loses `this` and splits budgets.
+            _engine.Invoke(_invokeBridge, pInvocation.Target ?? "", pInvocation.Member, argumentsJson);
             return SdkOperationResult.Succeeded();
         }
         catch (Exception exception) when (!IsCritical(exception))
         {
-            State = ScriptVmState.Faulted;
-            return SdkOperationResult.Failed(
-                ConstraintErrorCode(exception),
-                $"JavaScript invocation '{pInvocation.Target}.{pInvocation.Member}' failed: {exception.Message}");
+            return ExecutionFailed(exception, $"JavaScript invocation '{pInvocation.Target}.{pInvocation.Member}'");
         }
     }
 
@@ -247,6 +180,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         if (State == ScriptVmState.Created)
         {
             _modules.Clear();
+            _storedSourceBytes = 0;
             return SdkOperationResult.Succeeded();
         }
         return RebuildEngine(_policy);
@@ -257,6 +191,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         if (_disposed) return;
         _disposed = true;
         _modules.Clear();
+        _storedSourceBytes = 0;
         DisposeEngine();
         State = ScriptVmState.Disposed;
     }
@@ -264,32 +199,22 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     private SdkOperationResult RebuildEngine(ScriptExecutionPolicy pPolicy)
     {
         if (pPolicy == null)
-        {
             return SdkOperationResult.Failed("jint.policy-required", "A JavaScript execution policy is required.");
-        }
         var validation = pPolicy.Validate();
         if (!validation.Success) return validation;
         if (pPolicy.AllowArbitraryHostFileSystem || pPolicy.AllowProcessExecution || pPolicy.AllowNativeInterop)
-        {
-            return SdkOperationResult.Failed(
-                "jint.host-capability-unsupported",
-                "Raw Jint VM never grants arbitrary filesystem, process, or native CLR access; those capabilities require explicit higher-level shims.");
-        }
+            return SdkOperationResult.Failed("jint.host-capability-unsupported", "Arbitrary filesystem, process and native access require separate host shims.");
 
         DisposeEngine();
         _modules.Clear();
+        _storedSourceBytes = 0;
         _policy = pPolicy;
         try
         {
-            var timeout = TimeSpan.FromMilliseconds(pPolicy.MaxExecutionMillisecondsPerTick);
-            var memoryBytes = checked((long)pPolicy.MaxMemoryMegabytes * 1024L * 1024L);
-            var requestedStatements = (long)pPolicy.MaxExecutionMillisecondsPerTick * 100_000L;
-            var maxStatements = (int)Math.Clamp(requestedStatements, 10_000L, DefaultMaxStatements);
-
             var options = new Options()
-                .LimitMemory(memoryBytes)
-                .TimeoutInterval(timeout)
-                .MaxStatements(maxStatements)
+                .LimitMemory((long)pPolicy.MaxMemoryMegabytes * 1024 * 1024)
+                .TimeoutInterval(TimeSpan.FromMilliseconds(pPolicy.MaxExecutionMillisecondsPerTick))
+                .MaxStatements((int)Math.Clamp((long)pPolicy.MaxExecutionMillisecondsPerTick * 100_000, 10_000, DefaultMaxStatements))
                 .LimitRecursion(pPolicy.MaxCallDepth)
                 .DisableStringCompilation();
             options.Interop.Enabled = false;
@@ -300,43 +225,44 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
             options.Constraints.StackOverflowGuard = true;
 
             _engine = new Engine(options);
+            _invokeBridge = _engine.Evaluate(ScriptInvocationBridge.Source);
             State = ScriptVmState.Configured;
             return SdkOperationResult.Succeeded(new[]
             {
-                SdkDiagnostic.Info(
-                    "jint.configured",
-                    "Jint 4.16.2 VM configured with memory/time/statement/recursion/native-stack limits, dynamic string compilation disabled, and CLR access disabled."),
+                SdkDiagnostic.Info("jint.configured", "Jint 4.16.2 configured with execution limits, primitive-only invocation and CLR access disabled."),
             });
         }
         catch (Exception exception) when (!IsCritical(exception))
         {
+            DisposeEngine();
             State = ScriptVmState.Faulted;
             return SdkOperationResult.Failed("jint.configure-failed", exception.Message);
         }
     }
 
+    private SdkOperationResult ExecutionFailed(Exception exception, string context)
+    {
+        State = ScriptVmState.Faulted;
+        return SdkOperationResult.Failed(ConstraintErrorCode(exception), $"{context} failed: {exception.Message}");
+    }
+
     private void DisposeEngine()
     {
+        _invokeBridge = null;
         _engine?.Dispose();
         _engine = null;
     }
 
-    private static string ConstraintErrorCode(Exception pException)
+    private static string ConstraintErrorCode(Exception exception) => exception.GetType().Name switch
     {
-        return pException.GetType().Name switch
-        {
-            "MemoryLimitExceededException" => "jint.memory-limit",
-            "StatementsCountOverflowException" => "jint.statement-limit",
-            "TimeoutException" => "jint.timeout",
-            "RecursionDepthOverflowException" => "jint.recursion-limit",
-            "ParsingLimitException" => "jint.parsing-limit",
-            _ => "jint.execution-failed",
-        };
-    }
+        "MemoryLimitExceededException" => "jint.memory-limit",
+        "StatementsCountOverflowException" => "jint.statement-limit",
+        "TimeoutException" => "jint.timeout",
+        "RecursionDepthOverflowException" => "jint.recursion-limit",
+        "ParsingLimitException" => "jint.parsing-limit",
+        _ => "jint.execution-failed",
+    };
 
-    private static bool IsCritical(Exception pException)
-        => pException is OutOfMemoryException or StackOverflowException;
-
-    private static SdkOperationResult Disposed()
-        => SdkOperationResult.Failed("jint.disposed", "The Jint VM has been disposed.");
+    private static bool IsCritical(Exception exception) => exception is OutOfMemoryException or StackOverflowException;
+    private static SdkOperationResult Disposed() => SdkOperationResult.Failed("jint.disposed", "The Jint VM has been disposed.");
 }

@@ -14,6 +14,10 @@ static class Smoke
             ExecutesOrderedJavaScriptAndPreservesRealmState();
             RejectsInvalidUtf8BeforeExecution();
             BoundsInfiniteExecution();
+            PreservesMethodReceiverAndPrimitiveArguments();
+            RejectsHostObjectsAndOversizedArguments();
+            BoundsGetterExecutionDuringInvocation();
+            BoundsStoredModuleTextAndResetsBudget();
             Console.WriteLine($"UniversalRPG Jint smoke passed ({_checks} checks).");
             return 0;
         }
@@ -26,122 +30,167 @@ static class Smoke
 
     private static void FactoryRejectsBrowserFeaturesUntilHostApisExist()
     {
-        var factory = new JintScriptVmFactory();
-        var result = factory.Create(new ScriptVmRequest
+        var result = new JintScriptVmFactory().Create(new ScriptVmRequest
         {
             LanguageId = ScriptLanguageIds.RpgMakerMzJavaScript,
             CompatibilityProfile = "rmmz-web-runtime",
-            Policy = Policy(100),
+            Policy = Policy(250),
             RequiredFeatures = new[] { "javascript", "window", "rmmz-api" },
         });
-        Check(!result.Success, "raw Jint factory rejects unimplemented browser/RPG Maker host features");
-        Check(result.Result.ErrorCode == "jint.feature-unsupported", "feature rejection uses stable error code");
+        Check(!result.Success, "raw Jint factory rejects unimplemented host features");
+        Check(result.Result.ErrorCode == "jint.feature-unsupported", "feature refusal has stable code");
     }
 
     private static void ExecutesOrderedJavaScriptAndPreservesRealmState()
     {
-        var factory = new JintScriptVmFactory();
-        var created = factory.Create(new ScriptVmRequest
-        {
-            LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript,
-            CompatibilityProfile = "javascript-core",
-            Policy = Policy(250),
-            RequiredFeatures = new[] { "javascript" },
-        });
-        Check(created.Success && created.Vm != null, "factory creates JavaScript-only VM");
-        using var vm = created.Vm!;
-
-        Check(vm.Configure(Policy(250)).Success, "VM configures constrained policy");
+        using var vm = Create();
         Check(vm.State == ScriptVmState.Configured, "configured state recorded");
-
-        var first = Module(
-            "plugin:first",
-            0,
-            "if (typeof System !== 'undefined') throw new Error('CLR leaked');\n" +
-            "globalThis.counter = 41;\n" +
-            "function add(a, b) { return a + b; }\n");
-        var second = Module(
-            "plugin:second",
-            1,
-            "if (globalThis.counter !== 41) throw new Error('realm state lost');\n" +
-            "globalThis.counter += 1;\n");
-
-        Check(vm.LoadModule(first).Success, "first module loads without execution");
-        Check(vm.LoadModule(second).Success, "second module loads before execution");
-        Check(vm.State == ScriptVmState.Ready, "loaded modules move VM to ready state");
-        Check(vm.ExecuteModule("plugin:first").Success, "first module executes");
-        Check(vm.ExecuteModule("plugin:second").Success, "second module sees state from first module");
-        Check(vm.State == ScriptVmState.Running, "executed VM is running");
-        Check(vm.Invoke(new ScriptInvocation
-        {
-            Target = "globalThis",
-            Member = "add",
-            Arguments = new[] { new ScriptValue(2), new ScriptValue(3) },
-        }).Success, "global JavaScript function can be invoked through VM contract");
-
-        Check(vm.Reset().Success, "VM reset succeeds");
-        Check(vm.State == ScriptVmState.Configured, "reset recreates clean configured realm");
-        Check(!vm.ExecuteModule("plugin:first").Success, "reset clears loaded module registry");
+        Success(vm.LoadModule(Module("plugin:first", 0,
+            "if (typeof System !== 'undefined') throw Error('CLR leaked');" +
+            "globalThis.counter = 41; function add(a,b) { if(a+b!==5) throw Error('arguments'); }")), "load first module");
+        Success(vm.LoadModule(Module("plugin:second", 1,
+            "if(counter !== 41) throw Error('realm state lost'); counter++;")), "load second module");
+        Check(vm.State == ScriptVmState.Ready, "loading does not execute scripts");
+        Success(vm.ExecuteModule("plugin:first"), "execute first module");
+        Success(vm.ExecuteModule("plugin:second"), "second module sees first state");
+        Check(vm.State == ScriptVmState.Running, "running state recorded");
+        Success(vm.Invoke(Call("globalThis", "add", 2, 3)), "invoke global function");
+        Success(vm.Reset(), "reset running VM");
+        Check(vm.State == ScriptVmState.Configured, "reset creates clean configured realm");
+        Check(!vm.ExecuteModule("plugin:first").Success, "reset clears modules");
     }
 
     private static void RejectsInvalidUtf8BeforeExecution()
     {
-        var factory = new JintScriptVmFactory();
-        var created = factory.Create(new ScriptVmRequest
-        {
-            LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript,
-            CompatibilityProfile = "javascript-core",
-            Policy = Policy(100),
-            RequiredFeatures = new[] { "javascript" },
-        });
-        Check(created.Success && created.Vm != null, "UTF-8 smoke VM created");
-        using var vm = created.Vm!;
-        Check(vm.Configure(Policy(100)).Success, "UTF-8 smoke VM configured");
-
+        using var vm = Create();
         var result = vm.LoadModule(new ScriptModule
         {
             Descriptor = Descriptor("plugin:invalid-utf8", 0),
             Source = new byte[] { 0xC3, 0x28 },
         });
-        Check(!result.Success && result.ErrorCode == "jint.source-encoding", "invalid UTF-8 rejected before execution");
+        Check(!result.Success && result.ErrorCode == "jint.source-encoding", "invalid UTF-8 is refused");
     }
 
     private static void BoundsInfiniteExecution()
     {
-        var factory = new JintScriptVmFactory();
-        var policy = Policy(25);
-        var created = factory.Create(new ScriptVmRequest
+        using var vm = Create(25);
+        Success(vm.LoadModule(Module("plugin:loop", 0, "while(true){}")), "load loop as data");
+        var execution = vm.ExecuteModule("plugin:loop");
+        Check(!execution.Success, "infinite JS stops");
+        Check(execution.ErrorCode is "jint.timeout" or "jint.statement-limit", "loop reaches a real execution constraint");
+        Check(vm.State == ScriptVmState.Faulted, "constraint faults session");
+        Success(vm.Reset(), "reset faulted VM");
+        Check(vm.State == ScriptVmState.Configured, "reset after fault restores lifecycle");
+    }
+
+    private static void PreservesMethodReceiverAndPrimitiveArguments()
+    {
+        using var vm = Create();
+        Success(vm.LoadModule(Module("plugin:receiver", 0, """
+            globalThis.api = {
+                count: 0,
+                change: function(n, flag, text, empty) {
+                    'use strict';
+                    if (this !== api || n !== 42 || flag !== true || text !== '日本語' || empty !== null)
+                        throw Error('receiver or primitive argument mismatch');
+                    this.count++;
+                },
+                verify: function() { if(this !== api || this.count !== 1) throw Error('method receiver lost'); },
+                get probe() { this.reads = (this.reads || 0) + 1; return this.verify; }
+            };
+            globalThis.globalProbe = function() { 'use strict'; if(this !== globalThis) throw Error('global receiver lost'); };
+            """)), "load receiver fixture");
+        Success(vm.ExecuteModule("plugin:receiver"), "execute receiver fixture");
+        Success(vm.Invoke(Call("api", "change", 42, true, "日本語", null)), "retain receiver and primitive values");
+        Success(vm.Invoke(Call("api", "probe")), "resolve getter within invocation");
+        Success(vm.Invoke(Call("", "globalProbe")), "empty target uses global receiver");
+        Success(vm.Invoke(Call("globalThis", "globalProbe")), "globalThis target uses global receiver");
+    }
+
+    private static void RejectsHostObjectsAndOversizedArguments()
+    {
+        using var vm = Create();
+        Success(vm.LoadModule(Module("plugin:guard", 0,
+            "globalThis.calls = 0; function accept(){calls++;} function check(){if(calls !== 0) throw Error('invalid arguments executed');}")), "load argument fixture");
+        Success(vm.ExecuteModule("plugin:guard"), "execute argument fixture");
+        foreach (var value in new object[] { new HostObject(), typeof(string), (Action)(() => { }), double.NaN, double.PositiveInfinity, long.MaxValue, ulong.MaxValue })
+        {
+            var rejected = vm.Invoke(Call("", "accept", value));
+            Check(!rejected.Success && rejected.ErrorCode == "jint.argument-type", "reject unsafe/non-representable argument");
+        }
+        var oversized = vm.Invoke(Call("", "accept", new string('x', 8193)));
+        Check(!oversized.Success && oversized.ErrorCode == "jint.argument-limit", "reject oversized argument string");
+        var many = vm.Invoke(new ScriptInvocation
+        {
+            Member = "accept",
+            Arguments = Enumerable.Range(0, 257).Select(n => new ScriptValue(n)).ToArray(),
+        });
+        Check(!many.Success && many.ErrorCode == "jint.argument-limit", "reject excessive argument count");
+        Check(vm.State == ScriptVmState.Running, "bad host request does not damage VM state");
+        Success(vm.Invoke(Call("", "check")), "invalid arguments never reach game code");
+    }
+
+    private static void BoundsGetterExecutionDuringInvocation()
+    {
+        using var vm = Create(50);
+        Success(vm.LoadModule(Module("plugin:getter-loop", 0,
+            "globalThis.api = { get forever() { while(true){} } };")), "load getter fixture");
+        Success(vm.ExecuteModule("plugin:getter-loop"), "execute getter fixture");
+        var result = vm.Invoke(Call("api", "forever"));
+        Check(!result.Success && (result.ErrorCode is "jint.timeout" or "jint.statement-limit"), "property lookup is also execution-bounded");
+        Check(vm.State == ScriptVmState.Faulted, "getter constraint faults VM");
+        Success(vm.Reset(), "recover from getter timeout");
+    }
+
+    private static void BoundsStoredModuleTextAndResetsBudget()
+    {
+        using var vm = new JintEmbeddedScriptVm(ScriptLanguageIds.RpgMakerMvJavaScript);
+        var policy = new ScriptExecutionPolicy
+        {
+            MaxMemoryMegabytes = 16,
+            MaxExecutionMillisecondsPerTick = 250,
+            MaxCallDepth = 128,
+        };
+        Success(vm.Configure(policy), "configure source budget fixture");
+        // Each ASCII source becomes 10 MiB of UTF-16 text, outside Jint's own
+        // per-entry allocation counter. Two must not fit the 16 MiB source cap.
+        var source = new string(' ', 5 * 1024 * 1024);
+        Success(vm.LoadModule(Module("plugin:large-a", 0, source)), "first bounded source fits");
+        var second = vm.LoadModule(Module("plugin:large-b", 1, source));
+        Check(!second.Success && second.ErrorCode == "jint.source-memory-limit", "aggregate source memory is bounded before decode");
+        Success(vm.Reset(), "reset source registry");
+        Success(vm.LoadModule(Module("plugin:large-a", 0, source)), "reset releases source budget");
+    }
+
+    private static IEmbeddedScriptVm Create(int milliseconds = 250)
+    {
+        var created = new JintScriptVmFactory().Create(new ScriptVmRequest
         {
             LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript,
             CompatibilityProfile = "javascript-core",
-            Policy = policy,
+            Policy = Policy(milliseconds),
             RequiredFeatures = new[] { "javascript" },
         });
-        Check(created.Success && created.Vm != null, "bounded execution VM created");
-        using var vm = created.Vm!;
-        Check(vm.Configure(policy).Success, "bounded execution VM configured");
-        Check(vm.LoadModule(Module("plugin:loop", 0, "while (true) { }\n")).Success, "loop module loads as data");
-
-        var execution = vm.ExecuteModule("plugin:loop");
-        Check(!execution.Success, "infinite JavaScript is stopped by VM constraints");
-        Check(execution.ErrorCode is "jint.timeout" or "jint.statement-limit" or "jint.execution-failed",
-            "constraint failure returns bounded Jint error");
-        Check(vm.State == ScriptVmState.Faulted, "constraint violation faults the VM session");
+        Check(created.Success && created.Vm != null, "create JavaScript-only VM");
+        var vm = created.Vm!;
+        var configured = vm.Configure(Policy(milliseconds));
+        if (!configured.Success) { vm.Dispose(); Success(configured, "configure VM"); }
+        else Success(configured, "configure VM");
+        return vm;
     }
 
     private static ScriptExecutionPolicy Policy(int milliseconds) => new()
     {
-        AllowReadGameFiles = true,
-        AllowWriteSaveFiles = true,
-        AllowWriteCacheFiles = true,
-        AllowArbitraryHostFileSystem = false,
-        AllowNetwork = false,
-        AllowClipboard = false,
-        AllowProcessExecution = false,
-        AllowNativeInterop = false,
         MaxMemoryMegabytes = 64,
         MaxExecutionMillisecondsPerTick = milliseconds,
         MaxCallDepth = 128,
+    };
+
+    private static ScriptInvocation Call(string target, string member, params object?[] values) => new()
+    {
+        Target = target,
+        Member = member,
+        Arguments = values.Select(value => new ScriptValue(value)).ToArray(),
     };
 
     private static ScriptModule Module(string id, int order, string source) => new()
@@ -161,9 +210,18 @@ static class Smoke
         LoadOrder = order,
     };
 
+    private static void Success(SdkOperationResult result, string label)
+        => Check(result.Success, $"{label}: [{result.ErrorCode}] {result.ErrorMessage}");
+
     private static void Check(bool condition, string message)
     {
         _checks++;
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private sealed class HostObject
+    {
+        public string Secret => throw new InvalidOperationException("Host getter must never be read.");
+        public override string ToString() => throw new InvalidOperationException("Host coercion must never run.");
     }
 }

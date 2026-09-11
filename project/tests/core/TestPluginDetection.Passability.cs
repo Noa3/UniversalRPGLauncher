@@ -26,24 +26,32 @@ public partial class TestPluginDetection
 
     public void Test_Rm2kPassabilityChecksSourceAndTargetDirectionBits()
     {
-        var lower = new byte[Rm2kPassabilityMap.LowerPassageCount];
-        Array.Fill(lower, (byte)0x0F);
-        // Raw lower tile 2000 maps to lower passage index 2. Remove Right while
-        // retaining every other direction to prove the source tile is checked.
-        lower[2] = (byte)(Rm2kPassabilityMap.Down | Rm2kPassabilityMap.Left | Rm2kPassabilityMap.Up);
-
-        var database = PassabilityDatabase(1, lower, null);
-        var map = PassabilityMap(
-            2, 1, 1,
-            new[] { 2000, 2000 },
-            new[] { 10000, 10000 });
-
-        AssertTrue(Rm2kPassabilityMap.TryCreate(database, map, out var passability, out var error), error);
-        AssertTrue(passability != null);
-        AssertFalse(passability!.CanMove(0, 0, 1, 0),
-            "movement is blocked when the source tile disallows the outgoing direction");
-        AssertTrue(passability.CanMove(1, 0, 0, 0),
-            "the same passage table still permits the reverse direction because Left remains set");
+        // Use DIFFERENT lower tiles so source.Right and target.Left can be
+        // varied independently. Reversing an edge checks the same two flags;
+        // retaining Left on the source alone does not make reverse travel safe.
+        var map = PassabilityMap(2, 1, 1, new[] { 2000, 1000 }, new[] { 10000, 10000 });
+        for (var sourceMask = 0; sourceMask < 16; sourceMask++)
+        {
+            for (var targetMask = 0; targetMask < 16; targetMask++)
+            {
+                var lower = new byte[Rm2kPassabilityMap.LowerPassageCount];
+                var upper = new byte[Rm2kPassabilityMap.UpperPassageCount];
+                Array.Fill(lower, (byte)0x0F);
+                Array.Fill(upper, (byte)0x1F);
+                lower[2] = (byte)sourceMask;
+                lower[1] = (byte)targetMask;
+                var database = PassabilityDatabase(1, lower, upper);
+                AssertTrue(Rm2kPassabilityMap.TryCreate(database, map, out var passage, out var error), error);
+                AssertTrue(passage != null);
+                if (passage == null) return;
+                var expected = (sourceMask & Rm2kPassabilityMap.Right) != 0
+                    && (targetMask & Rm2kPassabilityMap.Left) != 0;
+                AssertEq(passage.CanMove(0, 0, 1, 0), expected,
+                    $"source.Right and target.Left must both allow the edge ({sourceMask:X}/{targetMask:X})");
+                AssertEq(passage.CanMove(1, 0, 0, 0), expected,
+                    "reverse movement checks the same adjacent edge flags");
+            }
+        }
     }
 
     public void Test_Rm2kPassabilityHonorsUpperLayerAndRejectsOversizedPassageData()

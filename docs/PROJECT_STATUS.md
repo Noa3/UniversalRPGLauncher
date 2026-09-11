@@ -1,261 +1,79 @@
 # UniversalRPG — Project Status
 
-> **Last reviewed:** 2026-09-11  
-> **Reviewed main baseline:** `782ea66141e494d32929a9cc41056523177888eb`  
-> **Primary focus:** RM2000/2003 playable runtime + reusable SDK/script-runtime foundations
+Last reviewed: 2026-09-12. This describes source present on the development branch, not a released compatibility guarantee.
 
-## Executive Summary
+## Product boundary
 
-UniversalRPG now has three deliberately separated product layers:
+UniversalRPG is a Godot-hosted C# application with engine-specific interpreters and a separate .NET SDK. The project is **not yet a generally playable replacement for every supported detector**.
 
-1. a Godot 4.7.2 C#/.NET launcher/application;
-2. internal engine detection/runtime plugins;
-3. a new Godot-free `UniversalRPG.Sdk` contract assembly for external embedding and future script VM backends.
+The current branch has extensive changes beyond the historical main baseline. Fresh .NET/Jint/Godot validation remains required. Executed JavaScript-semantic evidence is recorded separately in [VALIDATION_2026-09-12.md](VALIDATION_2026-09-12.md); it must not be used as proof that the complete application builds.
 
-It is **not yet a general playable replacement runtime**.
+## Engine matrix
 
-RM2000/2003 remain the most complete RPG Maker runtime path. WOLF has an experimental unencrypted/plain-data runtime. XP/VX/VX Ace and MV/MZ remain non-launchable, but their custom-script compatibility path now has real foundations: script inventory/archive decoding, ordered bootstrap abstractions, security policy, VM factory profiles, and public SDK exposure.
+| Engine family | Present implementation | Important missing boundary |
+|---|---|---|
+| RM2000 / RM2003 | Partial LCF parser, event scheduler/interpreter, passability, runtime state, transfers and presentation models | Full rendering/audio/menu/save/battle parity and representative end-to-end playability |
+| XP / VX / VX Ace | Metadata, bounded script-archive reader, Game.ini script-path handling, ordered VM pipeline | Embedded Ruby and RGSS1/2/3 APIs; no executable engine registration |
+| MV / MZ | Metadata, plugin inventory/parameters, ordered loader, concrete Jint adapter and PluginManager shim source | Validated integrated VM plus browser/render/audio/storage host; no playable MV/MZ runtime registration |
+| WOLF RPG Editor | Experimental understood unencrypted/plain-data parser and event VM | Broader native formats, systems and real-game conformance |
+| RM95 / Dante 98 / Unite | Detection/research | Runtime implementation |
 
-The last recorded canonical validation on `main` remains **296/296 headless tests passed** with a clean build. The current branch contains substantial runtime/SDK/script changes and requires fresh validation before merge.
+Detection, parsing, an isolated language interpreter, and a playable engine are distinct milestones. A capability must not be promoted simply because a class or a synthetic test exists.
 
-## Current Engine Status
+## SDK, scripts and content
 
-| Engine | Detection | Parsing / script inventory | Runtime | Script execution |
-|---|---:|---:|---:|---:|
-| Dante 98 | Yes | No | No | No |
-| RPG Maker 95 | Yes | No native parser | No | No |
-| RPG Maker 2000 | Yes | Partial LCF | Partial runtime | Native event interpreter |
-| RPG Maker 2003 | Yes | Partial shared LCF | Partial runtime | Native event interpreter |
-| RPG Maker XP | Yes | Metadata + bounded `Scripts.rxdata` reader | No | VM pipeline exists; no embedded Ruby backend |
-| RPG Maker VX | Yes | Metadata + bounded `Scripts.rvdata` reader | No | VM pipeline exists; no embedded Ruby backend |
-| RPG Maker VX Ace | Yes | Metadata + bounded `Scripts.rvdata2` reader | No | VM pipeline exists; no embedded Ruby backend |
-| RPG Maker MV | Yes | Metadata + custom plugin inventory | No | VM pipeline exists; no embedded JS backend |
-| RPG Maker MZ | Yes | Metadata/database + custom plugin inventory | No | VM pipeline exists; no embedded JS backend |
-| WOLF RPG Editor | Yes | Experimental plain-data readers | Experimental runtime | Native WOLF event VM slice |
-| RPG Maker Unite | Research candidate | No | No | No |
+The application references the shared `sdk/UniversalRPG.Sdk` assembly rather than providing competing copies of public SDK types. The SDK itself remains Godot-free; its current application adapter is still Godot-hosted.
 
-A script archive/plugin inventory does **not** imply executable script compatibility. XP/VX/VX Ace and MV/MZ still intentionally advertise no Runtime capability.
+Existing foundations include:
 
-## Public SDK / External Library
+- library analysis/session/extension contracts and truthful engine support descriptors;
+- ordered custom-script metadata and replaceable embedded VM interfaces;
+- RGSS Marshal/zlib script decoding, generation profiles and configured script paths;
+- MV/MZ enabled-plugin order, parameters, source identity and compatibility diagnostics;
+- read-only directory/ZIP/layered/prefixed content sources;
+- protected-content provider contracts and in-memory MV/MZ engine-asset reading.
 
-A Godot-free public contract layer now exists under:
+Packed data access does not imply that the corresponding game engine can execute. No general third-party DRM bypass, arbitrary DLL execution or external original-runtime fallback is provided.
 
-```text
-project/src/sdk/
-sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
-```
+## Latest correctness work
 
-The standalone SDK project targets plain `.NET 8` and compiles the exact same contract sources as the main application.
+### JavaScript invocation
 
-Implemented public contracts include:
+The prior host-side GetValue/Invoke sequence detached methods from their receiver and passed arbitrary CLR argument values into Jint. The new private invocation bridge resolves the target and member inside one constrained call, preserves `this`, and converts only bounded JSON primitive arguments. Strings used for target/member names are literal keys, never evaluated as code.
 
-- `IUniversalRpgLibrary`
-- `GameAnalysis`
-- `EngineSupportDescriptor`
-- `IUniversalRpgSession`
-- `IEngineScriptingRuntime`
-- `IEmbeddedScriptVm`
-- `IEmbeddedScriptVmFactory`
-- `EngineScriptDescriptor`
-- `ScriptExecutionPolicy`
-- trusted `IUniversalRpgExtension`
-- trusted script-library/shim provider contracts
+The bridge captures its JavaScript intrinsics before game code runs. Getter failures and execution constraints fault the session; invalid host arguments return errors before executing game code. Stored module text receives an aggregate UTF-16 source budget, separate from Jint's per-entry allocation limit.
 
-The in-app implementation is currently provided by:
+### PluginManager
 
-```text
-project/src/sdk_host/UniversalRpgLibraryAdapter.cs
-```
+Configuration is parsed as JSON rather than injected as a JavaScript object literal. Special names such as `__proto__` remain data. MZ callbacks retain their supplied receiver and argument values, including null/false/zero/empty strings. The builder bounds input enumeration and does not silently trim real plugin filenames.
 
-It bridges the current detector/plugin host to the public SDK and can already:
+### RM2000/2003 routes
 
-- analyze a game;
-- report truthful engine support level;
-- expose discovered RGSS/MV/MZ script descriptors;
-- create real sessions for runtime-capable engines;
-- refuse sessions for parsing-only engines.
+The runner now uses the real simulation coordinate fields, grows valid lazy switch storage, snapshots input commands, and validates coordinates before arithmetic. Fourteen new regression methods cover movement, collision, skip/repeat, facing locks, through movement, switches, invalid input and preservation of parsed event positions.
 
-NuGet packaging remains disabled until the repository chooses an explicit source license and package/versioning policy.
+The directional-passability fixture previously expected reverse movement through an edge whose opposite flag was blocked. It now independently varies source and destination masks and checks both directions without weakening the geometry implementation.
 
-See `docs/SDK.md`.
-
-## Script Compatibility Foundation
+**Not completed:** automatic route extraction/scheduling from LMU pages, faithful move-speed/frequency timing, full runtime sprite synchronization, unsupported route operations and a complete gameplay loop. The route runner still executes a bounded supported subset per explicit Step call.
 
-Running game-authored scripts/plugins is now an explicit core requirement.
+## Security and compatibility limitations
 
-### Shared security/runtime contracts
+Jint is pinned to 4.16.2 behind an interchangeable adapter. CLR namespace/reflection access is disabled. Arbitrary CLR object arguments are refused. Time, statement, recursion and allocation constraints are configured, but an in-process interpreter is **not an OS sandbox**, and its allocation/source budgets are **not a hard total process-heap limit**.
 
-`ScriptExecutionPolicy.SafeDefault` allows bounded game/save/cache access but denies by default:
-
-- arbitrary host filesystem
-- network
-- clipboard
-- process execution
-- native interop
-
-`IEmbeddedScriptVm` keeps concrete Ruby/JavaScript implementations replaceable.
-
-`IEmbeddedScriptVmFactory` receives a generation-specific compatibility request instead of allowing one VM to silently substitute different historical semantics.
-
-### RGSS / XP, VX, VX Ace
-
-Implemented:
-
-- bounded Ruby Marshal 4.8 subset reader for RPG Maker script archives;
-- zlib script-source decompression with per-script and total limits;
-- preservation of archive/script-editor order;
-- SHA-256 source identity;
-- Ruby-1.9-style IVAR/encoding metadata handling needed by later RGSS archives;
-- `RgssScriptRuntime` ordered load/bootstrap pipeline;
-- `RgssVmProfiles` separating:
-  - RGSS1 -> Ruby-1.8-compatible profile
-  - RGSS2 -> Ruby-1.8-compatible profile
-  - RGSS3 -> Ruby-1.9.2-compatible profile
-- fake-VM regression coverage proving order, language-profile enforcement, explicit bootstrap and failure propagation.
-
-Still missing:
-
-- actual embedded Ruby backend;
-- RGSS1/2/3 host APIs;
-- serialized RPG data object compatibility beyond the script archive path;
-- Win32API compatibility;
-- executable engine runtime registration.
-
-### MV / MZ
-
-Implemented:
-
-- bounded `plugins.js` parsing without JavaScript evaluation;
-- `js/plugins/*.js` inventory;
-- enabled/disabled and configured load order;
-- SHA-256 source hashes;
-- unlisted plugin discovery without silently enabling it;
-- conservative classification of:
-  - standard browser-style plugin
-  - Node/NW.js shim requirement
-  - process-execution requirement
-  - native `.node` addon requirement
-  - truncated/missing source
-- `WebScriptRuntime` ordered enabled-plugin bootstrap over `IEmbeddedScriptVm`;
-- explicit `IWebScriptSourceProvider` separating metadata inspection from executable VFS reads;
-- policy gates before process/native-capability plugins are loaded;
-- MV/MZ-specific VM compatibility profiles;
-- public SDK exposure of plugin inventory.
-
-Still missing:
-
-- actual embedded JavaScript backend;
-- browser/RPG Maker API environment (`window`, timers, Canvas/WebGL/WebAudio, storage, etc.);
-- safe Node/NW.js compatibility shims;
-- executable MV/MZ runtime registration.
-
-Current first JS VM spike candidate is QuickJS/QuickJS-ng. The choice is not yet vendored/final.
-
-See `docs/SCRIPT_COMPATIBILITY.md` and `docs/VM_EVALUATION.md`.
-
-## RM2000/2003 Runtime
-
-Current branch work materially advances the first playable path.
-
-Implemented foundations include:
-
-- bounded LCF framing/BER parsing;
-- typed LDB/LMT/LMU slices;
-- deterministic simulation;
-- verified event-command subset;
-- correct raw LMU trigger mapping;
-- active page selection;
-- serialized foreground interpreter and independent parallel interpreters;
-- repeating autorun semantics while page conditions remain active;
-- simulation-owned player-input lock during foreground events;
-- event-layer collision;
-- Player Touch on collision and successful step;
-- runtime-owned Action interaction targeting;
-- action events on current tile/front tile;
-- RPG_RT-style traversal across up to three Counter tiles;
-- verified directional chipset passability foundation;
-- renderer-neutral framebuffer/sprites/presentation state;
-- real `Teleport / Place Hero` map application rather than pending state only;
-- target-map parse/coordinate validation/passability/framebuffer/event replacement;
-- fail-closed missing/invalid map transfer behavior;
-- RTP/save/debug foundations.
-
-Important remaining gaps:
-
-- promote chipset passage vectors fully into first-class typed parser output and remove legacy raw fallback after validation;
-- runtime tile substitution / looping maps / vehicles / moving-event collision;
-- much broader event command coverage;
-- RM2000 vs RM2003 semantic differences;
-- faithful visible rendering;
-- audio;
-- menus/system flow;
-- original save compatibility;
-- battles;
-- authorized end-to-end real-game playthrough evidence.
-
-## WOLF
-
-Implemented:
-
-- WOLF detection;
-- protected-data refusal boundary;
-- experimental unencrypted/plain-data readers;
-- database/map/event foundations;
-- bounded deterministic `WolfEventVm`;
-- runtime lifecycle tests.
-
-Still experimental and not native-format/broad-game complete.
-
-## Runtime Capability Hardening
-
-Current branch also separates recognition from execution structurally:
-
-- plugin selection can require capabilities;
-- `EnginePluginHost` explicitly requires Runtime;
-- runtime creation defensively rechecks Runtime capability;
-- generic bootstrap runtime fails closed;
-- obsolete RGSS pseudo-runtime was removed;
-- regression coverage ensures detection-only engines cannot masquerade as launchable.
-
-## Validation
-
-`scripts/validate.sh` now validates six stages:
-
-1. standalone public SDK restore;
-2. standalone public SDK build;
-3. Godot .NET project restore;
-4. Godot .NET project build;
-5. Godot headless import;
-6. C# core/SDK-adapter/smoke tests.
-
-GitHub's connected API currently exposes no workflow/status run for the latest branch commits. Therefore the current branch is **not claimed green** even though extensive regression tests have been added.
-
-The existing GitHub workflow is configured for .NET 8 + Godot 4.7.2 Mono/.NET.
-
-## Immediate Priorities
-
-1. obtain a fresh full build/test run for the current branch and repair any compile/test regression;
-2. keep RM2000/2003 moving toward a representative end-to-end playable map;
-3. finish typed chipset passage parser migration;
-4. remove remaining RPG_RT-specific input/event decisions from launcher UI where runtime APIs now exist;
-5. extend real two-map transfer fixtures and broader event semantics;
-6. implement the first real `IEmbeddedScriptVm` spike:
-   - CRuby-family adapter investigation for RGSS;
-   - QuickJS/QuickJS-ng adapter investigation for MV/MZ;
-7. implement RGSS host API skeleton only after VM lifecycle/exception/sandbox tests work;
-8. implement minimal MV/MZ browser host APIs only after JS VM isolation works;
-9. continue WOLF format/runtime work independently from RPG Maker script VM layers;
-10. keep native DLL/addon compatibility late-stage and prefer HLE/shims.
-
-## Living Project Control
-
-Current sources of truth:
-
-1. source and tests;
-2. `SESSION_STATE.md`;
-3. this file;
-4. `docs/ARCHITECTURE.md`;
-5. `docs/ROADMAP.md`;
-6. SDK/script-specific docs.
-
-There is intentionally no Kanban/work-board file.
+Dynamic string compilation remains disabled; plugins requiring eval or Function are not automatically compatible. Node/NW.js/process/native requirements remain separate host capabilities, not implicit grants. Static source classification is diagnostic and cannot replace enforcement at runtime.
+
+No imported game code executes during detection. No Runtime capability was newly enabled in this stabilization pass.
+
+## Validation and immediate priorities
+
+The workflow separates JavaScript-semantic tests from the portable .NET/Jint smoke and Godot checks. Node is used only for development regression tests and is not part of the user installation.
+
+Required next steps:
+
+1. Run the complete SDK/Jint/Godot validation and repair measured failures.
+2. Connect supported movement routes to LMU pages, timing, active-page refresh and render descriptors with integration fixtures.
+3. Complete representative RM2K traversal, interaction, transfer and save paths before claiming playability.
+4. After real VM validation, add minimal browser/RPG Maker services with explicit capability tests rather than empty stubs.
+5. Continue Ruby/RGSS and WOLF as independent, evidence-driven runtime tracks.
+6. Audit dependency notices, exports and actual target devices before release.
+
+Use source/tests, `SESSION_STATE.md` and the relevant engine documents as the operational baseline. There is intentionally no Kanban file. Historical handoffs remain dated evidence, not current acceptance results.
