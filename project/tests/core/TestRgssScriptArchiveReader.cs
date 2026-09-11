@@ -33,6 +33,18 @@ public sealed class TestRgssScriptArchiveReader : TestBase
         AssertTrue(result.Scripts.All(pScript => pScript.Descriptor.Validate().Success));
     }
 
+    public void Test_Ruby19EncodingIvarPreservesUtf8ScriptName()
+    {
+        var archive = BuildArchive((1, "設定システム", "nil\n", true));
+
+        var result = RgssScriptArchiveReader.Read(archive, RgssGeneration.Rgss3);
+
+        AssertTrue(result.Success, result.Error);
+        AssertEq(result.Scripts.Count, 1);
+        AssertEq(result.Scripts[0].Name, "設定システム");
+        AssertEq(result.Scripts[0].Descriptor.DisplayName, "設定システム");
+    }
+
     public void Test_MapsGenerationToCorrectScriptLanguage()
     {
         var archive = BuildArchive((1, "Main", "nil\n", false));
