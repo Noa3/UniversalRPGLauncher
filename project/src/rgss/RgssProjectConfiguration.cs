@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using UniversalRPG.Core;
 using UniversalRPG.Sdk;
 
@@ -77,7 +76,7 @@ public static class RgssProjectConfigurationReader
                     "rgss.scripts-path-empty",
                     "Game.ini contains an empty Scripts path.");
             }
-            if (!TryNormalizeLogicalPath(value, out var normalized))
+            if (!LogicalGamePath.TryNormalize(value, out var normalized, 2048))
             {
                 return SdkValueResult<RgssProjectConfiguration>.Failed(
                     "rgss.scripts-path-unsafe",
@@ -103,22 +102,6 @@ public static class RgssProjectConfigurationReader
         RgssGeneration.Rgss2 => "Data/Scripts.rvdata",
         _ => "Data/Scripts.rvdata2",
     };
-
-    public static bool TryNormalizeLogicalPath(string pPath, out string pNormalized)
-    {
-        pNormalized = "";
-        if (string.IsNullOrWhiteSpace(pPath) || pPath.Length > 2048 || pPath.IndexOf('\0') >= 0) return false;
-        var path = pPath.Replace('\\', '/').Trim();
-        if (path.StartsWith('/', StringComparison.Ordinal) || Path.IsPathRooted(path)) return false;
-        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return false;
-        foreach (var part in parts)
-        {
-            if (part is "." or "..") return false;
-        }
-        pNormalized = string.Join('/', parts);
-        return true;
-    }
 
     private static string Unquote(string pValue)
     {
