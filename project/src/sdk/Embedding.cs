@@ -35,8 +35,10 @@ public sealed class GameAnalysis
     public EngineSupportLevel SupportLevel { get; init; }
     public IReadOnlyList<string> Evidence { get; init; } = Array.Empty<string>();
     public IReadOnlyList<EngineScriptDescriptor> Scripts { get; init; } = Array.Empty<EngineScriptDescriptor>();
+    public IReadOnlyList<ProtectedContentStatus> ProtectedContent { get; init; } = Array.Empty<ProtectedContentStatus>();
     public IReadOnlyList<SdkDiagnostic> Diagnostics { get; init; } = Array.Empty<SdkDiagnostic>();
     public bool HasScripts => Scripts.Count > 0;
+    public bool HasProtectedContent => ProtectedContent.Count > 0;
 }
 
 /// <summary>
