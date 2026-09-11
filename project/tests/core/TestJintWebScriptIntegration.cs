@@ -10,31 +10,13 @@ namespace UniversalRPG.Tests.Core;
 
 public sealed class TestJintWebScriptIntegration : TestBase
 {
-    public void Test_CustomMvPluginExecutesThroughRealEmbeddedVm()
+    public void Test_CustomMvPluginReadsConfiguredParametersThroughRealVm()
     {
-        var factory = new JintScriptVmFactory();
-        var created = factory.Create(new ScriptVmRequest
-        {
-            LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript,
-            CompatibilityProfile = "javascript-core",
-            Policy = SafePolicy(),
-            RequiredFeatures = new[] { "javascript" },
-        });
-        AssertTrue(created.Success, created.Result.ErrorMessage);
-        AssertTrue(created.Vm != null);
-        if (created.Vm == null) return;
+        var vm = CreateVm(ScriptLanguageIds.RpgMakerMvJavaScript);
+        if (vm == null) return;
+        using var ownedVm = vm;
 
-        using var vm = created.Vm;
-        var descriptor = new EngineScriptDescriptor
-        {
-            Id = "plugin:custom",
-            DisplayName = "Custom",
-            LanguageId = ScriptLanguageIds.RpgMakerMvJavaScript,
-            RelativePath = "js/plugins/Custom.js",
-            Origin = ScriptOrigin.Plugin,
-            Required = true,
-            LoadOrder = 0,
-        };
+        var descriptor = Descriptor("Custom", ScriptLanguageIds.RpgMakerMvJavaScript);
         var entry = new WebScriptInventoryEntry
         {
             Script = descriptor,
@@ -45,32 +27,84 @@ public sealed class TestJintWebScriptIntegration : TestBase
         var source = new StaticSourceProvider(new Dictionary<string, byte[]>
         {
             [descriptor.Id] = Encoding.UTF8.GetBytes(
+                "const urpgParams = PluginManager.parameters('Custom');\n" +
+                "if (urpgParams.Greeting !== 'Hello') throw new Error('PluginManager parameters mismatch');\n" +
                 "globalThis.__urpg_custom_plugin_runs = (globalThis.__urpg_custom_plugin_runs || 0) + 1;\n" +
                 "function urpgCustomPluginProbe() {\n" +
                 "  if (globalThis.__urpg_custom_plugin_runs !== 1) throw new Error('plugin order/state mismatch');\n" +
                 "}\n"),
         });
+        var prelude = WebPluginManagerShimBuilder.Build(
+            ScriptLanguageIds.RpgMakerMvJavaScript,
+            new[] { entry });
         using var runtime = new WebScriptRuntime(
             ScriptLanguageIds.RpgMakerMvJavaScript,
-            vm,
+            ownedVm,
             source,
-            new[] { entry });
+            new[] { entry },
+            new[] { prelude });
 
         var load = runtime.LoadScripts(SafePolicy());
         AssertTrue(load.Success, load.ErrorMessage);
-        AssertEq(vm.State, ScriptVmState.Ready);
+        AssertEq(ownedVm.State, ScriptVmState.Ready);
+        AssertEq(runtime.Scripts.Count, 2, "compatibility prelude is visible before the game plugin");
+        AssertEq(runtime.Scripts[0].Id, WebPluginManagerShimBuilder.ModuleId);
 
         var bootstrap = runtime.ExecuteBootstrap();
         AssertTrue(bootstrap.Success, bootstrap.ErrorMessage);
-        AssertEq(vm.State, ScriptVmState.Running);
+        AssertEq(ownedVm.State, ScriptVmState.Running);
 
-        var invoke = vm.Invoke(new ScriptInvocation
+        var invoke = ownedVm.Invoke(new ScriptInvocation
         {
             Target = "globalThis",
             Member = "urpgCustomPluginProbe",
         });
         AssertTrue(invoke.Success, invoke.ErrorMessage);
         AssertEq(runtime.GetPluginParameters("custom")["Greeting"], "Hello");
+    }
+
+    public void Test_MzRegisterCommandAndCallCommandWorkInsideCompatibilityRealm()
+    {
+        var vm = CreateVm(ScriptLanguageIds.RpgMakerMzJavaScript);
+        if (vm == null) return;
+        using var ownedVm = vm;
+
+        var descriptor = Descriptor("CommandPlugin", ScriptLanguageIds.RpgMakerMzJavaScript);
+        var entry = new WebScriptInventoryEntry
+        {
+            Script = descriptor,
+            Enabled = true,
+            Compatibility = WebScriptCompatibility.StandardBrowserApi,
+        };
+        var source = new StaticSourceProvider(new Dictionary<string, byte[]>
+        {
+            [descriptor.Id] = Encoding.UTF8.GetBytes(
+                "PluginManager.registerCommand('CommandPlugin', 'Ping', function(args) {\n" +
+                "  globalThis.__urpg_command_value = args.value;\n" +
+                "});\n" +
+                "function urpgCommandProbe() {\n" +
+                "  PluginManager.callCommand({}, 'CommandPlugin', 'Ping', { value: 'ok' });\n" +
+                "  if (globalThis.__urpg_command_value !== 'ok') throw new Error('command callback mismatch');\n" +
+                "}\n"),
+        });
+        var prelude = WebPluginManagerShimBuilder.Build(
+            ScriptLanguageIds.RpgMakerMzJavaScript,
+            new[] { entry });
+        using var runtime = new WebScriptRuntime(
+            ScriptLanguageIds.RpgMakerMzJavaScript,
+            ownedVm,
+            source,
+            new[] { entry },
+            new[] { prelude });
+
+        AssertTrue(runtime.LoadScripts(SafePolicy()).Success);
+        AssertTrue(runtime.ExecuteBootstrap().Success);
+        var invoke = ownedVm.Invoke(new ScriptInvocation
+        {
+            Target = "globalThis",
+            Member = "urpgCommandProbe",
+        });
+        AssertTrue(invoke.Success, invoke.ErrorMessage);
     }
 
     public void Test_FullMvProfileStillFailsClosedUntilBrowserHostExists()
@@ -83,6 +117,32 @@ public sealed class TestJintWebScriptIntegration : TestBase
         AssertFalse(result.Success);
         AssertEq(result.Result.ErrorCode, "jint.feature-unsupported");
     }
+
+    private IEmbeddedScriptVm? CreateVm(string pLanguageId)
+    {
+        var factory = new JintScriptVmFactory();
+        var created = factory.Create(new ScriptVmRequest
+        {
+            LanguageId = pLanguageId,
+            CompatibilityProfile = "javascript-core",
+            Policy = SafePolicy(),
+            RequiredFeatures = new[] { "javascript" },
+        });
+        AssertTrue(created.Success, created.Result.ErrorMessage);
+        AssertTrue(created.Vm != null);
+        return created.Vm;
+    }
+
+    private static EngineScriptDescriptor Descriptor(string pName, string pLanguageId) => new()
+    {
+        Id = "plugin:" + pName.ToLowerInvariant(),
+        DisplayName = pName,
+        LanguageId = pLanguageId,
+        RelativePath = "js/plugins/" + pName + ".js",
+        Origin = ScriptOrigin.Plugin,
+        Required = true,
+        LoadOrder = 0,
+    };
 
     private static ScriptExecutionPolicy SafePolicy() => new()
     {
