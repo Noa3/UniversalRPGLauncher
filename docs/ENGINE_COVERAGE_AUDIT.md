@@ -1,7 +1,7 @@
 # Engine Coverage Audit
 
-> **Audit date:** 2026-09-09  
-> **Repository baseline:** `main` commit `782ea66141e494d32929a9cc41056523177888eb`  
+> **Audit date:** 2026-09-11  
+> **Reviewed main baseline:** `782ea66141e494d32929a9cc41056523177888eb`  
 > **Method:** source/tests are authoritative; capability flags are not treated as proof of complete gameplay.
 
 ## Status Vocabulary
@@ -29,16 +29,18 @@
 | WOLF RPG Editor | Yes | Experimental unencrypted/plain-data readers | Experimental bounded `WolfEventVm` | Experimental `WolfEngineRuntime` | Experimental subset |
 | RPG Maker Unite | Candidate/research detection | No | No | No | Detection-only research |
 
-## Corrections from Earlier Audits
+## Capability Boundary Hardening
 
-Earlier documentation drifted from source in several places. The current source establishes that:
+The current branch strengthens the distinction between recognition and launchability:
 
-1. **Dante 98 is present** in the built-in catalog as `Dante98Plugin`, detection-only.
-2. **RM95 is detection-only**; it does not advertise Runtime.
-3. **XP/VX/VX Ace advertise Detection + Parsing only**; the selector must refuse runtime execution.
-4. **MV/MZ advertise Detection + Parsing only**; there is no JavaScript runtime capability.
-5. **WOLF advertises Runtime**, but only for the repository's intentionally narrow unencrypted/plain-data slice.
-6. RM2K/RM2K3 are the primary runtime path and advertise Runtime/SaveLoad/Debugging, but those capability flags do not mean full engine fidelity.
+1. `EnginePluginRegistry.Select()` accepts required capabilities.
+2. `EnginePluginHost` explicitly selects only plugins with `PluginCapability.Runtime`.
+3. `EnginePluginRegistry.CreateRuntime()` independently refuses a plugin without Runtime capability.
+4. generic `EngineBootstrapRuntime` now fails closed rather than providing a successful metadata lifecycle.
+5. the unused `RgssEngineRuntime.cs` pseudo-runtime was removed.
+6. regression coverage verifies a detection-only plugin cannot have its runtime factory invoked through registry creation or host startup.
+
+This is intentionally defense-in-depth: a future plugin cannot become launchable merely because detection succeeds or because a generic runtime-shaped class exists.
 
 ## Evidence by Subsystem
 
@@ -50,6 +52,8 @@ Earlier documentation drifted from source in several places. The current source 
 - `project/src/plugins/EngineRuntimeSelection.cs`
 - `project/src/plugins/EnginePluginHost.cs`
 - `project/src/plugins/BuiltInEnginePlugins.cs`
+- `project/tests/core/TestEnginePluginContract.cs`
+- `project/tests/core/TestPluginDetection.cs`
 
 The built-in catalog currently registers:
 
@@ -84,10 +88,9 @@ The runtime includes meaningful deterministic state/interpreter/presentation fou
 Evidence:
 
 - `RgssPlugin` in `BuiltInEnginePlugins.cs`
-- `project/src/plugins/RgssEngineRuntime.cs` as research/experimental code
 - `project/tests/core/TestRgssRuntime.cs`
 
-The plugin metadata intentionally omits Runtime. Existing runtime experiments must not be interpreted as supported Ruby/RGSS execution.
+XP/VX/VX Ace metadata intentionally omit Runtime. There is no active RGSS runtime implementation; future work begins with a real embedded Ruby/compatibility boundary.
 
 ### MV / MZ
 
@@ -115,13 +118,13 @@ This is a bounded experimental plain-data slice, not complete native WOLF compat
 
 ## Validation Evidence
 
-The latest recorded canonical result on the reviewed `main` history is:
+Latest recorded canonical result on the reviewed `main` baseline:
 
 - clean .NET build
 - `scripts/validate.sh` passed
 - **296/296** headless tests passed
 
-This documentation audit did not modify runtime code, so it does not invent a newer runtime test count. Any code change after the reviewed baseline requires fresh validation.
+The current branch contains runtime-selection code changes, so those historical results do not prove the branch is green. Fresh focused and full validation are required before merge.
 
 ## Engine Completion Gates
 
