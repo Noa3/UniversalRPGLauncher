@@ -120,6 +120,13 @@ public sealed class Rm2kEventScheduler
             {
                 _active.Remove(entry.Key);
             }
+            if (_state.IsTransferPending)
+            {
+                // A successful map transfer replaces the current scheduler/event
+                // set. Do not execute additional events from the old map in the
+                // same simulation frame after a transfer request is raised.
+                break;
+            }
         }
     }
 }
