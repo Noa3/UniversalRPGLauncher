@@ -84,6 +84,18 @@ public sealed class Rm2kEventScheduler
     }
 
     public bool TriggerAction(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Action);
+    public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touch);
+
+    /// <summary>
+    /// Starts an Event Touch/Collision page for a moving event that collided
+    /// with the player. Event movement itself is owned by the future movement
+    /// controller; this scheduler method only establishes the correct serialized
+    /// foreground trigger path and page selection.
+    /// </summary>
+    public bool TriggerCollision(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Collision);
+
+    public bool TriggerCollisionAt(int pX, int pY)
+        => TriggerAt(pX, pY, Rm2kEventTrigger.Collision);
 
     /// <summary>
     /// Triggers the first event at the coordinate that actually has an eligible
@@ -105,8 +117,6 @@ public sealed class Rm2kEventScheduler
         }
         return false;
     }
-
-    public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touch);
 
     /// <summary>
     /// Returns whether an active same-layer event occupies the coordinate.
@@ -210,9 +220,6 @@ public sealed class Rm2kEventScheduler
             }
             if (_state.IsTransferPending)
             {
-                // A successful map transfer replaces the current scheduler/event
-                // set. Do not execute additional events from the old map in the
-                // same simulation frame after a transfer request is raised.
                 break;
             }
         }
