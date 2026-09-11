@@ -116,6 +116,57 @@ public sealed class TestMvMzEncryptedContent : TestBase
         AssertEq(result.Result.ErrorCode, "mv-mz.encryption-key-invalid");
     }
 
+    public void Test_TrustedRegistryMountsBuiltInMvProvider()
+    {
+        var root = ProjectSettings.GlobalizePath(Root);
+        var plain = Enumerable.Range(0, 24).Select(pIndex => (byte)(pIndex * 3)).ToArray();
+        File.WriteAllBytes(Path.Combine(root, "img", "Actor.rpgmvp"), Encrypt(plain));
+        var registry = new ProtectedContentRegistry();
+        AssertTrue(registry.Register(new MvMzProtectedContentProvider()).Success);
+
+        var opened = registry.Open(new ProtectedContentDescriptor
+        {
+            SchemeId = MvMzProtectedContentProvider.MvScheme,
+            SourcePath = root,
+            EngineId = EnginePluginIds.RpgMakerMv,
+            Protection = GameContentProtectionKind.EngineManagedEncryption,
+        });
+
+        AssertTrue(opened.Success, opened.Result.ErrorMessage);
+        AssertTrue(opened.Source != null);
+        if (opened.Source == null) return;
+        using var source = opened.Source;
+        var read = source.Read("img/Actor.png");
+        AssertTrue(read.Success, read.ErrorMessage);
+        AssertTrue(read.Data.Span.SequenceEqual(plain));
+    }
+
+    public void Test_TrustedRegistryFailsClosedForUnknownProtectedArchive()
+    {
+        var registry = new ProtectedContentRegistry();
+        AssertTrue(registry.Register(new MvMzProtectedContentProvider()).Success);
+
+        var opened = registry.Open(new ProtectedContentDescriptor
+        {
+            SchemeId = "wolf-protected-archive",
+            SourcePath = ProjectSettings.GlobalizePath(Root),
+            EngineId = EnginePluginIds.WolfRpg,
+            Protection = GameContentProtectionKind.ProtectedArchive,
+        });
+
+        AssertFalse(opened.Success);
+        AssertEq(opened.Result.ErrorCode, "content.provider-unavailable");
+    }
+
+    public void Test_RegistryRejectsDuplicateProviderId()
+    {
+        var registry = new ProtectedContentRegistry();
+        AssertTrue(registry.Register(new MvMzProtectedContentProvider()).Success);
+        var duplicate = registry.Register(new MvMzProtectedContentProvider());
+        AssertFalse(duplicate.Success);
+        AssertEq(duplicate.ErrorCode, "content-provider.duplicate-id");
+    }
+
     private static byte[] Encrypt(byte[] pPlain)
     {
         var payload = (byte[])pPlain.Clone();
