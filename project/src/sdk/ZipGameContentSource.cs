@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 
 namespace UniversalRPG.Sdk;
 
@@ -74,13 +73,14 @@ public sealed class ZipGameContentSource : IGameContentSource
     public bool Exists(string pLogicalPath)
     {
         ThrowIfDisposed();
-        return TryNormalizePath(pLogicalPath, _limits.MaxPathLength, out var key) && _entries.ContainsKey(key);
+        return LogicalGamePath.TryNormalize(pLogicalPath, out var key, _limits.MaxPathLength)
+            && _entries.ContainsKey(key);
     }
 
     public ContentReadResult Read(string pLogicalPath)
     {
         ThrowIfDisposed();
-        if (!TryNormalizePath(pLogicalPath, _limits.MaxPathLength, out var key))
+        if (!LogicalGamePath.TryNormalize(pLogicalPath, out var key, _limits.MaxPathLength))
         {
             return ContentReadResult.Failed("zip.path-invalid", "ZIP logical path is unsafe or invalid.");
         }
@@ -146,8 +146,8 @@ public sealed class ZipGameContentSource : IGameContentSource
             {
                 throw new InvalidDataException($"ZIP contains more than {pLimits.MaxEntries} entries.");
             }
-            if (string.IsNullOrEmpty(entry.Name)) continue; // directory entry
-            if (!TryNormalizePath(entry.FullName, pLimits.MaxPathLength, out var key))
+            if (string.IsNullOrEmpty(entry.Name)) continue;
+            if (!LogicalGamePath.TryNormalize(entry.FullName, out var key, pLimits.MaxPathLength))
             {
                 throw new InvalidDataException($"ZIP contains unsafe entry path '{entry.FullName}'.");
             }
@@ -178,18 +178,6 @@ public sealed class ZipGameContentSource : IGameContentSource
         if (pEntry.Length == 0) return true;
         if (pEntry.CompressedLength <= 0) return false;
         return (double)pEntry.Length / pEntry.CompressedLength <= pMaximum;
-    }
-
-    private static bool TryNormalizePath(string pPath, int pMaxLength, out string pNormalized)
-    {
-        pNormalized = "";
-        if (string.IsNullOrWhiteSpace(pPath) || pPath.Length > pMaxLength || pPath.IndexOf('\0') >= 0) return false;
-        var normalized = pPath.Replace('\\', '/');
-        if (normalized.StartsWith('/', StringComparison.Ordinal) || Path.IsPathRooted(normalized)) return false;
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0 || parts.Any(pPart => pPart is "." or "..")) return false;
-        pNormalized = string.Join('/', parts);
-        return true;
     }
 
     private void ThrowIfDisposed()
