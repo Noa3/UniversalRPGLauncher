@@ -1,10 +1,10 @@
 # UniversalRPG — Development Roadmap
 
-> **Last reviewed:** 2026-09-09  
+> **Last reviewed:** 2026-09-11  
 > **Primary implementation track:** RM2000/2003 faithful runtime  
 > **Architecture:** shared core + engine-specific compiled plugins
 
-This roadmap describes the long-term product direction. `KANBAN.md` remains the authoritative short-term work queue and should contain only actionable near-term cards plus bounded future epics.
+This roadmap describes the long-term product direction. It is intentionally not a granular task board. `SESSION_STATE.md` records only the current objective/next action, while `docs/PROJECT_STATUS.md` lists immediate priorities. Agents should choose the next coherent implementation slice directly from repository evidence rather than maintaining a Kanban.
 
 ## Runtime Milestone Vocabulary
 
@@ -46,6 +46,8 @@ Implemented:
 - deterministic runtime clock
 - validation script and CI workflow
 - RTP registry/diagnostic primitives
+- runtime selection gated by explicit capabilities
+- defensive runtime-creation capability checks
 
 Ongoing:
 
@@ -54,6 +56,7 @@ Ongoing:
 - Android/iOS import integration
 - stronger fuzz/malformed-input coverage
 - permission model required before script/native execution
+- continued simplification/removal of dead pseudo-runtime abstractions
 
 ---
 
@@ -128,6 +131,8 @@ Protected/encrypted data is not a prerequisite for initial WOLF support and must
 ## Track D — RGSS Core / RPG Maker XP, VX, VX Ace
 
 **Status:** Detection/parsing boundary; runtime not implemented
+
+The previous metadata-only RGSS pseudo-runtime has been removed. Future RGSS work should start from a real embedded Ruby boundary rather than resurrecting a lifecycle placeholder.
 
 Shared architecture:
 
@@ -324,6 +329,7 @@ Required before release claims:
 - malformed/fuzz regression cases
 - event/script VM tests
 - runtime lifecycle tests
+- runtime-capability boundary tests
 - golden rendering tests when presentation becomes stable
 - save/load tests
 - engine-specific authorized fixtures
@@ -337,14 +343,16 @@ Required before release claims:
 - dangerous host APIs denied by default
 - explicit capabilities for network/clipboard/native behavior
 - sandbox/watchdog limits before Ruby/JavaScript/native execution
+- detection/parsing/runtime capabilities remain separate and fail closed
 
 ### Documentation
 
 Living:
 
 - `README.md`
-- `KANBAN.md`
 - `SESSION_STATE.md`
+- `AGENTS.md`
+- `HERMES_AUTONOMOUS_PROMPT.md`
 - `docs/PROJECT_STATUS.md`
 - `docs/ARCHITECTURE.md`
 - `docs/ROADMAP.md`
