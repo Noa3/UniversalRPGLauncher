@@ -63,6 +63,7 @@ public sealed class Rm2kEventScheduler
         }
         _active.Clear();
         _activeTriggers.Clear();
+        SyncPlayerInputLock();
     }
 
     public void Clear()
@@ -70,6 +71,7 @@ public sealed class Rm2kEventScheduler
         _events.Clear();
         _active.Clear();
         _activeTriggers.Clear();
+        SyncPlayerInputLock();
     }
 
     public void SetPresentation(PresentationState? pPresentation) => _presentation = pPresentation;
@@ -193,6 +195,7 @@ public sealed class Rm2kEventScheduler
     {
         _active[pEventId] = new EventInterpreter(_state, pEventId, pPage.Commands, _presentation);
         _activeTriggers[pEventId] = pTrigger;
+        SyncPlayerInputLock();
     }
 
     private void ExecuteActive()
@@ -203,6 +206,7 @@ public sealed class Rm2kEventScheduler
             {
                 _active.Remove(entry.Key);
                 _activeTriggers.Remove(entry.Key);
+                SyncPlayerInputLock();
             }
             if (_state.IsTransferPending)
             {
@@ -212,5 +216,10 @@ public sealed class Rm2kEventScheduler
                 break;
             }
         }
+    }
+
+    private void SyncPlayerInputLock()
+    {
+        _state.PlayerInputLocked = ForegroundBusy;
     }
 }
