@@ -144,6 +144,68 @@ public partial class TestRm2kRuntimeInteraction : TestBase
         AssertFalse(runtime.TryInteract(), "locked foreground state rejects map interaction");
     }
 
+    public void Test_TeleportCommandAppliesSameMapTransfer()
+    {
+        using var host = StartRuntime();
+        var runtime = RequireRuntime(host);
+        AssertMapIsLargeEnough(runtime);
+        var targetMapId = runtime.Simulation.MapId;
+
+        var transferEvent = new Rm2kMap.Event(904, runtime.Simulation.MapX, runtime.Simulation.MapY);
+        var page = new Rm2kMap.EventPage
+        {
+            Trigger = (int)Rm2kEventTrigger.Autorun,
+            Layer = 1,
+        };
+        page.Commands.Add(new Rm2kMap.EventCommand(
+            EventInterpreter.Teleport,
+            new List<int> { targetMapId, 1, 0, 6 }));
+        page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+        transferEvent.Pages.Add(page);
+        runtime.EventScheduler.SetEvents(new[] { transferEvent });
+
+        var update = host.Update(1.0 / 60.0);
+
+        AssertTrue(update.Success, update.Error?.Message ?? "same-map transfer failed");
+        AssertEq(runtime.Simulation.MapId, targetMapId, "transfer loaded the requested map");
+        AssertEq(runtime.Simulation.MapX, 1, "transfer applied target X");
+        AssertEq(runtime.Simulation.MapY, 0, "transfer applied target Y");
+        AssertEq(runtime.Simulation.FacingDirection, (byte)6, "transfer preserves requested facing");
+        AssertFalse(runtime.Simulation.IsTransferPending, "pending transfer is cleared only after successful application");
+        AssertFalse(runtime.Simulation.PlayerInputLocked, "new map scheduler releases the old foreground input lock");
+        AssertTrue(runtime.CurrentMapData != null, "destination LMU becomes current map data");
+        AssertTrue(runtime.Framebuffer != null, "destination framebuffer is staged and committed");
+    }
+
+    public void Test_TransferToMissingMapFailsWithoutClearingPendingRequest()
+    {
+        using var host = StartRuntime();
+        var runtime = RequireRuntime(host);
+        var missingMapId = GameSimulationState.MaxMapId;
+
+        var transferEvent = new Rm2kMap.Event(905, runtime.Simulation.MapX, runtime.Simulation.MapY);
+        var page = new Rm2kMap.EventPage
+        {
+            Trigger = (int)Rm2kEventTrigger.Autorun,
+            Layer = 1,
+        };
+        page.Commands.Add(new Rm2kMap.EventCommand(
+            EventInterpreter.Teleport,
+            new List<int> { missingMapId, 0, 0, 2 }));
+        page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+        transferEvent.Pages.Add(page);
+        runtime.EventScheduler.SetEvents(new[] { transferEvent });
+
+        var update = runtime.Update(1.0 / 60.0);
+
+        AssertFalse(update.Success, "missing target LMU fails the transfer update");
+        AssertTrue(update.Error != null && update.Error.Message.Contains("Map1000.lmu", StringComparison.OrdinalIgnoreCase),
+            "failure identifies the missing target map");
+        AssertTrue(runtime.Simulation.IsTransferPending,
+            "failed transfer remains pending instead of pretending that it completed");
+        AssertEq(runtime.Simulation.PendingMapId, missingMapId);
+    }
+
     private static EnginePluginHost StartRuntime()
     {
         var fixture = ProjectSettings.GlobalizePath("res://tests/fixtures/easyrpg-testgame/rm2000");
