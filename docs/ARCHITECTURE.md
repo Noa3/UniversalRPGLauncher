@@ -1,7 +1,7 @@
 # UniversalRPG — Architecture
 
 > **Status:** Active implementation  
-> **Last reviewed:** 2026-09-09  
+> **Last reviewed:** 2026-09-11  
 > **Primary milestone:** RM2000/2003 faithful runtime foundation  
 > **Secondary maintained boundaries:** cross-engine detection and experimental WOLF plain-data runtime
 
@@ -58,8 +58,9 @@ EngineDetectionRegistry
 EngineDetectionReport
         |
         v
-EngineRuntimeSelector
+EngineRuntimeSelector / EnginePluginHost
         |
+        | requires PluginCapability.Runtime
         v
 IEnginePlugin / IEngineRuntime
         |
@@ -95,7 +96,17 @@ Current high-level boundaries:
 | WOLF RPG | Detection + parsing + experimental unencrypted plain-data runtime |
 | Unite | Detection/research only |
 
-A generic lifecycle object is not proof of engine compatibility. Runtime capability must only be advertised when an engine plugin can safely create the repository's declared runtime boundary.
+A generic lifecycle object is not proof of engine compatibility.
+
+Runtime safety is enforced at multiple layers:
+
+1. runtime-facing selection requests `PluginCapability.Runtime`
+2. `EnginePluginHost` refuses plugins without Runtime before runtime creation
+3. `EnginePluginRegistry.CreateRuntime()` re-checks Runtime capability defensively
+4. the generic `EngineBootstrapRuntime` is deliberately non-launchable and fails closed
+5. engine plugins that actually support runtime behavior provide concrete runtimes such as `Rm2kEngineRuntime` or `WolfEngineRuntime`
+
+The old unregistered RGSS pseudo-runtime was removed so future RGSS execution work starts from a real embedded Ruby/compatibility design rather than a metadata lifecycle placeholder.
 
 See [ENGINE_PLUGINS.md](ENGINE_PLUGINS.md).
 
@@ -175,7 +186,7 @@ RGSS1 / RGSS2 / RGSS3 profile
 URPG graphics/audio/input/filesystem services
 ```
 
-No Ruby implementation has been selected or embedded yet. Existing RGSS metadata/runtime experimentation must not be described as playable RGSS execution.
+No Ruby implementation has been selected or embedded yet. There is intentionally no metadata-only RGSS runtime class in the active code path.
 
 ## MV/MZ Runtime Boundary
 
@@ -224,6 +235,7 @@ Required rules include:
 - bounded parser allocations/depth/counts
 - VFS containment for runtime file access
 - explicit permission/capability policy for dangerous functionality
+- unsupported runtimes remain fail-closed rather than using generic success bootstraps
 
 See [IMPORT_SECURITY.md](IMPORT_SECURITY.md).
 
@@ -235,17 +247,16 @@ Canonical repository validation:
 ./scripts/validate.sh
 ```
 
-Last recorded canonical result before this documentation refresh: **296/296** headless tests passed with clean build. Any new implementation change requires fresh validation; this document does not turn historical evidence into a current test guarantee.
+Last recorded canonical result on the reviewed `main` baseline: **296/296** headless tests passed with clean build. The current branch contains runtime code changes and therefore needs fresh validation before merge.
 
 ## Sources of Truth
 
 For current work, use in this order:
 
 1. actual source and tests
-2. `KANBAN.md`
-3. `SESSION_STATE.md`
-4. `docs/PROJECT_STATUS.md`
-5. this document
-6. roadmap/research documents
+2. `SESSION_STATE.md`
+3. `docs/PROJECT_STATUS.md`
+4. this document
+5. roadmap/research documents
 
-Historical session handoffs are evidence, not current architecture authority.
+There is intentionally no Kanban/work-board source of truth. Historical session handoffs are evidence, not current architecture authority.
