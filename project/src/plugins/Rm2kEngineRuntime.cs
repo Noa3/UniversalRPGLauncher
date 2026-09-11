@@ -218,9 +218,9 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     }
 
     /// <summary>
-    /// Runs the normal decision-key interaction against the tile immediately in
-    /// front of the player. Presentation controls remain frontend concerns, but
-    /// map-event targeting belongs to the engine runtime.
+    /// Handles the RPG_RT decision-key map interaction sequence: action events
+    /// on the player's current coordinate, then the tile in front, then up to
+    /// three consecutive counter tiles before the event behind the counter.
     /// </summary>
     public bool TryInteract()
     {
@@ -229,8 +229,42 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             return false;
         }
 
-        var (targetX, targetY) = GetFacingTarget();
-        return _eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Action);
+        if (_eventScheduler.TriggerAt(Simulation.MapX, Simulation.MapY, Rm2kEventTrigger.Action))
+        {
+            return true;
+        }
+
+        var (stepX, stepY) = GetFacingStep();
+        var targetX = Simulation.MapX + stepX;
+        var targetY = Simulation.MapY + stepY;
+        if (_eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Action))
+        {
+            return true;
+        }
+
+        if (_passabilityMap == null)
+        {
+            return false;
+        }
+
+        // RPG_RT traverses at most three counter tiles. Each iteration tests
+        // whether the current foreground tile is a counter before advancing one
+        // more tile in the facing direction and checking for an action event.
+        for (var counterIndex = 0; counterIndex < 3; counterIndex++)
+        {
+            if (!_passabilityMap.IsCounter(targetX, targetY))
+            {
+                break;
+            }
+            targetX += stepX;
+            targetY += stepY;
+            if (_eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Action))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public PluginOperationResult Update(double pDeltaSeconds)
@@ -528,15 +562,15 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _eventScheduler.SetEvents(events);
     }
 
-    private (int X, int Y) GetFacingTarget()
+    private (int X, int Y) GetFacingStep()
     {
         return Simulation.FacingDirection switch
         {
-            2 => (Simulation.MapX, Simulation.MapY + 1),
-            4 => (Simulation.MapX - 1, Simulation.MapY),
-            6 => (Simulation.MapX + 1, Simulation.MapY),
-            8 => (Simulation.MapX, Simulation.MapY - 1),
-            _ => (Simulation.MapX, Simulation.MapY),
+            2 => (0, 1),
+            4 => (-1, 0),
+            6 => (1, 0),
+            8 => (0, -1),
+            _ => (0, 0),
         };
     }
 
