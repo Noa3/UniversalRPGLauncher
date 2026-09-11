@@ -119,38 +119,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         {
             return SdkOperationResult.Failed("jint.configure-state", $"Jint VM cannot be configured from state {State}.");
         }
-        if (pPolicy == null)
-        {
-            return SdkOperationResult.Failed("jint.policy-required", "A JavaScript execution policy is required.");
-        }
-        var validation = pPolicy.Validate();
-        if (!validation.Success) return validation;
-        if (pPolicy.AllowArbitraryHostFileSystem || pPolicy.AllowProcessExecution || pPolicy.AllowNativeInterop)
-        {
-            return SdkOperationResult.Failed(
-                "jint.host-capability-unsupported",
-                "Raw Jint VM never grants arbitrary filesystem, process, or native CLR access; those capabilities require explicit higher-level shims.");
-        }
-
-        DisposeEngine();
-        _policy = pPolicy;
-        _limits = CreateLimits(pPolicy);
-        try
-        {
-            var options = new Options().ForUntrustedCode(_limits);
-            _engine = new Engine(options);
-            _modules.Clear();
-            State = ScriptVmState.Configured;
-            return SdkOperationResult.Succeeded(new[]
-            {
-                SdkDiagnostic.Info("jint.configured", "Jint VM configured with untrusted-code resource limits and CLR access disabled."),
-            });
-        }
-        catch (Exception exception) when (!IsCritical(exception))
-        {
-            State = ScriptVmState.Faulted;
-            return SdkOperationResult.Failed("jint.configure-failed", exception.Message);
-        }
+        return RebuildEngine(pPolicy);
     }
 
     public SdkOperationResult LoadModule(ScriptModule pModule)
@@ -286,7 +255,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
             _modules.Clear();
             return SdkOperationResult.Succeeded();
         }
-        return Configure(_policy);
+        return RebuildEngine(_policy);
     }
 
     public void Dispose()
@@ -296,6 +265,43 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         _modules.Clear();
         DisposeEngine();
         State = ScriptVmState.Disposed;
+    }
+
+    private SdkOperationResult RebuildEngine(ScriptExecutionPolicy pPolicy)
+    {
+        if (pPolicy == null)
+        {
+            return SdkOperationResult.Failed("jint.policy-required", "A JavaScript execution policy is required.");
+        }
+        var validation = pPolicy.Validate();
+        if (!validation.Success) return validation;
+        if (pPolicy.AllowArbitraryHostFileSystem || pPolicy.AllowProcessExecution || pPolicy.AllowNativeInterop)
+        {
+            return SdkOperationResult.Failed(
+                "jint.host-capability-unsupported",
+                "Raw Jint VM never grants arbitrary filesystem, process, or native CLR access; those capabilities require explicit higher-level shims.");
+        }
+
+        DisposeEngine();
+        _modules.Clear();
+        _policy = pPolicy;
+        _limits = CreateLimits(pPolicy);
+        try
+        {
+            var options = new Options().ForUntrustedCode(_limits);
+            _engine = new Engine(options);
+            State = ScriptVmState.Configured;
+            return SdkOperationResult.Succeeded(new[]
+            {
+                SdkDiagnostic.Info("jint.configured", "Jint VM configured with untrusted-code resource limits and CLR access disabled."),
+            });
+        }
+        catch (Exception exception) when (!IsCritical(exception))
+        {
+            _limits = null;
+            State = ScriptVmState.Faulted;
+            return SdkOperationResult.Failed("jint.configure-failed", exception.Message);
+        }
     }
 
     private void DisposeEngine()
@@ -308,12 +314,10 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     private static UntrustedCodeLimits CreateLimits(ScriptExecutionPolicy pPolicy)
     {
         var timeout = TimeSpan.FromMilliseconds(pPolicy.MaxExecutionMillisecondsPerTick);
-        var operationTimeout = TimeSpan.FromMilliseconds(Math.Max(2L, pPolicy.MaxExecutionMillisecondsPerTick * 2L));
+        var operationTimeout = TimeSpan.FromMilliseconds(Math.Max(2L, (long)pPolicy.MaxExecutionMillisecondsPerTick * 2L));
         var memoryBytes = checked((long)pPolicy.MaxMemoryMegabytes * 1024L * 1024L);
-        var maxStatements = Math.Clamp(
-            pPolicy.MaxExecutionMillisecondsPerTick * 100_000,
-            10_000,
-            DefaultMaxStatements);
+        var requestedStatements = (long)pPolicy.MaxExecutionMillisecondsPerTick * 100_000L;
+        var maxStatements = (int)Math.Clamp(requestedStatements, 10_000L, DefaultMaxStatements);
         return new UntrustedCodeLimits
         {
             TimeoutInterval = timeout,
