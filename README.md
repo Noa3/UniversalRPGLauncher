@@ -6,8 +6,9 @@ UniversalRPG is intended to interpret supported game data itself. It does **not*
 
 ## Current State
 
-> **Documentation snapshot:** 2026-09-09  
-> **Latest recorded canonical validation on `main`:** 296/296 headless tests passed, plus clean .NET build and `scripts/validate.sh`.
+> **Documentation snapshot:** 2026-09-11  
+> **Latest recorded canonical validation on `main`:** 296/296 headless tests passed, plus clean .NET build and `scripts/validate.sh`.  
+> **Current branch:** documentation refresh plus runtime-capability safety hardening; fresh validation is required before merge.
 
 The application foundation is working: users can select a game collection, import folders or inspect ZIP archives, persist library metadata, and run bounded engine detection without executing imported binaries or scripts.
 
@@ -28,6 +29,8 @@ The project is **not yet a general playable RPG Maker replacement**. RM2000/2003
 | RPG Maker Unite | Research/detection only; generic Unity exports are not considered proof of Unite provenance |
 
 RM2000/2003 currently include bounded LCF parsing, deterministic simulation infrastructure, an expanding event-command interpreter, renderer-neutral map/sprite/presentation state, RTP resolution primitives, and bounded save-related codecs. Full map rendering, chipset/passability fidelity, audio, menus, battle parity, original save compatibility, and complete command coverage remain incomplete.
+
+Runtime selection is fail-closed: engine recognition alone is never sufficient to start a game. A plugin must explicitly advertise `PluginCapability.Runtime`, and the runtime host/registry enforce that capability before runtime creation.
 
 ## Architecture
 
@@ -166,14 +169,15 @@ Detection and parsing must remain bounded and non-executing. Future Ruby, JavaSc
 
 See [docs/IMPORT_SECURITY.md](docs/IMPORT_SECURITY.md).
 
-## Project Control Files
+## Project Guidance
 
-- [KANBAN.md](KANBAN.md) — authoritative autonomous work queue
-- [SESSION_STATE.md](SESSION_STATE.md) — interruption/restart checkpoint
-- [AGENTS.md](AGENTS.md) — coding-agent policy
+- [SESSION_STATE.md](SESSION_STATE.md) — concise interruption/restart checkpoint and current next action
+- [AGENTS.md](AGENTS.md) — coding-agent policy and autonomous work rules
 - [HERMES_AUTONOMOUS_PROMPT.md](HERMES_AUTONOMOUS_PROMPT.md) — Hermes autonomous workflow
-- [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) — current implementation status
-- [docs/ROADMAP.md](docs/ROADMAP.md) — multi-engine development roadmap
+- [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) — current implementation status and immediate priorities
+- [docs/ROADMAP.md](docs/ROADMAP.md) — long-term multi-engine direction
+
+There is intentionally no project Kanban. Agents should inspect the current source/tests, use `SESSION_STATE.md` only as a compact checkpoint, and choose the next coherent implementation slice from the immediate priorities and roadmap.
 
 Historical `SESSION_HANDOFF_*.md` files are snapshots of past work and should not be treated as the current source of truth.
 
