@@ -65,6 +65,19 @@ public sealed class ProtectedContentDescriptor
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
 }
 
+/// <summary>
+/// Analysis-time status for one protected/packed game-content source. This lets
+/// clients distinguish supported engine-managed encryption from a detected
+/// archive that still requires another trusted provider or explicit policy.
+/// </summary>
+public sealed class ProtectedContentStatus
+{
+    public ProtectedContentDescriptor Descriptor { get; init; } = new();
+    public bool RuntimeReadable { get; init; }
+    public string ProviderId { get; init; } = "";
+    public string Note { get; init; } = "";
+}
+
 public sealed class ContentSourceResult
 {
     private ContentSourceResult(bool pSuccess, IGameContentSource? pSource, SdkOperationResult pResult)
