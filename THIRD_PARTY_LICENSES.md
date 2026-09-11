@@ -1,6 +1,6 @@
 # Third-Party Components and Licenses
 
-> **Last reviewed:** 2026-09-09
+> **Last reviewed:** 2026-09-11
 
 This file records third-party components that are actually distributed with UniversalRPG and tracks prospective dependencies separately.
 
@@ -18,33 +18,72 @@ A candidate listed below is **not** an approved dependency until its version, li
 
 ## Prospective Runtime Dependencies
 
-No Ruby VM, JavaScript VM or PE/native execution library is currently selected as the canonical dependency.
+No Ruby VM, JavaScript VM or PE/native execution library is currently vendored or selected as the final canonical dependency.
 
-### Embedded Ruby / RGSS
+The public runtime contracts deliberately use `IEmbeddedScriptVm` / `IEmbeddedScriptVmFactory` so these implementation choices can change without breaking external SDK consumers.
 
-Requirements before selection:
+See `docs/VM_EVALUATION.md`.
 
-- compatibility with the Ruby behavior required by RGSS1/2/3
-- embeddable without a user-installed runtime
-- Windows/Linux/Android feasibility
-- acceptable license and redistribution terms
-- controllable filesystem/process/network/native-extension boundaries
-- testable resource limits
+### Embedded Ruby / RGSS — preferred spike family: CRuby
 
-Candidates must be evaluated when the RGSS architecture card becomes actionable. Do not describe a candidate as “suitable for RGSS1/2/3” without compatibility evidence.
+Current architecture direction:
 
-### Embedded JavaScript / MV/MZ
+- RGSS1 -> `ruby-rgss1` / Ruby-1.8-compatible profile
+- RGSS2 -> `ruby-rgss2` / Ruby-1.8-compatible profile
+- RGSS3 -> `ruby-rgss3` / Ruby-1.9.2-compatible profile
 
-Requirements before selection:
+Ruby exposes native embedding APIs suitable for defining host classes/methods and evaluating Ruby inside an application.
 
-- sufficient ECMAScript behavior for RPG Maker MV/MZ/default plugins
-- Windows/Linux/Android support
-- embeddable sandbox boundary
-- memory/interrupt/watchdog control
-- acceptable license and redistribution terms
-- practical bindings for Canvas/WebGL/WebAudio and host APIs
+Ruby is distributed under the Ruby license with a 2-clause BSD option, but an actual vendored version still requires inspection of that release's `COPYING`/`BSDL`/`LEGAL` files and any bundled third-party components.
 
-Potential families to research include QuickJS, Duktape and V8, but no choice is currently approved.
+Before adding CRuby binaries/sources:
+
+- decide whether historical builds or a newer compatibility implementation is used per RGSS generation
+- prove Windows/Linux/Android build viability
+- prove clean create/reset/dispose behavior
+- implement resource/host-access policy around the VM
+- test representative historical Ruby semantics used by custom RGSS scripts
+- pin exact version/commit and all required notices
+
+Do not describe a current CRuby build as RGSS1/2/3 compatible solely because it can execute Ruby syntax.
+
+### Embedded JavaScript / MV/MZ — preferred first spike: QuickJS / QuickJS-ng
+
+QuickJS is a small embeddable JavaScript engine. QuickJS-ng continues this design and is MIT-licensed.
+
+It is currently the preferred **first implementation spike**, not an approved shipped dependency.
+
+Reasons for the spike:
+
+- small native embedding surface
+- low startup overhead
+- permissive MIT licensing
+- VM can remain isolated behind `IEmbeddedScriptVm`
+- practical fit for a custom browser/RPG Maker compatibility layer
+
+Before adding it to distributed builds:
+
+- pin exact upstream/version/commit
+- verify original license text and transitive sources
+- prove Windows/Linux/Android builds
+- implement memory/interruption/watchdog limits
+- disable OS/process/std helpers by default
+- prove exception/stack conversion
+- test MV/MZ plugin order through `WebScriptRuntime`
+- build browser/RPG Maker APIs separately above the VM
+
+A JavaScript VM alone does not provide Canvas, WebGL, WebAudio, DOM, storage, RPG Maker globals, or Node/NW.js compatibility.
+
+### Node / NW.js Compatibility
+
+Do not adopt unrestricted Node.js as the default MV/MZ host merely for plugin compatibility.
+
+Preferred approach:
+
+1. inventory API requirements
+2. implement bounded shims (`path`, game-VFS `fs`, Buffer, limited process metadata)
+3. keep process execution/network/native access policy-gated
+4. treat `.node` addons as a separate native compatibility class
 
 ### PE / Native Binary Inspection
 
@@ -89,12 +128,13 @@ A dedicated asset manifest may be added when external game-facing assets begin t
 5. Pin source/version information for reproducibility.
 6. Re-evaluate licensing when a dependency changes distribution mode (for example static vs dynamic linking).
 7. Keep planned candidates separate from components actually shipped.
+8. Do not vendor a VM merely to make a prototype pass; platform/security/compatibility requirements apply before distribution.
 
 ## Adding a Dependency
 
-Before merging:
+Before merging a new third-party runtime dependency:
 
-1. identify exact upstream project/version
+1. identify exact upstream project/version/commit
 2. verify license from the original source
 3. confirm Windows/Linux/Android implications
 4. assess security/sandbox impact
@@ -102,6 +142,7 @@ Before merging:
 6. add regression/build coverage
 7. update this file and include required license texts
 8. ensure release packaging contains required notices
+9. record how the dependency is replaced/mock-tested behind the public SDK boundary
 
 ## Proprietary Engine / RTP Data
 
