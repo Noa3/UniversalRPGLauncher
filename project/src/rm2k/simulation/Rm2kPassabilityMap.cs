@@ -12,9 +12,9 @@ namespace UniversalRPG.Rm2k.Simulation;
 /// separate runtime layers.
 ///
 /// Field IDs, defaults and tile/passability constants are verified against
-/// liblcf and EasyRPG Player. Runtime passability consumes only the canonical
-/// typed chipset vectors. Older parser output is promoted once through
-/// Rm2kChipsetDataNormalizer before the vectors are read.
+/// liblcf and EasyRPG Player. Runtime passability consumes only canonical typed
+/// chipset vectors. Legacy parser output is normalized on a local chipset copy,
+/// so constructing runtime geometry never mutates the parsed database.
 /// </summary>
 public sealed class Rm2kPassabilityMap
 {
@@ -146,15 +146,16 @@ public sealed class Rm2kPassabilityMap
             return false;
         }
 
-        if (!Rm2kChipsetDataNormalizer.TryNormalizeDatabase(pDatabase, out var normalizeError))
+        if (!TryFindChipset(pDatabase, chipsetId, out var parsedChipset))
         {
-            pError = $"Chipset vector normalization failed: {normalizeError}";
+            pError = $"Chipset {chipsetId} is not present in the parsed database.";
             return false;
         }
 
-        if (!TryFindChipset(pDatabase, chipsetId, out var chipset))
+        var chipset = ShallowCopy(parsedChipset);
+        if (!Rm2kChipsetDataNormalizer.TryNormalizeChipset(chipset, out var normalizeError))
         {
-            pError = $"Chipset {chipsetId} is not present in the parsed database.";
+            pError = $"Chipset vector normalization failed: {normalizeError}";
             return false;
         }
 
@@ -184,6 +185,16 @@ public sealed class Rm2kPassabilityMap
 
         pPassability = new Rm2kPassabilityMap(width, height, masks, counters);
         return true;
+    }
+
+    private static Godot.Collections.Dictionary ShallowCopy(Godot.Collections.Dictionary pSource)
+    {
+        var copy = new Godot.Collections.Dictionary();
+        foreach (var key in pSource.Keys)
+        {
+            copy[key] = pSource[key];
+        }
+        return copy;
     }
 
     private static bool TryFindChipset(
@@ -391,7 +402,7 @@ public sealed class Rm2kPassabilityMap
     private static bool TryReadInt(Godot.Collections.Dictionary pData, string pKey, out int pValue)
     {
         pValue = 0;
-        if (!pData.TryGetValue(pKey, out var rawValue))
+        if (!pData.TryGetValue("" + pKey, out var rawValue))
         {
             return false;
         }
