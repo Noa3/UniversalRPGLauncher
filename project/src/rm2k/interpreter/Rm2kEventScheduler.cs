@@ -8,9 +8,13 @@ namespace UniversalRPG.Rm2k.Interpreter;
 
 /// <summary>
 /// Owns bounded interpreters for the current RM2K map. Imported commands are
-/// still data; only the native EventInterpreter receives them. Active autorun
-/// and parallel pages are re-evaluated after completion, while action/touch/
-/// collision pages require an explicit runtime trigger.
+/// still data; only the native EventInterpreter receives them.
+///
+/// RPG_RT has one foreground interpreter (autorun/action/touch/collision) while
+/// parallel pages run independently. This scheduler preserves that separation:
+/// at most one foreground event is active, while multiple parallel pages may be
+/// active at the same time. Active autorun and parallel pages are re-evaluated
+/// after completion.
 /// </summary>
 public sealed class Rm2kEventScheduler
 {
@@ -19,6 +23,7 @@ public sealed class Rm2kEventScheduler
     private readonly GameSimulationState _state;
     private readonly List<Rm2kMap.Event> _events = new();
     private readonly Dictionary<int, EventInterpreter> _active = new();
+    private readonly Dictionary<int, Rm2kEventTrigger> _activeTriggers = new();
     private PresentationState? _presentation;
 
     public Rm2kEventScheduler(GameSimulationState pState, PresentationState? pPresentation = null)
@@ -29,6 +34,7 @@ public sealed class Rm2kEventScheduler
 
     public int ActiveInterpreterCount => _active.Count;
     public int EventCount => _events.Count;
+    public bool ForegroundBusy => _activeTriggers.Values.Any(pTrigger => pTrigger != Rm2kEventTrigger.Parallel);
 
     public void SetEvents(IEnumerable<Rm2kMap.Event> pEvents)
     {
@@ -56,20 +62,22 @@ public sealed class Rm2kEventScheduler
             _state.AddDiagnostic($"RM2K event limit reached; input inspection stopped after {MaxEvents} entries.");
         }
         _active.Clear();
+        _activeTriggers.Clear();
     }
 
     public void Clear()
     {
         _events.Clear();
         _active.Clear();
+        _activeTriggers.Clear();
     }
 
     public void SetPresentation(PresentationState? pPresentation) => _presentation = pPresentation;
 
     public void ExecuteFrame()
     {
-        StartAutomaticPages(Rm2kEventTrigger.Autorun);
-        StartAutomaticPages(Rm2kEventTrigger.Parallel);
+        StartParallelPages();
+        StartAutorunPage();
         ExecuteActive();
     }
 
@@ -123,23 +131,68 @@ public sealed class Rm2kEventScheduler
 
     private bool Trigger(int pEventId, Rm2kEventTrigger pTrigger)
     {
-        if (_active.ContainsKey(pEventId)) return false;
+        if (pTrigger == Rm2kEventTrigger.Parallel)
+        {
+            return false;
+        }
+        if (ForegroundBusy || _active.ContainsKey(pEventId))
+        {
+            return false;
+        }
+
         var eventData = _events.FirstOrDefault(pEvent => pEvent.Id == pEventId);
         var page = eventData == null ? null : Rm2kEventPageSelector.Select(eventData, _state, pTrigger);
-        if (page == null) return false;
-        _active[pEventId] = new EventInterpreter(_state, pEventId, page.Commands, _presentation);
+        if (page == null)
+        {
+            return false;
+        }
+        AddActive(eventData!.Id, pTrigger, page);
         return true;
     }
 
-    private void StartAutomaticPages(Rm2kEventTrigger pTrigger)
+    private void StartAutorunPage()
+    {
+        if (ForegroundBusy)
+        {
+            return;
+        }
+        foreach (var eventData in _events)
+        {
+            if (_active.ContainsKey(eventData.Id))
+            {
+                continue;
+            }
+            var page = Rm2kEventPageSelector.Select(eventData, _state, Rm2kEventTrigger.Autorun);
+            if (page == null)
+            {
+                continue;
+            }
+            AddActive(eventData.Id, Rm2kEventTrigger.Autorun, page);
+            return;
+        }
+    }
+
+    private void StartParallelPages()
     {
         foreach (var eventData in _events)
         {
-            if (_active.ContainsKey(eventData.Id)) continue;
-            var page = Rm2kEventPageSelector.Select(eventData, _state, pTrigger);
-            if (page == null) continue;
-            _active[eventData.Id] = new EventInterpreter(_state, eventData.Id, page.Commands, _presentation);
+            if (_active.ContainsKey(eventData.Id))
+            {
+                continue;
+            }
+            var page = Rm2kEventPageSelector.Select(eventData, _state, Rm2kEventTrigger.Parallel);
+            if (page == null)
+            {
+                continue;
+            }
+            AddActive(eventData.Id, Rm2kEventTrigger.Parallel, page);
         }
+    }
+
+    private void AddActive(int pEventId, Rm2kEventTrigger pTrigger, Rm2kMap.EventPage pPage)
+    {
+        _active[pEventId] = new EventInterpreter(_state, pEventId, pPage.Commands, _presentation);
+        _activeTriggers[pEventId] = pTrigger;
     }
 
     private void ExecuteActive()
@@ -149,6 +202,7 @@ public sealed class Rm2kEventScheduler
             if (!entry.Value.ExecuteFrame())
             {
                 _active.Remove(entry.Key);
+                _activeTriggers.Remove(entry.Key);
             }
             if (_state.IsTransferPending)
             {
