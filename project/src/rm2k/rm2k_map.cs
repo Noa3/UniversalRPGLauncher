@@ -48,10 +48,18 @@ public static class Rm2kMap
         public Dictionary<string, object> Graphic { get; set; } = new();
 
         /// <summary>
-        /// Raw RM2K/2003 trigger value. Runtime code should compare it through
-        /// Rm2kEventTrigger rather than inventing alternate numeric mappings.
+        /// Internal semantic trigger value. Raw LMU trigger codes are converted
+        /// through Rm2kEventTriggerCodec before pages reach the scheduler.
         /// </summary>
         public int Trigger { get; set; }
+
+        /// <summary>
+        /// Verified LMU event layer: 0=below, 1=same level, 2=above.
+        /// </summary>
+        public int Layer { get; set; } = 1;
+
+        /// <summary>Raw RM2K movement frequency metadata (0..8 in normal projects).</summary>
+        public int MoveFrequency { get; set; }
 
         public Dictionary<string, object> ToDict()
         {
@@ -67,6 +75,8 @@ public static class Rm2kMap
                 { "commands", serializedCommands },
                 { "graphic", new Dictionary<string, object>(Graphic) },
                 { "trigger", Trigger },
+                { "layer", Layer },
+                { "move_frequency", MoveFrequency },
             };
         }
     }
