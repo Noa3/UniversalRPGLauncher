@@ -32,6 +32,13 @@ public sealed class GameSimulationState
     public int Timer1Seconds { get; private set; }
     public int Timer2Seconds { get; private set; }
     public bool IsPaused { get; set; }
+    /// <summary>
+    /// Runtime-owned input gate used while RPG_RT-style foreground map events
+    /// (autorun/action/touch/collision) are executing. Parallel events must not
+    /// set this flag. Presentation input that advances the active foreground
+    /// interpreter is handled separately and is not blocked by this flag.
+    /// </summary>
+    public bool PlayerInputLocked { get; set; }
     public bool IsMenuOpen { get; set; }
     public bool IsSaveEnabled { get; set; } = true;
     public bool IsTransferPending { get; set; }
@@ -179,6 +186,10 @@ public sealed class GameSimulationState
 
     public bool TryMove(int pDeltaX, int pDeltaY)
     {
+        if (PlayerInputLocked)
+        {
+            return false;
+        }
         if (Math.Abs(pDeltaX) + Math.Abs(pDeltaY) != 1)
         {
             AddDiagnostic("Movement requires exactly one cardinal tile step.");
@@ -208,7 +219,7 @@ public sealed class GameSimulationState
         MapId = 0; MapX = 0; MapY = 0; FacingDirection = 2;
         Gold = 0; FrameCount = 0; Steps = 0;
         Timer1Active = false; Timer2Active = false; Timer1Seconds = 0; Timer2Seconds = 0; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
-        IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
+        IsPaused = false; PlayerInputLocked = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
