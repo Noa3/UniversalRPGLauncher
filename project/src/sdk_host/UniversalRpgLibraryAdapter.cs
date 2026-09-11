@@ -19,11 +19,13 @@ namespace UniversalRPG.SdkHost;
 public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
 {
     private readonly EnginePluginRegistry _runtimeRegistry;
+    private readonly ProtectedContentRegistry _contentRegistry;
     private readonly IReadOnlyList<EngineSupportDescriptor> _engines;
 
     public UniversalRpgLibraryAdapter()
     {
         _runtimeRegistry = BuiltInEnginePluginCatalog.CreateRuntimeRegistry();
+        _contentRegistry = ProtectedContentAnalyzer.CreateBuiltInRegistry();
         _engines = BuildEngineDescriptors();
     }
 
@@ -64,6 +66,11 @@ public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
         }
 
         var scripts = AnalyzeScripts(detection.GameDirectory, engineId, diagnostics);
+        var protectedContent = ProtectedContentAnalyzer.Analyze(
+            detection.GameDirectory,
+            engineId,
+            diagnostics,
+            _contentRegistry);
 
         return new GameAnalysis
         {
@@ -75,6 +82,7 @@ public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
             SupportLevel = support?.SupportLevel ?? EngineSupportLevel.Unknown,
             Evidence = detection.Evidence,
             Scripts = scripts,
+            ProtectedContent = protectedContent,
             Diagnostics = diagnostics,
         };
     }
@@ -96,6 +104,20 @@ public sealed class UniversalRpgLibraryAdapter : IUniversalRpgLibrary
             return SdkSessionResult.Failed(
                 "session.runtime-unavailable",
                 $"Engine '{pAnalysis.EngineId}' is recognized but does not currently expose an executable UniversalRPG runtime.");
+        }
+
+        var unreadable = pAnalysis.ProtectedContent.FirstOrDefault(pContent => !pContent.RuntimeReadable);
+        if (unreadable != null)
+        {
+            return SdkSessionResult.Failed(
+                "session.protected-content-unavailable",
+                $"The game requires protected-content scheme '{unreadable.Descriptor.SchemeId}', but no trusted runtime reader is available.",
+                new[]
+                {
+                    SdkDiagnostic.Warning(
+                        "session.protected-content-blocked",
+                        unreadable.Note),
+                });
         }
 
         var game = new PluginGameInfo
