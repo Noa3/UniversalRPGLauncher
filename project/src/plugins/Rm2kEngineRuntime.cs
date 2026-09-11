@@ -164,14 +164,27 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
 
         var cardinal = Math.Abs(pDeltaX) + Math.Abs(pDeltaY) == 1;
-        if (cardinal && _passabilityMap != null)
+        if (cardinal)
         {
             Simulation.FacingDirection = (byte)(pDeltaX > 0 ? 6 : pDeltaX < 0 ? 4 : pDeltaY > 0 ? 2 : 8);
-            if (!_passabilityMap.CanMove(
+            var targetX = Simulation.MapX + pDeltaX;
+            var targetY = Simulation.MapY + pDeltaY;
+
+            if (_eventScheduler.HasBlockingSameLayerEventAt(targetX, targetY))
+            {
+                // A same-layer event occupies the target tile. RPG_RT keeps the
+                // player in place and may start a Player Touch page on contact.
+                _eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Touch);
+                Simulation.AddDiagnostic("Movement blocked by active same-layer RM2K event.");
+                return false;
+            }
+
+            if (_passabilityMap != null
+                && !_passabilityMap.CanMove(
                     Simulation.MapX,
                     Simulation.MapY,
-                    Simulation.MapX + pDeltaX,
-                    Simulation.MapY + pDeltaY))
+                    targetX,
+                    targetY))
             {
                 Simulation.AddDiagnostic("Movement blocked by RM2K chipset passability.");
                 return false;
