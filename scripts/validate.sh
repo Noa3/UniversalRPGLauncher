@@ -4,24 +4,33 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="$ROOT_DIR/project"
 SDK_PROJECT="$ROOT_DIR/sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj"
+JINT_PROJECT="$ROOT_DIR/runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj"
+JINT_SMOKE_PROJECT="$ROOT_DIR/runtime/UniversalRPG.JavaScript.Jint.Smoke/UniversalRPG.JavaScript.Jint.Smoke.csproj"
 
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "ERROR: dotnet SDK is required for UniversalRPG." >&2
   exit 2
 fi
 
-echo "[1/6] Public SDK restore"
+echo "[1/9] Public SDK restore"
 dotnet restore "$SDK_PROJECT"
 
-echo "[2/6] Public SDK build"
+echo "[2/9] Public SDK build"
 dotnet build "$SDK_PROJECT" --no-restore
+
+echo "[3/9] Jint JavaScript adapter restore/build"
+dotnet restore "$JINT_PROJECT"
+dotnet build "$JINT_PROJECT" --no-restore
+
+echo "[4/9] Jint JavaScript VM smoke"
+dotnet run --project "$JINT_SMOKE_PROJECT" --configuration Debug
 
 cd "$PROJECT_DIR"
 
-echo "[3/6] Godot .NET project restore"
+echo "[5/9] Godot .NET project restore"
 dotnet restore
 
-echo "[4/6] Godot .NET project build"
+echo "[6/9] Godot .NET project build"
 dotnet build --no-restore
 
 find_godot() {
@@ -72,10 +81,11 @@ if [[ "$GODOT" == *.exe ]] && command -v cygpath >/dev/null 2>&1; then
   GODOT_PROJECT_PATH="$(cygpath -m "$PROJECT_DIR")"
 fi
 
-echo "[5/6] Godot import validation"
+echo "[7/9] Godot import validation"
 "$GODOT" --headless --editor --quit --path "$GODOT_PROJECT_PATH"
 
-echo "[6/6] C# core, SDK-adapter and smoke tests"
+echo "[8/9] C# core, SDK-adapter and smoke tests"
 "$GODOT" --headless --path "$GODOT_PROJECT_PATH" res://tests/csharp_runner.tscn
 
+echo "[9/9] Validation complete"
 echo "UniversalRPG validation passed."
