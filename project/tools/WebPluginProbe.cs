@@ -14,8 +14,9 @@ namespace UniversalRPG.Tools;
 
 /// <summary>
 /// Explicit developer entry point for a user-owned MV/MZ folder. Inspection is
-/// the default; executing plugins requires --execute-plugins. This is NOT the
-/// original core boot or a complete game runner and never sets Runtime capability.
+/// the default. --execute-plugins is the isolated subset; --execute-core loads
+/// original libraries/cores before plugins. Neither executes main.js or proves
+/// game playability. No mode sets engine Runtime capability.
 /// </summary>
 public partial class WebPluginProbe : Node
 {
@@ -24,7 +25,9 @@ public partial class WebPluginProbe : Node
         var exitCode = 2;
         var report = new Dictionary<string, object?>
         {
-            ["schema"] = "urpg.web-plugin-probe.v1",
+            ["schema"] = "urpg.web-plugin-probe.v2",
+            ["originalEntryPointExecuted"] = false,
+            ["originalCoreScriptsCompleted"] = false,
             ["utc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             ["fullGameRuntimeExecuted"] = false,
             ["playability"] = "not-tested",
@@ -53,9 +56,11 @@ public partial class WebPluginProbe : Node
                 JsonSerializer.Serialize(stream, report, new JsonSerializerOptions { WriteIndented = true });
             }
             GD.Print("UniversalRPG MV/MZ probe report: " + path);
-            GD.Print("Probe scope: plugin subset only; complete game playability was NOT tested.");
+            GD.Print("Probe scope: script initialization only; main.js and full game playability were NOT tested.");
             if (exitCode == 0 && report.TryGetValue("status", out var status) && Equals(status, "subset-passed"))
                 GD.Print("UniversalRPG web plugin subset passed.");
+            if (exitCode == 0 && report.TryGetValue("status", out var coreStatus) && Equals(coreStatus, "core-scripts-passed"))
+                GD.Print("UniversalRPG original core scripts initialized; entry point and playability NOT tested.");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -69,6 +74,10 @@ public partial class WebPluginProbe : Node
     {
         report["requestedEngine"] = options.Mz ? "MZ" : "MV";
         report["executionRequested"] = options.Execute;
+        report["coreMode"] = options.Core;
+        report["scope"] = options.Core
+            ? "Original project libraries/core/config plus plugin initialization; main.js/scene boot NOT executed"
+            : "Isolated plugin/data subset; no original core execution";
         report["completedPluginBootstrap"] = false;
         report["completedFrames"] = 0;
         report["requestedFrames"] = options.Frames;
@@ -115,6 +124,25 @@ public partial class WebPluginProbe : Node
         var incomplete = inventory.Diagnostics.Any(d => d.Severity != SdkDiagnosticSeverity.Info
             || d.Code == "scripts.plugins-config-missing");
         report["inspectionComplete"] = !incomplete;
+        var language = options.Mz ? ScriptLanguageIds.RpgMakerMzJavaScript : ScriptLanguageIds.RpgMakerMvJavaScript;
+        NativeCoreScriptSet? core = null;
+        if (options.Core)
+        {
+            core = NativeCoreScriptSet.Read(content, language, contentPrefix);
+            if (!core.Success)
+            {
+                report["status"] = "core-manifest-blocked";
+                report["error"] = core.Error;
+                return 2;
+            }
+            report["coreScripts"] = core.Modules.Select(module => new
+            {
+                id = module.Descriptor.Id, path = module.Descriptor.RelativePath,
+                sha256 = module.Descriptor.Sha256, bytes = module.Source.Length,
+            }).ToArray();
+            report["indexSha256"] = core.IndexSha256;
+            report["deferredEntryPoint"] = new { path = "js/main.js", sha256 = core.EntryPointSha256 };
+        }
         if (!options.Execute)
         {
             report["status"] = incomplete ? "inspection-incomplete" : "inspection-only";
@@ -128,15 +156,17 @@ public partial class WebPluginProbe : Node
         }
         var entries = WebPluginLoadPlan.SelectEnabled(inventory.Entries);
         report["selectedPluginCount"] = entries.Count;
-        if (entries.Count == 0)
+        if (entries.Count == 0 && !options.Core)
         {
             report["status"] = "nothing-to-execute";
             return 3;
         }
-        var language = options.Mz ? ScriptLanguageIds.RpgMakerMzJavaScript : ScriptLanguageIds.RpgMakerMvJavaScript;
+        IEnumerable<ScriptModule> preludes = options.Core
+            ? core!.Modules.Concat(new[] { NativeCorePluginSetup.Build(language, entries) })
+            : new[] { WebPluginManagerShimBuilder.Build(language, entries) };
         using var vm = new JintEmbeddedScriptVm(language, content, contentPrefix);
         using var runtime = new WebScriptRuntime(language, vm, new GameContentWebScriptSourceProvider(content), entries,
-            new[] { WebPluginManagerShimBuilder.Build(language, entries) }, new WebBrowserHostOptions());
+            preludes, new WebBrowserHostOptions());
         var policy = new ScriptExecutionPolicy
         {
             MaxMemoryMegabytes = 128, MaxExecutionMillisecondsPerTick = 250, MaxCallDepth = 128,
@@ -146,30 +176,32 @@ public partial class WebPluginProbe : Node
         bool Record(string name, SdkOperationResult result)
         {
             phases.Add(new { phase = name, success = result.Success, code = result.ErrorCode, message = result.ErrorMessage });
-            if (!result.Success) report["status"] = "subset-failed";
+            if (!result.Success) report["status"] = options.Core ? "core-scripts-failed" : "subset-failed";
             return result.Success;
         }
         if (!Record("load", runtime.LoadScripts(policy))) return 1;
         if (!Record("bootstrap", runtime.ExecuteBootstrap())) return 1;
         report["completedPluginBootstrap"] = true;
+        report["originalCoreScriptsCompleted"] = options.Core;
         for (var frame = 0; frame < options.Frames; frame++)
         {
             if (!Record("frame:" + frame, runtime.AdvanceFrame(options.StepMilliseconds / 1000.0))) return 1;
             report["completedFrames"] = frame + 1;
         }
-        report["status"] = "subset-passed";
+        report["status"] = options.Core ? "core-scripts-passed" : "subset-passed";
         // This only proves the enabled plugin startup plus the requested frames
         // in this deliberately limited host, NOT a functioning MV/MZ game.
         return 0;
     }
 
-    private sealed record Options(string Game, bool Mz, bool Execute, int Frames, double StepMilliseconds);
+    private sealed record Options(string Game, bool Mz, bool Execute, bool Core, int Frames, double StepMilliseconds);
 
     private static Options ReadOptions(string[] args)
     {
         string? game = null;
         string? engine = null;
         var execute = false;
+        var core = false;
         var frames = 3;
         var step = 1000.0 / 60.0;
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -177,7 +209,14 @@ public partial class WebPluginProbe : Node
         {
             var name = args[i];
             if (!seen.Add(name)) throw new ArgumentException("Repeated option: " + name);
-            if (name == "--execute-plugins") { execute = true; continue; }
+            if (name is "--execute-plugins" or "--execute-core" or "--inspect-core")
+            {
+                if (seen.Count(option => option is "--execute-plugins" or "--execute-core" or "--inspect-core") > 1)
+                    throw new ArgumentException("Choose exactly one inspection/execution mode.");
+                execute = name != "--inspect-core";
+                core = name != "--execute-plugins";
+                continue;
+            }
             if (name is not ("--game" or "--engine" or "--frames" or "--step-ms"))
                 throw new ArgumentException("Unknown option: " + name);
             if (++i >= args.Length) throw new ArgumentException("Missing value for " + name);
@@ -198,8 +237,8 @@ public partial class WebPluginProbe : Node
             }
         }
         if (string.IsNullOrWhiteSpace(game) || engine is not ("mv" or "mz"))
-            throw new ArgumentException("Usage: --game <folder> --engine mv|mz [--execute-plugins] [--frames 3] [--step-ms 16.6666667]");
+            throw new ArgumentException("Usage: --game <folder> --engine mv|mz [--execute-plugins | --inspect-core | --execute-core] [--frames 3] [--step-ms 16.6666667]");
         if (!Directory.Exists(game)) throw new DirectoryNotFoundException("--game must select an existing game folder, not an archive.");
-        return new Options(Path.GetFullPath(game), engine == "mz", execute, frames, step);
+        return new Options(Path.GetFullPath(game), engine == "mz", execute, core, frames, step);
     }
 }

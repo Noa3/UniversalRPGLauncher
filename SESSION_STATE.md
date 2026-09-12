@@ -1,38 +1,36 @@
 # UniversalRPG session checkpoint
 
 Updated: 2026-09-12. Branch: docs/refresh-2026-09-09, PR #1.
-Parent implementation: 372d59aba4a0239cf232bed97e6f35c839b1cb0c.
-No Kanban. Preserve unrelated work.
+Parent: f3d31dcf57d053bc78ab65025c9e3bb1e089b1c4. No Kanban.
 
-## Current priority
+## Priority
 
-MV/MZ remains first, now explicitly focused on the installed application. General browser work/web delivery is deferred. Browser-shaped APIs are only compatibility adapters for original scripts; no actual browser, HTTP server or external runtime is required by this pass.
+MV/MZ first, installed native application first. Preserve original custom scripts and other runtime work. General browser deployment/features are deferred; only implement the interfaces needed by original games. Do not replace game logic with a hard-coded native imitation.
 
 ## Latest implementation
 
-- NativeGameDataSource routes relative data/*.json reads through an explicit read-only VFS mount with optional www prefix, UTF-8/BOM handling, path and per-execution resource bounds.
-- Local XMLHttpRequest subset supports the original asynchronous DataManager read pattern, callbacks, abort/reopen and error behavior without networking or writes.
-- Jint gets an optional content-source constructor and a private primitive-only native function. The original constructor/factory still grants no data capability. Read policy is checked for every native call; the shared content source remains host-owned.
-- VM reentrancy guards prevent reset/dispose/recursive execute while a native callback is active.
-- Developer probe uses one unambiguous root/www project for scripts/data and allows local JSON reads only during explicitly requested trusted plugin execution.
-- Fixed the invalid StartsWith(char, StringComparison) call in LogicalGamePath to its string overload.
-- Added 15 C# integration methods, 27 executable Node checks and a pinned MIT-licensed test-only original MV DataManager excerpt. No production core replacement or runtime-capability promotion.
+- NativeBootManifestParser reads standard static MV index scripts or MZ's leading literal scriptUrls without executing imported markup/main.js; preserves extra local project libraries and validates core order/paths/bounds.
+- NativeCoreScriptSet snapshots/hashes original library/core/config sources from one root/www mount. Missing/oversized/invalid data returns no partial executable set.
+- Original PluginManager.setup runs against original $plugins. Initial loadScript scheduling is temporarily captured and checked against the existing enabled-plugin plan, then restored. Original parameter methods/aliases remain intact.
+- WebScriptRuntime now scopes currentScript for original library/core preludes as well as plugins. Existing constructor and isolated-plugin path remain supported; failures stay fail-stop.
+- Developer probe adds --inspect-core and --execute-core with distinct reports. main.js is read/hashed but NOT executed; core-scripts-passed is NOT a game boot/playability result.
+- Added two Node suites, 18 C# methods, original MIT MV PluginManager test fixture/notice and CI steps.
 
 ## Actual validation
 
-Ran node scripts/test-native-game-data.mjs on Node v22.16.0: **27/27 passed**. This executes the production JavaScript adapter and original MV loading methods with mocked transport/timers and explicit unrelated engine test doubles. It is not a complete MV/MZ or native C# test.
+Executed on Node v22.16.0: 36/36 production manifest-JS checks and 18/18 original-plugin-setup checks passed; both node --check commands passed. Verified source baseline Git hashes and workflow YAML/job dependencies.
 
-Workflow YAML/job references checked; the original workflow baseline matched its Git blob before the single added test step. Full .NET/Jint/Godot builds, all 15 new C# methods, the actual probe, exports and user games remain unexecuted. The editing environment lacks dotnet/Godot and toolchain retrieval failed with network/DNS errors. No historical main count is accepted for this branch.
+Not run: all 18 added C# methods, SDK/Jint/Godot build, native probe scene, user projects, platform exports or complete game startup. Toolchain is absent and retrieval failed network/DNS. Parent's PR-run query returned no validator. Never reuse historical counts as branch validation; do not merge before fresh full verification/review.
 
-Details: docs/VALIDATION_NATIVE_DATA_2026-09-12.md.
-Native scope/configuration: docs/NATIVE_MV_MZ.md.
+Details: docs/VALIDATION_CORE_STARTUP_2026-09-12.md.
+Modes/limitations: docs/CORE_STARTUP.md.
 
-## Next useful work
+## Next work
 
-1. Run the complete ./scripts/validate.sh under actual pinned tools and repair measured failures. No merge before fresh verification/review.
-2. Build the real original MV/MZ core/library startup sequence and version profiles, using the native data adapter instead of empty engine globals.
-3. Connect actual Godot rendering, input, audio and safe save storage. Target a simple title/New Game/map/dialogue/transfer/save path, not more generic browser features.
-4. Test user-owned projects with original custom plugins and minimize failures. Plugin-only/data-only passes are not proof of playability.
-5. Preserve RM2K/RGSS/WOLF and shared SDK work; maintain the no-external-executable path.
+1. Establish actual ./scripts/validate.sh success and repair compiler/test failures.
+2. Exercise the new original-core path with authorized default MV/MZ exports. Implement the first real missing native rendering/input/audio API rather than more isolated success-returning shims.
+3. Add the original entry-point lifecycle (main.js/window-load/effects/Scene_Boot) after its dependencies are real. Do not mistake dependency extraction for arbitrary custom-main compatibility.
+4. Target title -> New Game -> map -> dialogue -> transfer -> save/load with original plugins. Initial scheduling capture does not support custom loadScript side effects or dynamic loaders yet.
+5. Maintain SDK/VFS identity, resource policy, fail-stop sessions and existing other-engine regressions. No external runtime executable or browser process fallback.
 
-After three materially different failed strategies for one signature, checkpoint evidence/unblock conditions and move to an independent useful slice. Do not replay failed initialization, weaken assertions, invent completed features or create a work board.
+An in-process VM is not an OS sandbox. After three materially different failed strategies for one signature, record evidence/unblock conditions and continue independent useful work. Do not disable correct tests, replay partial initialization or claim playability from class names or isolated tests.

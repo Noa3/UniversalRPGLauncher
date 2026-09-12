@@ -51,6 +51,18 @@ GitHub Actions referenced in workflows are CI tooling, not shipped game content.
 
 Retain this notice with any distributed test fixture. This published core-source license does not cover proprietary RTPs, games, art or other unrelated assets. Release packaging should explicitly handle/exclude development fixtures as appropriate.
 
+### Original MV PluginManager test fixture
+
+- File: `project/tests/fixtures/core-startup/MVPluginManager.js`.
+- Source: `rpgtkoolmv/corescript`, `js/rpg_managers/PluginManager.js`.
+- Exact upstream/file Git blob: `491e9fa141ccfc6422dd03de865a6dc91bbf49ce` (retrieved 2026-09-12).
+- Modification: none; byte-for-byte test-only copy.
+- License: MIT; copyright (c) 2015 KADOKAWA CORPORATION./YOJI OJIMA.
+- Complete license: `project/tests/fixtures/core-startup/LICENSE.MV`.
+- Purpose: verify original setup/parameter behavior during core-stage initialization. Production loads user-supplied core files; it does not substitute this fixture.
+
+The MZ variant used by the Node test is an explicitly synthetic scheduling fixture, not an imported complete MZ core. Retain the MIT notice when distributing the original MV fixture and do not extend its license to unrelated game/RTP assets.
+
 ## Prospective dependencies
 
 ### Ruby / RGSS

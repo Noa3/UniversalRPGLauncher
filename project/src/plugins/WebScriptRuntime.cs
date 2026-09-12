@@ -202,9 +202,10 @@ public sealed partial class WebScriptRuntime : IEngineScriptingRuntime, IDisposa
             foreach (var module in _preludeModules)
             {
                 current = module.Descriptor.Id;
-                var result = _vm.ExecuteModule(current);
+                var result = ExecutePreludeModule(module);
                 if (!result.Success)
-                    return SdkOperationResult.Failed("web.prelude-execution-failed", $"Prelude '{current}': {result.ErrorMessage}", result.Diagnostics);
+                    return SdkOperationResult.Failed("web.prelude-execution-failed",
+                        $"Prelude '{current}' ({module.Descriptor.RelativePath}): {result.ErrorMessage}", result.Diagnostics);
             }
             foreach (var entry in _entries)
             {
