@@ -14,7 +14,8 @@ namespace UniversalRPG.Tools;
 /// <summary>
 /// Developer-only first-failure probe. It executes original core/config/plugins,
 /// original main.js and window load. It is not a renderer/game runner; missing
-/// graphics/audio/platform services remain explicit failures.
+/// graphics/audio/platform services remain explicit failures. Save/config data
+/// is intentionally ephemeral in this probe and never touches a user's saves.
 /// </summary>
 public partial class NativeMvMzBootProbe : Node
 {
@@ -26,6 +27,7 @@ public partial class NativeMvMzBootProbe : Node
             ["utc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             ["fullGameRuntimeExecuted"] = false, ["playability"] = "not-tested",
             ["entryPointExecuted"] = false, ["windowLoadDispatched"] = false, ["framesCompleted"] = 0,
+            ["storage"] = "ephemeral-memory; user save/config files are not read or written by this probe",
         };
         var exit = 2;
         try { exit = Run(Parse(OS.GetCmdlineUserArgs()), report); }
@@ -77,9 +79,10 @@ public partial class NativeMvMzBootProbe : Node
         string StripRoot(string path){if(prefix.Length==0)return path;var marker=prefix+"/";return path.StartsWith(marker,StringComparison.OrdinalIgnoreCase)?path[marker.Length..]:path;}
         var lifecycle=NativeEntryPointHostPrelude.Build(language,core.Modules.Select(m=>StripRoot(m.Descriptor.RelativePath)));
         var preludes=new[]{lifecycle,NativeGamepadHostPrelude.Build(language)}.Concat(core.Modules).Concat(new[]{NativeCorePluginSetup.Build(language,entries)});
-        using var vm=new JintEmbeddedScriptVm(language,content,prefix);
+        using var storage=new MemoryScriptKeyValueStorage("native-boot-probe");
+        using var vm=new JintEmbeddedScriptVm(language,content,prefix,storage);
         using var runtime=new WebScriptRuntime(language,vm,new GameContentWebScriptSourceProvider(content),entries,preludes,new WebBrowserHostOptions(),core.EntryPoint);
-        var policy=new ScriptExecutionPolicy{MaxMemoryMegabytes=192,MaxExecutionMillisecondsPerTick=500,MaxCallDepth=192,AllowReadGameFiles=true,AllowWriteSaveFiles=false,AllowWriteCacheFiles=false};
+        var policy=new ScriptExecutionPolicy{MaxMemoryMegabytes=192,MaxExecutionMillisecondsPerTick=500,MaxCallDepth=192,AllowReadGameFiles=true,AllowWriteSaveFiles=true,AllowWriteCacheFiles=false};
         if(!Phase("load",runtime.LoadScripts(policy)))return 1;
         if(!Phase("core-bootstrap",runtime.ExecuteBootstrap()))return 1;
         if(!Phase("entry",runtime.ExecuteEntryPoint()))return 1; report["entryPointExecuted"]=true;

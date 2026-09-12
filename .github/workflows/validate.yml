@@ -44,6 +44,8 @@ jobs:
         run: node scripts/test-native-input-host.mjs
       - name: Test native standard-gamepad bridge
         run: node scripts/test-native-gamepad-host.mjs
+      - name: Test native localStorage adapter
+        run: node scripts/test-native-storage.mjs
 
   portable:
     name: Portable SDK and JavaScript VM
