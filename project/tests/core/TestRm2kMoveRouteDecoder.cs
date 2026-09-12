@@ -15,9 +15,7 @@ public sealed class TestRm2kMoveRouteDecoder : TestBase
             Ber((int)Rm2kMoveCommandCode.MoveRight),
             Ber((int)Rm2kMoveCommandCode.FaceLeft),
             Ber((int)Rm2kMoveCommandCode.Wait));
-        var route = Route(commands, 4, repeat: false, skippable: true);
-
-        var result = Rm2kMoveRouteDecoder.Decode(route);
+        var result = Rm2kMoveRouteDecoder.Decode(Route(commands, repeat: false, skippable: true));
 
         AssertTrue(result.Success, result.Error);
         AssertEq(result.Route!.Commands.Count, 4);
@@ -49,10 +47,12 @@ public sealed class TestRm2kMoveRouteDecoder : TestBase
         commands.AddRange(Ber(100));
         commands.AddRange(Ber(50));
 
-        var result = Rm2kMoveRouteDecoder.DecodeCommands(commands.ToArray(), 4);
-
+        // Exercise the containing on-disk structure too: raw-stream-only tests
+        // previously missed the incorrect byte-size-as-command-count check.
+        var result = Rm2kMoveRouteDecoder.Decode(Route(commands.ToArray(), repeat: true, skippable: false));
         AssertTrue(result.Success, result.Error);
-        AssertEq(result.Route!.Commands[0].ParameterA, 12);
+        AssertEq(result.Route!.Commands.Count, 4);
+        AssertEq(result.Route.Commands[0].ParameterA, 12);
         AssertEq(result.Route.Commands[1].ParameterA, 13);
         AssertEq(result.Route.Commands[2].ParameterString, "Hero");
         AssertEq(result.Route.Commands[2].ParameterA, 5);
@@ -64,93 +64,106 @@ public sealed class TestRm2kMoveRouteDecoder : TestBase
 
     public void Test_DefaultsRepeatTrueAndSkippableFalseWhenFieldsAbsent()
     {
-        var commands = Ber((int)Rm2kMoveCommandCode.MoveDown);
-        var route = Bytes(
-            Chunk(0x0B, Ber(1)),
-            Chunk(0x0C, commands),
-            new byte[] { 0x00 });
-
-        var result = Rm2kMoveRouteDecoder.Decode(route);
-
+        var result = Rm2kMoveRouteDecoder.Decode(Bytes(
+            Chunk(0x0B, Ber(1)), Chunk(0x0C, Ber((int)Rm2kMoveCommandCode.MoveDown)), new byte[] { 0 }));
         AssertTrue(result.Success, result.Error);
         AssertTrue(result.Route!.Repeat);
         AssertFalse(result.Route.Skippable);
     }
 
-    public void Test_RejectsDeclaredCountMismatch()
+    public void Test_ExplicitRawCommandCountValidationRemainsAvailable()
     {
-        var route = Route(Ber((int)Rm2kMoveCommandCode.MoveLeft), 2, repeat: true, skippable: false);
-        var result = Rm2kMoveRouteDecoder.Decode(route);
-
+        // DecodeCommands' optional count is an explicit caller assertion. It is
+        // not the meaning of the serialized MoveRoute field 0x0B.
+        var result = Rm2kMoveRouteDecoder.DecodeCommands(Ber((int)Rm2kMoveCommandCode.MoveLeft), 2);
         AssertFalse(result.Success);
         AssertTrue(result.Error.Contains("declared 2", StringComparison.Ordinal));
+    }
+
+    public void Test_OneInstructionCanOccupySeveralSerializedBytes()
+    {
+        var stream = Bytes(Ber((int)Rm2kMoveCommandCode.SwitchOn), Ber(128));
+        AssertEq(stream.Length, 3);
+        var result = Rm2kMoveRouteDecoder.Decode(Route(stream, repeat: false, skippable: false));
+        AssertTrue(result.Success, result.Error);
+        AssertEq(result.Route!.Commands.Count, 1);
+        AssertEq(result.Route.Commands[0].ParameterA, 128);
+    }
+
+    public void Test_AdvisorySizeHintsDoNotAllocateOrCountInstructions()
+    {
+        var stream = Bytes(Ber((int)Rm2kMoveCommandCode.SwitchOff), Ber(123));
+        foreach (var hint in new[] { 0, 1, int.MaxValue })
+        {
+            var result = Rm2kMoveRouteDecoder.Decode(Bytes(Chunk(0x0B, Ber(hint)), Chunk(0x0C, stream), new byte[] { 0 }));
+            AssertTrue(result.Success, result.Error);
+            AssertEq(result.Route!.Commands.Count, 1);
+        }
+        AssertTrue(Rm2kMoveRouteDecoder.Decode(Bytes(Chunk(0x0C, stream), new byte[] { 0 })).Success);
+    }
+
+    public void Test_MalformedAndDuplicateSizeFieldsAreRejected()
+    {
+        var malformed = Bytes(Chunk(0x0B, new byte[] { 0x80 }), new byte[] { 0 });
+        AssertFalse(Rm2kMoveRouteDecoder.Decode(malformed).Success);
+        var duplicate = Bytes(Chunk(0x0B, Ber(0)), Chunk(0x0B, Ber(0)), new byte[] { 0 });
+        AssertFalse(Rm2kMoveRouteDecoder.Decode(duplicate).Success);
+    }
+
+    public void Test_ActualCommandCountLimitCannotBeBypassedBySmallHint()
+    {
+        // Opcode zero is MoveUp in movement streams, not a route terminator.
+        var tooMany = new byte[Rm2kMoveRouteDecoder.MaxCommands + 1];
+        var result = Rm2kMoveRouteDecoder.Decode(Bytes(Chunk(0x0B, Ber(0)), Chunk(0x0C, tooMany), new byte[] { 0 }));
+        AssertFalse(result.Success);
+        AssertTrue(result.Error.Contains("exceeds", StringComparison.Ordinal));
     }
 
     public void Test_RejectsUnknownCommandBecauseLengthCannotBeInferred()
     {
         var result = Rm2kMoveRouteDecoder.DecodeCommands(Ber(99));
-
         AssertFalse(result.Success);
         AssertTrue(result.Error.Contains("Unsupported", StringComparison.Ordinal));
     }
 
     public void Test_RejectsMalformedBooleanField()
     {
-        var route = Bytes(
-            Chunk(0x0B, Ber(0)),
-            Chunk(0x0C, Array.Empty<byte>()),
-            Chunk(0x15, new byte[] { 0x01, 0x00 }),
-            new byte[] { 0x00 });
-
-        var result = Rm2kMoveRouteDecoder.Decode(route);
-
+        var result = Rm2kMoveRouteDecoder.Decode(Bytes(
+            Chunk(0x0B, Ber(0)), Chunk(0x0C, Array.Empty<byte>()),
+            Chunk(0x15, new byte[] { 1, 0 }), new byte[] { 0 }));
         AssertFalse(result.Success);
         AssertTrue(result.Error.Contains("repeat", StringComparison.OrdinalIgnoreCase));
     }
 
     public void Test_RejectsTrailingBytesAfterRouteTerminator()
     {
-        var route = Bytes(
-            Chunk(0x0B, Ber(0)),
-            Chunk(0x0C, Array.Empty<byte>()),
-            new byte[] { 0x00, 0x55 });
-
-        var result = Rm2kMoveRouteDecoder.Decode(route);
-
+        var result = Rm2kMoveRouteDecoder.Decode(Bytes(
+            Chunk(0x0B, Ber(0)), Chunk(0x0C, Array.Empty<byte>()), new byte[] { 0, 0x55 }));
         AssertFalse(result.Success);
         AssertTrue(result.Error.Contains("trailing", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static byte[] Route(byte[] pCommands, int pCount, bool repeat, bool skippable)
+    private static byte[] Route(byte[] commands, bool repeat, bool skippable)
         => Bytes(
-            Chunk(0x0B, Ber(pCount)),
-            Chunk(0x0C, pCommands),
+            Chunk(0x0B, Ber(commands.Length)), Chunk(0x0C, commands),
             Chunk(0x15, new byte[] { repeat ? (byte)1 : (byte)0 }),
-            Chunk(0x16, new byte[] { skippable ? (byte)1 : (byte)0 }),
-            new byte[] { 0x00 });
+            Chunk(0x16, new byte[] { skippable ? (byte)1 : (byte)0 }), new byte[] { 0 });
 
-    private static byte[] Chunk(int pId, byte[] pPayload)
-        => Bytes(Ber(pId), Ber(pPayload.Length), pPayload);
-
-    private static byte[] Bytes(params byte[][] pParts)
+    private static byte[] Chunk(int id, byte[] payload) => Bytes(Ber(id), Ber(payload.Length), payload);
+    private static byte[] Bytes(params byte[][] parts)
     {
         var result = new List<byte>();
-        foreach (var part in pParts) result.AddRange(part);
+        foreach (var part in parts) result.AddRange(part);
         return result.ToArray();
     }
 
-    private static byte[] Ber(int pValue)
+    private static byte[] Ber(int value)
     {
-        if (pValue < 0) throw new ArgumentOutOfRangeException(nameof(pValue));
-        var groups = new List<byte> { (byte)(pValue & 0x7F) };
-        var value = pValue >> 7;
-        while (value > 0)
-        {
-            groups.Add((byte)(value & 0x7F));
-            value >>= 7;
-        }
+        if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+        var groups = new List<byte> { (byte)(value & 0x7F) };
+        while ((value >>= 7) > 0) groups.Add((byte)(value & 0x7F));
         groups.Reverse();
-        for (var index = 0; index < groups.Count - 1; index++) groups[index] |= 0x80;
+        for (var i = 0; i < groups.Count - 1; i++) groups[i] |= 0x80;
         return groups.ToArray();
     }
 }

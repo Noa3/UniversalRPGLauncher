@@ -1,52 +1,50 @@
 # UniversalRPG session checkpoint
 
 Updated: 2026-09-12. Branch: `docs/refresh-2026-09-09`, PR #1.
-No Kanban is maintained. Preserve unrelated source and choose work from actual code/tests.
+No Kanban is maintained. Preserve unrelated work and choose coherent changes from source/tests.
 
-## Latest work
+## Latest work: actual LMU event-page import
 
-Parent: `e038cfb04d7ffc4cf4ff5e2d3eb8a4bfc5a7a880`.
+Parent implementation: `7f5b805b792ff4f16a7f4cbe3f71127b1311fd7e`.
 
-- MV/MZ and RGSS loaders now stop permanently after a failed external load, bootstrap or hook. A retry cannot replay earlier scripts into the partially initialized VM. Recovery requires a fresh runtime and VM.
-- Hooks require completed bootstrap; reentrant operations are refused. Ordinary provider/VM exceptions become explicit diagnostics. These guards are single-host-thread lifecycle rules, not general thread safety or rollback.
-- Shared `WebPluginLoadPlan` uses stable configured order and the first enabled exact plugin name. Loader and parameter shim share that plan. Selected parameter dictionaries are bounded snapshots.
-- PluginManager gained `setParameters` and scheduled `_scripts` names. Dynamic script loading, DOM/rendering/audio APIs remain unimplemented rather than faked.
-- Added 16 C# session-safety methods and 10 load-plan methods; existing RGSS hook test now bootstraps first.
-- `validate.sh` now verifies non-empty Jint/Godot completion summaries, rejects reported failures even with exit 0, requires the pinned .NET Godot build, and retains fresh per-stage logs.
-- CI includes the new JavaScript contract tests and simulated-tool validation-driver tests.
+While preparing automatic movement integration, inspection found a more fundamental blocker: `ParseMap` counted event pages with `ParseStructArray(..., false)` and consequently iterated an empty object list. Actual LMU pages never reached the existing runtime event loader. The previously unreachable condition path also tried to access a nonexistent `fields` member on a raw chunk.
 
-## Validation evidence
+This pass:
 
-Executed locally on Node v22.16.0:
+- Materializes real pages through `Rm2kParser.EventPages.cs` and retains page IDs/order, commands, conditions, movement metadata and graphics metadata.
+- Decodes nested condition bytes through bounded structure readers; reports duplicate/malformed/trailing data instead of dropping a page.
+- Uses documented field IDs/defaults instead of guessed legacy aliases. Unknown page fields remain raw data.
+- Decodes the embedded movement-route structure. Its 0x0B SizeField is a serialized-byte hint, not an instruction count. Stale hints are advisory; actual payload and decoded command limits remain enforced.
+- Reads event operands and condition integer values as signed int32. Explicit empty condition integer payloads represent zero.
+- Fixes the event-command cap boundary so exactly MaxCommands plus its terminator is accepted, while an extra command is rejected.
+- Adds 19 C# LMU/event regression methods, primarily entering through generated file bytes and the actual ParseMap entry point. The route decoder suite now has 11 methods instead of 7, including parameterized structures and size-hint bounds.
 
-- new production PluginManager contract: **18/18 passed**;
-- existing production PluginManager regressions: **8/8 passed**.
+## Validation truth
 
-Executed locally using Python's standard library and Bash:
+Performed in this pass: source/format review, exact Git-blob verification of the materialized original large parser, inspection of the single intended ParseMap diff hunk, and lexical delimiter checks on edited C# files.
 
-- actual validation driver with simulated tool processes: **18 test methods passed**;
-- Bash syntax and workflow YAML/dependency-key checks passed.
+**Not performed:** C# compilation or execution, the new LMU/route tests, actual Jint/Godot execution, exports, or real-game playthroughs. .NET/Godot are absent and toolchain download attempts failed. Do not describe the branch as green. Earlier Node and simulated-tool test results belong to their earlier dated reports, not this parser pass.
 
-**Not executed:** the 26 new C# methods, SDK/Jint/Godot compilation, actual Jint/Godot suites, exports or real games. Toolchain installation remains unavailable; direct network access failed DNS resolution. No fresh canonical Actions result was available before the changes. Never reuse historical 296/296 main evidence as proof of this branch.
+Evidence, primary format references and pending commands: `docs/VALIDATION_LMU_EVENTS_2026-09-12.md`.
 
-Details: `docs/VALIDATION_SCRIPT_STARTUP_2026-09-12.md`.
-Script lifecycle/reference: `docs/SCRIPT_COMPATIBILITY.md`.
+## Preserved script work
 
-## Engine boundary
+MV/MZ and RGSS loaders retain the previous fail-stop startup/hook rules, requiring fresh sessions after external failures. `WebPluginLoadPlan`, PluginManager parameters/scheduled names, the Jint invocation boundary, VFS and validation-driver guards are unchanged by this parser pass.
 
-- RM2000/2003: partial runtime; automatic LMU movement-route scheduling/timing and complete runtime sprite synchronization still need integration.
-- WOLF: experimental understood plain-data subset.
-- XP/VX/VX Ace: archive/inventory/pipeline; no embedded Ruby backend.
-- MV/MZ: experimental Jint adapter and plugin shims; no complete browser/render/audio host or playable engine registration.
-- RM95/Dante98/Unite: detection/research.
-- Existing content/VFS and engine-managed MV/MZ asset readers do not imply full game compatibility.
+## Remaining runtime boundary
+
+- RM2000/2003: partial runtime. The parser now delivers real event-page data, but this pass does NOT implement automatic route scheduling, faithful speed/frequency timing, or full runtime sprite synchronization.
+- Runtime sprite refresh still needs to consume current event positions/facing and active pages, not only original map coordinates.
+- XP/VX/VX Ace: script archive/inventory/pipeline; no embedded Ruby backend.
+- MV/MZ: experimental Jint adapter/shims; no complete browser/render/audio host or playable engine registration.
+- WOLF: experimental understood plain-data subset. RM95/Dante98/Unite remain research/detection.
 
 ## Next useful work
 
-1. Run `./scripts/validate.sh` with .NET and pinned Godot Mono, inspect retained logs, and repair measured compiler/test failures first. No merge before fresh complete validation.
-2. Connect decoded LMU page movement routes to active-page lifecycle and explicit timing; publish runtime positions/facing to render descriptors without modifying parsed maps.
-3. Add a two-map traversal/save regression before claiming RM2K playability.
-4. After actual VM validation, extend browser/RPG Maker services behind truthful capabilities; retain the distinct RGSS profiles and source ordering.
-5. Audit dependency notices and actual target exports before release.
+1. Run `./scripts/validate.sh` with the pinned .NET/Godot toolchain and repair measured failures. No merge before fresh complete validation.
+2. Validate real LMU -> runtime page selection -> action/parallel event execution with a small authorized/synthetic project; existing hand-built runtime fixtures alone cannot prove the import path.
+3. Connect parsed movement routes to active-page lifecycle and explicit timing; publish current positions/facing to render descriptors without mutating parsed maps.
+4. Add a two-map traversal/save regression before claiming a playable RM2K milestone.
+5. Continue browser/RGSS services only behind truthful capabilities and verified VM behavior.
 
-On recovery read AGENTS, this checkpoint, project status and relevant source/tests. After three materially different failed strategies for a failure signature, preserve evidence and continue an independent useful path. Do not disable correct tests, silently replay initialization, create a task board, or claim support from class names alone.
+On recovery read AGENTS, this checkpoint and relevant source/tests. Never weaken correct tests, replay partial script initialization, recreate a task board or promote compatibility from class names alone.

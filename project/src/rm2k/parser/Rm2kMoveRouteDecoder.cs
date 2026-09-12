@@ -97,7 +97,7 @@ public static class Rm2kMoveRouteDecoder
     public const int MaxRouteBytes = 1024 * 1024;
     public const int MaxParameterStringBytes = 64 * 1024;
 
-    private const int FieldCommandCount = 0x0B;
+    private const int FieldCommandBytes = 0x0B;
     private const int FieldCommands = 0x0C;
     private const int FieldRepeat = 0x15;
     private const int FieldSkippable = 0x16;
@@ -111,7 +111,7 @@ public static class Rm2kMoveRouteDecoder
 
         var reader = new LcfBinaryReader(pData);
         byte[]? commandBytes = null;
-        int? declaredCount = null;
+        int? declaredBytes = null;
         var repeat = true;
         var skippable = false;
         var fieldCount = 0;
@@ -138,12 +138,12 @@ public static class Rm2kMoveRouteDecoder
             var data = (byte[])field["data"];
             switch (id)
             {
-                case FieldCommandCount:
-                    if (declaredCount.HasValue)
-                        return Rm2kMoveRouteDecodeResult.Failed("RM2K move route contains duplicate command-count fields.");
-                    if (!TryReadSingleBer(data, out var count) || count < 0 || count > MaxCommands)
-                        return Rm2kMoveRouteDecodeResult.Failed("RM2K move route command count is malformed or exceeds the bounded limit.");
-                    declaredCount = count;
+                case FieldCommandBytes:
+                    if (declaredBytes.HasValue)
+                        return Rm2kMoveRouteDecodeResult.Failed("RM2K move route contains duplicate command-size fields.");
+                    if (data.Length == 0) declaredBytes = 0;
+                    else if (TryReadSingleBer(data, out var size)) declaredBytes = size;
+                    else return Rm2kMoveRouteDecodeResult.Failed("RM2K move route byte-size hint is malformed.");
                     break;
                 case FieldCommands:
                     if (commandBytes != null)
@@ -177,7 +177,10 @@ public static class Rm2kMoveRouteDecoder
         }
 
         commandBytes ??= Array.Empty<byte>();
-        var commandsResult = DecodeCommands(commandBytes, declaredCount);
+        // Field 0x0B is a SizeField (serialized bytes), not a CountField.
+        // Like liblcf, tolerate stale size hints: the actual bounded payload
+        // determines decoding, allocation and the independent MaxCommands cap.
+        var commandsResult = DecodeCommands(commandBytes);
         if (!commandsResult.Success)
         {
             return commandsResult;
