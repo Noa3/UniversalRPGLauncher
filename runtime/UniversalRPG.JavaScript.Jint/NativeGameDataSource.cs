@@ -6,10 +6,10 @@ using UniversalRPG.Sdk;
 namespace UniversalRPG.JavaScript.Jint;
 
 /// <summary>
-/// Read-only, local JSON transport used by the original MV/MZ DataManager.
-/// The supplied VFS must enforce its own pre-allocation file limits. This class
-/// does not perform network requests or resolve native filesystem paths.
-/// The host owns the content source; disposing a VM does not dispose its mount.
+/// Read-only native transport used by original MV/MZ startup/data loaders. Data
+/// requests are limited to data/*.json. The only script request accepted is the
+/// selected project's own js/main.js URI, needed by MZ's startup accessibility
+/// check. No HTTP, arbitrary file URL or native path resolution exists here.
 /// </summary>
 public sealed class NativeGameDataSource
 {
@@ -31,14 +31,10 @@ public sealed class NativeGameDataSource
         else throw new ArgumentException("Invalid logical content prefix.", nameof(contentPrefix));
     }
 
-    // Call only at an outer ExecuteModule/Invoke boundary, never per callback.
     internal void BeginExecution(bool allowReadGameFiles)
     {
-        _allowed = allowReadGameFiles;
-        _reads = 0;
-        _bytes = 0;
+        _allowed = allowReadGameFiles; _reads = 0; _bytes = 0;
     }
-
     internal void EndExecution() => _allowed = false;
 
     internal string ReadEnvelope(string url)
@@ -46,7 +42,7 @@ public sealed class NativeGameDataSource
         if (!_allowed) return Failure("data.read-denied");
         if (_reads >= MaxReadsPerExecution) return Failure("data.request-budget");
         _reads++;
-        if (!TryResolveDataPath(url, out var path)) return Failure("data.path-denied");
+        if (!TryResolveReadablePath(url, out var path)) return Failure("data.path-denied");
         try
         {
             var result = _content.Read(_prefix + path);
@@ -54,31 +50,40 @@ public sealed class NativeGameDataSource
             if (result.Data.Length > MaxFileBytes) return Failure("data.file-too-large");
             if (result.Data.Length > MaxBytesPerExecution - _bytes) return Failure("data.byte-budget");
             _bytes += result.Data.Length;
-            // Strip only an initial UTF-8 BOM; never rewrite JSON/game data.
             var bytes = result.Data.Span;
-            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-                bytes = bytes[3..];
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) bytes = bytes[3..];
             var text = Utf8.GetString(bytes);
             return JsonSerializer.Serialize(new { success = true, text, errorCode = "" });
         }
         catch (DecoderFallbackException) { return Failure("data.invalid-utf8"); }
         catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
         {
-            // Provider exceptions must not reveal unrelated native host paths.
             return Failure("data.provider-failed");
         }
     }
 
-    internal static string Failure(string code)
-        => JsonSerializer.Serialize(new { success = false, text = "", errorCode = code });
+    internal static string Failure(string code) => JsonSerializer.Serialize(new { success = false, text = "", errorCode = code });
+
+    private bool TryResolveReadablePath(string url, out string path)
+    {
+        if (TryResolveDataPath(url, out path)) return true;
+        path = "";
+        const string scheme = "urpg://game/";
+        if (string.IsNullOrEmpty(url) || url.Length > 4096 || !url.StartsWith(scheme, StringComparison.Ordinal)) return false;
+        var raw = url[scheme.Length..];
+        if (raw.IndexOfAny(new[] { '?', '#', '\\' }) >= 0 || raw.Contains('%')) return false;
+        if (!LogicalGamePath.TryNormalize(raw, out var normalized) || normalized != raw) return false;
+        var expected = _prefix + "js/main.js";
+        if (!normalized.Equals(expected, StringComparison.OrdinalIgnoreCase)) return false;
+        path = "js/main.js";
+        return true;
+    }
 
     public static bool TryResolveDataPath(string url, out string path)
     {
         path = "";
         if (string.IsNullOrEmpty(url) || url.Length > 4096 || url != url.Trim()) return false;
         foreach (var c in url) if (char.IsControl(c)) return false;
-        // Relative local requests only. Queries/fragments are cache metadata,
-        // never part of a native filename. No file:, http:, UNC or data: URLs.
         var cut = url.IndexOfAny(new[] { '?', '#' });
         var raw = cut < 0 ? url : url[..cut];
         if (raw.StartsWith("./", StringComparison.Ordinal)) raw = raw[2..];
@@ -89,12 +94,10 @@ public sealed class NativeGameDataSource
             i += 2;
         }
         var decoded = Uri.UnescapeDataString(raw);
-        // Refuse residual/double encoding and encoded URI delimiters.
         if (decoded.IndexOfAny(new[] { '%', '?', '#', '\\' }) >= 0) return false;
         if (!LogicalGamePath.TryNormalize(decoded, out var normalized)) return false;
         if (!normalized.StartsWith("data/", StringComparison.OrdinalIgnoreCase)
             || !normalized.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
-        // Do not let empty segments or whitespace normalization alias a path.
         if (normalized != decoded || normalized.Length <= "data/.json".Length) return false;
         foreach (var segment in normalized.Split('/'))
         {

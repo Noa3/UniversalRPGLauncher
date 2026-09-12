@@ -38,6 +38,8 @@ jobs:
         run: node scripts/test-native-boot-manifest.mjs
       - name: Test original PluginManager setup
         run: node scripts/test-original-plugin-setup.mjs
+      - name: Test native entry-point lifecycle host
+        run: node scripts/test-native-entry-host.mjs
 
   portable:
     name: Portable SDK and JavaScript VM
