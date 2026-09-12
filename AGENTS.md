@@ -1,44 +1,41 @@
-# UniversalRPG Agent Instructions
+# UniversalRPG agent instructions
 
-Updated: 2026-09-12. **Current product priority: RPG Maker MV and MZ.**
-The user can provide/test more MV/MZ projects. This explicit decision supersedes the older RM2000/2003-first ordering in historical roadmaps and handoffs. Preserve those implementations; do not make their completion a prerequisite for MV/MZ.
+Updated: 2026-09-12. **MV/MZ first, installed application first.** The user has deferred browser delivery/general browser work and wants actual games running in URPG. Keep only the JavaScript/browser-shaped APIs required to run original MV/MZ code inside the native application; do not turn the project into a generic browser. Do not remove essential script compatibility or substitute native hard-coded gameplay for game-authored plugins.
 
 ## Product and source of truth
 
-URPG is a compatibility runtime/launcher, not a game remake. Do not invent new stories, worlds or gameplay for imported games. Original game code, plugin order and engine behavior remain the compatibility target. Enhancements must be opt-in.
+URPG is a compatibility runtime/launcher, not a game remake. Preserve original script ordering, custom plugins, data, game rules and engine behavior. Enhancements stay opt-in. Read AGENTS, SESSION_STATE, PROJECT_STATUS, docs/NATIVE_MV_MZ.md and relevant source/tests. Older browser-first or RM2K-first ordering is superseded.
 
-Read `AGENTS.md`, `SESSION_STATE.md`, `docs/PROJECT_STATUS.md`, `docs/MV_MZ_TESTING.md`, then relevant source/tests and architecture. Source and executed tests override stale prose. There is intentionally **no Kanban**; do not create a work board. The checkpoint is not a history log.
-
-C#/.NET is canonical. The Godot project is under `project/`; the repository currently pins Godot.NET.Sdk/4.7.2 and .NET 8. Do not invent a toolchain validation result or silently change versions. The standalone SDK must remain Godot-free and shared, not compiled into multiple competing contract assemblies. Preserve existing public signatures where practical.
+There is intentionally no Kanban. Do not create a work board. C#/.NET is canonical, the Godot project is under project/, and the shared SDK must stay Godot-free. Preserve existing public constructors/contracts. The repository currently pins Godot.NET.Sdk/4.7.2 and .NET 8; verify exact tools rather than silently changing pins or inventing test results.
 
 ## Work selection
 
-Repair measured build/test/security regressions first. Then prioritize a real MV/MZ path: bounded project inspection and diagnostics; original script/dependency load order; shared browser host; data/asset loading through VFS; actual rendering/audio/input/storage; default project boot; representative custom plugins; independent MV/MZ profiles. Use user-authorized projects and small synthetic fixtures. Do not substitute an isolated successful plugin for a successful game boot.
+Fix measured build/test/security failures first. Then develop the actual installed-app MV/MZ path: original core/library load order and version differences; local data/asset access; real rendering, audio, input and storage; title -> New Game -> map -> dialogue -> transfer -> save/load. Build the minimum engine services for this path rather than accumulating isolated browser APIs. Never call a plugin-only test a playable engine.
 
-RM2000/2003, RGSS and WOLF remain supported development tracks but receive regression maintenance rather than taking over the primary milestone. Native Windows DLLs, RM95, Dante98 and Unite remain later research. No original-engine, EasyRPG, mkxp, Wine, NW.js or system-browser subprocess fallback in the normal game path. Embedded licensed dependencies are implementation details.
+Existing RM2000/2003, RGSS and WOLF work remains intact and receives regression maintenance. Do not wait for it to be complete before advancing MV/MZ. Native Windows DLL execution, RM95/Dante98/Unite and browser deployment are later work. No original-engine, EasyRPG, mkxp, Wine, NW.js or system-browser subprocess fallback. Licensed embedded dependencies are allowed implementation details.
 
-## Current boundaries
+## Current boundary
 
-MV/MZ has a concrete experimental Jint adapter, ordered plugin pipeline, PluginManager shim and opt-in frame-pumped timer/currentScript subset. It has **no full DOM/Canvas/WebGL/WebAudio/Node host or playable game-engine registration**. The developer probe runs inspection by default and requires `--execute-plugins` to run trusted project scripts in the limited host. It is not a general browser sandbox.
+MV/MZ has an experimental Jint adapter, ordered plugin pipeline, PluginManager shim, frame timing/currentScript subset and a read-only native local JSON adapter. The latter exposes the XMLHttpRequest API shape expected by original DataManager code, but routes only data/*.json GET requests to an explicitly supplied VFS mount. It does not perform HTTP, open a browser or grant general host filesystem access.
 
-RM2000/2003 remains partial (including the recent LMU event-page import fix). XP/VX/VX Ace has script parsing/ordering but no embedded Ruby backend. WOLF is an experimental understood plain-data subset. Detection and parsing must never imply launchability; require `PluginCapability.Runtime` defensively at selection and creation.
+The diagnostic probe still executes only an explicitly requested trusted plugin subset. It does not boot the full core or certify game playability. Missing rendering/audio/engine globals must remain explicit failures, not no-ops.
 
-## Engineering and testing
+RM2000/2003 remains partial; RGSS has parsing/ordering but no Ruby backend; WOLF is an experimental understood plain-data subset. Detection/parsing/isolated language execution and playable Runtime are distinct. Check PluginCapability.Runtime at both selection and creation; never promote it based on class names.
 
-Choose a coherent implementation slice from real source, write regression coverage, execute focused tests and the full `./scripts/validate.sh` where tooling exists, then update only affected docs. Avoid duplicated interpreters, giant host shims and unimplemented APIs that silently return success. Stop on unsupported behavior with actionable diagnostics.
+## Implementation and validation
 
-The browser timing host is an explicit subset: virtual time advances only through `AdvanceFrame`, queues are bounded, new callbacks wait for another pump and missed interval periods are coalesced. This is not complete browser event-loop fidelity. Do not silently present it as such. Validate full core boot before expanding runtime capability flags.
+Choose a coherent slice, inspect existing callers, preserve tested behavior, implement it, add regressions, execute focused checks and ./scripts/validate.sh where available, then update only affected docs. Do not replace working components just for style or add duplicate runtime models.
 
-An in-process VM is not an OS sandbox. Inspection never executes game scripts/binaries. Runtime code must not receive arbitrary CLR objects, filesystem/process/native/network permissions or unrestricted host callbacks. Respect VFS containment, content identity, resource limits and the project's protected-content policy. Do not bypass third-party DRM or redistribute proprietary games/RTPs. Track exact third-party licenses.
+The native data callback accepts a primitive URL and returns bounded text/error metadata. Keep game mounts read-only, prefixes unambiguous and caller-owned. Enforce policy on every read and aggregate request/byte limits across the outer VM call. Do not expose reflected CLR objects. A VFS must bound reads before allocation; post-read limits do not create an OS sandbox. VM resource/time limits also are not a hard whole-process memory limit.
 
-## Recovery
+Inspection never runs scripts/binaries. Keep process/native/network access denied by default, preserve protected-content restrictions, do not bypass third-party DRM, and do not redistribute proprietary games/RTPs. Record exact licenses for all third-party code and fixtures. A permissively published core-source excerpt is not a license for unrelated assets.
 
-Preserve unrelated edits. A script session that fails during load/bootstrap/frame/hook is not safe to replay; use a fresh VM/runtime. This is fail-stop, not rollback.
+## Recovery and completion
 
-For one normalized failure signature, try at most three genuinely different approaches without new evidence. Do not run an identical failed command repeatedly. Preserve logs, revert only harmful experiments, record the blocker/unblock condition in `SESSION_STATE.md`, then move to independent useful work. Never weaken correct tests, hide errors or disable security to obtain green status.
+Use one host thread per VM. Reject reentrant execution/reset/disposal. A failed script load/bootstrap/frame/hook requires a fresh runtime/VM, not replay into partial state; this is fail-stop, not rollback.
 
-## Completion and reporting
+For the same failure signature, allow at most three genuinely different strategies without new evidence. Preserve logs and useful work, revert only harmful attempts, record the blocker/unblock condition in SESSION_STATE, and continue independent useful work. Never weaken correct tests, hide errors or disable safety to obtain green status.
 
-A complete slice requires implementation, relevant tests and actual validation. When .NET/Godot is unavailable, distinguish added C# tests from executed Node semantic tests and from simulated-tool tests. Never reuse a historical count for the current branch. Do not merge this large PR without fresh full validation and review.
+Distinguish source written, C# tests added, Node semantics executed, real Jint/Godot tests and full game evidence. Mocked transport/timers do not validate native VFS integration. Historical test counts do not validate the current branch. Do not merge the large PR without fresh full build/test evidence and review.
 
-Keep `SESSION_STATE.md` concise: current priority, implemented changes, exact validation evidence, blockers and next action. Dated reports are snapshots. Continue ordinary implementation without asking the user to pick every step; escalate only genuinely non-resolvable/destructive decisions.
+Keep SESSION_STATE concise: current objective, changes, actual validation, blockers and next action. Continue ordinary development without requiring the user to select every step; escalate only genuinely non-resolvable or destructive decisions.

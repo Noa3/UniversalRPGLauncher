@@ -28,7 +28,7 @@ public partial class WebPluginProbe : Node
             ["utc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
             ["fullGameRuntimeExecuted"] = false,
             ["playability"] = "not-tested",
-            ["scope"] = "plugin inventory and optional limited browser-host execution; no RPG Maker core boot",
+            ["scope"] = "plugin inventory, local game JSON and limited script execution; no complete RPG Maker core boot",
             ["notCovered"] = new[] { "RPG Maker core boot", "maps/rendering", "audio", "input", "persistent saves", "Node/native dependencies" },
             ["security"] = "In-process Jint constraints are not an operating-system sandbox. Execute only projects you trust.",
         };
@@ -83,6 +83,21 @@ public partial class WebPluginProbe : Node
             report["error"] = "The selected generation's expected core script was not found; no code was executed.";
             return 2;
         }
+        // Select one root for both native data and the existing script inventory.
+        // Mixing a root export with a second www export would run the wrong code.
+        var rootCore = content.Exists("js/" + coreName);
+        var wwwCore = content.Exists("www/js/" + coreName);
+        if ((rootCore && wwwCore)
+            || (rootCore && content.Exists("www/js/plugins.js"))
+            || (wwwCore && content.Exists("js/plugins.js")))
+        {
+            report["status"] = "blocked";
+            report["error"] = "Ambiguous root/www projects; select a single exported game folder.";
+            return 2;
+        }
+        var contentPrefix = rootCore ? "" : "www";
+        report["dataRoot"] = contentPrefix;
+        report["nativeDataScope"] = "Read-only local data/*.json; no network, script writes or whole-browser execution.";
         var inventory = WebScriptInventory.Inspect(options.Game, options.Mz);
         report["inventoryDiagnostics"] = inventory.Diagnostics.Select(d => new
         {
@@ -119,14 +134,14 @@ public partial class WebPluginProbe : Node
             return 3;
         }
         var language = options.Mz ? ScriptLanguageIds.RpgMakerMzJavaScript : ScriptLanguageIds.RpgMakerMvJavaScript;
-        using var vm = new JintEmbeddedScriptVm(language);
+        using var vm = new JintEmbeddedScriptVm(language, content, contentPrefix);
         using var runtime = new WebScriptRuntime(language, vm, new GameContentWebScriptSourceProvider(content), entries,
             new[] { WebPluginManagerShimBuilder.Build(language, entries) }, new WebBrowserHostOptions());
         var policy = new ScriptExecutionPolicy
         {
             MaxMemoryMegabytes = 128, MaxExecutionMillisecondsPerTick = 250, MaxCallDepth = 128,
-            // Flags do not create shims. Even file access is unavailable to probe scripts.
-            AllowReadGameFiles = false, AllowWriteSaveFiles = false, AllowWriteCacheFiles = false,
+            // The installed adapter permits local JSON reads only. No write/network grant.
+            AllowReadGameFiles = true, AllowWriteSaveFiles = false, AllowWriteCacheFiles = false,
         };
         bool Record(string name, SdkOperationResult result)
         {

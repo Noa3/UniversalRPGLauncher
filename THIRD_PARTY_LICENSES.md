@@ -39,6 +39,18 @@ The Node-based regression scripts use built-in `node:` modules, with no npm pack
 
 GitHub Actions referenced in workflows are CI tooling, not shipped game content.
 
+### Original MV DataManager test excerpt
+
+- File: `project/tests/fixtures/native-data/MVDataManager.excerpt.js`.
+- Source: `rpgtkoolmv/corescript`, `js/rpg_managers/DataManager.js`, commit `9875c94cb92c655f4ff919458740bf1eb503ee0f`.
+- Upstream full file blob: `9ddcc62f8324a29f202b376c77eaa63d871c1016`.
+- Modification: unchanged source lines 1–195 selected for testing, with four added provenance comments; no behavior edits.
+- License: MIT; copyright (c) 2015 KADOKAWA CORPORATION./YOJI OJIMA.
+- Complete license: `project/tests/fixtures/native-data/LICENSE.MV`.
+- Purpose: execute original loading/metadata methods against the production local-data adapter in regression tests, not bundle an original runtime executable or replace a user's core scripts.
+
+Retain this notice with any distributed test fixture. This published core-source license does not cover proprietary RTPs, games, art or other unrelated assets. Release packaging should explicitly handle/exclude development fixtures as appropriate.
+
 ## Prospective dependencies
 
 ### Ruby / RGSS

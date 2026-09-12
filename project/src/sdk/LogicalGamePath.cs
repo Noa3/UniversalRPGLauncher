@@ -26,7 +26,7 @@ public static class LogicalGamePath
         }
 
         var normalized = pPath.Replace('\\', '/').Trim();
-        if (normalized.Length == 0 || normalized.StartsWith('/', StringComparison.Ordinal)) return false;
+        if (normalized.Length == 0 || normalized.StartsWith("/", StringComparison.Ordinal)) return false;
         if (normalized.StartsWith("//", StringComparison.Ordinal)) return false;
         if (IsWindowsDriveQualified(normalized)) return false;
 

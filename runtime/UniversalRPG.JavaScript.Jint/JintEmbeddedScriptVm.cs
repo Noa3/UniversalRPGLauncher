@@ -59,7 +59,7 @@ public sealed class JintScriptVmFactory : IEmbeddedScriptVmFactory
 /// Constraints and restricted host values reduce risk; an in-process VM is not
 /// an operating-system sandbox. Dynamic string compilation remains disabled.
 /// </summary>
-public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
+public sealed partial class JintEmbeddedScriptVm : IEmbeddedScriptVm
 {
     private const int MaxStoredModules = 4096;
     private const int DefaultMaxStatements = 5_000_000;
@@ -69,6 +69,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     private JsValue? _invokeBridge;
     private ScriptExecutionPolicy _policy = ScriptExecutionPolicy.SafeDefault;
     private bool _disposed;
+    private bool _executing;
     private long _storedSourceBytes;
 
     public JintEmbeddedScriptVm(string pLanguageId)
@@ -85,6 +86,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     public SdkOperationResult Configure(ScriptExecutionPolicy pPolicy)
     {
         if (_disposed) return Disposed();
+        if (_executing) return SdkOperationResult.Failed("jint.operation-in-progress", "A VM execution is already in progress.");
         if (State is not (ScriptVmState.Created or ScriptVmState.Configured))
             return SdkOperationResult.Failed("jint.configure-state", $"Cannot configure from {State}.");
         return RebuildEngine(pPolicy);
@@ -93,6 +95,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     public SdkOperationResult LoadModule(ScriptModule pModule)
     {
         if (_disposed) return Disposed();
+        if (_executing) return SdkOperationResult.Failed("jint.operation-in-progress", "A VM execution is already in progress.");
         if (State is not (ScriptVmState.Configured or ScriptVmState.Ready))
             return SdkOperationResult.Failed("jint.load-state", $"Cannot load modules from {State}.");
         if (pModule == null || pModule.Descriptor == null)
@@ -132,6 +135,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     public SdkOperationResult ExecuteModule(string pScriptId)
     {
         if (_disposed) return Disposed();
+        if (_executing) return SdkOperationResult.Failed("jint.operation-in-progress", "A VM execution is already in progress.");
         if (State is not (ScriptVmState.Ready or ScriptVmState.Running))
             return SdkOperationResult.Failed("jint.execute-state", $"Cannot execute modules from {State}.");
         if (string.IsNullOrWhiteSpace(pScriptId) || !_modules.TryGetValue(pScriptId, out var source))
@@ -140,6 +144,8 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
             return SdkOperationResult.Failed("jint.not-configured", "Jint engine is unavailable.");
         try
         {
+            _executing = true;
+            _nativeGameData?.BeginExecution(_policy.AllowReadGameFiles);
             _engine.Execute(source);
             State = ScriptVmState.Running;
             return SdkOperationResult.Succeeded();
@@ -148,11 +154,13 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         {
             return ExecutionFailed(exception, $"JavaScript module '{pScriptId}'");
         }
+        finally { _nativeGameData?.EndExecution(); _executing = false; }
     }
 
     public SdkOperationResult Invoke(ScriptInvocation pInvocation)
     {
         if (_disposed) return Disposed();
+        if (_executing) return SdkOperationResult.Failed("jint.operation-in-progress", "A VM execution is already in progress.");
         if (State != ScriptVmState.Running)
             return SdkOperationResult.Failed("jint.invoke-state", $"Cannot invoke script from {State}.");
         if (_engine == null || _invokeBridge == null)
@@ -165,6 +173,8 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
             // Resolve the receiver AND method inside the constrained call. A
             // property getter is game code too. Never use host-side GetValue
             // followed by Invoke(member), which loses `this` and splits budgets.
+            _executing = true;
+            _nativeGameData?.BeginExecution(_policy.AllowReadGameFiles);
             _engine.Invoke(_invokeBridge, pInvocation.Target ?? "", pInvocation.Member, argumentsJson);
             return SdkOperationResult.Succeeded();
         }
@@ -172,11 +182,13 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
         {
             return ExecutionFailed(exception, $"JavaScript invocation '{pInvocation.Target}.{pInvocation.Member}'");
         }
+        finally { _nativeGameData?.EndExecution(); _executing = false; }
     }
 
     public SdkOperationResult Reset()
     {
         if (_disposed) return Disposed();
+        if (_executing) return SdkOperationResult.Failed("jint.operation-in-progress", "A VM execution is already in progress.");
         if (State == ScriptVmState.Created)
         {
             _modules.Clear();
@@ -189,6 +201,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
     public void Dispose()
     {
         if (_disposed) return;
+        if (_executing) throw new InvalidOperationException("Cannot dispose a VM during execution.");
         _disposed = true;
         _modules.Clear();
         _storedSourceBytes = 0;
@@ -226,6 +239,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
 
             _engine = new Engine(options);
             _invokeBridge = _engine.Evaluate(ScriptInvocationBridge.Source);
+            InstallNativeGameData();
             State = ScriptVmState.Configured;
             return SdkOperationResult.Succeeded(new[]
             {
@@ -248,6 +262,7 @@ public sealed class JintEmbeddedScriptVm : IEmbeddedScriptVm
 
     private void DisposeEngine()
     {
+        _nativeGameData?.EndExecution();
         _invokeBridge = null;
         _engine?.Dispose();
         _engine = null;

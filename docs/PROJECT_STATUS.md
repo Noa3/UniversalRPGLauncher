@@ -1,45 +1,43 @@
 # UniversalRPG — current implementation status
 
-Reviewed: 2026-09-12. **MV and MZ now have first priority at the user's request.** They have more projects available to test. This supersedes older RM2K-first ordering without discarding other runtimes.
+Reviewed: 2026-09-12. **MV/MZ first, installed application first.** The user has deferred general browser work and wants actual playable games inside the engine. Existing other-engine implementations remain intact.
 
-## Product boundary
+## Product and milestone
 
-URPG is an internal compatibility runtime/launcher, not a game remake. Preserve game-authored scripts, ordering, patches and engine semantics. A script VM or successful plugin subset is not a complete game engine.
+URPG is a compatibility runtime, not a game-content remake. Preserve original scripts, custom plugins and game logic. Implement only the browser-shaped interfaces actually needed by that code, backed by native engine services. A full browser, web server, NW.js or original-game executable is not the normal runtime path.
 
-The development branch remains unverified as a whole under .NET/Jint/Godot. Do not reuse historical main test counts or claim that Node semantic checks validate the C# integration. No merge or additional Runtime-capability promotion was made in this pass.
+No complete MV/MZ game boot or playable runtime is established yet. The branch must not be described as green without fresh .NET/Jint/Godot verification. The next playable milestone remains title -> New Game -> map movement -> dialogue -> transfer -> save/load in an authorized default project, followed by representative plugins.
 
-## Active MV/MZ work
+## New native game-data path
 
-The existing Jint backend and ordered plugin pipeline now have an opt-in, frame-pumped browser subset: window/self aliases, virtual performance.now, function timers and cancellation, animation callbacks, and currentScript metadata while a plugin file executes. Existing five-argument WebScriptRuntime construction remains supported; the new overload enables the host explicitly.
+The Jint adapter now optionally accepts an IGameContentSource. A private native function serves bounded local data/*.json requests, including nested plugin JSON files. The JavaScript side preserves the XMLHttpRequest shape used by original DataManager code, but there is no HTTP or arbitrary host-path lookup.
 
-AdvanceFrame accepts seconds only after successful bootstrap and invokes the whole callback batch once through the VM. Invalid host deltas are rejected before touching execution state. Callback failures stop the session, requiring a fresh runtime/VM. Limits cover queue sizes, arguments and callbacks. This is frame-quantized scheduling, not full browser event-loop conformance; see MV_MZ_TESTING.md for deviations.
+Requests complete through the existing frame pump, preserve callbacks/state and cancellation, and report missing files as errors instead of supplying empty success data. Original code still parses JSON and extracts note metadata, so plugins can extend the database list or alias onLoad rather than being bypassed by a replacement loader.
 
-The new developer probe inspects an actual selected MV/MZ folder by default. It requires --execute-plugins for limited execution, uses the existing VFS provider, never modifies the game folder, and writes a scoped JSON report under user://web-plugin-probes. It reports plugin-subset results separately from full-game playability. Unimplemented SceneManager, PIXI, DOM, audio or Node calls are not faked to obtain success.
+The source restricts file/read/aggregate budgets, UTF-8 decoding and path prefixes; enforces AllowReadGameFiles per read; and does not own/dispose the shared VFS mount. Native provider exceptions are sanitized. Reentrant VM reset/disposal/execution is refused while a callback is active. These controls are not an OS sandbox or a complete process-memory limit.
 
-The VFS script provider now checks an available inventory SHA-256 against the bytes read for loading. Changed sources require fresh inspection. This checks content identity only, not code trust or origin authenticity.
+The developer probe enables this narrow read capability only for explicitly requested trusted plugin execution. It resolves one root or www project and rejects ambiguous mixtures. Inspection remains non-executing. A passed probe remains a script subset, not a full game result.
 
-## Engine status
+## Engine boundaries
 
-| Family | Present source | Missing for game playability |
+| Family | Present implementation | Remaining game-runtime gap |
 |---|---|---|
-| MV / MZ — primary | Inventory, load plans, parameters/commands, Jint adapter, opt-in timing/metadata host and developer probe | Validated integrated builds, actual core/library boot, DOM/render/audio/input/data/storage integration and representative full games |
-| RM2000 / RM2003 | Partial LCF/event/simulation runtime, passability, transfers and recent actual LMU event-page import fix | Automatic movement integration/timing, complete renderer/audio/menu/save/battle behavior |
-| XP / VX / VX Ace | Script archives, configured paths, generation profiles and ordered fail-stop loader | Embedded Ruby and RGSS APIs |
-| WOLF | Experimental understood plain-data parser/VM | Broader native formats, systems and real-game conformance |
-| RM95 / Dante98 / Unite | Detection/research | Executable runtime |
+| MV/MZ — primary | Plugin inventory/order/parameters, Jint, timing/metadata subset, optional native local JSON transport, developer probe | Verified original core/library startup; real rendering/audio/input/storage; complete game execution |
+| RM2000/2003 | Partial LCF/events/simulation/passability/transfers and corrected actual LMU page parsing | Movement integration/timing, rendering/audio/menu/save/battle completeness |
+| XP/VX/VX Ace | Script parsing, configured paths, generation-specific ordered pipelines | Embedded Ruby and RGSS APIs |
+| WOLF | Experimental understood plain-data parser/VM | Broader formats, systems and real-game conformance |
+| RM95/Dante98/Unite | Detection/research | Executable runtime |
 
-The Godot-free SDK, content providers and other engine code are retained. No external original-engine, EasyRPG, mkxp, Wine or NW.js process is added as a normal runtime dependency. Node remains test tooling only.
+The shared SDK stays Godot-free. There is no new package/runtime dependency and no new Runtime capability flag in this pass.
 
-## Validation of this pass
+## Validation
 
-Executed locally on Node v22.16.0: 46 production browser-host semantic checks and both synthetic MV/MZ plugin fixtures passed. The fixtures use explicit fake core filename markers and do not test vendor engine code. Workflow YAML/dependencies and source resource paths were inspected.
+Executed: **27/27 Node semantic checks** of production data-adapter JavaScript. Six use pinned, MIT-licensed original MV DataManager methods to load 14 databases, preserve note metadata, load successive map data, handle a plugin-added database and surface missing/malformed data. Storage/timers and unrelated engine dependencies are explicit test doubles. No rendering or full game is tested.
 
-Added but not executed: 15 C#/Jint frame-host methods and 4 content-identity methods. Full SDK/Jint/Godot builds, the actual developer scene, C# tests, platform exports and user games remain pending because this environment lacks .NET/Godot and direct network/toolchain retrieval fails.
+Added but not executed: **15 C# methods** using actual Jint/SDK interfaces. Full SDK/Jint/Godot builds, the probe scene, exports and user projects remain pending. Node results do not prove native adapter compilation, policy enforcement or disk/archive integration. The current environment has no dotnet/Godot and toolchain retrieval failed.
 
-Detailed evidence: VALIDATION_MV_MZ_HOST_2026-09-12.md. Prior dated reports remain historical snapshots.
+Evidence: [VALIDATION_NATIVE_DATA_2026-09-12.md](VALIDATION_NATIVE_DATA_2026-09-12.md). Interface/scope: [NATIVE_MV_MZ.md](NATIVE_MV_MZ.md). Prior dated reports remain historical.
 
-## Next milestone
+## Immediate priorities
 
-First validate the current branch and the developer probe under actual Godot/Jint. Then build a version-aware manifest for real MV/MZ core/library startup, followed by data and encrypted-asset access through VFS, real rendering/audio/input/storage and a simple default project path: title -> New Game -> map movement -> dialogue -> transfer -> save/load. Extend custom plugins against that core path with minimized failure fixtures.
-
-Other engines receive regression maintenance, not priority takeover. The old RM2K-first roadmap is superseded by this explicit product decision. No Kanban is maintained.
+First establish actual full validation, then implement the real core/library boot sequence and native rendering/input/audio/save services. Preserve custom-script behavior and use real projects to guide integration. Do not grow a general browser or substitute isolated semantic tests for a playable game. Other engines receive regression maintenance. No Kanban is maintained.

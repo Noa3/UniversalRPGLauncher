@@ -1,33 +1,38 @@
 # UniversalRPG session checkpoint
 
 Updated: 2026-09-12. Branch: docs/refresh-2026-09-09, PR #1.
-Current parent: 7a538b8df494a077cbd3922387d086a3fea2d7c3.
+Parent implementation: 372d59aba4a0239cf232bed97e6f35c839b1cb0c.
+No Kanban. Preserve unrelated work.
 
-## Priority decision
+## Current priority
 
-**MV/MZ FIRST**, explicitly requested because the user has more projects available to test. Preserve RM2K/RGSS/WOLF code and regression coverage, but do not gate MV/MZ work on those engines' completion. AGENTS and the Hermes prompt now reflect this. No Kanban; URPG is a compatibility runtime, not a game-content remake.
+MV/MZ remains first, now explicitly focused on the installed application. General browser work/web delivery is deferred. Browser-shaped APIs are only compatibility adapters for original scripts; no actual browser, HTTP server or external runtime is required by this pass.
 
 ## Latest implementation
 
-- Opt-in WebBrowserHostPrelude: window/self, virtual performance.now, bounded function timers/cancellation, requestAnimationFrame and currentScript metadata.
-- WebScriptRuntime keeps its old constructor and adds a new host-enabled overload. AdvanceFrame pumps seconds through one constrained VM call after bootstrap; errors retain fail-stop lifecycle. Script URI metadata is scoped around each enabled plugin.
-- Explicit frame-quantized subset: snapshot queues, defer new callbacks, coalesce missed intervals. Not full browser conformance, rendering, audio, DOM or Node.
-- Developer scene res://tools/web_plugin_probe.tscn: inspect by default, --execute-plugins required for trusted-project subset execution. JSON reports never claim full-game playability and are written outside the game folder.
-- VFS script reads verify a known inventory SHA-256; changed bytes require reinspection.
-- Synthetic MV/MZ fixtures and CI steps added. Their core-named files are markers, not proprietary/vendor cores.
+- NativeGameDataSource routes relative data/*.json reads through an explicit read-only VFS mount with optional www prefix, UTF-8/BOM handling, path and per-execution resource bounds.
+- Local XMLHttpRequest subset supports the original asynchronous DataManager read pattern, callbacks, abort/reopen and error behavior without networking or writes.
+- Jint gets an optional content-source constructor and a private primitive-only native function. The original constructor/factory still grants no data capability. Read policy is checked for every native call; the shared content source remains host-owned.
+- VM reentrancy guards prevent reset/dispose/recursive execute while a native callback is active.
+- Developer probe uses one unambiguous root/www project for scripts/data and allows local JSON reads only during explicitly requested trusted plugin execution.
+- Fixed the invalid StartsWith(char, StringComparison) call in LogicalGamePath to its string overload.
+- Added 15 C# integration methods, 27 executable Node checks and a pinned MIT-licensed test-only original MV DataManager excerpt. No production core replacement or runtime-capability promotion.
 
-## Validation truth
+## Actual validation
 
-Actually run here: 46/46 production-JS browser-host semantic checks and 2/2 synthetic plugin fixtures passed on Node v22.16.0. Source baseline Git hashes and workflow YAML structure were checked.
+Ran node scripts/test-native-game-data.mjs on Node v22.16.0: **27/27 passed**. This executes the production JavaScript adapter and original MV loading methods with mocked transport/timers and explicit unrelated engine test doubles. It is not a complete MV/MZ or native C# test.
 
-Not run: 19 new C# methods (15 real-Jint frame-host + 4 source-identity), .NET/Jint/Godot builds, the actual probe scene, user games or platform exports. .NET/Godot are absent; current container network attempts fail DNS resolution. Do not claim whole-branch green or reuse earlier pass counts. Evidence: docs/VALIDATION_MV_MZ_HOST_2026-09-12.md.
+Workflow YAML/job references checked; the original workflow baseline matched its Git blob before the single added test step. Full .NET/Jint/Godot builds, all 15 new C# methods, the actual probe, exports and user games remain unexecuted. The editing environment lacks dotnet/Godot and toolchain retrieval failed with network/DNS errors. No historical main count is accepted for this branch.
 
-## Immediate next work
+Details: docs/VALIDATION_NATIVE_DATA_2026-09-12.md.
+Native scope/configuration: docs/NATIVE_MV_MZ.md.
 
-1. Establish complete ./scripts/validate.sh success and actual MV/MZ synthetic probe runs under Godot/Jint. No merge before fresh validation/review.
-2. Use docs/MV_MZ_TESTING.md to collect scoped reports from user-authorized projects; do not call subset-passed a game compatibility pass.
-3. Implement a real MV/MZ core/library boot manifest and version profiles, then VFS-backed data/assets and actual rendering/audio/input/storage. Target a small title/New Game/map/dialogue/transfer/save path.
-4. Keep unsupported APIs explicit. Preserve script order, source identity and fail-stop sessions. Avoid invented SceneManager/PIXI/DOM no-ops.
-5. Maintain other engines without deleting work or reverting to old priority ordering.
+## Next useful work
 
-In-process VM limits are not an OS sandbox. No auto execution on import, no arbitrary host API grants, no third-party DRM bypass and no proprietary asset redistribution. After three materially different failed strategies for one failure signature, record evidence/unblock conditions and move to an independent useful slice rather than looping.
+1. Run the complete ./scripts/validate.sh under actual pinned tools and repair measured failures. No merge before fresh verification/review.
+2. Build the real original MV/MZ core/library startup sequence and version profiles, using the native data adapter instead of empty engine globals.
+3. Connect actual Godot rendering, input, audio and safe save storage. Target a simple title/New Game/map/dialogue/transfer/save path, not more generic browser features.
+4. Test user-owned projects with original custom plugins and minimize failures. Plugin-only/data-only passes are not proof of playability.
+5. Preserve RM2K/RGSS/WOLF and shared SDK work; maintain the no-external-executable path.
+
+After three materially different failed strategies for one signature, checkpoint evidence/unblock conditions and move to an independent useful slice. Do not replay failed initialization, weaken assertions, invent completed features or create a work board.

@@ -32,6 +32,8 @@ jobs:
         run: node scripts/test-web-browser-host.mjs
       - name: Test synthetic MV and MZ plugin fixtures
         run: node scripts/test-web-probe-fixtures.mjs
+      - name: Test native game data and original MV loading methods
+        run: node scripts/test-native-game-data.mjs
 
   portable:
     name: Portable SDK and JavaScript VM
