@@ -40,6 +40,8 @@ jobs:
         run: node scripts/test-original-plugin-setup.mjs
       - name: Test native entry-point lifecycle host
         run: node scripts/test-native-entry-host.mjs
+      - name: Test native keyboard/focus event bridge
+        run: node scripts/test-native-input-host.mjs
 
   portable:
     name: Portable SDK and JavaScript VM

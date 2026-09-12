@@ -8,10 +8,10 @@ using UniversalRPG.Sdk;
 namespace UniversalRPG.Plugins;
 
 /// <summary>
-/// Small lifecycle/DOM surface required to execute the original MV/MZ entry
-/// point after its declared project scripts have already been loaded. This is
-/// not a renderer or browser: script tags can only acknowledge already-loaded
-/// sources, canvas contexts are unavailable, and unknown dynamic scripts fail.
+/// Small lifecycle/DOM/input surface required by original MV/MZ startup. This
+/// is not a general browser or renderer: dynamic scripts must already be in the
+/// verified load plan and canvas contexts remain unavailable until a native
+/// renderer is implemented.
 /// </summary>
 public static class NativeEntryPointHostPrelude
 {
@@ -57,8 +57,8 @@ public static class NativeEntryPointHostPrelude
             const windowListeners = create(null);
             const documentListeners = create(null);
             const addListener = (table, type, callback, options) => {
-                if (typeof type !== 'string' || typeof callback !== 'function') fail('entry.listener-invalid');
-                if (type.length > 64) fail('entry.listener-invalid');
+                if (typeof type !== 'string' || typeof callback !== 'function' || type.length === 0 || type.length > 64)
+                    fail('entry.listener-invalid');
                 const list = table[type] || (table[type] = []);
                 if (list.some(item => item.callback === callback)) return;
                 if (list.length >= 128) fail('entry.listener-limit');
@@ -84,15 +84,10 @@ public static class NativeEntryPointHostPrelude
             const makeElement = tagName => {
                 const tag = String(tagName).toUpperCase();
                 const element = {
-                    tagName: tag,
-                    nodeName: tag,
-                    nodeType: 1,
-                    parentNode: null,
-                    children: [],
-                    style: create(null),
-                    type: '', src: '', async: true, defer: false,
+                    tagName: tag, nodeName: tag, nodeType: 1, parentNode: null,
+                    children: [], style: create(null), type: '', src: '', async: true, defer: false,
                     onload: null, onerror: null, onclick: null, ontouchstart: null,
-                    _url: '', _id: '', _innerHTML: '',
+                    _url: '', _id: '', _innerHTML: '', width: 0, height: 0,
                     appendChild(child) {
                         if (!child || typeof child !== 'object') fail('entry.dom-child-invalid');
                         if (child.parentNode && child.parentNode !== this) child.parentNode.removeChild(child);
@@ -111,12 +106,9 @@ public static class NativeEntryPointHostPrelude
                         return child;
                     },
                     addEventListener(type, callback, options = false) {
-                        this.__listeners ||= create(null);
-                        addListener(this.__listeners, type, callback, options);
+                        this.__listeners ||= create(null); addListener(this.__listeners, type, callback, options);
                     },
-                    removeEventListener(type, callback) {
-                        if (this.__listeners) removeListener(this.__listeners, type, callback);
-                    },
+                    removeEventListener(type, callback) { if (this.__listeners) removeListener(this.__listeners, type, callback); },
                     getContext() { return null; }
                 };
                 define(element, 'id', {
@@ -125,33 +117,19 @@ public static class NativeEntryPointHostPrelude
                     set(value) {
                         const next = String(value);
                         if (this._id && ids[this._id] === this) delete ids[this._id];
-                        this._id = next;
-                        if (next && this.parentNode) ids[next] = this;
+                        this._id = next; if (next && this.parentNode) ids[next] = this;
                     }
                 });
-                define(element, 'innerHTML', {
-                    enumerable: true, configurable: true,
-                    get() { return this._innerHTML; }, set(value) { this._innerHTML = String(value); }
-                });
+                define(element, 'innerHTML', { enumerable: true, configurable: true, get() { return this._innerHTML; }, set(value) { this._innerHTML = String(value); } });
                 define(element, 'outerHTML', {
                     enumerable: true, configurable: true,
-                    get() {
-                        const name = tag.toLowerCase();
-                        const id = this.id ? ` id="${escapeAttr(this.id)}"` : '';
-                        return `<${name}${id}>${this.innerHTML}</${name}>`;
-                    }
+                    get() { const name = tag.toLowerCase(); const id = this.id ? ` id="${escapeAttr(this.id)}"` : ''; return `<${name}${id}>${this.innerHTML}</${name}>`; }
                 });
                 return element;
             };
-            const body = makeElement('body');
-            const head = makeElement('head');
-            const html = makeElement('html');
+            const body = makeElement('body'); const head = makeElement('head'); const html = makeElement('html');
             html.appendChild(head); html.appendChild(body);
-            const listOf = element => {
-                const list = [element];
-                list.item = index => list[index] || null;
-                return list;
-            };
+            const listOf = element => { const list = [element]; list.item = index => list[index] || null; return list; };
             const scheduleScript = element => {
                 const normalized = normalize(element.src || element._url || '');
                 const success = normalized && known.has(normalized.toLowerCase());
@@ -198,12 +176,36 @@ public static class NativeEntryPointHostPrelude
                 emit(windowListeners, 'load', root, event);
                 if (typeof root.onload === 'function') apply(root.onload, root, [event]);
             };
+            const dispatchWindow = type => {
+                if (typeof type !== 'string' || type.length === 0 || type.length > 64) fail('entry.window-event-invalid');
+                const event = freeze({ type, target: root, currentTarget: root });
+                emit(windowListeners, type, root, event);
+                const handler = root['on' + type]; if (typeof handler === 'function') apply(handler, root, [event]);
+            };
             const dispatchDocument = type => {
                 if (typeof type !== 'string' || type.length === 0 || type.length > 64) fail('entry.document-event-invalid');
                 const event = freeze({ type, target: documentSurface, currentTarget: documentSurface });
                 emit(documentListeners, type, documentSurface, event);
             };
-            define(root, '__urpgEntryHost', { value: freeze({ dispatchLoad, dispatchDocument }) });
+            const dispatchKey = (type, keyCode, repeat, modifiers) => {
+                if (type !== 'keydown' && type !== 'keyup') fail('entry.key-event-type');
+                if (typeof keyCode !== 'number' || !Number.isInteger(keyCode) || keyCode < 0 || keyCode > 65535)
+                    fail('entry.key-code-invalid');
+                if (typeof repeat !== 'boolean' || typeof modifiers !== 'number' || !Number.isInteger(modifiers) || modifiers < 0 || modifiers > 15)
+                    fail('entry.key-event-invalid');
+                let prevented = false;
+                const event = {
+                    type, keyCode, which: keyCode, repeat,
+                    altKey: !!(modifiers & 1), ctrlKey: !!(modifiers & 2), shiftKey: !!(modifiers & 4), metaKey: !!(modifiers & 8),
+                    target: documentSurface, currentTarget: documentSurface,
+                    preventDefault() { prevented = true; }, stopPropagation() {},
+                };
+                define(event, 'defaultPrevented', { enumerable: true, get: () => prevented });
+                emit(documentListeners, type, documentSurface, event);
+                const handler = documentSurface['on' + type]; if (typeof handler === 'function') apply(handler, documentSurface, [event]);
+                return prevented;
+            };
+            define(root, '__urpgEntryHost', { value: freeze({ dispatchLoad, dispatchWindow, dispatchDocument, dispatchKey }) });
         })
         """;
     // JS_NATIVE_ENTRY_HOST_END
@@ -215,24 +217,17 @@ public static class NativeEntryPointHostPrelude
         if (alreadyLoadedPaths == null) throw new ArgumentNullException(nameof(alreadyLoadedPaths));
         var paths = alreadyLoadedPaths.Take(MaxKnownScripts + 1).ToArray();
         if (paths.Length > MaxKnownScripts) throw new ArgumentException("Entry host script plan exceeds its bound.", nameof(alreadyLoadedPaths));
-        var normalized = new List<string>(paths.Length);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<string>(paths.Length); var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in paths)
         {
-            if (!LogicalGamePath.TryNormalize(path, out var value))
-                throw new ArgumentException("Entry host contains an unsafe script path.", nameof(alreadyLoadedPaths));
+            if (!LogicalGamePath.TryNormalize(path, out var value)) throw new ArgumentException("Entry host contains an unsafe script path.", nameof(alreadyLoadedPaths));
             if (!seen.Add(value)) throw new ArgumentException("Entry host contains a case-colliding script path.", nameof(alreadyLoadedPaths));
             normalized.Add(value);
         }
         var source = FactorySource + "(" + JsonSerializer.Serialize(normalized) + ");\n";
         return new ScriptModule
         {
-            Descriptor = new EngineScriptDescriptor
-            {
-                Id = ModuleId, DisplayName = "URPG native entry lifecycle",
-                LanguageId = languageId, Origin = ScriptOrigin.CompatibilityShim,
-                Required = true, LoadOrder = int.MinValue + 1,
-            },
+            Descriptor = new EngineScriptDescriptor { Id = ModuleId, DisplayName = "URPG native entry/input lifecycle", LanguageId = languageId, Origin = ScriptOrigin.CompatibilityShim, Required = true, LoadOrder = int.MinValue + 1 },
             Source = Encoding.UTF8.GetBytes(source),
         };
     }
