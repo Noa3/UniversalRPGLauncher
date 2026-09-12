@@ -106,7 +106,9 @@ public sealed class EnginePluginRegistry
 		return _plugins.TryGetValue(pPluginId, out pPlugin);
 	}
 
-	public bool HasSupport(string pEngineId)
+	public bool HasSupport(
+		string pEngineId,
+		PluginCapability pRequiredCapabilities = PluginCapability.None)
 	{
 		if (string.IsNullOrEmpty(pEngineId))
 		{
@@ -114,6 +116,10 @@ public sealed class EnginePluginRegistry
 		}
 		foreach (var plugin in _plugins.Values)
 		{
+			if (!HasCapabilities(plugin.Metadata, pRequiredCapabilities))
+			{
+				continue;
+			}
 			foreach (var range in plugin.Metadata.SupportedEngines)
 			{
 				if (range != null && range.EngineId.Equals(pEngineId, StringComparison.Ordinal))
@@ -125,7 +131,14 @@ public sealed class EnginePluginRegistry
 		return false;
 	}
 
-	public PluginResult<EnginePluginSelection> Select(PluginGameInfo pGame)
+	/// <summary>
+	/// Selects a compatible plugin. Callers that intend to create a runtime must
+	/// explicitly require <see cref="PluginCapability.Runtime"/>; generic
+	/// detection/parsing selections may pass <see cref="PluginCapability.None"/>.
+	/// </summary>
+	public PluginResult<EnginePluginSelection> Select(
+		PluginGameInfo pGame,
+		PluginCapability pRequiredCapabilities = PluginCapability.None)
 	{
 		if (pGame == null)
 		{
@@ -140,21 +153,39 @@ public sealed class EnginePluginRegistry
 			return PluginResult<EnginePluginSelection>.Failed(gameValidation.Error!);
 		}
 
-		var supportedPlugins = new List<IEnginePlugin>();
+		var enginePlugins = new List<IEnginePlugin>();
 		foreach (var plugin in Plugins)
 		{
 			if (plugin.Metadata.Supports(pGame))
 			{
-				supportedPlugins.Add(plugin);
+				enginePlugins.Add(plugin);
 			}
 		}
-		if (supportedPlugins.Count == 0)
+		if (enginePlugins.Count == 0)
 		{
 			return PluginResult<EnginePluginSelection>.Failed(PluginError.Create(
 				PluginErrorCode.UnsupportedEngine,
 				$"No registered plugin supports engine '{pGame.EngineId}'.",
 				pPhase: "select"
 			));
+		}
+
+		var supportedPlugins = enginePlugins
+			.Where(pPlugin => HasCapabilities(pPlugin.Metadata, pRequiredCapabilities))
+			.ToList();
+		if (supportedPlugins.Count == 0)
+		{
+			return PluginResult<EnginePluginSelection>.Failed(
+				PluginError.Create(
+					PluginErrorCode.UnsupportedEngine,
+					$"Engine '{pGame.EngineId}' is recognized, but no registered plugin provides the required capabilities ({pRequiredCapabilities}).",
+					pPhase: "select"),
+				new[]
+				{
+					PluginDiagnostic.Warning(
+						"plugin.capability-missing",
+						$"Recognized engine '{pGame.EngineId}' has no plugin with required capabilities ({pRequiredCapabilities}).")
+				});
 		}
 
 		var candidates = new List<(IEnginePlugin Plugin, PluginProbeResult Probe)>();
@@ -283,6 +314,22 @@ public sealed class EnginePluginRegistry
 			));
 		}
 		var pluginId = pSelection.Plugin.Metadata.Id;
+		if (!HasCapabilities(pSelection.Plugin.Metadata, PluginCapability.Runtime))
+		{
+			return PluginResult<IEngineRuntime>.Failed(
+				PluginError.Create(
+					PluginErrorCode.UnsupportedEngine,
+					$"Plugin '{pluginId}' does not advertise runtime capability; runtime creation was refused.",
+					pluginId,
+					"create"),
+				new[]
+				{
+					PluginDiagnostic.Warning(
+						"plugin.runtime-capability-missing",
+						"Runtime creation requires an explicit Runtime capability.",
+						pluginId)
+				});
+		}
 		try
 		{
 			var result = pSelection.Plugin.CreateRuntime(new EnginePluginRuntimeContext(pSelection.Game, pSelection));
@@ -319,6 +366,12 @@ public sealed class EnginePluginRegistry
 				exception
 			));
 		}
+	}
+
+	private static bool HasCapabilities(EnginePluginMetadata pMetadata, PluginCapability pRequiredCapabilities)
+	{
+		return pRequiredCapabilities == PluginCapability.None
+			|| (pMetadata.Capabilities & pRequiredCapabilities) == pRequiredCapabilities;
 	}
 
 	private static List<PluginDiagnostic> BuildDiagnostics(IEnumerable<PluginProbeReport> pReports)

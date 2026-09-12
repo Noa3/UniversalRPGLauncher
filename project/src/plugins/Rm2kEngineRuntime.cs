@@ -13,11 +13,11 @@ using UniversalRPG.Rm2k.Simulation;
 namespace UniversalRPG.Plugins;
 
 /// <summary>
-/// Minimal native RM2K/RM2K3 runtime backend. It loads the validated LDB/LMT
-/// and first LMU through the existing bounded parser, then advances a
-/// deterministic 60 Hz simulation clock. Decoded native event pages are driven
-/// by the scheduler during Update(); unsupported commands remain data-only and
-/// diagnostic. Launching no longer requires the original RPG_RT executable.
+/// Native RM2K/RM2K3 runtime backend. It loads bounded LDB/LMT/LMU data,
+/// configures chipset-derived map geometry, and advances a deterministic 60 Hz
+/// simulation clock. Decoded native event pages are driven by the scheduler;
+/// unsupported commands remain diagnostic and no original RPG_RT executable is
+/// launched.
 /// </summary>
 public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRuntimeDebugTools
 {
@@ -29,6 +29,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Rm2kEventScheduler _eventScheduler;
     private readonly Rm2kRendererAdapter _rendererAdapter = new();
     private readonly Rm2kSpriteAdapter _spriteAdapter = new();
+    private Rm2kPassabilityMap? _passabilityMap;
     private bool _debugToolsEnabled;
 
     public Rm2kEngineRuntime(string pPluginId, PluginGameInfo pGame)
@@ -43,6 +44,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     public Godot.Collections.Dictionary? MapTreeData { get; private set; }
     public Godot.Collections.Dictionary? CurrentMapData { get; private set; }
     public VirtualFramebuffer? Framebuffer { get; private set; }
+    public Rm2kPassabilityMap? PassabilityMap => _passabilityMap;
     public IReadOnlyList<Rm2kSpriteDescriptor> SpriteDescriptors { get; private set; } = Array.Empty<Rm2kSpriteDescriptor>();
     public PresentationState Presentation { get; } = new();
     public GameSimulationState Simulation { get; } = new();
@@ -83,9 +85,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
 
         Godot.Collections.Dictionary? currentMap = null;
-        var mapPath = Directory.EnumerateFiles(root, "*.lmu", SearchOption.TopDirectoryOnly)
-            .OrderBy(pPath => Path.GetFileName(pPath), StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
+        var mapSelection = Rm2kMapLocator.SelectInitialMap(root, mapTree.Data);
+        var mapPath = mapSelection.Path;
+        if (!string.IsNullOrEmpty(mapSelection.Diagnostic))
+        {
+            Simulation.AddDiagnostic(mapSelection.Diagnostic);
+        }
         if (mapPath != null)
         {
             var map = _parser.ParseMap(mapPath);
@@ -151,22 +156,107 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return PluginOperationResult.Succeeded();
     }
 
+    /// <summary>
+    /// Attempts one cardinal player step and owns the RM2K interaction side
+    /// effects of that step. Same-layer events block before map geometry is
+    /// evaluated; Player Touch pages may start on collision. After a successful
+    /// step, Player Touch pages on the destination coordinate are evaluated.
+    /// </summary>
     public bool TryMove(int pDeltaX, int pDeltaY)
     {
-        if (State != PluginRuntimeState.Running || !Simulation.TryMove(pDeltaX, pDeltaY))
+        if (State != PluginRuntimeState.Running || Simulation.PlayerInputLocked)
         {
             return false;
         }
-        if (CurrentMapData != null)
+
+        var cardinal = Math.Abs(pDeltaX) + Math.Abs(pDeltaY) == 1;
+        if (cardinal)
         {
-            var spriteResult = _spriteAdapter.BuildDescriptors(
-                CurrentMapData, Simulation.MapX, Simulation.MapY);
-            if (spriteResult.Success)
+            Simulation.FacingDirection = (byte)(pDeltaX > 0 ? 6 : pDeltaX < 0 ? 4 : pDeltaY > 0 ? 2 : 8);
+            var targetX = Simulation.MapX + pDeltaX;
+            var targetY = Simulation.MapY + pDeltaY;
+
+            if (_eventScheduler.HasBlockingSameLayerEventAt(targetX, targetY))
             {
-                SpriteDescriptors = spriteResult.Descriptors;
+                // A same-layer event occupies the target tile. RPG_RT keeps the
+                // player in place and may start a Player Touch page on contact.
+                _eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Touch);
+                Simulation.AddDiagnostic("Movement blocked by active same-layer RM2K event.");
+                return false;
+            }
+
+            if (_passabilityMap != null
+                && !_passabilityMap.CanMove(
+                    Simulation.MapX,
+                    Simulation.MapY,
+                    targetX,
+                    targetY))
+            {
+                Simulation.AddDiagnostic("Movement blocked by RM2K chipset passability.");
+                return false;
             }
         }
+
+        if (!Simulation.TryMove(pDeltaX, pDeltaY))
+        {
+            return false;
+        }
+        RefreshSpriteDescriptors();
+
+        // Below-player touch pages can be entered successfully. Keep this
+        // engine semantic in the runtime so all frontends behave identically.
+        _eventScheduler.TriggerAt(Simulation.MapX, Simulation.MapY, Rm2kEventTrigger.Touch);
         return true;
+    }
+
+    /// <summary>
+    /// Handles the RPG_RT decision-key map interaction sequence: action events
+    /// on the player's current coordinate, then the tile in front, then up to
+    /// three consecutive counter tiles before the event behind the counter.
+    /// </summary>
+    public bool TryInteract()
+    {
+        if (State != PluginRuntimeState.Running || Simulation.PlayerInputLocked)
+        {
+            return false;
+        }
+
+        if (_eventScheduler.TriggerAt(Simulation.MapX, Simulation.MapY, Rm2kEventTrigger.Action))
+        {
+            return true;
+        }
+
+        var (stepX, stepY) = GetFacingStep();
+        var targetX = Simulation.MapX + stepX;
+        var targetY = Simulation.MapY + stepY;
+        if (_eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Action))
+        {
+            return true;
+        }
+
+        if (_passabilityMap == null)
+        {
+            return false;
+        }
+
+        // RPG_RT traverses at most three counter tiles. Each iteration tests
+        // whether the current foreground tile is a counter before advancing one
+        // more tile in the facing direction and checking for an action event.
+        for (var counterIndex = 0; counterIndex < 3; counterIndex++)
+        {
+            if (!_passabilityMap.IsCounter(targetX, targetY))
+            {
+                break;
+            }
+            targetX += stepX;
+            targetY += stepY;
+            if (_eventScheduler.TriggerAt(targetX, targetY, Rm2kEventTrigger.Action))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public PluginOperationResult Update(double pDeltaSeconds)
@@ -191,6 +281,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             for (var tick = 0; tick < elapsedTicks; tick++)
             {
                 _eventScheduler.ExecuteFrame();
+                if (Simulation.IsTransferPending)
+                {
+                    var transfer = ApplyPendingTransfer();
+                    if (!transfer.Success)
+                    {
+                        return transfer;
+                    }
+                }
             }
         }
         return PluginOperationResult.Succeeded();
@@ -274,6 +372,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         MapTreeData = null;
         CurrentMapData = null;
         Framebuffer = null;
+        _passabilityMap = null;
         SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
         State = PluginRuntimeState.Stopped;
         return PluginOperationResult.Succeeded();
@@ -286,7 +385,102 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         MapTreeData = null;
         CurrentMapData = null;
         Framebuffer = null;
+        _passabilityMap = null;
         SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
+    }
+
+    private PluginOperationResult ApplyPendingTransfer()
+    {
+        if (!Simulation.IsTransferPending)
+        {
+            return PluginOperationResult.Succeeded();
+        }
+        if (DatabaseData == null || MapTreeData == null)
+        {
+            return Fail(PluginErrorCode.InvalidLifecycleTransition,
+                "RM2K transfer cannot be applied before database/map-tree initialization.", "transfer");
+        }
+        var root = ResolveGameDirectory();
+        if (root == null)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                "RM2K transfer cannot resolve the imported game directory.", "transfer");
+        }
+
+        var targetMapId = Simulation.PendingMapId;
+        var targetX = Simulation.PendingX;
+        var targetY = Simulation.PendingY;
+        var targetFacing = Simulation.FacingDirection;
+        var selection = Rm2kMapLocator.SelectMapById(root, targetMapId);
+        if (selection.Path == null)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                string.IsNullOrWhiteSpace(selection.Diagnostic)
+                    ? $"RM2K target map {targetMapId} is unavailable."
+                    : selection.Diagnostic,
+                "transfer");
+        }
+
+        var parsed = _parser.ParseMap(selection.Path);
+        if (!parsed.Success)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"Could not parse transfer target {Path.GetFileName(selection.Path)}: {parsed.Error?.Describe() ?? "unknown parser error"}",
+                "transfer");
+        }
+        var mapData = parsed.Data;
+        if (!TryReadInt(mapData, "width", out var width)
+            || !TryReadInt(mapData, "height", out var height)
+            || targetX < 0 || targetX >= width
+            || targetY < 0 || targetY >= height)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"RM2K transfer target ({targetMapId}, {targetX}, {targetY}) is outside the destination map.",
+                "transfer");
+        }
+
+        var renderResult = _rendererAdapter.CreateFramebuffer(mapData);
+        if (!renderResult.Success || renderResult.Framebuffer == null)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"Could not create framebuffer for transfer target: {renderResult.Error}", "transfer-render");
+        }
+        var spriteResult = _spriteAdapter.BuildDescriptors(mapData, targetX, targetY);
+        if (!spriteResult.Success)
+        {
+            return Fail(PluginErrorCode.InvalidGame,
+                $"Could not create sprite descriptors for transfer target: {spriteResult.Error}", "transfer-sprites");
+        }
+
+        try
+        {
+            ConfigureSimulationMap(mapData, MapTreeData, selection.Path);
+        }
+        catch (InvalidDataException exception)
+        {
+            return Fail(PluginErrorCode.InvalidGame, exception.Message, "transfer-map");
+        }
+
+        Simulation.MapX = targetX;
+        Simulation.MapY = targetY;
+        Simulation.FacingDirection = targetFacing;
+        CurrentMapData = mapData;
+        Framebuffer = renderResult.Framebuffer;
+        SpriteDescriptors = spriteResult.Descriptors;
+        Presentation.Reset();
+        LoadCurrentMapEvents(mapData);
+        Simulation.IsTransferPending = false;
+        Simulation.PendingMapId = 0;
+        Simulation.PendingX = 0;
+        Simulation.PendingY = 0;
+        Simulation.AddDiagnostic($"RM2K transfer applied -> map {targetMapId} at ({targetX}, {targetY}).");
+        return PluginOperationResult.Succeeded(new[]
+        {
+            PluginDiagnostic.Info(
+                "rm2k.transfer-applied",
+                $"Loaded Map{targetMapId:D4}.lmu at ({targetX}, {targetY}).",
+                _pluginId),
+        });
     }
 
     private string? ResolveGameDirectory()
@@ -317,6 +511,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         Godot.Collections.Dictionary pMapTreeData,
         string? pMapPath)
     {
+        _passabilityMap = null;
         if (pMapData == null)
         {
             Simulation.AddDiagnostic("RM2K map simulation is unavailable because no LMU map was loaded.");
@@ -344,18 +539,26 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 TryReadInt(start, "party_x", out mapX);
                 TryReadInt(start, "party_y", out mapY);
             }
-            else if (startMapId > 0)
-            {
-                Simulation.AddDiagnostic($"RM2K start map {startMapId} is not the loaded map {mapId}; using bounded map origin.");
-            }
         }
 
         var passability = new bool[checked(width * height)];
+        var passabilityError = "database is unavailable";
+        if (DatabaseData != null
+            && Rm2kPassabilityMap.TryCreate(DatabaseData, pMapData, out var decodedPassability, out passabilityError)
+            && decodedPassability != null)
+        {
+            _passabilityMap = decodedPassability;
+            Array.Fill(passability, true);
+            Simulation.AddDiagnostic("RM2K chipset directional passability decoded for the loaded map.");
+        }
+        else
+        {
+            Simulation.AddDiagnostic($"RM2K chipset passability unavailable ({passabilityError}); movement remains fail-closed.");
+        }
+
         Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, passability);
         Simulation.MapX = Math.Clamp(mapX, 0, width - 1);
         Simulation.MapY = Math.Clamp(mapY, 0, height - 1);
-        Simulation.AddDiagnostic(
-            "RM2K chipset passability is not decoded yet; movement remains fail-closed until the chipset parser slice is available.");
     }
 
     private static int ParseMapId(string? pMapPath)
@@ -391,8 +594,28 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     {
                         if (rawPage.VariantType != Godot.Variant.Type.Dictionary) continue;
                         var pageData = rawPage.AsGodotDictionary();
-                        if (!TryReadInt(pageData, "trigger", out var trigger)) continue;
-                        var page = new Rm2kMap.EventPage { Trigger = trigger };
+                        if (!TryReadInt(pageData, "trigger", out var rawTrigger)) continue;
+                        if (!Rm2kEventTriggerCodec.TryDecode(rawTrigger, out var trigger))
+                        {
+                            Simulation.AddDiagnostic($"Event {id} contains unsupported LMU trigger value {rawTrigger}; page skipped.");
+                            continue;
+                        }
+
+                        var page = new Rm2kMap.EventPage { Trigger = (int)trigger };
+                        if (TryReadInt(pageData, "priority", out var layer))
+                        {
+                            if (layer < 0 || layer > 2)
+                            {
+                                Simulation.AddDiagnostic($"Event {id} contains invalid LMU layer {layer}; page skipped.");
+                                continue;
+                            }
+                            page.Layer = layer;
+                        }
+                        if (TryReadInt(pageData, "move_frequency", out var moveFrequency))
+                        {
+                            page.MoveFrequency = moveFrequency;
+                        }
+
                         if (pageData.TryGetValue("conditions", out var rawConditions) && rawConditions.VariantType == Godot.Variant.Type.Dictionary)
                         {
                             foreach (var pair in rawConditions.AsGodotDictionary())
@@ -431,6 +654,32 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
         }
         _eventScheduler.SetEvents(events);
+    }
+
+    private void RefreshSpriteDescriptors()
+    {
+        if (CurrentMapData == null)
+        {
+            return;
+        }
+        var spriteResult = _spriteAdapter.BuildDescriptors(
+            CurrentMapData, Simulation.MapX, Simulation.MapY);
+        if (spriteResult.Success)
+        {
+            SpriteDescriptors = spriteResult.Descriptors;
+        }
+    }
+
+    private (int X, int Y) GetFacingStep()
+    {
+        return Simulation.FacingDirection switch
+        {
+            2 => (0, 1),
+            4 => (-1, 0),
+            6 => (1, 0),
+            8 => (0, -1),
+            _ => (0, 0),
+        };
     }
 
     private static bool TryReadInt(Godot.Collections.Dictionary pData, string pKey, out int pValue)

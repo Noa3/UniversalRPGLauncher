@@ -1,5 +1,4 @@
 using System;
-using UniversalRPG.Core;
 
 namespace UniversalRPG.Rm2k.Parser;
 
@@ -59,11 +58,15 @@ public static class Rm2kEventPageConditionDecoder
             return new Rm2kParser.ParseResult(false, new Rm2kParser.ParseError(-1, $"Condition field 0x{pId:x2} has no integer payload"));
         }
         var data = rawData.AsByteArray();
-        var reader = new LcfBinaryReader(data);
-        var value = reader.ReadBer();
+        // LCF scalar integers are signed 32-bit values. An explicitly empty
+        // integer field is zero, distinct from the default for an absent field.
+        using var reader = new LcfBinaryReader(data);
+        var value = data.Length == 0 ? 0 : reader.ReadSignedBer();
         if (reader.HasError() || !reader.IsEof())
         {
-            return new Rm2kParser.ParseResult(false, new Rm2kParser.ParseError(reader.ErrorOffset, $"Invalid condition integer field 0x{pId:x2}"));
+            var offset = field.TryGetValue("payload_offset", out var rawOffset) ? (int)rawOffset : 0;
+            return new Rm2kParser.ParseResult(false, new Rm2kParser.ParseError(
+                offset + Math.Max(reader.ErrorOffset, 0), $"Invalid condition integer field 0x{pId:x2}"));
         }
         return new Rm2kParser.ParseResult(true, null, new Godot.Collections.Dictionary { { "value", value } });
     }

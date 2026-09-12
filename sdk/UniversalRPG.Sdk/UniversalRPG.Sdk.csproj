@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>UniversalRPG.Sdk</RootNamespace>
+    <AssemblyName>UniversalRPG.Sdk</AssemblyName>
+    <Description>Godot-free public contracts for embedding UniversalRPG and implementing compatible script/runtime integrations.</Description>
+    <RepositoryUrl>https://github.com/Noa3/UniversalRPGLauncher</RepositoryUrl>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!--
+    The SDK compiles the exact same source files as the launcher. This avoids a
+    second copy of public contracts drifting away from the in-app API.
+
+    NuGet packaging intentionally remains disabled until the repository chooses
+    an explicit source license and release/versioning policy.
+  -->
+  <ItemGroup>
+    <Compile Include="../../project/src/sdk/**/*.cs"
+             Link="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

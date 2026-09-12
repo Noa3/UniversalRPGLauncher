@@ -1,206 +1,43 @@
-# UniversalRPG — Project Status
+# UniversalRPG — current implementation status
 
-> **Last Updated:** 2026-08-24
-> **Current Phase:** Phase 2 — RM2000/2003 Parser in progress
+Reviewed: 2026-09-12. **MV/MZ first, installed application first.** The user has deferred general browser work and wants actual playable games inside the engine. Existing other-engine implementations remain intact.
 
-## Executive Summary
+## Product and milestone
 
-The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, chipset passability, and renderer/system coverage beyond the bounded native event path.
+URPG is a compatibility runtime, not a game-content remake. Preserve original scripts, custom plugins and game logic. Implement only the browser-shaped interfaces actually needed by that code, backed by native engine services. A full browser, web server, NW.js or original-game executable is not the normal runtime path.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `296/296` tests.
+No complete MV/MZ game boot or playable runtime is established yet. The branch must not be described as green without fresh .NET/Jint/Godot verification. The next playable milestone remains title -> New Game -> map movement -> dialogue -> transfer -> save/load in an authorized default project, followed by representative plugins.
 
-The bounded RM2K interpreter now supports verified `ChangeGold` command `10310`, `ChangeItems` command `10320`, and `ChangePartyMembers` command `10330`. Gold and item counts are bounded to `0..999999`; party mutations support constant/variable actor IDs, add/remove operations, duplicate and capacity protection, and fail-closed diagnostics. Bounded MZ metadata extraction reads top-level `System.json` properties with a real JSON parser; no foreign JavaScript is executed. Chipset passability remains blocked until a verified LMU/Chipset field mapping and distinguishing fixtures are available.
+## New native game-data path
 
-## Phase Status Overview
+The Jint adapter now optionally accepts an IGameContentSource. A private native function serves bounded local data/*.json requests, including nested plugin JSON files. The JavaScript side preserves the XMLHttpRequest shape used by original DataManager code, but there is no HTTP or arbitrary host-path lookup.
 
-| Phase | Description | Status | Notes |
-|-------|-------------|--------|-------|
-| 0 | Repository audit | ✅ Complete | Initial setup |
-| 1 | Runtime foundation | ✅ Complete | Core abstractions implemented |
-| 1.5 | Application foundation | ✅ Complete | Library, plugin detection/selection wiring, persistence, localization, import safety |
-| 2 | RM2000/2003 parser | 🚧 In progress | Real LCF reader + initial LDB/LMU/LSD decoding |
-| 3 | RM2000/2003 rendering | 🚧 In progress | Renderer-neutral framebuffer adapter implemented; Godot presentation, sprites, and camera remain |
-| 4 | Event interpreter | 📋 Planned | Depends on Phase 2 |
-| 5 | Full RM2000/2003 systems | 📋 Planned | Depends on Phase 4 |
-| 6 | Compatibility work | 📋 Planned | Real-world testing |
-| 7 | Enhanced Mode | 📋 Planned | After Faithful Mode stable |
-| 8 | RGSS runtime | 📋 Planned | After Phase 5 |
-| 9 | MV/MZ runtime | 📋 Planned | After Phase 8 |
-| 10 | Native plugin compat | 🔬 Research | Long-term |
-| 11 | Android compat | 🔬 Research | Long-term |
+Requests complete through the existing frame pump, preserve callbacks/state and cancellation, and report missing files as errors instead of supplying empty success data. Original code still parses JSON and extracts note metadata, so plugins can extend the database list or alias onLoad rather than being bypassed by a replacement loader.
 
-## Implemented Systems
+The source restricts file/read/aggregate budgets, UTF-8 decoding and path prefixes; enforces AllowReadGameFiles per read; and does not own/dispose the shared VFS mount. Native provider exceptions are sanitized. Reentrant VM reset/disposal/execution is refused while a callback is active. These controls are not an OS sandbox or a complete process-memory limit.
 
-### 1. VirtualFileSystem (`project/src/core/virtual_filesystem.cs`)
+The developer probe enables this narrow read capability only for explicitly requested trusted plugin execution. It resolves one root or www project and rejects ambiguous mixtures. Inspection remains non-executing. A passed probe remains a script subset, not a full game result.
 
-**Status:** Implemented
+## Engine boundaries
 
-**Features:**
-- Multi-mount merging (game, override, RTP, save, cache)
-- Case-insensitive path resolution
-- Path traversal protection
-- Path normalization
-- Archive access preparation
+| Family | Present implementation | Remaining game-runtime gap |
+|---|---|---|
+| MV/MZ — primary | Plugin inventory/order/parameters, Jint, timing/metadata subset, optional native local JSON transport, developer probe | Verified original core/library startup; real rendering/audio/input/storage; complete game execution |
+| RM2000/2003 | Partial LCF/events/simulation/passability/transfers and corrected actual LMU page parsing | Movement integration/timing, rendering/audio/menu/save/battle completeness |
+| XP/VX/VX Ace | Script parsing, configured paths, generation-specific ordered pipelines | Embedded Ruby and RGSS APIs |
+| WOLF | Experimental understood plain-data parser/VM | Broader formats, systems and real-game conformance |
+| RM95/Dante98/Unite | Detection/research | Executable runtime |
 
-**Limitations:**
-- No archive (ZIP/RVData2) support yet
-- No symlink resolution
-- Case map rebuild on every mount change (O(n))
+The shared SDK stays Godot-free. There is no new package/runtime dependency and no new Runtime capability flag in this pass.
 
-**Test Coverage:** Partial (see tests below)
+## Validation
 
----
+Executed: **27/27 Node semantic checks** of production data-adapter JavaScript. Six use pinned, MIT-licensed original MV DataManager methods to load 14 databases, preserve note metadata, load successive map data, handle a plugin-added database and surface missing/malformed data. Storage/timers and unrelated engine dependencies are explicit test doubles. No rendering or full game is tested.
 
-### 2. VirtualClock (`project/src/core/virtual_clock.cs`)
+Added but not executed: **15 C# methods** using actual Jint/SDK interfaces. Full SDK/Jint/Godot builds, the probe scene, exports and user projects remain pending. Node results do not prove native adapter compilation, policy enforcement or disk/archive integration. The current environment has no dotnet/Godot and toolchain retrieval failed.
 
-**Status:** Implemented
+Evidence: [VALIDATION_NATIVE_DATA_2026-09-12.md](VALIDATION_NATIVE_DATA_2026-09-12.md). Interface/scope: [NATIVE_MV_MZ.md](NATIVE_MV_MZ.md). Prior dated reports remain historical.
 
-**Features:**
-- Deterministic simulation timing (60 Hz base)
-- Speed control (0.5x–10x, pause)
-- Scheduled callbacks
-- Frame-rate decoupling
-- Single-step debugging
+## Immediate priorities
 
-**Limitations:**
-- No save-state serialization yet
-- No rewind support
-- No deterministic RNG seeding
-
-**Test Coverage:** 8 deterministic regression tests
-
----
-
-### 3. GameDetector (`project/src/game_detector/game_detector.cs`)
-
-**Status:** Implemented
-
-**Features:**
-- Compatibility facade over registered, deterministic detection plugins
-- Bounded folder/ZIP inspection with ranked candidates and confidence scoring
-- Version, evidence, ambiguity, malformed-input, and structured diagnostics
-- Compatibility profile schema validation (legacy schema 0, current schema 1, future-schema rejection) and bounded profile sizes
-- Deterministic Markdown compatibility-report export for GitHub issues without upload or external execution
-- Explicit Faithful/Enhanced render policy with bounded integer scaling controls
-- Persisted candidate/selection/evidence/compatibility records in `user://library.cfg`
-- RTP dependency, custom script/plugin, and native library metadata
-- Explicit user-provided RTP registry/resolution is bounded, deterministic, and data-only; no proprietary RTP data is bundled or auto-discovered
-- Runtime selection through exact plugin IDs, capability checks, platform checks, and no-fallback errors
-
-**Limitations:**
-- RM2K/RM2K3 have a safe bounded bootstrap that loads LDB/LMT/LMU into simulation and scheduler state; full gameplay runtime is not implemented. RGSS/XP/VX/VX Ace, RM95, MV/MZ, and Unite remain detection-only.
-- Bounded inspection now distinguishes *partial* scans (entry budget reached on a well-formed tree, advisory Info) from truly malformed input (Error); large real games no longer hard-fail runtime initialization for exceeding the 4096-entry budget
-- MV metadata extraction now reads bounded `data/System.json` title data and reports `.rpgmvp`/`.rpgmvo`/`.rpgmvm` encrypted assets without executing JavaScript; MV remains detection/metadata-only
-- Executables and libraries are inspected as bounded data only, never loaded or executed
-- Archive import is read-only inspection; safe extraction/staging for future runtime assets remains separate work
-- Missing-asset diagnostics and bounded per-game RTP profile metadata are implemented in K-041; original RM2K/RM2K3 `LSD` saves now have a read-only bounded framing model from K-050, while semantic field mapping, save mutation, and UI integration remain separate work
-
-**Test Coverage:** 15 deterministic detection tests
-
----
-
-### 4. CompatibilityProfile (`project/src/compatibility/compatibility_profile.cs`)
-
-**Status:** Implemented
-
-**Features:**
-- Extensible JSON-based profiles
-- SHA-256 hash matching
-- Engine-specific profiles
-- Per-game flags with global override
-- Profile loading from directory
-
-**Limitations:**
-- No versioned schema migration
-- No profile validation
-- No profile signing
-
-**Test Coverage:** 19 deterministic profile tests
-
-## Technical Debt
-
-| Item | Severity | Description |
-|------|----------|-------------|
-| Headless Godot editor diagnostic | Low | Godot 4.7.2 emits an internal `EditorSettings` message during `--headless --editor --quit`; validation still exits successfully |
-| No CI | Medium | No automated build/testing |
-| No export pipeline | Medium | Presets exist; signed/release exports are not automated |
-| Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
-| No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
-- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads bounded map geometry/start-map diagnostics, decoded events, and scheduler state; chipset passability, complete rendering, and full systems remain incomplete |
-
-## Missing Core Components (Planned)
-
-| Component | Phase | Priority |
-|-----------|-------|----------|
-| Expand/validate RM2K parser | 2 | Critical |
-| RM2K interpreter | 4 | Critical |
-| RM2K renderer | 3 | High |
-| RGSS runtime | 8 | High |
-| JavaScript runtime | 9 | High |
-| Win32 API shim | 10 | Medium |
-| Save state system | 5 | High |
-| Asset override system | 7 | Medium |
-| Input abstraction | 1 | Implemented for RM2K keyboard/controller/touch mapping; broader platform abstraction remains open |
-| Audio abstraction | 1 | Low (planned) |
-| Renderer interface | 1 | Low (planned) |
-
-## Current Build Status
-
-| Target | Status | Notes |
-|--------|--------|-------|
-| Godot Editor | ✅ Runs | project.godot created |
-| Linux headless | ✅ Tested | Godot 4.7.2 import and all UI locales start |
-| Windows Export | ⏸️ Not tested | Preset present; templates/toolchain needed |
-| Linux Export | ⏸️ Not tested | Preset present; templates needed |
-| macOS/iOS Export | ⏸️ Not tested | Requires macOS, Xcode, signing, templates |
-| Android Export | ⏸️ Not tested | Preset present; Android SDK/templates needed |
-
-## Next Immediate Tasks
-
-1. K-016: typed bounded RPG Maker MZ metadata inspection and explicit encrypted-asset diagnostics; keep MZ detection-only until a safe JavaScript runtime boundary is separately verified
-2. Expand typed LMU decoding incrementally; do not guess undocumented offsets/fields
-3. Test CP932/Shift-JIS behavior on target platforms and add malicious-input fixtures
-4. Implement LMU event/page metadata decoding without executing commands
-
-## Open Questions
-
-1. Which Ruby VM to embed for RGSS? (mruby, rbx, custom?)
-2. Which JavaScript engine for MV/MZ? (V8, QuickJS, Duktape?)
-3. Should we use C++ for the RM2K parser (performance)?
-4. How to handle large game databases efficiently?
-5. What is the target minimum hardware spec?
-
-## Risk Assessment
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Ruby VM embedding complexity | High | High | Start with mruby, evaluate later |
-| JavaScript engine size | Medium | Medium | Use QuickJS (small footprint) |
-| RM2K format reverse-engineering | Medium | High | Public documentation exists |
-| Performance on mobile | Medium | High | Profile early, optimize hot paths |
-| Legal issues with RTP | Low | High | Never bundle RTP, user provides |
-| Win32 compatibility scope creep | High | Medium | Strict scope control, phase gates |
-
-
-## 2026-08-20 Stabilization Pass
-
-Changes prepared in this pass:
-
-- fixed repeating `VirtualClock` callbacks so they keep their requested interval instead of firing every tick after first expiry;
-- corrected slow-motion to use a real speed factor (`0.5 == half speed`), added stable callback IDs and monotonic FPS sampling;
-- fixed compatibility-profile precedence so per-game flags actually override global defaults;
-- repaired the previously non-compiling/incomplete `RM2KDatabase` data model and added round-trip regression tests;
-- added `scripts/validate.sh`, GitHub validation workflow, `KANBAN.md`, `AGENTS.md`, `SESSION_STATE.md`, and the Hermes autonomous-work prompt;
-- added provenance-pinned EasyRPG TestGame RM2000/RM2003 LDB/LMT/LMU fixtures and real-framing regression tests;
-- accepted valid zero-length LDB struct-array sections while preserving bounded malformed-input rejection.
-
-## 2026-08-22 Typed LDB Slice (K-012/K-015)
-
-- `ParseDatabase` now decodes the actors section into typed entries: name/title/character_name/face_name strings plus character_index, transparent, initial_level, final_level, critical_hit, critical_hit_chance, face_index integers; defaults mirror liblcf `rpg::Actor` initializers.
-- Switches and variables sections decode to id/name entries; duplicate structure IDs are rejected.
-- K-015 now additionally decodes scalar metadata for skills/items/states/classes/enemies/terrains/attributes/troops/animations/chipsets/battle_commands using field IDs verified against EasyRPG liblcf; nested arrays remain data-only and are retained as unknown fields.
-- Field IDs are verified against EasyRPG liblcf `src/generated/lcf/ldb/chunks.h`; unknown actor/entry fields remain preserved per entry for diagnostics.
-- Synthetic fixtures cover defaults, unknown-field retention, duplicate IDs, missing terminators, and battle-command trailing data; real-fixture tests assert typed entry counts equal section counts on both pinned TestGame LDBs.
-- Validation: `GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed with Godot `4.7.2.stable.mono.official.ed1daf0bf`; headless suite `170/170`.
-
-The C# migration and plugin application wiring have been validated with the local Godot 4.7.2 stable .NET editor on Windows: `dotnet build` passed, script registration succeeded after PascalCase file renames, and the headless C# core/smoke runner passed `159/159` at that time (now `171/171`).
+First establish actual full validation, then implement the real core/library boot sequence and native rendering/input/audio/save services. Preserve custom-script behavior and use real projects to guide integration. Do not grow a general browser or substitute isolated semantic tests for a playable game. Other engines receive regression maintenance. No Kanban is maintained.

@@ -1,86 +1,41 @@
-# UniversalRPG Agent Instructions
+# UniversalRPG agent instructions
 
-These instructions apply to autonomous coding agents working in this repository.
+Updated: 2026-09-12. **MV/MZ first, installed application first.** The user has deferred browser delivery/general browser work and wants actual games running in URPG. Keep only the JavaScript/browser-shaped APIs required to run original MV/MZ code inside the native application; do not turn the project into a generic browser. Do not remove essential script compatibility or substitute native hard-coded gameplay for game-authored plugins.
 
-## Source of truth
+## Product and source of truth
 
-Read these files at the start of every session, in this order:
+URPG is a compatibility runtime/launcher, not a game remake. Preserve original script ordering, custom plugins, data, game rules and engine behavior. Enhancements stay opt-in. Read AGENTS, SESSION_STATE, PROJECT_STATUS, docs/NATIVE_MV_MZ.md and relevant source/tests. Older browser-first or RM2K-first ordering is superseded.
 
-1. `AGENTS.md`
-2. `KANBAN.md`
-3. `SESSION_STATE.md`
-4. `docs/PROJECT_STATUS.md`
-5. `docs/ARCHITECTURE.md`
-6. `docs/ROADMAP.md`
-7. relevant code/tests for the selected card
+There is intentionally no Kanban. Do not create a work board. C#/.NET is canonical, the Godot project is under project/, and the shared SDK must stay Godot-free. Preserve existing public constructors/contracts. The repository currently pins Godot.NET.Sdk/4.7.2 and .NET 8; verify exact tools rather than silently changing pins or inventing test results.
 
-`KANBAN.md` is the work queue. `SESSION_STATE.md` is the crash/restart checkpoint.
-Do not invent a parallel private roadmap and do not spend a session only rewriting plans when a ready implementation card exists.
+## Work selection
 
-## Current implementation policy
+Fix measured build/test/security failures first. Then develop the actual installed-app MV/MZ path: original core/library load order and version differences; local data/asset access; real rendering, audio, input and storage; title -> New Game -> map -> dialogue -> transfer -> save/load. Build the minimum engine services for this path rather than accumulating isolated browser APIs. Never call a plugin-only test a playable engine.
 
-- C#/.NET is the validated/canonical implementation. The user-directed migration passed `dotnet build` and the Godot .NET headless suite with `128/128` tests.
-- Superseded `.gd` files were removed after migration validation. Keep future C# changes covered by equivalent regression tests.
-- Do not continue broad language migration work; focus on RM2000/2003 runtime progress behind Kanban cards and acceptance tests.
-- Godot 4.7.2 stable is the pinned engine line for this repository unless a deliberate upgrade card changes it.
-- Imported games are untrusted input. Never execute game EXEs, DLLs, Ruby, JavaScript, shell commands, or native plugins during detection/parsing tests.
+Existing RM2000/2003, RGSS and WOLF work remains intact and receives regression maintenance. Do not wait for it to be complete before advancing MV/MZ. Native Windows DLL execution, RM95/Dante98/Unite and browser deployment are later work. No original-engine, EasyRPG, mkxp, Wine, NW.js or system-browser subprocess fallback. Licensed embedded dependencies are allowed implementation details.
 
-## Autonomous work loop
+## Current boundary
 
-For each cycle:
+MV/MZ has an experimental Jint adapter, ordered plugin pipeline, PluginManager shim, frame timing/currentScript subset and a read-only native local JSON adapter. The latter exposes the XMLHttpRequest API shape expected by original DataManager code, but routes only data/*.json GET requests to an explicitly supplied VFS mount. It does not perform HTTP, open a browser or grant general host filesystem access.
 
-1. Select the highest-priority `READY` card whose dependencies are satisfied.
-2. Move it to `IN PROGRESS` and record it in `SESSION_STATE.md`.
-3. Inspect existing implementation before editing.
-4. Make the smallest coherent implementation that satisfies the acceptance criteria.
-5. Add or update regression tests.
-6. Run the narrowest relevant tests, then `./scripts/validate.sh` before declaring the card done when Godot is available.
-7. If validation passes, move the card to `DONE`, update docs/status only where behavior actually changed, checkpoint `SESSION_STATE.md`, and select the next card.
-8. Continue without asking for permission unless a destructive action, missing credential, legal decision, or genuinely ambiguous product choice makes progress unsafe.
+The diagnostic probe still executes only an explicitly requested trusted plugin subset. It does not boot the full core or certify game playability. Missing rendering/audio/engine globals must remain explicit failures, not no-ops.
 
-## Failure recovery and anti-loop rules
+RM2000/2003 remains partial; RGSS has parsing/ordering but no Ruby backend; WOLF is an experimental understood plain-data subset. Detection/parsing/isolated language execution and playable Runtime are distinct. Check PluginCapability.Runtime at both selection and creation; never promote it based on class names.
 
-A failure is identified by its normalized signature: failing command/test + primary error type/message + relevant file/function.
+## Implementation and validation
 
-For one signature:
+Choose a coherent slice, inspect existing callers, preserve tested behavior, implement it, add regressions, execute focused checks and ./scripts/validate.sh where available, then update only affected docs. Do not replace working components just for style or add duplicate runtime models.
 
-- Attempt at most **3 materially different fixes** before declaring the card blocked.
-- Never run the identical failing command more than **2 times in a row** without changing code/config/input or gathering new evidence.
-- A materially different attempt must change the hypothesis, implementation strategy, fixture, dependency/tooling path, or scope. Cosmetic edits do not count.
-- After each failed attempt, write a short entry under `SESSION_STATE.md -> Failure log` with hypothesis, change, and result.
-- If the same signature appears after 3 different attempts, stop modifying that subsystem. Revert only the speculative changes that made the state worse, keep verified improvements, mark the card `BLOCKED`, record exact evidence and a concrete unblock condition, then continue with the next independent `READY` card.
-- If a command hangs or makes no useful progress, terminate it, record the command and last output, and do not immediately rerun it unchanged.
-- If an agent notices it is repeating the same reasoning/action sequence, treat that as a loop even without an explicit error. Checkpoint state, mark the current approach exhausted, choose a different approach or another card.
-- Do not solve a local build failure by deleting tests, weakening assertions, swallowing exceptions, disabling validation, or silently changing compatibility requirements.
+The native data callback accepts a primitive URL and returns bounded text/error metadata. Keep game mounts read-only, prefixes unambiguous and caller-owned. Enforce policy on every read and aggregate request/byte limits across the outer VM call. Do not expose reflected CLR objects. A VFS must bound reads before allocation; post-read limits do not create an OS sandbox. VM resource/time limits also are not a hard whole-process memory limit.
 
-## Context/restart recovery
+Inspection never runs scripts/binaries. Keep process/native/network access denied by default, preserve protected-content restrictions, do not bypass third-party DRM, and do not redistribute proprietary games/RTPs. Record exact licenses for all third-party code and fixtures. A permissively published core-source excerpt is not a license for unrelated assets.
 
-Update `SESSION_STATE.md` after every completed card and before risky/refactor-heavy work.
-If the agent/process restarts, do not begin from memory. Read the checkpoint and Kanban, verify the working tree, rerun the last relevant validation if possible, and continue from the recorded next action.
+## Recovery and completion
 
-## Definition of done
+Use one host thread per VM. Reject reentrant execution/reset/disposal. A failed script load/bootstrap/frame/hook requires a fresh runtime/VM, not replay into partial state; this is fail-stop, not rollback.
 
-A card may be `DONE` only when:
+For the same failure signature, allow at most three genuinely different strategies without new evidence. Preserve logs and useful work, revert only harmful attempts, record the blocker/unblock condition in SESSION_STATE, and continue independent useful work. Never weaken correct tests, hide errors or disable safety to obtain green status.
 
-- acceptance criteria are implemented,
-- relevant regression tests exist,
-- relevant tests pass when tooling is available,
-- no known regression was hidden or ignored,
-- documentation/status is not claiming functionality beyond what exists.
+Distinguish source written, C# tests added, Node semantics executed, real Jint/Godot tests and full game evidence. Mocked transport/timers do not validate native VFS integration. Historical test counts do not validate the current branch. Do not merge the large PR without fresh full build/test evidence and review.
 
-If tooling required for validation is unavailable, use `VERIFY` rather than `DONE` and state the exact command that still must run.
-
-## Scope control
-
-Priority order remains:
-
-1. RM2000/2003 faithful parsing/runtime correctness
-2. deterministic core/runtime infrastructure
-3. renderer/event interpreter
-4. broader compatibility and RTP handling
-5. enhancements
-6. RGSS
-7. MV/MZ
-8. native DLL/Win32 compatibility
-
-Do not jump to DLL emulation, Ruby VM, JavaScript VM, AI translation, HD rendering, or broad UI polish while higher-priority runtime cards are ready.
+Keep SESSION_STATE concise: current objective, changes, actual validation, blockers and next action. Continue ordinary development without requiring the user to select every step; escalate only genuinely non-resolvable or destructive decisions.

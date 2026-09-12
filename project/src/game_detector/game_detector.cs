@@ -72,6 +72,11 @@ public partial class GameDetector : RefCounted
         public List<string> Evidence { get; } = new();
         public string Title { get; set; } = "";
         public string RtpDependency { get; set; } = "";
+        /// <summary>
+        /// Indicates game/project-authored script content for scripting-capable
+        /// engine families. For MV/MZ this means plugin inventory, not engine
+        /// core JavaScript files. For RGSS it means a Scripts.*data archive.
+        /// </summary>
         public bool HasCustomScripts { get; set; }
         public bool HasNativeLibraries { get; set; }
         public bool HasEncryptedArchives { get; set; }
@@ -170,9 +175,7 @@ public partial class GameDetector : RefCounted
 
         if (snapshot != null)
         {
-            result.HasCustomScripts = snapshot.Files.Any(pFile =>
-                pFile.RelativePath.EndsWith(".rb", StringComparison.OrdinalIgnoreCase)
-                || pFile.RelativePath.EndsWith(".js", StringComparison.OrdinalIgnoreCase));
+            result.HasCustomScripts = HasEngineScriptContent(snapshot, engine);
             result.HasNativeLibraries = snapshot.Files.Any(pFile => IsNative(pFile.RelativePath));
             result.HasEncryptedArchives = snapshot.Files.Any(pFile =>
                 pFile.RelativePath.EndsWith(".rgssad", StringComparison.OrdinalIgnoreCase)
@@ -191,6 +194,38 @@ public partial class GameDetector : RefCounted
             result.UnknownRuntimes.Sort(StringComparer.OrdinalIgnoreCase);
         }
         return result;
+    }
+
+    private static bool HasEngineScriptContent(GameInspectionSnapshot pSnapshot, EngineType pEngine)
+    {
+        if (pEngine == EngineType.RpgMakerMv || pEngine == EngineType.RpgMakerMz)
+        {
+            var inventory = WebScriptInventory.Inspect(pSnapshot, pEngine == EngineType.RpgMakerMz);
+            return inventory.Entries.Count > 0;
+        }
+
+        if (pEngine == EngineType.RpgMakerXp)
+        {
+            return ContainsFile(pSnapshot, "Scripts.rxdata");
+        }
+        if (pEngine == EngineType.RpgMakerVx)
+        {
+            return ContainsFile(pSnapshot, "Scripts.rvdata");
+        }
+        if (pEngine == EngineType.RpgMakerVxAce)
+        {
+            return ContainsFile(pSnapshot, "Scripts.rvdata2");
+        }
+
+        // Unknown/legacy engines may still carry loose Ruby/JavaScript helper
+        // files, but these are not treated as an executable scripting model.
+        return false;
+    }
+
+    private static bool ContainsFile(GameInspectionSnapshot pSnapshot, string pFileName)
+    {
+        return pSnapshot.Files.Any(pFile =>
+            System.IO.Path.GetFileName(pFile.RelativePath).Equals(pFileName, StringComparison.OrdinalIgnoreCase));
     }
 
     private static EngineType ResolveEngine(EngineDetectionReport pReport)

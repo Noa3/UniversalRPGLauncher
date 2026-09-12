@@ -5,4 +5,22 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The public SDK sources live physically under project/src/sdk so they stay
+      close to the runtime implementation, but they are compiled only by the
+      standalone UniversalRPG.Sdk project. The Godot application references
+      that assembly instead of compiling a second type-identical-but-runtime-
+      incompatible copy of the contracts.
+    -->
+    <Compile Remove="src/sdk/**/*.cs" />
+    <ProjectReference Include="../sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj" />
+
+    <!--
+      First optional embedded JavaScript backend. It still advertises only the
+      JavaScript core until the MV/MZ browser/RPG Maker host layer is present.
+    -->
+    <ProjectReference Include="../runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj" />
+  </ItemGroup>
 </Project>

@@ -1,94 +1,103 @@
-# Third Party Licenses
+# Third-Party Components and Licenses
 
-> **Last Updated:** 2026-08-20
+Last reviewed: 2026-09-12.
 
-This document tracks all third-party components used in UniversalRPG.
+This inventory distinguishes components present in source/build configuration from future candidates. A declared package dependency is not proof that release packaging or transitive notices have been fully audited.
 
-## Current Third-Party Components
+## Present components
 
 ### Noto Sans CJK SC
 
-- **Component:** `assets/fonts/NotoSansCJKsc-Regular.otf`
-- **Purpose:** Bundled Latin, Japanese, Korean, and Simplified Chinese UI glyph coverage
-- **Source:** [notofonts/noto-cjk](https://github.com/notofonts/noto-cjk)
-- **License:** SIL Open Font License 1.1
-- **License text:** [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt)
+- Asset: `project/assets/fonts/NotoSansCJKsc-Regular.otf`
+- Purpose: launcher glyph coverage.
+- Upstream: `notofonts/noto-cjk`.
+- License: SIL Open Font License 1.1.
+- Local license text: `project/assets/fonts/OFL.txt`.
 
-## Planned Third-Party Components
+### Jint
 
-The following components are **planned** but not yet included:
+- Declared package: **Jint 4.16.2**.
+- Used by: `runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj`.
+- Purpose: experimental embedded JavaScript adapter behind `IEmbeddedScriptVm`.
+- Upstream: `https://github.com/sebastienros/jint`.
+- Version reference: `v4.16.2`, commit `730db51d99d3bede8072ca55b0437c3206b83599`.
+- License: BSD 2-Clause.
+- Local notice: `third_party/Jint/LICENSE.txt`.
+- Status: adapter source and package reference exist; current branch build/smoke validation is pending.
 
-### Ruby VM (for RGSS support)
+Do not describe QuickJS as the only current VM prototype or Jint as an unselected candidate. Jint is already a declared dependency. It remains interchangeable and is not a commitment to a full MV/MZ browser runtime.
 
-**Candidates:**
-- **mruby** — MIT License
-  - Small footprint, embeddable Ruby implementation
-  - Suitable for RGSS1/2/3 compatibility
-  - [https://mruby.org/](https://mruby.org/)
+Before release, restore the pinned dependency graph, inventory transitive dependencies, include their required notices, and verify the packaged assemblies. This document does not claim that unresolved transitive packages have already been reviewed.
 
-- **Rubinius** — Apache License 2.0
-  - More complete Ruby implementation
-  - Larger footprint
-  - [https://rubini.us/](https://rubini.us/)
+### Godot and .NET
 
-**Decision pending:** Will be evaluated based on RGSS compatibility requirements.
+The host project references Godot.NET.Sdk/4.7.2 and targets .NET 8. Release packaging must include the notices required by the actual engine/runtime binaries and their dependencies. Export presets or SDK references alone do not demonstrate completed platform packaging or notice compliance.
 
-### JavaScript Engine (for MV/MZ support)
+## Development-only tools
 
-**Candidates:**
-- **QuickJS** — MIT License
-  - Small footprint (~300KB)
-  - Good ES2020 support
-  - [https://bellard.org/quickjs/](https://bellard.org/quickjs/)
+The Node-based regression scripts use built-in `node:` modules, with no npm package dependencies. Node is a development/CI tool for checking embedded JavaScript semantics. It is not required by the end user's URPG installation and is not launched as a game runtime.
 
-- **Duktape** — MIT License
-  - Very small footprint
-  - Good embeddability
-  - [https://duktape.org/](https://duktape.org/)
+GitHub Actions referenced in workflows are CI tooling, not shipped game content.
 
-- **V8** — BSD-style
-  - Full Chrome V8 engine
-  - Largest footprint, best compatibility
-  - [https://v8.dev/](https://v8.dev/)
+### Original MV DataManager test excerpt
 
-**Decision pending:** Will be evaluated based on MV/MZ compatibility requirements.
+- File: `project/tests/fixtures/native-data/MVDataManager.excerpt.js`.
+- Source: `rpgtkoolmv/corescript`, `js/rpg_managers/DataManager.js`, commit `9875c94cb92c655f4ff919458740bf1eb503ee0f`.
+- Upstream full file blob: `9ddcc62f8324a29f202b376c77eaa63d871c1016`.
+- Modification: unchanged source lines 1–195 selected for testing, with four added provenance comments; no behavior edits.
+- License: MIT; copyright (c) 2015 KADOKAWA CORPORATION./YOJI OJIMA.
+- Complete license: `project/tests/fixtures/native-data/LICENSE.MV`.
+- Purpose: execute original loading/metadata methods against the production local-data adapter in regression tests, not bundle an original runtime executable or replace a user's core scripts.
 
-### PE Parser (for native DLL inspection)
+Retain this notice with any distributed test fixture. This published core-source license does not cover proprietary RTPs, games, art or other unrelated assets. Release packaging should explicitly handle/exclude development fixtures as appropriate.
 
-**Candidates:**
-- **libpe-parse** — MIT License
-  - C++ PE format parser
-  - [https://github.com/avast/libpe-parse](https://github.com/avast/libpe-parse)
+### Original MV PluginManager test fixture
 
-- **pe-parse** — BSD License
-  - C++ PE parser with Python bindings
-  - [https://github.com/avast/pe-parse](https://github.com/avast/pe-parse)
+- File: `project/tests/fixtures/core-startup/MVPluginManager.js`.
+- Source: `rpgtkoolmv/corescript`, `js/rpg_managers/PluginManager.js`.
+- Exact upstream/file Git blob: `491e9fa141ccfc6422dd03de865a6dc91bbf49ce` (retrieved 2026-09-12).
+- Modification: none; byte-for-byte test-only copy.
+- License: MIT; copyright (c) 2015 KADOKAWA CORPORATION./YOJI OJIMA.
+- Complete license: `project/tests/fixtures/core-startup/LICENSE.MV`.
+- Purpose: verify original setup/parameter behavior during core-stage initialization. Production loads user-supplied core files; it does not substitute this fixture.
 
-**Decision pending:** Will be evaluated based on Win32 API compatibility requirements.
+The MZ variant used by the Node test is an explicitly synthetic scheduling fixture, not an imported complete MZ core. Retain the MIT notice when distributing the original MV fixture and do not extend its license to unrelated game/RTP assets.
 
-## Licensing Principles
+## Prospective dependencies
 
-1. **Prefer MIT/Apache 2.0/BSD** licensed libraries
-2. **Avoid copyleft licenses** (GPL, AGPL) unless absolutely necessary
-3. **Never bundle** proprietary RPG Maker code or RTP assets
-4. **Document** all third-party components with license text
-5. **Attribute** all third-party contributors
+### Ruby / RGSS
 
-## Adding New Dependencies
+No concrete Ruby backend is embedded yet. CRuby-family embedding remains a research direction behind the existing VM factory and generation-specific profiles.
 
-Before adding any third-party dependency:
+Before adoption:
 
-1. Evaluate license compatibility
-2. Assess footprint impact
-3. Consider self-implementation alternatives
-4. Document in this file
-5. Include license text in repository
+- select the exact source/version;
+- review that version's COPYING/LEGAL and bundled dependencies;
+- verify historical RGSS1/2/3 language behavior rather than assuming current Ruby is compatible;
+- validate Windows/Linux/Android integration and resource/host-access restrictions;
+- include required notices in release packages.
 
-## RPG Maker Engine & RTP
+### Alternative JavaScript backends
 
-**Not included.** UniversalRPG implements RPG Maker behavior independently.
+QuickJS/QuickJS-ng and other engines remain optional future alternatives behind the SDK VM interface. Evaluate their exact licenses, dependencies, platform support and interruption/memory behavior before integration. A JavaScript interpreter alone does not provide Canvas, WebGL, WebAudio, DOM or RPG Maker APIs.
 
-- No proprietary RPG Maker engine code
-- No original runtime binaries
-- No RTP assets
-- Users must provide their own legally obtained games and RTP
+### Native libraries / PE inspection
+
+Metadata inspection and native execution are separate concerns. Selecting a PE parser does not authorize loading arbitrary game DLLs. Any future dependency requires a version/platform/license review and explicit runtime capability policy.
+
+## External asset provenance
+
+For each new third-party texture, sound, font, UI image or other asset, record the original author/source URL, exact license/version, local path, modifications and required attribution. Verify permission for the intended use, modification and redistribution before importing it.
+
+A downloadable asset with no clear license is not approved for inclusion. Do not import ripped game assets, unofficial reposts or proprietary RTP content without applicable rights. Preserve existing approved notices; record uncertain assets separately rather than silently treating them as production content.
+
+## Release gates
+
+- Select an explicit license for UniversalRPG itself before publishing a reusable package under assumed open-source terms.
+- Keep actual dependencies separate from research candidates.
+- Pin versions and audit the restored transitive graph.
+- Include required license texts and credits in binary distributions.
+- Recheck obligations when linking/packaging mode changes.
+- Do not include proprietary RPG Maker/WOLF runtime binaries, user games or RTP assets without redistribution permission.
+
+Users supply legally obtained games and RTP resources. URPG implements compatibility behavior without bundling those proprietary contents.

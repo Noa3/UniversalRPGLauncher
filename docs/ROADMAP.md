@@ -1,392 +1,376 @@
 # UniversalRPG — Development Roadmap
 
-> **Last Updated:** 2026-08-20
-> **Current Phase:** Phase 2 — RM2000/2003 Parser
+> **Last reviewed:** 2026-09-11  
+> **Primary implementation track:** RM2000/2003 faithful runtime  
+> **Architecture:** shared core + engine-specific compiled plugins
 
-## Phase 0 — Repository Audit ✅
+This roadmap describes the long-term product direction. It is intentionally not a granular task board. `SESSION_STATE.md` records only the current objective/next action, while `docs/PROJECT_STATUS.md` lists immediate priorities. Agents should choose the next coherent implementation slice directly from repository evidence rather than maintaining a Kanban.
 
-**Status:** Complete (initial repository setup)
+## Runtime Milestone Vocabulary
 
-- [x] Create repository structure
-- [x] Document architecture
-- [x] Set up project configuration
-- [x] Add Godot .NET project and solution metadata
-- [x] Add reproducible restore/build/import/test validation entrypoint
-- [ ] Audit existing codebase (N/A — fresh repository)
+Use the following levels independently per engine:
 
-**Deliverables:**
-- `docs/ARCHITECTURE.md` — Complete architecture documentation
-- `docs/ROADMAP.md` — This file
-- `project.godot` — Godot project configuration
-- Directory structure matching the design
+| Level | Meaning |
+|---|---|
+| L0 | Detection |
+| L1 | Bounded metadata/data parsing |
+| L2 | Core data structures load |
+| L3 | Map/presentation foundation |
+| L4 | Basic event/script execution |
+| L5 | Exploration/simple game path playable |
+| L6 | Menus/system services |
+| L7 | Save/load compatibility |
+| L8 | Battle/major game systems |
+| L9 | Broad compatibility with authorized fixtures |
+| L10 | Optional enhanced features |
 
----
-
-## Phase 1 — Runtime Foundation ✅
-
-**Status:** Complete (core abstractions implemented)
-
-### Implemented
-
-- [x] VirtualFileSystem
-  - Multi-mount merging (game, override, RTP, save)
-  - Case-insensitive path resolution
-  - Path traversal protection
-  - Archive access preparation
-
-- [x] VirtualClock
-  - Deterministic simulation timing
-  - Speed control (0.5x–10x, pause)
-  - Scheduled callbacks
-  - Frame-rate decoupling
-
-- [x] GameDetector
-  - Multi-signal detection (Game.ini, RGSS DLLs, archives, directory structure)
-  - Confidence scoring (Low/Medium/High)
-  - Evidence collection
-  - RTP dependency detection
-  - Custom script/plugin detection
-  - Native library detection
-  - Unknown runtime warnings
-
-- [x] CompatibilityProfile
-  - Extensible JSON-based profiles
-  - SHA-256 hash matching
-  - Engine-specific profiles
-  - Per-game flags
-  - Global flags with per-game override
-
-### Next Steps (Phase 1 completion)
-
-- [ ] Add unit tests for VirtualFileSystem
-- [ ] Add unit tests for GameDetector
-- [ ] Add unit tests for CompatibilityProfile
-- [ ] Create synthetic test fixtures for detection
-- [ ] Export and test Godot project
+Do not describe an engine as “supported” without stating the milestone/capability level.
 
 ---
 
-## Phase 1.5 — Application Foundation ✅
+## Track A — Shared Application and Safety Foundation
 
-**Status:** Complete for desktop MVP; mobile import integration remains
+**Status:** Implemented foundation; ongoing hardening
 
-- [x] Valid Godot 4.7.2 project and responsive start scene
-- [x] Persistent user-selected games directory
-- [x] Bounded library scan with link/junction avoidance
-- [x] Real LCF, RGSS, MV, and MZ detection signals
-- [x] Honest runtime-support state and disabled launch action (RGSS/XP/VX/VX Ace, RM95, MV/MZ, and Unite remain detection-only)
-- [x] English-default localized UI with German, Spanish, French, Japanese, Korean, and Simplified Chinese
-- [x] Bundled CJK-capable font
-- [x] Initial UTF-8/CP932/Shift-JIS metadata decoder
-- [x] Trusted in-process engine plugin contracts and deterministic built-in catalog
-- [x] Bounded folder/ZIP detection with persisted candidates and safe runtime selection
-- [x] Windows, Linux, macOS, Android, and iOS export presets
-- [ ] Android Storage Access Framework import
-- [ ] iOS document picker import
-- [ ] Cover art, favorites, search, sorting, and recent play time
+Implemented:
 
----
+- Godot 4.7.2 C#/.NET project
+- persistent game library
+- trusted compiled engine plugin contracts
+- bounded folder/ZIP inspection
+- ranked detection and ambiguity handling
+- partial-vs-malformed inspection distinction
+- library persistence
+- localization
+- compatibility profiles/reporting
+- deterministic runtime clock
+- validation script and CI workflow
+- RTP registry/diagnostic primitives
+- runtime selection gated by explicit capabilities
+- defensive runtime-creation capability checks
 
-## Phase 2 — RM2000/2003 Parser
+Ongoing:
 
-**Status:** In progress
-
-### Goals
-
-Load an RM2000/2003 project and inspect:
-- Maps
-- Events
-- Database
-- Resources
-
-### Tasks
-
-- [x] Real LCF container framing/BER reader with hard limits
-- [x] RM2KParser — core parser class
-- [x] RM2KDatabase — serializable database data model (field decoding still incomplete)
-- [x] Initial LMU base fields: chipset, dimensions, tile layers, event metadata
-- [x] Initial LSD top-level container/chunk parsing
-- [x] Parser error handling for truncation/invalid BER/oversized data/dimensions
-- [x] Parser unit tests with synthetic real-LCF encodings
-- [x] Validate parser against legal/reproducible real-world fixtures
-- [x] Minimal RM2K/RM2K3 parser-backed runtime bootstrap with deterministic ticking
-- [ ] LMT map-tree parser
-- [ ] Full typed LDB section decoding
-- [ ] Full LMU event/page/command data decoding
-- [ ] Preserve/report unknown fields consistently
-
-### Key Design Decisions
-
-- Parse into structured data, not directly into Godot nodes
-- Unknown fields preserved/skipped safely
-- Separate parsing from interpretation logic
+- runtime-wide VFS containment
+- platform export validation
+- Android/iOS import integration
+- stronger fuzz/malformed-input coverage
+- permission model required before script/native execution
+- continued simplification/removal of dead pseudo-runtime abstractions
 
 ---
 
-## Phase 3 — RM2000/2003 Rendering
+## Track B — RM2000 / RM2003
 
-**Status:** Planned
+**Status:** Active; strongest runtime foundation
 
-### Goals
+### Completed foundation
 
-Open a map and render it accurately.
+- [x] LCF framing / BER reader
+- [x] LMT parser
+- [x] bounded LDB typed slices
+- [x] LMU map/event/page/command metadata slices
+- [x] unknown-field retention for implemented structures
+- [x] read-only LSD framing model
+- [x] parser-backed runtime lifecycle
+- [x] deterministic simulation state/clock
+- [x] player movement/transfer state
+- [x] event scheduler
+- [x] expanding verified event-command interpreter
+- [x] renderer-neutral framebuffer/sprite/presentation state
+- [x] RTP registry/diagnostic foundation
+- [x] runtime-owned bounded save codec
+- [x] input/presentation handoff slices
 
-### Tasks
+### Near-term goals
 
-- [ ] Map tile rendering
-- [ ] Character sprite rendering
-- [ ] Player movement
-- [ ] Camera system
-- [ ] Picture layer
-- [ ] Text/window rendering
-- [ ] Render order preservation
-- [ ] Golden image tests
+- [ ] verify and implement chipset/passability semantics from authoritative field evidence
+- [ ] complete enough tile/sprite/window presentation for representative real maps
+- [ ] expand event command coverage from verified semantics
+- [ ] separate RM2000/RM2003 behavior where it diverges
+- [ ] implement audio path
+- [ ] implement basic menus/system flow
+- [ ] establish original save semantic compatibility
+- [ ] reach an authorized end-to-end exploration milestone
+- [ ] expand toward battle/system parity
 
----
+### Completion gate
 
-## Phase 4 — Event Interpreter
-
-**Status:** Planned
-
-### Goals
-
-Implement enough event commands for basic games.
-
-### Priority Commands
-
-1. Movement commands
-2. Message display
-3. Switch/variable operations
-4. Conditional branches
-5. Event calls/jumps
-6. Map transfers
-7. Wait/delay commands
-8. Picture manipulation
-9. Audio commands
-10. Labels/jumps/loops
-
-### Tasks
-
-- [ ] EventCommand data structure
-- [ ] EventContext — execution context
-- [ ] EventStack — call stack management
-- [ ] EventFrame — frame scheduling
-- [ ] EventWaitState — non-blocking waits
-- [ ] ParallelEvent support
-- [ ] AutorunEvent support
-- [ ] CommonEvent support
-- [ ] Nested event call support
-- [ ] Event trace/debug system
-- [ ] Interpreter unit tests
+RM2K/RM2K3 should not be called broadly playable until real authorized fixtures can launch, move, interact, transfer maps, save/load appropriately, and exercise representative menus/events without external `RPG_RT.exe`.
 
 ---
 
-## Phase 5 — Full RM2000/2003 Systems
+## Track C — WOLF RPG Editor
 
-**Status:** Planned
+**Status:** Experimental plain-data runtime slice
 
-### Goals
+WOLF is an independent engine family.
 
-Broad RM2000/2003 game compatibility.
+Implemented foundation:
 
-### Tasks
+- [x] conservative detection
+- [x] protected-data refusal boundary
+- [x] experimental unencrypted/plain-data readers
+- [x] database/map/event model foundation
+- [x] bounded deterministic event VM slice
+- [x] runtime lifecycle regression tests
 
-- [ ] Menu system (title, game over, save, load)
-- [ ] Inventory system
-- [ ] Party management
-- [ ] Equipment system
-- [ ] Skills database
-- [ ] States/status effects
-- [ ] Battle system
-- [ ] Save/load system
-- [ ] Screen transitions
-- [ ] Animation system
+Next milestones:
 
----
+- [ ] define supported WOLF versions
+- [ ] pin authorized native format documentation/fixtures
+- [ ] replace synthetic/plain envelopes with native readers where justified
+- [ ] expand opcode/event semantics with per-opcode tests
+- [ ] add renderer/input/audio/UI/save layers
+- [ ] validate representative authorized real games
 
-## Phase 6 — Compatibility Work
-
-**Status:** Planned
-
-### Goals
-
-Use real-world test cases to refine compatibility.
-
-### Tasks
-
-- [ ] Encoding quirks (CP932, Shift_JIS, EUC-JP)
-- [ ] Runtime quirks (version-specific bugs)
-- [ ] Common patches (community fixes)
-- [ ] Known plugin HLE implementations
-- [ ] Compatibility database expansion
-- [ ] Regression test suite
+Protected/encrypted data is not a prerequisite for initial WOLF support and must not be bypassed merely to increase compatibility.
 
 ---
 
-## Phase 7 — Enhanced Mode
+## Track D — RGSS Core / RPG Maker XP, VX, VX Ace
 
-**Status:** Planned (only after Faithful Mode is dependable)
+**Status:** Detection/parsing boundary; runtime not implemented
 
-### Goals
+The previous metadata-only RGSS pseudo-runtime has been removed. Future RGSS work should start from a real embedded Ruby boundary rather than resurrecting a lifecycle placeholder.
 
-Modern improvements without altering gameplay semantics.
+Shared architecture:
 
-### Tasks
+```text
+XP / VX / VX Ace plugin
+        |
+        v
+IRubyVm
+        |
+        v
+RGSS compatibility core
+ ├── RGSS1 profile
+ ├── RGSS2 profile
+ └── RGSS3 profile
+        |
+        v
+URPG platform/runtime services
+```
 
-- [ ] Integer scaling
-- [ ] High-resolution presentation
-- [ ] Shader system (nearest, bilinear, CRT, scanlines)
-- [ ] Controller support (Xbox, PlayStation, Steam Deck)
-- [ ] Touch UI (Android)
-- [ ] Fast-forward/slow-motion
-- [ ] Screenshot system
-- [ ] Asset override system
-- [ ] Per-game enhancement profiles
-- [ ] Configurable virtual touch gamepad and per-game layouts
-- [ ] Physical controller remapping and mouse/touch emulation
-- [ ] Save backup/import/export and conflict-safe device transfer
-- [ ] Non-destructive translation/patch packs (PO/XLIFF)
-- [ ] Translation memory, glossary, font packs, and overflow diagnostics
-- [ ] Optional compatibility/debug/cheat tools with explicit safety policy
+Tasks:
 
----
+- [ ] select embeddable Ruby implementation with license/version/platform review
+- [ ] implement `IRubyVm` boundary
+- [ ] implement serialized data/archive readers per generation
+- [ ] implement common RGSS value/data types
+- [ ] implement Graphics / Bitmap / Sprite / Viewport / Window / Tilemap / Plane
+- [ ] implement Input / Audio / Font / Rect / Color / Tone / Table
+- [ ] implement RGSS1 profile and XP boot path
+- [ ] implement RGSS2 profile and VX boot path
+- [ ] implement RGSS3 profile and VX Ace boot path
+- [ ] define Win32API compatibility policy
+- [ ] add default-script and representative third-party-script fixtures
+- [ ] add save/load compatibility per generation
 
-## Phase 8 — RGSS Runtime
-
-**Status:** Planned (after Phase 5)
-
-### Goals
-
-Support RPG Maker XP, VX, and VX Ace.
-
-### Tasks
-
-- [ ] RGSSRuntime — core runtime abstraction
-- [ ] RubyVMAdapter — embedded Ruby VM
-- [ ] RGSS1 API (XP)
-- [ ] RGSS2 API (VX)
-- [ ] RGSS3 API (VXAce)
-- [ ] Win32API compatibility dispatcher
-- [ ] Native DLL inspector
-- [ ] Compatibility profiles per RGSS version
-- [ ] Automated compatibility tests
+Do not require a separately installed Ruby runtime.
 
 ---
 
-## Phase 9 — MV/MZ Runtime
+## Track E — JavaScript Core / RPG Maker MV and MZ
 
-**Status:** Planned (after Phase 8)
+**Status:** Detection + bounded metadata; runtime not implemented
 
-### Goals
+Shared architecture:
 
-Support RPG Maker MV and MZ games.
+```text
+MV / MZ plugin
+      |
+      v
+IJavaScriptVm
+      |
+      v
+browser/RPG Maker compatibility layer
+      |
+      v
+URPG services
+```
 
-### Tasks
+Tasks:
 
-- [ ] JavaScriptRuntime — IJavaScriptVM interface
-- [ ] Browser compatibility API (window, document, etc.)
-- [ ] Canvas rendering compatibility
-- [ ] WebAudio compatibility
-- [ ] WebGL compatibility
-- [ ] DOM compatibility layer
-- [ ] Storage compatibility (localStorage, IndexedDB)
-- [ ] Plugin system with compatibility reporting
-- [ ] Node compatibility layer (progressive)
+- [ ] select embeddable JavaScript VM with license/platform/sandbox review
+- [ ] implement `IJavaScriptVm`
+- [ ] implement bounded script loading and error diagnostics
+- [ ] implement required `window`, timers, `performance`, `requestAnimationFrame`
+- [ ] implement Canvas/WebGL presentation bridge
+- [ ] implement WebAudio/audio bridge
+- [ ] implement Image/fetch/XMLHttpRequest/storage subset
+- [ ] implement input/gamepad/pointer APIs
+- [ ] implement MV profile
+- [ ] implement MZ profile
+- [ ] implement plugin compatibility reporting
+- [ ] define limited Node/NW.js compatibility policy
+- [ ] implement save/load and representative project fixtures
 
----
-
-## Phase 10 — Native Plugin Compatibility
-
-**Status:** Research (long-term)
-
-### Goals
-
-Support Windows DLL plugins on Linux/Android.
-
-### Tasks
-
-- [ ] PE parser (binary inspection)
-- [ ] Win32 API shim layer
-- [ ] Known native plugin replacements (HLE)
-- [ ] Controlled Windows plugin loading
-- [ ] Architecture verification
-- [ ] Sandbox model
-- [ ] Crash containment
+No imported JavaScript should run outside the explicit sandbox/runtime boundary.
 
 ---
 
-## Phase 11 — Advanced Android Compatibility
+## Track F — RPG Maker 95
 
-**Status:** Research (long-term)
+**Status:** Detection/research only
 
-### Goals
+- [x] conservative detection boundary
+- [ ] pin legal/verified file-format references
+- [ ] create representative authorized fixtures
+- [ ] implement bounded project/map/database/event readers
+- [ ] define deterministic simulation/runtime
+- [ ] implement renderer/input/audio/UI/save
+- [ ] validate representative real games
 
-Support x86 Windows plugins on ARM64 Android.
-
-### Tasks
-
-- [ ] x86 execution layer research
-- [ ] ARM64 translation strategies
-- [ ] Windows ABI compatibility
-- [ ] Native plugin isolation
-- [ ] Android touch control layouts
-- [ ] Android storage permissions
+RM95 must not be treated as RM2000 merely because both are legacy engines.
 
 ---
 
-## Cross-Cutting Concerns
+## Track G — RPG Tsukūru Dante 98
 
-### Security
+**Status:** Detection/research only
 
-- [x] Detection never executes imported files
-- [x] Scanner depth, link, hidden-directory, and metadata-size limits
-- [ ] Canonical root containment on every runtime access
-- [ ] Safe archive staging and zip-bomb limits
-- [ ] Virtual filesystem runtime sandbox
-- [ ] Plugin loading policy
-- [ ] Network access control
-- [ ] Clipboard access control
-- [ ] Per-game permission UI
-- [ ] Crash isolation
+- [x] explicit research-marker detector
+- [ ] determine practical/legal source-media scope
+- [ ] document file/media format evidence
+- [ ] create safe fixtures
+- [ ] implement parser only after format confidence exists
+- [ ] keep PC-98/runtime concerns separate from RM95
+
+Do not alias Dante 98 data to RM95 without evidence.
+
+---
+
+## Track H — RPG Maker Unite
+
+**Status:** Research/detection only
+
+RPG Maker Unite is Unity-based. Generic Unity exports are not enough to prove Unite provenance and a general Unity compatibility runtime is outside the current product scope.
+
+- [ ] decide whether Unite should remain detection-only permanently
+- [ ] obtain authorized project/export fixtures if deeper support is considered
+- [ ] investigate conversion/import possibilities rather than promising arbitrary Unity-runtime compatibility
+
+This track must not block the primary engines.
+
+---
+
+## Track I — Native Plugins / DLL / Win32 Compatibility
+
+**Status:** Long-term research
+
+Sequence:
+
+1. metadata-only PE/native inspection
+2. compatibility database and hashes
+3. high-level replacements for known plugins
+4. constrained Win32 API shims
+5. only then investigate controlled native execution
+6. ARM64/x86 translation is a separate advanced problem
+
+Imported native code must never be executed automatically just because it exists.
+
+---
+
+## Track J — Enhanced Mode
+
+**Status:** Partial foundations; broad polish deferred until faithful runtime milestones
+
+Potential capabilities:
+
+- integer/pixel-perfect scaling
+- high-resolution presentation
+- high-refresh presentation without changing simulation Hz
+- shaders
+- controller profiles/remapping
+- Android touch controls
+- fast-forward / slow-motion
+- screenshots
+- asset overrides
+- translation packs
+- accessibility
+- save states
+- rewind
+- experimental widescreen
+
+Every enhancement must be capability-gated and independently disableable.
+
+---
+
+## Track K — Platform and Release Readiness
+
+Targets:
+
+- Windows x86-64
+- Linux x86-64
+- Android ARM64
+- macOS
+- iOS
+
+Required before release claims:
+
+- clean reproducible build
+- platform-specific import/storage flow
+- export templates/toolchains documented
+- signed package where platform requires it
+- smoke test on actual target
+- save path verification
+- controller/input verification
+- performance/memory profiling
+- third-party license audit
+
+---
+
+## Cross-Cutting Requirements
 
 ### Testing
 
-- [x] Plugin contract, detection, archive, persistence, and lifecycle regression tests
-- [ ] Unit tests for all parsers
-- [ ] Interpreter tests
-- [ ] Integration tests
-- [ ] Golden image rendering tests
-- [ ] Save/load tests
-- [ ] Timing tests
-- [ ] Compatibility regression tests
+- parser unit tests
+- malformed/fuzz regression cases
+- event/script VM tests
+- runtime lifecycle tests
+- runtime-capability boundary tests
+- golden rendering tests when presentation becomes stable
+- save/load tests
+- engine-specific authorized fixtures
+- end-to-end representative play paths
+
+### Security
+
+- bounded parsing
+- no detector-time execution
+- VFS containment
+- dangerous host APIs denied by default
+- explicit capabilities for network/clipboard/native behavior
+- sandbox/watchdog limits before Ruby/JavaScript/native execution
+- detection/parsing/runtime capabilities remain separate and fail closed
 
 ### Documentation
 
-- [ ] docs/ARCHITECTURE.md (maintained)
-- [ ] docs/COMPATIBILITY.md
-- [ ] docs/RUNTIME_RM2K.md
-- [ ] docs/RUNTIME_RGSS.md
-- [ ] docs/RUNTIME_MV_MZ.md
-- [ ] docs/NATIVE_PLUGINS.md
-- [ ] docs/SECURITY.md
-- [x] docs/IMPORT_SECURITY.md
-- [x] docs/LOCALIZATION.md
-- [ ] THIRD_PARTY_LICENSES.md
+Living:
 
-### Performance
+- `README.md`
+- `SESSION_STATE.md`
+- `AGENTS.md`
+- `HERMES_AUTONOMOUS_PROMPT.md`
+- `docs/PROJECT_STATUS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/ROADMAP.md`
+- `docs/ENGINE_DETECTION.md`
+- `docs/ENGINE_PLUGINS.md`
+- `docs/COMPATIBILITY.md`
+- `docs/IMPORT_SECURITY.md`
 
-- [ ] Profiling infrastructure
-- [ ] Memory allocation analysis
-- [ ] Rendering batch optimization
-- [ ] Startup speed optimization
-- [ ] Mobile performance targets
+Historical dated handoffs/reports should remain snapshots rather than being continuously rewritten.
 
----
+## Recommended Development Order
 
-## Version History
-
-| Version | Phase | Status | Date |
-|---------|-------|--------|------|
-| 0.1.0 | Phase 0 | Complete | 2026-08-17 |
-| 0.2.0 | Phase 1 | In Progress | 2026-08-17 |
-| 0.2.1 | Phase 1.5 | Application foundation | 2026-08-20 |
+1. keep shared build/test/security foundation green
+2. reach a meaningful RM2K/RM2K3 playable milestone
+3. improve WOLF native-format fidelity in parallel where verified fixtures exist
+4. build RGSS core, then XP → VX → VX Ace
+5. build shared JavaScript core, then MV → MZ
+6. deepen RM95/Dante only when format evidence/fixtures justify it
+7. treat Unite as research
+8. expand native DLL/Win32 compatibility only after normal runtimes are stable
+9. grow Enhanced Mode alongside stable engine capabilities, never ahead of correctness

@@ -9,24 +9,102 @@ permissions:
   contents: read
 
 jobs:
-  gdscript:
+  script-semantics:
+    name: Script semantics and validation driver
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node for development tests only
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test production invocation bridge
+        run: node scripts/test-script-invocation-bridge.mjs
+      - name: Test production PluginManager shim
+        run: node scripts/test-web-plugin-shim.mjs
+      - name: Test PluginManager compatibility contract
+        run: node scripts/test-plugin-manager-contract.mjs
+      - name: Test validation failure gates with simulated tools
+        run: python3 scripts/test-validation-driver.py
+      - name: Test production browser frame host
+        run: node scripts/test-web-browser-host.mjs
+      - name: Test synthetic MV and MZ plugin fixtures
+        run: node scripts/test-web-probe-fixtures.mjs
+      - name: Test native game data and original MV loading methods
+        run: node scripts/test-native-game-data.mjs
+      - name: Test native core startup manifest
+        run: node scripts/test-native-boot-manifest.mjs
+      - name: Test original PluginManager setup
+        run: node scripts/test-original-plugin-setup.mjs
+      - name: Test native entry-point lifecycle host
+        run: node scripts/test-native-entry-host.mjs
+      - name: Test native keyboard/focus event bridge
+        run: node scripts/test-native-input-host.mjs
+      - name: Test native standard-gamepad bridge
+        run: node scripts/test-native-gamepad-host.mjs
+      - name: Test native localStorage adapter
+        run: node scripts/test-native-storage.mjs
+
+  portable:
+    name: Portable SDK and JavaScript VM
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore and build SDK
+        run: |
+          dotnet restore sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj
+          dotnet build sdk/UniversalRPG.Sdk/UniversalRPG.Sdk.csproj --no-restore --configuration Release
+      - name: Restore and build Jint adapter
+        run: |
+          dotnet restore runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj
+          dotnet build runtime/UniversalRPG.JavaScript.Jint/UniversalRPG.JavaScript.Jint.csproj --no-restore --configuration Release
+      - name: Run Jint VM smoke
+        run: dotnet run --project runtime/UniversalRPG.JavaScript.Jint.Smoke/UniversalRPG.JavaScript.Jint.Smoke.csproj --configuration Release
 
-      - name: Install Godot 4.7.2 stable
+  validate:
+    name: Godot runtime and tests
+    needs: [portable, script-semantics]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Godot 4.7.2 .NET
         shell: bash
         run: |
           set -euo pipefail
           curl -fL --retry 3 \
             -o /tmp/godot.zip \
-            https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+            https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_linux_x86_64.zip
+          rm -rf /tmp/godot
+          mkdir -p /tmp/godot
           unzip -q /tmp/godot.zip -d /tmp/godot
-          GODOT_BIN="$(find /tmp/godot -maxdepth 2 -type f -name 'Godot*' | head -1)"
+          GODOT_BIN="$(find /tmp/godot -type f -name 'Godot_v4.7.2-stable_mono_linux.x86_64' | head -1)"
+          test -n "$GODOT_BIN"
           chmod +x "$GODOT_BIN"
           echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
-
+          "$GODOT_BIN" --version
       - name: Validate project and tests
         run: ./scripts/validate.sh
+      - name: Probe synthetic MV and MZ plugins under Godot and Jint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for engine in mv mz; do
+            "$GODOT_BIN" --headless --path project res://tools/web_plugin_probe.tscn -- \
+              --game "$GITHUB_WORKSPACE/project/tests/fixtures/web-probe/$engine" \
+              --engine "$engine" --execute-plugins --frames 3 | tee "/tmp/urpg-$engine-probe.log"
+            grep -Fq 'UniversalRPG web plugin subset passed.' "/tmp/urpg-$engine-probe.log"
+          done
