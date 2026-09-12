@@ -1,185 +1,44 @@
 # UniversalRPG Agent Instructions
 
-> **Last reviewed:** 2026-09-11
+Updated: 2026-09-12. **Current product priority: RPG Maker MV and MZ.**
+The user can provide/test more MV/MZ projects. This explicit decision supersedes the older RM2000/2003-first ordering in historical roadmaps and handoffs. Preserve those implementations; do not make their completion a prerequisite for MV/MZ.
 
-These rules apply to autonomous coding agents working in this repository.
+## Product and source of truth
 
-## Source of Truth
+URPG is a compatibility runtime/launcher, not a game remake. Do not invent new stories, worlds or gameplay for imported games. Original game code, plugin order and engine behavior remain the compatibility target. Enhancements must be opt-in.
 
-At the start of a session read:
+Read `AGENTS.md`, `SESSION_STATE.md`, `docs/PROJECT_STATUS.md`, `docs/MV_MZ_TESTING.md`, then relevant source/tests and architecture. Source and executed tests override stale prose. There is intentionally **no Kanban**; do not create a work board. The checkpoint is not a history log.
 
-1. `AGENTS.md`
-2. `SESSION_STATE.md`
-3. `docs/PROJECT_STATUS.md`
-4. `docs/ARCHITECTURE.md`
-5. relevant source/tests
-6. the relevant roadmap/engine documentation
+C#/.NET is canonical. The Godot project is under `project/`; the repository currently pins Godot.NET.Sdk/4.7.2 and .NET 8. Do not invent a toolchain validation result or silently change versions. The standalone SDK must remain Godot-free and shared, not compiled into multiple competing contract assemblies. Preserve existing public signatures where practical.
 
-Actual source and passing tests override stale prose. If documentation disagrees with source, correct the documentation rather than implementing toward an obsolete claim.
+## Work selection
 
-There is intentionally no Kanban/work-board file. Do not create one unless the user explicitly asks for it later.
+Repair measured build/test/security regressions first. Then prioritize a real MV/MZ path: bounded project inspection and diagnostics; original script/dependency load order; shared browser host; data/asset loading through VFS; actual rendering/audio/input/storage; default project boot; representative custom plugins; independent MV/MZ profiles. Use user-authorized projects and small synthetic fixtures. Do not substitute an isolated successful plugin for a successful game boot.
 
-`SESSION_STATE.md` is only a concise restart checkpoint. `docs/PROJECT_STATUS.md` describes immediate priorities, while `docs/ROADMAP.md` describes long-term direction.
+RM2000/2003, RGSS and WOLF remain supported development tracks but receive regression maintenance rather than taking over the primary milestone. Native Windows DLLs, RM95, Dante98 and Unite remain later research. No original-engine, EasyRPG, mkxp, Wine, NW.js or system-browser subprocess fallback in the normal game path. Embedded licensed dependencies are implementation details.
 
-## Canonical Implementation
+## Current boundaries
 
-- C#/.NET is canonical.
-- Godot 4.7.2 stable .NET is the pinned host engine unless a deliberate upgrade changes it.
-- The Godot project root is `project/`.
-- Do not restart or recreate the superseded GDScript implementation.
-- Native/GDExtension code may be introduced later behind explicit interfaces when justified by measured requirements.
+MV/MZ has a concrete experimental Jint adapter, ordered plugin pipeline, PluginManager shim and opt-in frame-pumped timer/currentScript subset. It has **no full DOM/Canvas/WebGL/WebAudio/Node host or playable game-engine registration**. The developer probe runs inspection by default and requires `--execute-plugins` to run trusted project scripts in the limited host. It is not a general browser sandbox.
 
-## Current Engine Boundaries
+RM2000/2003 remains partial (including the recent LMU event-page import fix). XP/VX/VX Ace has script parsing/ordering but no embedded Ruby backend. WOLF is an experimental understood plain-data subset. Detection and parsing must never imply launchability; require `PluginCapability.Runtime` defensively at selection and creation.
 
-Do not overstate capabilities.
+## Engineering and testing
 
-- RM2000/RM2003: partial parser-backed runtime and primary implementation track.
-- WOLF: experimental unencrypted/plain-data runtime slice.
-- XP/VX/VX Ace: detection + parsing only; no Ruby/RGSS execution.
-- MV/MZ: detection + parsing/metadata only; no JavaScript execution.
-- RM95: detection/research only.
-- Dante 98: detection/research only.
-- Unite: research/detection only.
+Choose a coherent implementation slice from real source, write regression coverage, execute focused tests and the full `./scripts/validate.sh` where tooling exists, then update only affected docs. Avoid duplicated interpreters, giant host shims and unimplemented APIs that silently return success. Stop on unsupported behavior with actionable diagnostics.
 
-A source file named `*Runtime.cs` is not enough to claim support. Declared plugin capabilities plus validated behavior define the supported boundary.
+The browser timing host is an explicit subset: virtual time advances only through `AdvanceFrame`, queues are bounded, new callbacks wait for another pump and missed interval periods are coalesced. This is not complete browser event-loop fidelity. Do not silently present it as such. Validate full core boot before expanding runtime capability flags.
 
-## Autonomous Work Selection
+An in-process VM is not an OS sandbox. Inspection never executes game scripts/binaries. Runtime code must not receive arbitrary CLR objects, filesystem/process/native/network permissions or unrestricted host callbacks. Respect VFS containment, content identity, resource limits and the project's protected-content policy. Do not bypass third-party DRM or redistribute proprietary games/RTPs. Track exact third-party licenses.
 
-Do not maintain a task board. Instead, select work directly from repository evidence.
+## Recovery
 
-At each work cycle:
+Preserve unrelated edits. A script session that fails during load/bootstrap/frame/hook is not safe to replay; use a fresh VM/runtime. This is fail-stop, not rollback.
 
-1. repair any build/test/security regression first
-2. read the current objective and next action from `SESSION_STATE.md`
-3. compare that checkpoint with actual source/tests
-4. inspect `docs/PROJECT_STATUS.md` immediate priorities
-5. choose the smallest coherent implementation slice that advances the highest-value unresolved problem
-6. if the previous next action is stale or no longer useful, replace it with a better one and explain why in `SESSION_STATE.md`
+For one normalized failure signature, try at most three genuinely different approaches without new evidence. Do not run an identical failed command repeatedly. Preserve logs, revert only harmful experiments, record the blocker/unblock condition in `SESSION_STATE.md`, then move to independent useful work. Never weaken correct tests, hide errors or disable security to obtain green status.
 
-Do not spend a session only reorganizing planning files when useful code work is available.
+## Completion and reporting
 
-## Autonomous Work Loop
+A complete slice requires implementation, relevant tests and actual validation. When .NET/Godot is unavailable, distinguish added C# tests from executed Node semantic tests and from simulated-tool tests. Never reuse a historical count for the current branch. Do not merge this large PR without fresh full validation and review.
 
-For each cycle:
-
-1. record the current objective and intended next change in `SESSION_STATE.md`
-2. inspect existing implementation/tests before editing
-3. make the smallest coherent implementation that improves the real runtime
-4. add/update regression tests
-5. run the narrowest relevant validation
-6. self-repair failures when possible
-7. run `./scripts/validate.sh` before declaring the slice complete when tooling is available
-8. update only documentation affected by verified behavior
-9. update `SESSION_STATE.md` with the new baseline, blockers and next action
-10. continue with the next coherent slice without asking for permission
-
-Only ask the user when progress requires a destructive/irreversible action, unavailable credential, legal/product decision with materially different outcomes, or external data that cannot reasonably be synthesized/replaced.
-
-## Current Priority Order
-
-Unless a regression changes the order:
-
-1. keep build/tests/security green
-2. advance RM2000/2003 toward an authorized end-to-end playable milestone
-3. resolve verified passability/rendering/event/runtime gaps
-4. separate RM2000 vs RM2003 semantics where required
-5. improve WOLF native-format fidelity only where verified/authorized evidence exists
-6. build RGSS core after the primary milestone is sufficiently stable
-7. build shared MV/MZ JavaScript runtime after an explicit sandbox design exists
-8. deepen RM95/Dante research only from verified formats
-9. keep Unite as research
-10. native DLL/Win32 execution remains late-stage
-
-Do not jump to native execution or broad visual polish while core runtime work is still the limiting factor.
-
-## Refactoring Policy
-
-Larger refactors are allowed when they materially improve correctness, maintainability or engine separation.
-
-Before a large refactor:
-
-- identify the concrete problem in the existing design
-- preserve working behavior with regression tests
-- prefer replacing dead/duplicated abstractions rather than layering another abstraction over them
-- keep runtime capabilities fail-closed
-- remove dead experimental code when it creates false support expectations and has no active callers
-- avoid rewriting functional engine subsystems merely to make the directory structure look cleaner
-
-A refactor is successful only if the resulting architecture is easier to reason about and validation remains green.
-
-## Runtime Capability Safety
-
-Engine recognition, parsing and runtime execution are separate capabilities.
-
-- runtime hosts must require `PluginCapability.Runtime`
-- runtime creation must defensively reject plugins that do not advertise Runtime
-- generic metadata/bootstrap lifecycles must not masquerade as playable engine runtimes
-- detection-only plugins may remain visible in the library but cannot launch
-
-## Failure Recovery / Anti-Loop
-
-Normalize a failure signature from:
-
-- failing command/test
-- primary error/message
-- relevant file/function or crash location
-
-For the same signature:
-
-- maximum 3 materially different repair strategies
-- never run the identical failing command more than twice consecutively without code/config/input changes or new evidence
-- a different strategy requires a different hypothesis, implementation path, fixture, dependency/tooling path or scope
-
-After each failed strategy record concise evidence in `SESSION_STATE.md`.
-
-After three failed strategies:
-
-1. stop the repeating approach
-2. terminate hung processes if needed
-3. preserve verified improvements
-4. revert only clearly harmful speculative edits
-5. record the blocker and exact unblock condition in `SESSION_STATE.md`
-6. choose the next independent useful implementation area from source/status/roadmap
-
-Do not solve failures by deleting tests, weakening correct assertions, swallowing errors or disabling security checks.
-
-## Definition of Complete Work
-
-A development slice is complete only when:
-
-- implementation exists
-- the intended behavior is covered by relevant regression tests
-- relevant tests pass when tooling is available
-- broader validation passes where required
-- no known regression is hidden
-- documentation does not claim more than the implementation provides
-
-If required tooling is unavailable, record the exact pending validation command in `SESSION_STATE.md` rather than claiming success.
-
-## Security
-
-Imported games are untrusted.
-
-During detection/parsing never execute:
-
-- EXE
-- DLL/SO
-- Ruby
-- JavaScript
-- shell/batch scripts
-- native game plugins
-
-Keep parser/archive work bounded. Do not follow reparse points. Do not bypass protected WOLF data.
-
-Before future script/native execution, implement the explicit capability/sandbox policy in `docs/IMPORT_SECURITY.md`.
-
-## Documentation Hygiene
-
-Living documents must stay concise and current.
-
-- `SESSION_STATE.md` is a checkpoint, not a history log.
-- `PROJECT_STATUS.md` records current implementation and immediate priorities.
-- `ROADMAP.md` records long-term direction, not granular tasks.
-- dated handoffs and QA reports are historical snapshots and should not be rewritten as current status.
-
-Do not duplicate every historical test count across files.
+Keep `SESSION_STATE.md` concise: current priority, implemented changes, exact validation evidence, blockers and next action. Dated reports are snapshots. Continue ordinary implementation without asking the user to pick every step; escalate only genuinely non-resolvable/destructive decisions.

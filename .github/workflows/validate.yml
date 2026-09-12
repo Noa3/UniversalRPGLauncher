@@ -28,6 +28,10 @@ jobs:
         run: node scripts/test-plugin-manager-contract.mjs
       - name: Test validation failure gates with simulated tools
         run: python3 scripts/test-validation-driver.py
+      - name: Test production browser frame host
+        run: node scripts/test-web-browser-host.mjs
+      - name: Test synthetic MV and MZ plugin fixtures
+        run: node scripts/test-web-probe-fixtures.mjs
 
   portable:
     name: Portable SDK and JavaScript VM
@@ -80,3 +84,13 @@ jobs:
           "$GODOT_BIN" --version
       - name: Validate project and tests
         run: ./scripts/validate.sh
+      - name: Probe synthetic MV and MZ plugins under Godot and Jint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for engine in mv mz; do
+            "$GODOT_BIN" --headless --path project res://tools/web_plugin_probe.tscn -- \
+              --game "$GITHUB_WORKSPACE/project/tests/fixtures/web-probe/$engine" \
+              --engine "$engine" --execute-plugins --frames 3 | tee "/tmp/urpg-$engine-probe.log"
+            grep -Fq 'UniversalRPG web plugin subset passed.' "/tmp/urpg-$engine-probe.log"
+          done

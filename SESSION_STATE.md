@@ -1,50 +1,33 @@
 # UniversalRPG session checkpoint
 
-Updated: 2026-09-12. Branch: `docs/refresh-2026-09-09`, PR #1.
-No Kanban is maintained. Preserve unrelated work and choose coherent changes from source/tests.
+Updated: 2026-09-12. Branch: docs/refresh-2026-09-09, PR #1.
+Current parent: 7a538b8df494a077cbd3922387d086a3fea2d7c3.
 
-## Latest work: actual LMU event-page import
+## Priority decision
 
-Parent implementation: `7f5b805b792ff4f16a7f4cbe3f71127b1311fd7e`.
+**MV/MZ FIRST**, explicitly requested because the user has more projects available to test. Preserve RM2K/RGSS/WOLF code and regression coverage, but do not gate MV/MZ work on those engines' completion. AGENTS and the Hermes prompt now reflect this. No Kanban; URPG is a compatibility runtime, not a game-content remake.
 
-While preparing automatic movement integration, inspection found a more fundamental blocker: `ParseMap` counted event pages with `ParseStructArray(..., false)` and consequently iterated an empty object list. Actual LMU pages never reached the existing runtime event loader. The previously unreachable condition path also tried to access a nonexistent `fields` member on a raw chunk.
+## Latest implementation
 
-This pass:
-
-- Materializes real pages through `Rm2kParser.EventPages.cs` and retains page IDs/order, commands, conditions, movement metadata and graphics metadata.
-- Decodes nested condition bytes through bounded structure readers; reports duplicate/malformed/trailing data instead of dropping a page.
-- Uses documented field IDs/defaults instead of guessed legacy aliases. Unknown page fields remain raw data.
-- Decodes the embedded movement-route structure. Its 0x0B SizeField is a serialized-byte hint, not an instruction count. Stale hints are advisory; actual payload and decoded command limits remain enforced.
-- Reads event operands and condition integer values as signed int32. Explicit empty condition integer payloads represent zero.
-- Fixes the event-command cap boundary so exactly MaxCommands plus its terminator is accepted, while an extra command is rejected.
-- Adds 19 C# LMU/event regression methods, primarily entering through generated file bytes and the actual ParseMap entry point. The route decoder suite now has 11 methods instead of 7, including parameterized structures and size-hint bounds.
+- Opt-in WebBrowserHostPrelude: window/self, virtual performance.now, bounded function timers/cancellation, requestAnimationFrame and currentScript metadata.
+- WebScriptRuntime keeps its old constructor and adds a new host-enabled overload. AdvanceFrame pumps seconds through one constrained VM call after bootstrap; errors retain fail-stop lifecycle. Script URI metadata is scoped around each enabled plugin.
+- Explicit frame-quantized subset: snapshot queues, defer new callbacks, coalesce missed intervals. Not full browser conformance, rendering, audio, DOM or Node.
+- Developer scene res://tools/web_plugin_probe.tscn: inspect by default, --execute-plugins required for trusted-project subset execution. JSON reports never claim full-game playability and are written outside the game folder.
+- VFS script reads verify a known inventory SHA-256; changed bytes require reinspection.
+- Synthetic MV/MZ fixtures and CI steps added. Their core-named files are markers, not proprietary/vendor cores.
 
 ## Validation truth
 
-Performed in this pass: source/format review, exact Git-blob verification of the materialized original large parser, inspection of the single intended ParseMap diff hunk, and lexical delimiter checks on edited C# files.
+Actually run here: 46/46 production-JS browser-host semantic checks and 2/2 synthetic plugin fixtures passed on Node v22.16.0. Source baseline Git hashes and workflow YAML structure were checked.
 
-**Not performed:** C# compilation or execution, the new LMU/route tests, actual Jint/Godot execution, exports, or real-game playthroughs. .NET/Godot are absent and toolchain download attempts failed. Do not describe the branch as green. Earlier Node and simulated-tool test results belong to their earlier dated reports, not this parser pass.
+Not run: 19 new C# methods (15 real-Jint frame-host + 4 source-identity), .NET/Jint/Godot builds, the actual probe scene, user games or platform exports. .NET/Godot are absent; current container network attempts fail DNS resolution. Do not claim whole-branch green or reuse earlier pass counts. Evidence: docs/VALIDATION_MV_MZ_HOST_2026-09-12.md.
 
-Evidence, primary format references and pending commands: `docs/VALIDATION_LMU_EVENTS_2026-09-12.md`.
+## Immediate next work
 
-## Preserved script work
+1. Establish complete ./scripts/validate.sh success and actual MV/MZ synthetic probe runs under Godot/Jint. No merge before fresh validation/review.
+2. Use docs/MV_MZ_TESTING.md to collect scoped reports from user-authorized projects; do not call subset-passed a game compatibility pass.
+3. Implement a real MV/MZ core/library boot manifest and version profiles, then VFS-backed data/assets and actual rendering/audio/input/storage. Target a small title/New Game/map/dialogue/transfer/save path.
+4. Keep unsupported APIs explicit. Preserve script order, source identity and fail-stop sessions. Avoid invented SceneManager/PIXI/DOM no-ops.
+5. Maintain other engines without deleting work or reverting to old priority ordering.
 
-MV/MZ and RGSS loaders retain the previous fail-stop startup/hook rules, requiring fresh sessions after external failures. `WebPluginLoadPlan`, PluginManager parameters/scheduled names, the Jint invocation boundary, VFS and validation-driver guards are unchanged by this parser pass.
-
-## Remaining runtime boundary
-
-- RM2000/2003: partial runtime. The parser now delivers real event-page data, but this pass does NOT implement automatic route scheduling, faithful speed/frequency timing, or full runtime sprite synchronization.
-- Runtime sprite refresh still needs to consume current event positions/facing and active pages, not only original map coordinates.
-- XP/VX/VX Ace: script archive/inventory/pipeline; no embedded Ruby backend.
-- MV/MZ: experimental Jint adapter/shims; no complete browser/render/audio host or playable engine registration.
-- WOLF: experimental understood plain-data subset. RM95/Dante98/Unite remain research/detection.
-
-## Next useful work
-
-1. Run `./scripts/validate.sh` with the pinned .NET/Godot toolchain and repair measured failures. No merge before fresh complete validation.
-2. Validate real LMU -> runtime page selection -> action/parallel event execution with a small authorized/synthetic project; existing hand-built runtime fixtures alone cannot prove the import path.
-3. Connect parsed movement routes to active-page lifecycle and explicit timing; publish current positions/facing to render descriptors without mutating parsed maps.
-4. Add a two-map traversal/save regression before claiming a playable RM2K milestone.
-5. Continue browser/RGSS services only behind truthful capabilities and verified VM behavior.
-
-On recovery read AGENTS, this checkpoint and relevant source/tests. Never weaken correct tests, replay partial script initialization, recreate a task board or promote compatibility from class names alone.
+In-process VM limits are not an OS sandbox. No auto execution on import, no arbitrary host API grants, no third-party DRM bypass and no proprietary asset redistribution. After three materially different failed strategies for one failure signature, record evidence/unblock conditions and move to an independent useful slice rather than looping.

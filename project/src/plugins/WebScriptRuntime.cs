@@ -33,7 +33,7 @@ public sealed class ScriptSourceResult
 /// earlier plugins into a partially initialized realm. Use on one host thread;
 /// the busy flag rejects reentrant callbacks, not arbitrary concurrent access.
 /// </summary>
-public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
+public sealed partial class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
 {
     public const int MaxPreludeModules = 128;
     private readonly IEmbeddedScriptVm _vm;
@@ -50,6 +50,13 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
     public WebScriptRuntime(string pLanguageId, IEmbeddedScriptVm pVm,
         IWebScriptSourceProvider pSourceProvider, IEnumerable<WebScriptInventoryEntry> pEntries,
         IEnumerable<ScriptModule>? pPreludeModules = null)
+        : this(pLanguageId, pVm, pSourceProvider, pEntries, pPreludeModules, null)
+    {
+    }
+
+    public WebScriptRuntime(string pLanguageId, IEmbeddedScriptVm pVm,
+        IWebScriptSourceProvider pSourceProvider, IEnumerable<WebScriptInventoryEntry> pEntries,
+        IEnumerable<ScriptModule>? pPreludeModules, WebBrowserHostOptions? pBrowserHostOptions)
     {
         if (pLanguageId is not (ScriptLanguageIds.RpgMakerMvJavaScript or ScriptLanguageIds.RpgMakerMzJavaScript))
             throw new ArgumentException("Web script runtime requires an MV or MZ language ID.", nameof(pLanguageId));
@@ -58,9 +65,11 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
         _sourceProvider = pSourceProvider ?? throw new ArgumentNullException(nameof(pSourceProvider));
         _entries = WebPluginLoadPlan.SelectEnabled(pEntries);
         var preludes = (pPreludeModules ?? Array.Empty<ScriptModule>()).Take(MaxPreludeModules + 1).ToArray();
-        if (preludes.Length > MaxPreludeModules)
+        if (preludes.Length + (pBrowserHostOptions == null ? 0 : 1) > MaxPreludeModules)
             throw new ArgumentException("Compatibility preludes exceed the bounded limit.", nameof(pPreludeModules));
-        _preludeModules = preludes;
+        _browserHostOptions = pBrowserHostOptions;
+        _preludeModules = pBrowserHostOptions == null ? preludes
+            : new[] { WebBrowserHostPrelude.Build(_languageId, pBrowserHostOptions) }.Concat(preludes).ToArray();
     }
 
     public IReadOnlyList<string> LanguageIds => new[] { _languageId };
@@ -200,9 +209,15 @@ public sealed class WebScriptRuntime : IEngineScriptingRuntime, IDisposable
             foreach (var entry in _entries)
             {
                 current = entry.Script.Id;
+                var entered = EnterPluginScript(entry.Script.RelativePath);
+                if (!entered.Success)
+                    return SdkOperationResult.Failed("web.script-scope-failed", $"Plugin '{current}': {entered.ErrorMessage}", entered.Diagnostics);
                 var result = _vm.ExecuteModule(current);
                 if (!result.Success)
                     return SdkOperationResult.Failed("web.plugin-execution-failed", $"Plugin '{current}': {result.ErrorMessage}", result.Diagnostics);
+                var left = LeavePluginScript();
+                if (!left.Success)
+                    return SdkOperationResult.Failed("web.script-scope-failed", $"Plugin '{current}': {left.ErrorMessage}", left.Diagnostics);
             }
             _bootstrapped = true;
             _faulted = false;
