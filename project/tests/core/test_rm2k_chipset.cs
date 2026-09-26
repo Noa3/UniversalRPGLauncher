@@ -163,6 +163,63 @@ public partial class TestRm2kChipset : TestBase
         return result;
     }
 
+    public void Test_TerrainTagFollowsChipIndexAndSubstitution()
+    {
+        var terrain = new int[162];
+        for (var index = 0; index < terrain.Length; index++)
+        {
+            terrain[index] = index + 1;
+        }
+
+        // A block A tile maps to chip index 0, so terrain 1.
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockA + 500, terrain, null), 1);
+        // Block D start maps to chip index 6.
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockD, terrain, null), 7);
+        // The first block E tile maps to chip index 18.
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockE, terrain, null), 19);
+
+        // The lower table is applied to block E indices, so it moves the tag.
+        var lowerTable = Identity(144);
+        lowerTable[0] = 10;
+        var substitution = new Rm2kTileSubstitution(lowerTable, null);
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockE, terrain, substitution), 29,
+            "a substituted block E tile takes the terrain of the replacement");
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockD, terrain, substitution), 7,
+            "block D keeps its own index");
+    }
+
+    public void Test_TerrainTagDefaultsToOneWithoutATable()
+    {
+        // RPG_RT drops an all-ones terrain table, and liblcf defaults to 1, so an
+        // absent table must resolve to terrain 1 instead of failing.
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockD, null, null), Rm2kChipset.DefaultTerrainTag);
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockD, [], null), Rm2kChipset.DefaultTerrainTag);
+        // A short table does not cover the chip index and falls back too.
+        AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockD, new[] { 1, 2 }, null),
+            Rm2kChipset.DefaultTerrainTag);
+    }
+
+    public void Test_SimulationResolvesTerrainPerMapTile()
+    {
+        var state = new GameSimulationState();
+        var terrain = new int[162];
+        Array.Fill(terrain, 1);
+        terrain[Rm2kChipset.BlockEIndex] = 7;
+        state.TerrainData = terrain;
+        state.LowerLayer = new[] { Rm2kChipset.BlockD, Rm2kChipset.BlockE, 0, 0 };
+        state.ConfigureMap(1, 2, 2, new byte[4]);
+
+        AssertEq(state.GetTerrainTagAt(0, 0), 1, "a block D tile keeps terrain 1");
+        AssertEq(state.GetTerrainTagAt(1, 0), 7, "a block E tile reads the terrain table");
+        // Out-of-bounds coordinates use the first lower tile, like RPG_RT.
+        AssertEq(state.GetTerrainTagAt(9, 9), 1, "out-of-bounds falls back to the first lower tile");
+        AssertEq(state.GetTerrainTagAt(-1, -1), 1);
+
+        // A map without a lower layer cannot resolve a tile and stays default.
+        state.LowerLayer = null;
+        AssertEq(state.GetTerrainTagAt(0, 0), Rm2kChipset.DefaultTerrainTag);
+    }
+
     public void Test_AnimationSpeedMapsChipsetFlagToFrames()
     {
         // Game_Map::GetAnimationSpeed(): only "animated or not" is stored.

@@ -48,6 +48,39 @@ public sealed class GameSimulationState
             pChipId, FrameCount, ChipsetAnimationType, ChipsetAnimationSpeed);
     }
 
+    /// <summary>Chipset terrain table (162 entries) for the loaded map.</summary>
+    public int[] TerrainData { get; set; } = [];
+
+    /// <summary>Tile substitution for the loaded map; identity when unknown.</summary>
+    public Rm2kTileSubstitution? TileSubstitution { get; set; }
+
+    /// <summary>
+    /// Terrain tag of a map tile, following verified
+    /// <c>Game_Map::GetTerrainTag</c>: the lower layer decides. Coordinates
+    /// outside the map use the terrain of the first lower tile, as RPG_RT does.
+    /// </summary>
+    public int GetTerrainTagAt(int pX, int pY)
+    {
+        var lower = LowerLayer;
+        if (lower == null || lower.Length == 0)
+        {
+            return Rm2kChipset.DefaultTerrainTag;
+        }
+        var index = 0;
+        if (pX >= 0 && pY >= 0 && pX < MapWidth && pY < MapHeight)
+        {
+            index = pX + pY * MapWidth;
+        }
+        if (index >= lower.Length)
+        {
+            return Rm2kChipset.DefaultTerrainTag;
+        }
+        return Rm2kTileSubstitution.GetTerrainTag(lower[index], TerrainData, TileSubstitution);
+    }
+
+    /// <summary>Lower map layer tile ids, used for terrain and passability lookups.</summary>
+    public int[]? LowerLayer { get; set; }
+
     public bool Timer1Active { get; private set; }
     public bool Timer2Active { get; private set; }
     public int Timer1Seconds { get; private set; }
@@ -343,6 +376,7 @@ public sealed class GameSimulationState
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear(); PassabilityMasks.Clear();
+        TerrainData = []; TileSubstitution = null; LowerLayer = null;
         Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;

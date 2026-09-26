@@ -387,6 +387,33 @@ partial class TestRm2kRealFixtures : TestBase
 			AssertEq(stepAfterOneSlowStep, animationSpeed == 0 ? 1 : 2,
 				$"{relativePath} one chipset-speed step advances the autotile");
 
+			// liblcf ChunkChipset: terrain_data = 0x03, 162 shorts. RPG_RT drops an
+			// all-ones table, so an absent table is valid and means terrain 1.
+			if (entry.ContainsKey("terrain_data"))
+			{
+				var terrain = (int[])entry["terrain_data"];
+				AssertEq(terrain.Length, Rm2kChipset.TerrainDataEntries,
+					$"{relativePath} terrain table covers every chip");
+				foreach (var tag in terrain)
+				{
+					AssertTrue(tag >= 1, $"{relativePath} terrain tag {tag} is a valid id");
+				}
+				// Every lower tile of the map must resolve to a terrain tag.
+				var substitution = new Rm2kTileSubstitution(null, null);
+				var tags = new HashSet<int>();
+				foreach (var chipId in (int[])map.GetData()["lower_layer"])
+				{
+					tags.Add(Rm2kTileSubstitution.GetTerrainTag(chipId, terrain, substitution));
+				}
+				AssertTrue(tags.Count >= 1, $"{relativePath} map tiles resolve terrain tags");
+			}
+			else
+			{
+				AssertEq(Rm2kTileSubstitution.GetTerrainTag(Rm2kChipset.BlockD, null, null),
+					Rm2kChipset.DefaultTerrainTag,
+					$"{relativePath} without a terrain table every tile is the default terrain");
+			}
+
 			var lower = (int[])map.GetData()["lower_layer"];
 			var upper = (int[])map.GetData()["upper_layer"];
 			var masks = Rm2kChipset.BuildDirectionMasks(lower, upper, chipset.Value.lower, chipset.Value.upper);

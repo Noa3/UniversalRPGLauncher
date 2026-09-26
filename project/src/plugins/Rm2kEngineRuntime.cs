@@ -315,8 +315,34 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
     private byte[]? _chipsetLower;
     private byte[]? _chipsetUpper;
+    private int[]? _chipsetTerrain;
     private int _chipsetAnimationType = Rm2kChipset.AnimTypeReciprocating;
     private int _chipsetAnimationSpeed = 0;
+
+    /// <summary>
+    /// Reads the verified 162-entry terrain table. A chipset without a table is
+    /// normal: RPG_RT drops an all-ones table, and liblcf defaults it to terrain
+    /// 1, so an absent table resolves to the default terrain tag.
+    /// </summary>
+    private static int[]? ReadTerrainData(Godot.Collections.Dictionary pChipset)
+    {
+        if (!pChipset.TryGetValue("terrain_data", out var raw)
+            || raw.VariantType != Godot.Variant.Type.PackedInt32Array)
+        {
+            return null;
+        }
+        var values = raw.AsInt32Array();
+        if (values.Length != Rm2kChipset.TerrainDataEntries)
+        {
+            return null;
+        }
+        var result = new int[values.Length];
+        for (var index = 0; index < values.Length; index++)
+        {
+            result[index] = values[index];
+        }
+        return result;
+    }
 
     /// <summary>
     /// Reads the verified chipset data (liblcf <c>rpg::Chipset</c>) for the
@@ -337,6 +363,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         _chipsetLower = ReadPassabilityArray(chipset, "passable_data_lower", Rm2kChipset.PassabilityLowerEntries);
         _chipsetUpper = ReadPassabilityArray(chipset, "passable_data_upper", Rm2kChipset.PassabilityUpperEntries);
+        _chipsetTerrain = ReadTerrainData(chipset);
         if (TryReadInt(chipset, "animation_type", out var animationType))
         {
             _chipsetAnimationType = animationType != 0
@@ -479,6 +506,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         ReadChipsetData(DatabaseData, chipsetId);
         Simulation.ChipsetAnimationType = _chipsetAnimationType;
         Simulation.ChipsetAnimationSpeed = _chipsetAnimationSpeed;
+        Simulation.TerrainData = _chipsetTerrain ?? [];
+        Simulation.LowerLayer = lowerLayer;
         if (_chipsetLower != null && _chipsetUpper != null && lowerLayer != null && upperLayer != null)
         {
             // Verified Rm2kChipset rules: the upper layer decides, and only an

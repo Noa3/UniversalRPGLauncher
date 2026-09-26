@@ -50,6 +50,16 @@ public static class Rm2kChipset
     /// <summary>Upper passability table size (liblcf ChunkChipset::passable_data_upper).</summary>
     public const int PassabilityUpperEntries = 144;
 
+    /// <summary>Terrain table size (liblcf ChunkChipset::terrain_data, 162 shorts).</summary>
+    public const int TerrainDataEntries = 162;
+
+    /// <summary>
+    /// Terrain tag used when a chipset carries no terrain table. RPG_RT omits an
+    /// all-ones table and liblcf defaults every entry to 1, so an absent table
+    /// and a chip index the table does not cover both mean terrain 1.
+    /// </summary>
+    public const int DefaultTerrainTag = 1;
+
     // Passability flags (map_data.h namespace Passable).
     public const byte PassDown = 0x01;
     public const byte PassLeft = 0x02;
@@ -434,5 +444,28 @@ public sealed class Rm2kTileSubstitution
             return substituted < 0 ? chipIndex : substituted;
         }
         return chipIndex;
+    }
+
+    /// <summary>
+    /// Verified Game_Map::GetTerrainTag: the lower tile decides, its chip index
+    /// is resolved through the substitution, and the chipset terrain table maps
+    /// that index to a terrain tag. An absent table means every tile is terrain
+    /// 1 (the RPG_RT optimisation that drops an all-ones table), and an index the
+    /// table does not cover falls back to that same default.
+    /// </summary>
+    public static int GetTerrainTag(int pLowerRawId, int[]? pTerrainData, Rm2kTileSubstitution? pSubstitution)
+    {
+        if (pTerrainData == null || pTerrainData.Length == 0)
+        {
+            return Rm2kChipset.DefaultTerrainTag;
+        }
+        var chipIndex = pSubstitution == null
+            ? Rm2kChipset.ChipIdToIndex(pLowerRawId)
+            : pSubstitution.ResolveChipIndex(pLowerRawId);
+        if (chipIndex < 0 || chipIndex >= pTerrainData.Length)
+        {
+            return Rm2kChipset.DefaultTerrainTag;
+        }
+        return pTerrainData[chipIndex];
     }
 }

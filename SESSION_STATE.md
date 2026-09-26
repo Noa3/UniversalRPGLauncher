@@ -5,7 +5,15 @@
 
 ## Current card
 
-K-086, K-087 and K-088 are DONE: verified RM2K chipset passability drives real movement, autotile animation is exposed, and verified tile substitution is applied. K-089 (per-map terrain tags via `Game_Map::GetChipId`) is the next READY card.
+K-086 through K-089 are DONE: verified RM2K chipset passability drives real movement, autotile animation and tile substitution are applied, and per-map terrain tags are decoded and resolved. K-091 (counter tile action-trigger propagation) is the next READY card.
+
+**K-089 completed (2026-09-26)**
+- Verified: `terrain_data = 0x03` is 162 **shorts** (324 bytes), liblcf `int16_t`, all ones by default. RPG_RT omits an all-ones table and the Player returns terrain 1 for an empty table, so an absent table is normal data.
+- Verified: only the **lower** layer decides the terrain, the upper layer is never consulted, and the order is raw id -> `ChipIdToIndex` -> substitution in `[18, 162)` -> `terrain_data[chip_index]`. Out-of-bounds uses chip index 0.
+- Parser decodes `terrain_data` with a bounded length check per chipset entry (plus the section-level key for the first entry) and reports unverified lengths with an offset.
+- `Rm2kTileSubstitution.GetTerrainTag` implements the lookup and falls back to `DefaultTerrainTag` (1) for an absent table or an uncovered chip index, instead of reading out of bounds like the Player's `assert` permits.
+- `GameSimulationState` gained `TerrainData`, `LowerLayer`, `TileSubstitution`, `GetTerrainTagAt`; the runtime reads the table of the map's own chipset.
+- The pinned RM2000 fixture carries a real 162-entry terrain table with valid tag ids.
 
 **K-088 completed (2026-09-26)**
 - Card correction: the substitution tables are **not** LMT data. `lcf::rpg::MapInfo` has no such fields and `ChunkMapInfo` has no field ids for them. They live in `lcf::rpg::SaveMapInfo` (`lower_tiles`, `upper_tiles`, 144 identity entries), so they are save-file data. Reading them belongs with the open K-050 save-game work.
@@ -34,7 +42,7 @@ K-086, K-087 and K-088 are DONE: verified RM2K chipset passability drives real m
 
 ## Next action
 
-1. Start K-089: per-map terrain tags. Verify `Game_Map::GetChipId` (lower layer, chip index, then the block E substitution already implemented) against the LDB `terrain_data` array, whose liblcf field id is `ChunkChipset::terrain_data = 0x03` with 162 entries. Terrain tags feed event conditions and encounter rates, so this is the next step after passability.
+1. Start K-091: counter tile action-trigger propagation. Verified Player behaviour in `Game_Player::CheckEventTriggerThere` searches the action trigger on the tile in front of the player and continues over at most 3 counter tiles in the facing direction. Compare the current trigger evaluation before changing it, and reuse the K-088 substitution API for `Game_Map::IsCounter`.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -47,7 +55,7 @@ K-086, K-087 and K-088 are DONE: verified RM2K chipset passability drives real m
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 360 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 363 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|

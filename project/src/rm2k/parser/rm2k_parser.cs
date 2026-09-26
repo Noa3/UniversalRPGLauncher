@@ -724,11 +724,12 @@ public partial class Rm2kParser : RefCounted
 	}
 
 	/// <summary>
-	/// Copies the verified chipset passability bitflag arrays out of the chipset
-	/// section. The arrays belong to a single chipset entry, so they are stored
-	/// on the matching typed entry; the section-level keys are kept for the first
-	/// entry to preserve the existing contract. Lengths are bounded; unexpected
-	/// sizes are reported as unknown rather than reinterpreted.
+	/// Copies the verified chipset arrays out of the chipset section: the
+	/// passability bitflags (0x04, 0x05) and the terrain tags (0x03). The arrays
+	/// belong to a single chipset entry, so they are stored on the matching typed
+	/// entry; the section-level keys are kept for the first entry to preserve the
+	/// existing contract. Lengths are bounded; unexpected sizes are reported as
+	/// unknown rather than reinterpreted.
 	/// </summary>
 	private static void ReadChipsetPassability(
 		Godot.Collections.Dictionary pSection,
@@ -759,40 +760,50 @@ public partial class Rm2kParser : RefCounted
 				continue;
 			}
 			var fields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)chipset["fields"]);
-			foreach (var entry in new[]
+			foreach (var target in new[] { sectionTarget, entryTarget })
 			{
-				(FieldId: 0x04, Key: "passable_data_lower", Expected: 162),
-				(FieldId: 0x05, Key: "passable_data_upper", Expected: 144),
-			})
-			{
-				if (!fields.TryGetValue(entry.FieldId, out var rawField))
+				if (target == null)
 				{
 					continue;
 				}
-				var data = (byte[])((Godot.Collections.Dictionary)rawField)["data"];
-				if (data.Length != entry.Expected)
+				foreach (var entry in new[]
 				{
-					foreach (var target in new[] { sectionTarget, entryTarget })
+					(FieldId: 0x04, Key: "passable_data_lower", Expected: 162, Scale: 1),
+					(FieldId: 0x05, Key: "passable_data_upper", Expected: 144, Scale: 1),
+					// liblcf ChunkChipset: terrain_data is an array of 162 shorts, so
+					// the payload is twice as long as the entry count.
+					(FieldId: 0x03, Key: "terrain_data", Expected: 162, Scale: 2),
+				})
+				{
+					if (!fields.TryGetValue(entry.FieldId, out var rawField))
 					{
-						if (target == null)
-						{
-							continue;
-						}
+						continue;
+					}
+					var rawEntry = (Godot.Collections.Dictionary)rawField;
+					var data = (byte[])rawEntry["data"];
+					if (data.Length != entry.Expected * entry.Scale)
+					{
 						target[$"{entry.Key}_unverified_length"] = data.Length;
 						target[$"{entry.Key}_offset"] = pChunkOffset
-							+ (int)((Godot.Collections.Dictionary)rawField)["payload_offset"];
+							+ (int)rawEntry["payload_offset"];
+						continue;
 					}
-					continue;
-				}
-				var values = new int[data.Length];
-				for (var index = 0; index < data.Length; index++)
-				{
-					values[index] = data[index];
-				}
-				foreach (var target in new[] { sectionTarget, entryTarget })
-				{
-					if (target != null)
+					if (entry.Scale == 1)
 					{
+						var values = new int[data.Length];
+						for (var index = 0; index < data.Length; index++)
+						{
+							values[index] = data[index];
+						}
+						target[entry.Key] = values;
+					}
+					else
+					{
+						var values = new int[entry.Expected];
+						for (var index = 0; index < entry.Expected; index++)
+						{
+							values[index] = (short)((data[index * 2] << 8) | data[index * 2 + 1]);
+						}
 						target[entry.Key] = values;
 					}
 				}

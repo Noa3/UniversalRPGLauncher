@@ -71,7 +71,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-086 | 1 | DONE | Decode verified RM2K chipset passability arrays from the LDB chipset section | K-015 |
 | K-087 | 2 | DONE | Add verified RM2K autotile animation ticking (counter values blocked: no verified data source) | K-015 |
 | K-088 | 2 | DONE | Apply verified RM2K tile substitution tables (source: liblcf SaveMapInfo, not LMT) | K-086 |
-| K-089 | 2 | READY | Decode RM2K per-map terrain tags via verified `Game_Map::GetChipId` substitution | K-015 |
+| K-089 | 2 | DONE | Decode RM2K per-map terrain tags via verified `Game_Map::GetChipId` substitution | K-015 |
+| K-091 | 2 | READY | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -721,7 +722,40 @@ The card originally said "LMT map-info tile substitution tables". That was wrong
 - `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 360 tests passed`, exit `0`.
 - `test_rm2k_chipset.cs` pins the identity default, that substitution changes passability lookups, that only the verified ranges are remapped, that malformed tables fall back to identity, that out-of-range requests fail closed, and the `GetChipId` index-first order.
 
+### K-089 — RM2K per-map terrain tags
+
+**Status (2026-09-26) — DONE: terrain table decoded and resolved per map tile**
+
+**Verified (EasyRPG Player `src/game_map.cpp` `GetTerrainTag` / `GetChipId`, liblcf `ChunkChipset`)**
+- `terrain_data = 0x03`, an array of 162 **shorts** (324 bytes), `int16_t` in `rpg::Chipset`, defaulting to all ones.
+- RPG_RT omits an all-ones table, and the Player returns terrain 1 when the table is empty, so an absent table is normal data and not a decode failure.
+- The **lower** layer alone decides the terrain; the upper layer is never consulted.
+- Resolution order: raw id -> `ChipIdToIndex` -> substitution for indices in `[BLOCK_E_INDEX, NUM_LOWER_TILES)` -> `terrain_data[chip_index]`.
+- Out-of-bounds coordinates use chip index 0, i.e. the terrain of the first lower tile; on looping maps the coordinate wraps first.
+
+**Implemented**
+- Parser decodes `terrain_data` (0x03) with a bounded 162 x 2 byte length check, per chipset entry plus the section-level key for the first entry, and reports an unexpected length as `terrain_data_unverified_length` with its offset.
+- `Rm2kTileSubstitution.GetTerrainTag` implements the verified lookup, falling back to `Rm2kChipset.DefaultTerrainTag` (1) when the table is absent or does not cover the chip index, instead of reading out of bounds the way the Player's `assert` allows.
+- `GameSimulationState.TerrainData`, `LowerLayer`, `TileSubstitution` and `GetTerrainTagAt` expose it to the runtime and to event conditions.
+- `Rm2kEngineRuntime` reads the terrain table of the chipset the map actually uses.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 363 tests passed`, exit `0`.
+- `test_rm2k_chipset.cs` pins the chip-index mapping, the substitution effect on terrain, the absent and short table fallbacks, and the out-of-bounds behaviour through `GetTerrainTagAt`.
+- `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` verifies the real RM2000 chipset table has 162 entries with valid tag ids and that every lower tile of the map resolves a tag.
+- `TestPluginDetection` asserts the real runtime map resolves a valid terrain tag, including out of bounds.
+
+### K-091 — Counter tile action-trigger propagation
+
+**Status (2026-09-26) — READY: verification first**
+
+**Scope**
+- Verified Player behaviour in `Game_Player::CheckEventTriggerThere`: the action trigger is searched on the tile in front of the player and, when that tile is a counter tile, continues over at most 3 counter tiles in the facing direction. RPG_RT allows a maximum of 3 counter tiles.
+- Needs `Game_Map::IsCounter` (upper layer id `>= BLOCK_F`, `upper_tiles` substitution, `Counter` bit `0x40`), which is verified and can reuse the K-088 substitution API.
+
+**Unblock condition**
+- Read the current event trigger evaluation in `Rm2kEngineRuntime`/`Rm2kEventScheduler` and compare it against the Player before changing anything, and keep the counter tile loop bounded to 3 tiles.
+
 ## Agent maintenance rules
-- New defects found during a card become `P0`/`P1` bug cards when they threaten correctness/security; otherwise add them to backlog.
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

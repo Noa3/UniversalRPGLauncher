@@ -479,6 +479,12 @@ public partial class TestPluginDetection : TestBase
             "a fresh map starts on autotile frame zero");
         AssertEq(runtime.Simulation.GetChipAnimationStep(Rm2kChipset.BlockF), 0,
             "upper tiles never animate");
+        // The real map must resolve a terrain tag for its own tiles; an absent
+        // chipset table resolves to the liblcf default instead of failing.
+        AssertEq(runtime.Simulation.GetTerrainTagAt(runtime.Simulation.MapX, runtime.Simulation.MapY) >= 1,
+            true, "the real map resolves a valid terrain tag");
+        AssertEq(runtime.Simulation.GetTerrainTagAt(-1, -1) >= 1, true,
+            "out-of-bounds coordinates resolve a terrain tag");
         AssertTrue(runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassUp)
                 || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassDown)
                 || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassLeft)
