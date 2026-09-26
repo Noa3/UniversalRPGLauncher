@@ -79,7 +79,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-095 | 3 | DONE | Resolve verified chipset source rectangles for blocks C, E and F | K-087 |
 | K-096 | 3 | DONE | Build the verified block D autotile quarter table and block geometry | K-095 |
 | K-097 | 3 | DONE | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
-| K-098 | 3 | READY | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-097 |
+| K-098 | 3 | DONE | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-097 |
+| K-099 | 3 | READY | Compose a full map frame from chipset tiles, map layers and the z-order rule | K-098 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -919,13 +920,37 @@ The Player guards block C with `id >= BLOCK_C && id < BLOCK_D`, not with the end
 
 ### K-098 — Chipset bitmap decoding and blitting
 
-**Status (2026-09-26) — READY: blocked on a real fixture**
+**Status (2026-09-26) — DONE: the real pinned chipset decodes and blits**
+
+**Blocker resolved by research, not by invention**
+The card said this was blocked on a real `Chipset.png`. The pinned fixtures had none, but the fixtures come from the public `EasyRPG/TestGame` repository, which ships the chipset images. The right chipset was determined, not guessed: the map's `chipset_id` is `1` and that LDB entry's `chipset_name` is `World`, so `TestGame-2000/ChipSet/World.png` from the **same pinned commit** is the real chipset for the pinned LDB.
+
+The fixture README previously stated that no image is imported. That was true while the project only parsed LCF data; it is now updated with the reason, the pinned source URL and the SHA-256, and the image is a passive, never executed asset.
+
+**Verified (EasyRPG Player)**
+- `src/cache.cpp`, the `Material::Chipset` spec: directory `ChipSet`, loaded with `transparent` true, and 480 by 256 pixels.
+- `src/image_png.cpp`, `ReadPalettedData`: for a paletted PNG every colour is opaque except **palette index 0**, which becomes alpha 0.
+- The real fixture is an 8 bit paletted, non interlaced PNG of exactly 480 by 256 pixels, which independently confirms the `30 * 16` tile grid derived from the chipset formulas in K-095.
+
+**Implemented**
+- `Rm2kChipsetBitmap.TryParse`/`TryLoad`: bounded paletted PNG decoding, keeping the **palette index** rather than only the converted colour so the transparency rule survives. It refuses a wrong signature, a non 8 bit depth, a non paletted colour type, interlacing, oversized dimensions, a missing or oversized palette, missing image data and unknown scanline filters instead of reinterpreting them.
+- `TryBlitTile` and `TryBlitRectangle` implement the verified transparency rule: index 0 is left untouched so a background shows through, every other index is painted opaque.
+- `Rm2kPixelBuffer`, a Godot free RGBA buffer, so the blit stays deterministic and testable like the rest of the rendering code.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 400 tests passed`, exit `0`.
+- `test_rm2k_chipset_bitmap.cs` decodes the real fixture, checks its size against the derived tile grid, verifies that index 0 is present and that every used index is covered by the palette, checks that a blitted pixel is opaque exactly when its index is not 0, refuses rectangles outside the image, and pins the malformed input cases.
+- The strongest check: every chipset rectangle that K-095 through K-097 can produce for the real chipset, over 1000 of them, is blittable inside the real 480 by 256 image.
+
+### K-099 — Compose a full map frame
+
+**Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- Load the indexed `Chipset.png` of the chipset the map uses, convert the palette, and blit the rectangles from K-095 through K-097 into the renderer. All lower layer blocks now resolve to rectangles, so this slice is the last step before the map is visible.
+- Turn a parsed map into a pixel frame: for each tile, resolve the lower layer and upper layer chip ids, blit the autotile quarters or the direct chipset rectangle, and apply the z-order rule so a wall tile is drawn above the character and an "above" upper tile forms the top sublayer.
 
 **Unblock condition**
-- The pinned EasyRPG testgame fixtures contain no `Chipset.png`, so obtain a real RM2K/RTP chipset image and add it as a fixture first. Only then write the decoder; a decoder tested solely on a synthesized PNG must be labelled as such and must not be presented as fixture coverage.
+- The z-order rule is already verified in `CreateTileCacheAt`: for an upper tile the sublayer depends on the `Above` flag after the substitution, and for a lower tile on the `Wall` or `Above` flag of the resolved chip index, using the same chip index ranges as the passability lookup. Re-read it, then read how the two layers and the three sublayers are drawn, before implementing. Do not invent a draw order.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

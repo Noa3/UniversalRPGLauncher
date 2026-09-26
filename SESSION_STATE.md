@@ -5,7 +5,15 @@
 
 ## Current card
 
-K-086 through K-093 and K-095 through K-097 are DONE. K-098 (chipset bitmap + blitting) is the only open RM2K card and is blocked on a real `Chipset.png` fixture. K-094 (vehicles) stays open at lower priority.
+K-086 through K-093 and K-095 through K-098 are DONE. K-099 (compose a full map frame) is the next RM2K card; K-094 (vehicles) stays open at lower priority.
+
+**K-098 completed (2026-09-26)**
+- **Blocker solved by research**: the pinned fixtures come from the public `EasyRPG/TestGame` repo, which ships the chipset images. The right chipset was determined, not guessed: the map's `chipset_id` is `1` and that LDB entry's `chipset_name` is `World`, so `TestGame-2000/ChipSet/World.png` from the **same pinned commit** is the real chipset for the pinned LDB.
+- The fixture README said "no image is imported". That was true while the project only parsed LCF data; it is now updated with the reason, the pinned URL and the SHA-256. The image is passive and never executed.
+- Verified: `cache.cpp` `Material::Chipset` spec = directory `ChipSet`, `transparent` true, 480x256. `image_png.cpp` `ReadPalettedData` = palette index 0 is transparent, every other index opaque. The real file is 8 bit paletted, non interlaced, exactly 480x256, which independently confirms `Columns=30`/`Rows=16` from K-095.
+- New `Rm2kChipsetBitmap.TryParse`/`TryLoad` (bounded paletted PNG decoding, keeping the **palette index** so transparency survives) with `TryBlitTile`/`TryBlitRectangle` implementing the verified transparency rule, plus a Godot free `Rm2kPixelBuffer`.
+- The decoder refuses bad signature, non 8 bit depth, non paletted type, interlacing, oversized dimensions, missing/oversized palette, missing data and unknown scanline filters instead of reinterpreting them.
+- The strongest test: every rectangle K-095..K-097 can produce for the real chipset, over 1000 of them, is blittable inside the real image.
 
 **K-097 completed (2026-09-26)**
 - **Defect in K-096 found while reading the source**: `GenerateAutotiles` packs the quarter pairs with the last quarter on top and unpacks `x` first, so the **second** value of a pair is the chipset column and the **first** is the row. K-096 had it transposed. Block D code and anchor expectations are corrected. The K-096 test did not catch it because it verified the table, not the axis order — lesson: an axis assumption needs its own test, which now exists.
@@ -93,7 +101,7 @@ K-086 through K-093 and K-095 through K-097 are DONE. K-098 (chipset bitmap + bl
 
 ## Next action
 
-1. K-098 is the last RM2K visibility step and needs a real `Chipset.png` fixture. Ask the user for an RM2K or RTP chipset directory. Until then the only open work is K-094 (vehicles), which is lower priority per `AGENTS.md`.
+1. Start K-099: re-read `CreateTileCacheAt` in `tilemap_layer.cpp` for the z-order rule (upper sublayer from the `Above` flag after substitution, lower from `Wall`/`Above` on the resolved chip index) and how the two layers plus three sublayers are drawn. Do not invent a draw order.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -106,7 +114,7 @@ K-086 through K-093 and K-095 through K-097 are DONE. K-098 (chipset bitmap + bl
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 394 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 400 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
