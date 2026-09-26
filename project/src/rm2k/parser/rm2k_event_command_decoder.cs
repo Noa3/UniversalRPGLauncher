@@ -39,7 +39,10 @@ public static class Rm2kEventCommandDecoder
 
             var code = reader.ReadBer();
             var indent = reader.ReadBer();
-            if (reader.HasError()) return ReaderFailure(reader);
+            if (reader.HasError())
+            {
+                return ReaderFailure(reader);
+            }
             var stringLength = reader.ReadBer();
             if (reader.HasError() || stringLength < 0 || stringLength > MaxStringBytes)
             {
@@ -56,7 +59,10 @@ public static class Rm2kEventCommandDecoder
             for (var parameter = 0; parameter < parameterCount; parameter++)
             {
                 parameters.Add(reader.ReadBer());
-                if (reader.HasError()) return ReaderFailure(reader);
+                if (reader.HasError())
+                {
+                    return ReaderFailure(reader);
+                }
             }
             commands.Add(new Godot.Collections.Dictionary
             {

@@ -63,6 +63,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-061 | 2 | DONE | Compatibility report export for GitHub issues | K-060 |
 | K-070 | 3 | DONE | Faithful-vs-Enhanced profile and integer scaling controls | K-030 |
 | K-071 | 3 | DONE | Controller/touch remapping layer | K-020 |
+| K-081 | 0 | DONE | Decode real LMU event pages: fix struct-array field collection and verify liblcf IDs | K-013 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -530,6 +531,30 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - Fresh canonical validation: `TestEventInterpreter 47/47`; `All 296 tests passed`; build and `scripts/validate.sh` passed.
 - RGSS/XP/VX/Ace and MV/MZ remain detection/metadata-only; no foreign Ruby or JavaScript is executed.
 - Remaining boundary: chipset passability remains blocked until a verified LMU/Chipset field mapping and distinguishing fixtures exist.
+
+### K-081 — Real LMU event-page decoding
+
+**Status (2026-08-31) — DONE**
+
+**Problem**
+- `ParseStructArray` and `ReadStructFields` only materialized objects/fields when a `pCollectFields` flag was set. Nested `rpg::EventPage` arrays were read with that flag off, so `events[].pages` was always empty for real LMU files: the event interpreter, scheduler, and page-condition paths had never run against real data.
+- `EventInterpreter.End` was `0`; liblcf `lcf::rpg::Cmd` defines `END = 10`.
+- Page field ids carried unverified fallbacks (`0x09`/`0x08`/`0x06`, plus `0x0b` for the command list) that do not exist in liblcf.
+- The nested `EventPageCondition` struct was read as if it were already field-decoded, which threw `KeyNotFoundException` and faulted RM2K runtime initialization.
+
+**Fix**
+- Struct arrays and struct fields are always materialized; the collection flag was removed.
+- `EventInterpreter.End = 10` (verified liblcf).
+- Page ids limited to the verified set: condition `0x02`, move_frequency `0x20`, trigger `0x21`, layer `0x22`, move_route `0x29`, `event_commands_size` `0x33`, `event_commands` `0x34`.
+- Nested struct payloads are decoded through `ReadNestedStructFields` before dispatch.
+- An undecodable command vector is contained per page (`command_error` + `event_commands_bytes`) instead of failing the whole map.
+
+**Validation evidence (2026-08-31)**
+- Real fixtures now decode event pages: RM2000 `Map0001.lmu` 22 pages, RM2003 `Map0001.lmu` 38 pages; RM2000 decodes every command vector without error.
+- `event_commands_bytes` equals the declared `event_commands_size` on decoded pages.
+- One RM2003 page contains a 5-byte BER value above 31 bits; the page is contained with a diagnostic instead of guessing the encoding.
+- Regression coverage: `Test_RealMapEventPagesDecodeCommandCountsMatchingLiblcfSizes`, `Test_Rm2000RealMapPagesDecodeEveryCommandVector`, `Test_LiblcfEndCommandStopsInterpreterWithoutDiagnostic`.
+- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 300 tests passed`, exit `0`.
 
 ## Agent maintenance rules
 

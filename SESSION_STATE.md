@@ -1,6 +1,6 @@
 # UniversalRPG Autonomous Session State
 
-> Updated: 2026-08-26
+> Updated: 2026-08-31
 > Purpose: small durable checkpoint for Hermes/other autonomous agents.
 
 ## Current card
@@ -12,7 +12,7 @@ K-060, K-061, K-070, and K-071 are DONE. Compatibility profiles validate bounded
 
 ## Last verified baseline
 
-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: latest headless C# suite `284/284`, exit 0, .NET build clean. The Godot project now lives under `project/`; validate.sh handles both.
+Windows validation on 2026-08-31: `dotnet restore`, `dotnet build project/UniversalRPG.csproj --no-restore` (0 warnings, 0 errors), Godot import (`--headless --editor --quit`), and the headless C# runner at `All 300 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 ## Cross-engine QA pass (t_1b2292d4) — completed 2026-08-24
 
@@ -170,6 +170,18 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Regression coverage: `Test_ResetClearsMutableRuntimeCollections` in `TestGameSimulationState`.
 - Fresh canonical validation: `TestGameSimulationState 20/20`; `All 297 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` passed with 0 warnings and 0 errors; `scripts/validate.sh` passed.
 - The known non-fatal Godot `EditorSettings` headless diagnostic and intentional malformed-JSON fixture diagnostics remain unchanged.
+
+## Latest completed real LMU event-page decoding slice (2026-08-31)
+
+- Fixed a silent parser defect: `ParseStructArray`/`ReadStructFields` only materialized objects and fields when an internal collect flag was set, so nested `rpg::EventPage` arrays decoded to zero pages in every real LMU file. The event interpreter, scheduler, and page-condition paths had never executed against real data.
+- Struct arrays/fields are now always materialized; the collect flag was removed.
+- `EventInterpreter.End` corrected from `0` to the verified liblcf `END = 10`.
+- Page field ids reduced to the verified liblcf set (condition `0x02`, move_frequency `0x20`, trigger `0x21`, layer `0x22`, move_route `0x29`, `event_commands_size` `0x33`, `event_commands` `0x34`); unverified fallbacks `0x09`/`0x08`/`0x06`/`0x0b` were removed.
+- Nested `EventPageCondition` payloads are now decoded as struct fields; previously this threw `KeyNotFoundException` and faulted RM2K runtime initialization.
+- A command vector that cannot be decoded is contained per page (`command_error`, `event_commands_bytes`) so one bad page no longer makes the whole map unloadable. One RM2003 page carries a 5-byte BER value above 31 bits; the encoding is left undecoded rather than guessed.
+- Real-fixture coverage: RM2000 `Map0001.lmu` 22 pages, RM2003 38 pages; RM2000 decodes every command vector, and `event_commands_bytes` matches the declared `event_commands_size`.
+- Regression coverage: `Test_RealMapEventPagesDecodeCommandCountsMatchingLiblcfSizes`, `Test_Rm2000RealMapPagesDecodeEveryCommandVector`, `Test_LiblcfEndCommandStopsInterpreterWithoutDiagnostic`.
+- Fresh canonical validation: `All 300 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
 
 ## Next action
 

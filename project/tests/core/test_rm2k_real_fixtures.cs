@@ -134,6 +134,85 @@ partial class TestRm2kRealFixtures : TestBase
 			AssertTrue(actor.ContainsKey("unknown_fields"), pRelativePath + " actor unknown_fields key");
 		}
 	}
+	public void Test_RealMapEventPagesDecodeCommandCountsMatchingLiblcfSizes()
+	{
+		var verifiedPages = 0;
+		var containedErrors = 0;
+		foreach (var relativePath in new[] { "rm2000/Map0001.lmu", "rm2003/Map0001.lmu" })
+		{
+			var result = _parser.ParseMap(FixtureRoot.PathJoin(relativePath));
+			AssertTrue(result.IsSuccess(), DescribeError(result));
+			if (!result.IsSuccess())
+			{
+				return;
+			}
+
+			foreach (Godot.Collections.Dictionary mapEvent in (Godot.Collections.Array)result.GetData()["events"])
+			{
+				var pages = (Godot.Collections.Array)mapEvent["pages"];
+				AssertEq(pages.Count, mapEvent["page_count"].AsInt32(), relativePath + " event page_count");
+				foreach (Godot.Collections.Dictionary page in pages)
+				{
+					var commands = (Godot.Collections.Array)page["commands"];
+					if (!page["has_command_list"].AsBool())
+					{
+						AssertEq(commands.Count, 0, relativePath + " page without command list");
+						continue;
+					}
+
+					// A page must either decode fully or report a contained error with
+					// its raw payload size; command data is never dropped silently.
+					var commandError = page["command_error"].AsString();
+					if (commandError.Length > 0)
+					{
+						AssertTrue(page["event_commands_bytes"].AsInt32() > 0,
+							relativePath + " contained command error keeps payload size");
+						containedErrors++;
+						continue;
+					}
+
+					AssertTrue(commands.Count > 0, relativePath + " page with command list has commands");
+					var declaredSize = page["event_commands_size"].AsInt32();
+					if (declaredSize >= 0)
+					{
+						AssertTrue(page["event_commands_bytes"].AsInt32() == declaredSize,
+							$"{relativePath} bytes={page["event_commands_bytes"].AsInt32()} declared={declaredSize}");
+					}
+					verifiedPages++;
+				}
+			}
+		}
+
+		AssertTrue(verifiedPages > 0, "real fixtures expose decoded event command lists");
+		AssertTrue(containedErrors < verifiedPages, "most real pages decode without contained errors");
+	}
+
+	public void Test_Rm2000RealMapPagesDecodeEveryCommandVector()
+	{
+		var result = _parser.ParseMap(FixtureRoot.PathJoin("rm2000/Map0001.lmu"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+
+		var commandPages = 0;
+		foreach (Godot.Collections.Dictionary mapEvent in (Godot.Collections.Array)result.GetData()["events"])
+		{
+			foreach (Godot.Collections.Dictionary page in (Godot.Collections.Array)mapEvent["pages"])
+			{
+				if (!page["has_command_list"].AsBool())
+				{
+					continue;
+				}
+				commandPages++;
+				AssertEq(page["command_error"].AsString(), "",
+					"RM2000 page command vector decodes without error");
+			}
+		}
+
+		AssertTrue(commandPages > 0, "RM2000 fixture has pages with command lists");
+	}
 
 	private static string DescribeError(Rm2kParser.ParseResult pResult)
 	{

@@ -219,7 +219,7 @@ public partial class TestEventInterpreter : TestBase
 
 	public void Test_ConstantValuesMatchVerifiedLiblcfCodes()
 	{
-		AssertEq(EventInterpreter.End, 0);
+		AssertEq(EventInterpreter.End, 10);
 		AssertEq(EventInterpreter.ShowMessage, 10110);
 		AssertEq(EventInterpreter.ShowChoice, 10140);
 		AssertEq(EventInterpreter.InputNumber, 10150);
@@ -245,6 +245,42 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(EventInterpreter.EndBranch, 22011);
 		AssertEq(EventInterpreter.EndLoop, 22210);
 		AssertEq(EventInterpreter.Comment2, 22410);
+	}
+
+	public void Test_LiblcfEndCommandStopsInterpreterWithoutDiagnostic()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new(EventInterpreter.ShowMessage)
+			{
+				Text = "before end",
+			},
+			new(EventInterpreter.End),
+			new(EventInterpreter.ShowMessage)
+			{
+				Text = "after end",
+			},
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		var frames = 0;
+		var unsupported = 0;
+		while (interpreter.ExecuteFrame() && frames < 10)
+		{
+			frames++;
+			foreach (var diagnostic in state.Diagnostics)
+			{
+				if (diagnostic.Contains("Unsupported"))
+				{
+					unsupported++;
+				}
+			}
+		}
+
+		AssertFalse(interpreter.IsRunning, "liblcf END command stops the interpreter");
+		AssertEq(unsupported, 0, "END command is not reported as unsupported");
+		AssertEq(interpreter.CurrentCommandIndex, 1, "interpreter stopped on the END command");
 	}
 
 	public void Test_ShowMessageRecordedWithContinuationLines()

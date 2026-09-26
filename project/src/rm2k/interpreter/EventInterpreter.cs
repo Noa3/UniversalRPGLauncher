@@ -33,7 +33,7 @@ public sealed class EventInterpreter
 	public const int ActorIdVariable = 1;
 
 	// Verified RM2K/2003 event command codes (liblcf lcf::rpg::Cmd).
-	public const int End = 0;
+	public const int End = 10;
 	public const int ShowMessage = 10110;
 	public const int ShowChoice = 10140;
 	public const int InputNumber = 10150;

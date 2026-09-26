@@ -401,7 +401,7 @@ public partial class Rm2kParser : RefCounted
 			if (Array.IndexOf(LdbArraySections, id) >= 0)
 			{
 				var typed = id == 0x0b || id == 0x17 || id == 0x18 || LdbScalarFieldNames.ContainsKey(id);
-				var arrayResult = ParseStructArray((byte[])chunk["data"], typed);
+				var arrayResult = ParseStructArray((byte[])chunk["data"]);
 				if (!arrayResult.Success)
 				{
 					return Failure($"Invalid {sectionName} section: {arrayResult.Error!.Message}",
@@ -548,7 +548,7 @@ public partial class Rm2kParser : RefCounted
 	private static ParseResult DecodeLdbBattleCommands(byte[] pData)
 	{
 		var reader = new LcfBinaryReader(pData);
-		var fieldsResult = ReadStructFields(reader, true);
+		var fieldsResult = ReadStructFields(reader);
 		if (!fieldsResult.Success)
 		{
 			return fieldsResult;
@@ -824,7 +824,7 @@ public partial class Rm2kParser : RefCounted
 		if (fields.TryGetValue(0x51, out var eventChunk))
 		{
 			var eventChunkData = (Godot.Collections.Dictionary)eventChunk;
-			var eventArray = ParseStructArray((byte[])eventChunkData["data"], true);
+			var eventArray = ParseStructArray((byte[])eventChunkData["data"]);
 			if (!eventArray.Success)
 			{
 				return Failure($"Invalid map events: {eventArray.Error!.Message}",
@@ -843,7 +843,7 @@ public partial class Rm2kParser : RefCounted
 				if (eventFields.TryGetValue(0x05, out var pageChunk))
 				{
 					var pageChunkData = (Godot.Collections.Dictionary)pageChunk;
-					var pages = ParseStructArray((byte[])pageChunkData["data"], false);
+					var pages = ParseStructArray((byte[])pageChunkData["data"]);
 					if (!pages.Success)
 					{
 						return Failure($"Invalid event pages: {pages.Error!.Message}", (int)eventChunkData["payload_offset"]);
@@ -854,54 +854,80 @@ public partial class Rm2kParser : RefCounted
 					foreach (var pageObj in (Godot.Collections.Array<Godot.Collections.Dictionary>)pages.Data["objects"])
 					{
 						var pageFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)pageObj["fields"]);
+						// liblcf LMU_Reader::ChunkEventPage: trigger 0x21, layer 0x22,
+						// move_frequency 0x20, condition 0x02, move_route 0x29,
+						// event_commands 0x34. No other ids are verified.
 						var triggerResult = IntegerFromFields(pageFields, 0x21, 0);
-						if (!triggerResult.Success) triggerResult = IntegerFromFields(pageFields, 0x09, 0);
 						var priorityResult = IntegerFromFields(pageFields, 0x22, 0);
-						if (!priorityResult.Success) priorityResult = IntegerFromFields(pageFields, 0x08, 0);
 						var freqResult = IntegerFromFields(pageFields, 0x20, 0);
-						if (!freqResult.Success) freqResult = IntegerFromFields(pageFields, 0x06, 0);
 
 						if (!triggerResult.Success || !priorityResult.Success || !freqResult.Success)
 						{
 							return Failure($"Invalid page metadata", (int)pageChunkData["payload_offset"]);
 						}
 
-						var conditionData = new Godot.Collections.Dictionary();
-						if (pageFields.TryGetValue(0x02, out var conditionChunk))
+					var conditionData = new Godot.Collections.Dictionary();
+					if (pageFields.TryGetValue(0x02, out var conditionChunk))
+					{
+						// Nested struct chunks keep their payload raw; decode it as a
+						// field sequence before dispatching to the condition decoder.
+						var conditionFieldsResult = ReadNestedStructFields((Godot.Collections.Dictionary)conditionChunk);
+						if (!conditionFieldsResult.Success)
 						{
-							var conditionFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)((Godot.Collections.Dictionary)conditionChunk)["fields"]);
-							var conditionResult = Rm2kEventPageConditionDecoder.Decode(conditionFields);
-							if (!conditionResult.Success) return conditionResult;
-							conditionData = conditionResult.Data;
+							return Failure($"Invalid event page condition: {conditionFieldsResult.Error!.Message}",
+								(int)((Godot.Collections.Dictionary)conditionChunk)["payload_offset"]);
 						}
+						var conditionResult = Rm2kEventPageConditionDecoder.Decode(
+							(Godot.Collections.Dictionary)conditionFieldsResult.Data["fields"]);
+						if (!conditionResult.Success) return conditionResult;
+						conditionData = conditionResult.Data;
+					}
 
-						var hasMoveList = pageFields.ContainsKey(0x29);
-						var commandChunk = pageFields.ContainsKey(0x34)
-							? (Godot.Collections.Dictionary)pageFields[0x34]
-							: pageFields.ContainsKey(0x0b) ? (Godot.Collections.Dictionary)pageFields[0x0b] : null;
-						var hasList = commandChunk != null;
-						Godot.Collections.Array<Godot.Collections.Dictionary> commands = new();
-						if (hasList)
+					var hasMoveList = pageFields.ContainsKey(0x29);
+					var hasList = pageFields.ContainsKey(0x34);
+					var commandSizeResult = IntegerFromFields(pageFields, 0x33, -1);
+					if (!commandSizeResult.Success)
+					{
+						return Failure($"Invalid event command size: {commandSizeResult.Error!.Message}",
+							(int)pageChunkData["payload_offset"]);
+					}
+					Godot.Collections.Array<Godot.Collections.Dictionary> commands = new();
+					string commandError = "";
+					int commandBytes = 0;
+					if (hasList)
+					{
+						var pg = (Godot.Collections.Dictionary)pageFields[0x34];
+						var rawCommands = (byte[])pg["data"];
+						commandBytes = rawCommands.Length;
+						var commandResult = Rm2kEventCommandDecoder.Decode(rawCommands);
+						if (commandResult.Success)
 						{
-							var pg = commandChunk!;
-							var commandResult = Rm2kEventCommandDecoder.Decode((byte[])pg["data"]);
-							if (!commandResult.Success)
-							{
-								return Failure($"Invalid event command list: {commandResult.Error!.Message}", (int)pg["payload_offset"] + Math.Max(commandResult.Error.Offset, 0));
-							}
 							commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)commandResult.Data["commands"];
 						}
-
-						pageList.Add(new Godot.Collections.Dictionary
+						else
 						{
-							{ "trigger", (int)triggerResult.Data["value"] },
-							{ "priority", (int)priorityResult.Data["value"] },
-							{ "move_frequency", (int)freqResult.Data["value"] },
-							{ "conditions", conditionData },
-							{ "has_move_list", hasMoveList },
-							{ "has_command_list", hasList },
-							{ "commands", commands },
-						});
+							// Contain the failure to this page: an undecodable command
+							// vector must not make the whole map unloadable. The raw
+							// payload stays available for diagnostics.
+							commandError = commandResult.Error!.Describe();
+						}
+					}
+
+					pageList.Add(new Godot.Collections.Dictionary
+					{
+						{ "trigger", (int)triggerResult.Data["value"] },
+						{ "priority", (int)priorityResult.Data["value"] },
+						{ "move_frequency", (int)freqResult.Data["value"] },
+						{ "conditions", conditionData },
+						{ "has_move_list", hasMoveList },
+						{ "has_command_list", hasList },
+						// liblcf ChunkEventPage::event_commands_size (0x33) is the declared
+						// payload size of the command vector; -1 marks pages that omit it.
+						{ "event_commands_size", (int)commandSizeResult.Data["value"] },
+						{ "event_commands_bytes", commandBytes },
+						{ "command_error", commandError },
+						{ "commands", commands },
+					});
 					}
 					events.Add(new Godot.Collections.Dictionary
 					{
@@ -1016,7 +1042,7 @@ public partial class Rm2kParser : RefCounted
 			{
 				return ReaderFailure(reader);
 			}
-			var fieldsResult = ReadStructFields(reader, true);
+			var fieldsResult = ReadStructFields(reader);
 			if (!fieldsResult.Success)
 			{
 				return Failure($"Invalid LMT map {index}: {fieldsResult.Error!.Message}", fieldsResult.Error.Offset);
@@ -1061,7 +1087,7 @@ public partial class Rm2kParser : RefCounted
 		{
 			return ReaderFailure(reader);
 		}
-		var startResult = ReadStructFields(reader, true);
+		var startResult = ReadStructFields(reader);
 		if (!startResult.Success)
 		{
 			return Failure($"Invalid LMT start data: {startResult.Error!.Message}", startResult.Error.Offset);
@@ -1168,7 +1194,7 @@ public partial class Rm2kParser : RefCounted
 		});
 	}
 
-	private static ParseResult ParseStructArray(byte[] pData, bool pCollectFields)
+	private static ParseResult ParseStructArray(byte[] pData)
 	{
 		// RM2K/2003 stores some empty sections as a zero-length LCF payload rather
 		// than a BER-encoded count of zero. Both forms represent an empty array.
@@ -1198,19 +1224,18 @@ public partial class Rm2kParser : RefCounted
 			{
 				return ReaderFailure(reader);
 			}
-			var fieldsResult = ReadStructFields(reader, pCollectFields);
+			var fieldsResult = ReadStructFields(reader);
 			if (!fieldsResult.Success)
 			{
 				return fieldsResult;
 			}
-			if (pCollectFields)
+			// Objects and their fields are always materialized: nested arrays such as
+			// rpg::EventPage lists are decoded by the caller from the same structure.
+			objects.Add(new Godot.Collections.Dictionary
 			{
-				objects.Add(new Godot.Collections.Dictionary
-				{
-					{ "id", objectId },
-					{ "fields", fieldsResult.Data["fields"] },
-				});
-			}
+				{ "id", objectId },
+				{ "fields", fieldsResult.Data["fields"] },
+			});
 		}
 		if (!reader.IsEof())
 		{
@@ -1383,7 +1408,7 @@ public partial class Rm2kParser : RefCounted
 		return new ParseResult(true, null, new Godot.Collections.Dictionary());
 	}
 
-	private static ParseResult ReadStructFields(LcfBinaryReader pReader, bool pCollect)
+	private static ParseResult ReadStructFields(LcfBinaryReader pReader)
 	{
 		var fields = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var fieldCount = 0;
@@ -1402,13 +1427,24 @@ public partial class Rm2kParser : RefCounted
 			{
 				return new ParseResult(true, null, new Godot.Collections.Dictionary { { "fields", fields } });
 			}
-			if (pCollect)
-			{
-				fields.Add(field);
-			}
+			fields.Add(field);
 			fieldCount += 1;
 		}
 		return Failure("Structure is missing terminator", pReader.GetPosition());
+	}
+
+	private static ParseResult ReadNestedStructFields(Godot.Collections.Dictionary pChunk)
+	{
+		var data = (byte[])pChunk["data"];
+		if (data.Length == 0)
+		{
+			return new ParseResult(true, null, new Godot.Collections.Dictionary
+			{
+				{ "fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+			});
+		}
+		var reader = new LcfBinaryReader(data);
+		return ReadStructFields(reader);
 	}
 
 	private static Godot.Collections.Dictionary ChunksById(Godot.Collections.Array<Godot.Collections.Dictionary> pChunks)
