@@ -76,6 +76,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-092 | 2 | DONE | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
 | K-093 | 3 | DONE | Route the Godot host input through the verified turn order instead of ad-hoc triggers | K-092 |
 | K-094 | 2 | READY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
+| K-095 | 3 | DONE | Resolve verified chipset source rectangles for blocks C, E and F | K-087 |
+| K-096 | 3 | READY | Build the verified autotile cache for blocks A, B and D and decode the chipset bitmap | K-095 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -836,6 +838,43 @@ The card claimed "`Rm2kInputMapper` is unreferenced and nothing forwards input".
 
 **Unblock condition**
 - Read `Game_Player::GetOnOffVehicle`, `GetOffVehicle` and `GetOnVehicle` plus `Game_Vehicle` for the exact conditions, and verify the vehicle sprites and LMU fields in liblcf, before writing any vehicle code. Do not approximate with the `Boat`/`Ship`/`Airship` terrain booleans already present in the terrain data.
+
+### K-095 — Chipset source rectangles for blocks C, E and F
+
+**Status (2026-09-26) — DONE: verified chipset rectangles resolved, no pixels yet**
+
+**Why this slice**
+`VirtualFramebuffer` deliberately stores tile ids only, so nothing is drawn yet. The verified `Rm2kChipset` work from K-086 to K-089 produced the tile-id resolution the renderer needs. This slice resolves a tile id to the chipset rectangle it is blitted from, which is the last step before real blitting, and it is fully verifiable without any graphics dependency.
+
+**Verified (EasyRPG Player `src/tilemap_layer.cpp`, `Draw`)**
+- Block C is blitted straight from the chipset: `col = 3 + (id - BLOCK_C) / 50`, `row = 4 + animation_step_c`. `BLOCK_C_TILES` is 3, so block C occupies columns 3 to 5 and rows 4 to 7.
+- Block E applies the substitution table first (`id = substitutions[tile.ID - BLOCK_E]`), then `col = 12 + id % 6, row = id / 6` for `id < 96` and `col = 18 + (id - 96) % 6, row = (id - 96) / 6` afterwards.
+- Block F applies the substitution table first (`id = substitutions[tile.ID - BLOCK_F]`), then `col = 18 + id % 6, row = 8 + id / 6` for `id < 48` and `col = 24 + (id - 48) % 6, row = (id - 48) / 6` afterwards.
+- Blocks A, B and D are **not** blitted from the chipset: they come from the generated caches `autotiles_ab_screen` and `autotiles_d_screen`, so this slice refuses them instead of guessing.
+- The formulas require at least 30 columns and 16 rows of 16 pixel tiles, which follows from the largest computed column (24 + 5) and row ((143 - 48) / 6).
+
+**Range detail worth keeping**
+The Player guards block C with `id >= BLOCK_C && id < BLOCK_D`, not with the end of block C, so ids between 3150 and 3999 still resolve. Its passability lookup uses the same range. `Rm2kChipsetSource` keeps that on purpose so the renderer and the simulation always resolve a tile id identically; it is documented so it is not "fixed" later.
+
+**Implemented**
+- New `Rm2kChipsetSource.TryResolve` with `ChipsetRect`, plus an identity-substitution overload and `Columns`/`Rows` bounds. Unknown ids, the autotile cache blocks and unresolvable substitutions return false so callers fail closed.
+
+**Not implemented**
+- No bitmap decoding and no blitting. The pinned fixtures contain no `Chipset.png`, so there is nothing real to decode yet.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 381 tests passed`, exit `0`.
+- `test_rm2k_chipset_source.cs` pins the three formulas including the `< BLOCK_D` range detail, the substitution effect on blocks E and F, the block C cycle over several chipset settings, the fail-closed set, and that every resolved rectangle stays inside the 30 by 16 chipset grid.
+
+### K-096 — Autotile cache and chipset bitmap
+
+**Status (2026-09-26) — READY: verification first**
+
+**Scope**
+- Build the `autotiles_ab` and `autotiles_d` caches the Player generates in `GenerateAutotileAB`/`GenerateAutotileD` so blocks A, B and D can be resolved too, and decode the indexed `Chipset.png` so the rectangles from K-095 can actually be blitted.
+
+**Unblock condition**
+- Read `TilemapLayer::GenerateAutotileAB`/`GenerateAutotileD`/`CreateTileCache` for the exact quarter selection and block tables, and read the Player's indexed PNG loading before writing a decoder. The pinned fixtures have no `Chipset.png`, so obtain a real chipset image or add one as a fixture first; a decoder without a real image can only be tested on a synthesized file, which must be labelled as such.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

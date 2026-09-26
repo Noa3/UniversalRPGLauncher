@@ -5,7 +5,15 @@
 
 ## Current card
 
-K-086 through K-093 are DONE: a running RM2K game now moves and triggers events through the verified turn order. K-094 (vehicles for the action-event order) is the next READY card.
+K-086 through K-093 and K-095 are DONE. K-096 (autotile cache + chipset bitmap) and K-094 (vehicles) are the open cards; K-096 is the higher priority one because it is what makes the map visible.
+
+**K-095 completed (2026-09-26)**
+- Verified in `tilemap_layer.cpp` (Draw): only blocks **C, E and F** are blitted straight from the chipset bitmap. Blocks A, B and D come from the generated caches `autotiles_ab_screen`/`autotiles_d_screen` and are refused instead of guessed.
+- Formulas: block C `col = 3 + (id-3000)/50`, `row = 4 + animation_step_c` (columns 3-5, rows 4-7, because `BLOCK_C_TILES` is 3). Block E applies `lower_tiles` first, then `col = 12 + id%6, row = id/6` for `id < 96` else `col = 18 + (id-96)%6, row = (id-96)/6`. Block F applies `upper_tiles` first, then `col = 18 + id%6, row = 8 + id/6` for `id < 48` else `col = 24 + (id-48)%6, row = (id-48)/6`.
+- The formulas need at least 30 x 16 tiles of 16 px, derived from the largest column (24+5) and row ((143-48)/6).
+- Range detail kept on purpose and documented: the Player guards block C with `< BLOCK_D`, not with the end of block C, so 3150..3999 still resolve. Its passability lookup uses the same range, so renderer and simulation must agree.
+- New `Rm2kChipsetSource.TryResolve` with `ChipsetRect`, an identity overload, and `Columns`/`Rows` bounds. Unknown ids and unresolvable substitutions fail closed.
+- Still no pixels: `VirtualFramebuffer` stores tile ids only, and the pinned fixtures contain no `Chipset.png`.
 
 **K-093 completed (2026-09-26)**
 - Card correction: the host was **already** wired. `Main.cs` constructs `Rm2kInputMapper`, calls `SetTouchViewport` in `_Ready`, and handles `_UnhandledInput` with the verified key edge rules. The real defect was narrower: the host had an input path that bypassed everything K-091/K-092 verified.
@@ -67,7 +75,7 @@ K-086 through K-093 are DONE: a running RM2K game now moves and triggers events 
 
 ## Next action
 
-1. Start K-094 (vehicles) only if it is wanted: it gates the action-event order, but it needs the verified `GetOnOffVehicle`/`GetOnVehicle`/`GetOffVehicle` logic and the LMU/LDB vehicle data first. Otherwise prefer renderer/event-command coverage, which is higher priority per `AGENTS.md`.
+1. Start K-096: read `GenerateAutotileAB`/`GenerateAutotileD`/`CreateTileCache` in `tilemap_layer.cpp` for the exact quarter selection, and the Player indexed PNG loading. Get a real `Chipset.png` fixture first: the pinned testgame has none, so a decoder could only be tested on a synthesized file and must be labelled as such.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -80,7 +88,7 @@ K-086 through K-093 are DONE: a running RM2K game now moves and triggers events 
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 375 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 381 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
