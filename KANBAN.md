@@ -72,7 +72,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-087 | 2 | DONE | Add verified RM2K autotile animation ticking (counter values blocked: no verified data source) | K-015 |
 | K-088 | 2 | DONE | Apply verified RM2K tile substitution tables (source: liblcf SaveMapInfo, not LMT) | K-086 |
 | K-089 | 2 | DONE | Decode RM2K per-map terrain tags via verified `Game_Map::GetChipId` substitution | K-015 |
-| K-091 | 2 | READY | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
+| K-091 | 2 | DONE | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
+| K-092 | 2 | READY | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -747,14 +748,41 @@ The card originally said "LMT map-info tile substitution tables". That was wrong
 
 ### K-091 — Counter tile action-trigger propagation
 
+**Status (2026-09-26) — DONE: verified propagation over at most three counter tiles**
+
+**Verified (EasyRPG Player `src/game_player.cpp`, `src/game_map.cpp`, liblcf)**
+- `Game_Map::IsCounter`: the upper layer must hold a tile `>= BLOCK_F`, the id runs through `upper_tiles`, and the resolved entry must carry `Passable::Counter` (`0x40`).
+- `Game_Map::XwithDirection` / `YwithDirection`: the tile in front, with the looping map wrap applied.
+- `Game_Player::CheckEventTriggerThere` (action): check the tile in front; then while no action event was found and at most three times, if the current tile is a counter tile, step one tile further in the facing direction and check again. RPG_RT allows a maximum of three counter tiles, so four in a row stop the search.
+- Layer rules differ by position and are easy to get backwards: events **in front** of the player must have `Layers_same` (`1`), events **on the player's own tile** must **not** have it.
+- The walking case evaluates only `Trigger_touched` and `Trigger_collision` on the tile in front and does **not** walk counter tiles.
+- liblcf `LMU_Reader::ChunkEventPage`: `trigger = 0x21`, `layer = 0x22`; `rpg::EventPage::Layers` is `below = 0`, `same = 1`, `above = 2`.
+
+**Defect found and fixed**
+- The LMU field `0x22` was decoded and stored under the name `priority`. liblcf has no `priority` field: `0x22` is `layer`. The name was wrong and the value was unusable, so the layer rules could not be implemented. It is now `layer`, carried into `Rm2kMap.EventPage.Layer`.
+
+**Implemented**
+- `Rm2kChipset.IsCounterTile` (upper id, substitution, counter flag, fail closed).
+- `GameSimulationState.UpperLayer`, `UpperPassability`, `IsCounterAt`, `FrontTile` and the looping `Wrap` helper.
+- `Rm2kEventScheduler.TriggerActionFacing`, `TriggerActionHere` and `TriggerTouchOrCollisionFacing` implement the three verified cases, with `Rm2kTriggerLayerRule` for the explicit same/not-same decision and `MaxCounterTiles = 3`.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 369 tests passed`, exit `0`.
+- `test_event_interpreter.cs` pins the reachable event behind a three tile chain, the stop behind a four tile chain, the layer rules for front versus own tile, and that touch/collision do not walk counter tiles.
+- `test_rm2k_chipset.cs` pins `IsCounterTile` including the substitution and the fail-closed cases, and `FrontTile` including the map wrap.
+- `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` verifies both real fixtures expose a valid `layer` and `trigger` on every event page.
+
+### K-092 — Player input drives movement and triggers
+
 **Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- Verified Player behaviour in `Game_Player::CheckEventTriggerThere`: the action trigger is searched on the tile in front of the player and, when that tile is a counter tile, continues over at most 3 counter tiles in the facing direction. RPG_RT allows a maximum of 3 counter tiles.
-- Needs `Game_Map::IsCounter` (upper layer id `>= BLOCK_F`, `upper_tiles` substitution, `Counter` bit `0x40`), which is verified and can reuse the K-088 substitution API.
+- Nothing in the runtime currently calls the trigger API: `Rm2kEventScheduler` only runs auto-start and parallel pages, so `TriggerActionFacing` and friends are implemented but not reachable.
+- Wire verified player input to `GameSimulationState.TryMove` and to the trigger cases, matching `Game_Player::Update` order: on a successful step, touched/collision on the tile in front; when stopped and the decision key is pressed, `GetOnOffVehicle` first and the action triggers only when no vehicle was toggled.
+- The RM2K input mapper already handles keyboard, joypad and bounded touch input; this card is about the runtime consuming it.
 
 **Unblock condition**
-- Read the current event trigger evaluation in `Rm2kEngineRuntime`/`Rm2kEventScheduler` and compare it against the Player before changing anything, and keep the counter tile loop bounded to 3 tiles.
+- Read `Game_Player::Update` (`game_player.cpp`) and `Game_Player::CheckActionEvent` for the exact ordering and the vehicle guard, and check whether the existing input mapper exposes a direction plus a decision edge, before wiring anything.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

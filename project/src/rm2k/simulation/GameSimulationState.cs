@@ -81,6 +81,66 @@ public sealed class GameSimulationState
     /// <summary>Lower map layer tile ids, used for terrain and passability lookups.</summary>
     public int[]? LowerLayer { get; set; }
 
+    /// <summary>Upper map layer tile ids, used for counter tile lookups.</summary>
+    public int[]? UpperLayer { get; set; }
+
+    /// <summary>Upper passability table of the map's chipset, when verified.</summary>
+    public byte[]? UpperPassability { get; set; }
+
+    /// <summary>
+    /// Verified Game_Map::IsCounter for a map tile: an upper tile that resolves
+    /// to a chipset entry carrying the counter flag.
+    /// </summary>
+    public bool IsCounterAt(int pX, int pY)
+    {
+        var upper = UpperLayer;
+        if (upper == null || MapWidth <= 0)
+        {
+            return false;
+        }
+        var (x, y) = Wrap(pX, pY);
+        var index = x + y * MapWidth;
+        if (index < 0 || index >= upper.Length)
+        {
+            return false;
+        }
+        return Rm2kChipset.IsCounterTile(upper[index], UpperPassability, TileSubstitution);
+    }
+
+    /// <summary>
+    /// Verified Game_Map::XwithDirection/YwithDirection: the tile in front of
+    /// the given position, with the looping map wrap applied.
+    /// </summary>
+    public (int X, int Y) FrontTile(int pX, int pY, byte pDirection)
+    {
+        var x = pX;
+        var y = pY;
+        switch (pDirection)
+        {
+            case 2: y++; break;
+            case 4: x--; break;
+            case 6: x++; break;
+            case 8: y--; break;
+        }
+        return Wrap(x, y);
+    }
+
+    /// <summary>Wraps a coordinate onto a looping map, like Game_Map::RoundX/RoundY.</summary>
+    private (int X, int Y) Wrap(int pX, int pY)
+    {
+        var x = pX;
+        var y = pY;
+        if (MapWidth > 0)
+        {
+            x = ((x % MapWidth) + MapWidth) % MapWidth;
+        }
+        if (MapHeight > 0)
+        {
+            y = ((y % MapHeight) + MapHeight) % MapHeight;
+        }
+        return (x, y);
+    }
+
     public bool Timer1Active { get; private set; }
     public bool Timer2Active { get; private set; }
     public int Timer1Seconds { get; private set; }
@@ -377,6 +437,7 @@ public sealed class GameSimulationState
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear(); PassabilityMasks.Clear();
         TerrainData = []; TileSubstitution = null; LowerLayer = null;
+        UpperLayer = null; UpperPassability = null;
         Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;

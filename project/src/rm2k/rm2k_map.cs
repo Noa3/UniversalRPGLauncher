@@ -43,6 +43,9 @@ public class Rm2kMap
 		// liblcf EventPage::Trigger: 0=action, 1=touched, 2=collision, 3=auto_start, 4=parallel.
 		public int Trigger;
 
+		// liblcf EventPage::Layers (LMU chunk 0x22): 0=below, 1=same, 2=above.
+		public int Layer;
+
 		public Dictionary<string, object> ToDict()
 		{
 			return new Dictionary<string, object>

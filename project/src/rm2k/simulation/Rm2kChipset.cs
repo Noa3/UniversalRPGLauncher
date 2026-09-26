@@ -269,6 +269,39 @@ public static class Rm2kChipset
         return masks;
     }
 
+    /// <summary>
+    /// Verified Game_Map::IsCounter: the upper layer must hold a tile above
+    /// <c>BLOCK_F</c>, its id runs through the upper substitution table, and the
+    /// resulting entry must carry the <see cref="PassCounter"/> flag.
+    /// </summary>
+    public static bool IsCounterTile(
+        int pUpperRawId, byte[]? pUpperPassability, Rm2kTileSubstitution? pSubstitution)
+    {
+        if (pUpperPassability == null || pUpperPassability.Length == 0)
+        {
+            return false;
+        }
+        var upperIndex = pUpperRawId - BlockF;
+        if (upperIndex < 0)
+        {
+            return false;
+        }
+        if (pSubstitution != null)
+        {
+            var substituted = pSubstitution.SubstituteUpper(upperIndex);
+            if (substituted < 0)
+            {
+                return false;
+            }
+            upperIndex = substituted;
+        }
+        if (upperIndex >= pUpperPassability.Length)
+        {
+            return false;
+        }
+        return (pUpperPassability[upperIndex] & PassCounter) != 0;
+    }
+
     // ---- Autotile animation -------------------------------------------------
     // Verified against EasyRPG Player `src/tilemap_layer.cpp` (Draw),
     // `src/game_map.cpp` (SetChipset/GetAnimation*) and liblcf `rpg::Chipset`.

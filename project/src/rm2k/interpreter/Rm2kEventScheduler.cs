@@ -6,6 +6,15 @@ using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Rm2k.Interpreter;
 
+/// <summary>Layer rule the Player applies when looking for a triggering event.</summary>
+public enum Rm2kTriggerLayerRule
+{
+    /// <summary>Event in front of the player: it must share the player's layer.</summary>
+    MustBeSame,
+    /// <summary>Event on the player's own tile: it must not share the player's layer.</summary>
+    MustNotBeSame,
+}
+
 /// <summary>
 /// Owns bounded interpreters for the current RM2K map. Imported commands are
 /// still data; only the native EventInterpreter receives them. Autorun pages
@@ -15,6 +24,14 @@ namespace UniversalRPG.Rm2k.Interpreter;
 public sealed class Rm2kEventScheduler
 {
     public const int MaxEvents = 1000;
+
+    /// <summary>liblcf rpg::EventPage::Layers: below = 0, same = 1, above = 2.</summary>
+    public const int LayerBelow = 0;
+    public const int LayerSame = 1;
+    public const int LayerAbove = 2;
+
+    /// <summary>RPG_RT allows a maximum of 3 counter tiles in an action chain.</summary>
+    public const int MaxCounterTiles = 3;
 
     private readonly GameSimulationState _state;
     private readonly List<Rm2kMap.Event> _events = new();
@@ -161,6 +178,89 @@ public sealed class Rm2kEventScheduler
     }
 
     public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touched);
+
+    /// <summary>
+    /// Verified Game_Player::CheckEventTriggerThere. The action trigger is
+    /// searched on the tile in front of the player, and when that tile is a
+    /// counter tile the search continues over at most three counter tiles in the
+    /// facing direction. RPG_RT allows a maximum of three counter tiles, and the
+    /// loop stops as soon as an action event was found.
+    /// </summary>
+    public bool TriggerActionFacing()
+    {
+        var (frontX, frontY) = _state.FrontTile(_state.MapX, _state.MapY, _state.FacingDirection);
+        // The Player checks the tile in front first, then steps over a counter
+        // tile before checking the next one, at most three times.
+        var gotAction = TriggerAt(frontX, frontY, Rm2kEventTrigger.Action, Rm2kTriggerLayerRule.MustBeSame);
+        for (var step = 0; !gotAction && step < MaxCounterTiles; step++)
+        {
+            if (!_state.IsCounterAt(frontX, frontY))
+            {
+                break;
+            }
+            (frontX, frontY) = _state.FrontTile(frontX, frontY, _state.FacingDirection);
+            gotAction |= TriggerAt(frontX, frontY, Rm2kEventTrigger.Action, Rm2kTriggerLayerRule.MustBeSame);
+        }
+        return gotAction;
+    }
+
+    /// <summary>
+    /// Verified Game_Player::CheckEventTriggerHere: action pages on the player's
+    /// own tile count when they are not on the same layer.
+    /// </summary>
+    public bool TriggerActionHere()
+    {
+        return TriggerAt(_state.MapX, _state.MapY, Rm2kEventTrigger.Action, Rm2kTriggerLayerRule.MustNotBeSame);
+    }
+
+    /// <summary>
+    /// Verified Game_Player::CheckEventTriggerThere for the walking case: only
+    /// touched and collision pages on the tile in front are evaluated, with no
+    /// counter tile walk.
+    /// </summary>
+    public bool TriggerTouchOrCollisionFacing()
+    {
+        var (frontX, frontY) = _state.FrontTile(_state.MapX, _state.MapY, _state.FacingDirection);
+        return TriggerAt(frontX, frontY, Rm2kEventTrigger.Touched, Rm2kTriggerLayerRule.MustBeSame)
+            || TriggerAt(frontX, frontY, Rm2kEventTrigger.Collision, Rm2kTriggerLayerRule.MustBeSame);
+    }
+
+    /// <summary>
+    /// Starts the first matching page at the given tile. The Player keeps the
+    /// layer rule explicit: events in front of the player must share its layer,
+    /// events on the player's own tile must not.
+    /// </summary>
+    private bool TriggerAt(int pX, int pY, Rm2kEventTrigger pTrigger, Rm2kTriggerLayerRule pRule)
+    {
+        var triggered = false;
+        foreach (var eventData in _events)
+        {
+            if (eventData.X != pX || eventData.Y != pY)
+            {
+                continue;
+            }
+            var matched = false;
+            foreach (var page in eventData.Pages)
+            {
+                if (page.Trigger != (int)pTrigger)
+                {
+                    continue;
+                }
+                var isSameLayer = page.Layer == LayerSame;
+                if (pRule == Rm2kTriggerLayerRule.MustBeSame ? !isSameLayer : isSameLayer)
+                {
+                    continue;
+                }
+                matched = true;
+            }
+            if (!matched)
+            {
+                continue;
+            }
+            triggered |= Trigger(eventData.Id, pTrigger);
+        }
+        return triggered;
+    }
 
     private bool Trigger(int pEventId, Rm2kEventTrigger pTrigger)
     {

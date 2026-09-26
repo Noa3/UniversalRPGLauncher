@@ -970,11 +970,13 @@ public partial class Rm2kParser : RefCounted
 						// liblcf LMU_Reader::ChunkEventPage: trigger 0x21, layer 0x22,
 						// move_frequency 0x20, condition 0x02, move_route 0x29,
 						// event_commands 0x34. No other ids are verified.
-						var triggerResult = IntegerFromFields(pageFields, 0x21, 0);
-						var priorityResult = IntegerFromFields(pageFields, 0x22, 0);
+        var triggerResult = IntegerFromFields(pageFields, 0x21, 0);
+        // liblcf LMU_Reader::ChunkEventPage::layer = 0x22, and rpg::EventPage::Layers
+        // is below = 0, same = 1, above = 2. There is no "priority" field.
+        var layerResult = IntegerFromFields(pageFields, 0x22, 0);
 						var freqResult = IntegerFromFields(pageFields, 0x20, 0);
 
-						if (!triggerResult.Success || !priorityResult.Success || !freqResult.Success)
+						if (!triggerResult.Success || !layerResult.Success || !freqResult.Success)
 						{
 							return Failure($"Invalid page metadata", (int)pageChunkData["payload_offset"]);
 						}
@@ -1028,8 +1030,8 @@ public partial class Rm2kParser : RefCounted
 
 					pageList.Add(new Godot.Collections.Dictionary
 					{
-						{ "trigger", (int)triggerResult.Data["value"] },
-						{ "priority", (int)priorityResult.Data["value"] },
+        { "trigger", (int)triggerResult.Data["value"] },
+        { "layer", (int)layerResult.Data["value"] },
 						{ "move_frequency", (int)freqResult.Data["value"] },
 						{ "conditions", conditionData },
 						{ "has_move_list", hasMoveList },

@@ -220,6 +220,65 @@ public partial class TestRm2kChipset : TestBase
         AssertEq(state.GetTerrainTagAt(0, 0), Rm2kChipset.DefaultTerrainTag);
     }
 
+    public void Test_CounterTileNeedsAnUpperTileWithTheCounterFlag()
+    {
+        // Verified Game_Map::IsCounter: the upper layer must hold a tile above
+        // BLOCK_F, and the resolved entry must carry the Counter bit.
+        var upperFlags = new byte[144];
+        AssertFalse(Rm2kChipset.IsCounterTile(Rm2kChipset.BlockF - 1, upperFlags, null),
+            "a lower tile is never a counter tile");
+        AssertFalse(Rm2kChipset.IsCounterTile(Rm2kChipset.BlockF, upperFlags, null),
+            "a plain upper tile is not a counter tile");
+
+        upperFlags[3] = Rm2kChipset.PassCounter;
+        AssertTrue(Rm2kChipset.IsCounterTile(Rm2kChipset.BlockF + 3, upperFlags, null),
+            "an upper tile whose entry carries the counter flag is a counter tile");
+
+        // The upper substitution table runs before the flag lookup.
+        var upperTable = Identity(144);
+        upperTable[0] = 3;
+        var substitution = new Rm2kTileSubstitution(null, upperTable);
+        AssertTrue(Rm2kChipset.IsCounterTile(Rm2kChipset.BlockF, upperFlags, substitution),
+            "the substitution redirects the counter lookup");
+        AssertFalse(Rm2kChipset.IsCounterTile(Rm2kChipset.BlockF, upperFlags, null),
+            "without the substitution the same tile is not a counter tile");
+
+        AssertFalse(Rm2kChipset.IsCounterTile(Rm2kChipset.BlockF + 144, upperFlags, null),
+            "an upper id beyond the table fails closed");
+        AssertFalse(Rm2kChipset.IsCounterTile(Rm2kChipset.BlockF, null, null),
+            "a missing table reports no counter tile");
+    }
+
+    public void Test_FrontTileAndCounterLookupFollowTheVerifiedRules()
+    {
+        var state = new GameSimulationState();
+        state.ConfigureMap(1, 5, 5, new byte[25]);
+
+        // Verified Game_Map::XwithDirection/YwithDirection with map wrapping.
+        AssertEq(state.FrontTile(2, 2, 2), (2, 3), "down");
+        AssertEq(state.FrontTile(2, 2, 4), (1, 2), "left");
+        AssertEq(state.FrontTile(2, 2, 6), (3, 2), "right");
+        AssertEq(state.FrontTile(2, 2, 8), (2, 1), "up");
+        AssertEq(state.FrontTile(0, 0, 4), (4, 0), "left off the map wraps");
+        AssertEq(state.FrontTile(4, 4, 6), (0, 4), "right off the map wraps");
+        AssertEq(state.FrontTile(2, 2, 1), (2, 2), "a diagonal direction does not move");
+
+        // A counter tile chain in front of the player.
+        var upper = new int[25];
+        upper[2 + 0 * 5] = Rm2kChipset.BlockF;  // (2,0)
+        upper[2 + 1 * 5] = Rm2kChipset.BlockF;  // (2,1)
+        upper[2 + 2 * 5] = Rm2kChipset.BlockF;  // (2,2)
+        var upperFlags = new byte[144];
+        upperFlags[0] = Rm2kChipset.PassCounter;
+        state.UpperLayer = upper;
+        state.UpperPassability = upperFlags;
+        AssertTrue(state.IsCounterAt(2, 0), "the upper tile with the counter flag counts");
+        AssertFalse(state.IsCounterAt(1, 1), "a tile without an upper layer is not a counter tile");
+
+        state.UpperPassability = null;
+        AssertFalse(state.IsCounterAt(2, 0), "a missing table reports no counter tile");
+    }
+
     public void Test_AnimationSpeedMapsChipsetFlagToFrames()
     {
         // Game_Map::GetAnimationSpeed(): only "animated or not" is stored.

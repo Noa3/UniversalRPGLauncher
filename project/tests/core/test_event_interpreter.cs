@@ -37,6 +37,158 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq((int)Rm2kEventTrigger.Parallel, 4);
 	}
 
+	public void Test_ActionFacingSearchesThroughThreeCounterTiles()
+	{
+		// Verified Game_Player::CheckEventTriggerThere: the action trigger is
+		// searched on the tile in front, and the search continues over at most
+		// three counter tiles in the facing direction.
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 5, 5, new byte[25]);
+		state.MapX = 0;
+		state.MapY = 4;
+		state.FacingDirection = 8; // up
+
+		var upper = new int[25];
+		var upperFlags = new byte[144];
+		upperFlags[0] = Rm2kChipset.PassCounter;
+		// A counter chain at (0,3), (0,2) and (0,1); (0,0) stays plain.
+		upper[0 + 3 * 5] = Rm2kChipset.BlockF;
+		upper[0 + 2 * 5] = Rm2kChipset.BlockF;
+		upper[0 + 1 * 5] = Rm2kChipset.BlockF;
+		state.UpperLayer = upper;
+		state.UpperPassability = upperFlags;
+
+		var events = new List<Rm2kMap.Event>();
+		var reachable = new Rm2kMap.Event(1, 0, 1);
+		reachable.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Action,
+			Layer = Rm2kEventScheduler.LayerSame,
+		});
+		reachable.Pages[0].Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+		events.Add(reachable);
+
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(events);
+		AssertTrue(scheduler.TriggerActionFacing(),
+			"the action event is found through the counter tile chain");
+	}
+
+	public void Test_ActionFacingStopsAtTheThirdCounterTile()
+	{
+		// The Player checks the tile in front and then steps over at most three
+		// counter tiles, so the fourth counter tile in a row blocks the search.
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 5, 10, new byte[50]);
+		state.MapX = 0;
+		state.MapY = 9;
+		state.FacingDirection = 8; // up
+
+		var upper = new int[50];
+		var upperFlags = new byte[144];
+		upperFlags[0] = Rm2kChipset.PassCounter;
+		foreach (var y in new[] { 8, 7, 6, 5, 4 })
+		{
+			upper[0 + y * 5] = Rm2kChipset.BlockF;
+		}
+		state.UpperLayer = upper;
+		state.UpperPassability = upperFlags;
+
+		// A four counter tile chain between the player and the event at (0,4).
+		var beyond = new Rm2kMap.Event(1, 0, 4);
+		beyond.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Action,
+			Layer = Rm2kEventScheduler.LayerSame,
+		});
+		beyond.Pages[0].Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new List<Rm2kMap.Event> { beyond });
+		AssertFalse(scheduler.TriggerActionFacing(),
+			"four counter tiles in a row stop the action search");
+
+		// The same event is reachable when only three counter tiles separate it:
+		// with counter tiles at (0,8), (0,7) and (0,6) the search checks
+		// (0,8), (0,7), (0,6) and then (0,5).
+		upper[0 + 5 * 5] = 0;
+		var reachable = new Rm2kMap.Event(2, 0, 5);
+		reachable.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Action,
+			Layer = Rm2kEventScheduler.LayerSame,
+		});
+		reachable.Pages[0].Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+		scheduler.SetEvents(new List<Rm2kMap.Event> { reachable });
+		AssertTrue(scheduler.TriggerActionFacing(),
+			"three counter tiles still reach the event");
+	}
+
+	public void Test_ActionLayersFollowThePlayerRules()
+	{
+		// Verified: events in front of the player must share its layer, events on
+		// the player's own tile must not.
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 3, 3, new byte[9]);
+		state.MapX = 1;
+		state.MapY = 1;
+		state.FacingDirection = 8; // up, so the event at (1,0) is in front
+
+		var sameLayerInFront = new Rm2kMap.Event(1, 1, 0);
+		sameLayerInFront.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Action,
+			Layer = Rm2kEventScheduler.LayerSame,
+		});
+		sameLayerInFront.Pages[0].Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+
+		var belowHere = new Rm2kMap.Event(2, 1, 1);
+		belowHere.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Action,
+			Layer = Rm2kEventScheduler.LayerBelow,
+		});
+		belowHere.Pages[0].Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new List<Rm2kMap.Event> { sameLayerInFront, belowHere });
+
+		AssertTrue(scheduler.TriggerActionFacing(), "a same layer event in front triggers");
+		AssertTrue(scheduler.TriggerActionHere(), "a below layer event on the own tile triggers");
+	}
+
+	public void Test_TouchAndCollisionIgnoreCounterChains()
+	{
+		// Verified: the walking case evaluates only touched and collision pages on
+		// the tile in front, with no counter tile walk.
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 3, 3, new byte[9]);
+		state.MapX = 1;
+		state.MapY = 1;
+		state.FacingDirection = 2;
+
+		var upper = new int[9];
+		var upperFlags = new byte[144];
+		upperFlags[0] = Rm2kChipset.PassCounter;
+		upper[1 + 0 * 3] = Rm2kChipset.BlockF;
+		upper[1 + 2 * 3] = Rm2kChipset.BlockF;
+		state.UpperLayer = upper;
+		state.UpperPassability = upperFlags;
+
+		var beyond = new Rm2kMap.Event(5, 1, 0);
+		beyond.Pages.Add(new Rm2kMap.EventPage
+		{
+			Trigger = (int)Rm2kEventTrigger.Touched,
+			Layer = Rm2kEventScheduler.LayerSame,
+		});
+		beyond.Pages[0].Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new List<Rm2kMap.Event> { beyond });
+		AssertFalse(scheduler.TriggerTouchOrCollisionFacing(),
+			"the touch trigger does not walk counter tiles");
+	}
+
 	public void Test_EventPageSelectorUsesHighestEligiblePage()
 	{
 		var state = new GameSimulationState();

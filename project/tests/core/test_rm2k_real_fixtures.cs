@@ -387,8 +387,31 @@ partial class TestRm2kRealFixtures : TestBase
 			AssertEq(stepAfterOneSlowStep, animationSpeed == 0 ? 1 : 2,
 				$"{relativePath} one chipset-speed step advances the autotile");
 
-			// liblcf ChunkChipset: terrain_data = 0x03, 162 shorts. RPG_RT drops an
-			// all-ones table, so an absent table is valid and means terrain 1.
+			// liblcf ChunkEventPage: trigger = 0x21, layer = 0x22 with
+			// below = 0, same = 1, above = 2. The Player needs the layer to decide
+			// which events are reachable in front of the player.
+			var eventData = (Godot.Collections.Array<Godot.Collections.Dictionary>)map.GetData()["events"];
+			foreach (var rawEvent in eventData)
+			{
+				if (rawEvent.TryGetValue("pages", out var rawPages) && rawPages.VariantType == Godot.Variant.Type.Array)
+				{
+					foreach (var rawPage in rawPages.AsGodotArray())
+					{
+						if (rawPage.VariantType != Godot.Variant.Type.Dictionary)
+						{
+							continue;
+						}
+						var page = rawPage.AsGodotDictionary();
+						AssertTrue(page.ContainsKey("layer"), $"{relativePath} event page exposes layer");
+						var layer = (int)page["layer"];
+						AssertTrue(layer is >= 0 and <= 2, $"{relativePath} layer {layer} is below, same or above");
+						AssertTrue(page.ContainsKey("trigger"), $"{relativePath} event page exposes trigger");
+						var trigger = (int)page["trigger"];
+						AssertTrue(trigger is >= 0 and <= 4, $"{relativePath} trigger {trigger} is a known trigger");
+					}
+				}
+			}
+
 			if (entry.ContainsKey("terrain_data"))
 			{
 				var terrain = (int[])entry["terrain_data"];

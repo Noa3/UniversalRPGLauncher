@@ -508,6 +508,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         Simulation.ChipsetAnimationSpeed = _chipsetAnimationSpeed;
         Simulation.TerrainData = _chipsetTerrain ?? [];
         Simulation.LowerLayer = lowerLayer;
+        Simulation.UpperLayer = upperLayer;
+        Simulation.UpperPassability = _chipsetUpper;
         if (_chipsetLower != null && _chipsetUpper != null && lowerLayer != null && upperLayer != null)
         {
             // Verified Rm2kChipset rules: the upper layer decides, and only an
@@ -573,6 +575,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                             continue;
                         }
                         var page = new Rm2kMap.EventPage { Trigger = trigger };
+                        TryReadInt(pageData, "layer", out var layer);
+                        page.Layer = layer;
                         if (pageData.TryGetValue("conditions", out var rawConditions) && rawConditions.VariantType == Godot.Variant.Type.Dictionary)
                         {
                             foreach (var pair in rawConditions.AsGodotDictionary())

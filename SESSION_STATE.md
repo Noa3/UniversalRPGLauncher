@@ -5,7 +5,16 @@
 
 ## Current card
 
-K-086 through K-089 are DONE: verified RM2K chipset passability drives real movement, autotile animation and tile substitution are applied, and per-map terrain tags are decoded and resolved. K-091 (counter tile action-trigger propagation) is the next READY card.
+K-086 through K-091 are DONE. K-092 (player input drives movement and triggers) is the next READY card.
+
+**K-091 completed (2026-09-26)**
+- Verified: `Game_Map::IsCounter` = upper tile `>= BLOCK_F`, id through `upper_tiles`, entry carries `Counter` (`0x40`). `XwithDirection`/`YwithDirection` = the tile in front with the looping map wrap applied.
+- Verified: the action search checks the tile in front, then steps over a counter tile and checks again, at most three times. Four counter tiles in a row stop the search.
+- Verified layer rules (easy to get backwards): events **in front** of the player must have `Layers_same` (`1`), events **on the player's own tile** must **not** have it. Touch/collision while walking never walk counter tiles.
+- **Defect fixed**: LMU field `0x22` was decoded and stored as `priority`. liblcf has no `priority` field — `0x22` is `layer` (`below=0, same=1, above=2`). The stored value was unusable, so the layer rules could not be implemented at all. Now `layer` in `Rm2kMap.EventPage.Layer`.
+- New: `Rm2kChipset.IsCounterTile`, `GameSimulationState.IsCounterAt`/`FrontTile`/`Wrap`/`UpperLayer`/`UpperPassability`, `Rm2kEventScheduler.TriggerActionFacing`/`TriggerActionHere`/`TriggerTouchOrCollisionFacing` with `Rm2kTriggerLayerRule` and `MaxCounterTiles = 3`.
+- Two of my own mistakes, both caught by the tests: the counter loop first checked the tile *before* stepping (the Player steps first), and the loop condition was inverted.
+- Still not wired: nothing in the runtime calls the trigger API yet, so these entry points are implemented and tested but unreachable until K-092.
 
 **K-089 completed (2026-09-26)**
 - Verified: `terrain_data = 0x03` is 162 **shorts** (324 bytes), liblcf `int16_t`, all ones by default. RPG_RT omits an all-ones table and the Player returns terrain 1 for an empty table, so an absent table is normal data.
@@ -42,7 +51,7 @@ K-086 through K-089 are DONE: verified RM2K chipset passability drives real move
 
 ## Next action
 
-1. Start K-091: counter tile action-trigger propagation. Verified Player behaviour in `Game_Player::CheckEventTriggerThere` searches the action trigger on the tile in front of the player and continues over at most 3 counter tiles in the facing direction. Compare the current trigger evaluation before changing it, and reuse the K-088 substitution API for `Game_Map::IsCounter`.
+1. Start K-092: nothing in the runtime calls the trigger API yet, so `TriggerActionFacing` and friends are unreachable. Read `Game_Player::Update` and `CheckActionEvent` for the exact ordering (step, then touched/collision in front; on stop plus decision key, `GetOnOffVehicle` first and action triggers only when no vehicle was toggled), check what the existing input mapper exposes, then wire input to `TryMove` and the trigger cases.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -55,7 +64,7 @@ K-086 through K-089 are DONE: verified RM2K chipset passability drives real move
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 363 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 369 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
