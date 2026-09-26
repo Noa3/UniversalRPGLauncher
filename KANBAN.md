@@ -83,7 +83,9 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-099 | 3 | DONE | Compose a full map frame from chipset tiles, map layers and the z-order rule | K-098 |
 | K-100 | 3 | DONE | Render the real map in the runtime and show chipset pixels in the host preview | K-099 |
 | K-101 | 3 | DONE | Decode the RM2K charset geometry and draw character frames | K-100 |
-| K-102 | 3 | READY | Draw the hero and event sprites into the map frame in the verified order | K-101 |
+| K-102 | 3 | DONE | Decode event sprite fields and place characters per draw stage | K-101 |
+| K-103 | 2 | READY | Resolve the hero charset and draw the hero and events in the runtime frame | K-102 |
+| K-094 | 2 | READY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -1020,16 +1022,37 @@ The paletted PNG decoder was generalised to `Rm2kIndexedImage`, with `Rm2kChipse
 - `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 417 tests passed`, exit `0`.
 - `test_rm2k_charset.cs` pins the cell and frame geometry against the real image, the `(index % 4, index / 4)` cell split, the frame clamping, the facing conversion, and the drawing including the clipping behaviour: a character at tile (0, 0) is cut off above the tile bottom, and one fully outside the frame paints nothing without throwing.
 
-### K-102 — Hero and event sprites in the frame
+### K-102 — Event sprite fields and per-stage placement
+
+**Status (2026-09-26) — DONE: verified sprite placement, not yet wired into the runtime**
+
+**Verified (EasyRPG Player and liblcf)**
+- `src/sprite_character.cpp`: `character_name = character->GetSpriteName()` and `character_index = character->GetSpriteIndex()`, and the charset is requested from the `CharSet` directory, like the chipset from `ChipSet`.
+- liblcf `LMU_Reader::ChunkEventPage`: `character_name = 0x15`, `character_index = 0x16`, `character_direction = 0x17`. The direction is an `rpg::EventPage::Direction` value.
+- The drawable priorities split the characters into three stages: `Priority_EventsBelow = 30` between the map layers, `Priority_Player = 40` shared with "same as hero" events, and `Priority_EventsAbove = 60` after `Priority_TilesetAbove = 50`.
+
+**Parsing gap found and fixed**
+The parser declared `character_name` and `character_index` for actors (chunk `0x03`/`0x04`) but never for event pages, even though the ids `0x15`/`0x16` are verified in liblcf. Event sprite data was therefore not available at all. The parser now decodes `character_name`, `character_index` and `character_direction` for every event page, and a missing name yields an empty string, which is what a page without a character graphic means.
+
+**Implemented**
+- `Rm2kCharacterSprite` with the verified `StageForLayer` for the three page layers and `FacingFromLiblcfDirection` for the direction, plus a `Skipped` flag so a caller can report a character that could not be drawn.
+- `Rm2kMapFrameRenderer.RenderSprites` draws one stage at a time, so the caller can interleave the stages with the two map layers in the verified order, and reports how many were drawn. A character index beyond the charset capacity is skipped and flagged, never taken from an arbitrary cell.
+- `Rm2kMapFrameRenderer` can now be created without a chipset for sprite only passes; tile drawing then does nothing instead of throwing.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 419 tests passed`, exit `0`.
+- `test_rm2k_charset.cs` pins the layer to stage mapping, the liblcf direction to facing conversion and the fact that the two conversions are inverse, and checks that each stage draws only its own characters, that an out of range index is skipped and flagged, and that the below stage and the hero stage paint different characters.
+
+### K-103 — Hero and events in the runtime frame
 
 **Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- The character frame can be drawn but nothing draws it yet. The verified order is panorama (`10`), lower layer (`20`), below-layer events (`30`) and the hero (`40`, shared with "same as hero" events), upper layer (`50`), above-layer and flying events (`60` and `70`), weather (`80`) and screen (`90`).
-- Drawing a character needs its charset name and index, which live on the event page (`character_name`, `character_index`) and for the hero on the database party member.
+- The placement logic is verified and tested but nothing calls it: the runtime renders only the two map layers. This card resolves the hero's charset and draws the hero and the events into the frame between and after the layers.
+- The hero's charset is not yet known: the Player builds the player character from the first party member, and `Game_Actor::SetSprite` stores `sprite_name` and `sprite_id`.
 
 **Unblock condition**
-- Verify the hero's charset name and index source in liblcf `rpg::Game_Actor` / `rpg::Party` and the Player's party setup, and the event page character fields already decoded as `character_name` and `character_index`, before wiring the draws. A character whose index exceeds the charset cell capacity must be skipped with a diagnostic rather than drawn from an arbitrary cell.
+- Verify where a fresh game's player sprite comes from, because unlike an event the hero has no page: read `Game_Party::SetupNewGame` and the `Game_Actor` sprite initialisation in the Player, and check whether RM2K falls back to actor 1's `character_name`/`character_index` from the LDB. Only then read the actor data in the runtime, and keep the fallback to the first actor documented.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

@@ -851,9 +851,22 @@ public partial class Rm2kParser : RefCounted
 		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entries", entries } });
 	}
 
-	private ParseResult DecodeLdbString(byte[] pData, string pLabel)
+	/// <summary>
+	/// Reads an RM2K string field by id. A missing field yields an empty string,
+	/// which is what an event page without a character graphic means.
+	/// </summary>
+	private string ReadRm2kStringField(Godot.Collections.Dictionary pFields, int pFieldId)
 	{
-		if (pData.Length > MaxLdbStringBytes)
+		if (!pFields.TryGetValue(pFieldId, out var raw))
+		{
+			return "";
+		}
+		var result = DecodeLdbString((byte[])((Godot.Collections.Dictionary)raw)["data"], $"field 0x{pFieldId:X}");
+		return result.Success ? (string)result.Data["value"] : "";
+	}
+
+	private ParseResult DecodeLdbString(byte[] pData, string pLabel)
+	{		if (pData.Length > MaxLdbStringBytes)
 		{
 			return Failure($"LDB {pLabel} exceeds {MaxLdbStringBytes}-byte limit");
 		}
@@ -973,11 +986,15 @@ public partial class Rm2kParser : RefCounted
         var triggerResult = IntegerFromFields(pageFields, 0x21, 0);
         // liblcf LMU_Reader::ChunkEventPage::layer = 0x22, and rpg::EventPage::Layers
         // is below = 0, same = 1, above = 2. There is no "priority" field.
-        var layerResult = IntegerFromFields(pageFields, 0x22, 0);
-						var freqResult = IntegerFromFields(pageFields, 0x20, 0);
+					var layerResult = IntegerFromFields(pageFields, 0x22, 0);
+					var freqResult = IntegerFromFields(pageFields, 0x20, 0);
+					var characterIndexResult = IntegerFromFields(pageFields, 0x16, 0);
+					var characterDirectionResult = IntegerFromFields(pageFields, 0x17, 0);
+					var characterName = ReadRm2kStringField(pageFields, 0x15);
 
-						if (!triggerResult.Success || !layerResult.Success || !freqResult.Success)
-						{
+					if (!triggerResult.Success || !layerResult.Success || !freqResult.Success
+						|| !characterIndexResult.Success || !characterDirectionResult.Success)
+					{
 							return Failure($"Invalid page metadata", (int)pageChunkData["payload_offset"]);
 						}
 
@@ -1033,6 +1050,13 @@ public partial class Rm2kParser : RefCounted
         { "trigger", (int)triggerResult.Data["value"] },
         { "layer", (int)layerResult.Data["value"] },
 						{ "move_frequency", (int)freqResult.Data["value"] },
+						// liblcf LMU_Reader::ChunkEventPage: character_name = 0x15,
+						// character_index = 0x16, character_direction = 0x17. The Player
+						// reads exactly these three for the event sprite, with the
+						// direction being an lcf::rpg::EventPage::Direction value.
+						{ "character_name", characterName },
+						{ "character_index", (int)characterIndexResult.Data["value"] },
+						{ "character_direction", (int)characterDirectionResult.Data["value"] },
 						{ "conditions", conditionData },
 						{ "has_move_list", hasMoveList },
 						{ "has_command_list", hasList },

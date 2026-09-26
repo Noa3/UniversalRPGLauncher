@@ -5,7 +5,18 @@
 
 ## Current card
 
-K-086 through K-093 and K-095 through K-101 are DONE. K-102 (hero and event sprites in the frame) is next; K-094 (vehicles) stays open at lower priority.
+## Current card
+
+K-086 through K-093 and K-095 through K-102 are DONE. K-103 (hero and events in the runtime frame) is next; K-094 (vehicles) stays open at lower priority.
+
+**K-102 completed (2026-09-26)**
+- Verified `sprite_character.cpp`: `character_name = GetSpriteName()`, `character_index = GetSpriteIndex()`, Charset aus Verzeichnis `CharSet`.
+- Verified liblcf `ChunkEventPage`: `character_name=0x15`, `character_index=0x16`, `character_direction=0x17`.
+- **Parsing-Lücke gefunden und behoben**: Der Parser deklarierte `character_name`/`character_index` nur für **Actors** (0x03/0x04), nie für EventPages — obwohl 0x15/0x16 in liblcf verifiziert sind. Event-Sprite-Daten waren damit gar nicht verfügbar. Jetzt werden alle drei Felder pro EventPage dekodiert; fehlender Name = leer.
+- Drei Draw-Stufen aus `Priority_EventsBelow(30)`, `Priority_Player(40)` (geteilt mit "same as hero"), `Priority_EventsAbove(60)` nach `Priority_TilesetAbove(50)`.
+- Neu `Rm2kCharacterSprite` (`StageForLayer`, `FacingFromLiblcfDirection`, `Skipped`) und `Rm2kMapFrameRenderer.RenderSprites`, das **eine Stufe pro Aufruf** zeichnet, damit der Aufrufer sie in der verifizierten Reihenfolge mit den beiden Layern verschränken kann. Ein Figurenindex jenseits der Charset-Kapazität wird **übersprungen und markiert**, nie aus einer beliebigen Zelle gezeichnet.
+- Beide Richtungs-Umrechnungen (Projekt 2/4/6/8 ↔ liblcf 0..3) sind nachweislich invers zueinander getestet.
+- Der Renderer kann jetzt ohne Chipset erzeugt werden (Sprite-only-Pass); Tile-Zeichnen tut dann nichts statt zu werfen.
 
 **K-101 completed (2026-09-26)**
 - Verified `GetCharacterRect`: Zelle `24*(TILE_SIZE/16)*3` × `32*(TILE_SIZE/16)*4` = **72×128**, Position `(index%4, index/4)`, 3×4 Frames à **24×32**.
@@ -127,7 +138,7 @@ K-086 through K-093 and K-095 through K-101 are DONE. K-102 (hero and event spri
 
 ## Next action
 
-1. Start K-102: verify the hero charset name and index source (liblcf rpg::Game_Actor / rpg::Party and the Player party setup) and the event page `character_name`/`character_index` fields before wiring the draws. A character index beyond the charset cell capacity must be skipped with a diagnostic, not drawn from an arbitrary cell.
+1. Start K-103: nothing calls the placement logic yet. Read `Game_Party::SetupNewGame` and the `Game_Actor` sprite initialisation to find where a fresh game player sprite comes from, and check whether RM2K falls back to actor 1 character_name/character_index from the LDB. Only then read the actor data in the runtime and document the fallback.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -140,7 +151,7 @@ K-086 through K-093 and K-095 through K-101 are DONE. K-102 (hero and event spri
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 417 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 419 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|

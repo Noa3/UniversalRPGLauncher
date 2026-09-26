@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Godot;
 using UniversalRPG.Rm2k.Rendering;
@@ -160,6 +161,74 @@ public partial class TestRm2kCharset : TestBase
         AssertEq(charset.TryDrawCharacter(0, 2, Rm2kCharset.FrameMiddle, outside, -1, -1), true,
             "a character fully outside the frame is still handled without throwing");
         AssertEq(CountOpaque(outside), 0, "a fully clipped character paints nothing");
+    }
+
+    public void Test_EventLayerAndDirectionMapToTheDrawStage()
+    {
+        // liblcf Layers_below = 0, Layers_same = 1, Layers_above = 2 and
+        // Direction up 0, right 1, down 2, left 3.
+        AssertEq(Rm2kCharacterSprite.StageForLayer(0), Rm2kMapFrameRenderer.SpriteStage.BelowLayer);
+        AssertEq(Rm2kCharacterSprite.StageForLayer(1), Rm2kMapFrameRenderer.SpriteStage.HeroLayer);
+        AssertEq(Rm2kCharacterSprite.StageForLayer(2), Rm2kMapFrameRenderer.SpriteStage.AboveLayer);
+        AssertEq(Rm2kCharacterSprite.StageForLayer(7), Rm2kMapFrameRenderer.SpriteStage.HeroLayer,
+            "an unknown layer falls back to the hero stage");
+
+        // The project stores 2 down, 4 left, 6 right, 8 up.
+        AssertEq(Rm2kCharacterSprite.FacingFromLiblcfDirection(0), (byte)8, "liblcf up");
+        AssertEq(Rm2kCharacterSprite.FacingFromLiblcfDirection(1), (byte)6, "liblcf right");
+        AssertEq(Rm2kCharacterSprite.FacingFromLiblcfDirection(2), (byte)2, "liblcf down");
+        AssertEq(Rm2kCharacterSprite.FacingFromLiblcfDirection(3), (byte)4, "liblcf left");
+        AssertEq(Rm2kCharacterSprite.FacingFromLiblcfDirection(9), (byte)8, "an unknown direction is up");
+
+        // The two conversions have to be inverse to each other.
+        foreach (var facing in new byte[] { 2, 4, 6, 8 })
+        {
+            AssertEq(Rm2kCharset.FacingToRow(Rm2kCharacterSprite.FacingFromLiblcfDirection(
+                Rm2kCharset.FacingToRow(facing))), Rm2kCharset.FacingToRow(facing),
+                $"facing {facing} survives the round trip");
+        }
+    }
+
+    public void Test_SpritesAreDrawnPerStageAndInvalidOnesAreSkipped()
+    {
+        var path = ProjectSettings.GlobalizePath(FixtureRoot.PathJoin(CharsetFixture));
+        if (!File.Exists(path) || !Rm2kIndexedImage.TryLoad(path, out var image, out _))
+        {
+            return;
+        }
+        var charset = new Rm2kCharset(image);
+        var renderer = new Rm2kMapFrameRenderer();
+        var sprites = new List<Rm2kCharacterSprite>
+        {
+            new() { Charset = charset, MapX = 0, MapY = 0, CharacterIndex = 0, Stage = Rm2kMapFrameRenderer.SpriteStage.BelowLayer },
+            new() { Charset = charset, MapX = 1, MapY = 0, CharacterIndex = 1, Stage = Rm2kMapFrameRenderer.SpriteStage.HeroLayer },
+            new() { Charset = charset, MapX = 2, MapY = 0, CharacterIndex = 2, Stage = Rm2kMapFrameRenderer.SpriteStage.AboveLayer },
+            new() { Charset = charset, MapX = 3, MapY = 0, CharacterIndex = 9999, Stage = Rm2kMapFrameRenderer.SpriteStage.HeroLayer },
+        };
+        var target = new Rm2kPixelBuffer(64, 16);
+
+        renderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.BelowLayer;
+        AssertEq(renderer.RenderSprites(target, new Rm2kMapLayers(4, 1, [0, 0, 0, 0], null), sprites), 1,
+            "only the below stage is drawn");
+        renderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.HeroLayer;
+        AssertEq(renderer.RenderSprites(target, new Rm2kMapLayers(4, 1, [0, 0, 0, 0], null), sprites), 1,
+            "the hero stage draws the valid sprite and skips the out of range index");
+        renderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.AboveLayer;
+        AssertEq(renderer.RenderSprites(target, new Rm2kMapLayers(4, 1, [0, 0, 0, 0], null), sprites), 1,
+            "only the above stage is drawn");
+
+        AssertEq(sprites[3].Skipped, true,
+            $"a character index past the charset capacity is skipped, not drawn from an arbitrary cell");
+
+        // Each stage must be drawn into its own frame so the order is observable.
+        var below = new Rm2kPixelBuffer(64, 16);
+        renderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.BelowLayer;
+        renderer.RenderSprites(below, new Rm2kMapLayers(4, 1, [0, 0, 0, 0], null), sprites);
+        var hero = new Rm2kPixelBuffer(64, 16);
+        renderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.HeroLayer;
+        renderer.RenderSprites(hero, new Rm2kMapLayers(4, 1, [0, 0, 0, 0], null), sprites);
+        AssertFalse(System.Linq.Enumerable.SequenceEqual(below.Pixels, hero.Pixels),
+            "the below stage and the hero stage paint different characters");
     }
 
     private static int CountOpaque(Rm2kPixelBuffer pBuffer)

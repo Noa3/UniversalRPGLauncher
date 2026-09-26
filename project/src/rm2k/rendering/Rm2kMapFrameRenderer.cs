@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Rm2k.Rendering;
@@ -17,11 +18,20 @@ namespace UniversalRPG.Rm2k.Rendering;
 /// </remarks>
 public sealed class Rm2kMapFrameRenderer
 {
-    private readonly Rm2kChipsetBitmap _chipset;
+    private readonly Rm2kChipsetBitmap? _chipset;
 
     public Rm2kMapFrameRenderer(Rm2kChipsetBitmap pChipset)
     {
         _chipset = pChipset ?? throw new ArgumentNullException(nameof(pChipset));
+    }
+
+    /// <summary>
+    /// Creates a renderer for sprite only passes, where no chipset tiles are drawn
+    /// and the caller supplies the charset of every character itself.
+    /// </summary>
+    public Rm2kMapFrameRenderer()
+    {
+        _chipset = null;
     }
 
     /// <summary>
@@ -41,6 +51,60 @@ public sealed class Rm2kMapFrameRenderer
     {
         RenderLayer(pTarget, pMap, pTables, pFrameCount, pLowerLayer: false);
     }
+
+    /// <summary>
+    /// Where a sprite sits relative to the two map layers, following the Player's
+    /// drawable priorities: below-layer events between the layers, the hero and
+    /// "same as hero" events after the lower layer, and above-layer events after
+    /// the upper layer.
+    /// </summary>
+    public enum SpriteStage
+    {
+        /// <summary>Below the hero: drawn between the two map layers.</summary>
+        BelowLayer,
+
+        /// <summary>Same layer as the hero: drawn after the lower layer.</summary>
+        HeroLayer,
+
+        /// <summary>Above the hero: drawn after the upper layer.</summary>
+        AboveLayer,
+    }
+
+    /// <summary>
+    /// Draws the characters of one stage. The Player splits events by their
+    /// page layer: liblcf <c>Layers_below = 0</c> goes to the below stage,
+    /// <c>Layers_same = 1</c> shares the hero priority, and <c>Layers_above = 2</c>
+    /// is drawn after the upper layer. The hero is always in the hero stage.
+    /// </summary>
+    public int RenderSprites(
+        Rm2kPixelBuffer pTarget, Rm2kMapLayers pMap, IEnumerable<Rm2kCharacterSprite> pSprites)
+    {
+        ArgumentNullException.ThrowIfNull(pTarget);
+        ArgumentNullException.ThrowIfNull(pMap);
+        if (pSprites == null)
+        {
+            return 0;
+        }
+        var drawn = 0;
+        foreach (var sprite in pSprites)
+        {
+            if (sprite.Stage != CurrentStage)
+            {
+                continue;
+            }
+            if (!sprite.Charset.TryDrawCharacter(
+                sprite.CharacterIndex, sprite.FacingDirection, sprite.Frame, pTarget, sprite.MapX, sprite.MapY))
+            {
+                sprite.Skipped = true;
+                continue;
+            }
+            drawn++;
+        }
+        return drawn;
+    }
+
+    /// <summary>Which stage <see cref="RenderSprites"/> currently draws.</summary>
+    public SpriteStage CurrentStage { get; set; } = SpriteStage.HeroLayer;
 
     private void RenderLayer(
         Rm2kPixelBuffer pTarget, Rm2kMapLayers pMap, Rm2kChipsetTables pTables,
@@ -77,6 +141,10 @@ public sealed class Rm2kMapFrameRenderer
         Rm2kPixelBuffer pTarget, int pChipId, int pX, int pY,
         Rm2kChipsetTables pTables, int pFrameCount)
     {
+        if (_chipset == null)
+        {
+            return;
+        }
         var targetX = pX * Rm2kChipsetBitmap.TileSize;
         var targetY = pY * Rm2kChipsetBitmap.TileSize;
         if (pChipId < Rm2kChipset.BlockD)
@@ -117,6 +185,62 @@ public sealed class Rm2kMapFrameRenderer
     {
         return Rm2kChipset.ChipAnimationStep(
             pChipId, pFrameCount, pTables.AnimationType, pTables.AnimationSpeed);
+    }
+}
+
+/// <summary>
+/// One character to draw into the map frame: where it stands, which charset cell
+/// it uses and which stage the Player draws it in.
+/// </summary>
+public sealed class Rm2kCharacterSprite
+{
+    public required Rm2kCharset Charset { get; init; }
+    public required int MapX { get; init; }
+    public required int MapY { get; init; }
+
+    /// <summary>Charset cell index from the character index field.</summary>
+    public int CharacterIndex { get; init; }
+
+    /// <summary>Facing as this project stores it: 2 down, 4 left, 6 right, 8 up.</summary>
+    public byte FacingDirection { get; init; } = 2;
+
+    /// <summary>liblcf frame; anything from middle2 is clamped like the Player does.</summary>
+    public int Frame { get; init; } = Rm2kCharset.FrameMiddle;
+
+    /// <summary>Stage the Player draws this character in.</summary>
+    public Rm2kMapFrameRenderer.SpriteStage Stage { get; init; } = Rm2kMapFrameRenderer.SpriteStage.HeroLayer;
+
+    /// <summary>Set when the sprite could not be drawn, so a caller can report it.</summary>
+    public bool Skipped { get; set; }
+
+    /// <summary>
+    /// Maps a liblcf event page layer to the draw stage, following
+    /// <c>Layers_below = 0</c>, <c>Layers_same = 1</c> and <c>Layers_above = 2</c>.
+    /// The hero itself is never below.
+    /// </summary>
+    public static Rm2kMapFrameRenderer.SpriteStage StageForLayer(int pLayer)
+    {
+        return pLayer switch
+        {
+            0 => Rm2kMapFrameRenderer.SpriteStage.BelowLayer,
+            2 => Rm2kMapFrameRenderer.SpriteStage.AboveLayer,
+            _ => Rm2kMapFrameRenderer.SpriteStage.HeroLayer,
+        };
+    }
+
+    /// <summary>
+    /// Converts a liblcf event page direction into the facing this project stores.
+    /// liblcf uses up 0, right 1, down 2, left 3.
+    /// </summary>
+    public static byte FacingFromLiblcfDirection(int pDirection)
+    {
+        return pDirection switch
+        {
+            1 => 6,
+            3 => 4,
+            2 => 2,
+            _ => 8,
+        };
     }
 }
 
