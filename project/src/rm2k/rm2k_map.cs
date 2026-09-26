@@ -40,7 +40,7 @@ public class Rm2kMap
 		public List<EventCommand> Commands { get; } = new();
 		public Dictionary<string, object> Graphic { get; set; } = new();
 
-		// 0=autorun, 1=parallel, 2=action, 3=touch
+		// liblcf EventPage::Trigger: 0=action, 1=touched, 2=collision, 3=auto_start, 4=parallel.
 		public int Trigger;
 
 		public Dictionary<string, object> ToDict()

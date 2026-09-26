@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
+using UniversalRPG.Rm2k.Presentation;
 using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
 
@@ -848,6 +849,494 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(state.Variables.Count, 0, "no variable written for patch-only target modes");
 	}
 
+	public void Test_ChangeLevelAdjustsSelectedActorsAndClamps()
+	{
+		var state = new GameSimulationState();
+		state.PartyMemberIds.Add(1);
+		state.PartyMemberIds.Add(2);
+		state.SetActorLevel(1, 10);
+		state.SetActorLevel(2, 50);
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// Party-wide add 5.
+			ActorStatCmd(EventInterpreter.ChangeLevel, EventInterpreter.ActorSelectParty, 0,
+				EventInterpreter.ActorValueAdd, EventInterpreter.VarOperandConstant, 5),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.GetActorLevel(1), 15, "actor 1 gained five levels");
+		AssertEq(state.GetActorLevel(2), 55, "actor 2 gained five levels");
+	}
+
+	public void Test_ChangeLevelSubtractsAndClampsToLevelBounds()
+	{
+		var state = new GameSimulationState();
+		state.SetActorLevel(3, 2);
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// Single actor 3, subtract 10 -> clamped to the minimum level.
+			ActorStatCmd(EventInterpreter.ChangeLevel, EventInterpreter.ActorSelectHero, 3,
+				EventInterpreter.ActorValueSubtract, EventInterpreter.VarOperandConstant, 10),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.GetActorLevel(3), GameSimulationState.MinActorLevel, "level clamped to the minimum");
+	}
+
+	public void Test_ChangeLevelReadsVariableOperandAndVariableActorId()
+	{
+		var state = new GameSimulationState();
+		state.Variables.Add(4);   // v1 = 4 -> level delta
+		state.Variables.Add(7);   // v2 = 7 -> actor id
+		state.SetActorLevel(7, 20);
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			ActorStatCmd(EventInterpreter.ChangeLevel, EventInterpreter.ActorSelectVariableHero, 2,
+				EventInterpreter.ActorValueAdd, EventInterpreter.VarOperandVariable, 1),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.GetActorLevel(7), 24, "actor id and delta both read from variables");
+	}
+
+	public void Test_ChangeExpClampsToExpBounds()
+	{
+		var state = new GameSimulationState();
+		state.PartyMemberIds.Add(1);
+		state.SetActorExp(1, 10);
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			ActorStatCmd(EventInterpreter.ChangeExp, EventInterpreter.ActorSelectParty, 0,
+				EventInterpreter.ActorValueSubtract, EventInterpreter.VarOperandConstant, 50),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.GetActorExp(1), 0, "exp clamped at zero");
+	}
+
+	public void Test_ChangeLevelAndExpRejectInvalidModesFailClosed()
+	{
+		var state = new GameSimulationState();
+		state.PartyMemberIds.Add(1);
+		state.SetActorLevel(1, 10);
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// Unsupported actor mode.
+			ActorStatCmd(EventInterpreter.ChangeLevel, 5, 0,
+				EventInterpreter.ActorValueAdd, EventInterpreter.VarOperandConstant, 1),
+			// Unsupported operation.
+			ActorStatCmd(EventInterpreter.ChangeLevel, EventInterpreter.ActorSelectParty, 0,
+				7, EventInterpreter.VarOperandConstant, 1),
+			// Unsupported operand mode.
+			ActorStatCmd(EventInterpreter.ChangeExp, EventInterpreter.ActorSelectParty, 0,
+				EventInterpreter.ActorValueAdd, 9, 1),
+			// Invalid actor id.
+			ActorStatCmd(EventInterpreter.ChangeLevel, EventInterpreter.ActorSelectHero, 0,
+				EventInterpreter.ActorValueAdd, EventInterpreter.VarOperandConstant, 1),
+			// Too few parameters.
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeLevel, new List<int> { 0, 0, 0 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		for (var index = 0; index < 5; index++)
+		{
+			AssertTrue(interpreter.ExecuteFrame(), $"frame {index} skipped safely");
+		}
+		AssertEq(state.GetActorLevel(1), 10, "level unchanged by rejected commands");
+		AssertEq(state.Diagnostics.Count, 5, "one diagnostic per rejected command");
+	}
+
+	public void Test_ChangeHeroNameStoresBoundedActorName()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeHeroName, new List<int> { 4 })
+			{
+				Text = "Aldo",
+			},
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.GetActorName(4), "Aldo", "actor name stored");
+	}
+
+	public void Test_ChangeHeroNameRejectsInvalidActorId()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ChangeHeroName, new List<int> { 0 }) { Text = "Nobody" },
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.ActorState.Count, 0, "no actor state created for an invalid id");
+		AssertTrue(state.Diagnostics[^1].Contains("invalid actor id"));
+	}
+
+	public void Test_EndEventProcessingStopsInterpreterImmediately()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ShowMessage) { Text = "before" },
+			new Rm2kMap.EventCommand(EventInterpreter.EndEventProcessing),
+			new Rm2kMap.EventCommand(EventInterpreter.ShowMessage) { Text = "after" },
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame(), "message frame runs");
+		AssertFalse(interpreter.ExecuteFrame(), "EndEventProcessing stops the interpreter");
+		AssertFalse(interpreter.IsRunning);
+	}
+
+	public void Test_FlashScreenStoresBoundedFlashAndCanWait()
+	{
+		var state = new GameSimulationState();
+		var presentation = new PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// [red, green, blue, alpha, tenths, wait]
+			new Rm2kMap.EventCommand(EventInterpreter.FlashScreen,
+				new List<int> { 255, 128, 0, 200, 10, 1 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands, presentation);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(presentation.IsFlashActive, "flash started");
+		AssertEq(presentation.FlashRed, 255);
+		AssertEq(presentation.FlashFramesRemaining, 60, "ten tenths equal sixty frames");
+		AssertEq(interpreter.WaitFramesRemaining, 60, "wait flag blocks the next commands");
+
+		presentation.Tick(60);
+		AssertFalse(presentation.IsFlashActive, "flash ends after its duration");
+	}
+
+	public void Test_FlashScreenRejectsOutOfBoundsColorAndDuration()
+	{
+		var state = new GameSimulationState();
+		var presentation = new PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.FlashScreen,
+				new List<int> { 999, 0, 0, 0, 1, 0 }),
+			new Rm2kMap.EventCommand(EventInterpreter.FlashScreen,
+				new List<int> { 0, 0, 0, 0, -5, 0 }),
+			new Rm2kMap.EventCommand(EventInterpreter.FlashScreen, new List<int> { 1, 2, 3 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands, presentation);
+		for (var index = 0; index < 3; index++)
+		{
+			AssertTrue(interpreter.ExecuteFrame(), $"frame {index} skipped safely");
+		}
+		AssertFalse(presentation.IsFlashActive, "no flash started from rejected payloads");
+		AssertEq(state.Diagnostics.Count, 3, "one diagnostic per rejected flash");
+	}
+
+	public void Test_ShakeScreenEndsOnZeroDuration()
+	{
+		var state = new GameSimulationState();
+		var presentation = new PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// [strength, speed, tenths, wait] with zero tenths ends the shake.
+			new Rm2kMap.EventCommand(EventInterpreter.ShakeScreen,
+				new List<int> { 4, 4, 0, 0 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands, presentation);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertFalse(presentation.IsShakeActive, "zero duration ends the shake");
+		AssertTrue(state.Diagnostics[^1].Contains("ended"));
+	}
+
+	public void Test_ShakeScreenStoresBoundedShake()
+	{
+		var state = new GameSimulationState();
+		var presentation = new PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ShakeScreen,
+				new List<int> { 5, 3, 5, 0 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands, presentation);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(presentation.IsShakeActive, "shake started");
+		AssertEq(presentation.ShakeStrength, 5);
+		AssertEq(presentation.ShakeFramesRemaining, 30, "five tenths equal thirty frames");
+		AssertEq(interpreter.WaitFramesRemaining, 0, "no wait without the wait flag");
+	}
+
+	public void Test_WeatherEffectsClampsStrengthAndUnknownType()
+	{
+		var state = new GameSimulationState();
+		var presentation = new PresentationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// Strength above 2 is clamped, unknown RM2K types fold to 0.
+			new Rm2kMap.EventCommand(EventInterpreter.WeatherEffects, new List<int> { 9, 7 }),
+			new Rm2kMap.EventCommand(EventInterpreter.WeatherEffects, new List<int> { 2, 2 }),
+			new Rm2kMap.EventCommand(EventInterpreter.WeatherEffects, new List<int> { 1 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands, presentation);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(presentation.WeatherType, 0, "unknown type folds to none");
+		AssertEq(presentation.WeatherStrength, 2, "strength clamped to the maximum");
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(presentation.WeatherType, 2, "valid type stored");
+		AssertEq(presentation.WeatherStrength, 2);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(presentation.WeatherType, 2, "malformed weather command does not change state");
+		AssertTrue(state.Diagnostics[^1].Contains("malformed parameters skipped"),
+			$"malformed weather command reports: {state.Diagnostics[^1]}");
+	}
+
+	public void Test_ScreenEffectsRequirePresentationState()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.FlashScreen,
+				new List<int> { 1, 2, 3, 4, 5, 0 }),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("presentation state unavailable"));
+	}
+
+	public void Test_CallEventRunsNestedCommandsAndReturnsToCaller()
+	{
+		var state = new GameSimulationState();
+		state.Variables.Add(0);
+		var nested = new List<Rm2kMap.EventCommand>
+		{
+			new(EventInterpreter.ControlVars)
+			{
+				Parameters = new List<int>
+				{
+					EventInterpreter.TargetEvalSingle, 1, 1, EventInterpreter.VarOpSet,
+					EventInterpreter.VarOperandConstant, 42, 0,
+				},
+			},
+			new(EventInterpreter.End),
+		};
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// Call map event 5, first page.
+			new(EventInterpreter.CallEvent, new List<int> { EventInterpreter.CallTargetMapEvent, 5, 1 }),
+			new(EventInterpreter.ControlVars)
+			{
+				Parameters = new List<int>
+				{
+					EventInterpreter.TargetEvalSingle, 2, 2, EventInterpreter.VarOpSet,
+					EventInterpreter.VarOperandConstant, 7, 0,
+				},
+			},
+			new(EventInterpreter.End),
+		};
+
+		IReadOnlyList<Rm2kMap.EventCommand>? Resolve(int pEventId, int pPageIndex) =>
+			pEventId == 5 && pPageIndex == 1 ? nested : null;
+		var interpreter = new EventInterpreter(state, 1, commands, null, Resolve);
+
+		AssertTrue(interpreter.ExecuteFrame(), "call frame starts");
+		AssertEq(interpreter.CallDepth, 1, "nested frame pushed");
+		AssertTrue(interpreter.ExecuteFrame(), "nested command runs");
+		AssertEq(state.Variables[0], 42, "nested command applied");
+
+		AssertTrue(interpreter.ExecuteFrame(), "nested END returns to the caller");
+		AssertEq(interpreter.CallDepth, 0, "nested frame popped");
+		AssertTrue(interpreter.ExecuteFrame(), "caller continues after the call");
+		AssertEq(state.Variables[1], 7, "caller command after the call executed");
+
+		AssertFalse(interpreter.ExecuteFrame(), "base frame ends the event");
+		AssertFalse(interpreter.IsRunning);
+	}
+
+	public void Test_CallEventRejectsUnsupportedTargetsAndUnknownEvents()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// Common events are not decoded yet.
+			new(EventInterpreter.CallEvent, new List<int> { EventInterpreter.CallTargetCommonEvent, 1, 1 }),
+			// Unknown event id.
+			new(EventInterpreter.CallEvent, new List<int> { EventInterpreter.CallTargetMapEvent, 99, 1 }),
+			// Too few parameters.
+			new(EventInterpreter.CallEvent, new List<int> { EventInterpreter.CallTargetMapEvent, 5 }),
+			new(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands, null,
+			(int pEventId, int pPageIndex) => null);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("not supported yet"));
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("no commands"));
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("malformed parameters skipped"));
+		AssertEq(interpreter.CallDepth, 0, "no nested frame was pushed");
+	}
+
+	public void Test_CallEventStopsAtRecursionLimit()
+	{
+		var state = new GameSimulationState();
+		var recursive = new List<Rm2kMap.EventCommand>
+		{
+			new(EventInterpreter.CallEvent, new List<int> { EventInterpreter.CallTargetMapEvent, 5, 1 }),
+			new(EventInterpreter.End),
+		};
+		var interpreter = new EventInterpreter(state, 1, recursive, null,
+			(int pEventId, int pPageIndex) => recursive);
+
+		var frames = 0;
+		var maxDepth = 0;
+		while (interpreter.CallDepth < EventInterpreter.MaxScriptRecursion
+            && interpreter.ExecuteFrame() && frames < EventInterpreter.MaxScriptRecursion + 5)
+		{
+			frames++;
+			maxDepth = Math.Max(maxDepth, interpreter.CallDepth);
+		}
+
+		AssertEq(maxDepth, EventInterpreter.MaxScriptRecursion, "recursion is bounded");
+		// The diagnostic buffer is intentionally capped, so clear it before the
+		// frame that crosses the limit and assert the reported reason.
+		state.ClearDiagnostics();
+		interpreter.ExecuteFrame();
+		AssertTrue(state.Diagnostics.Count == 1 && state.Diagnostics[0].Contains("recursion limit"),
+			$"recursion limit is diagnosed: {string.Join(" | ", state.Diagnostics)}");
+	}
+
+	public void Test_ChangeEventLocationMovesEventThroughHook()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// [eventId, operandMode, x, y]
+			new(EventInterpreter.ChangeEventLocation, new List<int> { 4, EventInterpreter.VarOperandConstant, 7, 9 }),
+			new(EventInterpreter.End),
+		};
+
+		var moved = new System.Collections.Generic.List<(int Id, int X, int Y, int Direction)>();
+		bool SetLocation(int pEventId, int pX, int pY, int pDirection)
+		{
+			moved.Add((pEventId, pX, pY, pDirection));
+			return pEventId == 4;
+		}
+		var interpreter = new EventInterpreter(state, 1, commands, null, null, SetLocation);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(moved.Count, 1, "location hook invoked once");
+		AssertEq(moved[0].Id, 4);
+		AssertEq(moved[0].X, 7);
+		AssertEq(moved[0].Y, 9);
+		AssertEq(moved[0].Direction, -1, "no direction without the RPG2K3 parameter");
+	}
+
+	public void Test_ChangeEventLocationReadsVariableCoordinatesAndRejectsUnknownEvent()
+	{
+		var state = new GameSimulationState();
+		state.Variables.Add(5);   // v1 = 5
+		state.Variables.Add(12);  // v2 = 12
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new(EventInterpreter.ChangeEventLocation,
+				new List<int> { 2, EventInterpreter.VarOperandVariable, 1, 2, 3 }),
+			new(EventInterpreter.ChangeEventLocation, new List<int> { 99, 0, 1, 1 }),
+			new(EventInterpreter.ChangeEventLocation, new List<int> { 1, 0, 1 }),
+			new(EventInterpreter.End),
+		};
+
+		var applied = new System.Collections.Generic.List<(int X, int Y, int Direction)>();
+		bool SetLocation(int pEventId, int pX, int pY, int pDirection)
+		{
+			applied.Add((pX, pY, pDirection));
+			return pEventId != 99;
+		}
+		var interpreter = new EventInterpreter(state, 1, commands, null, null, SetLocation);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(applied.Count, 1, "variable coordinates resolved");
+		AssertEq(applied[0].X, 5);
+		AssertEq(applied[0].Y, 12);
+		AssertEq(applied[0].Direction, 2, "RPG2K3 direction parameter is one-based");
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("not found"));
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("malformed parameters skipped"));
+	}
+
+	public void Test_EraseEventDeactivatesOwningEventAndEndsFrame()
+	{
+		var state = new GameSimulationState();
+		var deactivated = new System.Collections.Generic.List<int>();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new(EventInterpreter.ShowMessage) { Text = "before erase" },
+			new(EventInterpreter.EraseEvent),
+			new(EventInterpreter.ShowMessage) { Text = "after erase" },
+		};
+
+		var interpreter = new EventInterpreter(state, 6, commands, null, null, null,
+			pEventId =>
+			{
+				deactivated.Add(pEventId);
+				return true;
+			});
+
+		AssertTrue(interpreter.ExecuteFrame(), "message runs before the erase");
+		AssertFalse(interpreter.ExecuteFrame(), "erase ends the frame");
+		AssertEq(deactivated.Count, 1, "deactivation hook invoked once");
+		AssertEq(deactivated[0], 6, "owning event deactivated");
+		AssertFalse(interpreter.IsRunning);
+	}
+
+	public void Test_EraseEventRejectsParameterizedFormAndUnknownEvent()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new(EventInterpreter.EraseEvent, new List<int> { 3, 1, 0 }),
+			new(EventInterpreter.EraseEvent),
+			new(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 6, commands, null, null, null,
+			pEventId => false);
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("not supported yet"));
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("not found"));
+	}
+
 	public void Test_ControlVarsDivisionByZeroSkips()
 	{
 		var state = new GameSimulationState();
@@ -1165,6 +1654,20 @@ public partial class TestEventInterpreter : TestBase
 	private static Rm2kMap.EventCommand Cmd(int pCode, params int[] pParameters)
 	{
 		return new Rm2kMap.EventCommand(pCode, new List<int>(pParameters));
+	}
+
+	private static Rm2kMap.EventCommand ActorStatCmd(
+		int pCode,
+		int pActorMode,
+		int pActorId,
+		int pOperation,
+		int pOperandMode,
+		int pOperand)
+	{
+		// Verified layout: [actorMode, actorId, operation, operandMode, operand, showMessage].
+		return new Rm2kMap.EventCommand(
+			pCode,
+			new List<int> { pActorMode, pActorId, pOperation, pOperandMode, pOperand, 0 });
 	}
 
 	private static Rm2kMap.EventCommand SwitchCmd(int pStart, int pEnd, int pMode)

@@ -40,6 +40,8 @@ public sealed class EventInterpreter
 	public const int ChangeGold = 10310;
 	public const int ChangeItems = 10320;
 	public const int ChangePartyMembers = 10330;
+	public const int ChangeExp = 10410;
+	public const int ChangeLevel = 10420;
 	public const int ControlSwitches = 10210;
 	public const int ControlVars = 10220;
 	public const int Teleport = 10810;
@@ -48,6 +50,18 @@ public sealed class EventInterpreter
 	public const int Loop = 12210;
 	public const int BreakLoop = 12220;
 	public const int Comment = 12410;
+	public const int ChangeHeroName = 10610;
+	public const int FlashScreen = 11040;
+	public const int ShakeScreen = 11050;
+	public const int WeatherEffects = 11070;
+	public const int EndEventProcessing = 12310;
+	public const int CallEvent = 12330;
+	public const int EraseEvent = 12320;
+	public const int ChangeEventLocation = 10860;
+
+	// CallEvent target kinds (EasyRPG CommandCallEvent).
+	public const int CallTargetCommonEvent = 0;
+	public const int CallTargetMapEvent = 1;
 	public const int ShowMessage2 = 20110; // message continuation line
 	public const int ElseBranch = 22010;
 	public const int EndBranch = 22011;
@@ -84,6 +98,24 @@ public sealed class EventInterpreter
 	// ControlVariables parameters[4].
 	public const int VarOperandVariableIndirect = 2;
 
+	// GetActors modes (EasyRPG Game_Interpreter::GetActors).
+	public const int ActorSelectParty = 0;
+	public const int ActorSelectHero = 1;
+	public const int ActorSelectVariableHero = 2;
+
+	// OperateValue operations used by ChangeExp/ChangeLevel.
+	public const int ActorValueAdd = 0;
+	public const int ActorValueSubtract = 1;
+
+	// Screen effect subcommands (RPG2K3 extension of FlashScreen/ShakeScreen).
+	public const int FlashSubOnce = 0;
+	public const int FlashSubBegin = 1;
+	public const int FlashSubEnd = 2;
+	public const int ShakeSubOnce = 0;
+	public const int ShakeSubBegin = 1;
+	public const int ShakeSubEnd = 2;
+	public const int EventInterpreterMaxTenths = MaxWaitFrames / 6;
+
 	// ConditionalBranch condition types (EasyRPG CommandConditionalBranch).
 	public const int ConditionSwitch = 0;
 	public const int ConditionVariable = 1;
@@ -98,19 +130,44 @@ public sealed class EventInterpreter
 
 	private readonly GameSimulationState _state;
 	private readonly int _eventId;
-	private readonly IReadOnlyList<Rm2kMap.EventCommand> _commands;
+	private IReadOnlyList<Rm2kMap.EventCommand> _commands;
 	private readonly Stack<int> _loopStack = new();
+	private readonly Stack<CallFrame> _callStack = new();
+	private readonly Func<int, int, IReadOnlyList<Rm2kMap.EventCommand>?>? _eventCommandResolver;
+	private readonly Func<int, int, int, int, bool>? _eventLocationSetter;
+	private readonly Func<int, bool>? _eventDeactivator;
 	private readonly PresentationState? _presentation;
 	private int _commandIndex;
 	private int _waitFramesRemaining;
 
+	/// <summary>Suspended caller state for a bounded nested CallEvent.</summary>
+	private sealed class CallFrame
+	{
+		public CallFrame(IReadOnlyList<Rm2kMap.EventCommand> pCommands, int pReturnIndex, int pLoopDepth)
+		{
+			Commands = pCommands;
+			ReturnIndex = pReturnIndex;
+			LoopDepth = pLoopDepth;
+		}
+
+		public IReadOnlyList<Rm2kMap.EventCommand> Commands { get; }
+		public int ReturnIndex { get; }
+		public int LoopDepth { get; }
+	}
+
 	public EventInterpreter(GameSimulationState state, int eventId,
-		IReadOnlyList<Rm2kMap.EventCommand> commands, PresentationState? presentation = null)
+		IReadOnlyList<Rm2kMap.EventCommand> commands, PresentationState? presentation = null,
+		Func<int, int, IReadOnlyList<Rm2kMap.EventCommand>?>? eventCommandResolver = null,
+		Func<int, int, int, int, bool>? eventLocationSetter = null,
+		Func<int, bool>? eventDeactivator = null)
 	{
 		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
 		_commands = commands ?? throw new ArgumentNullException(nameof(commands));
 		_presentation = presentation;
+		_eventCommandResolver = eventCommandResolver;
+		_eventLocationSetter = eventLocationSetter;
+		_eventDeactivator = eventDeactivator;
 		_commandIndex = 0;
 	}
 
@@ -119,6 +176,7 @@ public sealed class EventInterpreter
 	public int EventId => _eventId;
 	public int CurrentCommandIndex => _commandIndex;
 	public int WaitFramesRemaining => _waitFramesRemaining;
+	public int CallDepth => _callStack.Count;
 	public bool IsRunning { get; private set; } = true;
 
 	/// <summary>
@@ -141,8 +199,7 @@ public sealed class EventInterpreter
 
 		if (_commandIndex >= _commands.Count)
 		{
-			IsRunning = false;
-			return false;
+			return FinishFrame();
 		}
 
 		var cmd = _commands[_commandIndex];
@@ -150,8 +207,10 @@ public sealed class EventInterpreter
 		switch (cmd.Code)
 		{
 			case End:
-				IsRunning = false;
-				return false;
+			case EndEventProcessing:
+				// liblcf END terminates the current frame; a nested CallEvent
+				// returns to its caller, the base frame stops the event.
+				return FinishFrame();
 
 			case ShowMessage:
 			case Comment:
@@ -195,6 +254,40 @@ public sealed class EventInterpreter
 				ExecuteControlVars(cmd);
 				return Advance();
 
+			case ChangeLevel:
+				ExecuteChangeLevelOrExp(cmd, pIsLevel: true);
+				return Advance();
+
+			case ChangeExp:
+				ExecuteChangeLevelOrExp(cmd, pIsLevel: false);
+				return Advance();
+
+			case ChangeHeroName:
+				ExecuteChangeHeroName(cmd);
+				return Advance();
+
+			case FlashScreen:
+				ExecuteFlashScreen(cmd);
+				return Advance();
+
+			case ShakeScreen:
+				ExecuteShakeScreen(cmd);
+				return Advance();
+
+			case WeatherEffects:
+				ExecuteWeatherEffects(cmd);
+				return Advance();
+
+			case CallEvent:
+				return ExecuteCallEvent(cmd);
+
+			case ChangeEventLocation:
+				ExecuteChangeEventLocation(cmd);
+				return Advance();
+
+			case EraseEvent:
+				return ExecuteEraseEvent(cmd);
+
 			case Teleport:
 				ExecuteTeleport(cmd);
 				return Advance();
@@ -233,6 +326,87 @@ public sealed class EventInterpreter
 	{
 		_commandIndex++;
 		return IsRunning;
+	}
+
+	/// <summary>
+	/// Completes the current command frame. A nested CallEvent resumes its
+	/// caller; the base frame stops the interpreter.
+	/// </summary>
+	private bool FinishFrame()
+	{
+		if (_callStack.Count == 0)
+		{
+			IsRunning = false;
+			return false;
+		}
+		var frame = _callStack.Pop();
+		_commands = frame.Commands;
+		_commandIndex = frame.ReturnIndex;
+		TrimLoopStack(frame.LoopDepth);
+		return IsRunning;
+	}
+
+	private void TrimLoopStack(int pDepth)
+	{
+		while (_loopStack.Count > pDepth)
+		{
+			_loopStack.Pop();
+		}
+	}
+
+	/// <summary>
+	/// EasyRPG CommandCallEvent pushes a nested frame. Map events are resolved
+	/// through the injected resolver; common events stay diagnostic-only because
+	/// the LDB common-event section is not decoded yet.
+	/// </summary>
+	private bool ExecuteCallEvent(Rm2kMap.EventCommand pCmd)
+	{
+		// Verified layout: [targetKind, eventId, pageIndex] with minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Call event");
+			return Advance();
+		}
+		var targetKind = pCmd.Parameters[0];
+		if (targetKind != CallTargetMapEvent)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Call event: target kind {targetKind} is not supported yet");
+			return Advance();
+		}
+		var calledEventId = pCmd.Parameters[1];
+		var pageIndex = pCmd.Parameters[2];
+		if (calledEventId < 1 || calledEventId > GameSimulationState.MaxActorId)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Call event: invalid event id {calledEventId} skipped");
+			return Advance();
+		}
+		if (pageIndex < 0 || pageIndex > PresentationState.MaxPictures * 1000)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Call event: invalid page index {pageIndex} skipped");
+			return Advance();
+		}
+		if (_eventCommandResolver == null)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Call event: no event command resolver available");
+			return Advance();
+		}
+		if (_callStack.Count >= MaxScriptRecursion)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Call event: recursion limit {MaxScriptRecursion} reached");
+			return Advance();
+		}
+		var called = _eventCommandResolver(calledEventId, pageIndex);
+		if (called == null || called.Count == 0)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Call event: event {calledEventId} page {pageIndex} has no commands");
+			return Advance();
+		}
+
+		_callStack.Push(new CallFrame(_commands, _commandIndex + 1, _loopStack.Count));
+		_commands = called;
+		_commandIndex = 0;
+		_state.AddDiagnostic($"[Event {_eventId}] Call event: running event {calledEventId} page {pageIndex}");
+		return true;
 	}
 
 	private bool ExecuteShowChoice(Rm2kMap.EventCommand pCmd)
@@ -321,13 +495,347 @@ public sealed class EventInterpreter
 		// params[0] is a duration in tenths of a second (EasyRPG SetupWait);
 		// 0.0 seconds still waits exactly one frame.
 		var tenths = Param(pCmd, 0);
-		var frames = tenths == 0 ? 1 : checked(tenths * 6);
-		if (frames > MaxWaitFrames)
+		WaitForFrames(tenths == 0 ? 1 : TenthsToFrames(tenths));
+		_state.AddDiagnostic($"[Event {_eventId}] Wait {_waitFramesRemaining} frames");
+	}
+
+	/// <summary>EasyRPG converts tenths of a second at 60 simulation frames per second.</summary>
+	private static int TenthsToFrames(int pTenths) => Math.Min(checked(pTenths * 6), MaxWaitFrames);
+
+	private void WaitForFrames(int pFrames)
+	{
+		_waitFramesRemaining = Math.Clamp(pFrames, 1, MaxWaitFrames);
+	}
+
+	private void ExecuteChangeLevelOrExp(Rm2kMap.EventCommand pCmd, bool pIsLevel)
+	{
+		var label = pIsLevel ? "Change level" : "Change exp";
+		// EasyRPG: [actorMode, actorId, operation, operandMode, operand, showMessage]
+		// with CmdSetup minimum width 6.
+		if (pCmd.Parameters.Count < 6)
 		{
-			frames = MaxWaitFrames;
+			Malformed(label);
+			return;
 		}
-		_waitFramesRemaining = frames;
-		_state.AddDiagnostic($"[Event {_eventId}] Wait {frames} frames");
+		var actors = ResolveActors(pCmd.Parameters[0], pCmd.Parameters[1], label);
+		if (actors == null)
+		{
+			return;
+		}
+		var operation = pCmd.Parameters[2];
+		if (operation != ActorValueAdd && operation != ActorValueSubtract)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] {label}: unsupported operation {operation} skipped");
+			return;
+		}
+		int operand;
+		switch (pCmd.Parameters[3])
+		{
+			case VarOperandConstant:
+				operand = pCmd.Parameters[4];
+				break;
+			case VarOperandVariable:
+				operand = GetVariable(pCmd.Parameters[4]);
+				break;
+			case VarOperandVariableIndirect:
+				if (pCmd.Parameters[4] < 1 || pCmd.Parameters[4] > GameSimulationState.MaxVariables)
+				{
+					_state.AddDiagnostic($"[Event {_eventId}] {label}: invalid indirect variable {pCmd.Parameters[4]} skipped");
+					return;
+				}
+				operand = GetVariable(GetVariable(pCmd.Parameters[4]));
+				break;
+			default:
+				_state.AddDiagnostic($"[Event {_eventId}] {label}: unsupported operand mode {pCmd.Parameters[3]} skipped");
+				return;
+		}
+		// OperateValue negates the operand for the subtract operation.
+		if (operation == ActorValueSubtract)
+		{
+			operand = -operand;
+		}
+
+		foreach (var actorId in actors)
+		{
+			if (pIsLevel)
+			{
+				var level = Math.Clamp(
+					_state.GetActorLevel(actorId) + operand,
+					GameSimulationState.MinActorLevel,
+					GameSimulationState.MaxActorLevel);
+				_state.SetActorLevel(actorId, level);
+				_state.AddDiagnostic($"[Event {_eventId}] Change level: actor {actorId} -> level {level}");
+			}
+			else
+			{
+				var exp = Math.Clamp(
+					_state.GetActorExp(actorId) + operand,
+					0,
+					GameSimulationState.MaxActorExp);
+				_state.SetActorExp(actorId, exp);
+				_state.AddDiagnostic($"[Event {_eventId}] Change exp: actor {actorId} -> exp {exp}");
+			}
+		}
+	}
+
+	/// <summary>
+	/// EasyRPG GetActors(): mode 0 selects the party, mode 1 a single actor id,
+	/// mode 2 the actor id stored in a variable. Returns null when the request is
+	/// invalid, so the caller can fail closed.
+	/// </summary>
+	private List<int>? ResolveActors(int pActorMode, int pActorId, string pLabel)
+	{
+		switch (pActorMode)
+		{
+			case ActorSelectParty:
+				return new List<int>(_state.PartyMemberIds);
+			case ActorSelectHero:
+				if (pActorId < 1 || pActorId > GameSimulationState.MaxActorId)
+				{
+					_state.AddDiagnostic($"[Event {_eventId}] {pLabel}: invalid actor id {pActorId} skipped");
+					return null;
+				}
+				return new List<int> { pActorId };
+			case ActorSelectVariableHero:
+				if (pActorId < 1 || pActorId > GameSimulationState.MaxVariables)
+				{
+					_state.AddDiagnostic($"[Event {_eventId}] {pLabel}: invalid variable id {pActorId} skipped");
+					return null;
+				}
+				var actorId = GetVariable(pActorId);
+				if (actorId < 1 || actorId > GameSimulationState.MaxActorId)
+				{
+					_state.AddDiagnostic($"[Event {_eventId}] {pLabel}: variable {pActorId} holds invalid actor id {actorId}");
+					return null;
+				}
+				return new List<int> { actorId };
+			default:
+				_state.AddDiagnostic($"[Event {_eventId}] {pLabel}: unsupported actor mode {pActorMode} skipped");
+				return null;
+		}
+	}
+
+	private void ExecuteChangeHeroName(Rm2kMap.EventCommand pCmd)
+	{
+		// EasyRPG CmdSetup minimum width 1; the actor id is the first parameter
+		// and the new name is the command string.
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Change hero name");
+			return;
+		}
+		var actorId = pCmd.Parameters[0];
+		if (actorId < 1 || actorId > GameSimulationState.MaxActorId)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change hero name: invalid actor id {actorId} skipped");
+			return;
+		}
+		_state.SetActorName(actorId, pCmd.Text);
+		_state.AddDiagnostic($"[Event {_eventId}] Change hero name: actor {actorId} renamed");
+	}
+
+	/// <summary>
+	/// EasyRPG CommandChangeEventLocation: [eventId, operandMode, x, y] with an
+	/// optional RPG2K3 direction in parameters[4].
+	/// </summary>
+	private void ExecuteChangeEventLocation(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Change event location");
+			return;
+		}
+		if (_eventLocationSetter == null)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change event location: no event location hook available");
+			return;
+		}
+		var targetEventId = pCmd.Parameters[0];
+		if (targetEventId < 1 || targetEventId > GameSimulationState.MaxActorId)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change event location: invalid event id {targetEventId} skipped");
+			return;
+		}
+		var x = ResolveEventCoordinate(pCmd.Parameters[1], pCmd.Parameters[2]);
+		var y = ResolveEventCoordinate(pCmd.Parameters[1], pCmd.Parameters[3]);
+		if (x < 0 || y < 0)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change event location: invalid coordinates ({x},{y}) skipped");
+			return;
+		}
+		var direction = pCmd.Parameters.Count > 4 ? pCmd.Parameters[4] - 1 : -1;
+		if (direction is not (-1 or 0 or 1 or 2 or 3))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change event location: invalid direction {pCmd.Parameters[4]} skipped");
+			return;
+		}
+		if (!_eventLocationSetter(targetEventId, x, y, direction))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Change event location: event {targetEventId} not found");
+			return;
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Change event location: event {targetEventId} -> ({x},{y})");
+	}
+
+	private int ResolveEventCoordinate(int pOperandMode, int pValue)
+	{
+		switch (pOperandMode)
+		{
+			case VarOperandConstant:
+				return pValue;
+			case VarOperandVariable:
+				return pValue >= 1 && pValue <= GameSimulationState.MaxVariables ? GetVariable(pValue) : -1;
+			case VarOperandVariableIndirect:
+				if (pValue < 1 || pValue > GameSimulationState.MaxVariables)
+				{
+					return -1;
+				}
+				return GetVariable(GetVariable(pValue));
+			default:
+				return -1;
+		}
+	}
+
+	/// <summary>
+	/// EasyRPG CommandEraseEvent: the vanilla command carries no parameters and
+	/// deactivates the event that owns the running command list.
+	/// </summary>
+	private bool ExecuteEraseEvent(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count > 0)
+		{
+			// Patch-provided event ids are not modeled.
+			_state.AddDiagnostic($"[Event {_eventId}] Erase event: parameterized form is not supported yet");
+			return Advance();
+		}
+		if (_eventDeactivator == null)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Erase event: no event deactivation hook available");
+			return Advance();
+		}
+		if (!_eventDeactivator(_eventId))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Erase event: event {_eventId} not found");
+			return Advance();
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Erase event: event {_eventId} deactivated");
+		return FinishFrame();
+	}
+
+	private void ExecuteFlashScreen(Rm2kMap.EventCommand pCmd)
+	{
+		// EasyRPG CommandFlashScreen: [red, green, blue, alpha, tenths, wait]
+		// with CmdSetup minimum width 6.
+		if (pCmd.Parameters.Count < 6)
+		{
+			Malformed("Flash screen");
+			return;
+		}
+		if (_presentation == null)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Flash screen: presentation state unavailable");
+			return;
+		}
+		var tenths = pCmd.Parameters[4];
+		if (tenths < 0 || tenths > EventInterpreterMaxTenths)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Flash screen: invalid duration {tenths} skipped");
+			return;
+		}
+		var subcommand = pCmd.Parameters.Count > 6 ? pCmd.Parameters[6] : FlashSubOnce;
+		if (subcommand is not (FlashSubOnce or FlashSubBegin or FlashSubEnd))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Flash screen: unsupported subcommand {subcommand} skipped");
+			return;
+		}
+		if (subcommand == FlashSubEnd)
+		{
+			_presentation.FlashEnd();
+			_state.AddDiagnostic($"[Event {_eventId}] Flash screen: ended");
+			return;
+		}
+		var frames = TenthsToFrames(tenths);
+		if (!_presentation.FlashOnce(pCmd.Parameters[0], pCmd.Parameters[1], pCmd.Parameters[2], pCmd.Parameters[3], frames))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Flash screen: parameters outside bounds skipped");
+			return;
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Flash screen: {frames} frames");
+		// SetupWait treats a zero duration as a single frame.
+		if (pCmd.Parameters[5] != 0)
+		{
+			WaitForFrames(tenths <= 0 ? 1 : frames);
+		}
+	}
+
+	private void ExecuteShakeScreen(Rm2kMap.EventCommand pCmd)
+	{
+		// EasyRPG CommandShakeScreen: [strength, speed, tenths, wait]
+		// with CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Shake screen");
+			return;
+		}
+		if (_presentation == null)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Shake screen: presentation state unavailable");
+			return;
+		}
+		var tenths = pCmd.Parameters[2];
+		if (tenths < 0 || tenths > EventInterpreterMaxTenths)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Shake screen: invalid duration {tenths} skipped");
+			return;
+		}
+		var subcommand = pCmd.Parameters.Count > 4 ? pCmd.Parameters[4] : ShakeSubOnce;
+		if (subcommand is not (ShakeSubOnce or ShakeSubBegin or ShakeSubEnd))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Shake screen: unsupported subcommand {subcommand} skipped");
+			return;
+		}
+		if (subcommand == ShakeSubEnd || tenths == 0)
+		{
+			// EasyRPG treats a zero duration as ending the shake.
+			_presentation.ShakeEnd();
+			_state.AddDiagnostic($"[Event {_eventId}] Shake screen: ended");
+			return;
+		}
+		var frames = TenthsToFrames(tenths);
+		if (!_presentation.ShakeOnce(pCmd.Parameters[0], pCmd.Parameters[1], frames))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Shake screen: parameters outside bounds skipped");
+			return;
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Shake screen: {frames} frames");
+		if (pCmd.Parameters[3] != 0)
+		{
+			WaitForFrames(frames);
+		}
+	}
+
+	private void ExecuteWeatherEffects(Rm2kMap.EventCommand pCmd)
+	{
+		// EasyRPG CommandWeatherEffects: [type, strength] with minimum width 2.
+		if (pCmd.Parameters.Count < 2)
+		{
+			Malformed("Weather effects");
+			return;
+		}
+		if (_presentation == null)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Weather effects: presentation state unavailable");
+			return;
+		}
+		// EasyRPG clamps the strength to 2 and folds unknown RM2K types to 0.
+		var strength = Math.Min(pCmd.Parameters[1], PresentationState.MaxWeatherStrength);
+		var type = pCmd.Parameters[0] > PresentationState.MaxWeatherType ? 0 : pCmd.Parameters[0];
+		if (type < 0 || !_presentation.SetWeather(type, strength))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Weather effects: type {pCmd.Parameters[0]} rejected");
+			return;
+		}
+		_state.AddDiagnostic($"[Event {_eventId}] Weather effects: type {type} strength {strength}");
 	}
 
 	private void ExecuteControlSwitches(Rm2kMap.EventCommand pCmd)

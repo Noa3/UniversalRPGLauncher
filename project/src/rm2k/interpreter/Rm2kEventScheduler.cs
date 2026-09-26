@@ -72,6 +72,79 @@ public sealed class Rm2kEventScheduler
 
     public void SetPresentation(PresentationState? pPresentation) => _presentation = pPresentation;
 
+    /// <summary>
+    /// Supplies the nested CallEvent resolver. Map events are already owned by
+    /// this scheduler, so the default resolver answers from its own event list.
+    /// </summary>
+    public Func<int, int, IReadOnlyList<Rm2kMap.EventCommand>?>? EventCommandResolver { get; set; }
+
+    /// <summary>Moves a map event; returns false when the id is unknown.</summary>
+    public Func<int, int, int, int, bool>? EventLocationSetter { get; set; }
+
+    /// <summary>Deactivates a map event and stops its interpreter.</summary>
+    public Func<int, bool>? EventDeactivator { get; set; }
+
+    private bool ApplyEventLocation(int pEventId, int pX, int pY, int pDirection)
+    {
+        if (EventLocationSetter != null)
+        {
+            return EventLocationSetter(pEventId, pX, pY, pDirection);
+        }
+        foreach (var eventData in _events)
+        {
+            if (eventData.Id != pEventId)
+            {
+                continue;
+            }
+            eventData.X = pX;
+            eventData.Y = pY;
+            return true;
+        }
+        return false;
+    }
+
+    private bool DeactivateEvent(int pEventId)
+    {
+        if (EventDeactivator != null)
+        {
+            return EventDeactivator(pEventId);
+        }
+        var found = false;
+        foreach (var eventData in _events)
+        {
+            if (eventData.Id == pEventId)
+            {
+                found = true;
+            }
+        }
+        if (!found)
+        {
+            return false;
+        }
+        _active.Remove(pEventId);
+        _autorunStarted.Add(pEventId);
+        _parallelStarted.Add(pEventId);
+        return true;
+    }
+
+    private IReadOnlyList<Rm2kMap.EventCommand>? ResolveCommands(int pEventId, int pPageIndex)
+    {
+        if (EventCommandResolver != null)
+        {
+            return EventCommandResolver(pEventId, pPageIndex);
+        }
+        foreach (var eventData in _events)
+        {
+            if (eventData.Id != pEventId || eventData.Pages.Count == 0)
+            {
+                continue;
+            }
+            var pageNumber = pPageIndex <= 0 ? 0 : pPageIndex - 1;
+            return pageNumber < eventData.Pages.Count ? eventData.Pages[pageNumber].Commands : null;
+        }
+        return null;
+    }
+
     public void ExecuteFrame()
     {
         StartAutomaticPages(Rm2kEventTrigger.AutoStart, _autorunStarted, restartWhenFinished: false);
@@ -95,7 +168,7 @@ public sealed class Rm2kEventScheduler
         var eventData = _events.FirstOrDefault(pEvent => pEvent.Id == pEventId);
         var page = eventData == null ? null : Rm2kEventPageSelector.Select(eventData, _state, pTrigger);
         if (page == null) return false;
-        _active[pEventId] = new EventInterpreter(_state, pEventId, page.Commands, _presentation);
+        _active[pEventId] = new EventInterpreter(_state, pEventId, page.Commands, _presentation, ResolveCommands, ApplyEventLocation, DeactivateEvent);
         return true;
     }
 
@@ -107,7 +180,7 @@ public sealed class Rm2kEventScheduler
             var page = Rm2kEventPageSelector.Select(eventData, _state, pTrigger);
             if (page == null) continue;
             if (!restartWhenFinished && pStarted.Contains(eventData.Id)) continue;
-            _active[eventData.Id] = new EventInterpreter(_state, eventData.Id, page.Commands, _presentation);
+            _active[eventData.Id] = new EventInterpreter(_state, eventData.Id, page.Commands, _presentation, ResolveCommands, ApplyEventLocation, DeactivateEvent);
             pStarted.Add(eventData.Id);
         }
     }

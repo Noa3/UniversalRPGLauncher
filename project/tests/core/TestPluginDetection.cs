@@ -490,6 +490,13 @@ public partial class TestPluginDetection : TestBase
                 AssertFalse(diagnostic.Contains("invalid range") || diagnostic.Contains("unsupported target mode"),
                     $"real control command must not be rejected: {diagnostic}");
             }
+            // Codes implemented from the verified liblcf/EasyRPG contract must
+            // not be reported as unsupported while running real map data.
+            foreach (var implemented in new[] { 10410, 10420, 10610, 12310 })
+            {
+                AssertFalse(diagnostic.Contains($"Unsupported RM2K command {implemented}"),
+                    $"implemented command {implemented} must not be unsupported: {diagnostic}");
+            }
         }
     }
 

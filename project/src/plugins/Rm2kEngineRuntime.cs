@@ -188,6 +188,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             Simulation.FrameCount += elapsedTicks;
             Simulation.AdvanceTimers(elapsedTicks);
+            Presentation.Tick(elapsedTicks);
             for (var tick = 0; tick < elapsedTicks; tick++)
             {
                 _eventScheduler.ExecuteFrame();
@@ -441,6 +442,31 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
         }
         _eventScheduler.SetEvents(events);
+        _mapEvents = events;
+    }
+
+    private List<Rm2kMap.Event> _mapEvents = new();
+
+    /// <summary>
+    /// Resolves the command list for a nested CallEvent. RM2K page indices are
+    /// one-based; index 0 addresses the first page of the event.
+    /// </summary>
+    private IReadOnlyList<Rm2kMap.EventCommand>? ResolveEventCommands(int pEventId, int pPageIndex)
+    {
+        foreach (var mapEvent in _mapEvents)
+        {
+            if (mapEvent.Id != pEventId || mapEvent.Pages.Count == 0)
+            {
+                continue;
+            }
+            var pageNumber = pPageIndex <= 0 ? 0 : pPageIndex - 1;
+            if (pageNumber >= mapEvent.Pages.Count)
+            {
+                return null;
+            }
+            return mapEvent.Pages[pageNumber].Commands;
+        }
+        return null;
     }
 
     private static bool TryReadInt(Godot.Collections.Dictionary pData, string pKey, out int pValue)

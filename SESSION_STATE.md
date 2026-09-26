@@ -203,6 +203,20 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Still diagnostic-only by design: `ChangeLevel` (10420, 6 occurrences), `ChangeHeroName` (10610), screen effects (11040/11050/11070), `CallEvent` (12330), `ChangeBattleCommands` (1009), and Maniac codes found in the fixtures.
 - Fresh canonical validation: `All 309 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
 
+## Latest completed interpreter command batch (2026-08-31)
+
+Implemented from the verified liblcf command table and EasyRPG `ExecuteCommand` dispatch widths:
+
+- `ChangeLevel` (10420) and `ChangeExp` (10410), 6 parameters `[actorMode, actorId, operation, operandMode, operand, showMessage]`, using `GetActors` modes (party / hero / variable-held hero) and `OperateValue` add/subtract. Levels clamp to `1..99`, exp to `0..999999`. `GameSimulationState` gained bounded per-actor records (`GetOrCreateActorState`, level/exp/name accessors).
+- `ChangeHeroName` (10610) stores the command string as the actor name, bounded to 64 characters.
+- `EndEventProcessing` (12310) ends the current command frame rather than the whole interpreter.
+- `FlashScreen` (11040), `ShakeScreen` (11050) and `WeatherEffects` (11070) drive new bounded screen-effect state on `PresentationState`; `Rm2kEngineRuntime.Update` ticks effects with elapsed simulation frames, and the wait flag reuses the tenths-to-frames conversion. Weather strength clamps to 2, unknown RM2K types fold to 0.
+- `CallEvent` (12330) pushes a bounded nested frame for map events via an injected resolver (`Rm2kEventScheduler` answers from its own event list). Nested `END` returns to the caller, loop-stack depth is restored per frame, recursion is capped at `MaxScriptRecursion`, and common-event targets stay diagnostic-only because the LDB common-event section is not decoded yet.
+- `ChangeEventLocation` (10860) and `EraseEvent` (12320) mutate event position and activity through scheduler-backed hooks, so `TriggerAt` observes the new position and the owning interpreter stops.
+- Corrected the stale `Rm2kMap.EventPage.Trigger` comment to the liblcf enum.
+- Fresh canonical validation: `All 330 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
+- Still diagnostic-only: `ChangeBattleCommands` (1009), menu/Maniac codes (5001-5005, 11610), `MoveEvent` (11330, needs move routes), `ChangeMapTileset` (11710), battle-dependent commands, and common-event calls.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.

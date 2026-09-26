@@ -17,6 +17,10 @@ public sealed class GameSimulationState
     public const int MaxMapId = 1000;
     public const int MaxSwitches = 50000;
     public const int MaxVariables = 50000;
+    public const int MinActorLevel = 1;
+    public const int MaxActorLevel = 99;
+    public const int MaxActorExp = 999999;
+    public const int MaxActorNameLength = 64;
 
     public string GameTitle { get; init; } = "";
     public int MapId { get; set; } = 0;
@@ -98,6 +102,81 @@ public sealed class GameSimulationState
     public void ClearDiagnostics()
     {
         Diagnostics.Clear();
+    }
+
+    /// <summary>
+    /// Returns the mutable per-actor record, creating bounded RM2K defaults.
+    /// Keys are always present so callers never observe a partial record.
+    /// </summary>
+    public Godot.Collections.Dictionary GetOrCreateActorState(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pActorId), "Actor id is outside RM2K bounds.");
+        }
+        if (!ActorState.TryGetValue(pActorId, out var state) || state == null)
+        {
+            state = new Godot.Collections.Dictionary
+            {
+                { "level", MinActorLevel },
+                { "exp", 0 },
+                { "name", "" },
+            };
+            ActorState[pActorId] = state;
+        }
+        else
+        {
+            if (!state.ContainsKey("level")) state["level"] = MinActorLevel;
+            if (!state.ContainsKey("exp")) state["exp"] = 0;
+            if (!state.ContainsKey("name")) state["name"] = "";
+        }
+        return state;
+    }
+
+    public int GetActorLevel(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId || !ActorState.TryGetValue(pActorId, out var state) || state == null)
+        {
+            return MinActorLevel;
+        }
+        return state.ContainsKey("level") ? state["level"].AsInt32() : MinActorLevel;
+    }
+
+    public void SetActorLevel(int pActorId, int pLevel)
+    {
+        var state = GetOrCreateActorState(pActorId);
+        state["level"] = Math.Clamp(pLevel, MinActorLevel, MaxActorLevel);
+    }
+
+    public int GetActorExp(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId || !ActorState.TryGetValue(pActorId, out var state) || state == null)
+        {
+            return 0;
+        }
+        return state.ContainsKey("exp") ? state["exp"].AsInt32() : 0;
+    }
+
+    public void SetActorExp(int pActorId, int pExp)
+    {
+        var state = GetOrCreateActorState(pActorId);
+        state["exp"] = Math.Clamp(pExp, 0, MaxActorExp);
+    }
+
+    public string GetActorName(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId || !ActorState.TryGetValue(pActorId, out var state) || state == null)
+        {
+            return "";
+        }
+        return state.ContainsKey("name") ? state["name"].AsString() : "";
+    }
+
+    public void SetActorName(int pActorId, string pName)
+    {
+        var state = GetOrCreateActorState(pActorId);
+        var name = pName ?? "";
+        state["name"] = name.Length > MaxActorNameLength ? name[..MaxActorNameLength] : name;
     }
 
     private int _timer1TickRemainder;

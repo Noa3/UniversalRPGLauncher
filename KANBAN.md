@@ -66,6 +66,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-081 | 0 | DONE | Decode real LMU event pages: fix struct-array field collection and verify liblcf IDs | K-013 |
 | K-082 | 0 | DONE | Align event-page trigger ids with liblcf and fail closed on undecodable pages | K-081 |
 | K-083 | 0 | DONE | Correct ControlSwitches/ControlVariables parameter layout to the verified EasyRPG spec | K-081 |
+| K-084 | 1 | DONE | Implement verified actor-stat, screen-effect, and event-control interpreter commands | K-023 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -595,6 +596,25 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - `Test_RealFixtureCommandsUseVerifiedParameterWidths` asserts the pinned fixtures satisfy the verified minimum widths; `Test_Rm2kRuntimeExecutesRealFixtureActionPages` now also fails if a real control command is rejected as an invalid range or patch-only target mode.
 - `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 309 tests passed`, exit `0`.
 - Still diagnostic-only by design: `ChangeLevel` (10420), `ChangeHeroName` (10610), screen effects (11040/11050/11070), `CallEvent` (12330), battle commands (1009), and Maniac codes present in the fixtures.
+
+### K-084 — Verified actor-stat, screen-effect and event-control commands
+
+**Status (2026-08-31) — DONE**
+
+Implemented from the verified `lcf::rpg::Cmd` table and EasyRPG `ExecuteCommand` dispatch widths:
+
+- `ChangeLevel` (10420) and `ChangeExp` (10410), 6 parameters `[actorMode, actorId, operation, operandMode, operand, showMessage]`, using `GetActors` modes (party / hero / variable-held hero) and `OperateValue` add/subtract. Levels clamp to `1..99`, exp to `0..999999`.
+- `ChangeHeroName` (10610), 1 parameter; the command string is the new name, bounded to 64 characters.
+- `EndEventProcessing` (12310) ends the current frame instead of the whole interpreter.
+- `FlashScreen` (11040, 6 parameters), `ShakeScreen` (11050, 4 parameters) and `WeatherEffects` (11070, 2 parameters) drive new bounded screen-effect state on `PresentationState`; the runtime ticks effects with elapsed simulation frames, and the wait flag reuses the RM2K tenths-to-frames conversion. Weather strength clamps to 2 and unknown RM2K types fold to 0.
+- `CallEvent` (12330, 3 parameters) pushes a bounded nested frame for map events through an injected resolver; nested `END` returns to the caller, recursion is capped at `MaxScriptRecursion`, and common-event targets stay diagnostic-only because the LDB common-event section is not decoded yet.
+- `ChangeEventLocation` (10860, 4 parameters) and `EraseEvent` (12320) mutate event position and activity through scheduler-backed hooks, so `TriggerAt` observes the new position.
+- `Rm2kMap.EventPage.Trigger` comment corrected to the liblcf enum.
+
+**Validation evidence (2026-08-31)**
+- New regression coverage in `TestEventInterpreter`: level/exp party-wide, clamping, variable operand, variable-held actor id, fail-closed modes, hero name, `EndEventProcessing`, flash/shake/weather bounds and waits, presentation-absent path, nested call with return, unsupported call targets, recursion bound, event location with variable coordinates, and erase-event activation.
+- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 330 tests passed`, exit `0`.
+- Still diagnostic-only by design: `ChangeBattleCommands` (1009), menu/Maniac codes (5001-5005, 11610), `MoveEvent` (11330, needs move routes), `ChangeMapTileset` (11710), and battle-dependent commands.
 
 ## Agent maintenance rules
 - Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.

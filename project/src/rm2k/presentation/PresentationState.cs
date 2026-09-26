@@ -34,6 +34,12 @@ public sealed class PresentationState
     public const int MaxChoiceCharacters = 128;
     public const int MaxPictureNameCharacters = 256;
     public const int MaxPictureDimension = 8192;
+    public const int MaxColorChannel = 255;
+    public const int MaxEffectFrames = 600; // 10 seconds at 60 Hz, matching EventInterpreter.MaxWaitFrames
+    public const int MaxShakeStrength = 8;
+    public const int MaxShakeSpeed = 8;
+    public const int MaxWeatherType = 2;
+    public const int MaxWeatherStrength = 2;
 
     public bool MessageVisible { get; private set; }
     public string MessageText { get; private set; } = "";
@@ -41,6 +47,22 @@ public sealed class PresentationState
     public int? PendingInputVariableId { get; private set; }
     public int? InputValue { get; private set; }
     public Dictionary<int, PictureState> Pictures { get; } = new();
+
+    // Screen effects (liblcf FlashScreen 11040, ShakeScreen 11050, WeatherEffects 11070).
+    public bool IsFlashActive { get; private set; }
+    public int FlashRed { get; private set; }
+    public int FlashGreen { get; private set; }
+    public int FlashBlue { get; private set; }
+    public int FlashAlpha { get; private set; }
+    public int FlashFramesRemaining { get; private set; }
+
+    public bool IsShakeActive { get; private set; }
+    public int ShakeStrength { get; private set; }
+    public int ShakeSpeed { get; private set; }
+    public int ShakeFramesRemaining { get; private set; }
+
+    public int WeatherType { get; private set; }
+    public int WeatherStrength { get; private set; }
 
     public void Reset()
     {
@@ -50,7 +72,88 @@ public sealed class PresentationState
         PendingInputVariableId = null;
         InputValue = null;
         Pictures.Clear();
+        IsFlashActive = false;
+        FlashRed = FlashGreen = FlashBlue = FlashAlpha = 0;
+        FlashFramesRemaining = 0;
+        IsShakeActive = false;
+        ShakeStrength = 0;
+        ShakeSpeed = 0;
+        ShakeFramesRemaining = 0;
+        WeatherType = 0;
+        WeatherStrength = 0;
     }
+
+    /// <summary>Advances timed screen effects by whole simulation frames.</summary>
+    public void Tick(int pFrames)
+    {
+        if (pFrames < 0) throw new ArgumentOutOfRangeException(nameof(pFrames));
+        if (IsFlashActive)
+        {
+            FlashFramesRemaining -= pFrames;
+            if (FlashFramesRemaining <= 0)
+            {
+                IsFlashActive = false;
+                FlashFramesRemaining = 0;
+            }
+        }
+        if (IsShakeActive)
+        {
+            ShakeFramesRemaining -= pFrames;
+            if (ShakeFramesRemaining <= 0)
+            {
+                IsShakeActive = false;
+                ShakeFramesRemaining = 0;
+            }
+        }
+    }
+
+    public bool FlashOnce(int pRed, int pGreen, int pBlue, int pAlpha, int pFrames)
+    {
+        if (!IsChannel(pRed) || !IsChannel(pGreen) || !IsChannel(pBlue) || !IsChannel(pAlpha)) return false;
+        if (pFrames < 0 || pFrames > MaxEffectFrames) return false;
+        FlashRed = pRed;
+        FlashGreen = pGreen;
+        FlashBlue = pBlue;
+        FlashAlpha = pAlpha;
+        FlashFramesRemaining = pFrames;
+        IsFlashActive = pFrames > 0;
+        return true;
+    }
+
+    public void FlashEnd()
+    {
+        IsFlashActive = false;
+        FlashFramesRemaining = 0;
+    }
+
+    public bool ShakeOnce(int pStrength, int pSpeed, int pFrames)
+    {
+        if (pStrength < 0 || pStrength > MaxShakeStrength) return false;
+        if (pSpeed < 0 || pSpeed > MaxShakeSpeed) return false;
+        if (pFrames < 0 || pFrames > MaxEffectFrames) return false;
+        ShakeStrength = pStrength;
+        ShakeSpeed = pSpeed;
+        ShakeFramesRemaining = pFrames;
+        IsShakeActive = pFrames > 0;
+        return true;
+    }
+
+    public void ShakeEnd()
+    {
+        IsShakeActive = false;
+        ShakeFramesRemaining = 0;
+    }
+
+    public bool SetWeather(int pType, int pStrength)
+    {
+        if (pType < 0 || pType > MaxWeatherType) return false;
+        if (pStrength < 0 || pStrength > MaxWeatherStrength) return false;
+        WeatherType = pType;
+        WeatherStrength = pStrength;
+        return true;
+    }
+
+    private static bool IsChannel(int pValue) => pValue >= 0 && pValue <= MaxColorChannel;
 
     public bool BeginInput(int pVariableId)
     {
