@@ -70,7 +70,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-085 | 2 | DONE | Bring RPG Maker MV to data-directory and System.json metadata parity with MZ | K-017 |
 | K-086 | 1 | DONE | Decode verified RM2K chipset passability arrays from the LDB chipset section | K-015 |
 | K-087 | 2 | DONE | Add verified RM2K autotile animation ticking (counter values blocked: no verified data source) | K-015 |
-| K-088 | 2 | READY | Decode the LMT map-info tile substitution tables (`lower_tiles`/`upper_tiles`) and apply them to chipset lookups | K-086 |
+| K-088 | 2 | DONE | Apply verified RM2K tile substitution tables (source: liblcf SaveMapInfo, not LMT) | K-086 |
+| K-089 | 2 | READY | Decode RM2K per-map terrain tags via verified `Game_Map::GetChipId` substitution | K-015 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -696,8 +697,31 @@ Follow-up to K-086. Same evidence discipline: nothing below was inferred from me
 - Passability and animation data belong to a single chipset entry. Reading the first entry "because it is the map's chipset" was an unverified assumption; the LMU `chipset_id` is the verified selector.
 
 
+### K-088 — RM2K tile substitution tables
+
+**Status (2026-09-26) — DONE: verified substitution applied; the tables themselves come from save files**
+
+**Card correction**
+The card originally said "LMT map-info tile substitution tables". That was wrong. liblcf `lcf::rpg::MapInfo` has no substitution fields and liblcf `ChunkMapInfo` (LMT) has no `lower_tiles`/`upper_tiles` field ids. The tables live in `lcf::rpg::SaveMapInfo` (`lower_tiles`, `upper_tiles`, 144 entries each, identity by default), so they are save-file data, not map-tree data.
+
+**Verified resolution order (EasyRPG Player `src/game_map.cpp`)**
+- `Setup` fills both tables with `std::iota` (identity), which matches the liblcf `SaveMapInfo` default, so identity is the correct behaviour for a freshly loaded map.
+- Upper layer, `IsPassableTile` and `IsCounter`: `tile_id = upper_layer[i] - BLOCK_F` and then `tile_id = map_info.upper_tiles[tile_id]`, so the substitution happens **after** reducing the raw id and **before** the flag lookup.
+- Lower block E, `IsPassableLowerTile`: `tile_id = tile_raw_id - BLOCK_E; tile_id = map_info.lower_tiles[tile_id] + BLOCK_E_INDEX`. Only block E is substituted; blocks A/B/C/D are used as-is.
+- `GetChipId` (terrain lookup) converts the raw id to a chip index first and only then remaps indices in `[BLOCK_E_INDEX, NUM_LOWER_TILES)`.
+
+**Implemented**
+- New `Rm2kTileSubstitution` with the verified identity default, `SubstituteLower`, `SubstituteUpper` and `ResolveChipIndex` (the `GetChipId` order). Tables whose length or entries do not fit the 144-entry range fall back to identity instead of clamping, and requests outside the range return -1 so they fail closed.
+- `Rm2kChipset.IsPassableLowerTile`, `IsPassableTile` and `BuildDirectionMasks` take an optional `Rm2kTileSubstitution`; the existing overloads keep identity behaviour, so the runtime is unchanged until save data provides a table.
+
+**Not implemented, on purpose**
+- Reading the tables out of a save file. That belongs with the open save-game work (K-050 family: "semantic field mapping, save mutation"), not with the chipset parser.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 360 tests passed`, exit `0`.
+- `test_rm2k_chipset.cs` pins the identity default, that substitution changes passability lookups, that only the verified ranges are remapped, that malformed tables fall back to identity, that out-of-range requests fail closed, and the `GetChipId` index-first order.
+
 ## Agent maintenance rules
-- Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.
 - New defects found during a card become `P0`/`P1` bug cards when they threaten correctness/security; otherwise add them to backlog.
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

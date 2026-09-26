@@ -128,7 +128,7 @@ The bounded RM2K interpreter now supports verified `ChangeGold` command `10310`,
 | No export pipeline | Medium | Presets exist; signed/release exports are not automated |
 | Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
 | No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
-- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads bounded map geometry/start-map diagnostics, decoded events, chipset-driven movement, verified autotile animation steps, and scheduler state; complete rendering, tile substitution, event counters, and full systems remain incomplete |
+- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads bounded map geometry/start-map diagnostics, decoded events, chipset-driven movement, verified autotile animation steps, and verified tile substitution, and scheduler state; complete rendering, per-map terrain tags, event counters, and full systems remain incomplete |
 
 ## Missing Core Components (Planned)
 

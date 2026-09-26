@@ -102,9 +102,17 @@ public static class Rm2kChipset
 
     /// <summary>
     /// Verified Game_Map::IsPassableLowerTile, including the wall/autotile
-    /// exception that lets a walking-through wall tile be entered.
+    /// exception that lets a walking-through wall tile be entered. Block E tile
+    /// ids run through the lower substitution table
+    /// (<c>map_info.lower_tiles[tile_raw_id - BLOCK_E] + BLOCK_E_INDEX</c>).
     /// </summary>
     public static bool IsPassableLowerTile(int pLowerRawId, byte[] pLowerPassability, byte pBit)
+    {
+        return IsPassableLowerTile(pLowerRawId, pLowerPassability, pBit, null);
+    }
+
+    public static bool IsPassableLowerTile(
+        int pLowerRawId, byte[] pLowerPassability, byte pBit, Rm2kTileSubstitution? pSubstitution)
     {
         if (pLowerPassability == null || pLowerPassability.Length == 0)
         {
@@ -114,6 +122,15 @@ public static class Rm2kChipset
         if (pLowerRawId >= BlockE)
         {
             tileId = pLowerRawId - BlockE;
+            if (pSubstitution != null)
+            {
+                var substituted = pSubstitution.SubstituteLower(tileId);
+                if (substituted < 0)
+                {
+                    return false;
+                }
+                tileId = substituted;
+            }
         }
         else if (pLowerRawId >= BlockD)
         {
@@ -151,12 +168,41 @@ public static class Rm2kChipset
         byte[] pUpperPassability,
         byte pBit)
     {
+        return IsPassableTile(pLowerRawId, pUpperRawId, pLowerPassability, pUpperPassability, pBit, null);
+    }
+
+    /// <summary>
+    /// Verified Game_Map::IsPassableTile with tile substitution: the upper raw
+    /// id is reduced by <c>BLOCK_F</c> and then replaced through
+    /// <c>map_info.upper_tiles</c> before the flag lookup.
+    /// </summary>
+    public static bool IsPassableTile(
+        int pLowerRawId,
+        int pUpperRawId,
+        byte[] pLowerPassability,
+        byte[] pUpperPassability,
+        byte pBit,
+        Rm2kTileSubstitution? pSubstitution)
+    {
         if (pUpperPassability == null || pLowerPassability == null)
         {
             return false;
         }
         var upperIndex = pUpperRawId - BlockF;
-        if (upperIndex < 0 || upperIndex >= pUpperPassability.Length)
+        if (upperIndex < 0)
+        {
+            return false;
+        }
+        if (pSubstitution != null)
+        {
+            var substituted = pSubstitution.SubstituteUpper(upperIndex);
+            if (substituted < 0)
+            {
+                return false;
+            }
+            upperIndex = substituted;
+        }
+        if (upperIndex >= pUpperPassability.Length)
         {
             return false;
         }
@@ -169,7 +215,7 @@ public static class Rm2kChipset
         {
             return true;
         }
-        return IsPassableLowerTile(pLowerRawId, pLowerPassability, pBit);
+        return IsPassableLowerTile(pLowerRawId, pLowerPassability, pBit, pSubstitution);
     }
 
     /// <summary>
@@ -182,6 +228,16 @@ public static class Rm2kChipset
         byte[] pLowerPassability,
         byte[] pUpperPassability)
     {
+        return BuildDirectionMasks(pLowerLayer, pUpperLayer, pLowerPassability, pUpperPassability, null);
+    }
+
+    public static byte[] BuildDirectionMasks(
+        int[] pLowerLayer,
+        int[] pUpperLayer,
+        byte[] pLowerPassability,
+        byte[] pUpperPassability,
+        Rm2kTileSubstitution? pSubstitution)
+    {
         if (pLowerLayer == null || pUpperLayer == null)
         {
             return [];
@@ -193,7 +249,7 @@ public static class Rm2kChipset
             var mask = 0;
             foreach (var bit in new[] { PassDown, PassLeft, PassRight, PassUp })
             {
-                if (IsPassableTile(pLowerLayer[index], pUpperLayer[index], pLowerPassability, pUpperPassability, bit))
+                if (IsPassableTile(pLowerLayer[index], pUpperLayer[index], pLowerPassability, pUpperPassability, bit, pSubstitution))
                 {
                     mask |= bit;
                 }
@@ -286,5 +342,97 @@ public static class Rm2kChipset
             return 0;
         }
         return pFrameCount / Math.Max(1, pAnimationSpeed);
+    }
+}
+
+/// <summary>
+/// RM2K tile substitution tables, verified against EasyRPG Player
+/// <c>Game_Map::Setup</c> (<c>std::iota</c> identity), <c>IsPassableTile</c>,
+/// <c>IsPassableLowerTile</c> and <c>GetChipId</c>, plus liblcf
+/// <c>rpg::SaveMapInfo</c>, which stores both tables with 144 identity entries.
+/// They live in the save file, not in the LMT map info, so the identity tables
+/// are the verified default for a freshly loaded map.
+/// </summary>
+public sealed class Rm2kTileSubstitution
+{
+    private readonly int[] _lower;
+    private readonly int[] _upper;
+
+    public Rm2kTileSubstitution(int[]? pLower, int[]? pUpper)
+    {
+        _lower = Validate(pLower, Rm2kChipset.NumUpperTiles);
+        _upper = Validate(pUpper, Rm2kChipset.NumUpperTiles);
+    }
+
+    private static int[] Validate(int[]? pTable, int pExpectedLength)
+    {
+        if (pTable == null)
+        {
+            return Identity(pExpectedLength);
+        }
+        var result = new int[pTable.Length];
+        for (var index = 0; index < pTable.Length; index++)
+        {
+            if (pTable[index] < 0 || pTable[index] >= pExpectedLength)
+            {
+                // An out-of-range entry is refused instead of clamped so a
+                // malformed save cannot silently remap tiles.
+                return Identity(pExpectedLength);
+            }
+            result[index] = pTable[index];
+        }
+        return result;
+    }
+
+    private static int[] Identity(int pLength)
+    {
+        var result = new int[pLength];
+        for (var index = 0; index < pLength; index++)
+        {
+            result[index] = index;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// <c>map_info.lower_tiles[tile_raw_id - BLOCK_E] + BLOCK_E_INDEX</c>, or
+    /// -1 when the request cannot be resolved.
+    /// </summary>
+    public int SubstituteLower(int pBlockEIndex)
+    {
+        if (pBlockEIndex < 0 || pBlockEIndex >= _lower.Length)
+        {
+            return -1;
+        }
+        return _lower[pBlockEIndex] + Rm2kChipset.BlockEIndex;
+    }
+
+    /// <summary>
+    /// <c>map_info.upper_tiles[tile_raw_id - BLOCK_F]</c>, or -1 when the
+    /// request cannot be resolved.
+    /// </summary>
+    public int SubstituteUpper(int pUpperIndex)
+    {
+        if (pUpperIndex < 0 || pUpperIndex >= _upper.Length)
+        {
+            return -1;
+        }
+        return _upper[pUpperIndex];
+    }
+
+    /// <summary>
+    /// Verified Game_Map::GetChipId: the raw id is converted to a chip index
+    /// first, and the lower table then replaces indices inside
+    /// <c>[BLOCK_E_INDEX, NUM_LOWER_TILES)</c>.
+    /// </summary>
+    public int ResolveChipIndex(int pChipId)
+    {
+        var chipIndex = Rm2kChipset.ChipIdToIndex(pChipId);
+        if (chipIndex >= Rm2kChipset.BlockEIndex && chipIndex < Rm2kChipset.NumLowerTiles)
+        {
+            var substituted = SubstituteLower(chipIndex - Rm2kChipset.BlockEIndex);
+            return substituted < 0 ? chipIndex : substituted;
+        }
+        return chipIndex;
     }
 }

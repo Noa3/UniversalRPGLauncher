@@ -5,7 +5,13 @@
 
 ## Current card
 
-K-086 and K-087 are DONE: verified RM2K chipset passability drives real movement and verified autotile animation is exposed to the renderer. K-088 (LMT tile substitution tables) is the next READY card.
+K-086, K-087 and K-088 are DONE: verified RM2K chipset passability drives real movement, autotile animation is exposed, and verified tile substitution is applied. K-089 (per-map terrain tags via `Game_Map::GetChipId`) is the next READY card.
+
+**K-088 completed (2026-09-26)**
+- Card correction: the substitution tables are **not** LMT data. `lcf::rpg::MapInfo` has no such fields and `ChunkMapInfo` has no field ids for them. They live in `lcf::rpg::SaveMapInfo` (`lower_tiles`, `upper_tiles`, 144 identity entries), so they are save-file data. Reading them belongs with the open K-050 save-game work.
+- Verified order in Player `game_map.cpp`: upper layer reduces by `BLOCK_F` then substitutes through `upper_tiles`; lower block E reduces by `BLOCK_E` then substitutes and adds `BLOCK_E_INDEX`; blocks A/B/C/D are never substituted; `GetChipId` converts the raw id to a chip index **first** and then remaps indices in `[BLOCK_E_INDEX, NUM_LOWER_TILES)`.
+- New `Rm2kTileSubstitution` with identity default, `SubstituteLower`, `SubstituteUpper`, `ResolveChipIndex`. Tables that do not fit the 144-entry range fall back to identity instead of clamping; out-of-range requests return -1 and fail closed.
+- `Rm2kChipset.IsPassableLowerTile`, `IsPassableTile` and `BuildDirectionMasks` accept an optional substitution; the old overloads keep identity, so the runtime is unchanged until a save supplies a table.
 
 **K-087 completed (2026-09-26)**
 - Verified autotile animation in EasyRPG Player `src/tilemap_layer.cpp` (Draw), `src/game_map.cpp` (SetChipset, GetAnimationType/Speed) and liblcf `src/generated/lcf/ldb/chunks.h`.
@@ -28,9 +34,9 @@ K-086 and K-087 are DONE: verified RM2K chipset passability drives real movement
 
 ## Next action
 
-1. Start K-088: the tile substitution tables `lcf::rpg::MapInfo::lower_tiles`/`upper_tiles` come from the LMT map info. Verify the LMT chunk/field ids in liblcf `src/generated/lcf/ldb/chunks.h` (`ChunkMapInfo`) before implementing, and confirm against `Game_Map::Setup` (`std::iota` identity) and `Game_Map::DoSubstitute`.
+1. Start K-089: per-map terrain tags. Verify `Game_Map::GetChipId` (lower layer, chip index, then the block E substitution already implemented) against the LDB `terrain_data` array, whose liblcf field id is `ChunkChipset::terrain_data = 0x03` with 162 entries. Terrain tags feed event conditions and encounter rates, so this is the next step after passability.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
-3. Reference Player sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`).
+3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
 ## Reference repos noted by the user (2026-09-26, not actioned)
 
@@ -41,7 +47,7 @@ K-086 and K-087 are DONE: verified RM2K chipset passability drives real movement
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 356 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 360 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|

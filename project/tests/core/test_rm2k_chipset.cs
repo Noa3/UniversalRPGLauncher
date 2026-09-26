@@ -153,6 +153,16 @@ public partial class TestRm2kChipset : TestBase
             "a short upper layer cannot extend the map");
     }
 
+    private static int[] Identity(int pLength)
+    {
+        var result = new int[pLength];
+        for (var index = 0; index < pLength; index++)
+        {
+            result[index] = index;
+        }
+        return result;
+    }
+
     public void Test_AnimationSpeedMapsChipsetFlagToFrames()
     {
         // Game_Map::GetAnimationSpeed(): only "animated or not" is stored.
@@ -235,6 +245,103 @@ public partial class TestRm2kChipset : TestBase
                 }
             }
         }
+    }
+
+    public void Test_SubstitutionDefaultsToIdentity()
+    {
+        // Game_Map::Setup fills both tables with std::iota, and liblcf
+        // rpg::SaveMapInfo stores 144 identity entries.
+        var substitution = new Rm2kTileSubstitution(null, null);
+        for (var index = 0; index < 144; index++)
+        {
+            AssertEq(substitution.SubstituteUpper(index), index, "upper identity");
+            AssertEq(substitution.SubstituteLower(index), index + Rm2kChipset.BlockEIndex, "lower identity");
+        }
+    }
+
+    public void Test_SubstitutionReplacesPassabilityLookups()
+    {
+        var lowerFlags = new byte[162];
+        var upperFlags = new byte[144];
+        Array.Fill(lowerFlags, Rm2kChipset.AllDirections);
+        Array.Fill(upperFlags, Rm2kChipset.AllDirections);
+        // Block E entry 0 and upper entry 0 are both impassable, and the tables
+        // redirect them to the fully passable entries at the end.
+        lowerFlags[Rm2kChipset.BlockEIndex] = 0;
+        upperFlags[0] = 0;
+
+        AssertFalse(Rm2kChipset.IsPassableTile(
+            Rm2kChipset.BlockE, Rm2kChipset.BlockF, lowerFlags, upperFlags, Rm2kChipset.PassRight),
+            "without substitution the blocked entries decide");
+
+        var lowerTable = Identity(144);
+        var upperTable = Identity(144);
+        lowerTable[0] = 143;
+        upperTable[0] = 143;
+        var substitution = new Rm2kTileSubstitution(lowerTable, upperTable);
+
+        AssertTrue(Rm2kChipset.IsPassableTile(
+            Rm2kChipset.BlockE, Rm2kChipset.BlockF, lowerFlags, upperFlags, Rm2kChipset.PassRight, substitution),
+            "the upper table redirects the blocked upper entry");
+        AssertTrue(Rm2kChipset.IsPassableLowerTile(
+            Rm2kChipset.BlockE, lowerFlags, Rm2kChipset.PassRight, substitution),
+            "the lower table redirects the blocked block E entry");
+
+        // The substitution is only applied to the verified ranges: a lower tile
+        // from block A/B/C is never remapped.
+        var lowerBlockedA = new byte[162];
+        Array.Fill(lowerBlockedA, Rm2kChipset.AllDirections);
+        lowerBlockedA[1] = 0;
+        AssertFalse(Rm2kChipset.IsPassableLowerTile(1000, lowerBlockedA, Rm2kChipset.PassRight, substitution),
+            "block A entries are not substituted");
+    }
+
+    public void Test_SubstitutionFailsClosedOnOutOfRangeTables()
+    {
+        var lowerFlags = new byte[162];
+        var upperFlags = new byte[144];
+        Array.Fill(lowerFlags, Rm2kChipset.AllDirections);
+        Array.Fill(upperFlags, Rm2kChipset.AllDirections);
+
+        // A malformed table falls back to identity rather than clamping.
+        var brokenLower = Identity(144);
+        brokenLower[0] = 200;
+        var brokenUpper = Identity(144);
+        brokenUpper[0] = -1;
+        var substitution = new Rm2kTileSubstitution(brokenLower, brokenUpper);
+        AssertEq(substitution.SubstituteLower(0), 0 + Rm2kChipset.BlockEIndex, "a broken table falls back to identity");
+        AssertEq(substitution.SubstituteUpper(0), 0);
+
+        // Requests outside the table range cannot be resolved.
+        AssertEq(substitution.SubstituteUpper(144), -1);
+        AssertEq(substitution.SubstituteUpper(-1), -1);
+        AssertEq(substitution.SubstituteLower(144), -1);
+
+        var passable = new byte[162];
+        Array.Fill(passable, Rm2kChipset.AllDirections);
+        AssertFalse(Rm2kChipset.IsPassableLowerTile(
+            Rm2kChipset.BlockE + 144, passable, Rm2kChipset.PassRight, substitution),
+            "a block E id beyond the table fails closed");
+        AssertFalse(Rm2kChipset.IsPassableTile(
+            0, Rm2kChipset.BlockF + 144, passable, upperFlags, Rm2kChipset.PassRight, substitution),
+            "an upper id beyond the table fails closed");
+    }
+
+    public void Test_ChipIndexResolutionAppliesLowerSubstitution()
+    {
+        // Verified Game_Map::GetChipId: the raw id becomes a chip index first,
+        // and only indices in [BLOCK_E_INDEX, NUM_LOWER_TILES) are remapped.
+        var lowerTable = Identity(144);
+        lowerTable[0] = 5;
+        var substitution = new Rm2kTileSubstitution(lowerTable, null);
+        AssertEq(substitution.ResolveChipIndex(Rm2kChipset.BlockE), Rm2kChipset.BlockEIndex + 5,
+            "a block E tile follows the lower table");
+        AssertEq(substitution.ResolveChipIndex(Rm2kChipset.BlockD), Rm2kChipset.BlockDIndex,
+            "a block D tile is not substituted");
+        AssertEq(substitution.ResolveChipIndex(Rm2kChipset.BlockA + 500), 0,
+            "a block A tile is not substituted");
+        AssertEq(substitution.ResolveChipIndex(Rm2kChipset.BlockF), Rm2kChipset.NumLowerTiles,
+            "an upper tile keeps its index outside the lower range");
     }
 
     public void Test_SimulationAdvancesChipAnimationWithTheFrameCount()
