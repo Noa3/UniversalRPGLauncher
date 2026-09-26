@@ -27,6 +27,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Rm2kParser _parser = new();
     private readonly VirtualClock _clock = new();
     private readonly Rm2kEventScheduler _eventScheduler;
+    private readonly Rm2kPlayerTurn _playerTurn;
     private readonly Rm2kRendererAdapter _rendererAdapter = new();
     private readonly Rm2kSpriteAdapter _spriteAdapter = new();
     private bool _debugToolsEnabled;
@@ -36,6 +37,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _pluginId = pPluginId;
         _game = pGame;
         _eventScheduler = new Rm2kEventScheduler(Simulation, Presentation);
+        _playerTurn = new Rm2kPlayerTurn(Simulation, _eventScheduler);
     }
 
     public PluginRuntimeState State { get; private set; } = PluginRuntimeState.Created;
@@ -195,6 +197,20 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
         }
         return PluginOperationResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Applies one resolved input action to the running map. The host feeds this
+    /// from <see cref="Rm2kInputMapper"/>; the ordering inside a turn follows the
+    /// verified Player sequence.
+    /// </summary>
+    public bool SubmitInput(UniversalRPG.Rm2k.Input.Rm2kInputAction pAction)
+    {
+        if (State != PluginRuntimeState.Running)
+        {
+            return false;
+        }
+        return _playerTurn.Apply(pAction);
     }
 
     public PluginResult<string> ExportSaveSnapshot()

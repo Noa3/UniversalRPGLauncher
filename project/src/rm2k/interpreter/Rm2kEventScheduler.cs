@@ -226,6 +226,43 @@ public sealed class Rm2kEventScheduler
     }
 
     /// <summary>
+    /// Verified Game_Player::UpdateMovement: after a successful step, when the
+    /// player comes to a stop, touched and collision pages are evaluated on the
+    /// player's own tile, so they must not share the player's layer.
+    /// </summary>
+    public bool TriggerTouchOrCollisionHere()
+    {
+        return TriggerAt(_state.MapX, _state.MapY, Rm2kEventTrigger.Touched, Rm2kTriggerLayerRule.MustNotBeSame)
+            || TriggerAt(_state.MapX, _state.MapY, Rm2kEventTrigger.Collision, Rm2kTriggerLayerRule.MustNotBeSame);
+    }
+
+    /// <summary>
+    /// Verified Game_Player::CheckActionEvent: the decision key first evaluates
+    /// touched and collision pages in front of the player, then action pages on
+    /// the player's own tile, then the action page in front, which continues
+    /// over at most three counter tiles. The result is the union of all cases.
+    /// </summary>
+    public bool CheckActionEvent()
+    {
+        var (frontX, frontY) = _state.FrontTile(_state.MapX, _state.MapY, _state.FacingDirection);
+        var result = TriggerAt(frontX, frontY, Rm2kEventTrigger.Touched, Rm2kTriggerLayerRule.MustBeSame)
+            || TriggerAt(frontX, frontY, Rm2kEventTrigger.Collision, Rm2kTriggerLayerRule.MustBeSame);
+        result |= TriggerAt(_state.MapX, _state.MapY, Rm2kEventTrigger.Action, Rm2kTriggerLayerRule.MustNotBeSame);
+
+        var gotAction = TriggerAt(frontX, frontY, Rm2kEventTrigger.Action, Rm2kTriggerLayerRule.MustBeSame);
+        for (var step = 0; !gotAction && step < MaxCounterTiles; step++)
+        {
+            if (!_state.IsCounterAt(frontX, frontY))
+            {
+                break;
+            }
+            (frontX, frontY) = _state.FrontTile(frontX, frontY, _state.FacingDirection);
+            gotAction |= TriggerAt(frontX, frontY, Rm2kEventTrigger.Action, Rm2kTriggerLayerRule.MustBeSame);
+        }
+        return result || gotAction;
+    }
+
+    /// <summary>
     /// Starts the first matching page at the given tile. The Player keeps the
     /// layer rule explicit: events in front of the player must share its layer,
     /// events on the player's own tile must not.

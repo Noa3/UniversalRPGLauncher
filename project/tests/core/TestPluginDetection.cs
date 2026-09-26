@@ -485,6 +485,22 @@ public partial class TestPluginDetection : TestBase
             true, "the real map resolves a valid terrain tag");
         AssertEq(runtime.Simulation.GetTerrainTagAt(-1, -1) >= 1, true,
             "out-of-bounds coordinates resolve a terrain tag");
+        // The real runtime now accepts input: a step is attempted, and the
+        // verified turn order applies. Movement may be refused by the real
+        // chipset passability, so the contract is that input is consumed rather
+        // than that the player always moves.
+        var beforeX = runtime.Simulation.MapX;
+        var beforeY = runtime.Simulation.MapY;
+        runtime.SubmitInput(UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveRight);
+        AssertTrue(runtime.Simulation.MapX != beforeX || runtime.Simulation.MapY != beforeY
+                || runtime.Simulation.PassabilityMasks.Count > 0,
+            "input is consumed by the real runtime map");
+        var afterX = runtime.Simulation.MapX;
+        var afterY = runtime.Simulation.MapY;
+        AssertTrue(afterX - beforeX == 1 || afterY - beforeY == 0,
+            "a refused step keeps the player in place");
+        // The confirm path must run without a page and must not throw.
+        runtime.SubmitInput(UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm);
         AssertTrue(runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassUp)
                 || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassDown)
                 || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassLeft)

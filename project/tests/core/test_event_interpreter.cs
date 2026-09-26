@@ -7,6 +7,7 @@ using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Presentation;
 using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
+using UniversalRPG.Rm2k.Input;
 
 namespace UniversalRPG.Tests.Core;
 
@@ -187,6 +188,131 @@ public partial class TestEventInterpreter : TestBase
 		scheduler.SetEvents(new List<Rm2kMap.Event> { beyond });
 		AssertFalse(scheduler.TriggerTouchOrCollisionFacing(),
 			"the touch trigger does not walk counter tiles");
+	}
+
+	private static Rm2kMap.Event EventWithTrigger(int pId, int pX, int pY, Rm2kEventTrigger pTrigger, int pLayer)
+	{
+		var mapEvent = new Rm2kMap.Event(pId, pX, pY);
+		var page = new Rm2kMap.EventPage
+		{
+			Trigger = (int)pTrigger,
+			Layer = pLayer,
+		};
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches,
+			new List<int> { EventInterpreter.TargetEvalSingle, pId, 1, EventInterpreter.SwitchModeOn }));
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+		mapEvent.Pages.Add(page);
+		return mapEvent;
+	}
+
+	public void Test_PlayerTurnSuccessfulStepTriggersTouchedOnItsOwnTile()
+	{
+		// Verified Game_Player::UpdateMovement: after a successful step the
+		// touched/collision lookup happens on the player's own tile and must not
+		// share its layer.
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 5, 5, Enumerable.Repeat((byte)Rm2kChipset.AllDirections, 25));
+		state.MapX = 2;
+		state.MapY = 2;
+		state.FacingDirection = 2;
+
+		var ownTile = EventWithTrigger(1, 2, 3, Rm2kEventTrigger.Touched, Rm2kEventScheduler.LayerBelow);
+		var inFront = EventWithTrigger(2, 2, 4, Rm2kEventTrigger.Touched, Rm2kEventScheduler.LayerSame);
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new List<Rm2kMap.Event> { ownTile, inFront });
+		var turn = new Rm2kPlayerTurn(state, scheduler);
+
+		AssertTrue(turn.Apply(Rm2kInputAction.MoveDown), "the step onto the touched tile triggers");
+		AssertEq(state.MapY, 3, "the player moved");
+		AssertEq(scheduler.ActiveInterpreterCount, 1, "only the own tile page runs");
+	}
+
+	public void Test_PlayerTurnBlockedStepTriggersTouchedInFront()
+	{
+		// A blocked step leaves the player stopping, so the Player evaluates
+		// touched/collision on the tile in front, which must share the layer.
+		var state = new GameSimulationState();
+		var masks = Enumerable.Repeat((byte)Rm2kChipset.AllDirections, 25).ToArray();
+		// Block the tile in front so the step fails.
+		masks[2 + 3 * 5] = 0;
+		state.ConfigureMap(1, 5, 5, masks);
+		state.MapX = 2;
+		state.MapY = 2;
+		state.FacingDirection = 2;
+
+		var inFront = EventWithTrigger(2, 2, 3, Rm2kEventTrigger.Touched, Rm2kEventScheduler.LayerSame);
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new List<Rm2kMap.Event> { inFront });
+		var turn = new Rm2kPlayerTurn(state, scheduler);
+
+		AssertTrue(turn.Apply(Rm2kInputAction.MoveDown), "the blocked step triggers the tile in front");
+		AssertEq(state.MapY, 2, "the player did not move");
+		AssertEq(scheduler.ActiveInterpreterCount, 1);
+	}
+
+	public void Test_PlayerTurnConfirmRunsTheActionEventCases()
+	{
+		// Verified CheckActionEvent: the decision key evaluates touched/collision
+		// in front, action on the own tile, and the action chain in front.
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 5, 5, Enumerable.Repeat((byte)Rm2kChipset.AllDirections, 25));
+		state.MapX = 2;
+		state.MapY = 2;
+		state.FacingDirection = 8;
+
+		var actionInFront = EventWithTrigger(1, 2, 1, Rm2kEventTrigger.Action, Rm2kEventScheduler.LayerSame);
+		var scheduler = new Rm2kEventScheduler(state);
+		scheduler.SetEvents(new List<Rm2kMap.Event> { actionInFront });
+		var turn = new Rm2kPlayerTurn(state, scheduler);
+
+		AssertTrue(turn.Apply(Rm2kInputAction.Confirm), "the action event in front triggers");
+		AssertEq(scheduler.ActiveInterpreterCount, 1);
+	}
+
+	public void Test_PlayerTurnConfirmDoesNothingWithoutAPage()
+	{
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 5, 5, Enumerable.Repeat((byte)Rm2kChipset.AllDirections, 25));
+		var scheduler = new Rm2kEventScheduler(state);
+		var turn = new Rm2kPlayerTurn(state, scheduler);
+		AssertFalse(turn.Apply(Rm2kInputAction.Confirm), "no event means no result");
+		AssertEq(scheduler.ActiveInterpreterCount, 0);
+	}
+
+	public void Test_PlayerTurnRespectsPauseAndRunningEvents()
+	{
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 5, 5, Enumerable.Repeat((byte)Rm2kChipset.AllDirections, 25));
+		state.MapX = 2;
+		state.MapY = 2;
+		var scheduler = new Rm2kEventScheduler(state);
+		var turn = new Rm2kPlayerTurn(state, scheduler);
+
+		state.IsPaused = true;
+		AssertFalse(turn.Apply(Rm2kInputAction.MoveRight), "a paused simulation does not move");
+		AssertEq(state.MapX, 2);
+		state.IsPaused = false;
+
+		// A running event page blocks movement, like Game_Map::IsRunning.
+		var autorun = EventWithTrigger(1, 0, 0, Rm2kEventTrigger.AutoStart, Rm2kEventScheduler.LayerSame);
+		scheduler.SetEvents(new List<Rm2kMap.Event> { autorun });
+		scheduler.ExecuteFrame();
+		AssertTrue(scheduler.ActiveInterpreterCount > 0, "the autorun page is running");
+		AssertFalse(turn.Apply(Rm2kInputAction.MoveRight), "a running event blocks movement");
+		AssertEq(state.MapX, 2, "the player did not move while an event runs");
+	}
+
+	public void Test_PlayerTurnIgnoresUnrelatedActions()
+	{
+		var state = new GameSimulationState();
+		state.ConfigureMap(1, 3, 3, Enumerable.Repeat((byte)Rm2kChipset.AllDirections, 9));
+		var scheduler = new Rm2kEventScheduler(state);
+		var turn = new Rm2kPlayerTurn(state, scheduler);
+		AssertFalse(turn.Apply(Rm2kInputAction.None), "no action does nothing");
+		AssertFalse(turn.Apply(Rm2kInputAction.Menu), "the menu action is not a map step");
+		AssertFalse(turn.Apply(Rm2kInputAction.Cancel), "cancel is not a map step");
+		AssertEq(state.MapX, 0);
+		AssertEq(state.MapY, 0);
 	}
 
 	public void Test_EventPageSelectorUsesHighestEligiblePage()

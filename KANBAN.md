@@ -73,7 +73,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-088 | 2 | DONE | Apply verified RM2K tile substitution tables (source: liblcf SaveMapInfo, not LMT) | K-086 |
 | K-089 | 2 | DONE | Decode RM2K per-map terrain tags via verified `Game_Map::GetChipId` substitution | K-015 |
 | K-091 | 2 | DONE | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
-| K-092 | 2 | READY | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
+| K-092 | 2 | DONE | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
+| K-093 | 3 | READY | Wire the Godot host scene to `SubmitInput` so a running game receives real input | K-092 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -774,15 +775,44 @@ The card originally said "LMT map-info tile substitution tables". That was wrong
 
 ### K-092 — Player input drives movement and triggers
 
+**Status (2026-09-26) — DONE: verified turn order applied to real input; host wiring still missing**
+
+**Card correction**
+The card said a successful step triggers touched/collision "on the tile in front". That is wrong. In the Player, `Game_Player::UpdateNextMovementAction` calls `CheckEventTriggerThere` (tile in front, layer same) only when the step was **blocked**, while `Game_Player::UpdateMovement` calls `CheckEventTriggerHere` (own tile, layer **not** same) when the player comes to a stop after a **successful** step. The layer rules are therefore opposite in the two cases.
+
+**Verified ordering**
+- `Game_Player::UpdateNextMovementAction`: `Move(move_dir)`, and if the player is still stopping, evaluate touched/collision on the tile in front.
+- If stopping and the decision key is pressed, the vehicle toggle runs first and the action event check only runs when no vehicle was toggled.
+- `Game_Player::CheckActionEvent`: touched/collision in front, then action on the own tile, then action in front continuing over at most three counter tiles; the result is the union.
+- A running event page blocks movement (`Game_Map::IsRunning`).
+- `Game_Map::XwithDirection`/`YwithDirection` wrap on looping maps.
+
+**Implemented**
+- `Rm2kEventScheduler.TriggerTouchOrCollisionHere` and the complete `CheckActionEvent`, complementing the K-091 entry points.
+- New `Rm2kPlayerTurn`, a Godot-free class that applies one resolved input action in the verified order: refuse while paused, in a menu, or while an event page runs; a direction attempts `TryMove` and then picks the `Here` or `There` trigger path; `Confirm` runs `CheckActionEvent`.
+- `Rm2kEngineRuntime.SubmitInput(Rm2kInputAction)` exposes the turn to the host and refuses input unless the runtime is running.
+
+**Deliberate simplification**
+- Vehicles and the airship are not implemented, so the vehicle toggle in front of `CheckActionEvent` cannot change anything and the action check always runs. This is recorded rather than faked.
+
+**Still missing**
+- Nothing feeds `SubmitInput` yet: `Rm2kInputMapper` is still unreferenced by the host scene, so the game cannot receive real input. That is the next card.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 375 tests passed`, exit `0`.
+- `test_event_interpreter.cs` pins the successful-step `Here` path, the blocked-step `There` path, the confirm path, the empty confirm, the pause and running-event guards, and that `None`/`Menu`/`Cancel` are not map steps.
+- `TestPluginDetection` feeds `MoveRight` and `Confirm` into the real runtime map and asserts the position contract.
+
+### K-093 — Godot host feeds real input to the runtime
+
 **Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- Nothing in the runtime currently calls the trigger API: `Rm2kEventScheduler` only runs auto-start and parallel pages, so `TriggerActionFacing` and friends are implemented but not reachable.
-- Wire verified player input to `GameSimulationState.TryMove` and to the trigger cases, matching `Game_Player::Update` order: on a successful step, touched/collision on the tile in front; when stopped and the decision key is pressed, `GetOnOffVehicle` first and the action triggers only when no vehicle was toggled.
-- The RM2K input mapper already handles keyboard, joypad and bounded touch input; this card is about the runtime consuming it.
+- `Rm2kInputMapper` exists with verified bindings (arrows/WASD, Enter/Space confirm, Escape cancel, joypad A/B, touch edges) but nothing constructs it or forwards its result.
+- Find the host scene/node that owns an `IEngineRuntime` during a running game and forward input events through the mapper to `SubmitInput`, including touch viewport configuration and the decision key as an edge.
 
 **Unblock condition**
-- Read `Game_Player::Update` (`game_player.cpp`) and `Game_Player::CheckActionEvent` for the exact ordering and the vehicle guard, and check whether the existing input mapper exposes a direction plus a decision edge, before wiring anything.
+- Read how the host currently routes input during a running game (the scene under `project/scenes` and the plugin host node) and confirm which node receives `_UnhandledInput`/`_Input` and how it reaches the runtime, before adding any handler. Keep the mapper's fail-closed `None` results out of the turn logic.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

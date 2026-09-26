@@ -5,7 +5,16 @@
 
 ## Current card
 
-K-086 through K-091 are DONE. K-092 (player input drives movement and triggers) is the next READY card.
+K-086 through K-092 are DONE. K-093 (Godot host feeds real input to the runtime) is the next READY card.
+
+**K-092 completed (2026-09-26)**
+- Card correction: a successful step does **not** trigger touched/collision in front. `Game_Player::UpdateNextMovementAction` calls `CheckEventTriggerThere` (in front, layer same) only when the step was **blocked**, while `Game_Player::UpdateMovement` calls `CheckEventTriggerHere` (own tile, layer **not** same) after a **successful** step. The layer rules are opposite in the two cases.
+- Verified: on a stop plus decision key the vehicle toggle runs first and the action check only runs if no vehicle was toggled. `CheckActionEvent` unions touched/collision in front, action on the own tile, and the action chain over at most three counter tiles.
+- New `Rm2kEventScheduler.TriggerTouchOrCollisionHere` and the complete `CheckActionEvent`.
+- New `Rm2kPlayerTurn` (Godot-free, so the ordering is regression tested): refuses while paused, in a menu, or while an event page runs; a direction attempts `TryMove` then picks the `Here` or `There` path; `Confirm` runs `CheckActionEvent`.
+- New `Rm2kEngineRuntime.SubmitInput(Rm2kInputAction)`, refused unless the runtime is running.
+- Deliberate simplification, recorded not faked: no vehicles/airship exist, so the vehicle toggle cannot change anything and the action check always runs.
+- Still not reachable from a game: nothing constructs `Rm2kInputMapper` or forwards input, so `SubmitInput` is only called by tests. That is K-093.
 
 **K-091 completed (2026-09-26)**
 - Verified: `Game_Map::IsCounter` = upper tile `>= BLOCK_F`, id through `upper_tiles`, entry carries `Counter` (`0x40`). `XwithDirection`/`YwithDirection` = the tile in front with the looping map wrap applied.
@@ -51,7 +60,7 @@ K-086 through K-091 are DONE. K-092 (player input drives movement and triggers) 
 
 ## Next action
 
-1. Start K-092: nothing in the runtime calls the trigger API yet, so `TriggerActionFacing` and friends are unreachable. Read `Game_Player::Update` and `CheckActionEvent` for the exact ordering (step, then touched/collision in front; on stop plus decision key, `GetOnOffVehicle` first and action triggers only when no vehicle was toggled), check what the existing input mapper exposes, then wire input to `TryMove` and the trigger cases.
+1. Start K-093: find the host node that owns an `IEngineRuntime` during a running game, and forward `_UnhandledInput`/`_Input` events through a constructed `Rm2kInputMapper` (including `SetTouchViewport`) into `Rm2kEngineRuntime.SubmitInput`. Read the host scene under `project/scenes` first; do not guess the input path.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -64,7 +73,7 @@ K-086 through K-091 are DONE. K-092 (player input drives movement and triggers) 
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 369 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 375 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
