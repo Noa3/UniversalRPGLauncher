@@ -5,7 +5,18 @@
 
 ## Current card
 
-K-086 through K-093 and K-095 through K-100 are DONE. A real RM2K game renders a real map image with a golden baseline. K-101 (hero, event, weather sprites) is next; K-094 (vehicles) stays open at lower priority.
+K-086 through K-093 and K-095 through K-101 are DONE. K-102 (hero and event sprites in the frame) is next; K-094 (vehicles) stays open at lower priority.
+
+**K-101 completed (2026-09-26)**
+- Verified `GetCharacterRect`: Zelle `24*(TILE_SIZE/16)*3` × `32*(TILE_SIZE/16)*4` = **72×128**, Position `(index%4, index/4)`, 3×4 Frames à **24×32**.
+- Verified `Sprite_Character::Draw`: `row = GetFacing()`, `frame = GetAnimFrame()`, alles ab `Frame_middle2` wird auf `Frame_middle` geklemmt. liblcf `Frame`: left=0, middle=1, right=2, middle2=3.
+- Verified `UpdateFacing`: bei den vier Kardinalrichtungen ist facing == direction, also ist liblcf `Direction` up=0/right=1/down=2/left=3 direkt die Sprite-Zeile.
+- Verified Offsets: `SetOx(chara_width/2)`, `SetOy(chara_height)` — zentriert, Füße auf der Kachelunterkante.
+- Fixture `rm2000/CharSet/Chara1.png` (gepinnter Commit, 18785 B, SHA-256 `24442b61…`) bestätigt unabhängig: 288×384 = exakt 4×72 quer und 3×128 tief, also 12 Figuren.
+- **Refactor**: Der indexed-PNG-Decoder wurde zu `Rm2kIndexedImage` generalisiert; `Rm2kChipsetBitmap` ist die Chipset-spezifische Hülle mit dem 480×256-Vertrag. Charset, Chipset und später Pictures teilen sich Decoder und Transparenzregel.
+- Neu `Rm2kCharset`: `FacingToRow` (2/4/6/8 → liblcf-Index), `ClampFrame`, `TryGetCell`, `TryGetFrameRect`, `TryDrawCharacter` mit Füßen auf der Kachelunterkante und Clipping am Rand.
+- Clipping ist verifiziert korrekt: Figur auf Kachel (0,0) wird oben abgeschnitten, vollständig außerhalb malt sie nichts — **ohne** Exception.
+- Der Godot-Editor liegt unter `E:\GodotEditor\Godot_v4.7.2-stable_mono_win64_console.exe` (wurde aus Git entfernt, ist aber lokal vorhanden).
 
 **K-100 completed (2026-09-26) — the map is visible**
 - Verified: `cache.cpp` liest das Chipset aus dem Verzeichnis `ChipSet`, Dateiname `<chipset_name>.png`; `Game_Map::GetChipsetName` liefert den Namen aus der Datenbank.
@@ -116,7 +127,7 @@ K-086 through K-093 and K-095 through K-100 are DONE. A real RM2K game renders a
 
 ## Next action
 
-1. Start K-101: read `Spriteset_Map` and `Sprite_Character` for character sprite construction, verify the `Material::Charset` image format, then add a real `CharSet/*.png` fixture the same way the chipset was added. The image is available in the pinned fixture; the layout is not yet proven.
+1. Start K-102: verify the hero charset name and index source (liblcf rpg::Game_Actor / rpg::Party and the Player party setup) and the event page `character_name`/`character_index` fields before wiring the draws. A character index beyond the charset cell capacity must be skipped with a diagnostic, not drawn from an arbitrary cell.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -129,7 +140,7 @@ K-086 through K-093 and K-095 through K-100 are DONE. A real RM2K game renders a
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 412 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 417 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|

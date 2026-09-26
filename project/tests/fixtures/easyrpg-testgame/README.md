@@ -14,6 +14,7 @@ The source repository includes a GPL-3.0 `COPYING` file and `AUTHORS.md` with pr
 | `rm2003/Map0001.lmu` | 8488 | `7a18ef96def5666eb0b8e76ae271d01cb2d23706f51e8bbc9a5f1848e2ba5825` |
 | `rm2000/ChipSet/World.png` | 35812 | `7d3f28e1d825b254c6b5d8afca36e31575e54d9ab58a98678d89ab3573ba6855` |
 | `rm2000/rendered/Map0001.png` | 6270 | `02ffa1bfbd1e5abe2d11f6b3f722abd13253e9e66f478b1e9dc3902a7d3d2935` |
+| `rm2000/CharSet/Chara1.png` | 18785 | `24442b6157d3f609fe3d6e588f23a42f012d3180c2c1729b2af0ddc188ce0cfc` |
 
 Raw source paths are pinned to the same commit:
 
@@ -24,6 +25,7 @@ Raw source paths are pinned to the same commit:
 - <https://raw.githubusercontent.com/EasyRPG/TestGame/4f7a35b2b3f6ef3cdd3ae22f2f616cfb0e5e8313/TestGame-2003/RPG_RT.lmt>
 - <https://raw.githubusercontent.com/EasyRPG/TestGame/4f7a35b2b3f6ef3cdd3ae22f2f616cfb0e5e8313/TestGame-2003/Map0001.lmu>
 - <https://raw.githubusercontent.com/EasyRPG/TestGame/4f7a35b2b3f6ef3cdd3ae22f2f616cfb0e5e8313/TestGame-2000/ChipSet/World.png>
+- <https://raw.githubusercontent.com/EasyRPG/TestGame/4f7a35b2b3f6ef3cdd3ae22f2f616cfb0e5e8313/TestGame-2000/CharSet/Chara1.png>
 
 ## Why the chipset image is included
 
@@ -32,6 +34,8 @@ Raw source paths are pinned to the same commit:
 It is a passive image. It is parsed as untrusted bytes by `Rm2kChipsetBitmap` and never executed, and it is the only image kept. The earlier statement that no image is imported was true when the project only parsed LCF data.
 
 The file also independently confirms two verified constants: it is 480 by 256 pixels, which matches the `30 * 16` tile grid derived from the chipset formulas in K-095, and it is an 8 bit paletted PNG, matching the Player's `Material::Chipset` spec and the paletted loader in `src/image_png.cpp`.
+
+`rm2000/CharSet/Chara1.png` was added for the charset geometry in K-101. It independently confirms the verified cell size: 288 by 384 pixels is exactly four 72 pixel cells per row and three 128 pixel cells down, which is what `GetCharacterRect` requires with its `(index % 4, index / 4)` split and its `24 * 3` by `32 * 4` cell. Like the chipset it is a passive 8 bit paletted PNG.
 
 The upstream project may change its contents or licensing in later commits. Update the pinned commit, hashes, and this note together if fixtures are refreshed.
 

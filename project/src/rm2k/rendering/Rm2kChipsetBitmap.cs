@@ -49,28 +49,35 @@ public sealed class Rm2kPixelBuffer
 }
 
 /// <summary>
-/// Decoded RM2K chipset bitmap. The Player loads a chipset as a paletted PNG
-/// with transparency, where palette index 0 is transparent and every other
-/// index is opaque (EasyRPG Player <c>src/image_png.cpp</c>,
-/// <c>ReadPalettedData</c>), and expects a 480 by 256 image
-/// (<c>src/cache.cpp</c>, the <c>Material::Chipset</c> spec, which also marks
-/// the load as transparent).
+/// A decoded indexed 8 bit PNG with a palette, the form the Player loads
+/// chipset, charset and picture material in. Palette index 0 is transparent and
+/// every other index is opaque (EasyRPG Player <c>src/image_png.cpp</c>,
+/// <c>ReadPalettedData</c>).
 /// </summary>
 /// <remarks>
 /// The palette index is kept rather than only the converted colour, because the
-/// autotile composition of K-096 and K-097 selects chipset rectangles, and
-/// transparency has to survive the blit.
+/// chipset autotile composition selects rectangles and the transparency rule has
+/// to survive the blit.
 /// </remarks>
-public sealed class Rm2kChipsetBitmap
+public sealed class Rm2kIndexedImage
 {
     /// <summary>Chipset width in pixels, verified by the Player chipset spec.</summary>
-    public const int ExpectedWidth = 480;
+    public const int ExpectedChipsetWidth = 480;
 
     /// <summary>Chipset height in pixels, verified by the Player chipset spec.</summary>
-    public const int ExpectedHeight = 256;
+    public const int ExpectedChipsetHeight = 256;
+
+    /// <summary>Size of one map tile in pixels, from <c>#define TILE_SIZE 16</c>.</summary>
+    public const int MapTileSize = 16;
 
     /// <summary>Size of one chipset tile in pixels.</summary>
-    public const int TileSize = 16;
+    public const int TileSize = MapTileSize;
+
+    /// <summary>Chipset width in pixels, verified by the Player chipset spec.</summary>
+    public const int ExpectedWidth = ExpectedChipsetWidth;
+
+    /// <summary>Chipset height in pixels, verified by the Player chipset spec.</summary>
+    public const int ExpectedHeight = ExpectedChipsetHeight;
 
     /// <summary>Palette index the Player treats as transparent.</summary>
     public const byte TransparentIndex = 0;
@@ -83,7 +90,7 @@ public sealed class Rm2kChipsetBitmap
 
     private static readonly byte[] PngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
 
-    private Rm2kChipsetBitmap(int pWidth, int pHeight, byte[] pIndices, byte[][] pPalette)
+    private Rm2kIndexedImage(int pWidth, int pHeight, byte[] pIndices, byte[][] pPalette)
     {
         Width = pWidth;
         Height = pHeight;
@@ -103,14 +110,14 @@ public sealed class Rm2kChipsetBitmap
     /// <summary>True when the image matches the chipset size the Player expects.</summary>
     public bool HasExpectedSize => Width == ExpectedWidth && Height == ExpectedHeight;
 
-    public static bool TryLoad(string pPath, out Rm2kChipsetBitmap pBitmap, out string pError)
+    public static bool TryLoad(string pPath, out Rm2kIndexedImage pImage, out string pError)
     {
-        pBitmap = null!;
+        pImage = null!;
         pError = "";
         try
         {
             var data = File.ReadAllBytes(pPath);
-            return TryParse(data, out pBitmap, out pError);
+            return TryParse(data, out pImage, out pError);
         }
         catch (IOException exception)
         {
@@ -129,9 +136,9 @@ public sealed class Rm2kChipsetBitmap
     /// the Player's chipset loader does an index to RGBA conversion itself, and
     /// a non paletted image would silently lose the transparency rule.
     /// </summary>
-    public static bool TryParse(byte[] pData, out Rm2kChipsetBitmap pBitmap, out string pError)
+    public static bool TryParse(byte[] pData, out Rm2kIndexedImage pImage, out string pError)
     {
-        pBitmap = null!;
+        pImage = null!;
         pError = "";
         if (pData == null || pData.Length < 8)
         {
@@ -259,7 +266,7 @@ public sealed class Rm2kChipsetBitmap
         {
             palette[entry] = [paletteData[entry * 3], paletteData[entry * 3 + 1], paletteData[entry * 3 + 2]];
         }
-        pBitmap = new Rm2kChipsetBitmap(width, height, indices, palette);
+        pImage = new Rm2kIndexedImage(width, height, indices, palette);
         return true;
     }
 
@@ -408,5 +415,91 @@ public sealed class Rm2kChipsetBitmap
             return pLeft;
         }
         return distanceUp <= distanceUpLeft ? pUp : pUpLeft;
+    }
+}
+
+/// <summary>
+/// A decoded RM2K chipset image. The decoding, the palette and the
+/// transparency rule come from <see cref="Rm2kIndexedImage"/>; this type only adds
+/// the chipset specific size contract.
+/// </summary>
+public sealed class Rm2kChipsetBitmap
+{
+    private Rm2kChipsetBitmap(Rm2kIndexedImage pImage)
+    {
+        Image = pImage;
+    }
+
+    /// <summary>The decoded pixels.</summary>
+    public Rm2kIndexedImage Image { get; }
+
+    /// <summary>Width in pixels, 480 for a verified chipset.</summary>
+    public int Width => Image.Width;
+
+    /// <summary>Height in pixels, 256 for a verified chipset.</summary>
+    public int Height => Image.Height;
+
+    /// <summary>Row major palette indices, one byte per pixel.</summary>
+    public byte[] Indices => Image.Indices;
+
+    /// <summary>RGB triples indexed by palette index.</summary>
+    public byte[][] Palette => Image.Palette;
+
+    /// <summary>True when the image matches the size the Player chipset spec expects.</summary>
+    public bool HasExpectedSize => Width == Rm2kIndexedImage.ExpectedChipsetWidth
+        && Height == Rm2kIndexedImage.ExpectedChipsetHeight;
+
+    /// <summary>Chipset width in pixels, verified by the Player chipset spec.</summary>
+    public const int ExpectedWidth = Rm2kIndexedImage.ExpectedChipsetWidth;
+
+    /// <summary>Chipset height in pixels, verified by the Player chipset spec.</summary>
+    public const int ExpectedHeight = Rm2kIndexedImage.ExpectedChipsetHeight;
+
+    /// <summary>Size of one chipset tile in pixels.</summary>
+    public const int TileSize = Rm2kIndexedImage.MapTileSize;
+
+    /// <summary>Palette index the Player treats as transparent.</summary>
+    public const byte TransparentIndex = Rm2kIndexedImage.TransparentIndex;
+
+    /// <summary>Upper bound for palette entries, matching the 8 bit PNG limit.</summary>
+    public const int MaxPaletteEntries = Rm2kIndexedImage.MaxPaletteEntries;
+
+    public static bool TryLoad(string pPath, out Rm2kChipsetBitmap pBitmap, out string pError)
+    {
+        if (Rm2kIndexedImage.TryLoad(pPath, out var image, out pError))
+        {
+            pBitmap = new Rm2kChipsetBitmap(image);
+            return true;
+        }
+        pBitmap = null!;
+        return false;
+    }
+
+    public static bool TryParse(byte[] pData, out Rm2kChipsetBitmap pBitmap, out string pError)
+    {
+        if (Rm2kIndexedImage.TryParse(pData, out var image, out pError))
+        {
+            pBitmap = new Rm2kChipsetBitmap(image);
+            return true;
+        }
+        pBitmap = null!;
+        return false;
+    }
+
+    /// <summary>Palette index of a pixel, or -1 when outside the image.</summary>
+    public int IndexAt(int pX, int pY) => Image.IndexAt(pX, pY);
+
+    public bool TryBlitTile(int pColumn, int pRow, Rm2kPixelBuffer pTarget, int pTargetX, int pTargetY)
+    {
+        return Image.TryBlitRectangle(
+            pColumn * Rm2kIndexedImage.TileSize, pRow * Rm2kIndexedImage.TileSize,
+            Rm2kIndexedImage.TileSize, Rm2kIndexedImage.TileSize, pTarget, pTargetX, pTargetY);
+    }
+
+    public bool TryBlitRectangle(
+        int pSourceX, int pSourceY, int pWidth, int pHeight,
+        Rm2kPixelBuffer pTarget, int pTargetX, int pTargetY)
+    {
+        return Image.TryBlitRectangle(pSourceX, pSourceY, pWidth, pHeight, pTarget, pTargetX, pTargetY);
     }
 }

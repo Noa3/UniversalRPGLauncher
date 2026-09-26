@@ -82,7 +82,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-098 | 3 | DONE | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-097 |
 | K-099 | 3 | DONE | Compose a full map frame from chipset tiles, map layers and the z-order rule | K-098 |
 | K-100 | 3 | DONE | Render the real map in the runtime and show chipset pixels in the host preview | K-099 |
-| K-101 | 3 | READY | Draw hero, event and weather sprites into the frame in the verified order | K-100 |
+| K-101 | 3 | DONE | Decode the RM2K charset geometry and draw character frames | K-100 |
+| K-102 | 3 | READY | Draw the hero and event sprites into the map frame in the verified order | K-101 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -994,16 +995,41 @@ A real RM2K game directory now produces a real map image. The chain is end to en
 - `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 412 tests passed`, exit `0`.
 - `test_rm2k_runtime_rendering.cs` renders a real game directory built from the pinned fixtures, compares it against the golden image byte for byte, checks the frame size and the colour count, and verifies that a missing or malformed chipset image is reported while the runtime keeps running and the tile id framebuffer stays available. Stopping clears the rendered map.
 
-### K-101 — Hero, event and weather sprites
+### K-101 — Charset geometry and character frames
+
+**Status (2026-09-26) — DONE: verified charset geometry with a real charset fixture**
+
+**Verified (EasyRPG Player)**
+- `src/sprite_character.cpp`, `GetCharacterRect`: the cell is `24 * (TILE_SIZE / 16) * 3` by `32 * (TILE_SIZE / 16) * 4`, which is **72 by 128** with `TILE_SIZE = 16`, placed at `(index % 4, index / 4)`. Each cell holds a 3 by 4 frame grid, so one frame is **24 by 32**.
+- `Sprite_Character::Draw`: `row = character->GetFacing()` and `frame = character->GetAnimFrame()`, with anything from `Frame_middle2` replaced by `Frame_middle`. liblcf `rpg::EventPage::Frame` is `left = 0, middle = 1, right = 2, middle2 = 3`.
+- `src/game_character.cpp`, `UpdateFacing`: for the four cardinal directions the facing is set to the direction itself, so liblcf `rpg::EventPage::Direction` `up = 0, right = 1, down = 2, left = 3` is the sprite row directly. Diagonal directions have their own rule, which RM2K characters never use.
+- The sprite offsets are `SetOx(chara_width / 2)` and `SetOy(chara_height)`, which centres the frame on the tile and puts its feet on the tile bottom.
+- `src/cache.cpp` loads charset material as transparent, like the chipset.
+
+**Fixture**
+`rm2000/CharSet/Chara1.png` from the same pinned commit, added the same way as the chipset. It independently confirms the geometry: 288 by 384 pixels is exactly four 72 pixel cells across and three 128 pixel cells down, giving twelve characters.
+
+**Refactor**
+The paletted PNG decoder was generalised to `Rm2kIndexedImage`, with `Rm2kChipsetBitmap` as the chipset specific wrapper that owns the 480 by 256 contract. Charset, chipset and later picture material share one decoder and one transparency rule.
+
+**Implemented**
+- `Rm2kCharset` with the verified cell and frame constants, `FacingToRow` for the project's facing values (2 down, 4 left, 6 right, 8 up), `ClampFrame` matching the Player's `middle2` clamp, `TryGetCell`, `TryGetFrameRect` and `TryDrawCharacter` which places the feet on the tile bottom and clips at the frame edge.
+- `Rm2kIndexedImage` is the shared decoder; `Rm2kChipsetBitmap` keeps the chipset size check.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 417 tests passed`, exit `0`.
+- `test_rm2k_charset.cs` pins the cell and frame geometry against the real image, the `(index % 4, index / 4)` cell split, the frame clamping, the facing conversion, and the drawing including the clipping behaviour: a character at tile (0, 0) is cut off above the tile bottom, and one fully outside the frame paints nothing without throwing.
+
+### K-102 — Hero and event sprites in the frame
 
 **Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- The frame currently contains only map tiles. The verified order needs the panorama first (`Priority_Background = 10`), then the lower layer (`20`), below-layer events (`30`) and the hero (`40`, shared with "same as hero" events), then the upper layer (`50`), then above-layer and flying events (`60` and `70`), the weather (`80`) and the screen (`90`).
-- Character sprites come from `CharSet/*.png` plus the direction and pattern of an event page, none of which is decoded yet.
+- The character frame can be drawn but nothing draws it yet. The verified order is panorama (`10`), lower layer (`20`), below-layer events (`30`) and the hero (`40`, shared with "same as hero" events), upper layer (`50`), above-layer and flying events (`60` and `70`), weather (`80`) and screen (`90`).
+- Drawing a character needs its charset name and index, which live on the event page (`character_name`, `character_index`) and for the hero on the database party member.
 
 **Unblock condition**
-- Read `Spriteset_Map` and `Sprite_Character` for how a character sprite is built, verify the `Material::Charset` image format, and add a real charset fixture the same way the chipset was added, only after its field ids and layout are verified. The pinned fixture ships `CharSet/*.png`, so the image is available; the layout is not yet proven.
+- Verify the hero's charset name and index source in liblcf `rpg::Game_Actor` / `rpg::Party` and the Player's party setup, and the event page character fields already decoded as `character_name` and `character_index`, before wiring the draws. A character whose index exceeds the charset cell capacity must be skipped with a diagnostic rather than drawn from an arbitrary cell.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
