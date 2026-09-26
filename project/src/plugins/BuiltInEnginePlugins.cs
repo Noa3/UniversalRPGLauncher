@@ -554,7 +554,17 @@ public sealed class RpgMakerMvPlugin : WebRpgPlugin
 
         // Parse as JSON (bounded by the 512 KiB cap above) so a nested
         // "gameTitle" key inside an object cannot shadow the top-level field.
+        // MV keys are verified against the MV System data contract: gameTitle,
+        // versionId, locale, currencyUnit, startMapId, startX, startY and
+        // partyMembers. MV uses versionId where MZ uses systemVersion.
         var title = "";
+        var versionId = 0;
+        var locale = "";
+        var currencyUnit = "";
+        var startMapId = 0;
+        var startX = 0;
+        var startY = 0;
+        var partyMembers = new List<int>();
         try
         {
             using var document = JsonDocument.Parse(text, new JsonDocumentOptions
@@ -563,11 +573,53 @@ public sealed class RpgMakerMvPlugin : WebRpgPlugin
                 AllowTrailingCommas = false,
                 CommentHandling = JsonCommentHandling.Disallow,
             });
-            if (document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("gameTitle", out var gameTitle)
-                && gameTitle.ValueKind == JsonValueKind.String)
+            var root = document.RootElement;
+            if (root.ValueKind == JsonValueKind.Object)
             {
-                title = gameTitle.GetString() ?? "";
+                if (root.TryGetProperty("gameTitle", out var gameTitle)
+                    && gameTitle.ValueKind == JsonValueKind.String)
+                {
+                    title = gameTitle.GetString() ?? "";
+                }
+                if (root.TryGetProperty("versionId", out var version) && version.ValueKind == JsonValueKind.Number)
+                {
+                    versionId = version.TryGetInt32(out var parsedVersion) ? parsedVersion : 0;
+                }
+                if (root.TryGetProperty("locale", out var localeValue) && localeValue.ValueKind == JsonValueKind.String)
+                {
+                    locale = localeValue.GetString() ?? "";
+                }
+                if (root.TryGetProperty("currencyUnit", out var currency) && currency.ValueKind == JsonValueKind.String)
+                {
+                    currencyUnit = currency.GetString() ?? "";
+                }
+                if (root.TryGetProperty("startMapId", out var mapId) && mapId.ValueKind == JsonValueKind.Number)
+                {
+                    startMapId = mapId.TryGetInt32(out var parsedMapId) ? parsedMapId : 0;
+                }
+                if (root.TryGetProperty("startX", out var x) && x.ValueKind == JsonValueKind.Number)
+                {
+                    startX = x.TryGetInt32(out var parsedX) ? parsedX : 0;
+                }
+                if (root.TryGetProperty("startY", out var y) && y.ValueKind == JsonValueKind.Number)
+                {
+                    startY = y.TryGetInt32(out var parsedY) ? parsedY : 0;
+                }
+                if (root.TryGetProperty("partyMembers", out var party) && party.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var member in party.EnumerateArray())
+                    {
+                        if (partyMembers.Count >= MvMetadataResult.MaxPartyMembers)
+                        {
+                            break;
+                        }
+                        if (member.ValueKind == JsonValueKind.Number && member.TryGetInt32(out var actorId)
+                            && actorId >= 1 && actorId <= MvMetadataResult.MaxActorId)
+                        {
+                            partyMembers.Add(actorId);
+                        }
+                    }
+                }
             }
         }
         catch (JsonException)
@@ -579,20 +631,41 @@ public sealed class RpgMakerMvPlugin : WebRpgPlugin
             pFile.RelativePath.EndsWith(".rpgmvp", StringComparison.OrdinalIgnoreCase)
             || pFile.RelativePath.EndsWith(".rpgmvo", StringComparison.OrdinalIgnoreCase)
             || pFile.RelativePath.EndsWith(".rpgmvm", StringComparison.OrdinalIgnoreCase));
+        var diagnostics = new List<string>();
+        if (encrypted)
+        {
+            diagnostics.Add("Encrypted MV assets detected; files remain metadata-only.");
+        }
         return new MvMetadataResult
         {
             GameTitle = title,
+            VersionId = versionId,
+            Locale = locale,
+            CurrencyUnit = currencyUnit,
+            StartMapId = startMapId,
+            StartX = startX,
+            StartY = startY,
+            PartyMemberIds = partyMembers,
             HasEncryptedFiles = encrypted,
-            Diagnostics = encrypted
-                ? new[] { "Encrypted MV assets detected; files remain metadata-only." }
-                : Array.Empty<string>(),
+            Diagnostics = diagnostics,
         };
     }
 }
 
 public sealed class MvMetadataResult
 {
+    /// <summary>MV's System.json integer; MZ stores the same concept as "systemVersion".</summary>
+    public const int MaxPartyMembers = 4;
+    public const int MaxActorId = 50000;
+
     public string GameTitle { get; init; } = "";
+    public int VersionId { get; init; }
+    public string Locale { get; init; } = "";
+    public string CurrencyUnit { get; init; } = "";
+    public int StartMapId { get; init; }
+    public int StartX { get; init; }
+    public int StartY { get; init; }
+    public IReadOnlyList<int> PartyMemberIds { get; init; } = Array.Empty<int>();
     public bool HasEncryptedFiles { get; init; }
     public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
 }
@@ -857,10 +930,12 @@ public sealed class RpgMakerUnitePlugin : BuiltInEnginePlugin
 }
 
 /// <summary>
-/// Bounded metadata from an MZ game's data/ directory (Actors.json, MapInfos.json),
-/// decoded without executing any JavaScript. Entry counts and names only.
+/// Bounded metadata from an RPG Maker MV/MZ game `data/` directory
+/// (Actors.json, MapInfos.json, System.json and the optional database
+/// sections), decoded without executing any JavaScript. Entry counts, names,
+/// and inventory only.
 /// </summary>
-public sealed class MzDataDirectoryResult
+public class WebDataDirectoryResult
 {
     public const int MaxDataJsonBytes = 2048 * 1024;
     public const int MaxActorEntries = 9999;
@@ -899,17 +974,15 @@ public sealed class MzDataDirectoryResult
     public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// Extract bounded data-directory metadata from a validated MZ snapshot.
-    /// Returns null when the snapshot lacks the MZ runtime signature or the
-    /// requested files are truncated/oversized; partial results keep diagnostics.
+    /// Extracts bounded data-directory metadata from a snapshot that carries the
+    /// required engine runtime signature. Returns null when the signature is
+    /// missing so an MV snapshot is never read as MZ (and the reverse).
+    /// Truncated or oversized files are diagnosed instead of trusted.
     /// </summary>
-    public static MzDataDirectoryResult? Extract(GameInspectionSnapshot pSnapshot)
+    internal static T? ExtractCore<T>(GameInspectionSnapshot pSnapshot, Func<GameInspectionSnapshot, bool> pHasSignature)
+        where T : WebDataDirectoryResult, new()
     {
-        var runtime = pSnapshot.Files.FirstOrDefault(pFile =>
-            pFile.RelativePath.EndsWith("/rmmz_core.js", StringComparison.OrdinalIgnoreCase)
-            || pFile.RelativePath.Equals("rmmz_core.js", StringComparison.OrdinalIgnoreCase)
-            || pFile.RelativePath.EndsWith("/rmmz_managers.js", StringComparison.OrdinalIgnoreCase));
-        if (runtime == null)
+        if (!pHasSignature(pSnapshot))
         {
             return null;
         }
@@ -935,7 +1008,7 @@ public sealed class MzDataDirectoryResult
             diagnostics.Add("data/MapInfos.json not found in snapshot.");
         }
 
-        return new MzDataDirectoryResult
+        return new T
         {
             ActorCount = actors.Count,
             ActorNames = actors.Names,
@@ -1131,5 +1204,40 @@ public sealed class MzDataDirectoryResult
             names.Add(name);
         }
         return (count, names);
+    }
+}
+
+/// <summary>MZ data-directory inventory; requires the rmmz runtime signature.</summary>
+public sealed class MzDataDirectoryResult : WebDataDirectoryResult
+{
+    public static MzDataDirectoryResult? Extract(GameInspectionSnapshot pSnapshot)
+    {
+        return ExtractCore<MzDataDirectoryResult>(pSnapshot, HasMzRuntimeSignature);
+    }
+
+    internal static bool HasMzRuntimeSignature(GameInspectionSnapshot pSnapshot)
+    {
+        return pSnapshot.Files.Any(pFile =>
+            pFile.RelativePath.Equals("rmmz_core.js", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.EndsWith("/rmmz_core.js", StringComparison.OrdinalIgnoreCase))
+            && pSnapshot.Files.Any(pFile =>
+                pFile.RelativePath.Equals("rmmz_managers.js", StringComparison.OrdinalIgnoreCase)
+                || pFile.RelativePath.EndsWith("/rmmz_managers.js", StringComparison.OrdinalIgnoreCase));
+    }
+}
+
+/// <summary>MV data-directory inventory; requires the rpg_core runtime signature.</summary>
+public sealed class MvDataDirectoryResult : WebDataDirectoryResult
+{
+    public static MvDataDirectoryResult? Extract(GameInspectionSnapshot pSnapshot)
+    {
+        return ExtractCore<MvDataDirectoryResult>(pSnapshot, HasMvRuntimeSignature);
+    }
+
+    internal static bool HasMvRuntimeSignature(GameInspectionSnapshot pSnapshot)
+    {
+        return pSnapshot.Files.Any(pFile =>
+            pFile.RelativePath.Equals("rpg_core.js", StringComparison.OrdinalIgnoreCase)
+            || pFile.RelativePath.EndsWith("/rpg_core.js", StringComparison.OrdinalIgnoreCase));
     }
 }

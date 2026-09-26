@@ -67,6 +67,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-082 | 0 | DONE | Align event-page trigger ids with liblcf and fail closed on undecodable pages | K-081 |
 | K-083 | 0 | DONE | Correct ControlSwitches/ControlVariables parameter layout to the verified EasyRPG spec | K-081 |
 | K-084 | 1 | DONE | Implement verified actor-stat, screen-effect, and event-control interpreter commands | K-023 |
+| K-085 | 2 | DONE | Bring RPG Maker MV to data-directory and System.json metadata parity with MZ | K-017 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -615,6 +616,26 @@ Implemented from the verified `lcf::rpg::Cmd` table and EasyRPG `ExecuteCommand`
 - New regression coverage in `TestEventInterpreter`: level/exp party-wide, clamping, variable operand, variable-held actor id, fail-closed modes, hero name, `EndEventProcessing`, flash/shake/weather bounds and waits, presentation-absent path, nested call with return, unsupported call targets, recursion bound, event location with variable coordinates, and erase-event activation.
 - `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 330 tests passed`, exit `0`.
 - Still diagnostic-only by design: `ChangeBattleCommands` (1009), menu/Maniac codes (5001-5005, 11610), `MoveEvent` (11330, needs move routes), `ChangeMapTileset` (11710), and battle-dependent commands.
+
+### K-085 — RPG Maker MV data-directory and metadata parity
+
+**Status (2026-08-31) — DONE for the bounded data-only slice**
+
+**Scope boundary**
+- MV/MZ gameplay needs a JavaScript engine. That stays blocked: card K-090 is `BACKLOG` behind the RM2K playable milestone, and repository policy forbids executing imported JavaScript. This card is data-only.
+
+**Problem**
+- Only MZ had a bounded `data/` inventory; MV was limited to `gameTitle` from `System.json`.
+
+**Fix**
+- The inventory reader is now shared: `WebDataDirectoryResult` with `MzDataDirectoryResult` and `MvDataDirectoryResult` wrappers. Each wrapper requires its own runtime signature, so an MV snapshot is never read as MZ and the reverse is equally refused.
+- `MvMetadataResult` now also reports `versionId`, `locale`, `currencyUnit`, `startMapId`, `startX`, `startY`, and bounded `partyMembers` (actor ids `1..50000`, capped at four). MV stores its version as `versionId` where MZ uses `systemVersion`; both keys are read from the top-level object only, so nested keys cannot shadow them.
+- No JavaScript, HTML, or native file is executed or evaluated; only bounded JSON text is parsed.
+
+**Validation evidence (2026-08-31)**
+- New `TestMvDataDirectory` suite: inventory extraction, database section counts, missing files, malformed and non-array JSON, malformed optional sections with siblings kept, encrypted assets, verified System.json keys, and mutual signature refusal in both directions.
+- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 340 tests passed`, exit `0`.
+- RPG Maker AX was evaluated and deliberately left out: no verifiable file signature is documented publicly, and the repository forbids inventing format details. It stays unsupported rather than guessed.
 
 ## Agent maintenance rules
 - Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.

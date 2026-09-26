@@ -217,6 +217,15 @@ Implemented from the verified liblcf command table and EasyRPG `ExecuteCommand` 
 - Fresh canonical validation: `All 330 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
 - Still diagnostic-only: `ChangeBattleCommands` (1009), menu/Maniac codes (5001-5005, 11610), `MoveEvent` (11330, needs move routes), `ChangeMapTileset` (11710), battle-dependent commands, and common-event calls.
 
+## Latest completed MV/MZ parity slice (2026-08-31)
+
+- Scope boundary: MV/MZ gameplay requires a JavaScript engine, which stays blocked behind card K-090 and the repository rule against executing imported JavaScript. This slice is data-only by design.
+- The bounded `data/` inventory is now shared between both engines: `WebDataDirectoryResult` holds the reader, and `MzDataDirectoryResult`/`MvDataDirectoryResult` are thin wrappers that require their own runtime signature. An MV snapshot can no longer be read as MZ and vice versa.
+- MV previously reported only `gameTitle`; `MvMetadataResult` now also reports `versionId`, `locale`, `currencyUnit`, `startMapId`, `startX`, `startY`, and bounded `partyMembers` (ids `1..50000`, capped at four). Verified against the public MV System data contract: MV uses `versionId` where MZ uses `systemVersion`, and all values are read from the top-level object only.
+- RPG Maker AX was investigated and intentionally not added: no publicly verifiable file signature exists, and the repository forbids inventing format details.
+- New `TestMvDataDirectory` suite covers the inventory, section counts, missing files, malformed and non-array JSON, malformed optional sections, encrypted assets, the verified System.json keys, and mutual signature refusal.
+- Fresh canonical validation: `All 340 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.
