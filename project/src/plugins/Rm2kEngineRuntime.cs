@@ -119,6 +119,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     $"Could not create RM2K map framebuffer: {renderResult.Error}", "initialize-render");
             }
             Framebuffer = renderResult.Framebuffer;
+            RenderCurrentMap(
+                currentMap,
+                (int)currentMap["width"],
+                (int)currentMap["height"]);
 
             var spriteResult = _spriteAdapter.BuildDescriptors(
                 currentMap, Simulation.MapX, Simulation.MapY);
@@ -291,6 +295,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         MapTreeData = null;
         CurrentMapData = null;
         Framebuffer = null;
+        ClearRendering();
         SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
         State = PluginRuntimeState.Stopped;
         return PluginOperationResult.Succeeded();
@@ -303,7 +308,105 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         MapTreeData = null;
         CurrentMapData = null;
         Framebuffer = null;
+        ClearRendering();
         SpriteDescriptors = Array.Empty<Rm2kSpriteDescriptor>();
+    }
+
+    /// <summary>
+    /// Rendered RGBA pixels of the current map, or null when the chipset image is
+    /// missing or unreadable. The tile id framebuffer stays available in that
+    /// case, so a game without chipset images still runs and still reports.
+    /// </summary>
+    public Rm2kPixelBuffer? RenderedMap { get; private set; }
+
+    /// <summary>Chipset image of the loaded map, when it was found.</summary>
+    public Rm2kChipsetBitmap? ChipsetImage { get; private set; }
+
+    /// <summary>Reason the map could not be rendered, empty when it rendered.</summary>
+    public string RenderDiagnostic { get; private set; } = "";
+
+    /// <summary>
+    /// Renders the current map into pixels with the verified chipset data. A
+    /// missing chipset image is reported and leaves the runtime running, because
+    /// the Player treats the chipset as an asset and the simulation does not
+    /// depend on it.
+    /// </summary>
+    private void RenderCurrentMap(Godot.Collections.Dictionary? pMapData, int pWidth, int pHeight)
+    {
+        RenderedMap = null;
+        ChipsetImage = null;
+        RenderDiagnostic = "";
+        var root = ResolveGameDirectory();
+        if (root == null)
+        {
+            RenderDiagnostic = "RM2K rendering needs a resolved game directory.";
+            return;
+        }
+        if (string.IsNullOrEmpty(_chipsetName))
+        {
+            RenderDiagnostic = "RM2K rendering needs a chipset name from the database.";
+            return;
+        }
+        // The Player reads the chipset from the ChipSet directory (cache.cpp).
+        var chipsetPath = Path.Combine(root, "ChipSet", _chipsetName + ".png");
+        if (!File.Exists(chipsetPath))
+        {
+            RenderDiagnostic = $"RM2K chipset image '{_chipsetName}.png' is missing in ChipSet.";
+            return;
+        }
+        if (!Rm2kChipsetBitmap.TryLoad(chipsetPath, out var bitmap, out var error))
+        {
+            RenderDiagnostic = $"RM2K chipset image could not be decoded: {error}";
+            return;
+        }
+        if (!bitmap.HasExpectedSize)
+        {
+            RenderDiagnostic = $"RM2K chipset image is {bitmap.Width}x{bitmap.Height}, expected " +
+                $"{Rm2kChipsetBitmap.ExpectedWidth}x{Rm2kChipsetBitmap.ExpectedHeight}.";
+            return;
+        }
+        if (pMapData == null)
+        {
+            RenderDiagnostic = "RM2K rendering needs the parsed map.";
+            return;
+        }
+        var lowerLayer = TryReadIntArray(pMapData, "lower_layer");
+        var upperLayer = TryReadIntArray(pMapData, "upper_layer");
+        if (lowerLayer == null || upperLayer == null)
+        {
+            RenderDiagnostic = "RM2K rendering needs both map layers.";
+            return;
+        }
+        if (lowerLayer.Length != checked(pWidth * pHeight) || upperLayer.Length != checked(pWidth * pHeight))
+        {
+            RenderDiagnostic = "RM2K map layers do not cover the map tile count.";
+            return;
+        }
+
+        var layers = new Rm2kMapLayers(pWidth, pHeight, lowerLayer, upperLayer);
+        var tables = new Rm2kChipsetTables
+        {
+            Lower = _chipsetLower,
+            Upper = _chipsetUpper,
+            Substitution = Simulation.TileSubstitution,
+            AnimationType = _chipsetAnimationType,
+            AnimationSpeed = _chipsetAnimationSpeed,
+        };
+        var target = new Rm2kPixelBuffer(
+            checked(pWidth * Rm2kChipsetBitmap.TileSize),
+            checked(pHeight * Rm2kChipsetBitmap.TileSize));
+        var renderer = new Rm2kMapFrameRenderer(bitmap);
+        renderer.RenderLower(target, layers, tables, Simulation.FrameCount);
+        renderer.RenderUpper(target, layers, tables, Simulation.FrameCount);
+        ChipsetImage = bitmap;
+        RenderedMap = target;
+    }
+
+    private void ClearRendering()
+    {
+        RenderedMap = null;
+        ChipsetImage = null;
+        RenderDiagnostic = "";
     }
 
     private string? ResolveGameDirectory()
@@ -334,6 +437,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private int[]? _chipsetTerrain;
     private int _chipsetAnimationType = Rm2kChipset.AnimTypeReciprocating;
     private int _chipsetAnimationSpeed = 0;
+    private string _chipsetName = "";
 
     /// <summary>
     /// Reads the verified 162-entry terrain table. A chipset without a table is
@@ -370,12 +474,19 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     {
         _chipsetLower = null;
         _chipsetUpper = null;
+        _chipsetTerrain = null;
         _chipsetAnimationType = Rm2kChipset.AnimTypeReciprocating;
         _chipsetAnimationSpeed = 0;
+        _chipsetName = "";
         var chipset = FindChipset(pDatabase, pChipsetId);
         if (chipset == null)
         {
             return;
+        }
+        if (chipset.TryGetValue("chipset_name", out var rawName)
+            && rawName.VariantType == Godot.Variant.Type.String)
+        {
+            _chipsetName = rawName.AsString();
         }
         _chipsetLower = ReadPassabilityArray(chipset, "passable_data_lower", Rm2kChipset.PassabilityLowerEntries);
         _chipsetUpper = ReadPassabilityArray(chipset, "passable_data_upper", Rm2kChipset.PassabilityUpperEntries);

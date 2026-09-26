@@ -13,6 +13,7 @@ The source repository includes a GPL-3.0 `COPYING` file and `AUTHORS.md` with pr
 | `rm2003/RPG_RT.lmt` | 1734 | `35ff18ceda8ce13a613ad7f9088a3a7bfa88a86505833c7e953fd07b996cc1e0` |
 | `rm2003/Map0001.lmu` | 8488 | `7a18ef96def5666eb0b8e76ae271d01cb2d23706f51e8bbc9a5f1848e2ba5825` |
 | `rm2000/ChipSet/World.png` | 35812 | `7d3f28e1d825b254c6b5d8afca36e31575e54d9ab58a98678d89ab3573ba6855` |
+| `rm2000/rendered/Map0001.png` | 6270 | `02ffa1bfbd1e5abe2d11f6b3f722abd13253e9e66f478b1e9dc3902a7d3d2935` |
 
 Raw source paths are pinned to the same commit:
 
@@ -33,3 +34,9 @@ It is a passive image. It is parsed as untrusted bytes by `Rm2kChipsetBitmap` an
 The file also independently confirms two verified constants: it is 480 by 256 pixels, which matches the `30 * 16` tile grid derived from the chipset formulas in K-095, and it is an 8 bit paletted PNG, matching the Player's `Material::Chipset` spec and the paletted loader in `src/image_png.cpp`.
 
 The upstream project may change its contents or licensing in later commits. Update the pinned commit, hashes, and this note together if fixtures are refreshed.
+
+## The rendered golden image
+
+`rm2000/rendered/Map0001.png` is **not** from upstream. It is the output of this project's own renderer for the pinned `rm2000/Map0001.lmu` with the pinned `rm2000/ChipSet/World.png`, at frame 0, at 320 by 240 pixels. It is a regression baseline: `TestRm2kRuntimeRendering` renders the map again and compares every byte, so a change in the chipset resolution, the autotile tables, the transparency rule or the draw order fails the test instead of quietly producing a different picture.
+
+The pinned map is a single test room: 20 by 15 tiles, a lower layer of block D and E tiles, an upper layer of block F tiles that are fully transparent in that chipset, and no animated autotile. It renders to 13 distinct colours and its floor and wall tiles fill every pixel, so a transparency check is not meaningful on it and the transparency rule is verified per tile instead.

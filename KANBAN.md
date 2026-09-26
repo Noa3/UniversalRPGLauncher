@@ -81,7 +81,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-097 | 3 | DONE | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
 | K-098 | 3 | DONE | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-097 |
 | K-099 | 3 | DONE | Compose a full map frame from chipset tiles, map layers and the z-order rule | K-098 |
-| K-100 | 3 | READY | Draw the hero, events and the panorama into the composed frame in the verified order | K-099 |
+| K-100 | 3 | DONE | Render the real map in the runtime and show chipset pixels in the host preview | K-099 |
+| K-101 | 3 | READY | Draw hero, event and weather sprites into the frame in the verified order | K-100 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -967,16 +968,42 @@ The real RM2000 testgame map is 20 by 15 tiles, its lower layer uses only block 
 - `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 408 tests passed`, exit `0`.
 - `test_rm2k_map_frame.cs` pins the sublayer rules for `Wall`, `Above` and both, the fail-closed case without passability, the chip index resolution including the block E substitution, the real map rendering with its measured shape, a visible upper tile changing the tile area, a fully transparent upper tile painting nothing, animation across frame 0 and 24 for the blocks that paint, and block D not animating.
 
-### K-100 — Hero, events and panorama
+### K-100 — Runtime renders the map and the host shows it
+
+**Status (2026-09-26) — DONE: a real RM2K game renders pixels, with a golden image baseline**
+
+**What this delivers**
+A real RM2K game directory now produces a real map image. The chain is end to end verified: the LDB chipset tables, the LMU layers, the chip id resolution, the autotile quarter tables, the real chipset PNG and the verified draw order, all against the pinned fixtures.
+
+**Verified (EasyRPG Player)**
+- `src/cache.cpp`: the chipset is read from the `ChipSet` directory, and `Cache::Chipset` goes through the standard `LoadBitmap` path, so the image name is `<chipset_name>.png` inside `ChipSet`.
+- `Game_Map::GetChipsetName` supplies the name from the database, and the map selects the chipset by its own `chipset_id`, which is already implemented in K-087.
+
+**Implemented**
+- `Rm2kEngineRuntime` reads `chipset_name`, resolves `<root>/ChipSet/<name>.png`, decodes it, checks the 480 by 256 size and renders the map into `RenderedMap` with `ChipsetImage` and `RenderDiagnostic` exposed. A missing, malformed or wrongly sized image is reported and leaves the runtime **running**, because the Player treats the chipset as an asset and the simulation does not depend on it. The tile id framebuffer keeps working next to the pixels.
+- `Rm2kMapPreview` uploads the pixels once per change and draws them scaled with the nearest neighbour filter, with the player marker on top and the render diagnostic when there is no image. It falls back to the tile id view when no image exists.
+- `Main.cs` forwards `RenderedMap` and `RenderDiagnostic` and reports the pixel size.
+
+**Golden image**
+`rm2000/rendered/Map0001.png` is this project's own output, not upstream, and is pinned as a regression baseline with its SHA-256. The rendering test compares every byte, so a change in the chipset resolution, the autotile tables, the transparency rule or the draw order now fails the suite instead of quietly producing a different picture.
+
+**Measured facts about the pinned map, not assumptions**
+20 by 15 tiles, 320 by 240 pixels, lower layer of block D and E only, upper layer of block F only, those upper tiles fully transparent in the real chipset, 13 distinct colours, and every pixel covered because the room's floor and wall tiles are solid. Three of my expectations were wrong for those reasons and were replaced with measurements. Transparency is therefore verified per tile, and the animated blocks with synthetic maps.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 412 tests passed`, exit `0`.
+- `test_rm2k_runtime_rendering.cs` renders a real game directory built from the pinned fixtures, compares it against the golden image byte for byte, checks the frame size and the colour count, and verifies that a missing or malformed chipset image is reported while the runtime keeps running and the tile id framebuffer stays available. Stopping clears the rendered map.
+
+### K-101 — Hero, event and weather sprites
 
 **Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- The map frame is composed but nothing else is in it. The verified order needs the panorama first (`Priority_Background = 10`), then the lower layer (`20`), then below-layer events (`30`) and the hero (`40`, shared with "same as hero" events), then the upper layer (`50`), then above-layer and flying events (`60` and `70`), then the weather (`80`) and the screen (`90`).
-- The hero and event sprites come from `CharSet/*.png` and `MoveRoute` animation patterns, which are not decoded yet.
+- The frame currently contains only map tiles. The verified order needs the panorama first (`Priority_Background = 10`), then the lower layer (`20`), below-layer events (`30`) and the hero (`40`, shared with "same as hero" events), then the upper layer (`50`), then above-layer and flying events (`60` and `70`), the weather (`80`) and the screen (`90`).
+- Character sprites come from `CharSet/*.png` plus the direction and pattern of an event page, none of which is decoded yet.
 
 **Unblock condition**
-- Read `Spriteset_Map` and `Sprite_Character` for how a character sprite is built from the charset, the direction and the pattern, and verify the charset image format from the Player's `Material::Charset` spec before decoding anything. The pinned fixture ships `CharSet/*.png`, so a real charset can be added the same way the chipset was, but only after its field ids and layout are verified.
+- Read `Spriteset_Map` and `Sprite_Character` for how a character sprite is built, verify the `Material::Charset` image format, and add a real charset fixture the same way the chipset was added, only after its field ids and layout are verified. The pinned fixture ships `CharSet/*.png`, so the image is available; the layout is not yet proven.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

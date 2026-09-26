@@ -554,6 +554,7 @@ public partial class Main : Control
 			_stopButton.Disabled = true;
 			_presentationControls.Visible = false;
 			_mapPreview.SetFramebuffer(null);
+			_mapPreview.SetRenderedMap(null);
 			return;
 		}
 		_stopButton.Disabled = false;
@@ -564,11 +565,13 @@ public partial class Main : Control
 			_status.Text = update.Error?.Message ?? "Runtime update failed.";
 			_mapPreview.SetMapData(null);
 			_mapPreview.SetFramebuffer(null);
+			_mapPreview.SetRenderedMap(null);
 			return;
 		}
 		_status.Text = $"Runtime running: {_launcher.ActiveRuntime?.GetType().Name}";
 		_mapPreview.SetMapData(null);
 		_mapPreview.SetFramebuffer(null);
+		_mapPreview.SetRenderedMap(null);
 		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
 		{
 			UpdatePresentationControls(rm2k);
@@ -591,11 +594,17 @@ public partial class Main : Control
 			}
 			_mapPreview.SetMapData(rm2k.CurrentMapData);
 			_mapPreview.SetFramebuffer(rm2k.Framebuffer);
+			_mapPreview.SetRenderedMap(rm2k.RenderedMap);
+			_mapPreview.RenderDiagnostic = rm2k.RenderDiagnostic;
 			_mapPreview.SetPlayerPosition(rm2k.Simulation.MapX, rm2k.Simulation.MapY);
 			if (rm2k.CurrentMapData != null && rm2k.CurrentMapData.TryGetValue("width", out var width)
 				&& rm2k.CurrentMapData.TryGetValue("height", out var height))
 			{
 				_presentationState.Text += $"\nMap framebuffer: {width.AsInt32()}x{height.AsInt32()}";
+			}
+			if (rm2k.RenderedMap != null)
+			{
+				_presentationState.Text += $"\nRendered pixels: {rm2k.RenderedMap.Width}x{rm2k.RenderedMap.Height}";
 			}
 		}
 	}
