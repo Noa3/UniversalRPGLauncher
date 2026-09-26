@@ -5,7 +5,17 @@
 
 ## Current card
 
-K-086 is DONE: verified RM2K chipset passability now drives real movement. K-087 (autotile animation + event counters) is the next READY card.
+K-086 and K-087 are DONE: verified RM2K chipset passability drives real movement and verified autotile animation is exposed to the renderer. K-088 (LMT tile substitution tables) is the next READY card.
+
+**K-087 completed (2026-09-26)**
+- Verified autotile animation in EasyRPG Player `src/tilemap_layer.cpp` (Draw), `src/game_map.cpp` (SetChipset, GetAnimationType/Speed) and liblcf `src/generated/lcf/ldb/chunks.h`.
+- `animation_type = 0x0B`, `animation_speed = 0x0C`; the project's scalar field contract matches upstream.
+- `GetAnimationSpeed()` = `animation_speed != 0 ? 12 : 24`. `animation_speed` is an animated/not flag, not a frame rate and not an on/off switch: even the zero default keeps AB autotiles cycling at half speed.
+- AB (blocks A/B): `frames / speed`, cyclic `% 3`, reciprocating `% 4` with `3 → 1` (0,1,2,1). Block C: `(frames / 6) % 4`, independent of the chipset settings. Blocks D/E/F: never animate. `frames` is the RPG_RT frame counter, already ticked as `Simulation.FrameCount`.
+- New API: `Rm2kChipset.AnimationSpeed/ReciprocatingStep/CyclicStep/CBlockStep/ChipAnimationStep`, plus `GameSimulationState.ChipsetAnimationType`, `ChipsetAnimationSpeed`, `GetChipAnimationStep`.
+- Parser fix: the passability tables now live on the matching typed chipset entry (matched by `id`), and the section-level keys stay for the first entry. Runtime fix: the chipset is selected by the LMU `chipset_id`, like `Game_Map::SetChipset(map->chipset_id)`, instead of assuming the first chipset.
+- Counter values are deliberately **not** implemented: liblcf `master` has no per-map counter array on `lcf::rpg::Map`/`MapInfo`, so there is no verified data source; inventing one is what K-086 forbids.
+- Lesson recorded: passability and animation belong to one chipset entry, and the LMU `chipset_id` is the verified selector. `sections["chipsets"]` is the raw section, while the typed entries are the top-level `chipsets` array.
 
 **K-086 completed (2026-09-26)**
 - Verified EasyRPG Player constants in `src/map_data.h`: passability bits `Down=0x01`, `Left=0x02`, `Right=0x04`, `Up=0x08`, `Above=0x10`, `Wall=0x20`, `Counter=0x40`; tile blocks A-F with strides 1000/1000/50/50/1/1, indices 0/2/3/6/18/162, ends 2000/3000/3150/4600/5144/10144; `NUM_LOWER_TILES=162`, `NUM_UPPER_TILES=144`.
@@ -18,8 +28,9 @@ K-086 is DONE: verified RM2K chipset passability now drives real movement. K-087
 
 ## Next action
 
-1. Start K-087 and read the EasyRPG Player autotile animation + counter logic (`autotile.cpp`, `main_data.h`, `game_map.cpp`) before writing any animation or counter code; the K-086 card exists because guessed constants were wrong.
+1. Start K-088: the tile substitution tables `lcf::rpg::MapInfo::lower_tiles`/`upper_tiles` come from the LMT map info. Verify the LMT chunk/field ids in liblcf `src/generated/lcf/ldb/chunks.h` (`ChunkMapInfo`) before implementing, and confirm against `Game_Map::Setup` (`std::iota` identity) and `Game_Map::DoSubstitute`.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
+3. Reference Player sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`).
 
 ## Reference repos noted by the user (2026-09-26, not actioned)
 
@@ -30,7 +41,7 @@ K-086 is DONE: verified RM2K chipset passability now drives real movement. K-087
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 350 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 356 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|

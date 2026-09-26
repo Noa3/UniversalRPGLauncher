@@ -361,6 +361,32 @@ partial class TestRm2kRealFixtures : TestBase
 				continue;
 			}
 
+			// The animation fields belong to one chipset entry, so the runtime
+			// must pick the entry the map actually uses.
+			var entry = FindChipsetEntry(database.GetData(), (int)map.GetData()["chipset_id"]);
+			AssertTrue(entry != null, $"{relativePath} map chipset_id resolves to a chipset entry");
+			if (entry == null)
+			{
+				continue;
+			}
+			// liblcf ChunkChipset: animation_type = 0x0B, animation_speed = 0x0C.
+			// RPG_RT omits a field that holds the default, and both liblcf defaults
+			// are zero, so an absent field is the default rather than a decode
+			// failure.
+			var animationType = entry.ContainsKey("animation_type") ? (int)entry["animation_type"] : 0;
+			var animationSpeed = entry.ContainsKey("animation_speed") ? (int)entry["animation_speed"] : 0;
+			AssertTrue(animationType is 0 or 1, $"{relativePath} animation_type is reciprocating or cyclic");
+			AssertTrue(animationSpeed >= 0, $"{relativePath} animation_speed is not negative");
+			// animation_speed is not an on/off switch: the Player maps it to 12 or
+			// 24 frames per step, so even the zero default keeps AB autotiles
+			// cycling at the slower rate.
+			AssertEq(Rm2kChipset.AnimationSpeed(animationSpeed), animationSpeed == 0 ? 24 : 12,
+				$"{relativePath} chipset animation speed");
+			var stepAfterOneSlowStep = Rm2kChipset.ChipAnimationStep(
+				Rm2kChipset.BlockA, 24, animationType, animationSpeed);
+			AssertEq(stepAfterOneSlowStep, animationSpeed == 0 ? 1 : 2,
+				$"{relativePath} one chipset-speed step advances the autotile");
+
 			var lower = (int[])map.GetData()["lower_layer"];
 			var upper = (int[])map.GetData()["upper_layer"];
 			var masks = Rm2kChipset.BuildDirectionMasks(lower, upper, chipset.Value.lower, chipset.Value.upper);
@@ -411,6 +437,51 @@ partial class TestRm2kRealFixtures : TestBase
 				AssertFalse(state.TryMove(0, 1), $"{relativePath} refuses an impassable tile");
 			}
 		}
+	}
+
+	private static Godot.Collections.Dictionary? FindChipsetEntry(
+		Godot.Collections.Dictionary pDatabase, int pChipsetId)
+	{
+		if (pDatabase.TryGetValue("chipsets", out var rawList)
+			&& rawList.VariantType == Godot.Variant.Type.Array)
+		{
+			foreach (var variant in rawList.AsGodotArray())
+			{
+				if (variant.VariantType == Godot.Variant.Type.Dictionary
+					&& variant.AsGodotDictionary() is var candidate
+					&& (int)candidate["id"] == pChipsetId)
+				{
+					return candidate;
+				}
+			}
+			return null;
+		}
+		if (!pDatabase.TryGetValue("sections", out var rawSections)
+			|| rawSections.VariantType != Godot.Variant.Type.Dictionary)
+		{
+			return null;
+		}
+		var sections = rawSections.AsGodotDictionary();
+		if (!sections.TryGetValue("chipsets", out var rawChipset))
+		{
+			return null;
+		}
+		var section = rawChipset.AsGodotDictionary();
+		if (!section.TryGetValue("entries", out var rawEntries)
+			|| rawEntries.VariantType != Godot.Variant.Type.Array)
+		{
+			return null;
+		}
+		foreach (var variant in rawEntries.AsGodotArray())
+		{
+			if (variant.VariantType == Godot.Variant.Type.Dictionary
+				&& variant.AsGodotDictionary() is var candidate
+				&& (int)candidate["id"] == pChipsetId)
+			{
+				return candidate;
+			}
+		}
+		return null;
 	}
 
 	private static (byte[] lower, byte[] upper)? ReadChipset(Godot.Collections.Dictionary pDatabase)

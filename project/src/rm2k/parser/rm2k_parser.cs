@@ -383,6 +383,8 @@ public partial class Rm2kParser : RefCounted
 		var battleCommands = new Godot.Collections.Dictionary();
 		var engineFamily = "RPG Maker 2000";
 		var version = 0;
+		Godot.Collections.Array<Godot.Collections.Dictionary>? chipsetPassabilityObjects = null;
+		var chipsetPassabilityOffset = 0;
 
 		foreach (var chunk in (Godot.Collections.Array<Godot.Collections.Dictionary>)top.Data["chunks"])
 		{
@@ -409,16 +411,16 @@ public partial class Rm2kParser : RefCounted
 				}
 				section["count"] = (int)arrayResult.Data["count"];
 				sectionCounts[sectionName] = (int)arrayResult.Data["count"];
-				if (id == 0x14)
-				{
-					// liblcf ChunkChipset: passable_data_lower (0x04, bitflag x 162)
-					// and passable_data_upper (0x05, bitflag x 144). The defaults in
-					// liblcf are 15 and 31, so bits 0-3 carry the four direction
-					// flags and the upper layer adds bit 4.
-					ReadChipsetPassability(section,
-						(Godot.Collections.Array<Godot.Collections.Dictionary>)arrayResult.Data["objects"],
-						(int)chunk["payload_offset"]);
-				}
+			if (id == 0x14)
+			{
+				// liblcf ChunkChipset: passable_data_lower (0x04, bitflag x 162)
+				// and passable_data_upper (0x05, bitflag x 144). The defaults in
+				// liblcf are 15 and 31, so bits 0-3 carry the four direction
+				// flags and the upper layer adds bit 4. The arrays belong to one
+				// chipset entry, so they are copied after the typed entries exist.
+				chipsetPassabilityObjects = (Godot.Collections.Array<Godot.Collections.Dictionary>)arrayResult.Data["objects"];
+				chipsetPassabilityOffset = (int)chunk["payload_offset"];
+			}
 				if (typed)
 				{
 					var decodeResult = DecodeTypedLdbSection(id,
@@ -509,6 +511,19 @@ public partial class Rm2kParser : RefCounted
 				engineFamily = "RPG Maker 2003";
 			}
 			sections[sectionName] = section;
+		}
+
+		if (chipsetPassabilityObjects != null
+			&& sections.TryGetValue("chipsets", out var rawChipsetSection)
+			&& rawChipsetSection.VariantType == Godot.Variant.Type.Dictionary)
+		{
+			// Section-level keys stay for the first chipset, and every typed entry
+			// carries its own tables so a map can select the chipset it uses.
+			ReadChipsetPassability(
+				rawChipsetSection.AsGodotDictionary(),
+				chipsetPassabilityObjects,
+				chipsetPassabilityObjects.Count > 0 ? chipsets : null,
+				chipsetPassabilityOffset);
 		}
 
 		return new ParseResult(true, null, new Godot.Collections.Dictionary
@@ -710,16 +725,39 @@ public partial class Rm2kParser : RefCounted
 
 	/// <summary>
 	/// Copies the verified chipset passability bitflag arrays out of the chipset
-	/// section. Lengths are bounded; unexpected sizes are reported as unknown
-	/// rather than reinterpreted.
+	/// section. The arrays belong to a single chipset entry, so they are stored
+	/// on the matching typed entry; the section-level keys are kept for the first
+	/// entry to preserve the existing contract. Lengths are bounded; unexpected
+	/// sizes are reported as unknown rather than reinterpreted.
 	/// </summary>
 	private static void ReadChipsetPassability(
 		Godot.Collections.Dictionary pSection,
 		Godot.Collections.Array<Godot.Collections.Dictionary> pObjects,
+		Godot.Collections.Array<Godot.Collections.Dictionary>? pTypedEntries,
 		int pChunkOffset)
 	{
+		var isFirstEntry = true;
 		foreach (var chipset in pObjects)
 		{
+			var sectionTarget = isFirstEntry ? pSection : null;
+			isFirstEntry = false;
+			Godot.Collections.Dictionary? entryTarget = null;
+			if (pTypedEntries != null)
+			{
+				var entryId = (int)chipset["id"];
+				foreach (var candidate in pTypedEntries)
+				{
+					if ((int)candidate["id"] == entryId)
+					{
+						entryTarget = candidate;
+						break;
+					}
+				}
+			}
+			if (sectionTarget == null && entryTarget == null)
+			{
+				continue;
+			}
 			var fields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)chipset["fields"]);
 			foreach (var entry in new[]
 			{
@@ -734,9 +772,16 @@ public partial class Rm2kParser : RefCounted
 				var data = (byte[])((Godot.Collections.Dictionary)rawField)["data"];
 				if (data.Length != entry.Expected)
 				{
-					pSection[$"{entry.Key}_unverified_length"] = data.Length;
-					pSection[$"{entry.Key}_offset"] = pChunkOffset
-						+ (int)((Godot.Collections.Dictionary)rawField)["payload_offset"];
+					foreach (var target in new[] { sectionTarget, entryTarget })
+					{
+						if (target == null)
+						{
+							continue;
+						}
+						target[$"{entry.Key}_unverified_length"] = data.Length;
+						target[$"{entry.Key}_offset"] = pChunkOffset
+							+ (int)((Godot.Collections.Dictionary)rawField)["payload_offset"];
+					}
 					continue;
 				}
 				var values = new int[data.Length];
@@ -744,9 +789,14 @@ public partial class Rm2kParser : RefCounted
 				{
 					values[index] = data[index];
 				}
-				pSection[entry.Key] = values;
+				foreach (var target in new[] { sectionTarget, entryTarget })
+				{
+					if (target != null)
+					{
+						target[entry.Key] = values;
+					}
+				}
 			}
-			return; // the first chipset entry is the map's chipset
 		}
 	}
 

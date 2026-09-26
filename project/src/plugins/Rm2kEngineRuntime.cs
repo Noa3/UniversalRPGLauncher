@@ -100,7 +100,6 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         DatabaseData = database.Data;
         MapTreeData = mapTree.Data;
         CurrentMapData = currentMap;
-        ReadChipsetPassability(database.Data);
         try
         {
             ConfigureSimulationMap(currentMap, mapTree.Data, mapPath);
@@ -316,30 +315,86 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
     private byte[]? _chipsetLower;
     private byte[]? _chipsetUpper;
+    private int _chipsetAnimationType = Rm2kChipset.AnimTypeReciprocating;
+    private int _chipsetAnimationSpeed = 0;
 
     /// <summary>
-    /// Reads the verified chipset passability tables (liblcf ChunkChipset 0x04
-    /// and 0x05) from the parsed database. Absent or unverified sizes leave the
-    /// tables null so movement stays fail-closed.
+    /// Reads the verified chipset data (liblcf <c>rpg::Chipset</c>) for the
+    /// chipset the map actually uses. Passability tables and the two animation
+    /// fields belong to one chipset entry, so the entry is selected by the LMU
+    /// <c>chipset_id</c> instead of assuming the first one.
     /// </summary>
-    private void ReadChipsetPassability(Godot.Collections.Dictionary pDatabase)
+    private void ReadChipsetData(Godot.Collections.Dictionary? pDatabase, int pChipsetId)
     {
         _chipsetLower = null;
         _chipsetUpper = null;
+        _chipsetAnimationType = Rm2kChipset.AnimTypeReciprocating;
+        _chipsetAnimationSpeed = 0;
+        var chipset = FindChipset(pDatabase, pChipsetId);
+        if (chipset == null)
+        {
+            return;
+        }
+        _chipsetLower = ReadPassabilityArray(chipset, "passable_data_lower", Rm2kChipset.PassabilityLowerEntries);
+        _chipsetUpper = ReadPassabilityArray(chipset, "passable_data_upper", Rm2kChipset.PassabilityUpperEntries);
+        if (TryReadInt(chipset, "animation_type", out var animationType))
+        {
+            _chipsetAnimationType = animationType != 0
+                ? Rm2kChipset.AnimTypeCyclic
+                : Rm2kChipset.AnimTypeReciprocating;
+        }
+        TryReadInt(chipset, "animation_speed", out _chipsetAnimationSpeed);
+    }
+
+    private static Godot.Collections.Dictionary? FindChipset(
+        Godot.Collections.Dictionary? pDatabase, int pChipsetId)
+    {
+        if (pDatabase == null)
+        {
+            return null;
+        }
+        // Typed chipset entries are exposed as a top-level array; the section
+        // dictionary keeps the raw chunk and the first chipset's tables.
+        if (FindChipsetIn(pDatabase.TryGetValue("chipsets", out var rawChipsets)
+                && rawChipsets.VariantType == Godot.Variant.Type.Array
+                ? rawChipsets.AsGodotArray()
+                : null, pChipsetId) is var direct
+            && direct != null)
+        {
+            return direct;
+        }
         if (!pDatabase.TryGetValue("sections", out var rawSections)
             || rawSections.VariantType != Godot.Variant.Type.Dictionary)
         {
-            return;
+            return null;
         }
-        var sections = rawSections.AsGodotDictionary();
-        if (!sections.TryGetValue("chipsets", out var rawChipset)
-            || rawChipset.VariantType != Godot.Variant.Type.Dictionary)
+        var section = rawSections.AsGodotDictionary();
+        return section.TryGetValue("chipsets", out var rawSection)
+            && rawSection.VariantType == Godot.Variant.Type.Dictionary
+            && rawSection.AsGodotDictionary().TryGetValue("entries", out var rawEntries)
+            && rawEntries.VariantType == Godot.Variant.Type.Array
+            ? FindChipsetIn(rawEntries.AsGodotArray(), pChipsetId)
+            : null;
+    }
+
+    private static Godot.Collections.Dictionary? FindChipsetIn(
+        Godot.Collections.Array? pEntries, int pChipsetId)
+    {
+        if (pEntries == null)
         {
-            return;
+            return null;
         }
-        var chipset = rawChipset.AsGodotDictionary();
-        _chipsetLower = ReadPassabilityArray(chipset, "passable_data_lower", Rm2kChipset.PassabilityLowerEntries);
-        _chipsetUpper = ReadPassabilityArray(chipset, "passable_data_upper", Rm2kChipset.PassabilityUpperEntries);
+        foreach (var variant in pEntries)
+        {
+            if (variant.VariantType == Godot.Variant.Type.Dictionary
+                && variant.AsGodotDictionary() is var entry
+                && TryReadInt(entry, "id", out var entryId)
+                && entryId == pChipsetId)
+            {
+                return entry;
+            }
+        }
+        return null;
     }
 
     private static int[]? TryReadIntArray(Godot.Collections.Dictionary pData, string pKey)
@@ -420,6 +475,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
         var lowerLayer = TryReadIntArray(pMapData, "lower_layer");
         var upperLayer = TryReadIntArray(pMapData, "upper_layer");
+        TryReadInt(pMapData, "chipset_id", out var chipsetId);
+        ReadChipsetData(DatabaseData, chipsetId);
+        Simulation.ChipsetAnimationType = _chipsetAnimationType;
+        Simulation.ChipsetAnimationSpeed = _chipsetAnimationSpeed;
         if (_chipsetLower != null && _chipsetUpper != null && lowerLayer != null && upperLayer != null)
         {
             // Verified Rm2kChipset rules: the upper layer decides, and only an

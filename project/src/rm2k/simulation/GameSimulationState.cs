@@ -31,6 +31,23 @@ public sealed class GameSimulationState
     public int FrameCount { get; set; } = 0;
     public int Steps { get; set; } = 0;
     public int FrameRate { get; set; } = 60;
+
+    /// <summary>Chipset <c>animation_type</c>: 0 reciprocating, 1 cyclic.</summary>
+    public int ChipsetAnimationType { get; set; } = Rm2kChipset.AnimTypeReciprocating;
+
+    /// <summary>Chipset <c>animation_speed</c>: 0 means "not animated".</summary>
+    public int ChipsetAnimationSpeed { get; set; } = 0;
+
+    /// <summary>
+    /// Animation step for a map tile id at the current <see cref="FrameCount"/>,
+    /// following the verified Player dispatch order.
+    /// </summary>
+    public int GetChipAnimationStep(int pChipId)
+    {
+        return Rm2kChipset.ChipAnimationStep(
+            pChipId, FrameCount, ChipsetAnimationType, ChipsetAnimationSpeed);
+    }
+
     public bool Timer1Active { get; private set; }
     public bool Timer2Active { get; private set; }
     public int Timer1Seconds { get; private set; }

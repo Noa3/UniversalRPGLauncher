@@ -146,7 +146,132 @@ public partial class TestRm2kChipset : TestBase
         // Mismatched layer lengths must never invent tiles.
         AssertEq(Rm2kChipset.BuildDirectionMasks(new[] { 0, 0 }, upper, lowerFlags, upperFlags).Length, 2,
             "mismatched layers truncate to the shorter layer");
+        // Mismatched layer lengths must never invent tiles.
+        AssertEq(Rm2kChipset.BuildDirectionMasks(new[] { 0, 0 }, upper, lowerFlags, upperFlags).Length, 2,
+            "mismatched layers truncate to the shorter layer");
         AssertEq(Rm2kChipset.BuildDirectionMasks(lower, new[] { 10000 }, lowerFlags, upperFlags).Length, 1,
             "a short upper layer cannot extend the map");
+    }
+
+    public void Test_AnimationSpeedMapsChipsetFlagToFrames()
+    {
+        // Game_Map::GetAnimationSpeed(): only "animated or not" is stored.
+        AssertEq(Rm2kChipset.AnimationSpeed(0), 24, "a chipset without animation is not animated");
+        AssertEq(Rm2kChipset.AnimationSpeed(1), 12, "an animated chipset steps every 12 frames");
+        AssertEq(Rm2kChipset.AnimationSpeed(99), 12, "only the zero/non-zero distinction matters");
+        AssertEq(Rm2kChipset.AnimationSpeed(-3), 12, "a negative flag still counts as animated");
+    }
+
+    public void Test_ReciprocatingStepSkipsTheFourthFrame()
+    {
+        // animation_type == 0: (frames / speed) % 4, with 3 replaced by 1.
+        const int speed = 24;
+        AssertEq(Rm2kChipset.ReciprocatingStep(0, speed), 0);
+        AssertEq(Rm2kChipset.ReciprocatingStep(23, speed), 0);
+        AssertEq(Rm2kChipset.ReciprocatingStep(24, speed), 1);
+        AssertEq(Rm2kChipset.ReciprocatingStep(47, speed), 1);
+        AssertEq(Rm2kChipset.ReciprocatingStep(48, speed), 2);
+        AssertEq(Rm2kChipset.ReciprocatingStep(71, speed), 2);
+        AssertEq(Rm2kChipset.ReciprocatingStep(72, speed), 1, "the fourth step shows frame one");
+        AssertEq(Rm2kChipset.ReciprocatingStep(95, speed), 1);
+        AssertEq(Rm2kChipset.ReciprocatingStep(96, speed), 0, "the cycle returns to frame zero");
+        AssertEq(Rm2kChipset.ReciprocatingStep(0, 0), 0, "a zero speed cannot divide by zero");
+    }
+
+    public void Test_CyclicStepUsesThreeEvenFrames()
+    {
+        const int speed = 12;
+        AssertEq(Rm2kChipset.CyclicStep(0, speed), 0);
+        AssertEq(Rm2kChipset.CyclicStep(11, speed), 0);
+        AssertEq(Rm2kChipset.CyclicStep(12, speed), 1);
+        AssertEq(Rm2kChipset.CyclicStep(24, speed), 2);
+        AssertEq(Rm2kChipset.CyclicStep(35, speed), 2);
+        AssertEq(Rm2kChipset.CyclicStep(36, speed), 0, "the cycle returns to frame zero");
+    }
+
+    public void Test_CBlockAnimatesOnItsOwnFixedCycle()
+    {
+        // Block C ignores the chipset animation type and speed entirely.
+        AssertEq(Rm2kChipset.CBlockStep(0), 0);
+        AssertEq(Rm2kChipset.CBlockStep(5), 0);
+        AssertEq(Rm2kChipset.CBlockStep(6), 1);
+        AssertEq(Rm2kChipset.CBlockStep(17), 2);
+        AssertEq(Rm2kChipset.CBlockStep(18), 3);
+        AssertEq(Rm2kChipset.CBlockStep(23), 3);
+        AssertEq(Rm2kChipset.CBlockStep(24), 0);
+        for (var frame = 0; frame < 24; frame++)
+        {
+            foreach (var animationType in new[] { 0, 1 })
+            {
+                foreach (var animationSpeed in new[] { 0, 7 })
+                {
+                    AssertEq(
+                        Rm2kChipset.ChipAnimationStep(Rm2kChipset.BlockC, frame, animationType, animationSpeed),
+                        Rm2kChipset.CBlockStep(frame),
+                        "block C is independent of the chipset animation settings");
+                }
+            }
+        }
+    }
+
+    public void Test_ChipAnimationStepDispatchesPerBlock()
+    {
+        // Blocks A/B animate with the chipset settings.
+        AssertEq(Rm2kChipset.ChipAnimationStep(Rm2kChipset.BlockA, 0, 0, 0), 0);
+        AssertEq(Rm2kChipset.ChipAnimationStep(Rm2kChipset.BlockA, 24, 0, 0), 1);
+        AssertEq(Rm2kChipset.ChipAnimationStep(Rm2kChipset.BlockB + 999, 24, 0, 0), 1);
+        AssertEq(Rm2kChipset.ChipAnimationStep(Rm2kChipset.BlockA, 24, 1, 1), 2, "cyclic step with speed 12");
+        AssertEq(Rm2kChipset.ChipAnimationStep(Rm2kChipset.BlockA, 24, 1, 0), 1, "speed 24 keeps the same step later");
+
+        // Blocks D, E and F never animate.
+        foreach (var chipId in new[] { Rm2kChipset.BlockD, Rm2kChipset.BlockDEnd - 1, Rm2kChipset.BlockE, Rm2kChipset.BlockF, Rm2kChipset.BlockFEnd - 1 })
+        {
+            for (var frame = 0; frame < 120; frame++)
+            {
+                foreach (var animationType in new[] { 0, 1 })
+                {
+                    AssertEq(Rm2kChipset.ChipAnimationStep(chipId, frame, animationType, 1), 0,
+                        $"chip {chipId} never animates");
+                }
+            }
+        }
+    }
+
+    public void Test_SimulationAdvancesChipAnimationWithTheFrameCount()
+    {
+        var state = new GameSimulationState();
+        state.ChipsetAnimationType = Rm2kChipset.AnimTypeReciprocating;
+        state.ChipsetAnimationSpeed = 0;
+
+        // The simulation frame counter is the Player's frame counter, so the
+        // step must follow it instead of a wall clock.
+        var seen = new List<int>();
+        for (var frame = 0; frame < 120; frame++)
+        {
+            state.FrameCount = frame;
+            seen.Add(state.GetChipAnimationStep(Rm2kChipset.BlockA));
+        }
+
+        AssertEq(seen[0], 0);
+        AssertEq(seen[1], 0, "the first 24 frames hold the first autotile frame");
+        AssertEq(seen[24], 1);
+        AssertEq(seen[48], 2);
+        AssertEq(seen[72], 1, "the reciprocating cycle skips the fourth frame");
+        AssertEq(seen[96], 0);
+
+        // Block C uses its own fixed cycle, blocks D-F never animate.
+        state.FrameCount = 6;
+        AssertEq(state.GetChipAnimationStep(Rm2kChipset.BlockC), 1);
+        state.FrameCount = 0;
+        AssertEq(state.GetChipAnimationStep(Rm2kChipset.BlockF), 0);
+        AssertEq(state.GetChipAnimationStep(Rm2kChipset.BlockE), 0);
+
+        // A cyclic chipset advances every 12 frames instead.
+        state.ChipsetAnimationType = Rm2kChipset.AnimTypeCyclic;
+        state.ChipsetAnimationSpeed = 1;
+        state.FrameCount = 11;
+        AssertEq(state.GetChipAnimationStep(Rm2kChipset.BlockA), 0);
+        state.FrameCount = 12;
+        AssertEq(state.GetChipAnimationStep(Rm2kChipset.BlockA), 1);
     }
 }

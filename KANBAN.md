@@ -69,7 +69,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-084 | 1 | DONE | Implement verified actor-stat, screen-effect, and event-control interpreter commands | K-023 |
 | K-085 | 2 | DONE | Bring RPG Maker MV to data-directory and System.json metadata parity with MZ | K-017 |
 | K-086 | 1 | DONE | Decode verified RM2K chipset passability arrays from the LDB chipset section | K-015 |
-| K-087 | 2 | READY | Add RM2K autotile/charset animation ticking and one-way plate/step events | K-015 |
+| K-087 | 2 | DONE | Add verified RM2K autotile animation ticking (counter values blocked: no verified data source) | K-015 |
+| K-088 | 2 | READY | Decode the LMT map-info tile substitution tables (`lower_tiles`/`upper_tiles`) and apply them to chipset lookups | K-086 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -665,19 +666,35 @@ This card closed the blocker that was repeated in every slice note ("chipset pas
 
 ### K-087 — RM2K autotile animation and event counters
 
-**Status (2026-09-26) — READY: verification first**
+**Status (2026-09-26) — autotile animation DONE; counter values not implementable from verified data**
 
-Follow-up to K-086. Chipset passability is resolved; the remaining chipset-driven runtime behaviour needs the same evidence discipline.
+Follow-up to K-086. Same evidence discipline: nothing below was inferred from memory.
 
-**Scope**
-- Autotile animation ticking: per-autotile `animation_type` (static, 3-frame, 4-frame), frame duration, and the chipset autotile id ranges.
-- Event counter stepping: the `PassCounter` bit (`0x40`) and the map/chipset counter tables that make plates and steps change passability while a character stands on them.
+**Autotile animation (implemented)**
+- Verified in EasyRPG Player `src/tilemap_layer.cpp` (Draw), `src/game_map.cpp` (SetChipset, GetAnimationType/Speed) and liblcf `src/generated/lcf/ldb/chunks.h` (`ChunkChipset`).
+- liblcf field ids: `animation_type = 0x0B`, `animation_speed = 0x0C`; the project's scalar field contract matches upstream.
+- `Game_Map::GetAnimationSpeed()` returns `animation_speed != 0 ? 12 : 24`, so `animation_speed` is only an animated/not flag, **not** a frame rate and **not** an on/off switch: even the zero default keeps AB autotiles cycling, just at half speed.
+- AB autotiles (blocks A1/A2/B, `id < BLOCK_C`): `step = frames / speed`, then cyclic (`animation_type != 0`) `% 3`, reciprocating (`animation_type == 0`) `% 4` with `3 → 1`, i.e. 0,1,2,1.
+- Block C: `step = (frames / 6) % 4` on a fixed cycle that ignores both chipset animation settings.
+- Blocks D, E and F never animate.
+- `frames` is the RPG_RT frame counter (`Game_System::GetFrameCounter`), which the simulation already ticks as `FrameCount`.
+- Implemented as `Rm2kChipset.AnimationSpeed/ReciprocatingStep/CyclicStep/CBlockStep/ChipAnimationStep`, exposed through `GameSimulationState.ChipsetAnimationType`, `ChipsetAnimationSpeed` and `GetChipAnimationStep`.
+- The runtime now selects the chipset entry by the LMU `chipset_id` instead of assuming the first chipset, which is what the Player does (`SetChipset(map->chipset_id)`). The parser stores the passability tables on the matching typed chipset entry and keeps the section-level keys for the first entry so the existing contract still holds.
 
-**Unblock condition**
-- Read the autotile animation and counter logic directly from the EasyRPG Player source (`autotile.cpp` / `main_data.h` / `game_map.cpp`) plus the RM2K chipset section layout before implementing. Do not infer frame counts or counter behaviour from memory; the K-086 card exists because guessed constants were wrong.
+**Event counters (deliberately not implemented)**
+- `Game_Map::IsCounter` is verified: the upper layer must hold `>= BLOCK_F`, the id runs through the `upper_tiles` substitution table, and the entry's `Counter` bit (`0x40`) marks it. The Player uses it only to look for an action trigger across at most 3 counter tiles in a row.
+- The counter *value* mechanism (plates and steps that close again) is **not** implementable: liblcf `master` has no per-map counter/chip-data array on `lcf::rpg::Map` or `lcf::rpg::MapInfo`, so there is no verified data source to decode. Implementing it would mean inventing a format, which is exactly what K-086 forbids.
+- The substitution tables (`map_info.lower_tiles`/`upper_tiles`, identity via `std::iota` in `Game_Map::Setup`) come from `lcf::rpg::MapInfo`. The current resolution treats them as identity, which matches the verified default, and the tables themselves remain a separate card.
 
-**Validation target**
-- A fixture-driven test proving a non-animated autotile stays on frame 0 and an animated one advances on the verified interval, plus a counter test proving a step tile blocks movement until triggered and reverts after the verified duration.
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 356 tests passed`, exit `0`.
+- `test_rm2k_chipset.cs` pins the speed mapping, the reciprocating 0,1,2,1 cycle, the cyclic three-frame cycle, the block C fixed cycle, the per-block dispatch, the D-F static blocks, and the frame-counter-driven step through `GameSimulationState`.
+- `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` proves both fixtures resolve their `chipset_id` to a real chipset entry with the expected animation defaults.
+- `TestPluginDetection` asserts the runtime carries chipset animation values and starts on autotile frame zero.
+
+**Lesson recorded**
+- Passability and animation data belong to a single chipset entry. Reading the first entry "because it is the map's chipset" was an unverified assumption; the LMU `chipset_id` is the verified selector.
+
 
 ## Agent maintenance rules
 - Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.

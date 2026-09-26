@@ -202,4 +202,89 @@ public static class Rm2kChipset
         }
         return masks;
     }
+
+    // ---- Autotile animation -------------------------------------------------
+    // Verified against EasyRPG Player `src/tilemap_layer.cpp` (Draw),
+    // `src/game_map.cpp` (SetChipset/GetAnimation*) and liblcf `rpg::Chipset`.
+
+    /// <summary>liblcf <c>rpg::Chipset::AnimType</c>.</summary>
+    public const int AnimTypeReciprocating = 0;
+
+    /// <summary>liblcf <c>rpg::Chipset::AnimType</c>: three even frames.</summary>
+    public const int AnimTypeCyclic = 1;
+
+    /// <summary>Frame step per game frame for the static C block (water).</summary>
+    public const int CBlockFramesPerStep = 6;
+
+    /// <summary>Frame count of the fixed C block cycle.</summary>
+    public const int CBlockFrameCount = 4;
+
+    /// <summary>
+    /// <c>Game_Map::GetAnimationSpeed()</c>: the chipset only stores a boolean
+    /// "animated" flag, and the Player maps it to 12 or 24 frames per step.
+    /// </summary>
+    public static int AnimationSpeed(int pChipsetAnimationSpeed)
+    {
+        return pChipsetAnimationSpeed != 0 ? 12 : 24;
+    }
+
+    /// <summary>
+    /// <c>GetCachedAutotileAB</c> step for a reciprocating chipset
+    /// (<c>animation_type == 0</c>): the Player divides by 4 and replaces the
+    /// fourth step with the second, which yields 0, 1, 2, 1, 0, 1, 2, 1, ...
+    /// </summary>
+    public static int ReciprocatingStep(int pFrameCount, int pAnimationSpeed)
+    {
+        var step = StepOf(pFrameCount, pAnimationSpeed) % 4;
+        return step == 3 ? 1 : step;
+    }
+
+    /// <summary>
+    /// <c>GetCachedAutotileAB</c> step for a cyclic chipset
+    /// (<c>animation_type != 0</c>): three even frames.
+    /// </summary>
+    public static int CyclicStep(int pFrameCount, int pAnimationSpeed)
+    {
+        return StepOf(pFrameCount, pAnimationSpeed) % 3;
+    }
+
+    /// <summary>
+    /// Block C animates on a fixed 6-frames-per-step cycle that ignores both
+    /// the chipset animation type and the chipset animation speed.
+    /// </summary>
+    public static int CBlockStep(int pFrameCount)
+    {
+        return pFrameCount / CBlockFramesPerStep % CBlockFrameCount;
+    }
+
+    /// <summary>
+    /// Animation step for a map tile id, following the Player's dispatch order:
+    /// blocks A/B use the chipset animation, block C uses the fixed cycle, and
+    /// blocks D-F never animate.
+    /// </summary>
+    public static int ChipAnimationStep(
+        int pChipId, int pFrameCount, int pChipsetAnimationType, int pChipsetAnimationSpeed)
+    {
+        if (pChipId >= BlockC && pChipId < BlockD)
+        {
+            return CBlockStep(pFrameCount);
+        }
+        if (pChipId < BlockC)
+        {
+            var speed = AnimationSpeed(pChipsetAnimationSpeed);
+            return pChipsetAnimationType != 0
+                ? CyclicStep(pFrameCount, speed)
+                : ReciprocatingStep(pFrameCount, speed);
+        }
+        return 0;
+    }
+
+    private static int StepOf(int pFrameCount, int pAnimationSpeed)
+    {
+        if (pFrameCount < 0)
+        {
+            return 0;
+        }
+        return pFrameCount / Math.Max(1, pAnimationSpeed);
+    }
 }

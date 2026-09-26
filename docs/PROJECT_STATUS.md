@@ -5,7 +5,7 @@
 
 ## Executive Summary
 
-The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, renderer/system coverage, autotile animation, and event counters beyond the bounded native event path and the now-working chipset passability.
+The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, renderer/system coverage, tile substitution tables, and event counters beyond the bounded native event path, the working chipset passability, and the verified autotile animation steps.
 
 The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `340/340` tests.
 
@@ -128,7 +128,7 @@ The bounded RM2K interpreter now supports verified `ChangeGold` command `10310`,
 | No export pipeline | Medium | Presets exist; signed/release exports are not automated |
 | Legacy encoding varies by platform | High | CP932 decoder must be tested on every target, especially Android/iOS |
 | No safe archive importer | High | Folder scans are bounded, but archive staging is not implemented |
-- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads bounded map geometry/start-map diagnostics, decoded events, chipset-driven movement, and scheduler state; complete rendering, autotile animation, event counters, and full systems remain incomplete |
+- Incomplete gameplay runtime | High | RM2K/RM2K3 bootstrap loads bounded map geometry/start-map diagnostics, decoded events, chipset-driven movement, verified autotile animation steps, and scheduler state; complete rendering, tile substitution, event counters, and full systems remain incomplete |
 
 ## Missing Core Components (Planned)
 

@@ -469,6 +469,16 @@ public partial class TestPluginDetection : TestBase
         AssertTrue(runtime.EventScheduler.EventCount > 0, "runtime loaded real map events");
         AssertTrue(runtime.Simulation.PassabilityMasks.Count > 0,
             "runtime decoded real chipset passability into per-direction masks");
+        // The chipset animation fields are optional: RPG_RT omits a field that
+        // holds the liblcf default, so the runtime must fall back to them.
+        AssertTrue(runtime.Simulation.ChipsetAnimationType is 0 or 1,
+            $"chipset animation type is reciprocating or cyclic but was {runtime.Simulation.ChipsetAnimationType}");
+        AssertTrue(runtime.Simulation.ChipsetAnimationSpeed >= 0,
+            $"chipset animation speed is not negative but was {runtime.Simulation.ChipsetAnimationSpeed}");
+        AssertEq(runtime.Simulation.GetChipAnimationStep(Rm2kChipset.BlockA), 0,
+            "a fresh map starts on autotile frame zero");
+        AssertEq(runtime.Simulation.GetChipAnimationStep(Rm2kChipset.BlockF), 0,
+            "upper tiles never animate");
         AssertTrue(runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassUp)
                 || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassDown)
                 || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassLeft)
