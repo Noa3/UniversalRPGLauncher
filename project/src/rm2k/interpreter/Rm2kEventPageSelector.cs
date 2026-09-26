@@ -3,12 +3,17 @@ using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Rm2k.Interpreter;
 
+/// <summary>
+/// liblcf <c>lcf::rpg::EventPage::Trigger</c> values. These are the raw page
+/// trigger ids decoded from LMU chunk <c>0x21</c> and must not be renumbered.
+/// </summary>
 public enum Rm2kEventTrigger
 {
-    Autorun = 0,
-    Parallel = 1,
-    Action = 2,
-    Touch = 3,
+    Action = 0,
+    Touched = 1,
+    Collision = 2,
+    AutoStart = 3,
+    Parallel = 4,
 }
 
 /// <summary>

@@ -74,7 +74,7 @@ public sealed class Rm2kEventScheduler
 
     public void ExecuteFrame()
     {
-        StartAutomaticPages(Rm2kEventTrigger.Autorun, _autorunStarted, restartWhenFinished: false);
+        StartAutomaticPages(Rm2kEventTrigger.AutoStart, _autorunStarted, restartWhenFinished: false);
         StartAutomaticPages(Rm2kEventTrigger.Parallel, _parallelStarted, restartWhenFinished: true);
         ExecuteActive();
     }
@@ -87,7 +87,7 @@ public sealed class Rm2kEventScheduler
         return eventData != null && Trigger(eventData.Id, pTrigger);
     }
 
-    public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touch);
+    public bool TriggerTouch(int pEventId) => Trigger(pEventId, Rm2kEventTrigger.Touched);
 
     private bool Trigger(int pEventId, Rm2kEventTrigger pTrigger)
     {

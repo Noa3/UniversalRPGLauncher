@@ -546,7 +546,7 @@ public partial class Main : Control
 		{
 			if (activeRm2k.TryMove(movement.Item1, movement.Item2))
 			{
-				activeRm2k.EventScheduler.TriggerAt(activeRm2k.Simulation.MapX, activeRm2k.Simulation.MapY, Rm2kEventTrigger.Touch);
+				activeRm2k.EventScheduler.TriggerAt(activeRm2k.Simulation.MapX, activeRm2k.Simulation.MapY, Rm2kEventTrigger.Touched);
 			}
 		}
 		GetViewport().SetInputAsHandled();

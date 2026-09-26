@@ -27,22 +27,46 @@ public partial class TestEventInterpreter : TestBase
 		AssertFalse(interpreter.IsRunning);
 	}
 
+	public void Test_TriggerValuesMatchVerifiedLiblcfEventPageTrigger()
+	{
+		AssertEq((int)Rm2kEventTrigger.Action, 0);
+		AssertEq((int)Rm2kEventTrigger.Touched, 1);
+		AssertEq((int)Rm2kEventTrigger.Collision, 2);
+		AssertEq((int)Rm2kEventTrigger.AutoStart, 3);
+		AssertEq((int)Rm2kEventTrigger.Parallel, 4);
+	}
+
 	public void Test_EventPageSelectorUsesHighestEligiblePage()
 	{
 		var state = new GameSimulationState();
 		state.Switches.Add(true);
 		var eventData = new Rm2kMap.Event(7, 3, 4);
-		eventData.Pages.Add(new Rm2kMap.EventPage { Trigger = 0 });
+		eventData.Pages.Add(new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Action });
 		eventData.Pages.Add(new Rm2kMap.EventPage
 		{
-			Trigger = 2,
+			Trigger = (int)Rm2kEventTrigger.Action,
 			Conditions = new Dictionary<string, object> { ["switch_id"] = 1, ["switch_value"] = true },
 		});
 
 		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Action);
 
 		AssertTrue(page != null);
-		AssertEq(page!.Trigger, 2);
+		AssertEq(page!.Trigger, (int)Rm2kEventTrigger.Action);
+	}
+
+	public void Test_EventPageSelectorIgnoresOtherTriggerKinds()
+	{
+		var state = new GameSimulationState();
+		var eventData = new Rm2kMap.Event(21, 1, 1);
+		eventData.Pages.Add(new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Touched });
+		eventData.Pages.Add(new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Parallel });
+
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Action) == null,
+			"action trigger does not select touched or parallel pages");
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Touched) != null,
+			"touched trigger selects the touched page");
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Parallel) != null,
+			"parallel trigger selects the parallel page");
 	}
 
 	public void Test_EventPageSelectorRejectsUnsatisfiedConditions()
@@ -51,11 +75,11 @@ public partial class TestEventInterpreter : TestBase
 		var eventData = new Rm2kMap.Event(8, 1, 1);
 		eventData.Pages.Add(new Rm2kMap.EventPage
 		{
-			Trigger = 0,
+			Trigger = (int)Rm2kEventTrigger.AutoStart,
 			Conditions = new Dictionary<string, object> { ["switch_id"] = 2, ["switch_value"] = true },
 		});
 
-		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun);
+		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.AutoStart);
 
 		AssertTrue(page == null);
 	}
@@ -69,7 +93,7 @@ public partial class TestEventInterpreter : TestBase
 		var eventData = new Rm2kMap.Event(11, 1, 1);
 		eventData.Pages.Add(new Rm2kMap.EventPage
 		{
-			Trigger = (int)Rm2kEventTrigger.Autorun,
+			Trigger = (int)Rm2kEventTrigger.AutoStart,
 			Conditions = new Dictionary<string, object>
 			{
 				["switch_b_enabled"] = true, ["switch_b_id"] = 2,
@@ -78,7 +102,7 @@ public partial class TestEventInterpreter : TestBase
 			},
 		});
 
-		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun);
+		var page = Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.AutoStart);
 
 		AssertTrue(page != null);
 	}
@@ -91,7 +115,7 @@ public partial class TestEventInterpreter : TestBase
 		var eventData = new Rm2kMap.Event(12, 1, 1);
 		eventData.Pages.Add(new Rm2kMap.EventPage
 		{
-			Trigger = (int)Rm2kEventTrigger.Autorun,
+			Trigger = (int)Rm2kEventTrigger.AutoStart,
 			Conditions = new Dictionary<string, object>
 			{
 				["item_enabled"] = true, ["item_id"] = 12,
@@ -99,7 +123,7 @@ public partial class TestEventInterpreter : TestBase
 			},
 		});
 
-		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun) != null);
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.AutoStart) != null);
 	}
 
 	public void Test_EventPageSelectorEvaluatesDeterministicTimerConditions()
@@ -110,7 +134,7 @@ public partial class TestEventInterpreter : TestBase
 		var eventData = new Rm2kMap.Event(13, 1, 1);
 		eventData.Pages.Add(new Rm2kMap.EventPage
 		{
-			Trigger = (int)Rm2kEventTrigger.Autorun,
+			Trigger = (int)Rm2kEventTrigger.AutoStart,
 			Conditions = new Dictionary<string, object>
 			{
 				["timer_enabled"] = true, ["timer_sec"] = 2,
@@ -118,7 +142,7 @@ public partial class TestEventInterpreter : TestBase
 			},
 		});
 
-		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Autorun) != null);
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.AutoStart) != null);
 		state.AdvanceTimers(60);
 		AssertTrue(state.Timer1Seconds == 1);
 		AssertTrue(state.Timer2Seconds == 3);
@@ -128,7 +152,7 @@ public partial class TestEventInterpreter : TestBase
 	{
 		var state = new GameSimulationState();
 		var eventData = new Rm2kMap.Event(9, 0, 0);
-		var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Autorun };
+		var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.AutoStart };
 		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches, new List<int> { 1, 1, 0, EventInterpreter.SwitchModeOn }));
 		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
 		eventData.Pages.Add(page);

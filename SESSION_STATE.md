@@ -183,6 +183,15 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Regression coverage: `Test_RealMapEventPagesDecodeCommandCountsMatchingLiblcfSizes`, `Test_Rm2000RealMapPagesDecodeEveryCommandVector`, `Test_LiblcfEndCommandStopsInterpreterWithoutDiagnostic`.
 - Fresh canonical validation: `All 300 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
 
+## Latest completed event-trigger alignment slice (2026-08-31)
+
+- `Rm2kEventTrigger` mirrored invented values (`Autorun=0, Parallel=1, Action=2, Touch=3`); liblcf `lcf::rpg::EventPage::Trigger` defines `action=0, touched=1, collision=2, auto_start=3, parallel=4`, and EasyRPG Player compares those raw ids against decoded pages. The enum now matches liblcf exactly, so real auto-start, parallel, and action pages can finally match.
+- `Rm2kEngineRuntime` now fails closed: a page with a non-empty `command_error` is skipped with a diagnostic instead of being bridged as an empty page that would run as if valid.
+- Real-fixture trigger values are asserted to stay inside the verified liblcf set, and the pinned fixtures are confirmed to contain action-trigger pages.
+- New end-to-end coverage: `Test_Rm2kRuntimeExecutesRealFixtureActionPages` starts the RM2K runtime on the pinned fixture, triggers a real action page, advances 20 frames, and requires interpreter diagnostics — the first proof that real fixture commands execute through the runtime.
+- Condition semantics were cross-checked against EasyRPG Player `Game_Event::AreConditionsMet`: switch A and switch B both require ON, RM2000 uses `variable >= value` while RM2K3 uses the six compare operators, timers compare with `secs > limit`. The existing implementation already matches, so nothing was changed there.
+- Fresh canonical validation: `All 304 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.

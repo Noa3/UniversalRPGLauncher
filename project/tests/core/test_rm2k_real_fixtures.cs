@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Tests.Framework;
@@ -212,6 +213,38 @@ partial class TestRm2kRealFixtures : TestBase
 		}
 
 		AssertTrue(commandPages > 0, "RM2000 fixture has pages with command lists");
+	}
+
+	public void Test_RealMapPageTriggersUseLiblcfEventPageTriggerValues()
+	{
+		var allowedTriggers = new HashSet<int> { 0, 1, 2, 3, 4 };
+		var actionPages = 0;
+		var totalPages = 0;
+		foreach (var relativePath in new[] { "rm2000/Map0001.lmu", "rm2003/Map0001.lmu" })
+		{
+			var result = _parser.ParseMap(FixtureRoot.PathJoin(relativePath));
+			AssertTrue(result.IsSuccess(), DescribeError(result));
+			if (!result.IsSuccess())
+			{
+				return;
+			}
+
+			foreach (Godot.Collections.Dictionary mapEvent in (Godot.Collections.Array)result.GetData()["events"])
+			{
+				foreach (Godot.Collections.Dictionary page in (Godot.Collections.Array)mapEvent["pages"])
+				{
+					totalPages++;
+					var trigger = page["trigger"].AsInt32();
+					AssertTrue(allowedTriggers.Contains(trigger),
+						$"{relativePath} trigger {trigger} is a liblcf EventPage::Trigger value");
+					if (trigger == 0) actionPages++;
+				}
+			}
+		}
+
+		AssertTrue(totalPages > 0, "real fixtures expose event pages");
+		AssertTrue(actionPages > 0,
+			"real fixtures expose action-trigger pages reachable by the runtime");
 	}
 
 	private static string DescribeError(Rm2kParser.ParseResult pResult)

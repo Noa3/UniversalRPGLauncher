@@ -432,7 +432,7 @@ public partial class TestPluginDetection : TestBase
         }
 
         var eventData = new Rm2kMap.Event(900, 0, 0);
-        var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Autorun };
+        var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.AutoStart };
         page.Commands.Add(new Rm2kMap.EventCommand(
             EventInterpreter.ControlSwitches,
             new List<int> { 7, 7, 0, EventInterpreter.SwitchModeOn }));
@@ -446,6 +446,41 @@ public partial class TestPluginDetection : TestBase
         AssertTrue(runtime.Simulation.Switches.Count >= 7);
         AssertTrue(runtime.Simulation.Switches[6],
             "RM2K host update must execute native autorun commands");
+    }
+
+    public void Test_Rm2kRuntimeExecutesRealFixtureActionPages()
+    {
+        var fixture = ProjectSettings.GlobalizePath("res://tests/fixtures/easyrpg-testgame/rm2000");
+        var game = new PluginGameInfo
+        {
+            GameDirectory = fixture,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        };
+        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        AssertTrue(host.Start(game).Success, "RM2K runtime must start for real event page execution");
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            throw new InvalidOperationException("RM2K runtime was not created for real event page execution.");
+        }
+
+        AssertTrue(runtime.EventScheduler.EventCount > 0, "runtime loaded real map events");
+        var diagnosticsBefore = runtime.Simulation.Diagnostics.Count;
+        var triggered = 0;
+        for (var eventId = 1; eventId <= 200 && triggered == 0; eventId++)
+        {
+            if (runtime.EventScheduler.TriggerAction(eventId)) triggered++;
+        }
+
+        AssertTrue(triggered > 0, "a real fixture action page must be triggerable");
+        for (var frame = 0; frame < 20; frame++)
+        {
+            host.Update(1.0 / 60.0);
+        }
+
+        AssertTrue(runtime.Simulation.Diagnostics.Count > diagnosticsBefore,
+            "executing real fixture event commands must produce interpreter diagnostics");
     }
 
     public void Test_BuiltInDetectionOnlyRuntimeRefusesLaunch()

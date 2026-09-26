@@ -392,6 +392,16 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                         if (rawPage.VariantType != Godot.Variant.Type.Dictionary) continue;
                         var pageData = rawPage.AsGodotDictionary();
                         if (!TryReadInt(pageData, "trigger", out var trigger)) continue;
+                        // Fail closed: a page whose command vector could not be
+                        // decoded must not run as if it were empty.
+                        if (pageData.TryGetValue("command_error", out var rawCommandError)
+                            && rawCommandError.VariantType == Godot.Variant.Type.String
+                            && rawCommandError.AsString().Length > 0)
+                        {
+                            Simulation.AddDiagnostic(
+                                $"RM2K event {id} page with trigger {trigger} skipped: {rawCommandError.AsString()}");
+                            continue;
+                        }
                         var page = new Rm2kMap.EventPage { Trigger = trigger };
                         if (pageData.TryGetValue("conditions", out var rawConditions) && rawConditions.VariantType == Godot.Variant.Type.Dictionary)
                         {

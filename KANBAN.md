@@ -64,6 +64,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-070 | 3 | DONE | Faithful-vs-Enhanced profile and integer scaling controls | K-030 |
 | K-071 | 3 | DONE | Controller/touch remapping layer | K-020 |
 | K-081 | 0 | DONE | Decode real LMU event pages: fix struct-array field collection and verify liblcf IDs | K-013 |
+| K-082 | 0 | DONE | Align event-page trigger ids with liblcf and fail closed on undecodable pages | K-081 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -556,8 +557,25 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - Regression coverage: `Test_RealMapEventPagesDecodeCommandCountsMatchingLiblcfSizes`, `Test_Rm2000RealMapPagesDecodeEveryCommandVector`, `Test_LiblcfEndCommandStopsInterpreterWithoutDiagnostic`.
 - `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 300 tests passed`, exit `0`.
 
-## Agent maintenance rules
+### K-082 — Event-page trigger ids and undecodable page containment
 
+**Status (2026-08-31) — DONE**
+
+**Problem**
+- `Rm2kEventTrigger` used invented values (`Autorun=0, Parallel=1, Action=2, Touch=3`). liblcf `lcf::rpg::EventPage::Trigger` defines `action=0, touched=1, collision=2, auto_start=3, parallel=4`, and EasyRPG Player compares those values directly against decoded page data. With the old enum no real autorun, parallel, or action page could ever match.
+- A page whose command vector failed to decode was bridged into the runtime as an empty page and could start as if it were valid.
+
+**Fix**
+- `Rm2kEventTrigger` now mirrors liblcf: `Action=0, Touched=1, Collision=2, AutoStart=3, Parallel=4`.
+- `Rm2kEngineRuntime` skips pages carrying a non-empty `command_error` and records a diagnostic instead of running them.
+
+**Validation evidence (2026-08-31)**
+- Regression coverage: `Test_TriggerValuesMatchVerifiedLiblcfEventPageTrigger`, `Test_EventPageSelectorIgnoresOtherTriggerKinds`, `Test_RealMapPageTriggersUseLiblcfEventPageTriggerValues`, `Test_Rm2kRuntimeExecutesRealFixtureActionPages`.
+- `Test_Rm2kRuntimeExecutesRealFixtureActionPages` starts the RM2K runtime on the pinned fixture, triggers a real action page, advances 20 frames, and requires interpreter diagnostics — the first test that proves real fixture commands execute end to end.
+- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 304 tests passed`, exit `0`.
+- Cross-checked against EasyRPG Player `Game_Event::AreConditionsMet`: switch A and switch B both require ON, RM2000 uses `variable >= value` while RM2K3 uses the six compare operators, and timers compare with `secs > limit`. Existing page-condition code already matches, so no change was made.
+
+## Agent maintenance rules
 - Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.
 - New defects found during a card become `P0`/`P1` bug cards when they threaten correctness/security; otherwise add them to backlog.
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
