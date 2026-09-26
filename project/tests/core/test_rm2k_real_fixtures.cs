@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Tests.Framework;
@@ -215,7 +216,48 @@ partial class TestRm2kRealFixtures : TestBase
 		AssertTrue(commandPages > 0, "RM2000 fixture has pages with command lists");
 	}
 
-	public void Test_RealMapPageTriggersUseLiblcfEventPageTriggerValues()
+	public void Test_RealFixtureCommandsUseVerifiedParameterWidths()
+	{
+		// EasyRPG CmdSetup declares the minimum parameter count per command.
+		// Real payloads must satisfy it, otherwise the interpreter would read
+		// shifted or missing operands.
+		var minimumParameters = new Dictionary<int, int>
+		{
+			{ 10110, 0 }, { 10210, 4 }, { 10220, 7 }, { 10310, 3 }, { 10320, 5 },
+			{ 10330, 3 }, { 10420, 6 }, { 10810, 3 }, { 11410, 1 }, { 12010, 6 },
+		};
+		var checkedCommands = 0;
+		foreach (var relativePath in new[] { "rm2000/Map0001.lmu", "rm2003/Map0001.lmu" })
+		{
+			var result = _parser.ParseMap(FixtureRoot.PathJoin(relativePath));
+			AssertTrue(result.IsSuccess(), DescribeError(result));
+			if (!result.IsSuccess())
+			{
+				return;
+			}
+
+			foreach (Godot.Collections.Dictionary mapEvent in (Godot.Collections.Array)result.GetData()["events"])
+			{
+				foreach (Godot.Collections.Dictionary page in (Godot.Collections.Array)mapEvent["pages"])
+				{
+					if (!page["has_command_list"].AsBool()) continue;
+					foreach (Godot.Collections.Dictionary command in (Godot.Collections.Array)page["commands"])
+					{
+						var code = command["code"].AsInt32();
+						if (!minimumParameters.TryGetValue(code, out var minimum)) continue;
+						var actual = ((int[])command["parameters"]).Length;
+						AssertTrue(actual >= minimum,
+							$"{relativePath} command {code} has {actual} parameters, expected at least {minimum}");
+						checkedCommands++;
+					}
+				}
+			}
+		}
+
+		AssertTrue(checkedCommands > 0, "real fixtures expose commands with verified widths");
+	}
+
+	public void Test_RealMapPageTriggersUseLiblcfEventPageTriggerValues_Values()
 	{
 		var allowedTriggers = new HashSet<int> { 0, 1, 2, 3, 4 };
 		var actionPages = 0;

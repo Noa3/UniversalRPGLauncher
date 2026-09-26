@@ -435,7 +435,7 @@ public partial class TestPluginDetection : TestBase
         var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.AutoStart };
         page.Commands.Add(new Rm2kMap.EventCommand(
             EventInterpreter.ControlSwitches,
-            new List<int> { 7, 7, 0, EventInterpreter.SwitchModeOn }));
+            new List<int> { EventInterpreter.TargetEvalSingle, 7, 7, EventInterpreter.SwitchModeOn }));
         page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
         eventData.Pages.Add(page);
         runtime.EventScheduler.SetEvents(new[] { eventData });
@@ -481,6 +481,16 @@ public partial class TestPluginDetection : TestBase
 
         AssertTrue(runtime.Simulation.Diagnostics.Count > diagnosticsBefore,
             "executing real fixture event commands must produce interpreter diagnostics");
+        foreach (var diagnostic in runtime.Simulation.Diagnostics)
+        {
+            // Real RM2K ControlSwitches/ControlVariables payloads use the verified
+            // parameter layout, so they must not be rejected as malformed.
+            if (diagnostic.Contains("Control switches") || diagnostic.Contains("Control variables"))
+            {
+                AssertFalse(diagnostic.Contains("invalid range") || diagnostic.Contains("unsupported target mode"),
+                    $"real control command must not be rejected: {diagnostic}");
+            }
+        }
     }
 
     public void Test_BuiltInDetectionOnlyRuntimeRefusesLaunch()

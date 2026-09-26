@@ -192,6 +192,17 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Condition semantics were cross-checked against EasyRPG Player `Game_Event::AreConditionsMet`: switch A and switch B both require ON, RM2000 uses `variable >= value` while RM2K3 uses the six compare operators, timers compare with `secs > limit`. The existing implementation already matches, so nothing was changed there.
 - Fresh canonical validation: `All 304 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
 
+## Latest completed control-command parameter layout slice (2026-08-31)
+
+- `ControlSwitches` and `ControlVars` read `parameters[0]` as the first id, but EasyRPG stores the lvalue form there (`Game_Interpreter_Shared::TargetEvalMode`), with the start id in `parameters[1]` and the range end in `parameters[2]`. Real payloads therefore started at id `0` and were always rejected as `invalid range 0-…`, so no real switch or variable command ever executed.
+- Both commands now follow the verified layout: `ControlSwitches` `[targetMode, start, end, mode]`, `ControlVars` `[targetMode, start, end, operation, operandMode, operand, bitfield]`.
+- `TargetEvalSingle` collapses the range end to the start id like `DecodeTargetEvaluationMode`; patch-only target modes stay fail-closed with diagnostics.
+- Added verified `VarOperandVariableIndirect` (`v[v[x]]`, EasyRPG `ValueOrVariable` mode 2).
+- Verified minimum widths from `Game_Interpreter::ExecuteCommand` are now asserted against the pinned fixtures: `ControlSwitches` 4, `ControlVars` 7, `ChangeLevel` 6, `ConditionalBranch` 6, `ChangeGold` 3, `ChangeItems` 5, `ChangePartyMembers` 3, `Teleport` 3, `Wait` 1.
+- The real-fixture runtime test now fails if a real control command is rejected as an invalid range or a patch-only target mode, so this regression cannot silently return.
+- Still diagnostic-only by design: `ChangeLevel` (10420, 6 occurrences), `ChangeHeroName` (10610), screen effects (11040/11050/11070), `CallEvent` (12330), `ChangeBattleCommands` (1009), and Maniac codes found in the fixtures.
+- Fresh canonical validation: `All 309 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.

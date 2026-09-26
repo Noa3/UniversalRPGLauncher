@@ -71,6 +71,19 @@ public sealed class EventInterpreter
 	public const int VarOperandConstant = 0;
 	public const int VarOperandVariable = 1;
 
+	// TargetEvalMode (EasyRPG Game_Interpreter_Shared): lvalue form stored in
+	// ControlSwitches/ControlVariables parameters[0]. Indirect and expression
+	// modes are patch-only and stay fail-closed.
+	public const int TargetEvalSingle = 0;
+	public const int TargetEvalRange = 1;
+	public const int TargetEvalIndirectSingle = 2;
+	public const int TargetEvalIndirectRange = 3;
+	public const int TargetEvalExpression = 4;
+
+	// ValueEvalMode (EasyRPG Game_Interpreter_Shared): rvalue form stored in
+	// ControlVariables parameters[4].
+	public const int VarOperandVariableIndirect = 2;
+
 	// ConditionalBranch condition types (EasyRPG CommandConditionalBranch).
 	public const int ConditionSwitch = 0;
 	public const int ConditionVariable = 1;
@@ -324,9 +337,17 @@ public sealed class EventInterpreter
 			Malformed("Control switches");
 			return;
 		}
-		var startId = pCmd.Parameters[0];
-		var endId = pCmd.Parameters[1];
+		// EasyRPG Game_Interpreter_Shared::TargetEvalMode: parameters[0] selects
+		// the lvalue form, [1] is the first id and [2] the range end.
+		var targetMode = pCmd.Parameters[0];
+		var startId = pCmd.Parameters[1];
+		var endId = targetMode == TargetEvalRange ? pCmd.Parameters[2] : startId;
 		var mode = pCmd.Parameters[3];
+		if (targetMode != TargetEvalSingle && targetMode != TargetEvalRange)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Control switches: unsupported target mode {targetMode} skipped");
+			return;
+		}
 		if (startId < 1 || endId < startId || endId > GameSimulationState.MaxSwitches)
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Control switches: invalid range {startId}-{endId} skipped");
@@ -560,14 +581,14 @@ public sealed class EventInterpreter
 			Malformed("Control variables");
 			return;
 		}
-		var startId = pCmd.Parameters[0];
-		var endId = pCmd.Parameters[1];
-		var targetMode = pCmd.Parameters[2];
+		var targetMode = pCmd.Parameters[0];
+		var startId = pCmd.Parameters[1];
+		var endId = targetMode == TargetEvalRange ? pCmd.Parameters[2] : startId;
 		var op = pCmd.Parameters[3];
 		var operandType = pCmd.Parameters[4];
 		var operandValue = pCmd.Parameters[5];
 
-		if (targetMode != 0)
+		if (targetMode != TargetEvalSingle && targetMode != TargetEvalRange)
 		{
 			_state.AddDiagnostic($"[Event {_eventId}] Control variables: unsupported target mode {targetMode} skipped");
 			return;
@@ -590,6 +611,15 @@ public sealed class EventInterpreter
 				break;
 			case VarOperandVariable:
 				operand = GetVariable(operandValue);
+				break;
+			case VarOperandVariableIndirect:
+				// EasyRPG ValueOrVariable mode 2: v[v[x]].
+				if (operandValue < 1 || operandValue > GameSimulationState.MaxVariables)
+				{
+					_state.AddDiagnostic($"[Event {_eventId}] Control variables: invalid indirect variable {operandValue} skipped");
+					return;
+				}
+				operand = GetVariable(GetVariable(operandValue));
 				break;
 			default:
 				_state.AddDiagnostic($"[Event {_eventId}] Control variables: unsupported operand type {operandType} skipped");

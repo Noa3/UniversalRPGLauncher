@@ -153,7 +153,7 @@ public partial class TestEventInterpreter : TestBase
 		var state = new GameSimulationState();
 		var eventData = new Rm2kMap.Event(9, 0, 0);
 		var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.AutoStart };
-		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches, new List<int> { 1, 1, 0, EventInterpreter.SwitchModeOn }));
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches, new List<int> { EventInterpreter.TargetEvalSingle, 1, 1, EventInterpreter.SwitchModeOn }));
 		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
 		eventData.Pages.Add(page);
 		var scheduler = new Rm2kEventScheduler(state);
@@ -213,7 +213,7 @@ public partial class TestEventInterpreter : TestBase
 		var state = new GameSimulationState();
 		var eventData = new Rm2kMap.Event(10, 5, 6);
 		var page = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Action };
-		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches, new List<int> { 2, 2, 0, EventInterpreter.SwitchModeOn }));
+		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches, new List<int> { EventInterpreter.TargetEvalSingle, 2, 2, EventInterpreter.SwitchModeOn }));
 		page.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
 		eventData.Pages.Add(page);
 		var scheduler = new Rm2kEventScheduler(state);
@@ -710,7 +710,11 @@ public partial class TestEventInterpreter : TestBase
 		{
 			new Rm2kMap.EventCommand(
 				EventInterpreter.ControlVars,
-				new List<int> { 1, 1, 0, EventInterpreter.VarOpMul, EventInterpreter.VarOperandVariable, 2 }),
+				new List<int>
+				{
+					EventInterpreter.TargetEvalSingle, 1, 1, EventInterpreter.VarOpMul,
+					EventInterpreter.VarOperandVariable, 2, 0,
+				}),
 			new Rm2kMap.EventCommand(EventInterpreter.End),
 		};
 
@@ -727,9 +731,9 @@ public partial class TestEventInterpreter : TestBase
 		var commands = new List<Rm2kMap.EventCommand>
 		{
 			new Rm2kMap.EventCommand(EventInterpreter.ControlVars,
-				new List<int> { 1, 1, 1, EventInterpreter.VarOpSet, 0, 5 }), // indirect target mode
+				new List<int> { EventInterpreter.TargetEvalIndirectSingle, 1, 1, EventInterpreter.VarOpSet, 0, 5, 0 }), // indirect target mode
 			new Rm2kMap.EventCommand(EventInterpreter.ControlVars,
-				new List<int> { 1, 1, 0, 9, EventInterpreter.VarOperandConstant, 5 }), // unsupported op
+				new List<int> { EventInterpreter.TargetEvalSingle, 1, 1, 9, EventInterpreter.VarOperandConstant, 5, 0 }), // unsupported op
 			new Rm2kMap.EventCommand(EventInterpreter.End),
 		};
 
@@ -742,6 +746,106 @@ public partial class TestEventInterpreter : TestBase
 		AssertTrue(interpreter.ExecuteFrame());
 		AssertEq(state.Variables[0], 11, "unsupported operation not applied");
 		AssertTrue(state.Diagnostics[^1].Contains("operation"));
+	}
+
+	public void Test_ControlSwitchesAndVarsUseVerifiedParameterLayout()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// Real RM2K/2003 layout: [targetMode, start, end, mode].
+			new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches,
+				new List<int> { EventInterpreter.TargetEvalSingle, 3, 0, EventInterpreter.SwitchModeOn }),
+			// [targetMode, start, end, op, operandMode, operand, bitfield].
+			new Rm2kMap.EventCommand(EventInterpreter.ControlVars,
+				new List<int>
+				{
+					EventInterpreter.TargetEvalSingle, 1, 1, EventInterpreter.VarOpSet,
+					EventInterpreter.VarOperandConstant, 5, 0,
+				}),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Switches[2], "single-target switch command sets switch 3");
+
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Variables[0], 5, "single-target variable command sets variable 1");
+		foreach (var diagnostic in state.Diagnostics)
+		{
+			AssertFalse(diagnostic.Contains("unsupported") || diagnostic.Contains("invalid"),
+				$"verified layout must not be rejected: {diagnostic}");
+		}
+	}
+
+	public void Test_ControlVarsRangeTargetWritesEveryVariableInRange()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ControlVars,
+				new List<int>
+				{
+					EventInterpreter.TargetEvalRange, 2, 4, EventInterpreter.VarOpSet,
+					EventInterpreter.VarOperandConstant, 7, 0,
+				}),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Variables.Count, 4, "range target padded to the range end");
+		AssertEq(state.Variables[0], 0, "variable 1 untouched");
+		AssertEq(state.Variables[1], 7, "variable 2 set");
+		AssertEq(state.Variables[2], 7, "variable 3 set");
+		AssertTrue(state.Diagnostics[0].Contains("Variables 2-4"), "range diagnostic reports both ids");	}
+
+	public void Test_ControlVarsIndirectOperandReadsVariableOfVariable()
+	{
+		var state = new GameSimulationState();
+		state.Variables.Add(3);   // v1 = 3
+		state.Variables.Add(3);   // v2 = 3 -> points at v3
+		state.Variables.Add(99);  // v3 = 99
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			// v1 = v[v[2]] with operand mode 2.
+			new Rm2kMap.EventCommand(EventInterpreter.ControlVars,
+				new List<int>
+				{
+					EventInterpreter.TargetEvalSingle, 1, 1, EventInterpreter.VarOpSet,
+					EventInterpreter.VarOperandVariableIndirect, 2, 0,
+				}),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertEq(state.Variables[0], 99, "indirect operand resolves v[v[2]]");
+	}
+
+	public void Test_ControlSwitchesAndVarsRejectPatchOnlyTargetModes()
+	{
+		var state = new GameSimulationState();
+		var commands = new List<Rm2kMap.EventCommand>
+		{
+			new Rm2kMap.EventCommand(EventInterpreter.ControlSwitches,
+				new List<int> { EventInterpreter.TargetEvalIndirectSingle, 1, 1, EventInterpreter.SwitchModeOn }),
+			new Rm2kMap.EventCommand(EventInterpreter.ControlVars,
+				new List<int>
+				{
+					EventInterpreter.TargetEvalExpression, 1, 1, EventInterpreter.VarOpSet,
+					EventInterpreter.VarOperandConstant, 5, 0,
+				}),
+			new Rm2kMap.EventCommand(EventInterpreter.End),
+		};
+
+		var interpreter = new EventInterpreter(state, 1, commands);
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("target mode"));
+		AssertTrue(interpreter.ExecuteFrame());
+		AssertTrue(state.Diagnostics[^1].Contains("target mode"));
+		AssertEq(state.Variables.Count, 0, "no variable written for patch-only target modes");
 	}
 
 	public void Test_ControlVarsDivisionByZeroSkips()
@@ -1065,15 +1169,22 @@ public partial class TestEventInterpreter : TestBase
 
 	private static Rm2kMap.EventCommand SwitchCmd(int pStart, int pEnd, int pMode)
 	{
+		// Verified layout: [targetMode, start, end, mode] with range mode 1.
+		var targetMode = pStart == pEnd ? EventInterpreter.TargetEvalSingle : EventInterpreter.TargetEvalRange;
 		return new Rm2kMap.EventCommand(
 			EventInterpreter.ControlSwitches,
-			new List<int> { pStart, pEnd, 0, pMode });
+			new List<int> { targetMode, pStart, pEnd, pMode });
 	}
 
 	private static Rm2kMap.EventCommand VarOp(int pTarget, int pOp, int pOperand)
 	{
+		// Verified layout: [targetMode, start, end, op, operandMode, operand, bitfield].
 		return new Rm2kMap.EventCommand(
 			EventInterpreter.ControlVars,
-			new List<int> { pTarget, pTarget, 0, pOp, EventInterpreter.VarOperandConstant, pOperand });
+			new List<int>
+			{
+				EventInterpreter.TargetEvalSingle, pTarget, pTarget, pOp,
+				EventInterpreter.VarOperandConstant, pOperand, 0,
+			});
 	}
 }

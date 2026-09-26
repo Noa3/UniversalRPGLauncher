@@ -65,6 +65,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-071 | 3 | DONE | Controller/touch remapping layer | K-020 |
 | K-081 | 0 | DONE | Decode real LMU event pages: fix struct-array field collection and verify liblcf IDs | K-013 |
 | K-082 | 0 | DONE | Align event-page trigger ids with liblcf and fail closed on undecodable pages | K-081 |
+| K-083 | 0 | DONE | Correct ControlSwitches/ControlVariables parameter layout to the verified EasyRPG spec | K-081 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -574,6 +575,26 @@ User-directed MZ slice; extends K-017, stays metadata-only.
 - `Test_Rm2kRuntimeExecutesRealFixtureActionPages` starts the RM2K runtime on the pinned fixture, triggers a real action page, advances 20 frames, and requires interpreter diagnostics — the first test that proves real fixture commands execute end to end.
 - `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 304 tests passed`, exit `0`.
 - Cross-checked against EasyRPG Player `Game_Event::AreConditionsMet`: switch A and switch B both require ON, RM2000 uses `variable >= value` while RM2K3 uses the six compare operators, and timers compare with `secs > limit`. Existing page-condition code already matches, so no change was made.
+
+### K-083 — ControlSwitches/ControlVariables parameter layout
+
+**Status (2026-08-31) — DONE**
+
+**Problem**
+- Both commands read `parameters[0]` as the first id. EasyRPG stores the lvalue form in `parameters[0]` (`Game_Interpreter_Shared::TargetEvalMode`), with `parameters[1]` as the start id and `parameters[2]` as the range end. Real RM2K/2003 payloads therefore decoded as start id `0` and were always rejected with `invalid range 0-…`, so no real switch or variable command ever executed.
+- Verified widths from `Game_Interpreter::ExecuteCommand`: `ControlSwitches` 4 parameters, `ControlVars` 7 parameters, `ChangeLevel` 6, `ConditionalBranch` 6.
+
+**Fix**
+- `ControlSwitches` reads `[targetMode, start, end, mode]`; `ControlVars` reads `[targetMode, start, end, operation, operandMode, operand, bitfield]`.
+- `TargetEvalSingle` collapses the range end to the start id, matching `DecodeTargetEvaluationMode`.
+- Patch-only target modes (`IndirectSingle`, `IndirectRange`, `Expression`) stay fail-closed with diagnostics.
+- Added the verified `VarOperandVariableIndirect` mode (`v[v[x]]`).
+
+**Validation evidence (2026-08-31)**
+- Regression coverage: `Test_ControlSwitchesAndVarsUseVerifiedParameterLayout`, `Test_ControlVarsRangeTargetWritesEveryVariableInRange`, `Test_ControlVarsIndirectOperandReadsVariableOfVariable`, `Test_ControlSwitchesAndVarsRejectPatchOnlyTargetModes`, `Test_RealFixtureCommandsUseVerifiedParameterWidths`.
+- `Test_RealFixtureCommandsUseVerifiedParameterWidths` asserts the pinned fixtures satisfy the verified minimum widths; `Test_Rm2kRuntimeExecutesRealFixtureActionPages` now also fails if a real control command is rejected as an invalid range or patch-only target mode.
+- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 309 tests passed`, exit `0`.
+- Still diagnostic-only by design: `ChangeLevel` (10420), `ChangeHeroName` (10610), screen effects (11040/11050/11070), `CallEvent` (12330), battle commands (1009), and Maniac codes present in the fixtures.
 
 ## Agent maintenance rules
 - Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.
