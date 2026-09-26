@@ -5,7 +5,16 @@
 
 ## Current card
 
-K-086 through K-093 and K-095 are DONE. K-096 (autotile cache + chipset bitmap) and K-094 (vehicles) are the open cards; K-096 is the higher priority one because it is what makes the map visible.
+K-086 through K-093, K-095 and K-096 are DONE. Open: K-097 (block A/B composition) and K-098 (chipset bitmap + blitting, blocked on a real `Chipset.png` fixture).
+
+**K-096 completed (2026-09-26)**
+- Verified in `tilemap_layer.cpp`: `BlockA_Subtiles_IDS[47][2][2]` (int8, `-1` = B liefert das Quartett) und `BlockD_Subtiles_IDS[50][2][2][2]` (uint8), Reihenfolge oben-links, oben-rechts, unten-links, unten-rechts.
+- Verified `GenerateAutotileD`: `block = (ID-4000)/50`, `variant = ID-4000-block*50`, Ablehnung bei `block >= 12 || variant >= 50`. Blockursprung `(block%2)*3, 8+(block/2)*4` für `block < 4`, sonst `6+(block%2)*3, ((block-4)/2)*4`. Jedes Quartett = Blockursprung + Tabellenoffset.
+- Wichtig: Der Player setzt Autotiles aus **vier** 16x16-Quartetten zusammen, eine Tile-ID löst also zu vier Chipset-Rechtecken auf, nicht zu einem.
+- **Transkriptionsdisziplin**: Beide Tabellen wurden per Skript mechanisch aus der Player-Quelle extrahiert (188 Werte für A, 400 für D), mit Anzahl, Wertebereich und erster/letzter Zeile gegen die Quelle geprüft, bevor eine Zeile C# geschrieben wurde. Dasselbe Skript hat die Block-D-Anker-Erwartungen im Test erzeugt, damit der Test nicht von der Tabelle abweichen kann.
+- Neu: `Rm2kAutotileQuarters.TryResolveBlockD` (vier `ChipsetRect`-Quartette, Range-Refusal) und `TryGetBlockAQuarters` (A-Tabelle für K-097 und für Regressionstests).
+- Der erste Testlauf fand einen echten Defekt: Offset `variant * 4`, obwohl eine Variante acht Werte umfasst — jede Variante ab der zweiten las die falsche Zeile.
+- Noch nicht: A/B-Zusammensetzung, Bitmap-Decoding, Blitting. Blöcke A, B, D lösen über `Rm2kChipsetSource` weiterhin **nicht** auf.
 
 **K-095 completed (2026-09-26)**
 - Verified in `tilemap_layer.cpp` (Draw): only blocks **C, E and F** are blitted straight from the chipset bitmap. Blocks A, B and D come from the generated caches `autotiles_ab_screen`/`autotiles_d_screen` and are refused instead of guessed.
@@ -75,7 +84,7 @@ K-086 through K-093 and K-095 are DONE. K-096 (autotile cache + chipset bitmap) 
 
 ## Next action
 
-1. Start K-096: read `GenerateAutotileAB`/`GenerateAutotileD`/`CreateTileCache` in `tilemap_layer.cpp` for the exact quarter selection, and the Player indexed PNG loading. Get a real `Chipset.png` fixture first: the pinned testgame has none, so a decoder could only be tested on a synthesized file and must be labelled as such.
+1. Start K-097 (block A/B composition): re-read `GenerateAutotileAB` for the exact quarter ordering and the combination pass, plus `TILES_PER_ROW`. The Player de-duplicates quarters via a hash, which affects only cache layout, not the quarter values. Keep K-098 blocked until a real `Chipset.png` exists as a fixture.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -88,7 +97,7 @@ K-086 through K-093 and K-095 are DONE. K-096 (autotile cache + chipset bitmap) 
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 381 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 387 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|

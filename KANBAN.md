@@ -77,7 +77,9 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-093 | 3 | DONE | Route the Godot host input through the verified turn order instead of ad-hoc triggers | K-092 |
 | K-094 | 2 | READY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
 | K-095 | 3 | DONE | Resolve verified chipset source rectangles for blocks C, E and F | K-087 |
-| K-096 | 3 | READY | Build the verified autotile cache for blocks A, B and D and decode the chipset bitmap | K-095 |
+| K-096 | 3 | DONE | Build the verified block D autotile quarter table and block geometry | K-095 |
+| K-097 | 3 | READY | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
+| K-098 | 3 | READY | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-096 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -866,15 +868,53 @@ The Player guards block C with `id >= BLOCK_C && id < BLOCK_D`, not with the end
 - `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 381 tests passed`, exit `0`.
 - `test_rm2k_chipset_source.cs` pins the three formulas including the `< BLOCK_D` range detail, the substitution effect on blocks E and F, the block C cycle over several chipset settings, the fail-closed set, and that every resolved rectangle stays inside the 30 by 16 chipset grid.
 
-### K-096 — Autotile cache and chipset bitmap
+### K-096 — Block D autotile quarters
+
+**Status (2026-09-26) — DONE: block D resolves to four verified chipset quarters**
+
+**Verified (EasyRPG Player `src/tilemap_layer.cpp`)**
+- `BlockA_Subtiles_IDS[47][2][2]` (int8, `-1` means the B block supplies the quarter) and `BlockD_Subtiles_IDS[50][2][2][2]` (uint8) are static tables in the Player source, ordered top-left, top-right, bottom-left, bottom-right.
+- `GenerateAutotileD`: `block = (ID - 4000) / 50`, `variant = ID - 4000 - block * 50`, refusing `block >= 12 || variant >= 50 || block < 0 || variant < 0`. Block origin is `(block % 2) * 3, 8 + (block / 2) * 4` for `block < 4` and `6 + (block % 2) * 3, ((block - 4) / 2) * 4` afterwards. Each quarter is the block origin plus its table offset.
+- The Player composes autotiles from four 16x16 quarters, so a tile id resolves to four chipset rectangles, not one.
+
+**Transcription discipline**
+- Both tables were extracted mechanically from the Player source with a script instead of being typed by hand: 188 values for block A and 400 for block D, with the count, value range and first/last rows checked against the source before any C# was written.
+- The same script generated the block D anchor expectations in the test, so the test cannot drift from the table it verifies.
+- Tables are stored flat: four values per block A variant, eight per block D variant.
+
+**Implemented**
+- `Rm2kAutotileQuarters.TryResolveBlockD` returns the four `ChipsetRect` quarters for a block D tile id and refuses out-of-range ids.
+- `Rm2kAutotileQuarters.TryGetBlockAQuarters` exposes the block A variant table so the block A/B composition can use it and so the transcription can be regression tested.
+
+**Not implemented**
+- The block A/B composition itself (the quarter selection combines the A and B bit patterns with the animation step) and any bitmap decoding or blitting.
+- Blocks A, B and D still do not resolve through `Rm2kChipsetSource`; only the block D quarters are available, and the composition is what turns them into a drawable tile.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 387 tests passed`, exit `0`.
+- `test_rm2k_autotile_quarters.cs` pins ten block D anchor rows against the Player table, the block origin for all twelve blocks, all 600 block D ids resolving with every quarter inside the chipset, the range refusals, and the block A table anchors and value range.
+- The first run caught a real defect: the block D variant offset used `variant * 4` while a variant spans eight values, so every variant after the first read the wrong row.
+
+### K-097 — Block A/B autotile composition
 
 **Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- Build the `autotiles_ab` and `autotiles_d` caches the Player generates in `GenerateAutotileAB`/`GenerateAutotileD` so blocks A, B and D can be resolved too, and decode the indexed `Chipset.png` so the rectangles from K-095 can actually be blitted.
+- `GenerateAutotileAB` composes each A/B autotile from the A table, the B bit pattern `(b_subtile >> (j*2+i)) & 1` with `block == 2` flipping or doubling it, and the animation step. `block = ID / 1000` selects `A1+Upper B`, `A2+Upper B` or `A1+Lower B`, `a_subtile = ID - block*1000 - b_subtile*50` and `b_subtile = (ID - block*1000) / 50`, refusing `b_subtile >= 16` and `a_subtile >= 47`.
+- The result is a generated 32x32 tile in the Player's own cache, so the composition has to be reproduced as four quarter pairs per animation step.
 
 **Unblock condition**
-- Read `TilemapLayer::GenerateAutotileAB`/`GenerateAutotileD`/`CreateTileCache` for the exact quarter selection and block tables, and read the Player's indexed PNG loading before writing a decoder. The pinned fixtures have no `Chipset.png`, so obtain a real chipset image or add one as a fixture first; a decoder without a real image can only be tested on a synthesized file, which must be labelled as such.
+- Re-read `GenerateAutotileAB` for the exact quarter ordering and the combination pass, and check `TILES_PER_ROW` for the generated cache geometry, before implementing. Note that the Player packs quarters into a hash and de-duplicates them, which only affects cache layout, not the quarter values.
+
+### K-098 — Chipset bitmap decoding and blitting
+
+**Status (2026-09-26) — READY: blocked on a real fixture**
+
+**Scope**
+- Load the indexed `Chipset.png` of the chipset the map uses, convert the palette, and blit the rectangles K-095 and K-096 resolved into the renderer.
+
+**Unblock condition**
+- The pinned EasyRPG testgame fixtures contain no `Chipset.png`, so obtain a real RM2K/RTP chipset image and add it as a fixture first. Only then write the decoder; a decoder tested solely on a synthesized PNG must be labelled as such and must not be presented as fixture coverage.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
