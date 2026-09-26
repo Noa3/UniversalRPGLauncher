@@ -5,7 +5,14 @@
 
 ## Current card
 
-K-086 through K-092 are DONE. K-093 (Godot host feeds real input to the runtime) is the next READY card.
+K-086 through K-093 are DONE: a running RM2K game now moves and triggers events through the verified turn order. K-094 (vehicles for the action-event order) is the next READY card.
+
+**K-093 completed (2026-09-26)**
+- Card correction: the host was **already** wired. `Main.cs` constructs `Rm2kInputMapper`, calls `SetTouchViewport` in `_Ready`, and handles `_UnhandledInput` with the verified key edge rules. The real defect was narrower: the host had an input path that bypassed everything K-091/K-092 verified.
+- Before: `Confirm` used a local `GetFacingTarget` with no map wrap and then `TriggerAt(x, y, Action)` — no layer rule, no touched/collision in front, no counter walk. A direction called `TryMove` and then `TriggerAt(mapX, mapY, Touched)` on success only — no layer rule and no blocked-step in-front path.
+- After: the map input branch calls `Rm2kEngineRuntime.SubmitInput(action)`, so the host inherits the verified `Here`/`There` choice, the layer rules, the counter walk, the pause/running-event guards and the map wrap. `GetFacingTarget` is deleted.
+- Input is marked handled when consumed, including a blocked step that moved nothing; `None`/`Menu`/`Cancel` stay unhandled. The message/choice/numeric-input priority stays ahead of map input because that is the `IsMessageActive` gate.
+- Not test-covered: the `Main.cs` branch is a Node override and cannot run headless without the scene; the runtime side is covered in `TestPluginDetection`, the host branch was verified by reading the code.
 
 **K-092 completed (2026-09-26)**
 - Card correction: a successful step does **not** trigger touched/collision in front. `Game_Player::UpdateNextMovementAction` calls `CheckEventTriggerThere` (in front, layer same) only when the step was **blocked**, while `Game_Player::UpdateMovement` calls `CheckEventTriggerHere` (own tile, layer **not** same) after a **successful** step. The layer rules are opposite in the two cases.
@@ -60,7 +67,7 @@ K-086 through K-092 are DONE. K-093 (Godot host feeds real input to the runtime)
 
 ## Next action
 
-1. Start K-093: find the host node that owns an `IEngineRuntime` during a running game, and forward `_UnhandledInput`/`_Input` events through a constructed `Rm2kInputMapper` (including `SetTouchViewport`) into `Rm2kEngineRuntime.SubmitInput`. Read the host scene under `project/scenes` first; do not guess the input path.
+1. Start K-094 (vehicles) only if it is wanted: it gates the action-event order, but it needs the verified `GetOnOffVehicle`/`GetOnVehicle`/`GetOffVehicle` logic and the LMU/LDB vehicle data first. Otherwise prefer renderer/event-command coverage, which is higher priority per `AGENTS.md`.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 

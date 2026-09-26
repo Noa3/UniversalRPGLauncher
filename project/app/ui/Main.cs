@@ -6,7 +6,6 @@ using UniversalRPG.Plugins;
 using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Input;
 using UniversalRPG.Rm2k.Rendering;
-using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.App.Ui;
 
@@ -523,45 +522,21 @@ public partial class Main : Control
 			}
 			return;
 		}
-		var movement = action switch
+		// The verified turn order lives in the runtime: it decides between the
+		// own-tile and the in-front touch path, applies the layer rules and walks
+		// counter tiles for the action chain.
+		if (rm2k.SubmitInput(action))
 		{
-			Rm2kInputAction.MoveUp => (0, -1),
-			Rm2kInputAction.MoveDown => (0, 1),
-			Rm2kInputAction.MoveLeft => (-1, 0),
-			Rm2kInputAction.MoveRight => (1, 0),
-			_ => (0, 0),
-		};
-		if (action == Rm2kInputAction.Confirm)
-		{
-			var actionTarget = GetFacingTarget(rm2k.Simulation);
-			rm2k.EventScheduler.TriggerAt(actionTarget.Item1, actionTarget.Item2, Rm2kEventTrigger.Action);
 			GetViewport().SetInputAsHandled();
-			return;
 		}
-		if (movement == (0, 0))
+		else if (action is Rm2kInputAction.MoveUp or Rm2kInputAction.MoveDown
+			or Rm2kInputAction.MoveLeft or Rm2kInputAction.MoveRight
+			or Rm2kInputAction.Confirm)
 		{
-			return;
+			// A map input that was consumed without moving or triggering, such as a
+			// blocked step, must not fall through to the UI.
+			GetViewport().SetInputAsHandled();
 		}
-		if (_launcher.ActiveRuntime is Rm2kEngineRuntime activeRm2k)
-		{
-			if (activeRm2k.TryMove(movement.Item1, movement.Item2))
-			{
-				activeRm2k.EventScheduler.TriggerAt(activeRm2k.Simulation.MapX, activeRm2k.Simulation.MapY, Rm2kEventTrigger.Touched);
-			}
-		}
-		GetViewport().SetInputAsHandled();
-	}
-
-	private static (int X, int Y) GetFacingTarget(GameSimulationState pSimulation)
-	{
-		return pSimulation.FacingDirection switch
-		{
-			2 => (pSimulation.MapX, pSimulation.MapY + 1),
-			4 => (pSimulation.MapX - 1, pSimulation.MapY),
-			6 => (pSimulation.MapX + 1, pSimulation.MapY),
-			8 => (pSimulation.MapX, pSimulation.MapY - 1),
-			_ => (pSimulation.MapX, pSimulation.MapY),
-		};
 	}
 
 	private void ApplyRenderFrameRate(int pFramesPerSecond)
