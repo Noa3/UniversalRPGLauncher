@@ -289,6 +289,52 @@ partial class TestRm2kRealFixtures : TestBase
 			"real fixtures expose action-trigger pages reachable by the runtime");
 	}
 
+	public void Test_RealChipsetDecodesVerifiedPassabilityArrays()
+	{
+		foreach (var relativePath in new[] { "rm2000/RPG_RT.ldb", "rm2003/RPG_RT.ldb" })
+		{
+			var result = _parser.ParseDatabase(FixtureRoot.PathJoin(relativePath));
+			AssertTrue(result.IsSuccess(), DescribeError(result));
+			if (!result.IsSuccess())
+			{
+				return;
+			}
+
+			var sections = (Godot.Collections.Dictionary)result.GetData()["sections"];
+			if (!sections.TryGetValue("chipsets", out var rawChipset))
+			{
+				AssertTrue(false, $"{relativePath} exposes the chipsets section; keys=[{string.Join(",", sections.Keys)}]");
+				continue;
+			}
+			var chipset = (Godot.Collections.Dictionary)rawChipset;
+
+			// liblcf ChunkChipset sizes: passable_data_lower x 162, upper x 144.
+			var lower = (int[])chipset["passable_data_lower"];
+			var upper = (int[])chipset["passable_data_upper"];
+			AssertEq(lower.Length, 162, $"{relativePath} lower passability length");
+			AssertEq(upper.Length, 144, $"{relativePath} upper passability length");
+
+			// Bits 0-3 are the four direction flags (liblcf defaults: lower 15,
+			// upper 31). The fixture must contain both a fully passable and a
+			// blocked tile, otherwise movement parity cannot be proven.
+			var fullyPassable = 0;
+			var blocked = 0;
+			foreach (var flags in lower)
+			{
+				if ((flags & 0x0f) == 0x0f) fullyPassable++;
+				if ((flags & 0x0f) == 0) blocked++;
+			}
+			foreach (var flags in upper)
+			{
+				if ((flags & 0x0f) == 0x0f) fullyPassable++;
+				if ((flags & 0x0f) == 0) blocked++;
+			}
+
+			AssertTrue(fullyPassable > 0, $"{relativePath} contains fully passable tiles");
+			AssertTrue(blocked > 0, $"{relativePath} contains impassable tiles");
+		}
+	}
+
 	private static string DescribeError(Rm2kParser.ParseResult pResult)
 	{
 		return pResult.IsSuccess() ? "" : pResult.GetError()!.Describe();

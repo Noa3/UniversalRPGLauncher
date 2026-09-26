@@ -226,6 +226,15 @@ Implemented from the verified liblcf command table and EasyRPG `ExecuteCommand` 
 - New `TestMvDataDirectory` suite covers the inventory, section counts, missing files, malformed and non-array JSON, malformed optional sections, encrypted assets, the verified System.json keys, and mutual signature refusal.
 - Fresh canonical validation: `All 340 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
 
+## Latest completed chipset passability decoding slice (2026-08-31)
+
+- This slice targeted the blocker that every previous note repeated: chipset passability was never decoded, so movement only used caller-supplied data.
+- Verified against liblcf: `passable_data_lower` is LDB chunk `0x04` (162 bitflag entries), `passable_data_upper` is `0x05` (144 entries), and the liblcf defaults (15 lower / 31 upper) prove bits 0-3 are the four direction flags with bit 4 added on the upper layer.
+- The parser now decodes both arrays from the LDB chipset section and reports an unexpected length as `<key>_unverified_length` with its offset instead of reinterpreting it.
+- `Test_RealChipsetDecodesVerifiedPassabilityArrays` proves both pinned fixtures decode 162/144 entries and each contains both fully passable and fully blocked tiles, so the "distinguishing fixture" requirement is now satisfied.
+- Still unverified and therefore not implemented: the per-direction bit mapping and the `BLOCK_B`..`BLOCK_F` tile-index constants/strides. The unblock condition is to read the `Passable` namespace and `BLOCK_*` values directly from the EasyRPG Player source, then implement the upper-then-lower resolution like `Game_Map::IsPassableTile`.
+- Fresh canonical validation: `All 341 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` 0 warnings and 0 errors; Godot import exit `0`.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.

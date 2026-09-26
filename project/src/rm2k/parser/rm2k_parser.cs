@@ -409,6 +409,16 @@ public partial class Rm2kParser : RefCounted
 				}
 				section["count"] = (int)arrayResult.Data["count"];
 				sectionCounts[sectionName] = (int)arrayResult.Data["count"];
+				if (id == 0x14)
+				{
+					// liblcf ChunkChipset: passable_data_lower (0x04, bitflag x 162)
+					// and passable_data_upper (0x05, bitflag x 144). The defaults in
+					// liblcf are 15 and 31, so bits 0-3 carry the four direction
+					// flags and the upper layer adds bit 4.
+					ReadChipsetPassability(section,
+						(Godot.Collections.Array<Godot.Collections.Dictionary>)arrayResult.Data["objects"],
+						(int)chunk["payload_offset"]);
+				}
 				if (typed)
 				{
 					var decodeResult = DecodeTypedLdbSection(id,
@@ -696,6 +706,48 @@ public partial class Rm2kParser : RefCounted
 			entries.Add(entry);
 		}
 		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entries", entries } });
+	}
+
+	/// <summary>
+	/// Copies the verified chipset passability bitflag arrays out of the chipset
+	/// section. Lengths are bounded; unexpected sizes are reported as unknown
+	/// rather than reinterpreted.
+	/// </summary>
+	private static void ReadChipsetPassability(
+		Godot.Collections.Dictionary pSection,
+		Godot.Collections.Array<Godot.Collections.Dictionary> pObjects,
+		int pChunkOffset)
+	{
+		foreach (var chipset in pObjects)
+		{
+			var fields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)chipset["fields"]);
+			foreach (var entry in new[]
+			{
+				(FieldId: 0x04, Key: "passable_data_lower", Expected: 162),
+				(FieldId: 0x05, Key: "passable_data_upper", Expected: 144),
+			})
+			{
+				if (!fields.TryGetValue(entry.FieldId, out var rawField))
+				{
+					continue;
+				}
+				var data = (byte[])((Godot.Collections.Dictionary)rawField)["data"];
+				if (data.Length != entry.Expected)
+				{
+					pSection[$"{entry.Key}_unverified_length"] = data.Length;
+					pSection[$"{entry.Key}_offset"] = pChunkOffset
+						+ (int)((Godot.Collections.Dictionary)rawField)["payload_offset"];
+					continue;
+				}
+				var values = new int[data.Length];
+				for (var index = 0; index < data.Length; index++)
+				{
+					values[index] = data[index];
+				}
+				pSection[entry.Key] = values;
+			}
+			return; // the first chipset entry is the map's chipset
+		}
 	}
 
 	private ParseResult DecodeLdbNamedEntries(
