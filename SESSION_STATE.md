@@ -163,6 +163,14 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
 - Focused result: `TestEventInterpreter 47/47`; canonical result: `All 296 tests passed`; build and `scripts/validate.sh` passed.
 - Chipset passability remains intentionally fail-closed: `PassabilityLayer` has no verified LMU/Chipset parser source yet. Unblock requires a verified liblcf/EasyRPG field mapping plus a fixture distinguishing passable and impassable tiles.
 
+## Latest completed simulation lifecycle slice (2026-08-31)
+
+- `GameSimulationState.Reset()` now clears all mutable runtime collections: switches, variables, inventory, party members, actor state, troop members, common-event IDs, and passability data.
+- This prevents stale gameplay state from surviving a runtime stop/restart boundary.
+- Regression coverage: `Test_ResetClearsMutableRuntimeCollections` in `TestGameSimulationState`.
+- Fresh canonical validation: `TestGameSimulationState 20/20`; `All 297 tests passed`; `dotnet build project/UniversalRPG.csproj --no-restore` passed with 0 warnings and 0 errors; `scripts/validate.sh` passed.
+- The known non-fatal Godot `EditorSettings` headless diagnostic and intentional malformed-JSON fixture diagnostics remain unchanged.
+
 ## Next action
 
 Continue with the next RM2K/2003 runtime slice only after its command/data semantics and regression oracle are verified. RGSS remains detection-only until a bounded Ruby implementation exists; its former metadata bootstrap is retained only as unregistered code and is not startable through the runtime selector.

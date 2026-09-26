@@ -79,6 +79,29 @@ public partial class TestGameSimulationState : TestBase
 		AssertEq(_state.Diagnostics.Count, 0);
 	}
 
+	public void Test_ResetClearsMutableRuntimeCollections()
+	{
+		_state.Switches.Add(true);
+		_state.Variables.Add(42);
+		_state.ItemCounts[7] = 3;
+		_state.PartyMemberIds.Add(5);
+		_state.ActorState[5] = new Godot.Collections.Dictionary { ["hp"] = 10 };
+		_state.TroopMembers.Add(new Godot.Collections.Dictionary { ["id"] = 1 });
+		_state.CommonEventIds.Add(9);
+		_state.ConfigureMap(1, 1, 1, new[] { true });
+
+		_state.Reset();
+
+		AssertEq(_state.Switches.Count, 0, "Reset clears switches");
+		AssertEq(_state.Variables.Count, 0, "Reset clears variables");
+		AssertEq(_state.ItemCounts.Count, 0, "Reset clears inventory");
+		AssertEq(_state.PartyMemberIds.Count, 0, "Reset clears party");
+		AssertEq(_state.ActorState.Count, 0, "Reset clears actor state");
+		AssertEq(_state.TroopMembers.Count, 0, "Reset clears troop members");
+		AssertEq(_state.CommonEventIds.Count, 0, "Reset clears common event ids");
+		AssertEq(_state.PassableTiles.Count, 0, "Reset clears map passability");
+	}
+
 	public void Test_BattleStateTransitions()
 	{
 		AssertFalse(_state.IsBattleActive);

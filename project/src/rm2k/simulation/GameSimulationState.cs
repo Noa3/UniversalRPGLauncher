@@ -211,6 +211,7 @@ public sealed class GameSimulationState
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear();
+        Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;
         SceneStack.Clear(); SceneStack.Add("Menu"); CurrentScene = "Menu";
