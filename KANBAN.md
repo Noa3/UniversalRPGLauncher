@@ -78,8 +78,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-094 | 2 | READY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
 | K-095 | 3 | DONE | Resolve verified chipset source rectangles for blocks C, E and F | K-087 |
 | K-096 | 3 | DONE | Build the verified block D autotile quarter table and block geometry | K-095 |
-| K-097 | 3 | READY | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
-| K-098 | 3 | READY | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-096 |
+| K-097 | 3 | DONE | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
+| K-098 | 3 | READY | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-097 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -897,21 +897,32 @@ The Player guards block C with `id >= BLOCK_C && id < BLOCK_D`, not with the end
 
 ### K-097 — Block A/B autotile composition
 
-**Status (2026-09-26) — READY: verification first**
+**Status (2026-09-26) — DONE: all lower layer blocks resolve to verified quarters**
 
-**Scope**
-- `GenerateAutotileAB` composes each A/B autotile from the A table, the B bit pattern `(b_subtile >> (j*2+i)) & 1` with `block == 2` flipping or doubling it, and the animation step. `block = ID / 1000` selects `A1+Upper B`, `A2+Upper B` or `A1+Lower B`, `a_subtile = ID - block*1000 - b_subtile*50` and `b_subtile = (ID - block*1000) / 50`, refusing `b_subtile >= 16` and `a_subtile >= 47`.
-- The result is a generated 32x32 tile in the Player's own cache, so the composition has to be reproduced as four quarter pairs per animation step.
+**Defect found in K-096 while reading the source for this card**
+`GenerateAutotiles` packs the quarter pairs into a hash with the last quarter on top and unpacks `x` first, so the **second** value of a pair is the chipset column and the **first** value is the row. K-096 had assumed the opposite. The block D rectangle code and its anchor expectations were corrected. The K-096 test had not caught this because it verified the table, not the axis order, so the axis is now documented in the code and pinned by the A/B column range tests.
 
-**Unblock condition**
-- Re-read `GenerateAutotileAB` for the exact quarter ordering and the combination pass, and check `TILES_PER_ROW` for the generated cache geometry, before implementing. Note that the Player packs quarters into a hash and de-duplicates them, which only affects cache layout, not the quarter values.
+**Verified (EasyRPG Player `src/tilemap_layer.cpp`)**
+- `GenerateAutotileAB`: `block = ID / 1000`, `b_subtile = (ID - block * 1000) / 50`, `a_subtile = ID - block * 1000 - b_subtile * 50`, refusing `b_subtile >= TILE_SIZE` and `a_subtile >= 47`. `#define TILE_SIZE 16` is in `src/options.h`, so the B pattern is a four bit value.
+- Three passes in this order: quarters the A table leaves to the B block with `t = (b_subtile >> (j * 2 + i)) & 1` and `t ^= 3` for block 2; quarters the A table supplies with the row `animID + (block == 1 ? 3 : 0)`; and the A/B combination pass, which runs last and therefore wins.
+- The Player packs the quarters into a hash and de-duplicates them; that only affects the layout of the generated cache, not the quarter values, so it is not reproduced.
+- `t ^= 3` swaps the two bits of the value, so a cleared bit 0 becomes 3 and a set bit 0 becomes 2. All four B variants, chipset columns 4 to 7, are reachable, and no more.
+
+**Implemented**
+- `Rm2kAutotileQuarters.TryResolveBlockAB` reproduces the three passes and returns the four quarters, refusing out-of-range blocks, B subtiles, A variants and animation steps.
+- With K-095 and K-096, every lower layer block now resolves: A, B and D through the autotile tables, C, E and F straight from the chipset.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 394 tests passed`, exit `0`.
+- `test_rm2k_autotile_quarters.cs` pins the B bit pattern per quarter, the animation step as the row, the block 2 flip in both directions, the A table supplying a quarter with the column range split, the block 1 row shift, the combination pass overriding the A table, the reachable B column set, and the range refusals.
+- The test also asserts that A quarters stay in columns 0 to 3 and B quarters in columns 4 to 7, which would fail if the pair axes were transposed again.
 
 ### K-098 — Chipset bitmap decoding and blitting
 
 **Status (2026-09-26) — READY: blocked on a real fixture**
 
 **Scope**
-- Load the indexed `Chipset.png` of the chipset the map uses, convert the palette, and blit the rectangles K-095 and K-096 resolved into the renderer.
+- Load the indexed `Chipset.png` of the chipset the map uses, convert the palette, and blit the rectangles from K-095 through K-097 into the renderer. All lower layer blocks now resolve to rectangles, so this slice is the last step before the map is visible.
 
 **Unblock condition**
 - The pinned EasyRPG testgame fixtures contain no `Chipset.png`, so obtain a real RM2K/RTP chipset image and add it as a fixture first. Only then write the decoder; a decoder tested solely on a synthesized PNG must be labelled as such and must not be presented as fixture coverage.

@@ -5,7 +5,16 @@
 
 ## Current card
 
-K-086 through K-093, K-095 and K-096 are DONE. Open: K-097 (block A/B composition) and K-098 (chipset bitmap + blitting, blocked on a real `Chipset.png` fixture).
+K-086 through K-093 and K-095 through K-097 are DONE. K-098 (chipset bitmap + blitting) is the only open RM2K card and is blocked on a real `Chipset.png` fixture. K-094 (vehicles) stays open at lower priority.
+
+**K-097 completed (2026-09-26)**
+- **Defect in K-096 found while reading the source**: `GenerateAutotiles` packs the quarter pairs with the last quarter on top and unpacks `x` first, so the **second** value of a pair is the chipset column and the **first** is the row. K-096 had it transposed. Block D code and anchor expectations are corrected. The K-096 test did not catch it because it verified the table, not the axis order — lesson: an axis assumption needs its own test, which now exists.
+- Verified `GenerateAutotileAB`: `block = ID/1000`, `b_subtile = (ID-block*1000)/50`, `a_subtile = ID-block*1000-b_subtile*50`, refusing `b_subtile >= TILE_SIZE` and `a_subtile >= 47`. `#define TILE_SIZE 16` is in `src/options.h`, so B is a four bit pattern.
+- Three passes in order: B-supplied quarters, A-supplied quarters (row `animID + (block==1?3:0)`), then the combination pass which runs last and wins.
+- `t ^= 3` swaps the two bits: a cleared bit 0 becomes **3**, a set bit 0 becomes 2. I initially claimed the B columns 4..6 only; all four (4..7) are reachable. The test now pins the reachable set.
+- The Player de-duplicates quarters through a hash; that only affects generated cache layout, so it is not reproduced.
+- New `Rm2kAutotileQuarters.TryResolveBlockAB`. **Every lower layer block now resolves**: A, B, D via the autotile tables, C, E, F straight from the chipset.
+- Encoding note: a `for (var x in new[] { ... })` line would not compile in this project; declaring the array first works.
 
 **K-096 completed (2026-09-26)**
 - Verified in `tilemap_layer.cpp`: `BlockA_Subtiles_IDS[47][2][2]` (int8, `-1` = B liefert das Quartett) und `BlockD_Subtiles_IDS[50][2][2][2]` (uint8), Reihenfolge oben-links, oben-rechts, unten-links, unten-rechts.
@@ -84,7 +93,7 @@ K-086 through K-093, K-095 and K-096 are DONE. Open: K-097 (block A/B compositio
 
 ## Next action
 
-1. Start K-097 (block A/B composition): re-read `GenerateAutotileAB` for the exact quarter ordering and the combination pass, plus `TILES_PER_ROW`. The Player de-duplicates quarters via a hash, which affects only cache layout, not the quarter values. Keep K-098 blocked until a real `Chipset.png` exists as a fixture.
+1. K-098 is the last RM2K visibility step and needs a real `Chipset.png` fixture. Ask the user for an RM2K or RTP chipset directory. Until then the only open work is K-094 (vehicles), which is lower priority per `AGENTS.md`.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -97,7 +106,7 @@ K-086 through K-093, K-095 and K-096 are DONE. Open: K-097 (block A/B compositio
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 387 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 394 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
