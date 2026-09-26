@@ -5,7 +5,14 @@
 
 ## Current card
 
-K-086 through K-093 and K-095 through K-098 are DONE. K-099 (compose a full map frame) is the next RM2K card; K-094 (vehicles) stays open at lower priority.
+K-086 through K-093 and K-095 through K-099 are DONE: a real RM2K map now renders from the real pinned chipset into pixels. K-100 (hero, events, panorama) is the next card; K-094 (vehicles) stays open at lower priority.
+
+**K-099 completed (2026-09-26)**
+- Verified `CreateTileCacheAt`: Upper-Tile geht in die obere Sublayer, wenn sein **substituierter** Entry `Above` trägt; Lower-Tile, wenn sein **aufgelöster Chip-Index** `Wall` oder `Above` trägt. Chip-Index-Bereiche identisch zur Passability.
+- Verified Draw-Reihenfolge via `lower_layer(this, Priority_TilesetBelow + TileBelow + layer)` und `upper_layer(this, Priority_TilesetAbove + TileAbove + layer)` mit `TileBelow=0`, `TileAbove=100`, `Priority_TilesetBelow=20`, `Priority_TilesetAbove=50`, `Priority_Player=40` → **untere Layer, dann Held, dann obere Layer**. Deshalb deckt eine Wall-Kachel den Helden ab.
+- **Defekt behoben**: `Rm2kChipsetSource.TryResolve` gab für E und F `false` zurück, wenn keine Substitution übergeben wurde — obwohl `Game_Map::Setup` beide Tabellen mit `std::iota` füllt. Eine fehlende Tabelle **ist** die Identität; jetzt Fallback statt "unauflösbar".
+- Neu: `Rm2kTileZOrder` (ResolveChipIndex, Lower/UpperLayerSubLayer), `Rm2kMapFrameRenderer` (RenderLower/RenderUpper, Sublayer 0 vor 1), `Rm2kMapLayers`, `Rm2kChipsetTables`. Der Held wird bewusst **nicht** gezeichnet — er gehört zwischen die beiden Aufrufe.
+- **Echte Fixture gemessen statt angenommen**: Die TestGame-Map ist 20x15, Lower nur D/E, Upper nur F, und deren F-Kacheln sind im echten Chipset **vollständig transparent** → Zeichnen ändert nichts. Keine A/B/C-Kacheln → keine Animation. Drei meiner Erwartungen waren falsch und wurden durch Messwerte ersetzt; Upper-Pfad und Animation werden mit synthetischen Maps geprüft.
 
 **K-098 completed (2026-09-26)**
 - **Blocker solved by research**: the pinned fixtures come from the public `EasyRPG/TestGame` repo, which ships the chipset images. The right chipset was determined, not guessed: the map's `chipset_id` is `1` and that LDB entry's `chipset_name` is `World`, so `TestGame-2000/ChipSet/World.png` from the **same pinned commit** is the real chipset for the pinned LDB.
@@ -101,7 +108,7 @@ K-086 through K-093 and K-095 through K-098 are DONE. K-099 (compose a full map 
 
 ## Next action
 
-1. Start K-099: re-read `CreateTileCacheAt` in `tilemap_layer.cpp` for the z-order rule (upper sublayer from the `Above` flag after substitution, lower from `Wall`/`Above` on the resolved chip index) and how the two layers plus three sublayers are drawn. Do not invent a draw order.
+1. Start K-100: the frame has no sprites yet. Verified order needs panorama (10), lower layer (20), below events (30), hero (40), upper layer (50), above/flying events (60/70), weather (80), screen (90). Read `Spriteset_Map` and `Sprite_Character` for charset sprite construction and verify the charset image format before decoding; the fixture ships `CharSet/*.png`.
 2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
 3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
 
@@ -114,7 +121,7 @@ K-086 through K-093 and K-095 through K-098 are DONE. K-099 (compose a full map 
 
 ## Last verified baseline
 
-Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 400 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 408 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|

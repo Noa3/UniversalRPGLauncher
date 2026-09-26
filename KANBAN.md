@@ -80,7 +80,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-096 | 3 | DONE | Build the verified block D autotile quarter table and block geometry | K-095 |
 | K-097 | 3 | DONE | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
 | K-098 | 3 | DONE | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-097 |
-| K-099 | 3 | READY | Compose a full map frame from chipset tiles, map layers and the z-order rule | K-098 |
+| K-099 | 3 | DONE | Compose a full map frame from chipset tiles, map layers and the z-order rule | K-098 |
+| K-100 | 3 | READY | Draw the hero, events and the panorama into the composed frame in the verified order | K-099 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -944,13 +945,38 @@ The fixture README previously stated that no image is imported. That was true wh
 
 ### K-099 — Compose a full map frame
 
+**Status (2026-09-26) — DONE: the real pinned map renders from the real pinned chipset**
+
+**Verified (EasyRPG Player)**
+- `CreateTileCacheAt` assigns each tile a sublayer. An upper layer tile goes into the above sublayer when its substituted entry carries `Above`; a lower layer tile goes into the above sublayer when its resolved chip index carries `Wall` or `Above`. The chip index ranges are the same as the passability lookup: block E through the lower substitution table plus `BLOCK_E_INDEX`, block D and block C by their stride, everything else the block number.
+- The two sublayers are two drawables: `lower_layer(this, Priority_TilesetBelow + TileBelow + layer)` and `upper_layer(this, Priority_TilesetAbove + TileAbove + layer)`, with `TileBelow = 0`, `TileAbove = 100`, `Priority_TilesetBelow = 20`, `Priority_TilesetAbove = 50` and `Priority_Player = 40`. Drawables are sorted ascending, so the effective order is lower layer, then the hero, then upper layer. That is why a wall tile covers the hero.
+- Without passability data the Player keeps the default `TileBelow`, which is the fail-closed case.
+
+**Defect fixed**
+`Rm2kChipsetSource.TryResolve` returned false for block E and F when no substitution was supplied, even though `Game_Map::Setup` fills both tables with `std::iota`. An absent table is the identity, so those lookups now fall back to it instead of making every block E and F tile unresolvable. The caller no longer has to build a substitution just to get the default.
+
+**Implemented**
+- `Rm2kTileZOrder` with the verified `ResolveChipIndex`, `LowerLayerSubLayer` and `UpperLayerSubLayer`.
+- `Rm2kMapFrameRenderer` with `RenderLower` and `RenderUpper`, drawing each layer's below sublayer before its above sublayer and blitting every resolved chipset rectangle. The hero is deliberately not drawn: it belongs between the two calls, which is what exposes a wall tile.
+- `Rm2kMapLayers` and `Rm2kChipsetTables` as the input, both Godot free.
+
+**What the pinned fixture actually contains, now measured rather than assumed**
+The real RM2000 testgame map is 20 by 15 tiles, its lower layer uses only block D and E, and its upper layer only block F. Its upper tiles are fully transparent in the real chipset, so drawing them changes nothing, and because it contains no A, B or C tile it has no animated autotile. Three of my initial expectations were wrong for that reason and were replaced by measurements of the fixture. The upper layer draw path and the animation are verified with synthetic maps instead, and the real map test now documents its own shape so those facts cannot silently change.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 408 tests passed`, exit `0`.
+- `test_rm2k_map_frame.cs` pins the sublayer rules for `Wall`, `Above` and both, the fail-closed case without passability, the chip index resolution including the block E substitution, the real map rendering with its measured shape, a visible upper tile changing the tile area, a fully transparent upper tile painting nothing, animation across frame 0 and 24 for the blocks that paint, and block D not animating.
+
+### K-100 — Hero, events and panorama
+
 **Status (2026-09-26) — READY: verification first**
 
 **Scope**
-- Turn a parsed map into a pixel frame: for each tile, resolve the lower layer and upper layer chip ids, blit the autotile quarters or the direct chipset rectangle, and apply the z-order rule so a wall tile is drawn above the character and an "above" upper tile forms the top sublayer.
+- The map frame is composed but nothing else is in it. The verified order needs the panorama first (`Priority_Background = 10`), then the lower layer (`20`), then below-layer events (`30`) and the hero (`40`, shared with "same as hero" events), then the upper layer (`50`), then above-layer and flying events (`60` and `70`), then the weather (`80`) and the screen (`90`).
+- The hero and event sprites come from `CharSet/*.png` and `MoveRoute` animation patterns, which are not decoded yet.
 
 **Unblock condition**
-- The z-order rule is already verified in `CreateTileCacheAt`: for an upper tile the sublayer depends on the `Above` flag after the substitution, and for a lower tile on the `Wall` or `Above` flag of the resolved chip index, using the same chip index ranges as the passability lookup. Re-read it, then read how the two layers and the three sublayers are drawn, before implementing. Do not invent a draw order.
+- Read `Spriteset_Map` and `Sprite_Character` for how a character sprite is built from the charset, the direction and the pattern, and verify the charset image format from the Player's `Material::Charset` spec before decoding anything. The pinned fixture ships `CharSet/*.png`, so a real charset can be added the same way the chipset was, but only after its field ids and layout are verified.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

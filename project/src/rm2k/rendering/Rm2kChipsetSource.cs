@@ -58,6 +58,13 @@ public static class Rm2kChipsetSource
     public readonly record struct ChipsetRect(int Column, int Row);
 
     /// <summary>
+    /// The identity tables, matching the <c>std::iota</c> default the Player
+    /// uses in <c>Game_Map::Setup</c>, so an unknown substitution behaves like a
+    /// freshly loaded map instead of failing every block E and F lookup.
+    /// </summary>
+    private static readonly Rm2kTileSubstitution IdentitySubstitution = new(null, null);
+
+    /// <summary>
     /// Resolves the chipset rectangle for a tile id. Returns false for the
     /// autotile cache blocks and for any id that cannot be resolved, so callers
     /// fail closed instead of drawing a wrong tile.
@@ -79,11 +86,9 @@ public static class Rm2kChipsetSource
 
         if (pChipId >= Rm2kChipset.BlockE && pChipId < Rm2kChipset.BlockEEnd)
         {
-            if (pSubstitution == null)
-            {
-                return false;
-            }
-            var substituted = pSubstitution.SubstituteLower(pChipId - Rm2kChipset.BlockE);
+            // Game_Map::Setup fills both tables with std::iota, so an absent table
+            // is the identity and must not make a block E or F tile unresolvable.
+            var substituted = (pSubstitution ?? IdentitySubstitution).SubstituteLower(pChipId - Rm2kChipset.BlockE);
             if (substituted < 0)
             {
                 return false;
@@ -97,11 +102,7 @@ public static class Rm2kChipsetSource
 
         if (pChipId >= Rm2kChipset.BlockF && pChipId < Rm2kChipset.BlockFEnd)
         {
-            if (pSubstitution == null)
-            {
-                return false;
-            }
-            var substituted = pSubstitution.SubstituteUpper(pChipId - Rm2kChipset.BlockF);
+            var substituted = (pSubstitution ?? IdentitySubstitution).SubstituteUpper(pChipId - Rm2kChipset.BlockF);
             if (substituted < 0)
             {
                 return false;
