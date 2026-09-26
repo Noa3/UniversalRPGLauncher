@@ -1,18 +1,43 @@
 # UniversalRPG Autonomous Session State
 
-> Updated: 2026-08-31
+> Updated: 2026-09-26
 > Purpose: small durable checkpoint for Hermes/other autonomous agents.
 
 ## Current card
 
-K-060, K-061, K-070, and K-071 are DONE. Compatibility profiles validate bounded schema versions, reports export deterministic redacted Markdown, the UI exposes Faithful/Enhanced rendering plus bounded integer scaling, and the RM2K input mapper handles keyboard, joypad, and bounded touch input.
+K-086 is DONE: verified RM2K chipset passability now drives real movement. K-087 (autotile animation + event counters) is the next READY card.
+
+**K-086 completed (2026-09-26)**
+- Verified EasyRPG Player constants in `src/map_data.h`: passability bits `Down=0x01`, `Left=0x02`, `Right=0x04`, `Up=0x08`, `Above=0x10`, `Wall=0x20`, `Counter=0x40`; tile blocks A-F with strides 1000/1000/50/50/1/1, indices 0/2/3/6/18/162, ends 2000/3000/3150/4600/5144/10144; `NUM_LOWER_TILES=162`, `NUM_UPPER_TILES=144`.
+- Verified `Game_Map` rules: upper layer decides first and only falls through to the lower layer when the upper entry carries `Above`; `Wall` autotile exception covers ids 20-23, 33-37, 42, 43, 45, 46.
+- New `project/src/rm2k/simulation/Rm2kChipset.cs` (chip-id conversion, direction bit, upper-then-lower resolution, `BuildDirectionMasks`) with fail-closed handling for unknown ids, missing tables, and mismatched layer lengths.
+- `GameSimulationState` gained `PassabilityMasks` + `IsPassableInDirection`; `TryMove` checks the direction bit; the old `IEnumerable<bool>` `ConfigureMap` still works by mapping passable to all four directions.
+- `Rm2kEngineRuntime` reads `passable_data_lower`/`passable_data_upper` from the LDB chipset section, verifies 162/144, builds masks from LMU `lower_layer`/`upper_layer`, and configures the simulation. The fail-closed "chipset passability is not decoded yet" diagnostic is gone.
+- New `project/tests/core/test_rm2k_chipset.cs` (8 tests) pins the verified constants and rules; `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` proves real RM2000/RM2003 maps mix walkable and impassable tiles and that real steps follow them; `TestPluginDetection` asserts the runtime decoded non-empty masks.
+- Lesson recorded: passability flags are stored **per chipset chip id**, so a test that needs different behaviour for two map tiles must use two different tile ids. Truncated/mismatched layer arrays intentionally yield the shorter length, and the runtime separately requires `masks.Length == width * height`.
+
+## Next action
+
+1. Start K-087 and read the EasyRPG Player autotile animation + counter logic (`autotile.cpp`, `main_data.h`, `game_map.cpp`) before writing any animation or counter code; the K-086 card exists because guessed constants were wrong.
+2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
+
+## Reference repos noted by the user (2026-09-26, not actioned)
+
+- `joiplay/mkxp`, `joiplay/android-mkxp` — RPG Maker XP (RGSS) reimplementation in C++; useful as a cross-engine reference for Ruby/RGSS and for its own passability handling, not a source of RM2K constants.
+- `futokoro/RPGMaker` — Ruby RGSS reimplementation (XP/VX/Ace).
+- `bakustarver/rpgmakermlinux-cicpoffs` — RPG Maker on Linux via C++ offscreen; detection/hosting reference.
+- Consequence: XP/VX/Ace work stays at priority 6-7 per `AGENTS.md`; MV/MZ playability still needs a JS runtime, which the repository policy does not provide.
+
+## Last verified baseline
+
+Windows validation on 2026-09-26: `dotnet build project/UniversalRPG.csproj` (0 errors) and the headless C# runner at `All 350 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
 
 |K-032, K-040, K-041, K-050, and K-055 are DONE; K-033 through K-039 and K-042 are also DONE — engine-neutral `IRuntimeSaveTools` and `IRuntimeDebugTools` gate in-memory save snapshots and local debug mutations. K-050 adds a read-only bounded original `LcfSaveData` framing model with unknown-chunk retention; semantic field mapping, save mutation, and UI integration remain separate. RM2K/RM2K3 explicitly declare `SaveLoad`/`Debugging`; debug tools are off by default.|
 |midnightschool.exe (C:\Users\noa3\Desktop\Neuer Ordner (3)) analyzed detection-only: NSIS-3 Unicode installer wrapping `$PLUGINSDIR/app-64.7z` = Electron x64 distribution; `resources/app.asar` contains a complete unencrypted RPG Maker MZ 1.x game under `project/` (title: 深夜学校のパイズリ怪異, 858 files / ~238 MiB extracted to %TEMP%\midnight-extract\mzgame with standard layout index.html + js/rmmz_core.js + rmmz_managers.js + data/System.json). The extracted Electron host was externally launch-verified with process exit 0 and visually confirmed by the user. Static ASAR inspection shows `package.json` main=`src/main.js`; the host creates an Electron window and loads `project/index.html` from inside the ASAR. This proves the vendor launcher works, not a UniversalRPG runtime path; the existing MZ plugin remains detection-only and must not mark the installer EXE as directly startable.|
 
-## Last verified baseline
+## Last verified baseline (previous session)
 
-Windows validation on 2026-08-31: `dotnet restore`, `dotnet build project/UniversalRPG.csproj --no-restore` (0 warnings, 0 errors), Godot import (`--headless --editor --quit`), and the headless C# runner at `All 300 tests passed`, exit 0. The Godot project lives under `project/`; `validate.sh` handles both layouts.
+Windows validation on 2026-08-31: `dotnet restore`, `dotnet build project/UniversalRPG.csproj --no-restore` (0 warnings, 0 errors), Godot import (`--headless --editor --quit`), and the headless C# runner at `All 300 tests passed`, exit 0.
 
 ## Cross-engine QA pass (t_1b2292d4) — completed 2026-08-24
 

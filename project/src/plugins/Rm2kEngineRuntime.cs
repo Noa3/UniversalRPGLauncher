@@ -100,6 +100,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         DatabaseData = database.Data;
         MapTreeData = mapTree.Data;
         CurrentMapData = currentMap;
+        ReadChipsetPassability(database.Data);
         try
         {
             ConfigureSimulationMap(currentMap, mapTree.Data, mapPath);
@@ -313,6 +314,72 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             .FirstOrDefault(pPath => Path.GetFileName(pPath).Equals(pName, StringComparison.OrdinalIgnoreCase));
     }
 
+    private byte[]? _chipsetLower;
+    private byte[]? _chipsetUpper;
+
+    /// <summary>
+    /// Reads the verified chipset passability tables (liblcf ChunkChipset 0x04
+    /// and 0x05) from the parsed database. Absent or unverified sizes leave the
+    /// tables null so movement stays fail-closed.
+    /// </summary>
+    private void ReadChipsetPassability(Godot.Collections.Dictionary pDatabase)
+    {
+        _chipsetLower = null;
+        _chipsetUpper = null;
+        if (!pDatabase.TryGetValue("sections", out var rawSections)
+            || rawSections.VariantType != Godot.Variant.Type.Dictionary)
+        {
+            return;
+        }
+        var sections = rawSections.AsGodotDictionary();
+        if (!sections.TryGetValue("chipsets", out var rawChipset)
+            || rawChipset.VariantType != Godot.Variant.Type.Dictionary)
+        {
+            return;
+        }
+        var chipset = rawChipset.AsGodotDictionary();
+        _chipsetLower = ReadPassabilityArray(chipset, "passable_data_lower", Rm2kChipset.PassabilityLowerEntries);
+        _chipsetUpper = ReadPassabilityArray(chipset, "passable_data_upper", Rm2kChipset.PassabilityUpperEntries);
+    }
+
+    private static int[]? TryReadIntArray(Godot.Collections.Dictionary pData, string pKey)
+    {
+        if (!pData.TryGetValue(pKey, out var raw) || raw.VariantType != Godot.Variant.Type.PackedInt32Array)
+        {
+            return null;
+        }
+        var values = raw.AsInt32Array();
+        var result = new int[values.Length];
+        for (var index = 0; index < values.Length; index++)
+        {
+            result[index] = values[index];
+        }
+        return result;
+    }
+
+    private static byte[]? ReadPassabilityArray(
+        Godot.Collections.Dictionary pChipset, string pKey, int pExpectedLength)    {
+        if (!pChipset.TryGetValue(pKey, out var raw) || raw.VariantType != Godot.Variant.Type.PackedInt32Array)
+        {
+            return null;
+        }
+        var values = raw.AsInt32Array();
+        if (values.Length != pExpectedLength)
+        {
+            return null;
+        }
+        var result = new byte[values.Length];
+        for (var index = 0; index < values.Length; index++)
+        {
+            if (values[index] is < 0 or > 0xff)
+            {
+                return null;
+            }
+            result[index] = (byte)values[index];
+        }
+        return result;
+    }
+
     private void ConfigureSimulationMap(
         Godot.Collections.Dictionary? pMapData,
         Godot.Collections.Dictionary pMapTreeData,
@@ -351,13 +418,27 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
         }
 
-        var passability = new bool[checked(width * height)];
-        Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, passability);
+        var lowerLayer = TryReadIntArray(pMapData, "lower_layer");
+        var upperLayer = TryReadIntArray(pMapData, "upper_layer");
+        if (_chipsetLower != null && _chipsetUpper != null && lowerLayer != null && upperLayer != null)
+        {
+            // Verified Rm2kChipset rules: the upper layer decides, and only an
+            // "above" upper tile falls through to the lower layer.
+            var masks = Rm2kChipset.BuildDirectionMasks(lowerLayer, upperLayer, _chipsetLower, _chipsetUpper);
+            if (masks.Length == checked(width * height))
+            {
+                Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, masks);
+                Simulation.MapX = Math.Clamp(mapX, 0, width - 1);
+                Simulation.MapY = Math.Clamp(mapY, 0, height - 1);
+                return;
+            }
+            Simulation.AddDiagnostic("RM2K chipset passability does not cover the map tile count; movement stays fail-closed.");
+            return;
+        }
+        Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, new bool[checked(width * height)]);
         Simulation.MapX = Math.Clamp(mapX, 0, width - 1);
         Simulation.MapY = Math.Clamp(mapY, 0, height - 1);
-        Simulation.AddDiagnostic(
-            "RM2K chipset passability is not decoded yet; movement remains fail-closed until the chipset parser slice is available.");
-    }
+        Simulation.AddDiagnostic("RM2K chipset passability is unavailable; movement remains fail-closed.");    }
 
     private static int ParseMapId(string? pMapPath)
     {

@@ -47,6 +47,9 @@ public sealed class GameSimulationState
     public int MapHeight { get; private set; }
     public Godot.Collections.Array<bool> PassableTiles { get; init; } = new();
 
+    /// <summary>Per-tile direction masks (Rm2kChipset.Pass* bits); authoritative for movement.</summary>
+    public Godot.Collections.Array<byte> PassabilityMasks { get; init; } = new();
+
     // Switches (bool or byte for RM2000 compatibility)
     public Godot.Collections.Array<bool> Switches { get; init; } = new();
 
@@ -226,34 +229,66 @@ public sealed class GameSimulationState
 
     public void ConfigureMap(int pMapId, int pWidth, int pHeight, IEnumerable<bool> pPassableTiles)
     {
+        var tiles = new List<byte>(checked(pWidth * pHeight));
+        foreach (var passable in pPassableTiles)
+        {
+            // Legacy all-directions view: a passable tile is walkable from any
+            // cardinal side, matching the previous boolean contract.
+            tiles.Add(passable ? Rm2kChipset.AllDirections : (byte)0);
+        }
+        ConfigureMap(pMapId, pWidth, pHeight, tiles);
+    }
+
+    /// <summary>
+    /// Configures the map with verified per-direction passability masks
+    /// (Rm2kChipset.Pass* bits) so one-way tiles behave like RM2K.
+    /// </summary>
+    public void ConfigureMap(int pMapId, int pWidth, int pHeight, IEnumerable<byte> pDirectionMasks)
+    {
         if (pMapId < 0 || pMapId > MaxMapId || pWidth <= 0 || pHeight <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(pWidth), "Map identity and dimensions are outside simulation bounds.");
         }
         var expected = checked(pWidth * pHeight);
-        var tiles = new List<bool>(expected);
-        foreach (var passable in pPassableTiles)
+        var tiles = new List<byte>(expected);
+        foreach (var mask in pDirectionMasks)
         {
             if (tiles.Count == expected)
             {
-                throw new ArgumentException("Passability data contains more tiles than the map.", nameof(pPassableTiles));
+                throw new ArgumentException("Passability data contains more tiles than the map.", nameof(pDirectionMasks));
             }
-            tiles.Add(passable);
+            tiles.Add(mask);
         }
         if (tiles.Count != expected)
         {
-            throw new ArgumentException("Passability data does not cover the complete map.", nameof(pPassableTiles));
+            throw new ArgumentException("Passability data does not cover the complete map.", nameof(pDirectionMasks));
         }
         MapId = pMapId;
         MapWidth = pWidth;
         MapHeight = pHeight;
-        PassableTiles.Clear();
-        foreach (var passable in tiles)
+        PassabilityMasks.Clear();
+        foreach (var mask in tiles)
         {
-            PassableTiles.Add(passable);
+            PassabilityMasks.Add(mask);
+        }
+        PassableTiles.Clear();
+        for (var index = 0; index < tiles.Count; index++)
+        {
+            PassableTiles.Add(tiles[index] == Rm2kChipset.AllDirections);
         }
         MapX = Math.Clamp(MapX, 0, pWidth - 1);
         MapY = Math.Clamp(MapY, 0, pHeight - 1);
+    }
+
+    /// <summary>True when the tile is walkable in the requested direction.</summary>
+    public bool IsPassableInDirection(int pX, int pY, byte pDirectionBit)
+    {
+        if (pX < 0 || pY < 0 || pX >= MapWidth || pY >= MapHeight)
+        {
+            return false;
+        }
+        var index = pX + pY * MapWidth;
+        return index < PassabilityMasks.Count && (PassabilityMasks[index] & pDirectionBit) == pDirectionBit;
     }
 
     public bool TryMove(int pDeltaX, int pDeltaY)
@@ -271,7 +306,8 @@ public sealed class GameSimulationState
             AddDiagnostic("Movement blocked by map bounds.");
             return false;
         }
-        if (!PassableTiles[targetY * MapWidth + targetX])
+        var directionBit = Rm2kChipset.DirectionBit(pDeltaX, pDeltaY);
+        if (!IsPassableInDirection(targetX, targetY, directionBit))
         {
             AddDiagnostic("Movement blocked by tile passability.");
             return false;
@@ -289,7 +325,7 @@ public sealed class GameSimulationState
         Timer1Active = false; Timer2Active = false; Timer1Seconds = 0; Timer2Seconds = 0; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
-        MapWidth = 0; MapHeight = 0; PassableTiles.Clear();
+        MapWidth = 0; MapHeight = 0; PassableTiles.Clear(); PassabilityMasks.Clear();
         Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;

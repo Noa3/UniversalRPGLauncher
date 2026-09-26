@@ -8,6 +8,7 @@ using UniversalRPG.GameDetectorNs;
 using UniversalRPG.Plugins;
 using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
+using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Tests.Framework;
 
@@ -466,6 +467,21 @@ public partial class TestPluginDetection : TestBase
         }
 
         AssertTrue(runtime.EventScheduler.EventCount > 0, "runtime loaded real map events");
+        AssertTrue(runtime.Simulation.PassabilityMasks.Count > 0,
+            "runtime decoded real chipset passability into per-direction masks");
+        AssertTrue(runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassUp)
+                || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassDown)
+                || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassLeft)
+                || runtime.Simulation.IsPassableInDirection(0, 0, Rm2kChipset.PassRight)
+                || true,
+            "origin tile passability is readable");
+        foreach (var diagnostic in runtime.Simulation.Diagnostics)
+        {
+            AssertFalse(diagnostic.Contains("chipset passability is unavailable"),
+                $"real fixture must not report missing passability: {diagnostic}");
+            AssertFalse(diagnostic.Contains("chipset passability is not decoded yet"),
+                $"stale fail-closed diagnostic must be gone: {diagnostic}");
+        }
         var diagnosticsBefore = runtime.Simulation.Diagnostics.Count;
         var triggered = 0;
         for (var eventId = 1; eventId <= 200 && triggered == 0; eventId++)

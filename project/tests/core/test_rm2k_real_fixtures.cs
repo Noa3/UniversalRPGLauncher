@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using UniversalRPG.Rm2k.Parser;
+using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
 
 namespace UniversalRPG.Tests.Core;
@@ -333,6 +334,116 @@ partial class TestRm2kRealFixtures : TestBase
 			AssertTrue(fullyPassable > 0, $"{relativePath} contains fully passable tiles");
 			AssertTrue(blocked > 0, $"{relativePath} contains impassable tiles");
 		}
+	}
+
+	public void Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles()
+	{
+		foreach (var relativePath in new[] { "rm2000/RPG_RT.ldb", "rm2003/RPG_RT.ldb" })
+		{
+			var database = _parser.ParseDatabase(FixtureRoot.PathJoin(relativePath));
+			AssertTrue(database.IsSuccess(), DescribeError(database));
+			if (!database.IsSuccess())
+			{
+				return;
+			}
+			var mapPath = relativePath.Replace("RPG_RT.ldb", "Map0001.lmu");
+			var map = _parser.ParseMap(FixtureRoot.PathJoin(mapPath));
+			AssertTrue(map.IsSuccess(), DescribeError(map));
+			if (!map.IsSuccess())
+			{
+				return;
+			}
+
+			var chipset = ReadChipset(database.GetData());
+			AssertTrue(chipset != null, $"{relativePath} chipset passability is present");
+			if (chipset == null)
+			{
+				continue;
+			}
+
+			var lower = (int[])map.GetData()["lower_layer"];
+			var upper = (int[])map.GetData()["upper_layer"];
+			var masks = Rm2kChipset.BuildDirectionMasks(lower, upper, chipset.Value.lower, chipset.Value.upper);
+
+			AssertEq(masks.Length, lower.Length, $"{relativePath} one mask per map tile");
+			var passableTiles = 0;
+			var blockedTiles = 0;
+		 foreach (var mask in masks)
+			{
+				if (mask == Rm2kChipset.AllDirections) passableTiles++;
+                if (mask == 0) blockedTiles++;
+			}
+
+			AssertTrue(passableTiles > 0, $"{relativePath} map has walkable tiles");
+			AssertTrue(blockedTiles > 0, $"{relativePath} map has impassable tiles");
+
+			// Movement must follow the decoded chipset: a fully blocked tile
+			// refuses the step, a walkable tile accepts it.
+			var blockedIndex = -1;
+			var walkableIndex = -1;
+			for (var index = 0; index < masks.Length; index++)
+			{
+				if (blockedIndex < 0 && masks[index] == 0) blockedIndex = index;
+                if (walkableIndex < 0 && masks[index] == Rm2kChipset.AllDirections) walkableIndex = index;
+			}
+			AssertTrue(blockedIndex >= 0 && walkableIndex >= 0, $"{relativePath} has both tile kinds");
+
+			var state = new GameSimulationState();
+			var width = map.GetData()["width"].AsInt32();
+			var height = map.GetData()["height"].AsInt32();
+			state.ConfigureMap(1, width, height, masks);
+
+			// Place the player next to a walkable tile and confirm the step.
+			var walkX = walkableIndex % width;
+			var walkY = walkableIndex / width;
+			if (walkX > 0)
+			{
+				state.MapX = walkX - 1;
+				state.MapY = walkY;
+				AssertTrue(state.TryMove(1, 0), $"{relativePath} steps onto a walkable tile");
+			}
+			if (blockedIndex / width > 0)
+			{
+				var blockedX = blockedIndex % width;
+				var blockedY = blockedIndex / width;
+				state.MapX = blockedX;
+				state.MapY = blockedY - 1;
+				AssertFalse(state.TryMove(0, 1), $"{relativePath} refuses an impassable tile");
+			}
+		}
+	}
+
+	private static (byte[] lower, byte[] upper)? ReadChipset(Godot.Collections.Dictionary pDatabase)
+	{
+		if (!pDatabase.TryGetValue("sections", out var rawSections)
+            || rawSections.VariantType != Godot.Variant.Type.Dictionary)
+        {
+            return null;
+        }
+		var sections = rawSections.AsGodotDictionary();
+		if (!sections.TryGetValue("chipsets", out var rawChipset)
+			|| rawChipset.VariantType != Godot.Variant.Type.Dictionary)
+		{
+			return null;
+		}
+		var chipset = rawChipset.AsGodotDictionary();
+		if (!chipset.TryGetValue("passable_data_lower", out var rawLower)
+			|| !chipset.TryGetValue("passable_data_upper", out var rawUpper))
+		{
+			return null;
+		}
+		var lowerValues = ((int[])rawLower);
+		var upperValues = ((int[])rawUpper);
+		if (lowerValues.Length != Rm2kChipset.PassabilityLowerEntries
+			|| upperValues.Length != Rm2kChipset.PassabilityUpperEntries)
+		{
+			return null;
+		}
+		var lower = new byte[lowerValues.Length];
+		var upper = new byte[upperValues.Length];
+		for (var index = 0; index < lower.Length; index++) lower[index] = (byte)lowerValues[index];
+		for (var index = 0; index < upper.Length; index++) upper[index] = (byte)upperValues[index];
+		return (lower, upper);
 	}
 
 	private static string DescribeError(Rm2kParser.ParseResult pResult)

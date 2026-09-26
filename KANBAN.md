@@ -68,7 +68,8 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-083 | 0 | DONE | Correct ControlSwitches/ControlVariables parameter layout to the verified EasyRPG spec | K-081 |
 | K-084 | 1 | DONE | Implement verified actor-stat, screen-effect, and event-control interpreter commands | K-023 |
 | K-085 | 2 | DONE | Bring RPG Maker MV to data-directory and System.json metadata parity with MZ | K-017 |
-| K-086 | 1 | VERIFY | Decode verified RM2K chipset passability arrays from the LDB chipset section | K-015 |
+| K-086 | 1 | DONE | Decode verified RM2K chipset passability arrays from the LDB chipset section | K-015 |
+| K-087 | 2 | READY | Add RM2K autotile/charset animation ticking and one-way plate/step events | K-015 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -640,26 +641,43 @@ Implemented from the verified `lcf::rpg::Cmd` table and EasyRPG `ExecuteCommand`
 
 ### K-086 — RM2K chipset passability decoding
 
-**Status (2026-08-31) — VERIFY: data half done, movement parity still blocked**
+**Status (2026-09-26) — DONE: verified chipset passability drives real movement**
 
-This card addresses the blocker that was repeated in every slice note ("chipset passability remains fail-closed").
+This card closed the blocker that was repeated in every slice note ("chipset passability remains fail-closed").
 
-**Verified now (liblcf `LDB_Reader::ChunkChipset` and `lcf::rpg::Chipset`)**
-- `passable_data_lower` = chunk `0x04`, bitflag array of 162 entries.
-- `passable_data_upper` = chunk `0x05`, bitflag array of 144 entries.
-- liblcf defaults are `15` for every lower and `31` for every upper entry, which proves bits 0-3 carry the four direction flags and the upper layer adds bit 4.
-- The parser now decodes both arrays from the LDB chipset section; an unexpected length is reported as `<key>_unverified_length` plus its offset instead of being reinterpreted.
-- `Test_RealChipsetDecodesVerifiedPassabilityArrays` proves both pinned fixtures decode 162/144 entries and that each contains fully passable and fully blocked tiles, so a distinguishing fixture is no longer missing.
+**Verified constants (EasyRPG Player `src/map_data.h` + `Game_Map` passability helpers)**
+- Passability bits: `Down=0x01`, `Left=0x02`, `Right=0x04`, `Up=0x08`, `Above=0x10`, `Wall=0x20`, `Counter=0x40`.
+- Tile blocks: `BLOCK_A=0` (stride 1000, index 0), `BLOCK_B=2000` (1000, 2), `BLOCK_C=3000` (50, 3), `BLOCK_D=4000` (50, 6), `BLOCK_E=5000` (1, 18), `BLOCK_F=10000` (1, 162); block ends 2000/3000/3150/4600/5144/10144; `NUM_LOWER_TILES=162`, `NUM_UPPER_TILES=144`.
+- `GetPassableMask` maps a step to `Right`/`Left`/`Down`/`Up`.
+- `IsPassableTile` decides from the upper layer first and only falls through to the lower layer when the upper entry carries `Above`; the lower lookup honours the `Wall` exception for autotiles 20-23, 33-37, 42, 43, 45, 46.
 
-**Still unverified, therefore not implemented**
-- The per-direction bit mapping (`0x01`/`0x02`/`0x04`/`0x08` to right/left/up/down). liblcf's generated headers do not document it and the Player-side `Passable` constants were not located in this pass.
-- The `BLOCK_B`/`BLOCK_C`/`BLOCK_D`/`BLOCK_E`/`BLOCK_F` tile-index constants and strides used to turn a map tile id into a chipset entry.
+**Implemented**
+- `project/src/rm2k/simulation/Rm2kChipset.cs` — verified `ChipIdToIndex`/`IndexToChipId`, `DirectionBit`, `IsPassableLowerTile`, `IsPassableTile`, `BuildDirectionMasks`. Unknown tile ids, missing tables, and mismatched layer lengths fail closed.
+- `GameSimulationState` keeps `PassabilityMasks` as the authoritative per-tile direction mask, adds `IsPassableInDirection`, and keeps the old `IEnumerable<bool>` `ConfigureMap` contract by mapping passable to all four directions. `TryMove` now checks the direction bit.
+- `Rm2kEngineRuntime` reads `passable_data_lower`/`passable_data_upper` from the LDB chipset section, verifies the 162/144 lengths, builds masks from the LMU `lower_layer`/`upper_layer`, and configures the simulation; the stale fail-closed diagnostics are gone.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj` — 0 errors; headless runner `All 350 tests passed`, exit `0`.
+- `test_rm2k_chipset.cs` pins the verified bit values, block constants, chip-id round trips, direction mapping, upper-then-lower resolution, the wall autotole exception, and the fail-closed cases.
+- `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` drives real RM2000/RM2003 maps: each fixture yields walkable and impassable tiles, and a real step onto a walkable tile succeeds while a step into an impassable tile is refused.
+- `TestPluginDetection` asserts the runtime decoded non-empty masks from the real fixture and no longer reports missing passability.
+
+
+### K-087 — RM2K autotile animation and event counters
+
+**Status (2026-09-26) — READY: verification first**
+
+Follow-up to K-086. Chipset passability is resolved; the remaining chipset-driven runtime behaviour needs the same evidence discipline.
+
+**Scope**
+- Autotile animation ticking: per-autotile `animation_type` (static, 3-frame, 4-frame), frame duration, and the chipset autotile id ranges.
+- Event counter stepping: the `PassCounter` bit (`0x40`) and the map/chipset counter tables that make plates and steps change passability while a character stands on them.
 
 **Unblock condition**
-- Read the `Passable` namespace and the `BLOCK_*` constants directly from the EasyRPG Player source (`game_map.cpp` / `main_data.h`), then implement `Rm2kPassability` that resolves upper-then-lower tiles like `Game_Map::IsPassableTile` and feeds `GameSimulationState.ConfigureMap`. Until then movement stays on caller-supplied passability rather than invented chipset rules.
+- Read the autotile animation and counter logic directly from the EasyRPG Player source (`autotile.cpp` / `main_data.h` / `game_map.cpp`) plus the RM2K chipset section layout before implementing. Do not infer frame counts or counter behaviour from memory; the K-086 card exists because guessed constants were wrong.
 
-**Validation evidence (2026-08-31)**
-- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 warnings, 0 errors; headless runner `All 341 tests passed`, exit `0`.
+**Validation target**
+- A fixture-driven test proving a non-animated autotile stays on frame 0 and an animated one advances on the verified interval, plus a counter test proving a step tile blocks movement until triggered and reverts after the verified duration.
 
 ## Agent maintenance rules
 - Hermes may split a card when implementation reveals genuinely independent work, but must preserve traceability to the parent ID.
