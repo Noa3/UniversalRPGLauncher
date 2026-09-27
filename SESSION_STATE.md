@@ -1215,3 +1215,78 @@ A branch is decided. 121's three modes, 126's change of an item and 126's change
 of a weapon are not, there is no interpreter holding an index into a list, and
 a 657 line is text. MZ has detection, bounded data reading, a named command
 table and one decided command.
+
+## K-124 The MZ event index
+
+**What was built** `MzCommandEntry`, `MzOperation` (operands, operations, and a
+`MzRandom` held per interpreter), `MzCommands` (121 and 122), `MzControlFlow`
+(the commands whose whole effect is the index, with the three answers they give)
+and `MzInterpreter` (the index, the branch result per indent, the step limit).
+
+**The rules, and the three that were wrong first**
+
+1. Every command that returns true is followed by `this._index++`. A first
+   draft added a flag for "the command moved the index itself" and then did not
+   step over a command that had, which made an else land on the false arm it had
+   just skipped. The flag is gone.
+2. A repeat above walks back to the first command at its own indent and the
+   step then moves off that one, so `112`, body, `413` goes round with no
+   special case.
+3. A command with no method is stepped over, not refused. **All five of the
+   codes this game stores without a method are ones it stores on purpose**: 0
+   the end of a block, 401 a line of text under a 101, 412 the end of a branch,
+   655 and 657 the two halves of a script.
+4. A list that ends inside a branch is reported `Truncated`; the engine's
+   `skipBranch` has no test for the end of the list and would read past it.
+5. The step limit is the engine's `checkFreeze`: a hundred thousand commands in
+   one frame.
+
+**Two findings from the real map, neither a test mistake**
+
+- **This game stores a loop nothing can leave.** Event 4 is a 112 with seven
+  message commands and a 413, and nothing between them tests anything or
+  breaks. The engine plays it until `checkFreeze` stops it. The reader reports
+  the same, and the test calls a freeze there the right answer.
+- **Random is drawn per variable, not per range.** A first draft claimed one
+  draw for a whole range; the engine's `command122` calls `Math.randomInt`
+  *inside* `for (let i = startId; i <= endId; i++)`. The test was wrong in the
+  same direction as the draft and was corrected against the source.
+
+**Total 896/896**, `TestMzInterpreter: 18/18`, validator passed, build 0
+warnings / 0 errors.
+
+## A repeat above is not a jump, and a mutation run said so
+
+The mutation run left two rules untested, and reading the engine for them
+corrected a claim the test file had been making wrongly for two cards:
+
+1. **`command413` is not `jumpTo`.** It is `do { this._index--; } while
+   (currentCommand().indent !== this._indent); return true;` — it writes the
+   index and clears nothing. Only `command119` calls `jumpTo`, and that clears
+   the branch result of every indent it steps over. The test file had said "a
+   repeat above is a jump, so this is the case that matters", which is the
+   opposite of what the engine does.
+2. **A jump that points backwards at a label is a loop.** `jumpTo` sets the
+   index to the label, `executeCommand` steps on, and the jump is met again. A
+   test shaped that way hung the suite for a hundred thousand steps, which is
+   `checkFreeze` doing its job — and the same thing the engine does. **This game
+   stores no label and no jump at all**, so only the shape that ends is
+   asserted.
+
+## How a 30 KB test file was lost twice, and what stops it
+
+Two repair scripts each emptied `test_mz_interpreter.cs`. Both used a slice
+`[k:end]` and both ran when the anchor text was no longer in the file, so `k`
+was -1 and the slice was empty or inverted. **The second time the file was
+untracked, so git had no copy either.** What stopped it the third time was
+`git add` immediately after writing, before anything else could touch the file,
+and then editing with `patch` and an exact anchor rather than with a script that
+rewrites by shape. A test file that has not been staged is one `rm` away from
+needing to be written again from memory.
+
+## What is still not decided
+
+Eleven commands of a hundred and fourteen have an effect. 117, 126, 230, 231,
+232, 235, 351 and 357 are read as text; a 655 or 657 line is text. There is
+still no renderer, no save path and no input. MZ has detection, bounded data
+reading, a named command table, a decided branch and an index that walks a list.

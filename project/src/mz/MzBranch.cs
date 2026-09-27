@@ -196,4 +196,23 @@ public sealed class MzBranchFacts
     /// have answered.
     /// </remarks>
     public int TimerSeconds { get; init; } = -1;
+
+    /// <summary>
+    /// What a switch holds, read and written by the commands around it, so a
+    /// branch two lines after the command that turned one on sees the change.
+    /// </summary>
+    public void SetSwitch(int pId, bool pOn) => Switches[pId] = pOn;
+
+    /// <summary>What a variable holds, or zero, which is what the engine's own
+    /// <c>$gameVariables.value</c> returns for one that was never set.</summary>
+    public int Variable(int pId) =>
+        Variables.TryGetValue(pId, out var value) ? value : 0;
+
+    /// <summary>Whether a variable was ever set, which the engine cannot tell
+    /// apart from one set to zero and this reader can.</summary>
+    public bool HasVariable(int pId) => Variables.ContainsKey(pId);
+
+    /// <summary>Writes a variable, so a command that changes it is visible to a
+    /// branch that comes after.</summary>
+    public void SetVariable(int pId, int pValue) => Variables[pId] = pValue;
 }

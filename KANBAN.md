@@ -2070,6 +2070,122 @@ the one failure here that would be invisible, and a mutation of it was caught.
   something and nothing acts on it yet.
 - Still no renderer, no save path, no input, and a 657 line is text.
 
+### K-124 Walk an event list with an index the way the engine moves it
+`READY` → `IN PROGRESS` → `DONE`
+
+**The gap that started this** K-123 decided a branch and nothing acted on it,
+because there was no index into the list to move. A game's flow is a chain of
+commands, and a branch decides one of them and no more. The first thing the
+interpreter has to be right about is not what a command does but **where the
+index goes after it**, because every other rule in an interpreter hangs off
+that.
+
+**What was built**
+
+- `project/src/mz/MzCommandEntry.cs`: one command out of a game's list.
+- `project/src/mz/MzOperation.cs`: the four operands, the operation types, and
+  a `MzRandom` **held per interpreter** — a static one would be shared between
+  two runs of two events and give a game the same numbers twice.
+- `project/src/mz/MzCommands.cs`: 121 and 122, and a rule that says which
+  commands this reader acts on.
+- `project/src/mz/MzControlFlow.cs`: the commands whose whole effect is the
+  index, and the three answers they give.
+- `project/src/mz/MzInterpreter.cs`: the index, the branch results per indent,
+  the step limit, and the four ways a run can end.
+
+**The index rules, each read out of `Game_Interpreter` and not reasoned about**
+
+1. **Every command that returns true is followed by `this._index++`.** A first
+   draft added a flag for "the command moved the index itself" and then did not
+   step over a command that had, which made an else land on the false arm it had
+   just skipped. The flag is gone.
+2. **A repeat above is not an exception.** It walks back to the first command at
+   its own indent, and the step then moves off that one — so `112`, body, `413`
+   goes round properly without any special case.
+3. **A command the engine has no method for is stepped over, not refused.**
+   `executeCommand` asks `typeof this[methodName] === "function"` and, when it
+   is not, still does `this._index++`. **Every one of those commands is one this
+   game stores on purpose**: 0 the end of a block, 401 a line of text under a
+   101, 412 the end of a branch, and 655 and 657 the two halves of a script.
+   Refusing any of them would strand the game on a command the engine itself ran
+   past.
+4. **A list that ends inside a branch is said, not read past.** The engine's
+   `skipBranch` has no test for the end of the list; this reader reports
+   `Truncated` and names what is wrong.
+5. **The step limit is the engine's `checkFreeze`.** A hundred thousand
+   commands in one frame freezes the game in the engine. This reader has no
+   frames, so it counts the same way and reports `Frozen`.
+
+**Two findings that came out of the real map, and neither is a test mistake**
+
+1. **This game stores a loop that nothing can leave.** Event 4 is a 112 with
+   seven message commands and a 413, and nothing between them tests anything or
+   breaks. The engine plays it until `checkFreeze` stops it. The reader reports
+   the same thing, and the test says a freeze there is the correct answer rather
+   than papering over it.
+2. **Random is drawn per variable, not per range.** A first draft claimed one
+   draw for a whole range. The engine's `command122` calls `Math.randomInt`
+   **inside** `for (let i = startId; i <= endId; i++)`, so three variables get
+   three rolls. The test was wrong in the same direction as the first draft and
+   was corrected against the source.
+
+**Test evidence**
+
+- 18 tests in `project/tests/core/test_mz_interpreter.cs`, every list in the
+  shape the editor writes — most of which were got wrong first, and the file
+  says which and how.
+- Total **896/896**, validator passed, build 0 warnings / 0 errors.
+
+**Still not true of MZ**
+
+- **Ten commands of a hundred and fourteen have an effect.** 117, 126, 230,
+  231, 232, 235, 351 and 357 are read as text. A game's flow is a chain of
+  commands, and this walks the chain for eleven of them.
+- Still no renderer, no save path, no input, and a 655 or 657 line is text.
+
+**Three rules that the mutation run found untested, and one of them was a claim
+the file had been making wrongly**
+
+1. **A repeat above is not a jump.** The engine's `command413` is `do {
+   this._index--; } while (currentCommand().indent !== this._indent); return
+   true;` — it writes the index and never calls `jumpTo`, so it clears no
+   branch result. Only `command119` calls `jumpTo`, and that clears the result
+   of every indent it steps over. **The test file had asserted the opposite
+   for two cards' worth of work**, on the reasoning that a repeat above is a
+   jump. Reading `command413` settled it: it is not, and a reader that treated
+   it as one would clear results the engine keeps.
+2. **A jump that points backwards at a label is a loop, in the engine as much
+   as here.** `jumpTo` sets the index to the label, `executeCommand` steps on,
+   and the jump is met again. A first draft of the label test was shaped that
+   way and hung the suite for a hundred thousand steps, which is `checkFreeze`
+   doing its work. **This game stores no label and no jump at all** — not one
+   118 or 119 in the map read here — so only the shape that ends is asserted.
+3. **A jump clears the result of an indent it LEAVES, and nothing else.** The
+   engine's walk is `if (newIndent !== indent) { this._branch[indent] = null; }`,
+   and every earlier test jumped from indent 0 to indent 0, so no test had ever
+   gone through that loop. A reader that dropped the clearing entirely passed
+   all seventeen. The movement is now claimed directly, both ways: a jump that
+   changes indent clears the indent it left, and a jump that stays on one
+   indent keeps what was there.
+
+**Two ways a mutation run lies about itself**
+
+The first run reported five escapes. Three of them were the runner's fault and
+not the suite's:
+
+1. **An anchor that is not in the file proves nothing.** Three mutations were
+   written from a remembered line and reported `NOMATCH`. A mutation that never
+   applied is neither caught nor escaped; it is a hole in the run, and counting
+   it as "escaped" would have said a rule is untested when in fact the rule was
+   never touched. Every anchor in the second run was read out of the file first.
+2. **A mutation that lands on the wrong occurrence of a shape passes for a
+   reason that has nothing to do with the rule.** `return false;` appears five
+   times in `MzCommands.cs`; replacing the first one changes the refusal of a
+   script operand, which a test does not look at, so the mutation survived and
+   looked like a gap in the arithmetic. **A mutation has to name the place, not
+   the shape** — the same rule that emptied this card's test file twice.
+
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

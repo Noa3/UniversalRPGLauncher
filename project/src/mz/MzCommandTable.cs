@@ -29,6 +29,23 @@ namespace UniversalRPG.Web;
 /// </remarks>
 public static class MzCommandTable
 {
+    // The numbers the interpreter's own movement depends on. These are the ones
+    // that appear in more than one place in the engine's control flow, so a
+    // reader that spelled them out twice would be able to disagree with itself.
+    public const int ShowText = 111;
+    public const int Loop = 112;
+    public const int BreakLoop = 113;
+    public const int ExitEventProcessing = 115;
+    public const int Label = 118;
+    public const int JumpToLabel = 119;
+    public const int ControlSwitches = 121;
+    public const int ControlVariables = 122;
+    public const int EndBranch = 412;
+    /// <summary>The end of a branch, which the editor writes and which
+    /// the engine steps over because it has no method for it.</summary>
+    public const int Else = 411;
+    public const int RepeatAbove = 413;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>

@@ -42,7 +42,9 @@ UniversalRPG/
 │   │   │   ├── interpreter/ # Event interpreter (first slice done)
 │   │   │   └── rendering/   # Future faithful renderer
 │   │   ├── rgss/            # Future XP/VX/VX Ace runtime
-│   │   ├── mz/              # MV/MZ data files read as values (no JS run)
+│   │   ├── mz/              # MZ data as values, command table, branch
+│   │   │                   #   decision, and an event list index
+│   │   │                   #   (no JS run)
 │   │   └── mv/              # Future MV runtime
 │   ├── platform/godot/      # Future explicit Godot adapter boundary
 │   ├── enhancement/         # Future optional Enhanced Mode features
@@ -100,6 +102,38 @@ plugins. Imported EXE, DLL, Ruby, JavaScript, and native plugin files are data
 only; they are never executed during inspection. See
 [ENGINE_DETECTION.md](ENGINE_DETECTION.md) and
 [ENGINE_PLUGINS.md](ENGINE_PLUGINS.md).
+
+## MZ event reading, and the index that walks a list
+
+An MZ game is read as data at three levels, and none of them runs anything:
+
+```
+MapNNN.json / Actors.json / System.json
+        │  MzJson      strict JSON decoder, no execution, no coercion
+        ▼
+MzDataFile             a value tree: objects, arrays, text, numbers, flags
+        │  MzCommandTable  the 114 commands, named from the engine's own
+        │                  Game_Interpreter methods in a real 1.9.1 game
+        ▼
+MzBranchEvaluator      decides a 111 from the facts a caller has; a branch or an
+        │                operand that would need eval is refused and named
+        ▼
+MzInterpreter          an index into one event list, moved the way the engine
+                       moves it: branches, else, loops, break, repeat above,
+                       labels, jumps, and a step limit equal to the engine's
+                       checkFreeze
+```
+
+`MzCommands` is where the commands that change numbers live (121 and 122), and
+`MzControlFlow` is where the commands whose whole effect is the index live. A
+command the engine has no method for — 0, 401, 412, 655 and 657, every one of
+which this game stores on purpose — is stepped over rather than refused, because
+the engine steps over it too.
+
+**Nothing here is a JavaScript runtime.** A 355 or 655 line is held as the text
+its author wrote, a 357 plugin call is not made, and a branch of kind 12 or an
+operand of kind 4 returns `ScriptNotRun` with the author's text kept. The engine
+evaluates those with `eval`; this repository does not evaluate a game's code.
 
 ## Compatibility Database
 
