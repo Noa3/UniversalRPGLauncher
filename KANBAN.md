@@ -1999,6 +1999,77 @@ written once.
 - MV shares the format and has no fixture; its numbering is the packed one, which
   is exactly what the second trap of K-121 is about.
 
+### K-123 Decide a conditional branch the way the engine does
+`READY` → `IN PROGRESS` → `DONE`
+
+**The gap that started this** K-122 named every command, so a branch read 111
+with its six parameters and nothing more. Naming a command is the opposite of
+doing it, and the first command whose whole effect can be taken from the engine
+without running anything is a branch: the engine decides it in one method, and
+every number in that method is readable.
+
+**What was built**
+
+- `project/src/mz/MzBranch.cs`: a branch, what it tests, the six ways of
+  comparing, and the facts a caller has.
+- `project/src/mz/MzBranchEvaluator.cs`: decides a branch from those facts and
+  from nothing else. Fourteen kinds, of which nine are decided and the rest say
+  what is missing.
+
+**One branch is deliberately not decided.** Kind 12 asks whether a line of the
+author's own JavaScript is true and the engine writes `result = !!eval(params[1])`
+for it. This repository does not evaluate a game's JavaScript, so that branch is
+`ScriptNotRun`, the author's text is kept, and the answer is neither true nor
+false. **A mutation that made it answer true was the first thing the suite
+checked and it was caught.**
+
+**Three things in the method that were got wrong, each by a reader that had read
+it**
+
+1. **The third parameter only says whether the right side is a variable.**
+   `params[2] === 0` picks between the number `params[3]` and
+   `$gameVariables.value(params[3])`. This reader read `params[2]` as the
+   variable, so the game's own branch `[1, 77, 1, 78, 1]` asked about variable
+   one where the game asked about variable seventy eight. The test harness then
+   made the opposite mistake, so the two hid each other for one run.
+2. **Gold has a numbering of its own.** `switch (params[2])` with case 0 at
+   least, 1 at most, 2 less — where a variable's case 0 is equal to and case 1 is
+   at least. The first three are the same words in a different order. A purchase
+   gated on a hundred gold **opens at ninety and shuts at a hundred and ten**,
+   and the reader is right about the arithmetic and wrong about the question.
+3. **A timer has no number in the parameters.** The second is a threshold in
+   seconds and the third is the way, because the branch asks the one timer the
+   event owns. This reader asked for a timer called five on a branch about five
+   seconds, and refused a branch it could have answered.
+
+**What is not known is not off.** A branch that asks about a switch nobody
+supplied comes back `Unknown` and names the switch. A reader that treated the
+missing as off would skip a game's content with nothing to show for it, which is
+the one failure here that would be invisible, and a mutation of it was caught.
+
+**Tests and evidence**
+
+- `TestMzBranchEvaluator` 11/11 — the game's own three branches decided and none
+  refused, each of the six comparisons at its own boundaries, gold under its own
+  numbering with the ninety and a hundred and ten case, a stopped timer not
+  compared, a script branch reported and not run, a missing thing refused by name,
+  and every number that is not one of the fourteen kinds checked rather than the
+  ones someone thought of.
+- Nine mutations, **the first suite at eight of nine**. The one that got through
+  folded a kind the engine has no name for into the nearest kind it does have,
+  which is the shape of every mistake this file was prone to. It now checks every
+  number from 14 to 657 that is not a kind, and that the refusal names it.
+- Total **877/877**, validator passed, build 0 warnings / 0 errors.
+
+**Still not true of MZ**
+
+- **A branch is decided; nothing else is.** 121's three modes, 126's change to
+  an item and 126's change to a weapon are not, and a game's flow is a chain of
+  commands, not one of them.
+- There is no interpreter holding an index into a list, so a branch decides
+  something and nothing acts on it yet.
+- Still no renderer, no save path, no input, and a 657 line is text.
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

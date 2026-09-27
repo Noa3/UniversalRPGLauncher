@@ -129,3 +129,68 @@ string while the enum carried the prose, so changing either one alone changed
 nothing a test could see. It is a `readonly record struct MzCommand(int Code,
 string Name)` now: the number and the name are one value and there is nowhere for
 a second copy to live.
+
+## What a conditional branch means, and the two numberings inside it
+
+The engine decides a branch in one method. `project/src/mz/MzBranchEvaluator.cs`
+was written from it, and four things in it are worth writing down because three
+of them were got wrong first.
+
+### The third parameter only says whether the right side is a variable
+
+```
+if (params[2] === 0) { value2 = params[3]; } else { value2 = $gameVariables.value(params[3]); }
+```
+
+`params[2]` is a yes or no and `params[3]` is the operand. **This reader read
+`params[2]` as the variable**, so this game's own branch
+`[1, 77, 1, 78, 1]` asked about variable 1 where the game asked about variable
+78, and refused a branch it could have answered. The harness for the test made
+the same mistake in the other direction and asked for a number where it meant a
+variable, so the two errors hid each other for one run.
+
+### Gold has a numbering of its own
+
+| Number | Gold means | A variable means |
+|---:|---|---|
+| 0 | at least | equal to |
+| 1 | at most | at least |
+| 2 | less than | at most |
+| 3 | — | greater than |
+| 4 | — | less than |
+| 5 | — | not equal to |
+
+The first three are the same words in a **different order**. Read through the
+variable's numbering, a branch that gates a purchase on a hundred gold opens at
+ninety and shuts at a hundred and ten — and the reader is right about the
+arithmetic and wrong about the question.
+
+### A timer has no number in the parameters
+
+```
+if ($gameTimer.isWorking()) {
+    const sec = $gameTimer.frames() / 60;
+    if (params[2] === 0) { result = sec >= params[1]; } else { result = sec <= params[1]; }
+}
+```
+
+The second parameter is a threshold in seconds and the third is the way. There is
+no timer number anywhere, because the branch asks the one timer the event owns.
+This reader treated the second as a number and asked for a timer called five on a
+branch about five seconds.
+
+### One branch is deliberately not answered
+
+Kind 12 asks whether a line of the author's own JavaScript is true, and the
+engine writes `result = !!eval(params[1])` for it. **This repository does not
+evaluate a game's JavaScript.** A branch of that kind is reported as
+`ScriptNotRun`, the author's text is kept so a caller can see what was declined,
+and the answer is neither true nor false — because saying either would be a claim
+about code that was not run.
+
+### What is not known is not off
+
+A branch that asks about a switch nobody supplied returns `Unknown` and names
+the switch, rather than coming to false. A reader that treated what it does not
+know as off would skip a game's content with nothing to show for it, and that is
+the one failure in a branch evaluator that would be invisible.

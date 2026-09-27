@@ -1185,3 +1185,33 @@ If validation fails, keep the failure signature here. Use at most three material
   interpretation of a few commands against the engine source, starting with 111,
   whose whole semantics were read out of `command111` and are six comparisons
   over six kinds of thing.
+- Tests: 878/878, TestMzBranchEvaluator 12/12, Mutationen 10/10.
+
+## The check that passed when it should not have
+
+A mutation that folds a kind of branch the engine has no name for into the
+nearest kind it does have was invisible twice. The test asked whether the
+evaluator's refusal mentioned the number, and the evaluator names what it needs
+in its own words: a branch on 99 that was folded into 0 reports "switch 0", and
+"switch 0" does not contain "99". **A check that reads the complaint rather than
+the thing cannot see a fold, because the complaint is itself already wrong.**
+
+The number lives in the branch, so the branch is what is checked. That test
+closes it, and the same reasoning applies wherever a diagnostic is used as proof
+of the thing it describes.
+
+## Two repairs that fought each other
+
+A killed mutation run left two mutations in `MzBranchEvaluator.cs`. Two repair
+scripts then each rewrote the wrong branch, so a Gold branch held the Actor's
+code and the Actor branch had lost the line naming the actor. Both were found
+only by the compiler and by reading the region. **Repairing a file by matching
+the first occurrence of a shape that occurs twice is how a repair lands in the
+wrong place**; the repair has to name the place, not the shape.
+
+## What is still not decided
+
+A branch is decided. 121's three modes, 126's change of an item and 126's change
+of a weapon are not, there is no interpreter holding an index into a list, and
+a 657 line is text. MZ has detection, bounded data reading, a named command
+table and one decided command.
