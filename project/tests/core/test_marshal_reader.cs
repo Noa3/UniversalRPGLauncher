@@ -709,6 +709,42 @@ public partial class TestMarshalReader : TestBase
             "holding every digit and not a truncated number");
     }
 
+    public void Test_AWholeNumberTooWideForThisMachineIsNotCalledACorruptFile()
+    {
+        // The two faults are kept apart on purpose. A file that is not marshal is
+        // a file this reader cannot read, and saying so is useful. A number that
+        // is simply too large for this machine's whole number is a file this
+        // reader understood completely, and telling the caller the file is
+        // corrupt sends them looking in the wrong place for a fault that is not
+        // in the file at all.
+        var body = new List<byte>();
+        body.Add((byte)MarshalType.Bignum);
+        body.Add((byte)'+');
+        AddLong(body, 40);
+        AddRaw(body, "1234567890123456789012345678901234567890");
+
+        var stream = new List<byte> { 0x04, 0x08 };
+        stream.AddRange(body);
+
+        var refused = "";
+        try
+        {
+            new MarshalReader(stream.ToArray()).Read();
+        }
+        catch (Exception exception)
+        {
+            refused = exception.Message;
+        }
+
+        AssertTrue(refused.Length > 0, "and the number is refused rather than cut");
+        AssertTrue(
+            refused.Contains("whole number"),
+            $"the refusal says what is wrong, which is the number: {refused}");
+        AssertTrue(
+            !refused.Contains("not marshal") && !refused.Contains("corrupt"),
+            $"and does not call the file corrupt, which it is not: {refused}");
+    }
+
     public void Test_ANegativeWholeNumberOfDigitsKeepsItsSign()
     {
         // The sign is a byte before the digits and not a byte before the length,

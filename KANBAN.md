@@ -1738,6 +1738,92 @@ the link names two.
   removed it went unnoticed, which is how the duplicate was found. It and the
   helper it alone used are gone.
 
+### K-120 Read the data three real games actually wrote
+`READY` → `IN PROGRESS` → `DONE`
+
+**The gap that started this** Every parser and reader in this repository was
+written against a fixture this repository made, or against EasyRPG's test game.
+Both are right for what they are and neither is a game: the RM2K test game has two
+hundred and ten bytes of database, six bytes of map tree and five maps, and every
+count, length and index in a game of that size fits in a byte and would not in a
+real one. **No fixture in this repository was written by an engine.** A reader
+that has only ever read a hand made file has never been shown a game.
+
+Three games were given to the repository to use. They were classified from their
+own files and nothing in them was executed.
+
+| Game | Engine | Decided by |
+|---|---|---|
+| `rgss-xp` | RPG Maker XP / RGSS1 | `RGSS104J.dll`, `Game.rxproj` naming `Scripts.rxdata` |
+| `rgss-xp-microquest` | RPG Maker XP / RGSS1 | `RGSS104E.dll`, `Game.ini` |
+| `rm2k-dragon-destiny` | RPG Maker 2000 | `RPG_RT.ldb`, 743 `.lmu` files, `RPG_RT.ini` |
+| `kirikiri` | **KiriKiri, not WOLF** | `SoftModeFlag`, `FrameSkip`, `SEandBGM`, no `Game.dat` |
+
+**What the real files found**
+
+The XP games keep their database as marshal and, with an unencrypted archive, in
+plain files under `Data/`. Sixteen of them are now in the repository, ~310
+kilobytes, and **all of them are read**: `TestRealXpData` walks every value of
+every file and finds no fault. The marshal reader is now checked against bytes an
+engine wrote, not only against the rubies' own sources.
+
+Two of my own assumptions were wrong and the files said so:
+
+- **A map is not a hash.** It is an `RPG::Map` object with eleven members, and
+  eleven keys. The reader was right; the expectation written from memory was not.
+- **A `.lmu` holds an `LcfMapUnit`**, not an `LcfMap`. Measured, not remembered.
+
+**The KiriKiri game was offered as a WOLF game and is not one.** It carries
+folders called `BasicData` and `MapData`, which are two of the three things the
+Wolf detector looks for, and its data folder is laid out the way a Wolf game's is.
+It has no `Game.dat` anywhere, and that is the third thing. The detector refuses
+it, and `TestKirikiriIsNotAWolfGame` proves the refusal is a decision rather than
+an accident of not having looked: **the same folder with a `Game.dat` in it is
+detected as Wolf.** A folder full of what a Wolf game would have is not a Wolf
+game, and a detector that answers either way rather than refusing has guessed.
+
+**What is claimed and what is not**
+
+Claimed: the XP detector recognises an XP installation from its own files and
+does not confuse it with VX or VX Ace; the marshal reader reads sixteen real
+files from two independent installations; the RM2K parser reads a 416 kilobyte
+database, a 57 kilobyte map tree and two maps of a 743 map game.
+
+Not claimed: that a game's data is **understood**. A database read as a
+dictionary of chunks is a database read; it is not an actor, an event, a page or
+a chipset. A map file is read as an `RPG::Map` holding its members; nothing here
+knows what a member called `@events` is for. There is still no renderer, no
+script execution, no save path, and `RgssEngineRuntime` is still metadata only.
+
+**Tests and evidence**
+
+- `TestRealXpData` 6/6 — sixteen real files, two installations, two encodings.
+- `TestRealXpDetection` 3/3 — an XP folder is XP, is not VX or VX Ace, and a
+  folder with data but no layout is either XP or nothing.
+- `TestRealRm2kData` 3/3 — a real 416 KB database, its 57 KB map tree, two maps.
+- `TestKirikiriIsNotAWolfGame` 2/2 — the refusal, and what makes it a decision.
+- `TestMarshalReader` 40/40 — the last one added tells a number this machine
+  cannot carry apart from a file it cannot read, which is the one mutation of the
+  eight that escaped the first suite.
+- Total **833/833**, validator passed, build 0 warnings / 0 errors.
+- **Eight mutations of the reader, all detected.** Two of the first suite's eight
+  did not test anything: it counted a mutation as breaking the build whenever
+  `error CS` appeared anywhere in a run, and the run prints the mutation report
+  of the step before it, so six that compiled were reported as broken. The suite
+  now compiles each mutation on its own and only calls it broken if that build
+  really fails.
+- `project/tests/fixtures/RGSS_FIXTURES.md` holds every file with its size and
+  SHA-256. No executable, DLL, save, image, audio or script is imported.
+
+**Deferred, not done**
+
+- The XP games' `Scripts.rxdata` is deliberately **not** imported. A script is
+  code, and this repository does not run a game's code.
+- 743 maps of `rm2k-dragon-destiny` are not in the repository; two are, and the
+  rest are the same format at a different size.
+- No archive from any of the three engines is in the repository, so the
+  `RgssArchiveReader` still has no real file to read.
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

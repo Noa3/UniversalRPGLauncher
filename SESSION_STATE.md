@@ -1095,3 +1095,29 @@ If validation fails, keep the failure signature here. Use at most three material
   8 mutations of the packing, all detected.
 - Still missing: a number wider than this machine's whole number is read and then
   refused, and no archive from any of the three engines is in the repository.
+
+## K-120 Real game data — checkpoint
+
+- What was added: sixteen XP `.rxdata` files from two independent installations
+  (`rgss-xp`, a Japanese one, and `rgss-xp-microquest`, an English one), a real
+  RM2K database, map tree and two maps (`rm2k-dragon-destiny`, 743 maps in the
+  game), and one `Game.ini` from a KiriKiri game that is **not** a WOLF game.
+  Sizes and SHA-256 in `project/tests/fixtures/RGSS_FIXTURES.md`.
+- What it found: the marshal reader reads every one of the sixteen XP files. Two
+  of my own expectations were wrong and the files settled them — an XP map is an
+  `RPG::Map` object with eleven members, not a hash, and a `.lmu` holds an
+  `LcfMapUnit`, not an `LcfMap`.
+- The WOLF detector was checked against the KiriKiri game, which has `BasicData`
+  and `MapData` folders and no `Game.dat`. It refuses it, and the test proves the
+  refusal is a decision by showing the same folder with a `Game.dat` is detected.
+- Tests: `TestRealXpData` 6/6, `TestRealXpDetection` 3/3, `TestRealRm2kData` 3/3,
+  `TestKirikiriIsNotAWolfGame` 2/2, `TestMarshalReader` 40/40, total 833/833,
+  validator passed, build 0 warnings / 0 errors, 8/8 mutations detected.
+- A lesson kept in the mutation harness: a suite that looks for `error CS`
+  anywhere in a run counts the previous step's output as a build fault. Compile
+  the mutation on its own, then run the suite.
+- Still missing, and this is the next step: **no archive from any engine is in
+  the repository**, so `RgssArchiveReader` has never read a real `RGSSAD` file and
+  `RgssEngineRuntime` is still metadata only. The XP games given to the repository
+  keep their data in plain files, so the archive path needs either an encrypted
+  game's data or a written archive from the engine's own format description.
