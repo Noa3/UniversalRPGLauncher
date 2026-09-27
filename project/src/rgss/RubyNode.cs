@@ -36,6 +36,73 @@ public enum RubyScope
 /// what it does. Deciding those is a separate step, and it is the step that
 /// would run the game's code, so it is not part of reading a script.
 /// </remarks>
+/// <summary>What a child of a node is for.</summary>
+/// <remarks>
+/// The parser used to say only that a child was there, which left every
+/// consumer to know the layout of every kind: a keyword that opens a test
+/// held the keyword first and the test second, a ternary held the test
+/// first, a block on a call held the call, the parameters and the body, and
+/// a block that was a body held only statements. One kind could therefore
+/// mean two things, and a second meaning was invisible. Naming the role
+/// means a consumer can ask for what it wants.
+/// </remarks>
+public enum RubyNodeRole
+{
+    /// <summary>The part of the tree that holds the other parts.</summary>
+    Body,
+
+    /// <summary>The value of a test.</summary>
+    Condition,
+
+    /// <summary>What runs when a test holds.</summary>
+    WhenTrue,
+
+    /// <summary>What runs when a test does not hold.</summary>
+    WhenFalse,
+
+    /// <summary>The left of an operation.</summary>
+    Left,
+
+    /// <summary>The right of an operation.</summary>
+    Right,
+
+    /// <summary>The name a call is made on.</summary>
+    Receiver,
+
+    /// <summary>The value assigned to.</summary>
+    Target,
+
+    /// <summary>The value assigned.</summary>
+    Value,
+
+    /// <summary>One argument of a call, in the order written.</summary>
+    Argument,
+
+    /// <summary>One parameter of a block, in the order written.</summary>
+    Parameter,
+
+    /// <summary>What a block runs.</summary>
+    BlockBody,
+
+    /// <summary>The part of a class or a method that gives it a name.</summary>
+    Definition,
+
+    /// <summary>One alternative of a case, in the order written.</summary>
+    When,
+
+    /// <summary>A statement, in the order written.</summary>
+    Statement,
+}
+
+/// <summary>A child of a node together with what it is for.</summary>
+public sealed class RubyNodePart
+{
+    /// <summary>What this child is for.</summary>
+    public required RubyNodeRole Role { get; init; }
+
+    /// <summary>The child itself.</summary>
+    public required RubyNode Node { get; init; }
+}
 public sealed class RubyNode
 {
     /// <summary>What kind of node this is.</summary>
@@ -94,6 +161,45 @@ public sealed class RubyNode
 
     /// <summary>The children, in source order.</summary>
     public IReadOnlyList<RubyNode> Children { get; init; } = Array.Empty<RubyNode>();
+    /// <summary>
+    /// The children with the role each one plays, empty when the parser
+    /// recorded only a position.
+    /// </summary>
+    /// <remarks>
+    /// This is the list to read. Children stays for the reader that wants the
+    /// order and does not care what the order means, and a node whose parts
+    /// are empty has not been given roles yet rather than having none.
+    /// </remarks>
+    public IReadOnlyList<RubyNodePart> Role_Children { get; init; } = Array.Empty<RubyNodePart>();
+
+    /// <summary>The first child playing the given role, or null.</summary>
+    public RubyNode? Part(RubyNodeRole pRole)
+    {
+        foreach (var part in Role_Children)
+        {
+            if (part.Role == pRole)
+            {
+                return part.Node;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Every child playing the given role, in the order written.</summary>
+    public IReadOnlyList<RubyNode> PartsOf(RubyNodeRole pRole)
+    {
+        var found = new List<RubyNode>();
+        foreach (var part in Role_Children)
+        {
+            if (part.Role == pRole)
+            {
+                found.Add(part.Node);
+            }
+        }
+
+        return found;
+    }
 
     /// <summary>The first child, or null.</summary>
     public RubyNode? First => Children.Count > 0 ? Children[0] : null;

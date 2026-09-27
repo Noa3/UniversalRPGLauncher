@@ -604,6 +604,117 @@ public partial class TestRubyParser : TestBase
         AssertEq(node.Receiver, null, "and no resolved receiver");
     }
 
+    public void Test_EachChildSaysWhatItIsFor()
+    {
+        // The reason the roles exist. A consumer of the tree has to ask for the
+        // test rather than know that an `if` holds the keyword first and the
+        // test second, and that a ternary holds the test first, and that a block
+        // on a call holds the call, the parameters and the body. Those layouts
+        // disagree with each other, and a reader that learned the wrong one would
+        // run the test as the true branch and pass a test written the same way.
+        //
+        // A name is held in Name and not in Text. That is worth stating here
+        // because a test that reads Text would find null and could be fixed
+        // either by filling Text or by reading Name, and only one of those is
+        // right.
+        var conditional = One("a if b");
+        var keyword = conditional;
+        AssertEq(keyword.Kind, RubyNodeKind.If, "the keyword opens the test, but was " + keyword.Kind + " name " + (keyword.Name ?? "null") + " children " + keyword.Children.Count);
+        var test = keyword.Part(RubyNodeRole.Condition)!;
+        AssertEq(test.Kind, RubyNodeKind.Identifier, "the test is a name");
+        AssertEq(test.Name, "b", "which is the name written after the keyword");
+
+        var ternary = One("a ? b : c");
+        AssertEq(ternary.Kind, RubyNodeKind.Ternary, "a ternary is a ternary");
+        AssertEq(ternary.Part(RubyNodeRole.Condition)!.Name, "a", "the test is named as the test");
+        AssertEq(ternary.Part(RubyNodeRole.WhenTrue)!.Name, "b", "the true branch as the true branch");
+        AssertEq(ternary.Part(RubyNodeRole.WhenFalse)!.Name, "c", "the false branch as the false branch");
+    }
+
+    public void Test_AnOperationAndAnAssignmentNameTheirTwoSides()
+    {
+        var sum = One("a + b");
+        AssertEq(sum.Kind, RubyNodeKind.Binary, "an operation is an operation");
+        AssertEq(sum.Operator, "+", "holding the operator written");
+        AssertEq(sum.Part(RubyNodeRole.Left)!.Name, "a", "the left named as the left");
+        AssertEq(sum.Part(RubyNodeRole.Right)!.Name, "b", "and the right as the right");
+
+        var assignment = One("a = b");
+        AssertEq(assignment.Kind, RubyNodeKind.Assignment, "an assignment is an assignment");
+        AssertEq(assignment.Part(RubyNodeRole.Target)!.Name, "a", "the target is what is written to");
+        AssertEq(assignment.Part(RubyNodeRole.Value)!.Name, "b", "and the value is what is written");
+    }
+
+    public void Test_TheOrderIsKeptAsWellAsTheRoles()
+    {
+        // Roles are an addition, not a replacement. A reader that wants the order
+        // and does not care what the order means still has it, and the two lists
+        // describe the same children.
+        var assignment = One("a = b");
+        AssertEq(assignment.Children.Count, 2, "two children as before");
+        AssertEq(assignment.Children[0].Name, "a", "the target comes first");
+        AssertEq(assignment.Children[1].Name, "b", "and the value second");
+        AssertEq(assignment.Role_Children.Count, 2, "both children carry a role");
+    }
+
+    public void Test_ARoleThatIsNotThereIsAbsentRatherThanTheFirstChild()
+    {
+        // The fault the roles exist to prevent, stated as a test. A lookup that
+        // answered with the first child when the role was not there would let a
+        // consumer run a name as if it were the body, and the mistake would look
+        // like a value rather than like a mistake.
+        var assignment = One("a = b");
+        AssertTrue(assignment.Role_Children.Count > 0, "the node does carry roles");
+        AssertTrue(
+            assignment.Part(RubyNodeRole.Condition) is null,
+            "an assignment has no test, and says so");
+        AssertTrue(
+            assignment.PartsOf(RubyNodeRole.WhenTrue).Count == 0,
+            "and no true branch either");
+
+        // A node that was never given roles at all must not answer for any of
+        // them, or a consumer cannot tell an absent role from a missing one.
+        var bare = new RubyNode { Kind = RubyNodeKind.Integer, Line = 1, Integer = 1 };
+        AssertTrue(
+            bare.Role_Children.Count == 0,
+            "a node with no roles has none listed");
+        AssertTrue(bare.Part(RubyNodeRole.Body) is null, "and answers nothing");
+    }
+
+    public void Test_TheRoleLookupKeepsTheOrderItWasGiven()
+    {
+        // A node may hold several children under one role, as a call holds
+        // several arguments, and a lookup that took the last would hand back a
+        // different one than a lookup that takes the first whenever the caller
+        // asked for the head of the list.
+        var call = One("a.b(c, d)");
+        AssertEq(call.Kind, RubyNodeKind.Call, "a call is a call");
+        AssertEq(call.Name, "b", "holding the name it is called by");
+        AssertEq(
+            call.Part(RubyNodeRole.Receiver)!.Name, "a",
+            "and the name it is called on");
+        var arguments = call.PartsOf(RubyNodeRole.Argument);
+        AssertEq(arguments.Count, 2, "with two arguments");
+        AssertEq(arguments[0].Name, "c", "the first written first");
+        AssertEq(arguments[1].Name, "d", "and the second after it");
+    }
+
+    public void Test_TheHeadOfARoleIsTheFirstOfItAndNotTheLast()
+    {
+        // A call holds several children under one role, and a caller that asks
+        // for the head of a role wants the first, because that is the first
+        // argument as written. A lookup that took the last would pass every test
+        // above it, since nothing there had two of the same role, and would hand
+        // a game the wrong argument.
+        var call = One("a.b(c, d)");
+        AssertEq(
+            call.Part(RubyNodeRole.Argument)!.Name, "c",
+            "the head of the arguments is the first one written");
+        AssertEq(
+            call.PartsOf(RubyNodeRole.Argument).Last().Name, "d",
+            "while the list still ends with the last");
+    }
+
     public void Test_APrecedenceChainMixesLevelsWithoutLosingAny()
     {
         // One expression that touches most of the table at once. A reader with

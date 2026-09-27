@@ -216,6 +216,11 @@ public sealed class RubyParser
                 Name = keyword,
                 Line = node.Line,
                 Children = [node, condition],
+                Role_Children =
+                [
+                    new() { Role = RubyNodeRole.Body, Node = node },
+                    new() { Role = RubyNodeRole.Condition, Node = condition },
+                ],
             };
         }
         return node;
@@ -239,6 +244,11 @@ public sealed class RubyParser
                 Operator = op,
                 Line = left.Line,
                 Children = [left, right],
+                Role_Children =
+                [
+                    new() { Role = RubyNodeRole.Target, Node = left },
+                    new() { Role = RubyNodeRole.Value, Node = right },
+                ],
             };
         }
         foreach (var op in new[] { "+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", "|=", "&=", "^=" })
@@ -281,6 +291,12 @@ public sealed class RubyParser
                 Operator = "?",
                 Line = condition.Line,
                 Children = [condition, whenTrue, whenFalse],
+                Role_Children =
+                [
+                    new() { Role = RubyNodeRole.Condition, Node = condition },
+                    new() { Role = RubyNodeRole.WhenTrue, Node = whenTrue },
+                    new() { Role = RubyNodeRole.WhenFalse, Node = whenFalse },
+                ],
             };
         }
         return condition;
@@ -348,6 +364,11 @@ public sealed class RubyParser
                     Operator = op,
                     Line = left.Line,
                     Children = [left, right],
+                    Role_Children =
+                    [
+                        new() { Role = RubyNodeRole.Left, Node = left },
+                        new() { Role = RubyNodeRole.Right, Node = right },
+                    ],
                 };
             }
             left = node;
@@ -420,6 +441,7 @@ public sealed class RubyParser
                         Name = name,
                         Line = node.Line,
                         Children = [node, .. arguments],
+                        Role_Children = CallParts(node, arguments),
                     };
                     continue;
                 }
@@ -429,6 +451,7 @@ public sealed class RubyParser
                     Name = name,
                     Line = node.Line,
                     Children = [node],
+                    Role_Children = CallParts(node, Array.Empty<RubyNode>()),
                 };
                 continue;
             }
@@ -454,6 +477,7 @@ public sealed class RubyParser
                     Name = "[]",
                     Line = node.Line,
                     Children = [node, .. arguments],
+                    Role_Children = CallParts(node, arguments),
                 };
                 continue;
             }
@@ -466,6 +490,7 @@ public sealed class RubyParser
                     Name = node.Name ?? string.Empty,
                     Line = node.Line,
                     Children = [node, .. arguments],
+                    Role_Children = CallParts(node, arguments),
                 };
                 continue;
             }
@@ -1117,6 +1142,21 @@ public sealed class RubyParser
         };
     }
 
+    /// <summary>The parts of a call: what it is called on, then its arguments.</summary>
+    private static IReadOnlyList<RubyNodePart> CallParts(
+        RubyNode pReceiver, IReadOnlyList<RubyNode> pArguments)
+    {
+        var parts = new List<RubyNodePart>
+        {
+            new() { Role = RubyNodeRole.Receiver, Node = pReceiver },
+        };
+        foreach (var argument in pArguments)
+        {
+            parts.Add(new RubyNodePart { Role = RubyNodeRole.Argument, Node = argument });
+        }
+
+        return parts;
+    }
     private static RubyNode Literal(
         RubyNodeKind pKind, int pLine, long? pInteger, double? pReal, string? pText,
         string? pName = null)

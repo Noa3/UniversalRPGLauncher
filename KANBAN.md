@@ -1552,6 +1552,49 @@ wrong.
   code: nothing crossed the logical/bitwise boundary, and nothing pinned `not`
   to its own level. Both now have tests.
 
+### K-118 Name what every child of a tree is for
+`READY` → `IN PROGRESS` → `DONE`
+
+**What it is** A consumer of the parse tree has to ask a node for the test, the
+body, the left of an operation or the first argument, instead of knowing the
+layout of every kind by heart.
+
+**The fault this found** The parser said only that a child was there, and what
+the list meant depended on the kind and on nothing else. A keyword that opens a
+test held the keyword first and the test second, a ternary held the test first, a
+block on a call held the call, the parameters and the body, and a block that was
+a body held only statements. **One kind could mean two things, and the second
+meaning was invisible.** Every consumer would have had to learn the layouts from
+the parser's source, and nothing would have said when one of them was wrong.
+
+**What changed** Every child carries the role it plays. `Children` stays for a
+reader that wants the order and does not care what the order means, and a node
+whose roles are empty has not been given roles rather than having none. A lookup
+for a role that is not there answers null instead of falling back to the first
+child, so an absent role cannot be mistaken for a present one.
+
+A name is held in `Name` and not in `Text`. That was worth a test, because a
+test reading `Text` finds null and could be fixed either by filling `Text` or by
+reading `Name`, and only one of those is right.
+
+- Roles filled for a keyword that opens a test, a ternary, an assignment, an
+  operation and a call. The four places that build a call say their shape through
+  one helper rather than each repeating it.
+- Tests: `TestRubyParser` 52/52, total 808/808, validator passed.
+- 6 mutations on the roles and the lookup, all detected. Two of them escaped at
+  first because a lookup that takes the last of a role and one that takes the
+  first cannot be told apart while every node holds at most one child under a
+  role, and because a lookup that fell back to the first child passed every test
+  that asked for a role that was there. Both are now tested.
+
+**Why this comes before a machine** A machine that ran the tree would have had to
+read the parser's source to know which child was the body, and a mistake there
+runs a name as if it were a statement. That is quietly wrong rather than loudly
+wrong, which is the worst shape a mistake can have.
+
+**Still missing for XP, VX and VX Ace** A machine to run the tree, and any real
+archive from any of the three engines.
+
 ### K-117 — The value layer between a game's data and its language
 **Status (2026-09-26) — DONE as a value layer. It names values and judges none.**
 

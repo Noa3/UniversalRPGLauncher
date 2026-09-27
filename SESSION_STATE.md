@@ -1039,3 +1039,24 @@ The completed-card audit found and corrected an unsafe RGSS capability claim: XP
 ## Recovery rule
 
 If validation fails, keep the failure signature here. Use at most three materially different attempts for the same signature; after that mark the corresponding Kanban card blocked and continue with an independent ready card.
+
+## Roles for the parse tree's children (2026-09-27)
+- Every child of a node now says what it is for, so a consumer asks for the test
+  or the body rather than knowing each kind's layout.
+- The fault this found: the parser said only that a child was there, so what a
+  list meant depended on the kind alone. A keyword that opens a test held the
+  keyword first, a ternary held the test first, a block on a call held the call,
+  the parameters and the body, and a block that was a body held only statements.
+  One kind could mean two things and the second meaning was invisible.
+- A name is held in `Name` and not in `Text`. Two test failures came from reading
+  the wrong field, and a wrong field can be fixed two ways of which one is right.
+- `One("a if b")` returns the `if` node itself, not a wrapper holding it. The
+  first version of the test assumed a wrapper and was wrong; the parser was right.
+- A lookup for a role that is not there answers null rather than falling back to
+  the first child, so an absent role cannot be mistaken for a present one.
+- Tests: `TestRubyParser` 52/52, total 808/808, validator passed, 0 warnings.
+- 6 mutations on the roles and the lookup, all detected. Two escaped at first:
+  a lookup taking the last of a role cannot be told from one taking the first
+  while every node holds at most one child under a role, and a lookup falling
+  back to the first child passed every test that asked for a role that was there.
+- Next: a machine to run the tree. That is no longer blocked on the tree's shape.
