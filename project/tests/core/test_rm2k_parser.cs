@@ -618,6 +618,119 @@ partial class TestRm2kParser : TestBase
 		AssertEq(sectionCounts["battle_commands"].AsInt32(), 1, "battle command section count");
 	}
 
+	/// <summary>
+	/// Verified liblcf struct ChunkSystem: the party list is the size/data
+	/// pair 0x15/0x16 and the vehicle graphics are plain scalar fields. The
+	/// Player needs both, so a database without a system chunk still yields
+	/// liblcf's empty defaults instead of failing.
+	/// </summary>
+	public void Test_ParseDatabaseDecodesTheSystemChunkPartyAndVehicleGraphics()
+	{
+		var system = Struct(
+			Chunk(0x0B, SystemText("boat")),
+			Chunk(0x0C, SystemText("ship")),
+			Chunk(0x0D, SystemText("airship")),
+			Chunk(0x0E, Ber(1)),
+			Chunk(0x0F, Ber(2)),
+			Chunk(0x10, Ber(3)),
+			Chunk(0x15, Ber(2)),
+			Chunk(0x16, new byte[] { 1, 0, 2, 0 }),
+			Chunk(0x63, new byte[] { 0x01 }),
+			Chunk(0x99, new byte[] { 0x07 })
+		);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x16, system),
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("TypedSystem.rdata"), database);
+
+		var result = _parser.ParseDatabase(Dir.PathJoin("TypedSystem.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var systemData = (Godot.Collections.Dictionary)result.GetData()["system"];
+		var party = (Godot.Collections.Array)systemData["party"];
+		AssertEq(party.Count, 2, "the declared party size is the entry count");
+		AssertEq(party[0].AsInt64(), 1, "the first party member is actor 1");
+		AssertEq(party[1].AsInt64(), 2, "the second party member is actor 2");
+		AssertEq(systemData["boat_name"].AsString(), "boat", "boat name");
+		AssertEq(systemData["ship_name"].AsString(), "ship", "ship name");
+		AssertEq(systemData["airship_name"].AsString(), "airship", "airship name");
+		AssertEq(systemData["boat_index"].AsInt32(), 1, "boat index");
+		AssertEq(systemData["ship_index"].AsInt32(), 2, "ship index");
+		AssertEq(systemData["airship_index"].AsInt32(), 3, "airship index");
+		// The unknown field keeps its count so nothing is silently dropped.
+		AssertEq(((Godot.Collections.Array)systemData["unknown_fields"]).Count, 1,
+			"the unknown system field is retained");
+	}
+
+	/// <summary>
+	/// A database without a system chunk is normal; the defaults are liblcf's
+	/// empty party and empty vehicle graphics, not a parse failure.
+	/// </summary>
+	public void Test_ParseDatabaseWithoutASystemChunkYieldsEmptyDefaults()
+	{
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("NoSystem.rdata"), database);
+
+		var result = _parser.ParseDatabase(Dir.PathJoin("NoSystem.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var systemData = (Godot.Collections.Dictionary)result.GetData()["system"];
+		AssertEq(((Godot.Collections.Array)systemData["party"]).Count, 0, "no party members");
+		AssertEq(systemData["boat_name"].AsString(), "", "no boat graphic");
+	}
+
+	/// <summary>
+	/// A party list whose declared size is longer than the data is truncated to
+	/// what the file actually contains instead of reading past the chunk.
+	/// </summary>
+	public void Test_ParseDatabaseClampsThePartyListToTheAvailableData()
+	{
+		var system = Struct(
+			Chunk(0x15, Ber(8)),
+			Chunk(0x16, new byte[] { 1, 0, 3, 0 })
+		);
+		var database = Lcf("LcfDataBase", new List<byte[]>
+		{
+			Chunk(0x16, system),
+			Chunk(0x1A, Ber(259)),
+			new byte[] { 0x00 },
+		});
+		WriteFile(Dir.PathJoin("ShortParty.rdata"), database);
+
+		var result = _parser.ParseDatabase(Dir.PathJoin("ShortParty.rdata"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var party = (Godot.Collections.Array)((Godot.Collections.Dictionary)result.GetData()["system"])["party"];
+		AssertEq(party.Count, 2, "the party list is limited by the stored data");
+		AssertEq(party[1].AsInt64(), 3, "the second stored actor id");
+	}
+
+	/// <summary>
+	/// An LCF string field is the raw encoded text; the decoder is shared with
+	/// the actor fields and strips no length prefix because the field size
+	/// already delimits it.
+	/// </summary>
+	internal static byte[] SystemText(string pText)
+	{
+		return System.Text.Encoding.ASCII.GetBytes(pText);
+	}
+
 	public void Test_ParseDatabaseRejectsBattleCommandDataAfterTerminator()
 	{
 		var payload = new List<byte>(Struct(Chunk(0x02, Ber(1))));

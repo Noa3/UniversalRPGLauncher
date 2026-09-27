@@ -151,9 +151,15 @@ public sealed class Rm2kCharset
     /// <c>SetOy(chara_height)</c> offsets. Transparent charset pixels leave the
     /// background untouched.
     /// </summary>
+    /// <param name="pOffsetX">
+    /// Horizontal scroll offset in pixels. The Player offsets a character sprite
+    /// by the same value it offsets the tile layers with, so the character stays
+    /// on its map tile while the map scrolls.
+    /// </param>
+    /// <param name="pOffsetY">Vertical scroll offset in pixels.</param>
     public bool TryDrawCharacter(
         int pCharacterIndex, byte pFacingDirection, int pFrame,
-        Rm2kPixelBuffer pTarget, int pMapX, int pMapY)
+        Rm2kPixelBuffer pTarget, int pMapX, int pMapY, int pOffsetX = 0, int pOffsetY = 0)
     {
         ArgumentNullException.ThrowIfNull(pTarget);
         if (!TryGetCell(pCharacterIndex, out var cellX, out var cellY)
@@ -161,8 +167,8 @@ public sealed class Rm2kCharset
         {
             return false;
         }
-        var targetX = (pMapX + 1) * Rm2kIndexedImage.MapTileSize - FrameWidth / 2;
-        var targetY = (pMapY + 1) * Rm2kIndexedImage.MapTileSize - FrameHeight;
+        var targetX = (pMapX + 1) * Rm2kIndexedImage.MapTileSize - FrameWidth / 2 + pOffsetX;
+        var targetY = (pMapY + 1) * Rm2kIndexedImage.MapTileSize - FrameHeight + pOffsetY;
         return _image.TryBlitRectangle(frameX, frameY, FrameWidth, FrameHeight, pTarget, targetX, targetY);
     }
 

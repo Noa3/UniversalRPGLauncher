@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Godot;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Core;
 using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Rm2k.Presentation;
-using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Plugins;
@@ -119,10 +120,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     $"Could not create RM2K map framebuffer: {renderResult.Error}", "initialize-render");
             }
             Framebuffer = renderResult.Framebuffer;
-            RenderCurrentMap(
-                currentMap,
-                (int)currentMap["width"],
-                (int)currentMap["height"]);
+            // The events have to be loaded before the first frame: the frame
+            // draws their characters, and rendering first produced a map without
+            // a single character while still looking plausible.
+            LoadCurrentMapEvents(currentMap);
+            _currentMap = currentMap;
+            _currentMapWidth = (int)currentMap["width"];
+            _currentMapHeight = (int)currentMap["height"];
+            RenderCurrentMap(currentMap, _currentMapWidth, _currentMapHeight);
 
             var spriteResult = _spriteAdapter.BuildDescriptors(
                 currentMap, Simulation.MapX, Simulation.MapY);
@@ -133,7 +138,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
             SpriteDescriptors = spriteResult.Descriptors;
         }
-        LoadCurrentMapEvents(currentMap);
+        else
+        {
+            LoadCurrentMapEvents(null);
+        }
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded(new[]
         {
@@ -171,6 +179,11 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             {
                 SpriteDescriptors = spriteResult.Descriptors;
             }
+            // A successful step changes what is visible, so the frame is
+            // recomposed. The tile layers stay cached: the Player does not
+            // re-raster them on a move either.
+            _isRenderDirty = true;
+            RecomposeFrame();
         }
         return true;
     }
@@ -198,6 +211,34 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             for (var tick = 0; tick < elapsedTicks; tick++)
             {
                 _eventScheduler.ExecuteFrame();
+            }
+
+            // Game_Character::UpdateMoveRoute runs once per update for every
+            // event with an active route, and it runs whether or not the player
+            // is moving. A command that starts a step returns immediately, so
+            // the route consumes one command per update and the character then
+            // spends the step budget walking before the next one is read.
+            UpdateEventMoveRoutes(elapsedTicks);
+
+            // Game_Character::Update advances the movement budget and the walk
+            // animation once per update, not once per call into the runtime. The
+            // sprite has to be redrawn while the step is unspent, because that
+            // is what makes the hero walk across the tile instead of appearing
+            // at its far edge.
+            var moving = Simulation.RemainingStep > 0;
+            for (var tick = 0; tick < elapsedTicks && Simulation.RemainingStep > 0; tick++)
+            {
+                Simulation.UpdateCharacterAnimation(pMoving: true);
+            }
+            if (!moving)
+            {
+                Simulation.UpdateCharacterAnimation(pMoving: false);
+            }
+            if (moving || _isRenderDirty || _eventRoutesMoved)
+            {
+                _isRenderDirty = true;
+                _eventRoutesMoved = false;
+                RecomposeFrame();
             }
         }
         return PluginOperationResult.Succeeded();
@@ -326,6 +367,257 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     public string RenderDiagnostic { get; private set; } = "";
 
     /// <summary>
+    /// Cached tile layers of the whole map. The Player keeps them as static
+    /// sprites and only scrolls them by an offset, so they are rastered once
+    /// and reused for every frame.
+    /// </summary>
+    private Rm2kPixelBuffer? _lowerLayerPixels;
+
+    private Rm2kPixelBuffer? _upperLayerPixels;
+    private Rm2kMapLayers? _renderedLayers;
+    private Rm2kMapFrameRenderer? _renderedRenderer;
+    private bool _isRenderDirty;
+
+    /// <summary>
+    /// Set when an event move route changed something this update, so the frame
+    /// is recomposed even when the player is standing still.
+    /// </summary>
+    private bool _eventRoutesMoved;
+
+    /// <summary>
+    /// The live move route state per event, indexed the same way as
+    /// <see cref="_mapEvents"/>. An event has no entry until a route forces it.
+    /// </summary>
+    private readonly Dictionary<int, Rm2kMoveRouteState> _eventRoutes = new();
+
+    /// <summary>
+    /// The position an event is drawn at while a route is walking it, which
+    /// differs from its logical tile until the step budget runs out.
+    /// </summary>
+    private readonly Dictionary<int, (int X, int Y, int RemainingStep, int Direction)> _eventStepStates = new();
+
+    /// <summary>
+    /// Advances every event's move route by one command per simulation update,
+    /// from <c>Game_Character::UpdateMoveRoute</c>.
+    /// </summary>
+    /// <remarks>
+    /// The command that starts a step returns from the Player's own loop at
+    /// once, so the route consumes exactly one command per update and the
+    /// character spends the following updates walking. Reproducing that return
+    /// is what stops a route from teleporting its event along the whole list in
+    /// a single frame.
+    /// </remarks>
+    private void UpdateEventMoveRoutes(int pTicks)
+    {
+        if (pTicks <= 0 || _mapEvents.Count == 0)
+        {
+            return;
+        }
+        for (var tick = 0; tick < pTicks; tick++)
+        {
+            foreach (var mapEvent in _mapEvents)
+            {
+                // An event with no route at all is skipped, but an event whose
+                // route has finished while a step is still unspent is not: the
+                // character is already on its way and has to arrive.
+                if (!_eventRoutes.TryGetValue(mapEvent.Id, out var route))
+                {
+                    continue;
+                }
+                // An event mid step is still walking: the budget runs out before
+                // the next command is read, which is the Player's behaviour. A
+                // step continues even after the route has finished, because the
+                // character is already on its way to where it was sent; what
+                // stops is reading another command. An inactive route with an
+                // unspent step is still ticked here, and an inactive route with
+                // none falls through to the command read, which finds nothing.
+                if (_eventStepStates.TryGetValue(mapEvent.Id, out var step))
+                {
+                    var advanced = Rm2kStepBudget.Advance(step.RemainingStep, route.MoveSpeed);
+                    if (!advanced.Completed)
+                    {
+                        _eventStepStates[mapEvent.Id] = (step.X, step.Y, advanced.Remaining, step.Direction);
+                        _eventRoutesMoved = true;
+                        continue;
+                    }
+                    // The tile is reached. The route may already be finished,
+                    // which is why this is not gated on the route still running.
+                    _eventStepStates.Remove(mapEvent.Id);
+                    _eventRoutesMoved = true;
+                }
+
+                var command = route.Current;
+                if (command == null)
+                {
+                    route.Cancel();
+                    continue;
+                }
+
+                if (Rm2kMoveRoute.IsMovementCommand(command.CommandId))
+                {
+                    if (!TryBeginEventStep(mapEvent, route, command))
+                    {
+                        // A refused step either skips the command or holds the
+                        // route on it, from the Player's own check: a skippable
+                        // route moves on, and a route that is not skippable
+                        // returns without advancing, so a character stuck against
+                        // a wall keeps trying the same step instead of sliding
+                        // along it.
+                        if (route.Skippable)
+                        {
+                            route.Advance();
+                        }
+                        else
+                        {
+                            route.NoteMoveFailure();
+                        }
+                        continue;
+                    }
+
+                    // A step that started does not finish here. The Player sets
+                    // the stop count and falls through to the index advance, so
+                    // the next command is read on the update after this one,
+                    // once the budget has run out.
+                    route.Advance();
+                    continue;
+                }
+
+                // Everything that is not a step runs at once and is consumed
+                // immediately, which is why a route of only facing or waiting
+                // commands can run several commands per update in the Player's
+                // loop but only one here: this method reads one command per
+                // update, so a route that never steps still advances one
+                // command per update.
+                ApplyEventRouteFacingCommand(mapEvent, route, command.CommandId);
+                route.Advance();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts one step for an event, from <c>Game_Character::Move</c>: the
+    /// logical tile changes immediately and the drawn position is the tile
+    /// less the unspent step.
+    /// </summary>
+    private bool TryBeginEventStep(
+        Rm2kMap.Event pEvent, Rm2kMoveRouteState pRoute, Rm2kMap.MoveCommand pCommand)
+    {
+        var direction = ResolveEventStepDirection(pEvent, pCommand.CommandId);
+        if (direction < 0)
+        {
+            return false;
+        }
+        var (dx, dy) = Rm2kMoveRoute.DirectionDelta(direction);
+        var targetX = pEvent.X + dx;
+        var targetY = pEvent.Y + dy;
+
+        // Both ends of the step have to be passable, from
+        // Game_Map::CheckWay: the source is checked against the bit it is
+        // leaving through and the target against the bit it is entered
+        // through. Checking only the target lets a character step out of a tile
+        // it is not allowed to leave.
+        var leaveBit = Rm2kMoveRoute.OppositePassabilityBit(direction);
+        var enterBit = Rm2kMoveRoute.PassabilityBitFromLiblcfDirection(direction);
+        if (!Simulation.IsPassableInDirection(targetX, targetY, enterBit)
+            || !Simulation.IsPassableInDirection(targetX, targetY, leaveBit))
+        {
+            return false;
+        }
+        pEvent.X = targetX;
+        pEvent.Y = targetY;
+        pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(direction);
+        _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
+            Rm2kStepBudget.ScreenTileSize, direction);
+        _eventRoutesMoved = true;
+        return true;
+    }
+
+    /// <summary>
+    /// The direction a movement command selects. The eight named directions map
+    /// straight onto the liblcf order; <c>move_forward</c> uses the current
+    /// facing, and the hero relative and random commands are refused rather than
+    /// guessed, because a wrong step desynchronises the route's position.
+    /// </summary>
+    private int ResolveEventStepDirection(Rm2kMap.Event pEvent, int pCommandId)
+    {
+        var named = Rm2kMoveRoute.MovementCommandDirection(pCommandId);
+        if (named >= 0)
+        {
+            return named;
+        }
+        if (pCommandId == Rm2kMoveRoute.MoveForward)
+        {
+            return pEvent.Direction;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Applies the facing and turning commands, from the same part of the
+    /// Player's switch. A command that needs randomness or the hero's position
+    /// is left to the caller rather than approximated here.
+    /// </summary>
+    private void ApplyEventRouteFacingCommand(
+        Rm2kMap.Event pEvent, Rm2kMoveRouteState pRoute, int pCommandId)
+    {
+        if (Rm2kMoveRoute.IsFacingCommand(pCommandId))
+        {
+            // The route works in the liblcf order, so the event's stored byte is
+            // converted rather than assigned directly.
+            var liblcf = Rm2kMoveRoute.LiblcfFromFacingDirection(pEvent.Direction);
+            var named = Rm2kMoveRoute.FacingCommandDirection(pCommandId);
+            if (named >= 0)
+            {
+                pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(named);
+                _eventRoutesMoved = true;
+                return;
+            }
+            switch (pCommandId)
+            {
+                case Rm2kMoveRoute.Turn90DegreeRight:
+                    pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(
+                        Rm2kMoveRoute.TurnRight(liblcf));
+                    _eventRoutesMoved = true;
+                    return;
+                case Rm2kMoveRoute.Turn90DegreeLeft:
+                    pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(
+                        Rm2kMoveRoute.TurnLeft(liblcf));
+                    _eventRoutesMoved = true;
+                    return;
+                case Rm2kMoveRoute.Turn180Degree:
+                    pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(
+                        Rm2kMoveRoute.TurnHalf(liblcf));
+                    _eventRoutesMoved = true;
+                    return;
+            }
+        }
+        switch (pCommandId)
+        {
+            case Rm2kMoveRoute.IncreaseMovementSpeed:
+                pRoute.MoveSpeed = Rm2kMoveRoute.ClampMoveSpeed(pRoute.MoveSpeed + 1);
+                return;
+            case Rm2kMoveRoute.DecreaseMovementSpeed:
+                pRoute.MoveSpeed = Rm2kMoveRoute.ClampMoveSpeed(pRoute.MoveSpeed - 1);
+                return;
+            case Rm2kMoveRoute.IncreaseMovementFrequence:
+                pRoute.MoveFrequency = Rm2kMoveRoute.ClampMoveFrequency(pRoute.MoveFrequency + 1);
+                return;
+            case Rm2kMoveRoute.DecreaseMovementFrequence:
+                pRoute.MoveFrequency = Rm2kMoveRoute.ClampMoveFrequency(pRoute.MoveFrequency - 1);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// The default RM2000/2003 screen size in pixels. The Player supports a
+    /// configurable resolution, which this runtime does not expose yet, so the
+    /// original size is used explicitly instead of being inferred.
+    /// </summary>
+    private const int ScreenWidth = Rm2kMapCamera.DefaultScreenWidth;
+
+    private const int ScreenHeight = Rm2kMapCamera.DefaultScreenHeight;
+
+    /// <summary>
     /// Renders the current map into pixels with the verified chipset data. A
     /// missing chipset image is reported and leaves the runtime running, because
     /// the Player treats the chipset as an asset and the simulation does not
@@ -392,14 +684,28 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             AnimationType = _chipsetAnimationType,
             AnimationSpeed = _chipsetAnimationSpeed,
         };
-        var target = new Rm2kPixelBuffer(
+        var full = new Rm2kPixelBuffer(
             checked(pWidth * Rm2kChipsetBitmap.TileSize),
             checked(pHeight * Rm2kChipsetBitmap.TileSize));
         var renderer = new Rm2kMapFrameRenderer(bitmap);
-        renderer.RenderLower(target, layers, tables, Simulation.FrameCount);
-        renderer.RenderUpper(target, layers, tables, Simulation.FrameCount);
+        // Verified drawable order in Spriteset_Map: the two tile layers are
+        // static sprites that only receive a scroll offset, while the
+        // character sprites are updated every frame. The map is therefore
+        // rastered once into two cached layer buffers and only the characters
+        // are re-composited when something moved.
+        //
+        // The upper layer is rastered into its own buffer: it is laid over the
+        // characters later, so it must not carry the lower layer with it or it
+        // would hide every character.
+        renderer.RenderLower(full, layers, tables, Simulation.FrameCount);
+        _lowerLayerPixels = CopyOf(full);
+        _upperLayerPixels = new Rm2kPixelBuffer(full.Width, full.Height);
+        renderer.RenderUpper(_upperLayerPixels, layers, tables, Simulation.FrameCount);
+        _renderedLayers = layers;
+        _renderedRenderer = renderer;
         ChipsetImage = bitmap;
-        RenderedMap = target;
+        _isRenderDirty = true;
+        RecomposeFrame();
     }
 
     private void ClearRendering()
@@ -407,6 +713,11 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         RenderedMap = null;
         ChipsetImage = null;
         RenderDiagnostic = "";
+        _lowerLayerPixels = null;
+        _upperLayerPixels = null;
+        _renderedLayers = null;
+        _renderedRenderer = null;
+        _isRenderDirty = false;
     }
 
     private string? ResolveGameDirectory()
@@ -487,6 +798,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             && rawName.VariantType == Godot.Variant.Type.String)
         {
             _chipsetName = rawName.AsString();
+        }
+        foreach (var key in chipset.Keys)
+        {
+            var v = chipset[key];
         }
         _chipsetLower = ReadPassabilityArray(chipset, "passable_data_lower", Rm2kChipset.PassabilityLowerEntries);
         _chipsetUpper = ReadPassabilityArray(chipset, "passable_data_upper", Rm2kChipset.PassabilityUpperEntries);
@@ -631,6 +946,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         var upperLayer = TryReadIntArray(pMapData, "upper_layer");
         TryReadInt(pMapData, "chipset_id", out var chipsetId);
         ReadChipsetData(DatabaseData, chipsetId);
+        LoadVehicles(pMapTreeData, mapId);
         Simulation.ChipsetAnimationType = _chipsetAnimationType;
         Simulation.ChipsetAnimationSpeed = _chipsetAnimationSpeed;
         Simulation.TerrainData = _chipsetTerrain ?? [];
@@ -641,7 +957,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             // Verified Rm2kChipset rules: the upper layer decides, and only an
             // "above" upper tile falls through to the lower layer.
-            var masks = Rm2kChipset.BuildDirectionMasks(lowerLayer, upperLayer, _chipsetLower, _chipsetUpper);
+            var masks = Rm2kChipset.BuildDirectionMasks(lowerLayer, upperLayer, _chipsetLower, _chipsetUpper, _chipsetLower == null ? null : null);
             if (masks.Length == checked(width * height))
             {
                 Simulation.ConfigureMap(Math.Clamp(mapId, 0, GameSimulationState.MaxMapId), width, height, masks);
@@ -672,6 +988,87 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return mapId;
     }
 
+    /// <summary>
+    /// Builds the three vehicles from the LMT start node, verified from
+    /// <c>Game_Vehicle</c>'s constructor.
+    /// </summary>
+    /// <remarks>
+    /// The Player reads each vehicle's start map and tile from the tree's start
+    /// node, not from an event: <c>boat_map_id</c>/<c>boat_x</c>/<c>boat_y</c> are
+    /// <c>0x0B</c>/<c>0x0C</c>/<c>0x0D</c>, the ship's are
+    /// <c>0x15</c>/<c>0x16</c>/<c>0x17</c> and the airship's are
+    /// <c>0x1F</c>/<c>0x20</c>/<c>0x21</c>. The sprite name and index come from
+    /// the LDB system section rather than the tree, which is why a vehicle whose
+    /// system name is empty has no sprite.
+    /// </remarks>
+    private void LoadVehicles(Godot.Collections.Dictionary? pMapTreeData, int pMapId)
+    {
+        _vehicles = new List<Rm2kVehicleState>(3);
+        if (pMapTreeData == null || !pMapTreeData.TryGetValue("start", out var rawStart)
+            || rawStart.VariantType != Godot.Variant.Type.Dictionary)
+        {
+            return;
+        }
+        var start = rawStart.AsGodotDictionary();
+
+        _vehicles.Add(BuildVehicle(
+            start, Rm2kVehicle.Boat, "boat", pMapId));
+        _vehicles.Add(BuildVehicle(
+            start, Rm2kVehicle.Ship, "ship", pMapId));
+        _vehicles.Add(BuildVehicle(
+            start, Rm2kVehicle.Airship, "airship", pMapId));
+    }
+
+    /// <summary>One vehicle, with the system section's sprite and the start node's tile.</summary>
+    private Rm2kVehicleState BuildVehicle(
+        Godot.Collections.Dictionary pStart, int pVehicleType, string pPrefix, int pMapId)
+    {
+        TryReadInt(pStart, pPrefix + "_map_id", out var vehicleMapId);
+        TryReadInt(pStart, pPrefix + "_x", out var vehicleX);
+        TryReadInt(pStart, pPrefix + "_y", out var vehicleY);
+
+        // The sprite comes from the system section, not the tree. A vehicle
+        // without a system name has no cell to draw and is reported rather than
+        // drawn as the first charset.
+        var vehicle = new Rm2kVehicleState(pVehicleType, vehicleMapId, vehicleX, vehicleY)
+        {
+            CharacterName = ReadSystemString(pVehicleType == Rm2kVehicle.Boat
+                ? "boat_name"
+                : pVehicleType == Rm2kVehicle.Ship ? "ship_name" : "airship_name"),
+            SpriteIndex = ReadSystemInt(pVehicleType == Rm2kVehicle.Boat
+                ? "boat_index"
+                : pVehicleType == Rm2kVehicle.Ship ? "ship_index" : "airship_index"),
+        };
+        _ = pMapId;
+        return vehicle;
+    }
+
+    private string ReadSystemString(string pKey)
+    {
+        if (DatabaseData != null
+            && DatabaseData.TryGetValue("system", out var rawSystem)
+            && rawSystem.VariantType == Godot.Variant.Type.Dictionary
+            && rawSystem.AsGodotDictionary().TryGetValue(pKey, out var rawValue)
+            && rawValue.VariantType == Godot.Variant.Type.String)
+        {
+            return rawValue.AsString();
+        }
+        return "";
+    }
+
+    private int ReadSystemInt(string pKey)
+    {
+        if (DatabaseData != null
+            && DatabaseData.TryGetValue("system", out var rawSystem)
+            && rawSystem.VariantType == Godot.Variant.Type.Dictionary
+            && rawSystem.AsGodotDictionary().TryGetValue(pKey, out var rawValue)
+            && rawValue.VariantType == Godot.Variant.Type.Int)
+        {
+            return rawValue.AsInt32();
+        }
+        return 0;
+    }
+
     private void LoadCurrentMapEvents(Godot.Collections.Dictionary? pMapData)
     {
         var events = new List<Rm2kMap.Event>();
@@ -684,6 +1081,31 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 var data = rawEvent.AsGodotDictionary();
                 if (!TryReadInt(data, "id", out var id) || !TryReadInt(data, "x", out var x) || !TryReadInt(data, "y", out var y)) continue;
                 var mapEvent = new Rm2kMap.Event(id, x, y);
+
+                // LMT character fields, verified chunk ids 0x15, 0x16, 0x17 and
+                // 0x19. They are read here so the sprite builder sees the real
+                // direction and start pose instead of the defaults. A missing
+                // field keeps the RPG Maker default of facing down, which is
+                // what an unconditioned event uses.
+                if (data.TryGetValue("character_name", out var rawEventCharacterName)
+                    && rawEventCharacterName.VariantType == Godot.Variant.Type.String)
+                {
+                    mapEvent.CharacterName = rawEventCharacterName.AsString();
+                }
+                if (TryReadInt(data, "character_index", out var eventCharacterIndex))
+                {
+                    mapEvent.CharacterIndex = eventCharacterIndex;
+                }
+                if (TryReadInt(data, "character_direction", out var eventDirection))
+                {
+                    // liblcf stores 1 up, 2 down, 3 left, 4 right; this project
+                    // stores 2 down, 4 left, 6 right, 8 up.
+                    mapEvent.Direction = Rm2kCharacterSprite.FacingFromLiblcfDirection(eventDirection);
+                }
+                if (TryReadInt(data, "character_pattern", out var eventPattern))
+                {
+                    mapEvent.AnimationFrame = Rm2kCharacterAnimation.ClampFrame(eventPattern);
+                }
                 if (data.TryGetValue("pages", out var rawPages) && rawPages.VariantType == Godot.Variant.Type.Array)
                 {
                     foreach (var rawPage in rawPages.AsGodotArray())
@@ -704,6 +1126,66 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                         var page = new Rm2kMap.EventPage { Trigger = trigger };
                         TryReadInt(pageData, "layer", out var layer);
                         page.Layer = layer;
+                        // liblcf EventPage::move_route is LMU chunk 0x29, with
+                        // move_commands 0x0B/0x0C, repeat 0x15 and skippable 0x16.
+                        // A route that failed to decode is reported by the parser
+                        // and leaves the page with an empty route, which is the
+                        // same shape as a page that never had one.
+                        if (TryReadInt(pageData, "move_frequency", out var moveFrequency))
+                        {
+                            page.MoveFrequency = moveFrequency;
+                        }
+                        if (pageData.TryGetValue("move_route_error", out var rawRouteError)
+                            && rawRouteError.VariantType == Godot.Variant.Type.String
+                            && rawRouteError.AsString().Length > 0)
+                        {
+                            Simulation.AddDiagnostic(
+                                $"RM2K event {id} move route skipped: {rawRouteError.AsString()}");
+                        }
+                        if (TryReadBool(pageData, "move_route_repeat", out var routeRepeat))
+                        {
+                            page.MoveRouteRepeat = routeRepeat;
+                        }
+                        if (TryReadBool(pageData, "move_route_skippable", out var routeSkippable))
+                        {
+                            page.MoveRouteSkippable = routeSkippable;
+                        }
+                        if (pageData.TryGetValue("move_route_commands", out var rawRouteCommands)
+                            && rawRouteCommands.VariantType == Godot.Variant.Type.Array)
+                        {
+                            foreach (var rawCommand in rawRouteCommands.AsGodotArray())
+                            {
+                                if (rawCommand.VariantType != Godot.Variant.Type.Dictionary) continue;
+                                var commandData = rawCommand.AsGodotDictionary();
+                                var command = new Rm2kMap.MoveCommand();
+                                TryReadInt(commandData, "command_id", out command.CommandId);
+                                TryReadInt(commandData, "parameter_a", out command.ParameterA);
+                                TryReadInt(commandData, "parameter_b", out command.ParameterB);
+                                TryReadInt(commandData, "parameter_c", out command.ParameterC);
+                                if (commandData.TryGetValue("parameter_string", out var rawParameterString)
+                                    && rawParameterString.VariantType == Godot.Variant.Type.String)
+                                {
+                                    command.ParameterString = rawParameterString.AsString();
+                                }
+                                page.MoveRouteCommands.Add(command);
+                            }
+                        }
+                        // liblcf EventPage uses 0x15 for the character name,
+                        // 0x16 for the character index and 0x17 for the
+                        // transparency. The sprite needs the first two.
+                        if (pageData.TryGetValue("character_name", out var rawCharacterName)
+                            && rawCharacterName.VariantType == Godot.Variant.Type.String)
+                        {
+                            page.Graphic["character_name"] = rawCharacterName.AsString();
+                        }
+                        if (TryReadInt(pageData, "character_index", out var characterIndex))
+                        {
+                            page.Graphic["character_index"] = characterIndex;
+                        }
+                        if (TryReadInt(pageData, "transparency", out var transparency))
+                        {
+                            page.Graphic["transparency"] = transparency;
+                        }
                         if (pageData.TryGetValue("conditions", out var rawConditions) && rawConditions.VariantType == Godot.Variant.Type.Dictionary)
                         {
                             foreach (var pair in rawConditions.AsGodotDictionary())
@@ -748,6 +1230,841 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private List<Rm2kMap.Event> _mapEvents = new();
 
     /// <summary>
+    /// The three vehicles, built from the LMT start node when a map is loaded.
+    /// Always three entries, in the order boat, ship, airship, so a caller can
+    /// index by <c>Game_Vehicle::Type</c>.
+    /// </summary>
+    private List<Rm2kVehicleState> _vehicles = new();
+
+    /// <summary>The vehicles on the current map, for a caller that renders them.</summary>
+    public IReadOnlyList<Rm2kVehicleState> Vehicles => _vehicles;
+
+    /// <summary>The player's vehicle boarding state, or null before a map is loaded.</summary>
+    public Rm2kVehicleBoarding? VehicleBoarding { get; private set; }
+
+    /// <summary>
+    /// Moves a vehicle onto the current map at a tile, for a test that needs the
+    /// vehicle draw path to actually run.
+    /// </summary>
+    /// <remarks>
+    /// The pinned fixture parks every vehicle on map 39 while it only ships
+    /// <c>Map0001.lmu</c>, so nothing would ever be drawn without this. A test
+    /// that wanted a visible boat on the real map would otherwise have to invent
+    /// a map 39 or a <c>vehicle.png</c> the game never had, and a fake charset
+    /// would prove nothing about the real file. The alternative is leaving the
+    /// draw path unexercised, which is worse.
+    /// </remarks>
+    /// <param name="pVehicleType">One of the <c>Rm2kVehicle</c> types.</param>
+    /// <param name="pX">Tile in x.</param>
+    /// <param name="pY">Tile in y.</param>
+    /// <returns>True when that vehicle exists and was moved.</returns>
+    public bool PlaceVehicleOnCurrentMapForTest(int pVehicleType, int pX, int pY)
+    {
+        foreach (var vehicle in _vehicles)
+        {
+            if (vehicle.VehicleType != pVehicleType)
+            {
+                continue;
+            }
+            vehicle.MapId = Simulation.MapId;
+            vehicle.X = pX;
+            vehicle.Y = pY;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The loaded map's decoded data, kept so a change that affects rendering can
+    /// be recomposed without parsing the file again.
+    /// </summary>
+    private Godot.Collections.Dictionary? _currentMap;
+    private int _currentMapWidth;
+    private int _currentMapHeight;
+
+    /// <summary>
+    /// Recomposes the current frame from the data that is already loaded.
+    /// </summary>
+    /// <remarks>
+    /// A vehicle, an event or the camera can change between two frames without
+    /// the map file changing, so the runtime keeps the decoded data and rebuilds
+    /// from it. This is the same path the per-frame update uses, so a test that
+    /// calls this is exercising the real draw and not a copy of it.
+    /// </remarks>
+    public void RestoreRenderForTest()
+    {
+        if (_currentMap == null)
+        {
+            return;
+        }
+        RenderCurrentMap(_currentMap, _currentMapWidth, _currentMapHeight);
+    }
+
+    /// <summary>The vehicles whose start map is the loaded one, in draw order.</summary>
+    public List<Rm2kVehicleState> VehiclesOnCurrentMap()
+    {
+        var here = new List<Rm2kVehicleState>();
+        foreach (var vehicle in _vehicles)
+        {
+            if (vehicle.MapId == Simulation.MapId)
+            {
+                here.Add(vehicle);
+            }
+        }
+        return here;
+    }
+
+    /// <summary>
+    /// The decoded LDB <c>system</c> section, which holds the starting party.
+    /// Null when no database was loaded, which is also a valid state.
+    /// </summary>
+    private Godot.Collections.Dictionary? SystemData
+    {
+        get
+        {
+            if (DatabaseData != null && DatabaseData.TryGetValue("system", out var raw)
+                && raw.VariantType == Godot.Variant.Type.Dictionary)
+            {
+                return raw.AsGodotDictionary();
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// An actor's charset from the LDB. <c>GetSpriteName</c> falls back to
+    /// <c>dbActor-&gt;character_name</c>, which is field 0x03 of an actor entry.
+    /// </summary>
+    private bool TryGetActorCharacterName(int pActorId, out string pName)
+    {
+        pName = "";
+        if (DatabaseData == null || pActorId <= 0
+            || !DatabaseData.TryGetValue("actors", out var rawActors)
+            || rawActors.VariantType != Godot.Variant.Type.Array)
+        {
+            return false;
+        }
+        var entry = FindById(rawActors.AsGodotArray(), pActorId);
+        if (entry == null || !entry.TryGetValue("character_name", out var rawName)
+            || rawName.VariantType != Godot.Variant.Type.String)
+        {
+            return false;
+        }
+        pName = rawName.AsString();
+        return true;
+    }
+
+    /// <summary>
+    /// An actor's charset cell index, field 0x04 of an actor entry, which
+    /// <c>GetSpriteIndex</c> falls back to.
+    /// </summary>
+    private bool TryGetActorCharacterIndex(int pActorId, out int pIndex)
+    {
+        pIndex = 0;
+        if (DatabaseData == null || pActorId <= 0
+            || !DatabaseData.TryGetValue("actors", out var rawActors)
+            || rawActors.VariantType != Godot.Variant.Type.Array)
+        {
+            return false;
+        }
+        var entry = FindById(rawActors.AsGodotArray(), pActorId);
+        if (entry == null)
+        {
+            return false;
+        }
+        return TryReadInt(entry, "character_index", out pIndex);
+    }
+
+    /// <summary>Finds a database entry by its <c>id</c> field.</summary>
+    private static Godot.Collections.Dictionary? FindById(Godot.Collections.Array pEntries, int pId)
+    {
+        foreach (var raw in pEntries)
+        {
+            if (raw.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+            var entry = raw.AsGodotDictionary();
+            if (TryReadInt(entry, "id", out var id) && id == pId)
+            {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+
+    /// <summary>
+    /// The camera offsets the last composed frame was cut at, in pixels. Exposed
+    /// for tests: the camera arithmetic is unit tested in Rm2kMapCamera, but
+    /// that does not prove the runtime applies it, and a mutation that returns
+    /// zero here is otherwise invisible.
+    /// </summary>
+    public int AppliedCameraOffsetX { get; private set; }
+
+    /// <summary>Vertical counterpart of <see cref="AppliedCameraOffsetX"/>.</summary>
+    public int AppliedCameraOffsetY { get; private set; }
+
+    /// <summary>
+    /// Moves the player to a map tile without a passability check, for tests
+    /// that need a position the fixture data would otherwise block. It changes
+    /// the simulation exactly the way a successful step would.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for tests only, and named for that, because the pinned fixture
+    /// map has no walkable route from the start position and a test that needs
+    /// a moved player would otherwise have to invent a map.
+    /// </remarks>
+    public void PlacePlayerForTest(int pX, int pY)
+    {
+        Simulation.MapX = pX;
+        Simulation.MapY = pY;
+    }
+
+    /// <summary>
+    /// Starts a step through the same path the input handler uses, for tests.
+    /// It exists so a test can observe the per frame step budget in the
+    /// rendered frame instead of only in the arithmetic.
+    /// </summary>
+    /// <summary>
+    /// The pixel offset the hero sprite is drawn with for the current step.
+    /// Exposed because the pinned fixture has an empty party, so the hero
+    /// sprite is never drawn and its position cannot be observed in the frame.
+    /// Without this, only the camera's response to a step would be under test
+    /// and a hero that snapped while the camera scrolled would pass.
+    /// </summary>
+    public (int X, int Y) HeroStepPixelOffset
+    {
+        get
+        {
+            // Read the value the renderer was actually given rather than
+            // recomputing it. Recomputing here would make this property agree
+            // with the step budget even if the sprite wiring dropped the
+            // offset, which is exactly the wiring under test.
+            var hero = ComposedHeroSprite;
+            if (hero != null)
+            {
+                return (hero.PixelOffsetX, hero.PixelOffsetY);
+            }
+            // No hero sprite means no value to report, and recomputing one here
+            // would let this property agree with the step budget even when the
+            // sprite wiring dropped the offset. A missing hero is a fact about
+            // the game, not something to paper over.
+            return (int.MinValue, int.MinValue);
+        }
+    }
+
+    /// <summary>
+    /// The animation frame the hero sprite is drawn with, for the same reason
+    /// as <see cref="HeroStepPixelOffset"/>.
+    /// </summary>
+    public int HeroAnimationFrame
+    {
+        get
+        {
+            var hero = ComposedHeroSprite;
+            if (hero != null)
+            {
+                return hero.Frame;
+            }
+            return int.MinValue;
+        }
+    }
+
+    /// <summary>
+    /// The character sprites of the last built frame, so a test can read what
+    /// the renderer was given. Without a hero sprite the party is empty and
+    /// the list holds only event characters, which is why the properties above
+    /// fall back rather than reporting a wrong value.
+    /// </summary>
+    private IReadOnlyList<Rm2kCharacterSprite> _heroSpriteProbe { get; set; } =
+        Array.Empty<Rm2kCharacterSprite>();
+
+    /// <summary>
+    /// The character sprite the frame was composed from, for tests. The pinned
+    /// LDB has an empty party, so the hero sprite does not exist in this
+    /// fixture and the hero's own offset cannot be observed; an event character
+    /// carries the same sprite wiring, so reading it proves the step offset
+    /// reaches the renderer rather than only the state.
+    /// </summary>
+    public Rm2kCharacterSprite? FirstComposedCharacterSprite =>
+        _heroSpriteProbe.Count > 0 ? _heroSpriteProbe[0] : null;
+
+    /// <summary>
+    /// The hero sprite of the last composed frame, or null when the party is
+    /// empty. Events are composed first and the hero last, so the last entry is
+    /// the hero. Identifying it by index rather than by map position matters:
+    /// an event can stand on the same tile as the player, and matching on
+    /// position alone would then report the event's offset.
+    /// </summary>
+    public Rm2kCharacterSprite? ComposedHeroSprite
+    {
+        get
+        {
+            if (LeadingActorCharacterName.Length == 0)
+            {
+                return null;
+            }
+            foreach (var sprite in _heroSpriteProbe)
+            {
+                if (sprite.Stage == Rm2kMapFrameRenderer.SpriteStage.HeroLayer
+                    && sprite.CharacterIndex == LeadingActorCharacterIndex
+                    && sprite.MapX == Simulation.MapX
+                    && sprite.MapY == Simulation.MapY)
+                {
+                    return sprite;
+                }
+            }
+            return null;
+        }
+    }
+
+    public bool TryMoveForTest(int pDeltaX, int pDeltaY)
+    {
+        return TryMove(pDeltaX, pDeltaY);
+    }
+
+    /// <summary>
+    /// Recomposes the frame from the cached tile layers and the current
+    /// characters, for tests. A production move does this through
+    /// <see cref="TryMove"/>; a test that places the player directly has to ask
+    /// for it, so the recomposition is never silently skipped.
+    /// </summary>
+    /// <summary>
+    /// Starts an event's move route the way the verified <c>MoveEvent</c>
+    /// command does, so a test can watch an event walk. Returns the number of
+    /// commands the route holds, which is zero when the event's page has none.
+    /// </summary>
+    public int StartEventMoveRouteForTest(int pEventId)
+    {
+        foreach (var mapEvent in _mapEvents)
+        {
+            if (mapEvent.Id != pEventId || mapEvent.Pages.Count == 0)
+            {
+                continue;
+            }
+            var page = mapEvent.Pages[0];
+            if (page.MoveRouteCommands.Count == 0)
+            {
+                return 0;
+            }
+            var route = new Rm2kMoveRouteState(
+                page.MoveRouteCommands, page.MoveRouteRepeat, page.MoveRouteSkippable)
+            {
+                MoveFrequency = page.MoveFrequency,
+                Direction = Rm2kMoveRoute.LiblcfFromFacingDirection(mapEvent.Direction),
+            };
+            route.Force(0);
+            _eventRoutes[pEventId] = route;
+            return page.MoveRouteCommands.Count;
+        }
+        return 0;
+    }
+
+    /// <summary>The position an event's walk has reached, or null if it is not moving.</summary>
+    public (int X, int Y)? EventPositionForTest(int pEventId)
+    {
+        foreach (var mapEvent in _mapEvents)
+        {
+            if (mapEvent.Id == pEventId)
+            {
+                return (mapEvent.X, mapEvent.Y);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>The unspent step of an event that is mid walk, or -1 when it is not.</summary>
+    public int EventRemainingStepForTest(int pEventId)
+    {
+        return _eventStepStates.TryGetValue(pEventId, out var step) ? step.RemainingStep : -1;
+    }
+
+    /// <summary>Whether an event's route has run to completion.</summary>
+    public bool EventRouteFinishedForTest(int pEventId)
+    {
+        return _eventRoutes.TryGetValue(pEventId, out var route) && route.Finished;
+    }
+
+    /// <summary>The direction an event faces, in the RPG Maker byte order.</summary>
+    public int EventFacingForTest(int pEventId)
+    {
+        foreach (var mapEvent in _mapEvents)
+        {
+            if (mapEvent.Id == pEventId)
+            {
+                return mapEvent.Direction;
+            }
+        }
+        return -1;
+    }
+
+    public void MarkFrameDirtyForTest()
+    {
+        _isRenderDirty = true;
+    }
+
+    public void RefreshFrameForTest()
+    {
+        if (_isRenderDirty)
+        {
+            RecomposeFrame();
+        }
+    }
+
+    /// <summary>
+    /// Composites the cached tile layers with the current characters into one
+    /// screen sized frame. This is the local equivalent of
+    /// <c>Scene_Map::UpdateGraphics</c>, which runs once per frame; the tile
+    /// layers do not change unless the map changed, so they are reused.
+    /// </summary>
+    /// <summary>
+    /// Publishes the character sprites the last composition used, so a test
+    /// can read the values the renderer was given instead of recomputing them.
+    /// </summary>
+    private void PublishHeroSpriteProbe(IReadOnlyList<Rm2kCharacterSprite> pSprites)
+    {
+        _heroSpriteProbe = pSprites;
+    }
+
+    private void RecomposeFrame()
+    {
+        if (_renderedRenderer == null || _renderedLayers == null
+            || _lowerLayerPixels == null || _upperLayerPixels == null)
+        {
+            return;
+        }
+        _isRenderDirty = false;
+
+        // The Player does not re-raster the map when the player moves: it keeps
+        // the two tile layers whole and scrolls them by
+        // GetDisplayX() / (SCREEN_TILE_SIZE / TILE_SIZE) screen tiles, then by
+        // TILE_SIZE to reach pixels. The same arithmetic is applied here without
+        // re-rastering, and the characters get the same offset so a character
+        // stays on its own map tile.
+        var offsetX = ResolveCameraOffsetX();
+        var offsetY = ResolveCameraOffsetY();
+        AppliedCameraOffsetX = offsetX;
+        AppliedCameraOffsetY = offsetY;
+        var frame = new Rm2kPixelBuffer(ScreenWidth, ScreenHeight);
+        CopyViewport(_lowerLayerPixels, frame, offsetX, offsetY);
+
+        var sprites = BuildCharacterSprites(offsetX, offsetY);
+        PublishHeroSpriteProbe(sprites);
+        _renderedRenderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.BelowLayer;
+        _renderedRenderer.RenderSprites(frame, _renderedLayers, sprites);
+        _renderedRenderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.HeroLayer;
+        _renderedRenderer.RenderSprites(frame, _renderedLayers, sprites);
+        // The Player creates the vehicle sprites after the event sprites, in
+        // Spriteset_Map::UpdateGraphics, so a vehicle is drawn on top of the
+        // events that share its tile rather than under them.
+        DrawVehicleSprites(frame, offsetX, offsetY);
+        // The upper layer is laid over the characters, so it must not clear the
+        // frame first: only its transparent pixels may be skipped.
+        CopyViewportOver(_upperLayerPixels, frame, offsetX, offsetY);
+        _renderedRenderer.CurrentStage = Rm2kMapFrameRenderer.SpriteStage.AboveLayer;
+        _renderedRenderer.RenderSprites(frame, _renderedLayers, sprites);
+
+        foreach (var sprite in sprites)
+        {
+            if (sprite.Skipped)
+            {
+                Simulation.AddDiagnostic(
+                    $"RM2K character {sprite.CharacterIndex} at ({sprite.MapX},{sprite.MapY}) could not be drawn.");
+            }
+        }
+        RenderedMap = frame;
+    }
+
+    /// <summary>
+    /// The horizontal camera offset in pixels, from
+    /// <c>Game_Map::GetDisplayX</c> and <c>Game_Player::GetDefaultPanX</c>.
+    /// The screen shake the Player adds on top is deliberately not applied: it
+    /// is presentation state and would couple a cosmetic effect to the
+    /// deterministic core.
+    /// </summary>
+    private int ResolveCameraOffsetX()
+    {
+        var position = Rm2kMapCamera.PositionX(Simulation.MapX, _renderedLayers!.Width, ScreenWidth);
+        var pixels = Rm2kMapCamera.OffsetPixelsX(position);
+        return pixels;
+    }
+
+    /// <summary>
+    /// The vertical camera offset in pixels, following
+    /// <c>Game_Map::GetDisplayY</c> and <c>Game_Player::GetDefaultPanY</c>.
+    /// </summary>
+    private int ResolveCameraOffsetY()
+    {
+        var position = Rm2kMapCamera.PositionY(Simulation.MapY, _renderedLayers!.Height, ScreenHeight);
+        return Rm2kMapCamera.OffsetPixelsY(position);
+    }
+
+    /// <summary>
+    /// Paints the cached upper layer over the frame, keeping the frame's pixels
+    /// where the layer is transparent. This is the same rule the verified
+    /// chipset blit uses, so a wall tile can still hide a character.
+    /// </summary>
+    private static void CopyViewportOver(
+        Rm2kPixelBuffer pLayer, Rm2kPixelBuffer pFrame, int pOffsetX, int pOffsetY)
+    {
+        var width = Math.Min(pLayer.Width - pOffsetX, pFrame.Width);
+        var height = Math.Min(pLayer.Height - pOffsetY, pFrame.Height);
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+        for (var row = 0; row < height; row++)
+        {
+            var source = ((pOffsetY + row) * pLayer.Width + pOffsetX) * 4;
+            var destination = row * pFrame.Width * 4;
+            for (var column = 0; column < width; column++)
+            {
+                var alpha = pLayer.Pixels[source + 3];
+                if (alpha == 0)
+                {
+                    source += 4;
+                    continue;
+                }
+                pFrame.Pixels[destination] = pLayer.Pixels[source];
+                pFrame.Pixels[destination + 1] = pLayer.Pixels[source + 1];
+                pFrame.Pixels[destination + 2] = pLayer.Pixels[source + 2];
+                pFrame.Pixels[destination + 3] = alpha;
+                source += 4;
+                destination += 4;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads the visible screen out of a cached full map layer, starting at the
+    /// camera offset. Pixels outside the layer stay black, which is the black
+    /// border the Player shows for a map smaller than the screen.
+    /// </summary>
+    /// <param name="pLayer">Cached full map layer.</param>
+    /// <param name="pFrame">Screen sized destination frame.</param>
+    /// <param name="pOffsetX">Camera offset in pixels.</param>
+    /// <param name="pClear">
+    /// True for the first layer, which owns the frame. False for the upper
+    /// layer, which is laid over the characters already drawn, so clearing
+    /// there would erase them.
+    /// </param>
+    private static void CopyViewport(
+        Rm2kPixelBuffer pLayer, Rm2kPixelBuffer pFrame, int pOffsetX, int pOffsetY)
+    {
+        pFrame.Clear();
+        var width = Math.Min(pLayer.Width - pOffsetX, pFrame.Width);
+        var height = Math.Min(pLayer.Height - pOffsetY, pFrame.Height);
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+        // A map that is smaller than the screen in one direction has no room to
+        // scroll in that direction, so the offset is zero there and the layer is
+        // shown unshifted. That is the Player's black border case.
+        pLayer.TryCopyRegion(pOffsetX, pOffsetY, width, height, pFrame, 0, 0);
+    }
+
+    /// <summary>
+    /// Builds the characters of the current frame: every event with a
+    /// character graphic and the hero, each with the stage the verified
+    /// drawable priority assigns it.
+    /// </summary>
+    /// <summary>
+    /// Draws the vehicles that are on this map, verified from
+    /// <c>Spriteset_Map::UpdateGraphics</c>: a vehicle is only created once and
+    /// only when its own start map is the current one.
+    /// </summary>
+    /// <remarks>
+    /// A vehicle with an empty system name has no charset cell, and a vehicle
+    /// whose charset is missing is reported rather than drawn as the first
+    /// character, which is the same fail-closed rule the event sprites use.
+    /// </remarks>
+    private void DrawVehicleSprites(Rm2kPixelBuffer pFrame, int pOffsetX, int pOffsetY)
+    {
+        if (_vehicles.Count == 0)
+        {
+            return;
+        }
+        var charsets = LoadCharSets();
+        foreach (var vehicle in _vehicles)
+        {
+            if (vehicle.MapId != Simulation.MapId || vehicle.CharacterName.Length == 0)
+            {
+                continue;
+            }
+            if (!charsets.TryGetValue(vehicle.CharacterName, out var charset))
+            {
+                Simulation.AddDiagnostic(
+                    $"RM2K {Rm2kVehicle.DescribeType(vehicle.VehicleType)} references charset "
+                    + $"'{vehicle.CharacterName}', which is not in CharSet.");
+                continue;
+            }
+            var sprite = new Rm2kVehicleSprite
+            {
+                VehicleType = vehicle.VehicleType,
+                CharacterName = vehicle.CharacterName,
+                CharacterIndex = vehicle.SpriteIndex,
+                MapX = vehicle.X,
+                MapY = vehicle.Y,
+                FacingDirection = Rm2kCharacterSprite.FacingFromLiblcfDirection(vehicle.Direction),
+                Frame = Rm2kCharset.FrameMiddle,
+                Altitude = vehicle.GetAltitude(),
+            };
+            Rm2kMapFrameRenderer.DrawVehicle(pFrame, charset, sprite, pOffsetX, pOffsetY);
+        }
+    }
+
+    /// <summary>
+    /// The character sprites of the current frame, built in draw order.
+    /// </summary>
+    /// <param name="pOffsetX">Horizontal camera offset in pixels.</param>
+    /// <param name="pOffsetY">Vertical camera offset in pixels.</param>
+    private List<Rm2kCharacterSprite> BuildCharacterSprites(int pOffsetX = 0, int pOffsetY = 0)
+    {
+        var charsets = LoadCharSets();
+        var sprites = new List<Rm2kCharacterSprite>();
+        foreach (var mapEvent in _mapEvents)
+        {
+            var sprite = TryBuildEventSprite(mapEvent, charsets);
+            if (sprite != null)
+            {
+                sprite.PixelOffsetX = pOffsetX;
+                sprite.PixelOffsetY = pOffsetY;
+                sprites.Add(sprite);
+            }
+        }
+        var hero = TryBuildHeroSprite(charsets);
+        if (hero != null)
+        {
+            // Added to, not replaced. The hero carries the step offset of the
+            // unspent movement budget from TryBuildHeroSprite, and the camera
+            // offset is a separate scroll applied to every sprite. Assigning
+            // pOffsetX here silently dropped the step, so the hero snapped to
+            // its tile while walking, which is the one thing the step budget
+            // exists to prevent.
+            hero.PixelOffsetX += pOffsetX;
+            hero.PixelOffsetY += pOffsetY;
+            sprites.Add(hero);
+        }
+        return sprites;
+    }
+
+    /// <summary>
+    /// An event character from the first page that requests a graphic. The
+    /// Player shows the first page whose conditions hold, and this runtime does
+    /// not evaluate page conditions yet, so an unconditioned page is required
+    /// rather than guessing which page would be active.
+    /// </summary>
+    private Rm2kCharacterSprite? TryBuildEventSprite(
+        Rm2kMap.Event pEvent, Dictionary<string, Rm2kCharset> pCharsets)
+    {
+        foreach (var page in pEvent.Pages)
+        {
+            if (!page.Graphic.TryGetValue("character_name", out var rawName)
+                || rawName is not string name || name.Length == 0)
+            {
+                continue;
+            }
+            if (!pCharsets.TryGetValue(name, out var charset))
+            {
+                Simulation.AddDiagnostic(
+                    $"RM2K event {pEvent.Id} references charset '{name}', which is not in CharSet.");
+                return null;
+            }
+            var index = page.Graphic.TryGetValue("character_index", out var rawIndex) && rawIndex is int i ? i : 0;
+            return new Rm2kCharacterSprite
+            {
+                Charset = charset,
+                MapX = pEvent.X,
+                MapY = pEvent.Y,
+                CharacterIndex = index,
+                Stage = Rm2kCharacterSprite.StageForLayer(page.Layer),
+                FacingDirection = pEvent.Direction,
+                Frame = pEvent.AnimationFrame,
+            };
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The hero character, verified from <c>Game_Player::ResetGraphic</c>: the
+    /// first party member, or no graphic when the party is empty.
+    /// </summary>
+    private Rm2kCharacterSprite? TryBuildHeroSprite(Dictionary<string, Rm2kCharset> pCharsets)
+    {
+        var graphic = Rm2kHeroSprite.FromActor(LeadingActorCharacterName, LeadingActorCharacterIndex);
+        if (graphic == null)
+        {
+            return null;
+        }
+        var request = graphic.Value;
+        if (!pCharsets.TryGetValue(request.SpriteName, out var charset))
+        {
+            return null;
+        }
+        return new Rm2kCharacterSprite
+        {
+            Charset = charset,
+            MapX = Simulation.MapX,
+            MapY = Simulation.MapY,
+            CharacterIndex = request.CharacterIndex,
+            // The hero is drawn between tiles while a step is unspent, exactly
+            // as GetSpriteX and GetSpriteY place it, and carries the animation
+            // frame the walk produced.
+            PixelOffsetX = Rm2kStepBudget.PixelOffsetX(
+                Simulation.MapX, Simulation.RemainingStep, FacingFromFacingDirection(Simulation.FacingDirection)),
+            PixelOffsetY = Rm2kStepBudget.PixelOffsetY(
+                Simulation.MapY, Simulation.RemainingStep, FacingFromFacingDirection(Simulation.FacingDirection)),
+            Frame = Rm2kCharacterAnimation.ClampFrame(Simulation.CharacterFrame),
+            Stage = Rm2kMapFrameRenderer.SpriteStage.HeroLayer,
+        };
+    }
+
+    /// <summary>
+    /// The liblcf <c>Game_Character::Direction</c> behind the facing this
+    /// project stores, so the step budget offsets the axis the hero is actually
+    /// travelling along. Only the four cardinal facings exist in this runtime,
+    /// which is all a step budget can be given.
+    /// </summary>
+    private static int FacingFromFacingDirection(byte pFacingDirection)
+    {
+        return Rm2kCharset.FacingToRow(pFacingDirection) switch
+        {
+            Rm2kCharset.DirectionRight => 1,
+            Rm2kCharset.DirectionLeft => 3,
+            Rm2kCharset.DirectionUp => 0,
+            _ => 2,
+        };
+    }
+
+    /// <summary>
+    /// Loads the charsets the hero and the events request. The Player requests
+    /// charset material from the <c>CharSet</c> directory, so a name that has
+    /// no file is reported and only skips its own characters.
+    /// </summary>
+    private Dictionary<string, Rm2kCharset> LoadCharSets()
+    {
+        var result = new Dictionary<string, Rm2kCharset>(StringComparer.OrdinalIgnoreCase);
+        var root = ResolveGameDirectory();
+        if (root == null)
+        {
+            return result;
+        }
+        foreach (var name in CollectCharSetNames())
+        {
+            if (string.IsNullOrEmpty(name) || result.ContainsKey(name))
+            {
+                continue;
+            }
+            var path = Path.Combine(root, "CharSet", name + ".png");
+            if (!File.Exists(path))
+            {
+                Simulation.AddDiagnostic($"RM2K charset '{name}.png' is missing from CharSet.");
+                continue;
+            }
+            if (!Rm2kIndexedImage.TryLoad(path, out var image, out var error))
+            {
+                Simulation.AddDiagnostic($"RM2K charset '{name}.png' could not be decoded: {error}");
+                continue;
+            }
+            result[name] = new Rm2kCharset(image);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Every charset name the frame can ask for: the events and the hero. Names
+    /// come from the data, so nothing is guessed from a file listing.
+    /// </summary>
+    private IEnumerable<string> CollectCharSetNames()
+    {
+        foreach (var mapEvent in _mapEvents)
+        {
+            foreach (var page in mapEvent.Pages)
+            {
+                if (page.Graphic.TryGetValue("character_name", out var rawName) && rawName is string name
+                    && name.Length > 0)
+                {
+                    yield return name;
+                }
+            }
+        }
+        if (LeadingActorCharacterName.Length > 0)
+        {
+            yield return LeadingActorCharacterName;
+        }
+    }
+
+    /// <summary>
+    /// The leading party member's charset from the LDB, which is what
+    /// <c>Game_Player::ResetGraphic</c> uses. A game with no starting party has
+    /// no hero graphic, which is a valid state and not a failure.
+    /// </summary>
+    private string LeadingActorCharacterName
+    {
+        get
+        {
+            var actorId = LeadingActorId;
+            if (actorId > 0 && TryGetActorCharacterName(actorId, out var name))
+            {
+                return name;
+            }
+            return "";
+        }
+    }
+
+    private int LeadingActorCharacterIndex
+    {
+        get
+        {
+            var actorId = LeadingActorId;
+            if (actorId > 0 && TryGetActorCharacterIndex(actorId, out var index))
+            {
+                return index;
+            }
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// The first starting actor from the LDB <c>system.party</c>, which
+    /// <c>Game_Party::SetupNewGame</c> fills and
+    /// <c>Game_Player::ResetGraphic</c> then reads through
+    /// <c>GetActor(0)</c>. Zero means the game defines no starting party, which
+    /// the Player renders without a hero graphic.
+    /// </summary>
+    private int LeadingActorId
+    {
+        get
+        {
+            var system = SystemData;
+            if (system == null || !system.TryGetValue("party", out var rawParty))
+            {
+                return 0;
+            }
+            var party = rawParty;
+            if (party.VariantType == Godot.Variant.Type.Array)
+            {
+                foreach (var raw in party.AsGodotArray())
+                {
+                    if (raw.VariantType == Godot.Variant.Type.Int)
+                    {
+                        return raw.AsInt32();
+                    }
+                }
+                return 0;
+            }
+            if (party.VariantType == Godot.Variant.Type.PackedInt32Array)
+            {
+                var values = party.AsInt32Array();
+                return values.Length > 0 ? values[0] : 0;
+            }
+            return 0;
+        }
+    }
+
+    /// <summary>
     /// Resolves the command list for a nested CallEvent. RM2K page indices are
     /// one-based; index 0 addresses the first page of the event.
     /// </summary>
@@ -769,6 +2086,17 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return null;
     }
 
+    /// <summary>
+    /// Copies a pixel buffer, so a cached layer can never be modified by the
+    /// frame that is composited from it.
+    /// </summary>
+    private static Rm2kPixelBuffer CopyOf(Rm2kPixelBuffer pSource)
+    {
+        var copy = new Rm2kPixelBuffer(pSource.Width, pSource.Height);
+        Array.Copy(pSource.Pixels, copy.Pixels, pSource.Pixels.Length);
+        return copy;
+    }
+
     private static bool TryReadInt(Godot.Collections.Dictionary pData, string pKey, out int pValue)
     {
         if (!pData.TryGetValue(pKey, out var rawValue))
@@ -784,6 +2112,24 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         catch (InvalidCastException)
         {
             pValue = 0;
+            return false;
+        }
+    }
+
+    private static bool TryReadBool(Godot.Collections.Dictionary pData, string pKey, out bool pValue)
+    {
+        pValue = false;
+        if (!pData.TryGetValue(pKey, out var rawValue))
+        {
+            return false;
+        }
+        try
+        {
+            pValue = (bool)rawValue;
+            return true;
+        }
+        catch (InvalidCastException)
+        {
             return false;
         }
     }

@@ -141,6 +141,16 @@ public static class Rm2kChipset
                 }
                 tileId = substituted;
             }
+            else
+            {
+                // Verified Game_Map::IsPassableLowerTile applies
+                //   tile_id = map_info.lower_tiles[tile_id] + BLOCK_E_INDEX
+                // and an absent table is the identity, so the offset is still
+                // added. Skipping it here read entry 0 instead of entry 18 and
+                // made every block E tile inherit the first autotile's
+                // passability.
+                tileId += BlockEIndex;
+            }
         }
         else if (pLowerRawId >= BlockD)
         {

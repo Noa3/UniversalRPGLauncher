@@ -412,6 +412,35 @@ public partial class TestRm2kChipset : TestBase
             "block A entries are not substituted");
     }
 
+    public void Test_BlockEUsesTheEIndexOffsetWithoutASubstitutionTable()
+    {
+        // Verified Game_Map::IsPassableLowerTile:
+        //     tile_id = tile_raw_id - BLOCK_E;
+        //     tile_id = map_info.lower_tiles[tile_id] + BLOCK_E_INDEX;
+        // The + BLOCK_E_INDEX is applied whether or not a table is present,
+        // because a missing table is the identity, not a skipped offset. So a
+        // map that carries no substitution at all must still resolve block E
+        // against passability entry 18, not entry 0.
+        var lower = new byte[Rm2kChipset.NumLowerTiles];
+        lower[Rm2kChipset.BlockEIndex] = Rm2kChipset.AllDirections;   // 18 passable
+        lower[0] = 0;                                                  // 0 blocked
+
+        AssertEq(Rm2kChipset.IsPassableLowerTile(
+                Rm2kChipset.BlockE, lower, Rm2kChipset.PassDown, null), true,
+            "block E without a substitution table uses the +BLOCK_E_INDEX entry");
+        AssertEq(Rm2kChipset.IsPassableLowerTile(
+                Rm2kChipset.BlockE + 143, lower, Rm2kChipset.PassDown, null), false,
+            "the last block E tile resolves to entry 161, which is blocked here");
+
+        // The same must hold for block C and the blocks below it, which never
+        // take the +BLOCK_E_INDEX path.
+        var lowerC = new byte[Rm2kChipset.NumLowerTiles];
+        lowerC[Rm2kChipset.BlockCIndex] = Rm2kChipset.AllDirections;
+        AssertEq(Rm2kChipset.IsPassableLowerTile(
+                Rm2kChipset.BlockC, lowerC, Rm2kChipset.PassDown, null), true,
+            "a block C tile is unaffected by the block E offset");
+    }
+
     public void Test_SubstitutionFailsClosedOnOutOfRangeTables()
     {
         var lowerFlags = new byte[162];

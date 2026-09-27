@@ -203,6 +203,18 @@ public sealed class WolfDataReader
             }
 
             var bytes = File.ReadAllBytes(pPath);
+            // A real WOLF map is a binary .mps file, so a non JSON payload is
+            // the expected case and not a corrupt file. Reporting the JSON
+            // parser's complaint here would tell the user their game data is
+            // damaged when the truth is that this format is not implemented.
+            if (!LooksLikeJson(bytes))
+            {
+                return Failed<JsonElement>(
+                    $"WOLF data file '{Path.GetFileName(pPath)}' is a binary WOLF file. "
+                    + "The binary WOLF format is not implemented by this runtime, "
+                    + "which currently reads the plain JSON variant only.",
+                    "wolf-format");
+            }
             var text = DecodeUtf8(bytes);
             using var document = JsonDocument.Parse(text, new JsonDocumentOptions
             {
@@ -255,6 +267,31 @@ public sealed class WolfDataReader
     {
         var offset = pBytes.Length >= 3 && pBytes[0] == 0xef && pBytes[1] == 0xbb && pBytes[2] == 0xbf ? 3 : 0;
         return new UTF8Encoding(false, true).GetString(pBytes, offset, pBytes.Length - offset);
+    }
+
+    /// <summary>
+    /// True when the payload plausibly starts a JSON document. A UTF-8 byte
+    /// order mark is skipped, and leading whitespace is allowed, so a normal
+    /// hand written or pretty printed data file is not misreported as binary.
+    /// </summary>
+    internal static bool LooksLikeJson(byte[] pBytes)
+    {
+        var start = 0;
+        if (pBytes.Length >= 3 && pBytes[0] == 0xEF && pBytes[1] == 0xBB && pBytes[2] == 0xBF)
+        {
+            start = 3;
+        }
+        while (start < pBytes.Length)
+        {
+            var c = pBytes[start];
+            if (c is 0x20 or 0x09 or 0x0A or 0x0D)
+            {
+                start++;
+                continue;
+            }
+            return c == (byte)'{';
+        }
+        return false;
     }
 
     internal static bool IsProtected(JsonElement pRoot)

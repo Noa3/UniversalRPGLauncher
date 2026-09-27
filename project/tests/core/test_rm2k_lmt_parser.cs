@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Godot;
 using UniversalRPG.Rm2k.Parser;
+using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
 
 namespace UniversalRPG.Tests.Core;
@@ -57,6 +58,71 @@ partial class TestRm2kLmtParser : TestBase
 		AssertEq(start["party_map_id"].AsInt32(), 30);
 		AssertEq(start["party_x"].AsInt32(), 37);
 		AssertEq(start["party_y"].AsInt32(), 72);
+	}
+
+	public void Test_ARealMapYieldsItsMoveRouteCommands()
+	{
+		// The pinned map is a real LMT, so this proves the route decoder against
+		// a file nobody wrote for the test. A page without a route yields an
+		// empty one, which is the liblcf default, so the assertion is on the
+		// shape of what came back rather than on a specific command.
+		var result = _parser.ParseMap(FixtureRoot.PathJoin("rm2000/Map0001.lmu"));
+		AssertTrue(result.IsSuccess(), DescribeError(result));
+		if (!result.IsSuccess())
+		{
+			return;
+		}
+		var data = result.GetData();
+		var events = (Godot.Collections.Array<Godot.Collections.Dictionary>)data["events"];
+		AssertTrue(events.Count > 0, "the real map has events");
+
+		var pagesWithRoutes = 0;
+		var totalCommands = 0;
+		var totalPages = 0;
+		foreach (var page in AllPages(events))
+		{
+			// A route that failed to decode is reported rather than silently
+			// empty, so a broken page cannot look like a page with no route.
+			totalPages++;
+			var error = ((string)page["move_route_error"]);
+			AssertEq(error, "", $"every page of the real map decodes its move route: {error}");
+
+			var commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)page["move_route_commands"];
+			AssertEq((int)page["move_route_count"], commands.Count,
+				"the reported count matches the commands that were read");
+			if (commands.Count > 0)
+			{
+				pagesWithRoutes++;
+				totalCommands += commands.Count;
+				foreach (var command in commands)
+				{
+					var id = (int)command["command_id"];
+					AssertTrue(id >= 0 && id <= Rm2kMoveRoute.MaxCommandId,
+						$"command {id} is one the format defines");
+				}
+			}
+		}
+		// The pinned map has 22 real event pages and every one of them decodes
+		// cleanly, but none of them defines a move route. Asserting that it does
+		// would be asserting something about the fixture rather than about the
+		// decoder, so the presence of commands is covered by the byte exact
+		// tests in TestRm2kMoveRouteDecoder and a synthetic LMT below.
+		AssertEq(totalPages, 22, "the pinned map has 22 real event pages");
+		AssertEq(pagesWithRoutes, 0,
+			"and none of them defines a move route, which is a property of the fixture");
+		AssertEq(totalCommands, 0, "so no route commands come from it");
+	}
+
+	private static IEnumerable<Godot.Collections.Dictionary> AllPages(
+		Godot.Collections.Array<Godot.Collections.Dictionary> pEvents)
+	{
+		foreach (var pageEvent in pEvents)
+		{
+			foreach (var page in (Godot.Collections.Array<Godot.Collections.Dictionary>)pageEvent["pages"])
+			{
+				yield return page;
+			}
+		}
 	}
 
 	public void Test_ParseRealRm2003MapTree()

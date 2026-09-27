@@ -8,6 +8,47 @@ namespace UniversalRPG.Rm2k;
 /// </summary>
 public class Rm2kMap
 {
+	/// <summary>
+	/// One entry of a move route, matching liblcf's
+	/// <c>rpg::MoveCommand</c>: <c>command_id</c>, <c>parameter_string</c> and
+	/// the three integers <c>parameter_a</c>, <c>parameter_b</c>,
+	/// <c>parameter_c</c>.
+	/// </summary>
+	public class MoveCommand
+	{
+		/// <summary>liblcf <c>MoveCommand::command_id</c>, an
+		/// <c>Enum&lt;MoveCommand_Code&gt;</c>.</summary>
+		public int CommandId;
+
+		/// <summary>liblcf <c>MoveCommand::parameter_string</c>, a DBString.</summary>
+		public string ParameterString = "";
+
+		public int ParameterA;
+		public int ParameterB;
+		public int ParameterC;
+
+		public MoveCommand(int pCommandId = 0, string pParameterString = "", int pA = 0, int pB = 0, int pC = 0)
+		{
+			CommandId = pCommandId;
+			ParameterString = pParameterString;
+			ParameterA = pA;
+			ParameterB = pB;
+			ParameterC = pC;
+		}
+
+		public Dictionary<string, object> ToDict()
+		{
+			return new Dictionary<string, object>
+			{
+				{ "command_id", CommandId },
+				{ "parameter_string", ParameterString },
+				{ "parameter_a", ParameterA },
+				{ "parameter_b", ParameterB },
+				{ "parameter_c", ParameterC },
+			};
+		}
+	}
+
 	/// <summary>Event command for RM2K.</summary>
 	public class EventCommand
 	{
@@ -46,6 +87,23 @@ public class Rm2kMap
 		// liblcf EventPage::Layers (LMU chunk 0x22): 0=below, 1=same, 2=above.
 		public int Layer;
 
+		// liblcf EventPage::move_route, LMU chunk 0x29. The route is a
+		// rpg::MoveRoute struct: move_commands 0x0B size and 0x0C array,
+		// repeat 0x15, skippable 0x16. Defaults are false for skippable and
+		// true for repeat.
+		public List<MoveCommand> MoveRouteCommands { get; } = new();
+
+		/// <summary>liblcf MoveRoute::repeat, default true.</summary>
+		public bool MoveRouteRepeat = true;
+
+		/// <summary>liblcf MoveRoute::skippable, default false.</summary>
+		public bool MoveRouteSkippable;
+
+		// liblcf EventPage::move_frequency, LMU chunk 0x20. The value is the
+		// move frequency, which is the divisor in GetMaxStopCountForStep and
+		// not the per update step amount.
+		public int MoveFrequency;
+
 		public Dictionary<string, object> ToDict()
 		{
 			return new Dictionary<string, object>
@@ -54,6 +112,9 @@ public class Rm2kMap
 				{ "commands_count", Commands.Count },
 				{ "graphic", Graphic },
 				{ "trigger", Trigger },
+				{ "move_route_count", MoveRouteCommands.Count },
+				{ "move_route_repeat", MoveRouteRepeat },
+				{ "move_frequency", MoveFrequency },
 			};
 		}
 	}
@@ -65,6 +126,20 @@ public class Rm2kMap
 		public int X;
 		public int Y;
 		public List<EventPage> Pages { get; } = new();
+
+		// LMT chunk 0x15, liblcf Event::character_name.
+		public string CharacterName = string.Empty;
+
+		// LMT chunk 0x16, liblcf Event::character_index.
+		public int CharacterIndex;
+
+		// LMT chunk 0x17, liblcf Event::character_direction, stored as this
+		// project stores directions: 2 down, 4 left, 6 right, 8 up.
+		public byte Direction = 2;
+
+		// LMT chunk 0x19, liblcf Event::character_pattern. This is the
+		// initial anim_frame, so a page can start on a given walk pose.
+		public int AnimationFrame;
 
 		public Event(int pId = 0, int pX = 0, int pY = 0)
 		{

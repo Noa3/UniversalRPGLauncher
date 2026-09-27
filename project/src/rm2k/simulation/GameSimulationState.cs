@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using UniversalRPG.Rm2k.Rendering;
 
 namespace UniversalRPG.Rm2k.Simulation;
 
@@ -30,6 +31,60 @@ public sealed class GameSimulationState
     public int Gold { get; set; } = 0;
     public int FrameCount { get; set; } = 0;
     public int Steps { get; set; } = 0;
+
+    /// <summary>
+    /// The unspent part of the current tile step, in
+    /// <see cref="Rm2kStepBudget.ScreenTileSize"/> units. Zero while the hero
+    /// stands still. A started move fills it, and every update subtracts the
+    /// per frame amount, which is what makes a move take sixteen updates at
+    /// the default move speed instead of one call.
+    /// </summary>
+    public int RemainingStep { get; set; } = 0;
+
+    /// <summary>
+    /// The character walk animation state, verified from
+    /// <c>Game_Character::anim_frame</c> and <c>anim_count</c>. These are not
+    /// the tile animation counters: they drive the character sprites only, and
+    /// they rotate over four values, the fourth of which is drawn as the
+    /// middle frame.
+    /// </summary>
+    public int CharacterFrame { get; set; } = Rm2kCharacterAnimation.FrameMiddle;
+
+    /// <summary>
+    /// <c>Game_Character::anim_count</c>: ticks accumulated towards the next
+    /// visible frame change.
+    /// </summary>
+    public int CharacterAnimCount { get; set; } = 0;
+
+    /// <summary>
+    /// The hero move speed, one based because the upstream animation tables
+    /// are one based. The default in an RPG Maker 2000 database is 3.
+    /// </summary>
+    public int HeroMoveSpeed { get; set; } = 3;
+
+    /// <summary>
+    /// Advances the character walk animation by one update tick, using
+    /// <see cref="Rm2kCharacterAnimation.Update"/>. The hero counts
+    /// down its stop count while standing, so a stopped hero reaches the
+    /// stationary limit; a moving hero is continuous and reaches the lower
+    /// continuous limit instead.
+    /// </summary>
+    public void UpdateCharacterAnimation(bool pMoving)
+    {
+        if (RemainingStep > 0)
+        {
+            (RemainingStep, _) = Rm2kStepBudget.Advance(RemainingStep, HeroMoveSpeed);
+        }
+        var updated = Rm2kCharacterAnimation.Update(
+            CharacterFrame,
+            CharacterAnimCount,
+            pMoving ? 0 : 1,
+            HeroMoveSpeed,
+            pAnimated: true,
+            pContinuous: pMoving);
+        CharacterFrame = updated.Frame;
+        CharacterAnimCount = updated.Count;
+    }
     public int FrameRate { get; set; } = 60;
 
     /// <summary>Chipset <c>animation_type</c>: 0 reciprocating, 1 cyclic.</summary>
@@ -391,6 +446,22 @@ public sealed class GameSimulationState
     }
 
     /// <summary>True when the tile is walkable in the requested direction.</summary>
+    /// <summary>
+    /// Overrides the passability masks for a test. A route that is refused at a
+    /// wall needs a map with a wall, and the real passability comes from the
+    /// database's chipset, so a test cannot describe one through a file without
+    /// inventing a chipset. This replaces the masks outright and is a no-op on
+    /// the shipped path, which is why it lives behind a ForTest name.
+    /// </summary>
+    public void OverridePassabilityMasksForTest(IEnumerable<byte> pDirectionMasks)
+    {
+        PassabilityMasks.Clear();
+        foreach (var mask in pDirectionMasks)
+        {
+            PassabilityMasks.Add(mask);
+        }
+    }
+
     public bool IsPassableInDirection(int pX, int pY, byte pDirectionBit)
     {
         if (pX < 0 || pY < 0 || pX >= MapWidth || pY >= MapHeight)
@@ -417,13 +488,30 @@ public sealed class GameSimulationState
             return false;
         }
         var directionBit = Rm2kChipset.DirectionBit(pDeltaX, pDeltaY);
-        if (!IsPassableInDirection(targetX, targetY, directionBit))
+        // Verified Game_Map::IsPassable: bit_from is the direction leaving the
+        // current tile and bit_to is the opposite direction on the target tile.
+        // Both are checked, so a one way tile or a blocked tile the player
+        // stands on both refuse the step. Checking only the target let a player
+        // walk out of an impassable tile, which the Player never allows.
+        var reverseBit = Rm2kChipset.DirectionBit(-pDeltaX, -pDeltaY);
+        if (!IsPassableInDirection(MapX, MapY, directionBit))
+        {
+            AddDiagnostic("Movement blocked by the passability of the tile being left.");
+            return false;
+        }
+        if (!IsPassableInDirection(targetX, targetY, reverseBit))
         {
             AddDiagnostic("Movement blocked by tile passability.");
             return false;
         }
+        // Game_Character::Move sets the logical tile to the target immediately
+        // and fills remaining_step to SCREEN_TILE_SIZE, so the sprite walks
+        // across the tile it just entered rather than snapping. The drawn
+        // position comes from that budget, so filling it here is what makes the
+        // move take HeroMoveSpeed worth of updates instead of a single call.
         MapX = targetX;
         MapY = targetY;
+        RemainingStep = Rm2kStepBudget.ScreenTileSize;
         Steps += 1;
         return true;
     }
@@ -432,6 +520,12 @@ public sealed class GameSimulationState
     {
         MapId = 0; MapX = 0; MapY = 0; FacingDirection = 2;
         Gold = 0; FrameCount = 0; Steps = 0;
+        // A half finished step must not survive into a new game, or the hero
+        // would start walking on a tile it is not standing on.
+        RemainingStep = 0;
+        CharacterFrame = Rm2kCharacterAnimation.FrameMiddle;
+        CharacterAnimCount = 0;
+        HeroMoveSpeed = 3;
         Timer1Active = false; Timer2Active = false; Timer1Seconds = 0; Timer2Seconds = 0; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;

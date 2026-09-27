@@ -83,6 +83,12 @@ public partial class Rm2kParser : RefCounted
 
 	public const int MaxLdbStringBytes = 1024 * 1024;
 
+	/// <summary>
+	/// RPG Maker caps the starting party and the menu command list well below
+	/// this; the limit only stops a malformed chunk from allocating.
+	/// </summary>
+	public const int MaxSystemArrayEntries = 4096;
+
 	// Field IDs verified against EasyRPG liblcf src/generated/lcf/ldb/chunks.h
 	// (struct ChunkActor). Only scalar header fields are decoded; nested
 	// structures (parameters, equipment, skills) stay raw for later cards.
@@ -259,6 +265,44 @@ public partial class Rm2kParser : RefCounted
 		{ 0xcc, "fixed_actor_facing_direction" }, { 0xcd, "fixed_enemy_facing_direction" },
 	};
 
+	private static readonly Dictionary<int, string> LdbSystemFieldNames = new()
+	{
+		// Verified liblcf src/generated/lcf/ldb/chunks.h, struct ChunkSystem.
+		// The three vehicle names and indices are the only graphic references the
+		// Player uses for a vehicle, and the party list is the size/data pair
+		// party_size 0x15 plus party 0x16.
+		{ 0x0b, "boat_name" }, { 0x0c, "ship_name" }, { 0x0d, "airship_name" },
+		{ 0x0e, "boat_index" }, { 0x0f, "ship_index" }, { 0x10, "airship_index" },
+		{ 0x11, "title_name" }, { 0x12, "gameover_name" },
+		{ 0x13, "system_name" }, { 0x14, "system2_name" },
+		{ 0x15, "party_size" }, { 0x16, "party" },
+		{ 0x1a, "menu_commands_size" }, { 0x1b, "menu_commands" },
+		{ 0x47, "message_stretch" }, { 0x48, "font_id" },
+		{ 0x51, "selected_condition" }, { 0x52, "selected_hero" },
+		{ 0x5b, "save_count" }, { 0x61, "equipment_setting" },
+		{ 0x63, "show_frame" }, { 0x64, "frame_name" },
+		{ 0x65, "invert_animations" }, { 0x6f, "show_title" },
+		{ 0xc8, "easyrpg_alternative_exp" }, { 0xc9, "easyrpg_battle_options" },
+	};
+
+	/// <summary>
+	/// Verified liblcf ChunkSystem field ids that are arrays of int16, so their
+	/// size field and data field sit next to each other.
+	/// </summary>
+	private static readonly Dictionary<int, int> LdbSystemArrayFields = new()
+	{
+		{ 0x16, 0x15 },
+		{ 0x1b, 0x1a },
+	};
+
+	private static readonly Dictionary<int, string> LdbSystemStringFields = new()
+	{
+		{ 0x0b, "boat_name" }, { 0x0c, "ship_name" }, { 0x0d, "airship_name" },
+		{ 0x11, "title_name" }, { 0x12, "gameover_name" },
+		{ 0x13, "system_name" }, { 0x14, "system2_name" },
+		{ 0x64, "frame_name" },
+	};
+
 	private readonly LegacyTextDecoder _textDecoder = new();
 
 	public class ParseError
@@ -381,6 +425,15 @@ public partial class Rm2kParser : RefCounted
 		var switches = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var variables = new Godot.Collections.Array<Godot.Collections.Dictionary>();
 		var battleCommands = new Godot.Collections.Dictionary();
+		// liblcf rpg::System defaults, so a database without a system chunk
+		// still exposes the starting party and the vehicle graphics as empty.
+		var system = new Godot.Collections.Dictionary
+		{
+			{ "party", new Godot.Collections.Array<long>() },
+			{ "boat_name", "" }, { "ship_name", "" }, { "airship_name", "" },
+			{ "boat_index", 0 }, { "ship_index", 0 }, { "airship_index", 0 },
+			{ "unknown_fields", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+		};
 		var engineFamily = "RPG Maker 2000";
 		var version = 0;
 		Godot.Collections.Array<Godot.Collections.Dictionary>? chipsetPassabilityObjects = null;
@@ -496,6 +549,32 @@ public partial class Rm2kParser : RefCounted
 				section["count"] = 1;
 				sectionCounts[sectionName] = 1;
 			}
+			if (id == 0x16)
+			{
+				// liblcf LDB_Reader::ChunkSystem declares the system chunk as a
+				// struct: a size/data pair for every field, so the party list is
+				// party_size 0x15 with data 0x16. The three vehicle names and
+				// indices are plain scalars, and they are the only reference the
+				// Player uses to place a vehicle graphic.
+				var systemResult = DecodeLdbSystem((byte[])chunk["data"]);
+				if (!systemResult.Success)
+				{
+					return Failure($"{sectionName} section: {systemResult.Error!.Message}",
+						(int)chunk["payload_offset"] + Math.Max(systemResult.Error.Offset, 0));
+				}
+				var decoded = (Godot.Collections.Dictionary)systemResult.Data["entry"];
+				foreach (var pair in decoded)
+				{
+					if (pair.Key.ToString() == "unknown_fields")
+					{
+						system["unknown_fields"] = pair.Value;
+						continue;
+					}
+					system[pair.Key] = pair.Value;
+				}
+				section["count"] = 1;
+				sectionCounts[sectionName] = 1;
+			}
 			if (id == 0x1a)
 			{
 				var integer = DecodeLcfInteger((byte[])chunk["data"]);
@@ -549,6 +628,7 @@ public partial class Rm2kParser : RefCounted
 			{ "switches", switches },
 			{ "variables", variables },
 			{ "battle_commands", battleCommands },
+			{ "system", system },
 			{ "version", version },
 			{ "engine_family", engineFamily },
 		});
@@ -603,6 +683,115 @@ public partial class Rm2kParser : RefCounted
 			}
 			entry[fieldName] = integerResult.Data["value"];
 		}
+		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entry", entry } });
+	}
+
+	/// <summary>
+	/// Decodes the LDB system chunk. The Player uses it for the starting party
+	/// (<c>Game_Party::SetupNewGame</c> copies <c>Data::system.party</c>) and
+	/// for the three vehicle graphics, so both are typed and every other field
+	/// keeps its id, count and framing in <c>unknown_fields</c>.
+	/// </summary>
+	private ParseResult DecodeLdbSystem(byte[] pData)
+	{
+		var reader = new LcfBinaryReader(pData);
+		var fieldsResult = ReadStructFields(reader);
+		if (!fieldsResult.Success)
+		{
+			return fieldsResult;
+		}
+		if (!reader.IsEof())
+		{
+			return Failure("System section has trailing data", reader.GetPosition());
+		}
+
+		// The caller already seeded liblcf's defaults, so this only overwrites
+		// the fields the chunk actually carries and keeps the rest.
+		var entry = new Godot.Collections.Dictionary();
+		var unknownFields = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+		var byId = new Dictionary<int, byte[]>();
+		foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)fieldsResult.Data["fields"])
+		{
+			byId[(int)field["id"]] = (byte[])field["data"];
+		}
+
+		foreach (var pair in LdbSystemArrayFields)
+		{
+			var dataId = pair.Key;
+			var sizeId = pair.Value;
+			if (!byId.TryGetValue(dataId, out var data) || data.Length == 0)
+			{
+				continue;
+			}
+			// The size field is authoritative for the count, and liblcf keeps
+			// every value even when the data is longer than the declared size.
+			var declared = 0;
+			if (byId.TryGetValue(sizeId, out var sizeData))
+			{
+				var sizeResult = DecodeLdbIntegerField(sizeData, $"system size 0x{sizeId:X}");
+				if (!sizeResult.Success)
+				{
+					return sizeResult;
+				}
+				declared = (int)sizeResult.Data["value"];
+			}
+			var values = new Godot.Collections.Array<long>();
+			var count = Math.Min(declared, data.Length / 2);
+			if (declared < 0 || declared > MaxSystemArrayEntries)
+			{
+				return Failure($"System array 0x{dataId:X} declares {declared} entries", 0);
+			}
+			for (var index = 0; index < count; index++)
+			{
+				values.Add((short)(data[index * 2] | (data[index * 2 + 1] << 8)));
+			}
+			entry[LdbSystemFieldNames[dataId]] = values;
+		}
+
+		foreach (var pair in LdbSystemStringFields)
+		{
+			if (!byId.TryGetValue(pair.Key, out var data))
+			{
+				continue;
+			}
+			var textResult = DecodeLdbString(data, $"system {pair.Value}");
+			if (!textResult.Success)
+			{
+				return textResult;
+			}
+			entry[pair.Value] = textResult.Data["value"];
+		}
+
+		foreach (var pair in LdbSystemFieldNames)
+		{
+			if (LdbSystemArrayFields.ContainsKey(pair.Key) || LdbSystemStringFields.ContainsKey(pair.Key))
+			{
+				continue;
+			}
+			if (!byId.TryGetValue(pair.Key, out var data))
+			{
+				continue;
+			}
+			if (pair.Key is 0x0e or 0x0f or 0x10 or 0x48 or 0x51 or 0x5b)
+			{
+				var integerResult = DecodeLdbIntegerField(data, $"system {pair.Value}");
+				if (!integerResult.Success)
+				{
+					return integerResult;
+				}
+				entry[pair.Value] = integerResult.Data["value"];
+			}
+		}
+
+		foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)fieldsResult.Data["fields"])
+		{
+			var fieldId = (int)field["id"];
+			if (!LdbSystemFieldNames.ContainsKey(fieldId))
+			{
+				unknownFields.Add(field);
+			}
+		}
+		entry["unknown_fields"] = unknownFields;
 		return new ParseResult(true, null, new Godot.Collections.Dictionary { { "entry", entry } });
 	}
 
@@ -959,6 +1148,10 @@ public partial class Rm2kParser : RefCounted
 			foreach (var eventObject in (Godot.Collections.Array<Godot.Collections.Dictionary>)eventArray.Data["objects"])
 			{
 				var eventFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)eventObject["fields"]);
+				var eventCharacterName = string.Empty;
+				var eventCharacterIndex = 0;
+				var eventDirection = 2;
+				var eventPattern = 0;
 				var xResult = IntegerFromFields(eventFields, 0x02, 0);
 				var yResult = IntegerFromFields(eventFields, 0x03, 0);
 				if (!xResult.Success || !yResult.Success)
@@ -980,6 +1173,25 @@ public partial class Rm2kParser : RefCounted
 					foreach (var pageObj in (Godot.Collections.Array<Godot.Collections.Dictionary>)pages.Data["objects"])
 					{
 						var pageFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)pageObj["fields"]);
+						// LMT character fields, verified in liblcf LMU_Reader:
+						// character_name 0x15, character_index 0x16,
+						// character_direction 0x17, character_pattern 0x19.
+						eventCharacterName = ReadRm2kStringField(eventFields, 0x15);
+						var indexResult = IntegerFromFields(eventFields, 0x16, 0);
+						if (indexResult.Success)
+						{
+							eventCharacterIndex = (int)indexResult.Data["value"];
+						}
+						var directionResult = IntegerFromFields(eventFields, 0x17, 2);
+						if (directionResult.Success)
+						{
+							eventDirection = (int)directionResult.Data["value"];
+						}
+						var patternResult = IntegerFromFields(eventFields, 0x19, 0);
+						if (patternResult.Success)
+						{
+							eventPattern = (int)patternResult.Data["value"];
+						}
 						// liblcf LMU_Reader::ChunkEventPage: trigger 0x21, layer 0x22,
 						// move_frequency 0x20, condition 0x02, move_route 0x29,
 						// event_commands 0x34. No other ids are verified.
@@ -1015,6 +1227,18 @@ public partial class Rm2kParser : RefCounted
 						conditionData = conditionResult.Data;
 					}
 
+					// Defaults for the move route, replaced by the decoder when the
+					// page actually carries one. liblcf defaults every field, so an
+					// absent route is an empty one rather than a failure.
+					var moveRouteData = new Godot.Collections.Dictionary
+					{
+						{ "move_commands", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
+						{ "command_count", 0 },
+						{ "repeat", true },
+						{ "skippable", false },
+					};
+					var moveRouteError = "";
+
 					var hasMoveList = pageFields.ContainsKey(0x29);
 					var hasList = pageFields.ContainsKey(0x34);
 					var commandSizeResult = IntegerFromFields(pageFields, 0x33, -1);
@@ -1045,6 +1269,21 @@ public partial class Rm2kParser : RefCounted
 						}
 					}
 
+					var moveRouteResult = Rm2kMoveRouteDecoder.Decode(pageFields);
+					if (moveRouteResult.Success)
+					{
+						moveRouteData = moveRouteResult.Data;
+					}
+					else
+					{
+						// A route that cannot be read makes this page's route
+						// unusable, but the rest of the page is still valid, so the
+						// failure is contained here rather than failing the map. The
+						// defaults stay in place, which is the same shape as a page
+						// that never had a route, and the error says which it was.
+						moveRouteError = moveRouteResult.Error!.Describe();
+					}
+
 					pageList.Add(new Godot.Collections.Dictionary
 					{
         { "trigger", (int)triggerResult.Data["value"] },
@@ -1060,6 +1299,14 @@ public partial class Rm2kParser : RefCounted
 						{ "conditions", conditionData },
 						{ "has_move_list", hasMoveList },
 						{ "has_command_list", hasList },
+						// liblcf EventPage::move_route is LMU chunk 0x29, a
+						// rpg::MoveRoute: move_commands 0x0B and 0x0C, repeat 0x15,
+						// skippable 0x16.
+						{ "move_route_commands", moveRouteData["move_commands"] },
+						{ "move_route_count", (int)moveRouteData["command_count"] },
+						{ "move_route_repeat", (bool)moveRouteData["repeat"] },
+						{ "move_route_skippable", (bool)moveRouteData["skippable"] },
+						{ "move_route_error", moveRouteError },
 						// liblcf ChunkEventPage::event_commands_size (0x33) is the declared
 						// payload size of the command vector; -1 marks pages that omit it.
 						{ "event_commands_size", (int)commandSizeResult.Data["value"] },
@@ -1074,6 +1321,11 @@ public partial class Rm2kParser : RefCounted
 						{ "name", DecodeTextField(eventFields, 0x01) },
 						{ "x", (int)xResult.Data["value"] },
 						{ "y", (int)yResult.Data["value"] },
+						// LMT character fields, the verified chunk ids.
+						{ "character_name", eventCharacterName },
+						{ "character_index", eventCharacterIndex },
+						{ "character_direction", eventDirection },
+						{ "character_pattern", eventPattern },
 						{ "page_count", pageCount },
 						{ "pages", pageList },
 					});
@@ -1086,6 +1338,10 @@ public partial class Rm2kParser : RefCounted
 						{ "name", DecodeTextField(eventFields, 0x01) },
 						{ "x", (int)xResult.Data["value"] },
 						{ "y", (int)yResult.Data["value"] },
+						{ "character_name", eventCharacterName },
+						{ "character_index", eventCharacterIndex },
+						{ "character_direction", eventDirection },
+						{ "character_pattern", eventPattern },
 						{ "page_count", 0 },
 						{ "pages", new Godot.Collections.Array<Godot.Collections.Dictionary>() },
 					});
@@ -1570,6 +1826,30 @@ public partial class Rm2kParser : RefCounted
 			fieldCount += 1;
 		}
 		return Failure("Structure is missing terminator", pReader.GetPosition());
+	}
+
+	/// <summary>
+	/// Reads a nested struct chunk into a field dictionary keyed by chunk id.
+	/// The move route decoder needs this because 0x0B and 0x0C live inside the
+	/// page's 0x29 chunk rather than beside it.
+	/// </summary>
+	internal static ParseResult ReadNestedStructFieldsForMoveRoute(Godot.Collections.Dictionary pChunk)
+	{
+		// A chunk that is not a byte payload is reported, not thrown: a map with
+		// one damaged page field must not make the whole map unparseable, and an
+		// exception here would escape the parser's own error handling.
+		if (!pChunk.TryGetValue("data", out var rawData) || rawData.VariantType != Variant.Type.PackedByteArray)
+		{
+			return new ParseResult(false,
+				new ParseError(-1, "The move route chunk carries no byte payload"), null);
+		}
+		var nested = ReadNestedStructFields(pChunk);
+		if (!nested.Success)
+		{
+			return nested;
+		}
+		return new ParseResult(true, null, ChunksById(
+			(Godot.Collections.Array<Godot.Collections.Dictionary>)nested.Data["fields"]));
 	}
 
 	private static ParseResult ReadNestedStructFields(Godot.Collections.Dictionary pChunk)

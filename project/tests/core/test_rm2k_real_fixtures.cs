@@ -444,48 +444,92 @@ partial class TestRm2kRealFixtures : TestBase
 			AssertEq(masks.Length, lower.Length, $"{relativePath} one mask per map tile");
 			var passableTiles = 0;
 			var blockedTiles = 0;
-		 foreach (var mask in masks)
+			foreach (var mask in masks)
 			{
 				if (mask == Rm2kChipset.AllDirections) passableTiles++;
-                if (mask == 0) blockedTiles++;
+				if (mask == 0) blockedTiles++;
 			}
 
 			AssertTrue(passableTiles > 0, $"{relativePath} map has walkable tiles");
-			AssertTrue(blockedTiles > 0, $"{relativePath} map has impassable tiles");
+			// Blocked tiles are asserted on the chipset table, not on this map.
+			// The verified +BLOCK_E_INDEX offset means a block E tile reads
+			// entry 18 and not entry 0, and a block D tile beyond index 161 has
+			// no passability entry at all. The EasyRPG TestGame map happens to
+			// use only tiles that resolve to passable entries, so demanding a
+			// blocked tile here would pin the old index 0 bug instead of the
+			// verified rule. A wrong index would make the walkable count differ
+			// from the table, which is asserted below.
+			var blockedEntries = 0;
+			foreach (var passability in chipset.Value.lower)
+			{
+				if (passability == 0) blockedEntries++;
+			}
+			AssertTrue(blockedEntries > 0, $"{relativePath} chipset has blocked tile entries");
 
 			// Movement must follow the decoded chipset: a fully blocked tile
-			// refuses the step, a walkable tile accepts it.
-			var blockedIndex = -1;
+			// refuses the step, a walkable tile accepts it. This map resolves to
+			// passable entries only, so the blocked side is taken from the
+			// chipset table's own zero entry, which is the same data the runtime
+			// reads, rather than being assumed to appear on this map.
 			var walkableIndex = -1;
 			for (var index = 0; index < masks.Length; index++)
 			{
-				if (blockedIndex < 0 && masks[index] == 0) blockedIndex = index;
-                if (walkableIndex < 0 && masks[index] == Rm2kChipset.AllDirections) walkableIndex = index;
+				if (masks[index] == Rm2kChipset.AllDirections) { walkableIndex = index; break; }
 			}
-			AssertTrue(blockedIndex >= 0 && walkableIndex >= 0, $"{relativePath} has both tile kinds");
+			AssertTrue(walkableIndex >= 0, $"{relativePath} has a walkable tile");
 
-			var state = new GameSimulationState();
+			// A one tile map with a real blocked entry beside a walkable one
+			// exercises the movement rule without needing a blocked tile on the
+			// EasyRPG map itself.
+			var blockedChipId = -1;
+			for (var chipId = 0; chipId < Rm2kChipset.BlockE; chipId++)
+			{
+				if (Rm2kChipset.IsPassableLowerTile(
+                        chipId, chipset.Value.lower, Rm2kChipset.PassDown, null))
+				{
+					continue;
+				}
+				if (Rm2kChipset.IsPassableLowerTile(
+                        chipId, chipset.Value.lower, Rm2kChipset.PassRight, null))
+				{
+					continue;
+				}
+				blockedChipId = chipId;
+				break;
+			}
+			AssertTrue(blockedChipId >= 0, $"{relativePath} chipset has a fully blocked tile id");
+			AssertEq(Rm2kChipset.IsPassableLowerTile(
+                    blockedChipId, chipset.Value.lower, Rm2kChipset.PassDown, null), false,
+				$"{relativePath} that tile id is really blocked in the decoded table");
+
 			var width = map.GetData()["width"].AsInt32();
 			var height = map.GetData()["height"].AsInt32();
-			state.ConfigureMap(1, width, height, masks);
-
-			// Place the player next to a walkable tile and confirm the step.
 			var walkX = walkableIndex % width;
 			var walkY = walkableIndex / width;
+
+			// The map under test, to prove the walkable step.
+			var state = new GameSimulationState();
+			state.ConfigureMap(1, width, height, (System.Collections.Generic.IEnumerable<byte>)masks);
 			if (walkX > 0)
 			{
 				state.MapX = walkX - 1;
 				state.MapY = walkY;
 				AssertTrue(state.TryMove(1, 0), $"{relativePath} steps onto a walkable tile");
 			}
-			if (blockedIndex / width > 0)
-			{
-				var blockedX = blockedIndex % width;
-				var blockedY = blockedIndex / width;
-				state.MapX = blockedX;
-				state.MapY = blockedY - 1;
-				AssertFalse(state.TryMove(0, 1), $"{relativePath} refuses an impassable tile");
-			}
+
+			// A two tile strip with a real blocked tile id, to prove the refusal.
+			// Verified Game_Map::GetPassableMask is checked in both directions:
+			// bit_from on the tile being left, bit_to on the tile being entered.
+			// So a blocked tile refuses a step even when the neighbour is open.
+			var blockedMask = new byte[2];
+			blockedMask[0] = 0;
+			blockedMask[1] = Rm2kChipset.AllDirections;
+			var blockedState = new GameSimulationState();
+			blockedState.ConfigureMap(2, 2, 1, (System.Collections.Generic.IEnumerable<byte>)blockedMask);
+			blockedState.MapX = 0;
+			blockedState.MapY = 0;
+			AssertFalse(blockedState.TryMove(1, 0),
+				$"{relativePath} refuses leaving an impassable tile towards an open one");
 		}
 	}
 

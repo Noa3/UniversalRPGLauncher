@@ -46,6 +46,75 @@ public sealed class Rm2kPixelBuffer
     {
         Array.Clear(Pixels);
     }
+
+    /// <summary>
+    /// Copies a rectangular region of this buffer into another one. Used to cut
+    /// the visible screen out of a cached full map buffer, which is how the
+    /// Player's two static tile sprites are scrolled by an offset: the layers
+    /// stay whole and the viewport reads a window out of them.
+    /// </summary>
+    /// <param name="pSourceX">Left edge of the region, in this buffer's pixels.</param>
+    /// <param name="pSourceY">Top edge of the region, in this buffer's pixels.</param>
+    /// <param name="pWidth">Region width in pixels; copied entirely or refused.</param>
+    /// <param name="pHeight">Region height in pixels; copied entirely or refused.</param>
+    /// <param name="pTarget">Destination buffer.</param>
+    /// <param name="pTargetX">Left edge of the region in the destination.</param>
+    /// <param name="pTargetY">Top edge of the region in the destination.</param>
+    /// <returns>
+    /// False when the region is not fully inside the source, which happens for
+    /// a viewport near a map edge. The caller then has to decide between a
+    /// partial window and a black border, so it is not silently clipped here.
+    /// </returns>
+    public bool TryCopyRegion(
+        int pSourceX, int pSourceY, int pWidth, int pHeight,
+        Rm2kPixelBuffer pTarget, int pTargetX, int pTargetY)
+    {
+        ArgumentNullException.ThrowIfNull(pTarget);
+        if (pWidth <= 0 || pHeight <= 0)
+        {
+            return false;
+        }
+        if (pSourceX < 0 || pSourceY < 0
+            || pSourceX + pWidth > Width || pSourceY + pHeight > Height
+            || pTargetX < 0 || pTargetY < 0
+            || pTargetX + pWidth > pTarget.Width || pTargetY + pHeight > pTarget.Height)
+        {
+            return false;
+        }
+        for (var row = 0; row < pHeight; row++)
+        {
+            var source = ((pSourceY + row) * Width + pSourceX) * 4;
+            var destination = ((pTargetY + row) * pTarget.Width + pTargetX) * 4;
+            Array.Copy(Pixels, source, pTarget.Pixels, destination, pWidth * 4);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Copies another buffer over this one, keeping this buffer's pixels where
+    /// the source is transparent. This is the verified transparency rule the
+    /// chipset blit uses: an upper tile that is transparent must not erase the
+    /// lower layer, which is how a hero behind a wall stays hidden.
+    /// </summary>
+    public void PaintOver(Rm2kPixelBuffer pSource)
+    {
+        ArgumentNullException.ThrowIfNull(pSource);
+        if (pSource.Width != Width || pSource.Height != Height)
+        {
+            throw new ArgumentException("Buffers must have the same dimensions.", nameof(pSource));
+        }
+        for (var offset = 0; offset < Pixels.Length; offset += 4)
+        {
+            if (pSource.Pixels[offset + 3] == 0)
+            {
+                continue;
+            }
+            Pixels[offset] = pSource.Pixels[offset];
+            Pixels[offset + 1] = pSource.Pixels[offset + 1];
+            Pixels[offset + 2] = pSource.Pixels[offset + 2];
+            Pixels[offset + 3] = pSource.Pixels[offset + 3];
+        }
+    }
 }
 
 /// <summary>

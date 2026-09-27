@@ -40,6 +40,40 @@ public partial class TestWolfRuntime : TestBase
         AssertEq(project.Value?.Maps[0].Events.Count, 1);
     }
 
+    /// <summary>
+    /// A real WOLF map is a binary .mps file, not JSON. The reader must say so
+    /// precisely instead of failing with a JSON parse error, because "this
+    /// runtime cannot read the format yet" and "this file is corrupt" are
+    /// different diagnoses for the user.
+    /// </summary>
+    public void Test_RealBinaryWolfMapIsRejectedAsUnsupportedFormatNotAsCorruptJson()
+    {
+        var root = Global(TempBase);
+        var real = Path.Combine(root, "Data", "MapData", "Map002.mps");
+        Directory.CreateDirectory(Path.GetDirectoryName(real)!);
+        // The verified WolfRPG MapData header from the published .mps format
+        // description: ten zero bytes, then "WOLFM", then a zero byte. The
+        // exact bytes matter only in that they are not JSON, which is the
+        // whole point of the assertion.
+        File.WriteAllBytes(real, new byte[]
+        {
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            (byte)'W', (byte)'O', (byte)'L', (byte)'F', (byte)'M', 0,
+            0x65,
+        });
+
+        var reader = new WolfMapReader(new WolfParseLimits());
+        var result = reader.Read(real);
+
+        AssertTrue(!result.Success, "a binary WOLF map is not readable by the JSON reader");
+        var message = result.Error?.Message ?? "";
+        AssertTrue(message.Contains("binary") || message.Contains("unsupported", StringComparison.OrdinalIgnoreCase),
+            $"the diagnostic names the format as binary or unsupported, but it said: {message}");
+        AssertTrue(!message.Contains("invalid JSON", StringComparison.OrdinalIgnoreCase)
+                && !message.Contains("Expected ':'", StringComparison.OrdinalIgnoreCase),
+            $"the diagnostic does not blame the JSON parser for a binary file, but it said: {message}");
+    }
+
     public void Test_WolfPluginRuntimeLoadsDataAndAdvancesDeterministicEventVm()
     {
         var game = new PluginGameInfo

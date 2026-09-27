@@ -76,11 +76,17 @@ public sealed class Rm2kMapFrameRenderer
     /// <c>Layers_same = 1</c> shares the hero priority, and <c>Layers_above = 2</c>
     /// is drawn after the upper layer. The hero is always in the hero stage.
     /// </summary>
+    /// <param name="pTarget">Frame to paint into.</param>
+    /// <param name="pMap">
+    /// Map geometry. Accepted for symmetry with the tile passes and validated,
+    /// but a character is placed by its own tile coordinates, so it is not read:
+    /// the Player's character sprites are independent of the tilemap sprite.
+    /// </param>
+    /// <param name="pSprites">Characters to consider; a null set draws nothing.</param>
     public int RenderSprites(
-        Rm2kPixelBuffer pTarget, Rm2kMapLayers pMap, IEnumerable<Rm2kCharacterSprite> pSprites)
+        Rm2kPixelBuffer pTarget, Rm2kMapLayers? pMap, IEnumerable<Rm2kCharacterSprite> pSprites)
     {
         ArgumentNullException.ThrowIfNull(pTarget);
-        ArgumentNullException.ThrowIfNull(pMap);
         if (pSprites == null)
         {
             return 0;
@@ -93,7 +99,8 @@ public sealed class Rm2kMapFrameRenderer
                 continue;
             }
             if (!sprite.Charset.TryDrawCharacter(
-                sprite.CharacterIndex, sprite.FacingDirection, sprite.Frame, pTarget, sprite.MapX, sprite.MapY))
+                sprite.CharacterIndex, sprite.FacingDirection, sprite.Frame, pTarget,
+                sprite.MapX, sprite.MapY, sprite.PixelOffsetX, sprite.PixelOffsetY))
             {
                 sprite.Skipped = true;
                 continue;
@@ -101,6 +108,45 @@ public sealed class Rm2kMapFrameRenderer
             drawn++;
         }
         return drawn;
+    }
+
+    /// <summary>
+    /// Draws a vehicle. A vehicle is a character cell like any other, with one
+    /// difference: it is drawn a whole number of tiles above the map, so the
+    /// altitude has to come off the vertical offset rather than out of the map
+    /// position.
+    /// </summary>
+    /// <param name="pTarget">Frame to paint into.</param>
+    /// <param name="pCharset">The charset the System section named.</param>
+    /// <param name="pVehicle">The vehicle to draw.</param>
+    /// <param name="pOffsetX">The camera scroll in x, like a character sprite.</param>
+    /// <param name="pOffsetY">The camera scroll in y, like a character sprite.</param>
+    /// <param name="pTileSize">
+    /// Pixels per map tile, from <c>TILE_SIZE</c>. The altitude is counted in
+    /// tiles, so the pixel offset is the altitude times this.
+    /// </param>
+    /// <returns>True when the cell was drawn.</returns>
+    /// <remarks>
+    /// The Player draws a vehicle through the same <c>Sprite_Character</c> as
+    /// every other character and applies the altitude in
+    /// <c>GetScreenY</c>, so a vehicle is composited at the hero stage and not
+    /// as a separate pass. Giving it its own stage would put it behind or in
+    /// front of the hero, which is not what the Player does.
+    /// </remarks>
+    public static bool DrawVehicle(
+        Rm2kPixelBuffer pTarget,
+        Rm2kCharset pCharset,
+        Rm2kVehicleSprite pVehicle,
+        int pOffsetX,
+        int pOffsetY,
+        int pTileSize = 16)
+    {
+        ArgumentNullException.ThrowIfNull(pTarget);
+        ArgumentNullException.ThrowIfNull(pCharset);
+        ArgumentNullException.ThrowIfNull(pVehicle);
+        return pCharset.TryDrawCharacter(
+            pVehicle.CharacterIndex, pVehicle.FacingDirection, pVehicle.Frame, pTarget,
+            pVehicle.MapX, pVehicle.MapY, pOffsetX, pOffsetY - pVehicle.Altitude * pTileSize);
     }
 
     /// <summary>Which stage <see cref="RenderSprites"/> currently draws.</summary>
@@ -210,6 +256,21 @@ public sealed class Rm2kCharacterSprite
     /// <summary>Stage the Player draws this character in.</summary>
     public Rm2kMapFrameRenderer.SpriteStage Stage { get; init; } = Rm2kMapFrameRenderer.SpriteStage.HeroLayer;
 
+    /// <summary>
+    /// Horizontal scroll offset in pixels, applied after the map position. The
+    /// Player keeps the character sprites in map coordinates and offsets them
+    /// by the same value it offsets the tile layers with, so a character moves
+    /// with the map instead of sliding on its own. It changes every frame the
+    /// camera scrolls, so it is not an init only value.
+    /// </summary>
+    public int PixelOffsetX { get; set; }
+
+    /// <summary>
+    /// Vertical scroll offset in pixels, applied after the map position. Same
+    /// verified rule as <see cref="PixelOffsetX"/>.
+    /// </summary>
+    public int PixelOffsetY { get; set; }
+
     /// <summary>Set when the sprite could not be drawn, so a caller can report it.</summary>
     public bool Skipped { get; set; }
 
@@ -229,16 +290,25 @@ public sealed class Rm2kCharacterSprite
     }
 
     /// <summary>
-    /// Converts a liblcf event page direction into the facing this project stores.
-    /// liblcf uses up 0, right 1, down 2, left 3.
+    /// Converts a liblcf event page direction into the facing this project
+    /// stores. liblcf uses up 0, right 1, down 2, left 3, verified from
+    /// <c>Game_Character::Direction</c>.
     /// </summary>
+    /// <remarks>
+    /// The previous mapping read these values as a one based axis, so liblcf 1
+    /// (right) was stored as left and liblcf 3 (left) as right. Every event
+    /// that faced sideways drew mirrored. A value outside 0..3 is corrupt data
+    /// and maps to up, which is what the Player does for a direction it cannot
+    /// face.
+    /// </remarks>
     public static byte FacingFromLiblcfDirection(int pDirection)
     {
         return pDirection switch
         {
-            1 => 6,
-            3 => 4,
-            2 => 2,
+            0 => 8,   // up
+            1 => 6,   // right
+            2 => 2,   // down
+            3 => 4,   // left
             _ => 8,
         };
     }

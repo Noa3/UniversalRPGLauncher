@@ -75,7 +75,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-091 | 2 | DONE | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
 | K-092 | 2 | DONE | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
 | K-093 | 3 | DONE | Route the Godot host input through the verified turn order instead of ad-hoc triggers | K-092 |
-| K-094 | 2 | READY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
+| K-094 | 2 | VERIFY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
 | K-095 | 3 | DONE | Resolve verified chipset source rectangles for blocks C, E and F | K-087 |
 | K-096 | 3 | DONE | Build the verified block D autotile quarter table and block geometry | K-095 |
 | K-097 | 3 | DONE | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
@@ -84,8 +84,16 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-100 | 3 | DONE | Render the real map in the runtime and show chipset pixels in the host preview | K-099 |
 | K-101 | 3 | DONE | Decode the RM2K charset geometry and draw character frames | K-100 |
 | K-102 | 3 | DONE | Decode event sprite fields and place characters per draw stage | K-101 |
-| K-103 | 2 | READY | Resolve the hero charset and draw the hero and events in the runtime frame | K-102 |
-| K-094 | 2 | READY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
+| K-103 | 2 | DONE | Resolve the hero charset and draw the hero and events in the runtime frame | K-102 |
+| K-104 | 2 | DONE | Re-render the frame when the player moves | K-103 |
+| K-105 | 2 | DONE | Camera viewport instead of a full-map frame | K-104 |
+| K-106 | 2 | DONE | Block E passability offset and the two-sided movement check | K-105 |
+| K-107 | 2 | DONE | Walk animation, the per frame step budget and the hero sprite wiring | K-106 |
+| K-108 | 3 | DONE | WOLF binary .mps reader, built from the verified format | K-094 |
+| K-109 | 3 | DONE | WOLF event command list, decoded from the verified signature table | K-108 |
+| K-110 | 3 | VERIFY | WOLF transfer, move route, database and common event binary formats | K-109 |
+| K-111 | 2 | DONE | RM2K move route, so events walk at the verified per frame rate | K-107 |
+| K-094 | 2 | VERIFY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
 | K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
@@ -1045,14 +1053,504 @@ The parser declared `character_name` and `character_index` for actors (chunk `0x
 
 ### K-103 — Hero and events in the runtime frame
 
-**Status (2026-09-26) — READY: verification first**
+**Status (2026-09-26) — DONE: the hero and the events are drawn in the verified order**
 
-**Scope**
-- The placement logic is verified and tested but nothing calls it: the runtime renders only the two map layers. This card resolves the hero's charset and draws the hero and the events into the frame between and after the layers.
-- The hero's charset is not yet known: the Player builds the player character from the first party member, and `Game_Actor::SetSprite` stores `sprite_name` and `sprite_id`.
+**Verified (EasyRPG Player)**
+- `src/game_player.cpp`, `Game_Player::ResetGraphic`: `auto* actor = Main_Data::game_party->GetActor(0)` and, when it is null, `SetSpriteGraphic("", 0)`. With an actor it calls `SetSpriteGraphic(ToString(actor->GetSpriteName()), actor->GetSpriteIndex())`. The hero therefore has no page of its own: it is the **first** party member.
+- `src/game_actor.h`: `GetSpriteName()` returns the runtime override `data.sprite_name` when it is non empty and otherwise falls back to `dbActor->character_name`; `GetSpriteIndex()` uses `data.sprite_id` in the same case. `SetSprite` clears the override when the requested graphic equals the database values, so a fresh game always draws the LDB graphic and no override has to be invented.
+- `src/game_party.cpp`, `Game_Party::SetupNewGame`: `data.party = lcf::Data::system.party`, so the leading actor id is the first entry of the LDB system party list.
+- The stage split and the per-stage draw call already existed from K-102; this card only wires it up.
 
-**Unblock condition**
-- Verify where a fresh game's player sprite comes from, because unlike an event the hero has no page: read `Game_Party::SetupNewGame` and the `Game_Actor` sprite initialisation in the Player, and check whether RM2K falls back to actor 1's `character_name`/`character_index` from the LDB. Only then read the actor data in the runtime, and keep the fallback to the first actor documented.
+**Parser gap found and fixed**
+`LoadCurrentMapEvents` decoded the trigger, the layer and the conditions but never copied `character_name`, `character_index` or `character_direction` into the page, although K-102 had verified the liblcf ids `0x15`/`0x16`/`0x17`. The event sprites were therefore unreachable at runtime. The page now carries all three, and the liblcf direction is converted to this project's facing instead of being stored raw.
+
+**LDB system chunk was not decoded at all**
+The hero resolution needs the starting party, and `system` was only a raw chunk. Verified against liblcf `src/generated/lcf/ldb/chunks.h` `struct ChunkSystem` and `src/generated/ldb_system.cpp`: the party list is the size/data pair `party_size 0x15` plus `party 0x16`, and the three vehicle graphics are the scalars `boat_name 0x0b`, `ship_name 0x0c`, `airship_name 0x0d` with `boat_index 0x0e`, `ship_index 0x0f`, `airship_index 0x10`. `DecodeLdbSystem` types those and keeps every other field in `unknown_fields` with its count and framing. A database without a system chunk yields liblcf's empty defaults instead of failing, because that is what a fresh empty database means.
+
+**Defects found while implementing**
+- The first `system` decoder overwrote the seeded defaults, so a database without the chunk lost every default key. It now only reports the fields the chunk actually carries and the caller merges them.
+- An LCF string field is the raw encoded text; the first test built a length prefix, which the shared decoder does not strip. The test was corrected, not the decoder.
+- The declared party size can exceed the stored data, so the list is clamped to `min(declared, data.Length / 2)` and never reads past the chunk. `MaxSystemArrayEntries = 4096` bounds a malformed size field.
+
+**Render order defect found**
+`RenderCurrentMap` ran before `LoadCurrentMapEvents`, so the first frame was rendered with an empty event list. The events are now loaded before the framebuffer and the first render. Without this the whole card was silently inert: the suite stayed green and the golden image matched, because nothing was drawn at all.
+
+**Test fixture defect found**
+`CopyRealGame` copied `ChipSet` but never `CharSet`, so no character could ever be drawn and the failure hid behind a missing-file diagnostic. The charset is now part of the copied fixture. The constant also needed the `FixtureRoot` prefix, because `GlobalizePath` does not resolve a bare relative path.
+
+**Measured, not assumed**
+The pinned LDB has **no starting party** (`party` decodes to an empty list), so the verified `GetActor(0) == null` path applies and this particular game draws no hero graphic. That is the correct result, and the test asserts it instead of inventing a hero. The frame therefore contains the chipset plus the event characters: 85 colours instead of the 13 the chipset-only frame of K-099 produced, and 20 character figures, confirmed by inspecting the rendered image.
+
+**Implemented**
+- `Rm2kHeroSprite.FromActor` with the verified fallback and the `CharSet/<name>.png` file name.
+- `Rm2kEngineRuntime` builds the frame in the verified order: lower layer, below events, hero plus same-layer events, upper layer, above events. A charset that is missing or undecodable is reported and skips only its characters.
+- The page graphic fields are filled in `LoadCurrentMapEvents`, and a skipped character is reported instead of drawing from an arbitrary cell.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 errors, 0 warnings; headless runner `All 425 tests passed`, exit `0`.
+- `test_rm2k_parser.cs` pins the system chunk party list, the three vehicle names and indices, the unknown field count, the empty defaults without a system chunk, and the clamp to the stored data.
+- `test_rm2k_runtime_rendering.cs` pins the character drawing (more colours than the chipset-only frame, no missing-charset diagnostic), the hero resolution from the first party actor including the null case, and that a missing charset is reported while the map still renders.
+- The golden image is regenerated and re-pinned with SHA-256 `a67ed0672ab97b977c17dc8dd729ef1ffffed8b8339c7e96db2a267cf09a764a`; the byte-for-byte comparison is green again.
+
+**Not implemented**
+- No movement animation: the hero and the events are drawn with the static middle frame, so the walk cycle is not exercised.
+- The hero is not re-rendered after the player moves; the frame is produced once during initialization.
+- The `frame_name` and the transparency level of an actor are decoded but not applied.
+
+### K-104 — Re-render the frame when the player moves
+
+**Status (2026-09-26) — DONE: the frame follows a move, tiles stay cached**
+
+**Verified (EasyRPG Player)**
+- `src/scene_map.cpp`, `Scene_Map::vUpdate` → `UpdateStage1` → `UpdateGraphics()` once per frame, and `PreUpdate`/`PreUpdateForegroundEvents` call it again. So the update is per frame, not per input.
+- `src/spriteset_map.cpp`, `Spriteset_Map::Update`: the tilemap only receives `SetOx(GetDisplayX() / (SCREEN_TILE_SIZE / TILE_SIZE))` and `SetOy(...)`, i.e. a scroll offset. The tile layers are **static sprites that are not re-rastered on movement**; only `character_sprite->Update()` and the tone change per frame.
+- Note the class is spelled `Spriteset_Map`, not `SpriteSet_Map`. An earlier probe with the wrong casing silently matched nothing, which is why the order of verification matters.
+
+**Design consequence**
+The map is rastered once into two cached layer buffers, and only the characters are re-composited. This matches the Player instead of re-rastering a whole map per step, and it keeps simulation and presentation separate: `RecomposeFrame` runs inside `Update` on a simulation frame boundary, never per rendered frame, so a higher display frame rate cannot change the simulation.
+
+**Composition order** (`RecomposeFrame`)
+1. copy of the cached lower tile layer,
+2. below-layer event characters,
+3. hero and same-layer event characters,
+4. the cached upper tile layer laid over them,
+5. above-layer event characters.
+
+**Three defects found and fixed while implementing**
+- `PaintOver` first copied every byte, including alpha 0, so the upper layer erased the lower layer and the whole floor. It now keeps the destination pixel where the source is transparent, which is the same rule the verified chipset blit uses. The K-099 golden test caught this immediately.
+- The upper layer was originally rastered into the same buffer as the lower layer, so it carried the lower layer with it and covered every character. It is now rastered into its own buffer.
+- The character pass drew onto an **empty** buffer instead of the lower layer, which dropped the floor entirely (`opaque=6513` instead of `76800`).
+
+**Defect in the existing API found by the new test**
+`RenderSprites` threw on a null map although it never reads the map: a character is placed by its own tile coordinates and the Player's character sprites are independent of the tilemap sprite. The parameter is now nullable and documented, so a sprite pass does not have to invent a map.
+
+**Validation evidence (2026-09-26)**
+- `dotnet build project/UniversalRPG.csproj --no-restore` — 0 errors, 0 warnings; headless runner `All 427 tests passed`, exit `0`.
+- `TestRm2kRuntimeRendering 9/9`, `TestRm2kCharset 7/7`.
+- The strongest check: the rendered frame is **byte identical** to the K-103 golden image, SHA-256 `a67ed0672ab97b977c17dc8dd729ef1ffffed8b8339c7e96db2a267cf09a764a`, with the same 85 colours and 76800 opaque pixels. The refactor therefore changes no output, which is what makes the caching safe to keep.
+- New tests pin that moving a character to another tile changes the composited frame, and that `PaintOver` respects transparency and refuses a mismatched buffer.
+
+**Not implemented**
+- The frame is still a full-map buffer, not a camera viewport. The Player scrolls by offsetting the two layer sprites; this runtime still renders the whole map, which is correct but not yet efficient.
+- Movement is still a single discrete step: there is no walk animation, so the hero jumps from tile to tile and the frame is invalidated per completed step.
+- Events have no move routes, so only the hero position changes between frames.
+
+### K-105 — Camera viewport instead of a full-map frame
+
+**Status (2026-09-26) — DONE: the camera is applied and the suite proves it**
+
+**What is implemented**
+- `project/src/rm2k/rendering/Rm2kMapCamera.cs`: `DefaultPanX`/`DefaultPanY` (9 and 7 screen tiles at 320x240), `PositionX`/`PositionY`, `OffsetPixelsX`/`OffsetPixelsY` and `PositiveModulo`, all as pure calculations.
+- `Rm2kPixelBuffer.TryCopyRegion` reads a window out of a cached layer and **refuses** a region that does not fit instead of clipping it.
+- The runtime frame is screen sized (320x240) instead of `width * 16` by `height * 16`. `RecomposeFrame` cuts the cached layers at `ResolveCameraOffsetX`/`ResolveCameraOffsetY` and gives the characters the same offsets through `Rm2kCharacterSprite.PixelOffsetX`/`PixelOffsetY`.
+- `AppliedCameraOffsetX`/`AppliedCameraOffsetY` expose what the runtime actually applied, so a test can assert the wiring and not only the arithmetic.
+
+**Verified (EasyRPG Player)**
+- `Game_Map::GetDisplayX` = `map_info.position_x + shake * 16`, so the stored position is already the scroll offset. Screen shake is deliberately not implemented: it is presentation state and would couple a cosmetic effect to the deterministic core.
+- `Game_Map::SetPositionX`/`SetPositionY` clamp to `[0, tiles * SCREEN_TILE_SIZE - screen_width]` or apply `Utils::PositiveModulo` when the map loops. The source says `std::clamp` must not be used, because for a map smaller than the screen the lower bound exceeds the upper bound.
+- `Game_Player::GetDefaultPanX` = `ceil(screen_width / TILE_SIZE / 2) - 1) * SCREEN_TILE_SIZE`.
+- `Spriteset_Map::Update` does `SetOx(GetDisplayX() / (SCREEN_TILE_SIZE / TILE_SIZE))`, which is a **division** by 16. This is `OffsetPixelsX`. Multiplying by 16 instead was the first attempt and put the viewport 16 times past the end of the map; the bound proves the direction: the last column of a 40 tile map is 7680 screen tiles, and 7680 / 16 = 480, which is inside the 640 pixel map, while 7680 * 16 = 122880 is not.
+
+**Two upstream unit mixes, both reproduced and pinned**
+- `SetPositionX` counts the map extent in screen tiles but the screen in pixels, so a map exactly one screen wide in pixels still has a positive bound (`20 * 256 - 320 = 4800`) and still scrolls.
+- The same mix means the reachable offset on a 40 tile map is 480 pixels, which is 160 more than a 320 pixel window needs. The excess is the Player's black border, and `CopyViewport` leaves it unpainted rather than reading past the layer. A test that demanded `offset + screen <= map` was wrong and was corrected.
+
+**Unblock condition met**
+A synthetic 40 by 30 map (640 by 480 pixels) is written by the test with the verified LMU field ids (`0x01` chipset, `0x02` width, `0x03` height, `0x47` lower, `0x48` upper, `0x51` events) and event characters at known tiles. Mutation A, forcing the applied camera offset to zero, now **fails** the suite, which it did not before this card. The tile arithmetic in `Rm2kMapCamera` was already unit tested; what was missing was a test that reaches the runtime wiring.
+
+**Still not implemented, and why it matters**
+- The scrolled frame is **not** compared pixel by pixel. `GameSimulationState.TileSubstitution` is never populated, so a synthetic map's floor does not render, and the frame contains only the characters. Comparing pixels would compare an empty floor, so the test asserts the applied offsets instead. Populating the LDB tile substitution is the prerequisite for the pixel comparison and is the next card.
+- Loop horizontal/vertical flags are exposed on the camera API but never set by the runtime, because the map loop fields are not decoded.
+- No screen shake and no configurable resolution: `RenderProfile` is a scaling policy, not a screen size. The renderer uses `Rm2kMapCamera.DefaultScreenWidth/Height` as named constants.
+- The above-layer compositing is only covered where the upper layer is transparent in the fixture, so its opacity rule is untested in the runtime.
+
+### K-106 — Block E passability offset and the two-sided movement check
+
+**Status (2026-09-26) — DONE: the premise was wrong, and chasing it found two real bugs**
+
+**The premise in this card was false, and that is the first result**
+The card assumed `GameSimulationState.TileSubstitution` was never populated because the LDB chipset carries `lower_substitution_ids` and `upper_substitution_ids` that had to be decoded. Verified EasyRPG `Game_Map::Setup` says otherwise:
+
+```
+std::iota(map_info.lower_tiles.begin(), map_info.lower_tiles.end(), 0);
+std::iota(map_info.upper_tiles.begin(), map_info.upper_tiles.end(), 0);
+```
+
+Both tables start as the identity and are only ever changed by `SubstituteDown`/`SubstituteUp`, which exist for the tile substitution event commands. There is no LDB field to decode, so `Rm2kTileSubstitution`'s identity fallback was already correct, and `Validate` checking both tables against 144 entries is also correct because `BlockEEnd = BlockE + 144` and `BlockFEnd = BlockF + 144`. Nothing needed populating. The card was rewritten once that was proven, and `chunks.h` was checked for `lower_tiles`/`upper_tiles` to confirm they are not LDB chunk fields at all.
+
+**Bug 1 — block E passability read the wrong entry**
+`Rm2kChipset.IsPassableLowerTile` applied `+ BLOCK_E_INDEX` only when a substitution object was present. Verified `Game_Map::IsPassableLowerTile` applies it unconditionally, because a missing table is the identity, not a skipped offset:
+
+```cpp
+tile_id = tile_raw_id - BLOCK_E;
+tile_id = map_info.lower_tiles[tile_id] + BLOCK_E_INDEX;
+```
+
+Without the offset a block E tile read passability entry 0 instead of entry 18, so every block E tile in every game inherited the first autotile's passability. In the pinned EasyRPG TestGame that turned 20 tile ids into whatever entry 0 said. Regression: `Test_BlockEUsesTheEIndexOffsetWithoutASubstitutionTable`, which pins the contract with and without a table and proves block C is unaffected. RED was `TestRm2kChipset: 23/24`.
+
+**Bug 2 — movement only checked the target tile**
+`GameSimulationState.TryMove` checked `IsPassableInDirection(targetX, targetY, directionBit)` and nothing else. Verified `Game_Map::IsPassable` computes two masks:
+
+```cpp
+const int bit_from = GetPassableMask(from_x, from_y, to_x, to_y);
+const int bit_to   = GetPassableMask(to_x, to_y, from_x, from_y);
+```
+
+`bit_from` is the direction leaving the current tile and is tested against the current tile. Only testing the target let a player walk out of an impassable tile and made one-way tiles wrong in both directions. `TryMove` now checks the current tile with `directionBit` and the target with the reverse bit. Regression: the blocked-tile case in `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` now uses a two tile strip with a real blocked id from the decoded table.
+
+**A test that was pinning the bug**
+`Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` asserted `blockedTiles > 0` on the map itself. That only held because of bug 1, which pushed block E tiles onto entry 0. With the bug fixed the EasyRPG map legitimately resolves to passable entries only, so the assertion was rewritten to ask the chipset table for a blocked id and to build the blocked strip from real decoded data. Asserting "this specific map has a wall" was a false claim about a fixture, not a requirement.
+
+**A fourth real defect found on the way: the fixture's upper layer was hiding the lower layer**
+The synthetic wide map filled the upper layer with tile 0, which is a block A autotile and paints over the floor. The pinned fixture uses tile 10000 (block F), which is transparent. With tile 0 the frame was 13 colours; with 10000 it is 58 and the floor is visible. The wide map test now uses the fixture's own id and asserts the pixel difference.
+
+**Mutation evidence, all four detected**
+- block E `+ BLOCK_E_INDEX` removed: caught by `Test_BlockEUsesTheEIndexOffsetWithoutASubstitutionTable`.
+- the source tile check removed from `TryMove`: caught by `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` for rm2000 and rm2003.
+- camera offset forced to 0: caught by `Test_AMapLargerThanTheScreenScrollsWithTheCamera`.
+- `RecomposeFrame` removed from `TryMove`: **caught now**, by the pixel comparison. Before this card the same mutation passed the suite, because the test used the test hooks and recomposed on its own.
+
+**Validation:** build 0 errors/0 warnings; `All 441 tests passed`, exit 0; `TestRm2kChipset 24/24`; `TestRm2kRuntimeRendering 13/13`; pinned golden image unchanged.
+
+**Mostly closed by K-107**
+The walk animation and the per frame step budget are implemented, tested and mutation checked, and the event facing bug is fixed. What is still open is the move route: events cannot follow `move_route` at all, so the per frame budget only runs for the player. That is the remaining gap between "the hero walks" and "playable".
+
+### K-107 — RM2K character walk animation and the per frame step budget
+
+**Status (2026-09-26) — VERIFY. The animation and the step budget are implemented, tested and mutation checked. The move route is not started, and one piece of sprite wiring cannot be covered by the available fixture.**
+
+**The animation, verified from upstream**
+`Game_Character::UpdateAnim` counts `anim_count` once per update and only advances the visible frame when a per speed threshold is reached: stationary `{12,10,8,6,5,4}`, continuous `{16,12,10,8,7,6}`, spin `{24,16,12,8,6,4}`, indexed by a one based speed. `IncAnimFrame` is `(anim_frame + 1) % 4` and resets the count. A character cell has three columns, and `Sprite_Character::Draw` clamps `Frame_middle2` back to `Frame_middle`, so the fourth rotation value is deliberately drawn as the middle frame. Cycling over three frames would animate at a different rate, so the four value rotation is a test of its own.
+
+**The thresholds overlap.** At the default move speed 3 the stationary limit 8 is reached before the continuous limit 10, so the frame advances on the eighth tick, not the ninth. Four of my first test expectations were wrong about this; the reader was right every time.
+
+**The step budget, verified from `Game_Character::Move`, `UpdateMovement` and `GetSpriteX`**
+A move is not a tile snap. `Move` sets the logical tile to the target immediately and sets `remaining_step` to `SCREEN_TILE_SIZE`, 256. `Update` subtracts `1 << (1 + move_speed)` per update, so at the default move speed 3 a tile takes exactly sixteen updates. The drawn position is `GetX() * 256 - remaining_step` for a move to the right, which is what makes the sprite walk across the tile it just entered. `UpdateMovement` clamps at zero so an overshoot cannot wrap the sprite across the map. `GetMaxStopCountForStep` is `1 << (9 - freq)` and 8 or more means no wait, and it uses the move **frequency**, not the move speed, so a character can be slow and still start the next step immediately.
+
+**Implemented**
+- `Rm2kStepBudget` with the movement amount, the stop count tables, `Advance`, the `SpriteX`/`SpriteY` formulas and the pixel offsets.
+- `GameSimulationState.RemainingStep`, filled by `TryMove` and spent by `UpdateCharacterAnimation`, cleared by `Reset`.
+- The runtime's `Update` advances the character once per simulation tick and recomposes the frame while a step is unspent, and the hero sprite carries the step offset and the animation frame.
+
+**A real reset bug this card found, the same class as K-106**
+`Reset` did not clear `RemainingStep`, so a new game inherited a half finished step. The regression test found it by driving the real state rather than a fresh instance.
+
+**A real sprite wiring bug this card found**
+`BuildCharacterSprites` assigned the camera offset onto the hero sprite, overwriting the step offset `TryBuildHeroSprite` had just set. The step budget therefore reached the state and never reached the renderer, so the hero would have snapped to its tile while walking. The offsets are now added, not replaced.
+
+**A real rendering bug found on the way, unrelated to the animation**
+`FacingFromLiblcfDirection` read its argument as a one based axis (`1 => 6, 3 => 4, 2 => 2`) while its own comment documented the real one, `Game_Character::Direction`: `Up = 0, Right = 1, Down = 2, Left = 3`. Every event facing sideways drew mirrored, and nothing caught it because the fixture only has events facing down. Now on the verified axis, pinned by a permutation test over all four directions.
+
+**The golden image changed, as a correction**
+Wiring the LMT `character_pattern` through made the fixture's events render their real stored pose 0 instead of the runtime default 1. The difference is confined to the character bands, y 37 to 159, across 48 sixteen by sixteen cells, and the colour count rose from 85 to 92. The old golden encoded the default rather than the game data, so it was replaced after that analysis.
+
+**Tests.** `test_rm2k_step_budget.cs`, 11 cases, covering the movement amounts, the sixteen updates per tile, the clamp, the per update pixel positions, each direction on its own axis, the stop count tables and their independence from the move speed, and the range refusal. `test_rm2k_character_animation.cs`, 10 cases. Two runtime tests: one drives the real `Update` path over the wide map and compares composed frames, one records that an empty party yields no hero sprite.
+
+**Mutation evidence.** Detected: the movement amount shifted to `1 << speed`, the clamp removed, the step offset sign flipped, `RemainingStep` not filled by `TryMove`, `RemainingStep` not cleared by `Reset`, the per frame animation tick loop removed, the frame count changed from four to three, the modulo changed to three, the stationary guard changed, the move speed range check removed, the left and right facings swapped, and the out of range fallback changed.
+
+**Two mutations reported as not mutant, recorded rather than chased.** Moving the direction mapping to a one based axis, and deleting the `0 => up` arm, both leave the function identical on every input because `0` was already handled by the `_ => up` fallback.
+
+**Closing the verification gap: a starting party fixture**
+The hero sprite's step offset was not mutation covered, because the pinned LDB defines an empty party, so the verified `ResetGraphic` path yields no hero and the hero sprite is never built. `Rm2kPartyFixtureBuilder` now appends the missing system section to a **copy** of the pinned database, leaving the fixture itself untouched.
+
+Three encodings had to be right, and two of them are not obvious:
+- A struct field is `id + length + payload` with both numbers in BER.
+- `party_size` (0x15) is a **signed BER integer**, because the library reads it through its signed BER decoder.
+- `party` (0x16) is a packed list of **two byte little endian** values, because the library reads it as `(short)(lo | hi << 8)`.
+
+Writing either payload in the other's encoding parses and then reports trailing bytes, or parses and reports an empty party, which is the exact failure the builder exists to prevent.
+
+The section is **appended**, not inserted. liblcf's `Struct<S>::ReadLcf` loops until EOF and breaks on each section's own terminator, and when a nested struct reads fewer bytes than the chunk declared it seeks to `off + length` and logs a corruption warning rather than trusting the inner walk. Our parser does the same, so a database is a sequence of terminated sections and one more is simply appended. Inserting at the first terminator lands inside the actors section, whose declared length is an upper bound that the reader seeks past.
+
+**With a hero present the wiring is now covered, and two more assertions were needed**
+- The composed sprite offset is the **camera scroll plus the step**, so the test asserts the difference against `AppliedCameraOffsetX/Y`. Asserting the composed value directly would only have asserted the camera.
+- The hero is identified by its charset cell index and map position, not by composition order: an event can share the layer and the tile, and a wide map fixture has both.
+- The animation frame needed a second assertion, because after one update the frame has not moved yet. Driving the step forward proves it changes, and driving the rotation to its fourth value proves the `ClampFrame` is applied where the sprite is built rather than only in the charset.
+
+**Mutation evidence for the wiring, all now detected:** the hero's step offset not computed, the camera offset overwriting the step offset instead of being added, the animation frame not assigned at all, and the animation frame assigned without the clamp. Before the party fixture existed, the first two of these escaped.
+
+**Still open on this card**
+There is no move route. Events cannot follow `move_route` at all, so the per frame budget only ever runs for the player. That is the remaining gap between "the hero walks" and "events walk", and it is now a card of its own.
+
+### K-108 — WOLF binary .mps reader, built from the verified format
+
+**Status (2026-09-26) — DONE for the map format. WOLF is still not playable; see the honest gaps below.**
+
+**What the previous entry found, and what this entry did about it**
+The WOLF reader was JSON-only, so no real WOLF game could ever load. This card implements the verified binary `.mps` map format. The user was asked how to proceed and chose: build the binary readers, no real game is available, so validate against the specification.
+
+**Implemented**
+- `project/src/wolf/WolfBinaryMapData.cs`: `WolfBinaryMapData`, `WolfBinaryMapPixel`, `WolfBinaryEvent`, `WolfBinaryEventPage`.
+- `project/src/wolf/WolfBinaryMapReader.cs`: `HasMapHeader` and `Read`, plus a bounded little endian `WolfByteCursor` where every read is checked, so a truncated or hostile file yields a diagnostic instead of an out of range access.
+- `WolfDataReader.LooksLikeJson` still reports a non JSON payload as an unimplemented binary format rather than blaming the JSON parser. That was the honest-rejection part of the previous entry and it stays.
+
+**Verified format facts used, none guessed**
+- Header: ten zero bytes, `WOLFM`, a zero byte, a version header byte (0x00 v2, 0x55 v3), three zero bytes, a u4 that must be 0x64, then a version byte that must be 0x65 (v2) or 0x66 (v3).
+- Then a length prefixed title (u4 byte count then the bytes, decoded as Shift-JIS), tileset id, width, height and event count, all u4.
+- The map body is a first pixel u4. A value of 0xFFFFFFFF means the map does not exist and **no body follows**; otherwise the body is width * height * 12 bytes read as width * height mappixels of three u4 values each.
+- A mappixel's first u4 carries the autotile id as raw / 100000 and the four corner modes as raw % 10000 / 1000, raw % 1000 / 100, raw % 100 / 10 and raw % 10.
+- An event starts with 0x6F, a u4 that must be 0x3039, its id, a length prefixed title, map x, map y, the page count, a zero u4, the pages, and a 0x70 footer.
+- An event page starts with the five byte signature 79 FF FF FF FF. The reference implementation derives the icon row as (byte >> 1) - 1.
+- The map ends with a 0x66 footer.
+
+**A real bug the test caught: a signed/unsigned comparison**
+`ReadUInt32` returns `uint`. The first pixel was cast to `int` and compared against the literal `0xFFFFFFFF`, which C# types as `uint`. So `firstPixel` was `-1` and the literal was `4294967295`, the comparison was never equal, and **every map that does not exist decoded as if it had a pixel body**. That shifted the whole file and produced a wrong error, "ends at byte 53 but 57 were needed", which pointed at the reader instead of at the comparison. Fixed by keeping the value in unsigned space. This is the kind of defect that a green test suite with a hand written JSON fixture would never have found.
+
+**A fixture bug found the same way**
+The test's `BuildMap` wrote the two base tile values even when the first pixel was 0xFFFFFFFF, which cannot happen in a real file because the format skips the body entirely. The fixture now follows the same rule, so it cannot encode a frame the editor could not produce.
+
+**Tests:** `project/tests/core/test_wolf_binary_map.cs`, 10 cases, all building bytes from the specification rather than from the reader's own output: full field decode, the autotile digit split with all four digits distinct, the non existing map, the event framing, a foreign magic, a wrong event signature, a missing footer, an out of range dimension refused before allocation, a truncated file refused with a byte offset, and an unknown version refused rather than guessed. `TestWolfRuntime` keeps the JSON rejection test.
+
+**Mutation evidence, all three detected:** the signed/unsigned comparison restored, the footer check removed, and the header check removed. Each fails the suite.
+
+**What this card does not claim**
+- **No real WOLF game has been parsed.** The framing and the field order are proven against the specification; the interpretation of any single field is not. The next real game this runtime is pointed at is the first genuine test of that.
+- The event page body after the signature is only partially decoded: graphic, trigger, move speed, frequency and route. **The command list is not decoded.** A wrong command count would desynchronise every following event, so it is a separate card rather than a guess.
+- `database_dat`, `commonevent_dat` and `game_dat` are not implemented. The JSON reader still covers those, so the runtime cannot load a real project end to end.
+- Games ship inside a DXLib archive and are frequently compressed or encrypted. The per version keys are published in clear text, so decryption is technically possible, but it is a separate decision and this card does not take it.
+- There is no WOLF renderer. Nothing here draws a map.
+
+### K-109 — WOLF event command list, decoded from the verified signature table
+
+**Status (2026-09-26) — DONE for the core command set. WOLF is still not playable.**
+
+**Why this card existed**
+A command list with a wrong length desynchronises every following command, every event and every map, so the list is the one part of the WOLF format that must not be guessed.
+
+**An important correction to the source material**
+The published `event_command` description carries the header comment "event_command-related structures, **not used for file parsing**". It defines the sub-structures of individual commands but not the generic command frame. An earlier attempt inferred a frame of a **big-endian** signature u4 plus a padding byte from the map parser. **That inference was wrong and the card's original claims below have been corrected.**
+
+**The command frame, as the schema actually describes it**
+The frame is `param_count` (`u1`), then `command_type` (`u4` **little-endian**) when `param_count` is nonzero, then a parameter block whose shape belongs to the command, then `branch_depth` (`u1`), `string_count` (`u1`), that many strings, `have_route` (`u1`) and, when set, the route data. A `param_count` of **zero terminates the list**; it is not a parameterless command. The signature and the big-endian reader were removed, and `WolfByteCursor.ReadUInt32BigEndian` is no longer used for the command type.
+
+**Implemented** `WolfBinaryEventCommand` with the verified command type and a name only where the schema gives one, `WolfEventCommandReader` decoding `param_count`, the little-endian type and the type specific parameter block, and `WolfMoveRouteReader` for the optional route.
+
+**Real spec errors found by the tests**
+- A command list written as zero bytes is not a list of parameterless commands: zero is the terminator, so such a fixture desynchronised everything after it.
+- The `NumberCondition` and `CallCommonByName` layouts in the earlier attempt were guesses. They are now either decoded from the schema or refused.
+- `CallCommonByName = 59` was invented. The verified type is **300 (0x12C)**.
+- Operation names for the type `121` variants by parameter count were guessed and have been **removed**; those commands are distinguished only by their verified type and parameter count.
+
+**Unknown command types stop the read instead of being skipped**
+Skipping an unknown command would shift every following one, so the reader refuses and reports the type. A command this runtime does not implement is a diagnostic, not a silently missing line of a game's script.
+
+**Tests:** `project/tests/core/test_wolf_event_command.cs`, 10 cases, every byte sequence built from the schema's command envelope rather than from the reader's output. `test_wolf_common_event.cs` covers the file header and the list, and `test_wolf_move_route.cs` covers the self-describing route entries.
+
+**Mutation evidence:** the command type read big-endian, the `param_count` not consumed, a route argument count taken from a type table instead of from the file, and each option bit of a route's behaviour and option bytes swapped independently were all detected. The type table mutation is the important one: it proves unknown route entries stay readable.
+
+**What this card does not claim**
+- The command frame is read and its types are known, but a command's **meaning** is not implemented. A real event that uses a command this runtime does not interpret stops the read with a precise diagnostic.
+- The command list is decoded **as data only**. No WOLF command executes. `WolfEventVm` still runs the JSON command model, not these bytes.
+- The transfer format is not read at all, and there is still no WOLF renderer.
+- Still no real WOLF game has been parsed. Framing and field order are proven against the schema; the meaning of a command is not.
+
+### K-110 — WOLF database, game settings, common events, commands and move routes
+**Status (2026-09-26) — VERIFY. The scoped binary readers are implemented; WOLF is still not playable.**
+
+**Why this card existed**
+The user confirmed the scope: binary `.mps`, `database_dat`, `commonevent_dat` and `game_dat`, and that **no real WOLF fixture exists**. Without that last fact every claim here is structural.
+
+**Implemented** `WolfBinaryDatabaseReader` (header, version at byte 10, property position `raw/1000` with index `raw%1000`), `WolfGameSettingsReader` (V2 and V3, the twelve string block, the 23 value u16 record, editor version at index 16), `WolfBinaryCommonEventReader` (15 byte header, the fixed five byte `unknown4` block, the command list), `WolfEventCommandReader` and `WolfMoveRouteReader`. The JSON readers were preserved and only the binary/data discrimination in `WolfDataReader` was changed.
+
+**The WOLFM magic and version framing**
+The magic is the six bytes `00 57 00 00 4F 4C`, then a version header byte, `46 4D 00` at bytes 7..9, the version at byte 10 and the type count at bytes 11..14. Guessed bytes were removed after the header was measured.
+
+**Move routes are self-describing, which is the point**
+A route entry carries its own argument counts: a four byte count, that many words, a one byte count, that many bytes. An argumentless entry still writes both lengths as zero. There are 59 route types and 12 of them are parameterised, but **the counts are not inferred from a type table** because an unknown type then becomes unreadable. Unknown entries stay readable and keep their raw arguments.
+
+**Route options are bitfields, not bytes**
+The behaviour byte holds eight flags. The route option byte uses the **upper three bits**; the lower five are reserved. Reading it as a full byte is a mutation the suite catches, one bit at a time, because a single test with all bits set does not detect a swap.
+
+**Real errors found and fixed**
+- Three `X_OKX` sentinels, an invalid `PluginResult<T>.Ok` and a non-existent `PluginErrorCode.CorruptData` were replaced with the repository's real API.
+- The database version was read at byte 9 and is at byte 10.
+- `HasDatabaseHeader` required 15 bytes including the type count, so a magic-only fixture failed; the two cases were split.
+- A binary file was blamed on the JSON reader before the discrimination was fixed.
+- `0xFFFFFFFF` needed unsigned handling and a non-existent map sentinel means no body follows.
+
+**Tests:** `test_wolf_binary_map.cs`, `test_wolf_binary_database.cs` (17), `test_wolf_game_settings.cs` (13), `test_wolf_common_event.cs` (17), `test_wolf_event_command.cs` (10), `test_wolf_move_route.cs` (11). Every fixture is byte-authored from the schemas.
+
+**Measured, not guessed:** `0x83 0x65 0x83 0x58 0x83 0x67` decodes to `テスト`, not to the text the first fixture assumed. The expectation was corrected after measuring.
+
+**What this card does not claim**
+- The transfer format is **not** read at all.
+- Nothing here executes. `WolfEventVm` still runs the JSON model.
+- **No real WOLF game has been parsed.** Every test is synthetic. These are structural claims, never real game evidence.
+
+### K-111 — RM2K event move routes, decoded and executed
+**Status (2026-09-26) — DONE. Event move routes are decoded from the LMT and stepped in the runtime.**
+
+**Verified structure** The route lives under `EventPage` `0x29`, with the command count at `0x0B`, the array at `0x0C`, `repeat` at `0x15` and `skippable` at `0x16`.
+
+**Semantics that were wrong before they were measured**
+- The first update **starts** movement and consumes no step budget.
+- The command index advances only after movement **completes**.
+- A blocked move advances only when `skippable` is true.
+- Facing commands execute immediately and consume no movement.
+- A finished route clears the remaining step budget.
+
+**Implemented** `Rm2kMoveRoute`, `Rm2kMoveRouteState`, `rm2k_move_route_decoder.cs` and the runtime tick in `Rm2kEngineRuntime.Update`, with typed `MoveCommand`/`MoveRoute` models on `Rm2kMap`.
+
+**Fixture boundary, stated honestly:** the pinned `Map0001.lmu` has 22 events and pages and **zero** move-route chunks, so it cannot prove a route. The end to end proof is a byte-authored synthetic LMU, and that is what `test_rm2k_event_move_route.cs` uses.
+
+**Tests:** route `9/9`, decoder `9/9`, state `12/12`, end to end `7/7`.
+
+**What this card does not claim:** only the verified command set is implemented. The pinned fixture exercises none of it, so no real game's route has been stepped.
+
+### K-112 — RGSS archive format, shared by XP, VX and VX Ace
+**Status (2026-09-26) — DONE as a reader and writer. Nothing executes an entry.**
+
+**Why this was first for XP/VX/Ace** Without the archive an XP game cannot start at all, and this format is the one thing all three of the RGSS engines share, so it counts for three criteria where a Ruby virtual machine would count for none of them until it ran.
+
+**Verified against the reference implementation.** Magic `RGSSAD`; every value is exclusive ored with the output of a linear congruential generator that starts at `0xDEADCAFE` and advances **once per value** by `magic = magic * 7 + 3`. A value is obfuscated with the generator's state **before** that step.
+
+**The header is eight bytes**: the name `RGSSAD`, one byte the format does **not** check, and the version. The reference reader compares the first six bytes and reads the version from the last. A reader that also required the seventh byte to be zero would refuse a file the format allows, so the suite proves that byte is ignored instead of assuming it is zero. The version byte is what tells an XP or VX archive from a VX Ace one.
+
+**Each entry** is a name, a size and a body. The name is obfuscated byte by byte and a backslash in it folds to a slash. The list ends when a name can no longer be read, not at a terminator. An entry claiming more bytes than the file holds is refused rather than handed back short, because a short body looks like a successful read.
+
+**Two of my own bugs, both caught by tests rather than by reading.** A regular expression pass removed the `return` from three failure paths, so a refused archive fell through and was read anyway while the diagnostic said it was not an archive. And an unused version read indexed one byte past the end of an eight byte header, which crashed on an empty archive.
+
+**Two of my own wrong expectations:** I had the header as three zero bytes after the name, and I had the generator taking two steps per field. The first surfaced as an out of bounds read on an empty archive, the second as a round trip that decoded a name length of three hundred million, which was **reproduced outside C#** before the reader was touched again.
+
+**Tests:** `test_rgss_archive.cs` 15/15, total `678/678`.
+
+**Mutation evidence, six of six detected:** a seed off by one, a wrong multiplier, a name byte read without the key, a version read from the wrong offset, the unchecked byte checked, and an entry list that started four bytes late.
+
+**What this card does not claim:** the reader lists and reads entries. It **executes nothing**; a game script is bytes. There is no real RPG Maker game in the repository, so no real archive has been read.
+
+### K-113 — Ruby Marshal reader for the RPG Maker data files
+**Status (2026-09-26) — DONE as a reader. No game class is instantiated and no script runs.**
+
+**Why this was second** With the archive in place the other half of the data pipeline was missing: XP, VX and VX Ace keep their data in `.rxdata`, `.rvdata` and `.rvdata2`, which are Ruby Marshal streams.
+
+**Verified against the published Ruby specification**, not from memory: a two byte version, then one value, where a value is a type byte and a payload whose shape belongs to the type.
+
+**Integers are the part that is easy to get wrong, and I got it wrong first.** A marshalled integer is a type byte and then one to five bytes, where the first of those encodes sign and width in a single value. Eight values are special; the rest is a sign extended byte with an offset of five. A reader that treats the first byte as a length decodes small numbers correctly and everything else as something plausible but wrong.
+
+**An object takes its index before its contents are read**, because a value inside a collection may link back to that collection and the link names an object the stream has already defined. Numbering afterwards would point every such link at the wrong object.
+
+**A link does not take an index of its own**, because it names an object that already exists. My first expectation had this wrong and the measurement corrected it.
+
+**A regexp carries no class name**: the specification gives a source and an option byte and nothing else. A bignum is **refused rather than read**, because a game's data uses fixnums for anything that fits and a bignum would mean arbitrary precision this reader does not carry.
+
+**Refusals, not partial trees:** a stream that ends inside a value, declares a length past the limit, or carries an undefined type byte raises. A major version this reader does not implement is refused outright and a **newer minor version** is refused too, because it may use a type this reader has never heard of; an older minor version is read.
+
+**Two mistakes of mine, the second only visible under mutation.** A grouped `case` list plus single `case` labels for the same values left the later ones unreachable, so a regexp fell through to the refusal branch; and when that label was removed the routing line went with it, so no regexp could be read at all. Routing and payload are now separate concerns.
+
+**The reader produces a value tree, not live objects**, on purpose: a game database is full of instances of classes this project has never heard of, and resolving them would mean either running the game's Ruby or inventing classes that do not exist.
+
+**Tests:** `test_marshal_reader.cs` 29/29, total `678/678`. The fixtures are written by hand from the specification's type table, because a round trip through a writer of our own would pass even if the reader and the writer were wrong in the same way.
+
+**Mutation evidence, fifteen detected:** a flipped sign offset, a swapped sign case, a zero case that swallowed a byte, a width read one byte short, an array numbered after its contents, a hash likewise, an uncapped nesting depth, an unchecked major version, an unchecked minor version, an uncapped byte count, an unchecked symbol link, an object link accepting index zero, a regexp reading a class name, a symbol link resolving out of range and a delayed array index.
+
+**Two mutations turned out to be equivalent rather than escaping.** Moving `++ObjectCount` below the `ReadLength` call changes nothing, because reading a length does not touch the counter. A mutation that cannot change behaviour cannot be caught by a test, and recording it as a gap would have been wrong. A mutation that really delays the index until after the elements were read is detected.
+
+**What this card does not claim:** no real `.rxdata` has been read, because the repository has no RPG Maker game.
+
+### K-114 — RM2K vehicles: state, boarding, sprites and the airship shadow
+**Status (2026-09-26) — VERIFY. Simulation and rendering are implemented and mutation tested; K-094 is not closed by it.**
+
+**Verified from the reference implementation, not guessed.** Boat and ship move at speed 4 and the airship at 5, so a move speed of 3 means half speed. A vehicle's altitude is measured in tile units against a budget of 256 and falls by 8 per update. A moving vehicle animates over 12 frames and a stopped one over 16, both modulo 4. The airship's shadow is a separate sprite drawn from `(128,32,16,16)` and `(144,32,16,16)` at opacity `(int)(0.26 * 255) = 66`, one below the airship, and visible only while the player is aboard.
+
+**Boarding is asymmetric.** An airship refuses a boarding attempt from a tile it is not directly over, and refuses a disembark while still in the air. A boat or a ship does not. Boarding has priority over an action event, which the reference implementation proves by the order `if (!GetOnOffVehicle()) CheckActionEvent(); return;`.
+
+**Vehicle background music is deliberately absent.** There is no BGM state contract in this project, so switching a vehicle's track would mean inventing one. It is not hidden behind a diagnostic flag; it is simply not there.
+
+**The pinned fixture cannot show a vehicle, and the tests say so.** All three vehicles in the pinned `RPG_RT.lmt` target map 39, while `Map0001` is map 1, and the pinned `vehicle.png` is absent. The drawing path is therefore exercised through a **derived** fixture that copies the game and adds the official reference test image, leaving the pinned data untouched. A test states the boundary explicitly instead of pretending otherwise.
+
+**Test-only hooks** exist to place a vehicle on the map under test and to re-render. They are called from tests only and are documented as such.
+
+**Tests:** vehicle `11/11`, boarding `11/11`, decision turn `12/12`, sprite `9/9`, compositing `6/6`, runtime rendering `19/19`.
+
+**Measured after the fact:** the airship's system index is **3**, not the 2 the first expectation assumed.
+
+**What this card does not claim:** `move_random`, hero directed movement, broader event and audio integration and the rest of the whole engine remain open. This card is one slice of K-094, which stays `VERIFY`.
+
+### K-115 — Ruby lexer for the RGSS engines
+**Status (2026-09-26) — DONE as a lexer. It calls nothing, resolves nothing and runs nothing.**
+
+**Where this sits** With K-112 and K-113 in place, this is the third of the three layers XP, VX and VX Ace need before their scripts can be read, and the first that looks at the script text itself.
+
+**The keyword list is Ruby's own, not written from memory.** Forty one reserved words extracted from the grammar's `parse.y`. A keyword is reserved, so a lexer that treated one as a name would accept files Ruby rejects and reject files Ruby accepts.
+
+**A name beginning with an upper case letter is a constant, and the reserved word check comes first.** Two reserved words, `BEGIN` and `END`, begin with an upper case letter and the grammar's `reswords` production lists them as keywords. Checking for a constant first read them as names. A test over **all forty one** words is what found it, because the single example I had chosen happened to be lower case.
+
+**A slash divides where a value has just ended and opens a regular expression where one could begin.** The first version had this backwards, so `a / b` was read as a regular expression that ran off the end of the line. Both shapes are in the suite because they differ only in what came before the slash.
+
+**A single quoted string interprets only two escapes**, the quote and the backslash. Reading it like a double quoted one loses a backslash a game asked to keep, which is the entire reason the form exists.
+
+**A regular expression keeps its backslashes**, because the pattern engine is what interprets an escape, and a `/` inside a character class does not close it.
+
+**A string keeps its bytes as well as its text**, because a Shift-JIS script is not UTF-8 and a reader that kept only text would silently corrupt it.
+
+**An octal literal may be `0o17` or `017`.** The marker sits between the leading zero and the digits; checking the current character instead of the next one read `0o17` as a bare zero.
+
+**Refusals, not partial token lists:** an unknown character, an unclosed string, an unclosed regular expression and a number with no digits in its base all raise with their line.
+
+**Tests:** `test_ruby_lexer.cs` 33/33, total `711/711`.
+
+**Mutation evidence, fourteen run and eleven detected:** a keyword list never consulted, the reserved word check moved after the constant check, the constant rule inverted, a slash always a regexp, a slash always a division, single quoted escapes applied in full, the octal marker not skipped, a shorter operator matched first, an unclosed string accepted, a line continuation read as a break, a block comment not skipped, a class variable read with one at sign, a regexp losing its backslash, an unterminated block comment end.
+
+**Two mutations were equivalent rather than escaping.** Appending `<=` and `<<` to the operator list changes nothing, because every multi character operator already appears before the shorter one it starts with; the check printed the whole list to establish that. Turning a byte escape's `((char)value).ToString()` into `value.ToString()` changes nothing, because the cast already produces values in the range where the two agree. A mutation that cannot change behaviour is not a gap in the tests.
+
+**Four gaps the mutations found were real and are now closed:** the keyword lookup was untested, the single quoted escapes were only checked for one letter, the operator order was checked only for the operators the test happened to use, and the line continuation test filtered the very newline it was about.
+
+**One mistake of mine in the tests hid four failures.** The helper that drops whitespace-only tokens did not drop the end of input token, so every list based assertion was off by one element. A probe with a different filter showed the lexer's output had been right all along.
+
+**What this card does not claim:** there is no parser yet, so a script is a token stream and nothing more. **No real RPG Maker script has been tokenised**, because the repository has no RPG Maker game.
+
+### K-116 — Ruby parser for the RGSS engines
+**Status (2026-09-26) — DONE as a parser. It builds a tree and runs nothing.**
+
+**Where this sits** With K-112 (archive), K-113 (Marshal) and K-115 (lexer) in
+place, the data of an XP, VX or VX Ace install is readable from end to end as
+data. A game's Ruby now has three layers: bytes, tokens, and this tree. What is
+still missing is everything that would give the tree meaning.
+
+**What it does** `RubyParser` turns a token stream into a tree of shapes. It
+answers one question — what shape was written. It does not answer what any name
+means, whether a call succeeds, or what a value is at run time. A node that
+records a call names the method as written and knows nothing about whether this
+runtime has ever heard of it.
+
+**The precedence is the grammar's own.** Every level was taken from the
+declaration order in the Ruby grammar rather than from memory. This turned out
+to matter more than expected: the first table written from memory had the
+relations and the equality on separate levels, which the grammar's
+`rel_expr %prec tCMP` shows are one. A reader that gets one level wrong parses a
+game's arithmetic into a different tree, and nothing about the result looks
+wrong.
+
+**What is deliberately not here**
+- No name resolution, no method lookup, no constant lookup.
+- No execution, no evaluation, no calling of anything.
+- No literal Ruby objects, no binding, no class loading.
+- A shape this parser cannot read raises with its line. A tree that stopped
+  early would be worse than none, because nothing would mark it as complete.
+
+**Verification (2026-09-26)**
+- `TestRubyParser` 44/44, total 755/755, `scripts/validate.sh` passed.
+- Every expected tree is written out by hand from the grammar's rules. A tree
+  produced by the parser and compared against itself would prove nothing.
+- 21 mutations, all detected.
+
+**Errors the tests found in this parser, all fixed**
+- The precedence table from memory had relations and equality on two levels; the
+  grammar resolves them onto one with `rel_expr %prec tCMP`.
+- `**` sat at the arithmetic level instead of above it, so `a * b ** c` parsed
+  as `(a * b) ** c`.
+- A member call's argument list was skipped whenever the receiver was a name, so
+  `sprite.draw(x, y)` read its parentheses as a grouping.
+- A block's body was read as a whole program, so every `def` and `do` reported a
+  missing `end` on a file that is well formed.
+- A `do` belonging to a `while` was read as a block on the loop's own condition.
+- The range operator had no level at all, so `1..2` parsed as two statements.
+- `not` was read both in `ParseUnary` and in `ParseBinary`. The second was
+  unreachable, and the mutation suite showed the 44 tests passed with it gone, so
+  it was removed rather than kept as a second route to the same node.
+- Two mutation escapes turned out to be untested boundaries rather than wrong
+  code: nothing crossed the logical/bitwise boundary, and nothing pinned `not`
+  to its own level. Both now have tests.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

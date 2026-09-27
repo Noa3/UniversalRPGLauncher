@@ -28,13 +28,26 @@ public sealed class WolfParseLimits
     public int MaxCommonEvents { get; init; } = 100_000;
     public int MaxStringBytes { get; init; } = 64 * 1024;
 
+    /// <summary>
+    /// The most strings one command may declare.
+    /// </summary>
+    /// <remarks>
+    /// The field is a single byte, so 255 is the largest value a file can
+    /// express. The limit is set below that on purpose: a count near the byte's
+    /// maximum is far more likely to be a misread than a real command with two
+    /// hundred strings, and refusing it is better than reading two hundred
+    /// strings out of unrelated bytes.
+    /// </remarks>
+    public int MaxStringsPerCommand { get; init; } = 32;
+
     public bool IsValid()
     {
         return MaxFileBytes > 0 && MaxFileBytes <= 64 * 1024 * 1024
             && MaxDatabaseRecords > 0 && MaxDatabaseFieldsPerRecord > 0
             && MaxMaps > 0 && MaxMapDimension > 0 && MaxMapDimension <= 4096
             && MaxMapTiles > 0 && MaxEventsPerMap > 0 && MaxCommandsPerEvent > 0
-            && MaxCommonEvents > 0 && MaxStringBytes > 0;
+            && MaxCommonEvents > 0 && MaxStringBytes > 0
+            && MaxStringsPerCommand > 0 && MaxStringsPerCommand <= 255;
     }
 }
 

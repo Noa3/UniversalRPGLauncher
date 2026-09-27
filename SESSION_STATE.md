@@ -136,11 +136,590 @@ K-086 through K-093 and K-095 through K-102 are DONE. K-103 (hero and events in 
 - New `project/tests/core/test_rm2k_chipset.cs` (8 tests) pins the verified constants and rules; `Test_RealFixtureChipsetProducesBothPassableAndBlockedTiles` proves real RM2000/RM2003 maps mix walkable and impassable tiles and that real steps follow them; `TestPluginDetection` asserts the runtime decoded non-empty masks.
 - Lesson recorded: passability flags are stored **per chipset chip id**, so a test that needs different behaviour for two map tiles must use two different tile ids. Truncated/mismatched layer arrays intentionally yield the shorter length, and the runtime separately requires `masks.Length == width * height`.
 
+## Latest completed hero and event character slice (K-103, 2026-09-26)
+
+- The runtime now draws the hero and the event characters into the map frame in the verified drawable order: lower layer, below events, hero plus same-layer events, upper layer, above events.
+- Hero graphic source verified in `Game_Player::ResetGraphic`: it is `Main_Data::game_party->GetActor(0)`, and a null actor produces `SetSpriteGraphic("", 0)`. `Game_Actor::GetSpriteName`/`GetSpriteIndex` fall back to the LDB `character_name`/`character_index` when no runtime override is set, and `SetSprite` clears the override for the database values, so a fresh game always draws the LDB graphic. `Game_Party::SetupNewGame` copies `Data::system.party`.
+- New `project/src/rm2k/rendering/Rm2kHeroSprite.cs` resolves the graphic and the `CharSet/<name>.png` file name.
+- The LDB `system` chunk (section `0x16`) was previously only a raw chunk. `DecodeLdbSystem` now types it, verified against liblcf `struct ChunkSystem`: party list `party_size 0x15` / `party 0x16`, and the vehicle graphics `boat_name 0x0b`, `ship_name 0x0c`, `airship_name 0x0d` with `boat_index 0x0e`, `ship_index 0x0f`, `airship_index 0x10`. Unmapped fields keep their count and framing in `unknown_fields`. A database without the chunk yields liblcf's empty defaults.
+- `LoadCurrentMapEvents` now copies `character_name` (liblcf `0x15`), `character_index` (`0x16`) and `character_direction` (`0x17`) into the event page and converts the direction into this project's facing. K-102 had verified the ids but nothing populated the page, so the event sprites were unreachable.
+
+Defects found and fixed while implementing:
+- `RenderCurrentMap` ran before `LoadCurrentMapEvents`, so the first frame was rendered with an empty event list and the whole card was silently inert while the suite stayed green.
+- The `system` decoder overwrote the seeded defaults; it now reports only the fields the chunk carries and the caller merges them.
+- The declared party size can exceed the stored data, so the list is clamped to `min(declared, data.Length / 2)` and bounded by `MaxSystemArrayEntries = 4096`.
+- `CopyRealGame` in the rendering test copied `ChipSet` but never `CharSet`, so no character could be drawn; the constant also needed the `FixtureRoot` prefix for `GlobalizePath`.
+
+Measured, not assumed: the pinned LDB has an empty `party` list, so the verified null-actor path applies and this fixture draws no hero graphic. That is correct behaviour and is asserted rather than papered over. The frame contains the chipset plus the event characters: 85 colours instead of the chipset-only 13, with 20 character figures confirmed by inspecting the rendered image.
+
+Validation: `dotnet build project/UniversalRPG.csproj --no-restore` 0 errors/0 warnings; `GODOT_BIN=tools/godot/editors/4.7.2/windows-x86_64/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` → `TestRm2kParser 36/36`, `TestRm2kRuntimeRendering 7/7`, `All 425 tests passed`, exit 0. Golden image regenerated and re-pinned, SHA-256 `a67ed0672ab97b977c17dc8dd729ef1ffffed8b8339c7e96db2a267cf09a764a`.
+
+Note: the Godot 4.7.2 editor was missing from `tools/godot/editors/` in this checkout and had to be re-extracted from `~/Downloads/Godot_v4.7.2-stable_mono_win64.zip` before validation could run. `tools/godot/editors/` is gitignored, so this is a local environment fix, not a repository change.
+
+## Latest completed frame recomposition slice (K-104, 2026-09-26)
+
+- The map is now rastered once into two cached layer buffers and only the characters are re-composited, so the visible hero follows a move. `RecomposeFrame` runs inside `Update` on a simulation frame boundary, never per rendered frame.
+- Verified in the Player: `Scene_Map::vUpdate` → `UpdateStage1` → `UpdateGraphics()` once per frame, and `Spriteset_Map::Update` only gives the tilemap `SetOx`/`SetOy` scroll offsets. The tile layers are static sprites and are not re-rastered on movement. Note the class is spelled `Spriteset_Map`; a probe with `SpriteSet_Map` matched nothing silently.
+- Composition order: copy of the cached lower layer, below-layer events, hero plus same-layer events, the cached upper layer over them, then above-layer events.
+
+Three defects found while implementing:
+- `Rm2kPixelBuffer.PaintOver` first copied every byte including alpha 0, so the upper layer erased the floor. It now keeps the destination where the source is transparent, matching the verified chipset blit rule.
+- The upper layer was rastered into the same buffer as the lower layer, so it carried the floor with it and covered every character. It now has its own buffer.
+- The character pass drew onto an empty buffer, which dropped the floor (`opaque=6513` instead of `76800`).
+- `Rm2kMapFrameRenderer.RenderSprites` threw on a null map although it never reads it. The parameter is now nullable and documented, because a character is placed by its own tile coordinates.
+
+Validation: build 0 errors/0 warnings; `All 427 tests passed`, exit 0; `TestRm2kRuntimeRendering 9/9`. The rendered frame is byte identical to the K-103 golden image, SHA-256 `a67ed0672ab97b977c17dc8dd729ef1ffffed8b8339c7e96db2a267cf09a764a`, 85 colours, 76800 opaque pixels. The refactor changes no output, which is what makes the layer caching safe to keep.
+
+## Latest slice (2026-09-26) — K-111 DONE: events walk their move route
+
+**The command set, verified from liblcf itself, not guessed.** `generator/csv/enums.csv` defines `rpg::MoveCommand::Code` from `move_up = 0` to `decrease_transp = 41`, in three contiguous blocks: the movement commands 0 to 11, the facing commands 12 to 22, and everything else from 23. The Player relies on exactly that contiguity, testing `cmd >= move_up && cmd <= move_forward` for movement and `cmd >= face_up && cmd <= face_away_from_hero` for facing, so an id in the wrong place is a behaviour change and not a label. `generator/csv/fields.csv` gives the LMU layout: `EventPage::move_route` is chunk 0x29, a `rpg::MoveRoute` whose `move_commands` is a `Vector<MoveCommand>` at 0x0B for the count and 0x0C for the entries, with `repeat` at 0x15 defaulting to true and `skippable` at 0x16 defaulting to false.
+
+**The route is a nested struct, and reading it at the page level silently reports no route at all.** 0x0B and 0x0C live inside the page's 0x29 chunk, not beside it. Passing the page's own fields to the decoder produced a clean "no route" for every page, which looks like a working decoder and is not one. The chunk is now read as a nested struct first.
+
+**Two encodings, one of them mine to get wrong.** A route stores no per-command length, so a single wrong byte shifts every command after it and the route still parses; only the ids reveal the drift. The test fixtures build BER correctly, which means reversing the seven bit groups before setting the continuation bits: 4097 is the two bytes 160 and 1, not 129 and 32. My first fixture did not reverse them and reported a decoder bug that did not exist.
+
+**The runtime, from `Game_Character::UpdateMoveRoute`.** A command that starts a step returns at once, so the route consumes one command per update and the character then spends the following updates walking. A refused step either skips the command when the route is skippable or holds the route on it, which is what stops a character stuck against a wall from sliding along it. A successful step falls through to the index advance, so the next command is read on the update after this one. A route that ends on a step still walks that step out, because the character is already on its way.
+
+**Mutation evidence for the runtime, all four now detected:** the index never advancing after a step, the step never being cleared, the passability check removed, and a refused step always advancing instead of holding. The last two escaped before the blocked route test existed, which is why that test was worth writing.
+
+**The pinned fixture has no move routes at all.** Its single real map has 22 event pages and every one decodes cleanly, but none defines a 0x29 route. The real map test now asserts that as a property of the fixture, and the commands are proved by the byte exact decoder tests and a synthetic LMT that carries a real 0x29 struct.
+
+**K-111 is DONE.** `All 525 tests passed`, build `0 Warnung(en)`, `0 Fehler`, `UniversalRPG validation passed.` No probes. Font artifact restored.
+
+## Ruby parser for the RGSS engines (2026-09-26)
+- `RubyParser` turns a token stream into a tree of shapes. It names what was
+  written and nothing more: no name resolution, no method or constant lookup, no
+  evaluation, no call of anything. It never executes a game's Ruby.
+- The operator precedence is the Ruby grammar's own, taken from the declaration
+  order of its precedence levels. That is not a detail: the first table written
+  from memory was wrong, and a reader with one level in the wrong place parses a
+  game's arithmetic into a different tree with nothing looking wrong about it.
+- The grammar resolves relations and equality with `rel_expr %prec tCMP`, which
+  makes them one level. The first table had them as two, and two tests written to
+  match the wrong table had to be corrected rather than the code.
+- `**` is the grammar's one right associative binary level and sits above
+  multiplication on a level of its own.
+- `not` is a level of its own between the logical pair and the assignment, so
+  `not a == b` negates the comparison. It was first read as a unary operator,
+  which binds at the other end of the scale entirely.
+- A shape the parser cannot read raises with its line. A tree that stopped early
+  would be worse than none, because nothing would mark it as incomplete.
+- Tests: `TestRubyParser` 44/44, total 755/755, validator passed.
+- 21 mutations on the precedence table and the reader's shapes, all detected.
+- Two escapes during the work were untested boundaries, not wrong code: nothing
+  in the suite crossed the logical/bitwise boundary and nothing pinned `not` to
+  its level. Both now have tests.
+- One mutation showed a `not` branch in `ParseBinary` was unreachable, since
+  `ParseUnary` takes the keyword first. It was removed instead of kept as a
+  second route to the same node, and the suite still passes without it.
+- Still missing for XP, VX and VX Ace: a reader for the tree's meaning, a
+  renderer, saves, input, audio, and any playable runtime. `RgssEngineRuntime`
+  is still a metadata inspector, and no real archive from any of the three
+  engines is in the repository, so all of this is structurally verified and not
+  checked against a real game.
+
+## Ruby lexer for the RGSS engines (2026-09-26)
+- `RubyLexer` splits a game's Ruby source into tokens. It calls nothing,
+  resolves nothing and runs nothing. Together with K-112 and K-113 this is the
+  third of the three layers XP, VX and VX Ace need before their scripts can be
+  read at all, and the first one that looks at the script text itself.
+- **The keyword list is the one from Ruby's own grammar**, extracted from
+  `parse.y` rather than written from memory: 41 reserved words, from `class` to
+  `__ENCODING__`. That matters because a keyword is reserved, so a lexer that
+  treated one as a name would accept files Ruby rejects.
+- **A name that begins with an upper case letter is a constant**, and the
+  reserved word check comes first. Two of the reserved words, `BEGIN` and `END`,
+  begin with an upper case letter, and the grammar's `reswords` production lists
+  them as keywords. Checking for a constant first read them as names. A test
+  over all 41 words is what found it, because the one example I had chosen
+  happened to be a lower case word.
+- **A slash divides where a value has just ended and opens a regular expression
+  where one could begin.** My first version had this exactly backwards, so
+  `a / b` was read as a regular expression that ran off the end of the line. The
+  two shapes differ only in what came before the slash, which is why both are in
+  the suite.
+- A regular expression keeps its backslashes, because the pattern engine is what
+  interprets an escape, and a `/` inside a character class does not close it.
+- **A single quoted string interprets only two escapes**, the quote and the
+  backslash. Reading it like a double quoted one lost a backslash a game asked
+  to keep, which is the whole reason the form exists.
+- A string keeps its **bytes** as well as its text, because a Shift-JIS script is
+  not UTF-8 and a reader that kept only text would silently corrupt it.
+- An octal literal may be `0o17` or `017`. The marker sits between the leading
+  zero and the digits, and checking the current character instead of the next
+  one read `0o17` as a bare zero.
+- An unknown character, an unclosed string, an unclosed regular expression and a
+  number with no digits in its base are all refused with their line. A partly
+  tokenised script is worse than none, because nothing marks it as incomplete.
+- Tests: `TestRubyLexer 33/33`, total `711/711`, build `0 Warnung(en)`,
+  validator passed, probes 0.
+- Mutation evidence, fourteen run and eleven detected: a keyword list never
+  consulted, the reserved word check moved after the constant check, the
+  constant rule inverted, a slash always a regular expression, a slash always a
+  division, single quoted escapes applied in full, the octal marker not
+  skipped, a shorter operator matched first, an unclosed string accepted, a line
+  continuation read as a break, a block comment not skipped, a class variable
+  read with one at sign, a regular expression losing its backslash, an
+  unterminated block comment end.
+- **Two mutations were equivalent rather than escaping.** Appending `<=` and
+  `<<` to the operator list changes nothing, because every multi character
+  operator already appears before the shorter one it starts with; the check
+  printed the whole list to establish that. And turning a byte escape's
+  `((char)value).ToString()` into `value.ToString()` changes nothing, because the
+  cast already produces values in the range where the two agree. A mutation
+  that cannot change behaviour is not a gap in the tests.
+- Four gaps the mutations found were real and are now closed: the keyword lookup
+  was untested, the single quoted escapes were only checked for one letter, the
+  operator order was checked for the operators the test happened to use, and the
+  line continuation test filtered the newline it was supposed to be about.
+- **One mistake of my own in the tests, and it hid four failures for a while.**
+  The helper that drops whitespace-only tokens did not drop the end of input
+  token, so every list based assertion was off by one element. A probe with a
+  different filter showed the lexer's output was right all along. Measuring
+  instead of reasoning about positions is what ended the loop.
+
+## Marshal reader for the RPG Maker data files (2026-09-26)
+- `MarshalReader` reads the Ruby Marshal stream that RPG Maker XP, VX and VX
+  Ace use for `.rxdata`, `.rvdata` and `.rvdata2`. Together with the archive
+  format this is the second of the two things all three engines need before any
+  of their data can be looked at. Neither runs a line of game code.
+- The reader produces a tree of `MarshalValue` rather than live objects, on
+  purpose. A game database is full of instances of classes this project has
+  never heard of, so resolving them would mean either running the game's Ruby
+  or inventing classes that do not exist. A value tree can be inspected without
+  either, and it keeps the class name as a string.
+- **Integers are the part that is easy to get wrong and I got wrong.** A
+  marshalled integer is a type byte and then one to five bytes, where the first
+  of those encodes sign and width in a single value. Eight values are special;
+  the rest is a sign extended byte with an offset of five. A reader that
+  treats the first byte as a length decodes small numbers correctly and
+  everything else as something plausible but wrong, which is the worst way to
+  be wrong.
+- **An object takes its index before its contents are read.** A value inside a
+  collection may link back to that collection, and the link names an object the
+  stream has already defined. Numbering afterwards would make every such link
+  point at the wrong object. `ReadArray` and `ReadHash` now take the index
+  first.
+- A link does not take an index of its own, because it names an object that
+  already exists. Only real values do. My first expectation had this wrong and
+  the measurement corrected it.
+- A regexp is the one type in its group that carries no class name: the
+  specification gives a source and an option byte and nothing else. Reading a
+  name there consumes the length byte of the source and shifts the rest of the
+  file.
+- A bignum is refused rather than read. A game's data uses fixnums for anything
+  that fits, and a bignum here would mean arbitrary precision this reader does
+  not carry, so pretending to read one would be a guess.
+- A stream that ends inside a value, declares a length past the limit, or
+  carries a type byte the specification does not define is refused. A partial
+  tree of a game's data is worse than an honest failure, because nothing marks
+  it as incomplete.
+- A major version this reader does not implement is refused outright, and a
+  newer minor version is refused too, because it may use a type this reader
+  has never heard of. An older minor version is read, since a newer minor
+  version can read an older one.
+- **Two mistakes of mine, and the second one only showed up under mutation.**
+  A grouped `case` list and single `case` labels for the same values left the
+  later ones unreachable, so a regexp fell through to the refusal branch. And
+  when I removed that label I took the routing line with it, so no regexp could
+  be read at all. Both are fixed; the routing and the payload are now separate
+  concerns.
+- The fixtures are written by hand from the specification's type table. A round
+  trip through a writer of our own would pass even if the reader and the writer
+  were wrong in the same way, which is the failure this suite exists to rule
+  out.
+- Tests: `TestMarshalReader 29/29`, total `678/678`, build `0 Warnung(en)`,
+  validator passed, probes 0.
+- Mutation evidence: a flipped sign offset, a swapped sign case, a zero case
+  that swallowed a byte, a width read one byte short, an array numbered after
+  its contents, a hash likewise, an uncapped nesting depth, an unchecked major
+  version, an unchecked minor version, an uncapped byte count, an unchecked
+  symbol link, an object link accepting index zero, a regexp reading a class
+  name, and a symbol link resolving out of range were all detected.
+- **Two mutations turned out to be equivalent rather than escaping.** Moving
+  `++ObjectCount` below the `ReadLength` call changes nothing, because reading a
+  length does not touch the counter. A mutation that cannot change behaviour
+  cannot be caught by a test, and recording it as a gap would have been wrong.
+  A mutation that really delays the index until after the elements were read is
+  detected, which is the behaviour the ordering exists for.
+- Structural only: the repository has no RPG Maker game, so there is no real
+  data file to read.
+
+## RGSS archive format, shared by XP, VX and VX Ace (2026-09-26)
+- `RgssArchiveReader` reads and writes the archive format that RPG Maker XP, VX
+  and VX Ace all share. This is the first thing that is genuinely common to
+  three of the engines the goal lists, so it counts for three criteria at once
+  where the Ruby virtual machine would count for none of them until it ran.
+- The format is obfuscated, not encrypted. Every value is exclusive ored with
+  the output of a linear congruential generator that starts at `0xDEADCAFE` and
+  advances once per value by `magic = magic * 7 + 3`. The value a field is
+  obfuscated with is the generator's state **before** that step.
+- **The header is eight bytes: the name `RGSSAD`, one byte the format does not
+  check, and the version.** The reference reader compares the first six bytes
+  and reads the version from the last one. A reader that also required the
+  seventh byte to be zero would refuse a file the format allows, so the test
+  proves the seventh byte is ignored rather than assuming it is zero.
+- The version byte is what tells an XP or VX archive from a VX Ace one. They
+  differ in nothing else a reader has to know before it can list entries.
+- Each entry is a name, a size and a body. The name is obfuscated byte by byte,
+  and a backslash in it is folded to a slash so that an archive written on
+  either system lists the same way. The list ends when a name can no longer be
+  read, not at a terminator.
+- An entry that claims more bytes than the file holds is refused rather than
+  handed back short, because a short body looks like a successful read.
+- This reader lists and reads entries. It does not execute anything an entry
+  contains: a game script is read as bytes and nothing more, which is what the
+  project rules require.
+- **Two bugs of my own, both caught by tests rather than by reading.** A regular
+  expression pass removed the `return` from three failure paths, so a refused
+  archive fell through and was read anyway; the diagnostic said the file was
+  not an archive while the reader went on parsing it. And an unused version
+  read indexed one byte past the end of an eight byte header, which crashed on
+  an empty archive. Both are fixed and the failing tests are the reason.
+- Two of my own wrong expectations: I had the header as three zero bytes after
+  the name, and I had the generator taking two steps per field. Neither matched
+  the reference reader. The first was found by an out of bounds read on an empty
+  archive and the second by a round trip that decoded to a name length of three
+  hundred million, which was reproduced outside C# before the reader was touched
+  again.
+- Tests: `TestRgssArchive 15/15`, total `649/649`, build `0 Warnung(en)`,
+  validator passed, probes 0.
+- Mutation evidence: a seed off by one, a wrong multiplier, a name byte read
+  without the key, a version read from the wrong offset, the unchecked byte
+  checked, and an entry list that started four bytes late were all detected.
+- Structural only: the repository has no RPG Maker game, so there is no real
+  archive to read. The fixtures are written by the project's own writer and the
+  expected values are also derived independently inside the test, because a
+  round trip through the project's own writer alone would pass even if both
+  halves were wrong in the same way.
+
+## K-110 WOLF move routes, the last gap in the command reader (2026-09-26)
+- `WolfMoveRouteReader` reads a route: the animation frequency, the move speed
+  and the move frequency, then the mode, then two option blocks, then a length
+  and that many steps. The header order is neither alphabetical nor the order a
+  reader would guess, and reading it in a different order still produces four
+  plausible bytes, so each header field gets its own value in the fixture.
+- **The two option blocks are bit fields, not bytes.** The behavior block holds
+  eight flags in one byte and the route option block holds three in the high
+  three bits of another, with the low five reserved. Reading them as bytes would
+  leave the cursor six bytes short and shift every field after them, which
+  produces a file that looks decoded and is not.
+- **A route step describes its own argument lengths.** The types that take
+  arguments write a byte saying how many four byte values follow, the values, a
+  byte saying how many single byte values follow, and then those. Reading the
+  lengths from the file rather than from a per type table is what lets this
+  reader read a type it has no name for: it can still step over the step
+  correctly and report the type as one it does not name. A reader driven by a
+  table cannot do that, and the mutation that swaps the file's length for a
+  table lookup is caught.
+- A step that takes no arguments still writes both length bytes, both zero.
+  Reading only the first takes the second from the next step's type, which is
+  exactly the drift a self describing format is meant to prevent.
+- The route type table has 59 values with a gap at 0x2A and 0x2B that the
+  specification leaves unused. A value in the gap is reported as one the table
+  leaves unused rather than stepped over silently, because a reader that
+  skipped it could not say how long it was.
+- The event command reader now reads a route when the route flag is set, so a
+  route inside a command is decoded rather than reported as unread.
+- Tests: `TestWolfMoveRoute 11/11`, `TestWolfEventCommand 10/10`, total `634/634`,
+  build `0 Warnung(en)`, validator passed, probes 0.
+- Mutation evidence: a removed option byte, a reversed header, swapped option
+  bits, option bits read from the low end, a table driven argument length, a
+  missing byte argument count and a byte argument count fixed at zero were all
+  detected. Two earlier mutations escaped and both were test gaps, not reader
+  gaps: an option test that set all three bits at once could not tell them
+  apart, and each option now has a fixture of its own.
+- **K-110 is now complete against its title.** The database, the game settings,
+  the common events and the move routes are done. The transfer format was not in
+  the title and is not started.
+
+## K-110 WOLF CommonEvent.dat, and a real bug in the command reader (2026-09-26)
+- `WolfBinaryCommonEventReader` reads the file: the `WOLF/FC` header, a
+  version byte, a count and that many records. Each record starts with `0x8E`
+  and is divided by five separator bytes into six parts, and the order matters:
+  the argument name table, the option string tables and the option value tables
+  all sit between separators rather than at the end of the record. A reader that
+  walks the fields top to bottom produces plausible wrong values, because every
+  field is still a valid length prefixed string.
+- The self variable name table is a fixed hundred entries, not a counted one.
+  Reading it as a count leaves the cursor inside the table and shifts every
+  field after it, which looks like a successful decode of a wrong file.
+- **A zero parameter count is the command list's end marker, not a command with
+  no arguments.** Nothing at all follows it. This was the first thing my
+  CommonEvent fixture got wrong, and it is why the format needs a test of its
+  own rather than a spot check.
+- **A length prefixed string's terminator is inside its length.** The format's
+  string is a zero terminated string with a size, and the size covers the
+  terminator. Writing the length without the terminator and then appending one
+  leaves a byte the reader does not consume, so every field after the first
+  string is off by one. The fixture did that and the reader was right to refuse
+  the result.
+- **The command reader from K-109 was structurally wrong and is now corrected.**
+  It read a four byte big endian signature followed by a padding byte, built on
+  constants like `0x0167_0000`. The verified structure is a one byte parameter
+  count, then a four byte little endian type, then a parameter block whose shape
+  belongs to the type. The old form decoded its own fixtures and no real file.
+- The corrected reader is type aware, because the parameter block is not
+  uniform. A message command has no block at all, a numeric condition has an
+  else flag, a condition count, three padding bytes and then that many variable,
+  value and operator triples, a call has an event id and then an argument status
+  word only when the id is in the common event range, and a branch carries a
+  condition id. After the block every command has a branch depth byte, a string
+  count byte, that many strings and a move route flag.
+- The old signature constants were partly invented. `CallCommonByName` was
+  `0x3B` because that packed the parameter count and the type into one word; the
+  verified type is 300. The double and triple variants were not separate types
+  at all but the same type with a different parameter count, and naming them by
+  type alone collapsed them. Names now come from the type and the parameter
+  count together.
+- **Where the specification gives a parameter count and not the meaning of each
+  count, the name reports the count.** Mapping type 121 with eight parameters to
+  an operation name would have been a guess, so the name says how many
+  parameters the command has.
+- A move route is not decoded. A command that carries one is reported as
+  carrying an undecoded route instead of being stepped over, because stepping
+  over bytes the reader does not understand would shift every command after it.
+- A string count above the limit is refused. The field is a single byte, so a
+  file can claim up to 255 strings; following that count out of a short file
+  would walk off the end. The limit is 32, and the reason is written down: a
+  count near the byte's maximum is far more likely to be a misread.
+- Tests: `TestWolfBinaryCommonEvent 17/17`, `TestWolfEventCommand 10/10`,
+  total `623/623`, build `0 Warnung(en)`, validator passed, probes 0.
+- Mutation evidence on the corrected reader: a fixed parameter count, a big
+  endian type, a uniform parameter block, an ignored zero marker, an ignored
+  string limit and a route flag that is never set were all detected.
+- Still missing against the K-110 title: the transfer format, and move routes
+  inside event commands. The database, the game settings and the common events
+  are done.
+
+## K-110 WOLF Game.dat VERIFY (2026-09-26)
+- `WolfGameSettingsReader` reads the Game.dat framing: magic `0 'W' 0 0 'O' 'L'
+  0 'F' 'M'`, a version byte, a byte settings length, the byte settings, the
+  version dependent string record, the file's own size, `unknown3`, the word
+  settings length and the word settings, the static random block and a version
+  footer.
+- **The version byte changes the record shape, not just the meaning of a
+  field.** A v2 record has eight Shift-JIS strings followed by one UTF-8 string;
+  a v3 record has twelve UTF-8 strings and no trailing one. Reading one as the
+  other consumes the wrong number of strings and lands somewhere else entirely
+  without failing, so the version has to pick the shape before anything is read.
+- **The record mixes encodings inside itself**: the first eight v2 strings are
+  Shift-JIS and the ninth is UTF-8. Decoding both as UTF-8 turns a Japanese
+  title into replacement characters; decoding both as Shift-JIS turns a UTF-8
+  name into mojibake. Both encodings are decoded strictly, so bytes that are
+  invalid in the declared encoding are refused rather than replaced.
+- **The word record is bounded by its own length**, not by a fixed field count.
+  A later version appended the loading gauge fields behind that length. The
+  record is 23 values: `unknown`, twelve custom move speeds, `unknown_2`, the
+  screen width and height, then the WOLF version at index **16**. I initially
+  had 18 words and the version at 17; both were wrong and the fixture caught it.
+- The file's declared size bounds the static random block, whose length varies
+  per file, so treating it as a fixed block would misread every other game.
+- The encryption key is the third string setting and is read so a protected game
+  can be recognised. Nothing is decrypted and this reader has no decryption
+  path.
+- Two fixture errors of my own, both caught by the tests rather than by
+  inspection: the v3 fixture had thirteen strings where the record has twelve,
+  and I had guessed the expected Shift-JIS text. `83 65 83 58 83 67` is
+  "Test", not the word one reaches for first, and the expectation is now the
+  measured value with a comment saying so.
+- Mutation evidence: a v2 record read as UTF-8, a wrong v3 string count, a
+  fixed word count, a removed file size bound and a wrong version index were all
+  detected.
+- Tests: `TestWolfGameSettings 13/13`, total `607/607`, build `0 Warnung(en)`,
+  validator passed, probes 0.
+- Still missing against the K-110 title: `commonevent_dat` and the transfer
+  format. `game_dat` and the database format are done.
+
+## K-094 vehicle runtime wiring VERIFY (2026-09-26)
+- `LoadVehicles` builds all three vehicles from the LMT start node and the LDB
+  system section, verified from `Game_Vehicle`'s constructor. All nine start
+  fields decode: `boat_*` `0x0B`/`0x0C`/`0x0D`, `ship_*` `0x15`/`0x16`/`0x17`,
+  `airship_*` `0x1F`/`0x20`/`0x21`.
+- Measured on the pinned fixture rather than assumed: all three vehicles name
+  the **same** charset, `vehicle` for the boat and the ship and `Vehicle` for
+  the airship, at cells **0, 1 and 3**. Cell 2 is unused, which is legal and
+  which I initially got wrong by expecting 0, 1, 2.
+- All three vehicles start on **map 39** and the party on map 30, while the
+  fixture only ships `Map0001.lmu`. So this map correctly draws no vehicle, and
+  `CharSet` holds only `Chara1.png`, so the `vehicle` cell could not be drawn
+  even on the right map.
+- The vehicle draw path is therefore **proven to run but not proven to draw**.
+  Three mutations still escape and all three are the same root cause: with no
+  `vehicle.png` in the fixture, the draw path never writes a pixel, so removing
+  the map check, the charset fallback or the altitude wiring changes nothing
+  observable. Mutation runs of the vehicle-order and the LMT read were detected.
+- Deliberately **not** done: fabricating a `vehicle.png` to make the test draw
+  something. A synthetic charset would prove the compositing maths and nothing
+  about the real file, and a real one is not available in the fixture. The
+  honest options are a game that ships a vehicle charset, or a fixture change
+  agreed with the user.
+- Tests: `TestRm2kRuntimeRendering 19/19`, total `594/594`, build
+  `0 Warnung(en)`, validator passed, probes 0.
+
+## K-094 vehicle compositing VERIFY (2026-09-26)
+- `Rm2kMapFrameRenderer.DrawVehicle` composites a vehicle through the same
+  charset cell as any character, with the altitude taken off the vertical
+  offset. A vehicle gets no separate sprite stage: the Player draws it with the
+  same `Sprite_Character` and applies the altitude in `GetScreenY`, so giving it
+  its own stage would put it behind or in front of the hero, which is not what
+  happens.
+- The altitude is counted in **whole tiles**, so the pixel offset is the
+  altitude times `TILE_SIZE` of 16. Forgetting the multiplication draws the
+  airship at 1/16 of the right height and still passes a bounds check, which is
+  why the test measures the row of the first drawn pixel instead of counting
+  pixels.
+- `Rm2kAirshipShadow` is the airship shadow, which is a **separate sprite**
+  rather than part of the airship: two 16x16 patches of the System graphic at
+  `(128,32)` and `(144,32)`, blitted together, at `Opacity(0.26 * 255)`, which
+  truncates to **66** and not 67. It is drawn one below the airship's own screen
+  z so the airship covers it, and only while the player is in the airship.
+  The Player's own comment says 26 percent is not what RPG_RT does; this
+  repository reproduces the Player's value because the accurate one cannot be
+  measured without a real game.
+- Mutation evidence: a missing tile-size multiplication, an added instead of
+  subtracted altitude, a shadow at the same z as the airship and a rounded
+  opacity were all detected.
+- Tests: `TestRm2kVehicleCompositing 6/6`, total `591/591`, build
+  `0 Warnung(en)`, validator passed, probes 0.
+- Still missing against the K-094 title: the vehicle state is built and tested
+  as a unit but is not yet constructed from the LDB system section inside the
+  runtime, so a real map still shows no boat.
+
+## K-094 vehicle sprites VERIFY (2026-09-26)
+- `Rm2kVehicleSprite` carries the sprite the LDB system section names
+  (`boat_name`/`boat_index`, `ship_name`/`ship_index`,
+  `airship_name`/`airship_index`) and the two properties that are specific to a
+  vehicle: the altitude it is drawn at and its animation.
+- A vehicle uses the **same** charset geometry as a character, `24 * 3` by
+  `32 * 4`, so no second sprite reader is needed.
+- The animation limit is `GetStopCount() ? 16 : 12`: a standing vehicle is shown
+  for sixteen frames and a moving one for twelve, which is the reverse of the
+  character tables and is exactly the kind of thing carried over by mistake.
+- The frame wraps with `anim_frame = (anim_frame + 1) % 4`, a modulo over all four
+  liblcf frames rather than a clamp, so `Frame_middle2` is a real state. The
+  sprite clamp turns it into middle when it is drawn, so a vehicle walks left,
+  middle, right, middle and back to left.
+- `ResetAnimation` only puts the frame back to middle when the animation type is
+  not `fixed_graphic`, so a fixed graphic holds its frame while it climbs.
+- Mutation evidence: a swapped animation limit, a clamped frame, a missing
+  fixed-graphic exemption and a counter that is not reset were all detected.
+  The first run reported all four as escaping; that was my mutation harness
+  using tab anchors against a space-indented file, not missing tests.
+- Tests: `TestRm2kVehicleSprite 9/9`, total `585/585`, build `0 Warnung(en)`,
+  validator passed, probes 0.
+- Still missing against the K-094 title: the vehicle sprites are described and
+  tested but not yet composited into a map frame, so nothing is visible yet.
+
+## Five new engine criteria added by the user (2026-09-26)
+- Criteria 4 to 8: RPG Maker MV, XP, VX, VX Ace and MZ complete.
+- Measured state before answering them: `RgssEngineRuntime` is 312 lines against
+  1922 for the RM2K runtime and contains no renderer, no frame buffer and no
+  interpreter. It is a metadata inspector. There is no `project/src/mv` or
+  `project/src/mz` at all, and the repository holds **no** RGSS or MV/MZ game
+  file: no `.rgssad`, `.rxdata`, `.rvdata2` or `.rpgmvp` anywhere in the
+  fixtures. K-080 (RGSS spike) and K-090 (MV/MZ spike) are still BACKLOG.
+- So none of the five new criteria is met, and none can be verified against a
+  real game with what the repository holds. Three questions were put to the user
+  about how to proceed and none was answered inside the prompt window, so the
+  safe defaults were taken and are recorded here rather than assumed silently:
+  build structurally against the published specifications as WOLF was done,
+  never execute foreign JavaScript, and finish RM2K before spreading out.
+
+## K-110 WOLF binary database VERIFY (2026-09-26)
+- `WolfBinaryDatabaseReader` reads the `DataBase.dat` / `CDataBase.dat` /
+  `SysDataBase.dat` framing: magic `0 'W' 0 0 'O' 'L'`, a one byte version
+  header where `0x00` is v2 and `0x55` is v3, the marker `'F' 'M' 0`, a version
+  byte, a record type count, then one block per type and a version footer byte.
+- The important part is the **position table**. A record does not store its
+  values in order: each table entry packs block and index into one number, with
+  the block in the thousands digit and the index in the remainder (`1000` is
+  number block index 0, `2000` is string block index 0). The values then live in
+  two blocks, numbers first and strings second, and the two block sizes are
+  derived from the table rather than stored. Reading the blocks in property
+  order instead of through the table yields plausible but wrong data, which is
+  why the fixture `Test_ThePositionTableDecidesTheOrderNotTheFileOrder` puts the
+  string first and the number second.
+- A property whose position points outside its block is reported as missing
+  rather than defaulted: a zero would be indistinguishable from a real value.
+- A string is a 32-bit length, the bytes, and a NUL one past the length. The
+  terminator has to be consumed or every following value is off by one.
+- The first version byte was read at index 9, which is the marker's `M`; the
+  header is six magic bytes plus one version header plus three marker bytes, so
+  the version byte is at index 10. The test caught it.
+- Mutation evidence: ignoring the position table, an off-by-one block count, a
+  missing terminator check, a missing footer check and a skipped terminator byte
+  were all detected. The first terminator run escaped because the fixture also
+  failed on the file end, so the check was never isolated; the fixture now has
+  all the bytes but a non-NUL terminator and asserts the message says so.
+- Tests: `TestWolfBinaryDatabase 17/17`, total `576/576`, build `0 Warnung(en)`,
+  validator passed, probes 0.
+- Still missing against the K-110 title: the `game_dat`, `commonevent_dat` and
+  transfer formats. Only the database format is done.
+
+## K-094 decision turn order DONE (2026-09-26)
+- `Rm2kDecisionTurn` reproduces the tail of `Game_Player::UpdateMove`:
+  `if (Input::IsTriggered(Input::DECISION)) { if (!GetOnOffVehicle())
+  { CheckActionEvent(); } } return;`. Vehicle boarding therefore has
+  precedence over the action event check, and the turn ends either way so the
+  step counter is not incremented.
+- The diagonal correction runs first, because `GetOffVehicle` asserts there is
+  no diagonal. A diagonal of 4 to 7 becomes the facing, and a caller that acted
+  on the diagonal directly would look at the wrong neighbour tile.
+- `CanBoardAirshipOn` requires the airship to be on the player's own tile and
+  **both** the player and the airship to be standing still. A drifting airship
+  is not boardable.
+- `CanLeaveAirship` refuses to leave an airship that is still ascending or
+  descending, which is what stops the player ending up standing in mid air.
+- `CanDisembark` checks `IsValid` first, then an active same-layer event on the
+  target tile, then passability towards the player.
+- Out of scope and not implemented: the BGM swap around boarding
+  (`SetBeforeVehicleMusic` / `BgmPlay`). The runtime has no BGM state at all, and
+  adding one would be speculation rather than a verified slice.
+- Mutation evidence: action-event-first, missing airship guard, hardcoded
+  airship stopping, boat before ship and missing leave-airship guard were all
+  detected. The first run reported the airship-stopping mutant as escaping; that
+  was a stale backup in the harness, and re-running it against the current file
+  detected it.
+- Tests: `TestRm2kDecisionTurn 12/12`, total `559/559`, build `0 Warnung(en)`,
+  validator passed.
+
+## K-094 RM2K vehicles VERIFY (2026-09-26)
+- `Rm2kVehicle`: types `None=0, Boat=1, Ship=2, Airship=3` (liblcf
+  `Game_Vehicle::Type`, stored in save data). Move speeds are **4** for boat and
+  ship and **5** for the airship -- liblcf `MoveSpeed_normal=4`,
+  `MoveSpeed_double=5`, so a vehicle is faster than the default event speed 3,
+  which is `MoveSpeed_half`. This was the easiest value to get wrong.
+- `Rm2kVehicleState.GetAltitude`: `(256 - remaining) / 16` tiles while ascending,
+  `remaining / 16` while descending, and only while flying. 8 is spent per
+  update, so a full ascent or descent is 32 updates. A finished descent lands
+  where it can and otherwise starts another ascent instead of hovering.
+- `Rm2kVehicleBoarding`: the two rules are asymmetric and stay separate.
+  Airship boarded by standing on it (`BoardAirship`, aboard at once) and left
+  by `BeginAirshipDisembark` (still aboard, the airship descends). Boat/ship
+  boarded by stepping onto the water (`BeginEmbark` -> `CompleteEmbark`) and
+  left by stepping off (`BeginDisembark` -> `CompleteDisembark`), which
+  restores `PreboardMoveSpeed` rather than the vehicle or event speed.
+  `VehicleInFront` checks ship before boat, matching the Player's own order.
+- Mutation evidence: wrong move speed, ascent 128, no flying check, no
+  land-or-retry branch, boat-before-ship, airship-steps-off, missing map check
+  and vehicle-speed-instead-of-stashed-speed were all detected.
+- Tests: `TestRm2kVehicle 11/11`, `TestRm2kVehicleBoarding 11/11`, total
+  `547/547`, build `0 Warnung(en)`, validator passed, probes 0.
+- Still missing against the K-094 title, which is "get on/off **for the
+  action-event order**": the vehicles are not yet drawn, not yet given their
+  system-section name and index as a sprite, and not yet wired into the action
+  event order. The pinned fixture has no water tiles and no vehicle sprites, so
+  the boarding rules are proven on synthetic maps only. Status is therefore
+  VERIFY, not DONE.
+
 ## Next action
 
-1. Start K-103: nothing calls the placement logic yet. Read `Game_Party::SetupNewGame` and the `Game_Actor` sprite initialisation to find where a fresh game player sprite comes from, and check whether RM2K falls back to actor 1 character_name/character_index from the LDB. Only then read the actor data in the runtime and document the fallback.
-2. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` (line endings) and untracked `qa_patches/`.
-3. Reference Player/liblcf sources used this session are cached under `%TEMP%\opencode\rpgrefs` (`game_map.cpp`, `game_character.cpp`, `tilemap_layer.cpp`, `spriteset_map.cpp`, `chunks.h`, `lmt_chunks.h`, `liblcf_chipset.h`, `liblcf_map.h`, `mapinfo.h`, `savemapinfo.h`).
+1. **K-111**, the move route, so events walk at the verified per frame rate. `Game_Character::UpdateMoveRoute` and `lcf::rpg::MoveRoute` are the reference; each command needs its verified semantics before code, and a wrong command length desynchronises the route.
+2. **K-110** for WOLF: the remaining command bodies and the binary database, common event and game formats.
+3. Vehicles (K-094) still need typed terrain flags and a collision path.
+4. A methodology note worth keeping: a mutation result means nothing until the baseline reports that there is nothing to detect, and a build failure must be distinguished from a test failure. Counting only test errors reports a failed build as a clean pass.
+5. Unrelated local changes must stay untouched: `project/assets/fonts/NotoSansCJKsc-Regular.otf.import` and untracked `qa_patches/`.
 
 ## Reference repos noted by the user (2026-09-26, not actioned)
 
