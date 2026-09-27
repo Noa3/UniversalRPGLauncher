@@ -1489,3 +1489,44 @@ failing; it was held by a command that could not do what the test meant.
 errors. Second mutation run in flight. Next after this: 233, 234, 224, 236 —
 the other picture commands — then 355 and 357, which this map uses nine and
 three times.
+
+## K-128 A menu, and a plugin call that is refused — DONE
+
+K-127 asked which picture commands come next. **None of them:** this map uses
+no 224, no 233, no 234, no 236, and modelling them would have been rules no
+data here can check.
+
+The two commands left on this map that mean something mean opposite things.
+
+**351 is run.** `if (!$gameParty.inBattle()) { SceneManager.push(Scene_Menu);
+} return true;` — one condition, and it returns true either way. A reader that
+stopped the run in a battle would leave the commands after it unrun in a way
+the engine never does. `MzMenuState` exists so a 351 is not
+indistinguishable from a command with no effect.
+
+**357 is refused, by name.** `PluginManager.callCommand(this, pluginName,
+params[1], params[3])` is somebody else's JavaScript. All nine of this map's
+357 commands are answered, each naming the plugin and the command inside it,
+each landing on `MzBranchFacts.Notices`. A silent step would leave a game that
+looks as if it works while its crafting menu and floating text never appear.
+
+**The finding that outranks both cards: this game ships fifty-two plugins and
+all fifty-two are enabled.** Its 357 commands call `ItemCombinationMZ`,
+`DTextPicture` and `HyoujouSelect`; its 355 scripts read
+`$gameVariables.value(180)`. **UniversalRPG runs this game's MZ event code and
+none of its plugin code, and no bounded slice changes that.** Said once, with
+the numbers, where a caller will see it — which is what a card can do about
+it.
+
+**939/939**, `TestMzMenuAndPlugins: 4/4`, validator passed, build 0 errors.
+Every expectation was measured out of the game's own files first: nine plugin
+commands, three plugins, two 351s, three scripts. **Nine mutation rules, nine
+caught** — and one of them had to be written twice, because the first attempt
+replaced a fragment inside an escaped string and left the file unparseable.
+`BROKE` counts as caught and proves nothing; the second attempt compiled and
+failed three named tests, one for each plugin this map calls.
+
+**Next after this, and it is not another MZ command.** This map's twenty-two
+codes are now all either modelled or refused. The next thing worth doing is a
+**second MZ fixture** — a game with no plugins — so the reader can be checked
+against MZ event code without a plugin's JavaScript in the picture at all.

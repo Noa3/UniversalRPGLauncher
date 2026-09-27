@@ -2565,3 +2565,87 @@ the target, as the engine's easing is built to do, and does not walk the
 straight line in between — which is stated rather than faked. 233 (rotate),
 234 (tint), 236 (weather) and 224 (fade) are the next pictures and are not
 here.
+
+
+### K-128 Measure what this game actually needs from MZ before modelling more of it
+`DONE` — measurement, P1, no dependencies
+
+**Why this card exists.** K-127 asked which picture commands come next, and the
+answer was: **none of them.** This map uses no 224, no 233, no 234 and no 236.
+Modelling them would have been rules no data in this repository can check —
+the mistake K-127 already refused to make once.
+
+**So what is left in the one map that is here?** All twenty-two codes in it
+are real MZ 1.9.1 commands, measured against the 114 `commandNNN` methods in
+`rmmz_objects.js`. Every one of them is now either modelled or refused:
+
+| Code | What it is | State |
+|---:|---|---|
+| 0, 401, 412, 655, 657 | steps over, as the engine does | K-124 |
+| 101, 111, 112, 113, 117, 121, 122, 413, 601-603 | text, branches, control flow, waits | K-123 to K-126 |
+| 126, 230, 231, 232, 235 | party, wait, pictures | K-125 to K-127 |
+| **351** | **Open Menu** | **the next one** |
+| **355** | **Script** | refused, and stays refused |
+| **357** | **Plugin Command** | refused, and has to be |
+
+**The finding, and it is about this game rather than about MZ.**
+This game ships **52 plugins and all 52 are enabled.** Its eleven `357`
+commands call `ItemCombinationMZ`, `DTextPicture` and `HyoujouSelect`, and
+their parameters carry the plugins' own options. `command357` is
+`PluginManager.callCommand(this, pluginName, params[1], params[3])` — so a
+`357` in this game is nine times a request to run somebody else's JavaScript.
+
+**That is refused, permanently and for the same reason `355` is.** Not
+because a plugin call is harder, but because executing foreign JavaScript is
+the one thing this repository does not do. A reader that implemented `357`
+faithfully would be the thing the security contract forbids, and it would
+have been faithful to this game and useless to everyone else.
+
+**What a reader can honestly say about a `357`.** The plugin's name, the
+command name inside it, the author's own description, and the parameters as
+data — all four are readable without running a line of it. What the plugin
+*does* is not answerable, and is not guessed. The same shape as `355`: the
+text is kept, the running is declined, and the decline is structured rather
+than a silent step over, because a step over would make a game look as if it
+worked.
+
+**The two commands, and they mean opposite things.**
+
+`351` is run. The engine's `command351` is `if (!$gameParty.inBattle()) {
+SceneManager.push(Scene_Menu); Window_MenuCommand.initCommandPosition(); }
+return true;` — **one condition, and it returns true either way.** A menu in
+a battle is not this command with another scene, it is nothing at all, and a
+reader that stopped the run there would leave the commands after it unrun in a
+way the engine never does. `MzMenuState` exists so a 351 is not
+indistinguishable from a command with no effect: a reader with no screen still
+has to be able to answer "did the game open a menu here", and without somewhere
+to write the answer down it could only be silent.
+
+`357` is refused, and **the refusal is structured rather than a step over.**
+All nine of this map's 357 commands are answered, each naming the plugin and
+the command inside it, and each landing on `MzBranchFacts.Notices` where a
+caller looking for what went wrong will find it. A silent step would leave a
+game that looks as if it works while its crafting menu and its floating text
+never appear.
+
+**Test evidence** 4 tests in
+`project/tests/core/test_mz_menu_and_plugins.cs`. **Total 939/939**, validator
+passed, build 0 errors. The expectations were all measured out of the game's
+own files before they were written — nine plugin commands, three plugins, two
+351s, three scripts — so no number in this card is a shape this card chose.
+
+**Mutations** Nine rules, **nine caught**, and one of them had to be written
+twice: the first attempt replaced a fragment inside an escaped string and left
+the file unparseable, so it came back `BROKE` — which counts as caught and
+proves nothing. The second attempt replaced the whole notice with a constant
+that still compiles, and it failed three named tests, one for each of the
+three plugins this map calls. **A mutation that does not compile is not
+evidence**, and this project has now been bitten by that three times.
+
+**And the honest limit this puts on the card.** A game with 52 plugins can
+have its own logic in them: `ItemCombinationMZ` is a crafting system, and
+this game's `355` scripts read `$gameVariables.value(180)` to work out what
+was crafted. **UniversalRPG will run this game's MZ event code and none of
+its plugin code**, and no bounded slice can change that. What a card can do is
+say so where a caller will see it, once, with the numbers, instead of leaving
+a reader to discover it by playing.

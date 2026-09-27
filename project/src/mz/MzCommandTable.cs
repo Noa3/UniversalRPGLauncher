@@ -62,6 +62,21 @@ public static class MzCommandTable
     /// <summary>Removes a picture from the screen.</summary>
     public const int ErasePicture = 235;
 
+    /// <summary>Opens the menu. The engine's own
+    /// <c>command351</c> is <c>if (!$gameParty.inBattle()) {
+    /// SceneManager.push(Scene_Menu); }</c> — no number changes, and a menu is
+    /// a thing the player sees rather than a thing the game computes.</summary>
+    public const int OpenMenu = 351;
+
+    /// <summary>Runs a plugin's own code. The engine's <c>command357</c> is
+    /// <c>PluginManager.callCommand(this, pluginName, params[1], params[3])
+    /// </c>, which is somebody else's JavaScript and is never run here.</summary>
+    public const int PluginCommand = 357;
+
+    /// <summary>Runs a line of the author's own JavaScript. The engine's
+    /// <c>command355</c> ends in <c>eval(script)</c> and is not run here.</summary>
+    public const int Script = 355;
+
     /// <summary>Changes how many of an item the party has. The engine's
     /// <c>gainItem</c> clamps the count to <c>maxItems</c>, which is
     /// ninety-nine, and deletes the entry when it lands on zero.</summary>

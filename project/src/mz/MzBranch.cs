@@ -228,6 +228,29 @@ public sealed class MzBranchFacts
     /// </summary>
     public MzScreen Screen { get; init; } = new();
 
+    /// <summary>
+    /// Whether the party is in a battle, which is the one condition
+    /// <c>command351</c> asks before it opens the menu.
+    /// </summary>
+    public bool InBattle { get; init; }
+
+    /// <summary>
+    /// Whether a menu is open, as the last 351 left it.
+    /// </summary>
+    /// <remarks>
+    /// **A menu is a thing a player sees, so a reader that has no screen still
+    /// has to be able to say one was asked for.** Without this a 351 would be
+    /// indistinguishable from a command with no effect, and a caller asking
+    /// "did the game open a menu here" would have nothing to read.
+    /// </remarks>
+    public MzMenuState Menu { get; set; } = MzMenuState.Closed;
+
+    /// <summary>
+    /// Something a command asked for and this reader would not or could not do,
+    /// in the order it happened. A caller reads this rather than the log.
+    /// </summary>
+    public List<string> Notices { get; } = new();
+
     public Dictionary<int, int> Weapons { get; init; } = new();
     public Dictionary<int, int> Armors { get; init; } = new();
 

@@ -103,6 +103,8 @@ public static class MzCommands
             or MzCommandTable.ControlSwitches
             or MzCommandTable.ControlVariables
             or MzCommandTable.ChangeItems
+            or MzCommandTable.OpenMenu
+            or MzCommandTable.PluginCommand
             or MzCommandTable.ShowPicture
             or MzCommandTable.MovePicture
             or MzCommandTable.ErasePicture
@@ -203,6 +205,72 @@ public static class MzCommands
                 // not there is not an error.
                 pActions.Add(new MzAction(
                     pCommand, pFacts.Screen.Erase(At(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.OpenMenu:
+            {
+                // `command351` is
+                //   if (!$gameParty.inBattle()) {
+                //       SceneManager.push(Scene_Menu);
+                //       Window_MenuCommand.initCommandPosition();
+                //   }
+                //   return true;
+                // — **and the battle check is the whole of it.** A menu in a
+                // battle is not this command with a different scene, it is
+                // nothing at all, and a reader that opened one would put a
+                // menu over a fight the engine keeps the menu out of.
+                //
+                // Nothing here changes a number, so there is nothing to apply
+                // and nothing to be wrong about numerically: a caller is told
+                // the menu is open and why it is or is not.
+                if (pFacts.InBattle)
+                {
+                    pActions.Add(new MzAction(
+                        pCommand,
+                        "the menu is not opened, because the party is in a"
+                        + " battle and the engine opens no menu there"));
+                    return true;
+                }
+                pFacts.Menu = MzMenuState.Open;
+                pActions.Add(new MzAction(pCommand, "the menu is open"));
+                return true;
+            }
+
+            case MzCommandTable.PluginCommand:
+            {
+                // `command357` is
+                //   const pluginName = Utils.extractFileName(params[0]);
+                //   PluginManager.callCommand(this, pluginName, params[1],
+                //                                 params[3]);
+                //   return true;
+                // — **and this is where a reader stops.** Not because a
+                // plugin call is harder than the rest of the engine, and not
+                // because this particular plugin is unusual, but because
+                // running it would mean running somebody else's JavaScript,
+                // which is the one thing this repository does not do.
+                //
+                // What can be read without running a line of it is kept: the
+                // plugin's file name, the command inside it, the author's own
+                // description in the third parameter, and the parameters as
+                // data. What the plugin *does* is not answerable and is not
+                // guessed — a crafted-recipe system and a picture of text
+                // need the plugin to mean anything at all.
+                //
+                // **And it is not stepped over.** A silent step over would
+                // make a game look as if it worked while eleven of its
+                // commands did nothing, and this map's eleven `357` commands
+                // are how this game's crafting and its floating text are
+                // reached. A caller is told, by name, that they were not run.
+                pFacts.Notices.Add(
+                    $"a plugin command of \"{Text(pCommand, 0)}\" asks"
+                    + $" \"{Text(pCommand, 1)}\" to run, which this reader"
+                    + " does not do");
+                pActions.Add(new MzAction(
+                    pCommand,
+                    $"plugin {Text(pCommand, 0)} was asked to"
+                    + $" \"{Text(pCommand, 1)}\" and was not run; its"
+                    + " JavaScript is not executed here"));
                 return true;
             }
 
