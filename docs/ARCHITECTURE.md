@@ -120,15 +120,33 @@ MzBranchEvaluator      decides a 111 from the facts a caller has; a branch or an
         ▼
 MzInterpreter          an index into one event list, moved the way the engine
                        moves it: branches, else, loops, break, repeat above,
-                       labels, jumps, and a step limit equal to the engine's
-                       checkFreeze
+                       labels, jumps, a wait that holds the index, and a step
+                       limit equal to the engine's checkFreeze
+        ▼
+MzEventRunner          a run over a list and every list it calls. A 117 makes a
+                       child the way the engine's setupChild does, and the caller
+                       waits for it, so the called list runs to its end first.
+                       Every list in a run shares one set of facts, because the
+                       engine's $gameVariables is one object. A common event the
+                       repository has no list for is named and refused, not
+                       stepped over.
 ```
 
-`MzCommands` is where the commands that change numbers live (121 and 122), and
-`MzControlFlow` is where the commands whose whole effect is the index live. A
-command the engine has no method for — 0, 401, 412, 655 and 657, every one of
-which this game stores on purpose — is stepped over rather than refused, because
-the engine steps over it too.
+`MzCommands` is where the commands that change numbers live (121 and 122, and
+230, which is a wait), and `MzControlFlow` is where the commands whose whole
+effect is the index live. A command the engine has no method for — 0, 401, 412,
+655 and 657, every one of which this game stores on purpose — is stepped over
+rather than refused, because the engine steps over it too.
+
+**A run ends four ways, and all four are said out loud.** `Finished` when the
+list and everything it called ran out. `Waiting` when a 230 held the index, with
+the frame count, because the engine counts frames down one per frame and a
+reader that stepped over the wait would run the rest of a list early. `Frozen`
+when a run passed the engine's own freeze, which counts the whole run and not
+one list. `Refused` when it met something it will not guess at — a common event
+the repository has no list for, or a branch whose operand would need `eval`.
+A caller that read any of these as "the list ended" would be wrong about the
+other three, so each carries what it was.
 
 **Nothing here is a JavaScript runtime.** A 355 or 655 line is held as the text
 its author wrote, a 357 plugin call is not made, and a branch of kind 12 or an

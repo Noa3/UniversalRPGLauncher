@@ -34,6 +34,19 @@ public readonly record struct MzAction(MzCommandEntry Command, string What)
     public static MzAction Variable(
         MzCommandEntry pCommand, int pId, int pWas, int pIs, string pHow) =>
         new(pCommand, $"variable {pId} {pHow} {pWas} to {pIs}");
+
+    /// <summary>
+    /// A wait, with the frames it asked for. The engine counts these down one
+    /// per frame, and a run with no frames is waiting rather than finished.
+    /// </summary>
+    public static MzAction Wait(MzCommandEntry pCommand, int pFrames) =>
+        new(pCommand, pFrames > 0
+            ? $"wait {pFrames} frames"
+            : "wait for something outside this reader");
+
+    /// <summary>A common event being called, by the index the game named.</summary>
+    public static MzAction CommonEvent(MzCommandEntry pCommand, int pIndex) =>
+        new(pCommand, $"call common event {pIndex}");
 }
 
 /// <summary>
@@ -88,7 +101,8 @@ public static class MzCommands
             or MzCommandTable.Label
             or MzCommandTable.JumpToLabel
             or MzCommandTable.ControlSwitches
-            or MzCommandTable.ControlVariables;
+            or MzCommandTable.ControlVariables
+            or MzCommandTable.Wait;
 
     /// <summary>
     /// Runs a command that changes the game's numbers. It returns false when the
@@ -100,6 +114,32 @@ public static class MzCommands
     {
         switch (pCommand.Code)
         {
+            case MzCommandTable.Wait:
+            {
+                // The engine's wait is `this._waitCount = params[0]`, and
+                // `updateWaitCount` takes one off it per frame and breaks the
+                // frame while it is above zero. **A command that is waiting does
+                // not advance the index**, so the same 230 is read again next
+                // frame, and a reader that stepped over it would run the rest of
+                // the list a whole list of frames too early.
+                //
+                // There are no frames here, so the run is handed back waiting and
+                // the caller decides when the next frame is. The count is kept so
+                // that it can be counted down.
+                var frames = At(pCommand, 0);
+                pActions.Add(MzAction.Wait(pCommand, frames));
+                pInterpreter.Wait(frames);
+                // `false` here does not mean "carry on" and `true` would not
+                // mean it either. `ExecuteOne` finishes with
+                // `return Stopped == MzStep.Stepped`, and `Wait` has just set
+                // `Stopped` to `Waiting`, so the run stops either way. **This
+                // return value is a dead branch** — a first mutation run proved
+                // it, by changing this to `true` and watching every test still
+                // pass. It is left as `false` because it says what the command
+                // meant, and the next branch in this switch is a real one.
+                return false;
+            }
+
             case MzCommandTable.ControlSwitches:
             {
                 // for (let i = params[0]; i <= params[1]; i++) — inclusive, and
@@ -123,10 +163,18 @@ public static class MzCommands
                     return false;
                 }
                 // A random operand picks a number in its own range, and the
-                // engine adds the same drawn number to every variable in the
-                // range rather than drawing for each. That is kept, because a
-                // reader that drew per variable would give a game a different
-                // set of numbers than the engine wrote.
+                // engine draws **inside** its loop:
+                //
+                //     for (let i = startId; i <= endId; i++) {
+                //         const realValue = value + Math.randomInt(randomMax);
+                //         this.operateVariable(i, operationType, realValue);
+                //     }
+                //
+                // so every variable of a range gets its own roll. That is kept
+                // because a reader that drew once for the range would give a
+                // game the same number five times over in a roll of "how many
+                // of these did I get" — and this comment once said the opposite
+                // of what the line below it does.
                 var randomMax = 1;
                 if ((MzOperand)At(pCommand, 3) == MzOperand.Random)
                 {

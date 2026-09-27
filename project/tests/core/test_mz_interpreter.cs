@@ -911,6 +911,7 @@ partial class TestMzInterpreter : TestBase
         var finished = 0;
         var refused = 0;
         var frozen = 0;
+        var waiting = 0;
         foreach (var commands in lists)
         {
             var interpreter = new MzInterpreter(commands);
@@ -939,6 +940,23 @@ partial class TestMzInterpreter : TestBase
                         "and a freeze says how far it got, so the list that"
                         + " could not end can be found in the game");
                     break;
+                case MzStep.Waiting:
+                    // A 230 leaves the index where it is, and the engine counts
+                    // the frames down before reading it again. A single reader
+                    // has no frames, so a list that waits stops here and says
+                    // so. **This is not a failure**: a caller with frames calls
+                    // `PassFrame` and comes back.
+                    waiting++;
+                    AssertTrue(
+                        interpreter.Reason.Contains("waiting"),
+                        "and a wait says it is waiting, and how long for, so the"
+                        + $" caller knows when to come back: {interpreter.Reason}");
+                    AssertEq(
+                        interpreter.Commands[interpreter.Index].Code,
+                        MzCommandTable.Wait,
+                        "and the index stayed on the wait, because the engine"
+                        + " reads the same command again next frame");
+                    break;
                 default:
                     AssertTrue(
                         false,
@@ -952,7 +970,8 @@ partial class TestMzInterpreter : TestBase
         AssertTrue(
             finished > 0,
             $"and {finished} of {lists.Count} ran through without stopping, with"
-            + $" {refused} refused by name and {frozen} frozen by the limit");
+            + $" {refused} refused by name, {frozen} frozen by the limit and"
+            + $" {waiting} waiting for frames");
         AssertTrue(
             frozen > 0,
             "and at least one was frozen, because this game really does store a"

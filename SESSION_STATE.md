@@ -1290,3 +1290,88 @@ Eleven commands of a hundred and fourteen have an effect. 117, 126, 230, 231,
 232, 235, 351 and 357 are read as text; a 655 or 657 line is text. There is
 still no renderer, no save path and no input. MZ has detection, bounded data
 reading, a named command table, a decided branch and an index that walks a list.
+
+## K-125 The list a command calls, and the wait that stops one
+
+**Built** `MzEventRunner` (a run over a list and every list it calls),
+`MzInterpreter.Wait` / `PassFrame`, `MzAction.CommonEvent` / `Wait`, and
+`Result.MissingCommonEvent` / `WaitingFrames` as fields rather than prose.
+
+**The rules, from `Game_Interpreter`**
+1. A called list runs to its end before the caller moves on — `updateChild`
+   gives the child its own `update()` and the parent breaks the frame while it
+   is still running.
+2. Every list in a run shares one set of facts, because both go through the one
+   `$gameVariables`.
+3. The event id travels with the call, and only on a map (`isOnCurrentMap`).
+4. A 230 holds the index: the same command is read again the frame after, so a
+   reader that stepped over it would run a list three frames early.
+
+**What it refuses rather than guesses** The bounded fixture carries no
+`CommonEvents.json` — the real one is 4.5 MB and was left out on purpose — so
+every 117 in this game names an index that cannot be handed over. The engine's
+own line is `if (commonEvent)` and steps over a missing one; **this reader
+refuses and names the index**, because a silent step-over would run the rest of
+a game's list as if the call had never been there.
+
+**Measured on the one map in the fixture** Six event pages ending four different
+ways: three reach a common event and name the index, one stops at a 230 and says
+it is waiting, one is refused because it opens with fifty-eight lines of the
+game's own JavaScript, one is a single 0 and runs through. A first draft guessed
+three, one, one and one, and two of the four were wrong.
+
+**A number read out of prose is not a number** The test took the common event's
+index out of the message with an offset and got 76 for 476, because it counted a
+space twice. The index is a field now, and the test checks field and prose
+against each other. **The same rule as the two lost test files: name the place,
+not the shape.**
+
+**Total 912/912**, `TestMzEventRunner: 16/16`, `TestMzInterpreter: 18/18`,
+validator passed, build 0 warnings / 0 errors.
+
+**The mutation runs found a real fault in the runner, not only gaps in the
+tests.** Reading the map and the event of a child was untested, and asking the
+question showed the runner was doing it wrong: it passed the *caller's* map down
+and read both values off the frame rather than off the interpreter. The engine
+does neither — `setup` sets `_mapId` from `$gameMap.mapId()`, the map the game
+is on, and `command117` reads `this._eventId` off the calling interpreter. Both
+are now read from where the engine reads them, and `Result.Child` hands the
+caller the child so a test can check the three fields instead of trusting them.
+
+**A first draft of that test claimed the event id falls away on the second
+level, and the engine does not do that.** `setup` is `this._eventId = eventId
+|| 0`, so a chain that is on the map carries the same event all the way down;
+only a list that is not on the map passes zero, and there it stays zero. The
+claim was backwards on the interesting side and would have been written into a
+test as if it were the engine's answer.
+
+**Five mutation runs, and the lesson from them.** A rule that survives a run
+is not automatically a gap, and a rule that dies is not automatically covered.
+The first run caught 4 of 9. The three that escaped were real, and the fourth
+turn showed why the other two were not: `WaitFrames <= 0` and `< 0` differ
+only in a state nothing can reach, and the wait case's own `return false`
+cannot be changed to `true` and change anything, because `ExecuteOne` ends with
+`return Stopped == MzStep.Stepped` and `Wait` has just set `Stopped` to
+`Waiting`. **That is an equivalent mutant and is now named in the code as a
+dead branch**, rather than carried as a rule with no test.
+
+**A rule that hit the wrong place is not a gap either.** `MissingCommonEvent =
+index,` stands in two places — the depth branch and the missing-list branch —
+and a `replace(..., 1)` mutation hit the depth one, which no test reached. So
+the depth was genuinely untested, and `MaxDepth` is now a field with two tests:
+a list that calls itself is refused at the engine's own hundred and is not
+reported as a freeze, and the same list under the limit runs through.
+
+**Two test drafts were wrong and both are named in the file.** A test of
+"runs through" was first given a list that calls itself, which never can — a
+self-call is endless at every level. The second draft gave the called list a
+call to itself, which is the same endless thing one level down. Both are
+recorded, because the next one to write a "control case" here will reach for
+the same shortcut.
+
+## What is still not decided
+
+Thirteen of a hundred and fourteen commands have an effect. 126, 231, 232, 235,
+351 and 357 are read as text; a 355 or 657 line is text. A called list this
+repository has runs; one it does not have is named. Still no renderer, no save
+path, no input and no audio.

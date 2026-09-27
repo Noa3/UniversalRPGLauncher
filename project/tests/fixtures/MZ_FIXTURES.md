@@ -12,6 +12,15 @@ Eleven data files, the two files that name the engine, and a package file: 15
 files, 238,133 bytes. `CommonEvents.json` was taken and dropped again — 4.5 MB of
 one game's text, and a test that needs it is not one that needed it.
 
+**What that means for 117, and it is a known gap rather than a bug.** A 117 names
+a common event by the index it has in that file, and the one map read here calls
+eight different ones. `MzEventRunner` runs a called list when it has one and
+**names the index and refuses when it has not**, because the engine's own line
+is `if (commonEvent)` — a missing one is stepped over — and a silent step-over
+would run the rest of a game's list as if the call had never been there. To
+close the gap the real file would have to come in whole, with a decision about
+whose text that is.
+
 | Fixture | Bytes | SHA-256 |
 |---|---:|---|
 | `mz/data/Actors.json` | 1745 | `c8b04e1b5c95403d77bca447b14e320e56b4d3c663606892b464e43efd42c7ac` |

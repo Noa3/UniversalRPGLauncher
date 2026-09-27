@@ -2186,6 +2186,149 @@ not the suite's:
    the shape** — the same rule that emptied this card's test file twice.
 
 
+### K-125 Run the list a command calls, and stop at a wait
+`DONE`
+
+**The gap that started this** K-124 could walk one list. **An MZ event is almost
+never one list**: this game stores eight common events in the one map read here
+and reaches them with 117, and a 117 whose list is not available is not a command
+a reader may step over — the rest of the list behind it never happens. The same
+card took the 230 wait, because a wait is the other thing that stops a list
+short of its end.
+
+**What was built**
+
+- `project/src/mz/MzEventRunner.cs`: a run over a list and every list it calls,
+  with the engine's own answers for three things that are easy to get wrong.
+- `MzInterpreter.Wait` and `PassFrame`: a wait holds the index and a caller
+  counts the frames down.
+- `MzAction.CommonEvent` and `MzAction.Wait`, and `Result.MissingCommonEvent`
+  and `Result.WaitingFrames` as **fields rather than prose**.
+
+**Three rules, each read out of `Game_Interpreter`**
+
+1. **A called list runs to its end before the caller moves on.** `updateChild`
+   gives the child its own `update()` and the parent breaks the frame while the
+   child is still running, so a caller that carried on straight away would run
+   its own next command first. The three tests claim the order of the innermost
+   list's command before the middle one's and the middle one's before the
+   outermost's.
+2. **Every list in a run shares one set of facts.** Both go through the one
+   `$gameVariables`. A runner that gave each list its own would have a called
+   list change something its caller cannot see.
+3. **The event id travels with the call, and only on a map.** `isOnCurrentMap()`
+   decides, and that is what lets a common event address "this event".
+
+**A wait is a fourth ending, and it is not a failure**
+
+`command230` is `this._waitCount = params[0]`, and `updateWaitCount` takes one
+off it per frame and breaks the frame while it is above zero. **The index does
+not move**, so the same command is read again the frame after. A reader that
+stepped over the wait would run the rest of a list three frames early. There
+are no frames here, so the run is handed back `Waiting` with the count, and the
+caller decides when the next frame is.
+
+**What this repository will not do, and says so at every place it happens**
+
+The bounded fixture carries **no `CommonEvents.json`** — the real one is 4.5 MB
+and was left out on purpose — so every 117 in this game names an index that
+cannot be handed over. The engine's own line is `if (commonEvent)`, and a
+missing one leaves the index where it was and carries on. **This reader refuses
+and names the index instead**, because a silent step-over would run the rest of
+a game's list as if the call had never been there. Reading a called list out of
+a fixture that does not contain it would mean writing the game's own scripts.
+
+**Measured on the one map in the fixture, not guessed**
+
+Six event pages, and the six end four different ways: three reach a common event
+and name the index, one stops at a 230 and says it is waiting, one is refused
+because it **opens with fifty-eight lines of the game's own JavaScript** — a
+355 and fifty-seven 655, which this repository does not evaluate — and one is a
+single 0 and runs through. A first draft of that test guessed three, one, one
+and one, and two of the four numbers were wrong.
+
+**A number read out of prose is not a number**
+
+The test took the common event's index out of the message text with an offset,
+and got **76 for 476** because it counted a space twice. The index is now a
+field, and the test checks the field and the prose against each other.
+
+**Test evidence**
+
+- **16 tests** in `project/tests/core/test_mz_event_runner.cs`; the interpreter
+  suite stayed at 18 with the `Waiting` case added to the walk of a real list.
+- Total **912/912**, validator passed, build 0 warnings / 0 errors.
+**What a mutation run does and does not prove.** Three runs, 14 rule variants
+in all. **Fourteen caught** in the end, and the four that survived the first
+pass were each looked at rather than counted either way:
+
+1. **`MzInterpreter.Run` did not read `Waiting` as an ending of its own**, so
+   the K-124 path could hand back a wait as if the list were done. A real hole.
+   Now documented in the code and claimed by the four-way ending.
+2. **`CommandLimit` over a whole run, and over the nested path, was untested.**
+   `checkFreeze` counts the run and not one list. Three tests now claim it,
+   including a pair of lists that call each other.
+3. **`MissingCommonEvent` was only readable out of the message**, and the
+   message is the one thing that changes shape. A first draft read the number
+   out of the prose with an offset and got 76 for 476.
+4. **`PassFrame` on a count of zero.** A first run asked `<= 0` against `< 0`
+   and it survived, which was a real gap: nothing held a caller that keeps
+   passing frames past the end of a wait.
+5. **`MaxDepth` was untested**, and a `replace(..., 1)` mutation hid why: the
+   line `MissingCommonEvent = index,` stands in two branches, and the mutation
+   hit the depth one, which no test reached. It is a field now, with three tests.
+
+   **And then the tests for it were not tight enough either.** A first draft
+   asked only *whether* a self-calling list was refused, and it is refused at
+   every limit from zero to eight — so all of it passed with a reader that
+   refused one level early, one level late, or twice as deep as it should. The
+   thing that tells the levels apart is **how many calls the run managed**,
+   and that is what is claimed now: a limit of zero records one action, one
+   records two, three records four, and a limit of six is not a limit of three.
+6. **The map and the event of a child were untested**, and writing those tests
+   found **a real fault in the runner**: it passed the *caller's* map down to
+   the child, and read the map and the event off the frame rather than off the
+   interpreter. `setup` sets `_mapId` from `$gameMap.mapId()` — the map the game
+   is on — and `command117` reads `this._eventId` off the calling interpreter.
+   Both are now read from where the engine reads them, and `Result.Child` hands
+   the caller the child so the three fields can be checked rather than trusted.
+
+   **And a first draft of that test claimed the event id falls away on the
+   second level, which the engine does not do.** `setup` takes `eventId || 0`,
+   so a chain on the map carries the same event all the way down. Only a list
+   that is *not* on the map passes zero, and there it stays zero. Both
+   directions are now claimed, because the first draft got the interesting one
+   backwards.
+
+**Three mutations that survived are equivalent mutants, and each one changed
+the code rather than the test.**
+
+1. The wait case's own `return false` cannot become `return true` and change
+   anything, because `ExecuteOne` ends with `return Stopped == MzStep.Stepped`
+   and `Wait` has just set `Stopped` to `Waiting`. That is a dead branch, and
+   the code now says so where it would otherwise look like a rule with no test.
+2. `WaitFrames <= 0` against `< 0`, and `WaitFrames--` against `-= 2`, differ
+   only in states nothing can reach: a wait is never set below zero and
+   `PassFrame` clamps it. Both are the same in every state a caller can be in.
+3. **The one that changed the design.** `Frame` carried the map and the event
+   as well as the interpreter, and a mutation showed that reading them off the
+   frame and reading them off the interpreter give the same answer in every
+   reachable state — the frame's copy always matched. **Two copies of one truth
+   is how the event id came back from the dead in a first draft**, so the frame
+   now carries only the interpreter and the question has one place to be asked.
+
+A mutation that cannot be caught because it cannot be reached is not a test
+gap, and writing a test for an unreachable state would only have named the
+unreachable state.
+
+**Still not true of MZ**
+
+- **Thirteen of a hundred and fourteen commands have an effect.** 126, 231, 232,
+  235, 351 and 357 are still read as text, and a 355 or 657 line is text.
+- A called list that this repository *has* runs; one it does not have is named.
+  The 4.5 MB that would supply the eight is deliberately not in the fixture.
+- Still no renderer, no save path, no input and no audio.
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

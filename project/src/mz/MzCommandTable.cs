@@ -46,6 +46,16 @@ public static class MzCommandTable
     public const int Else = 411;
     public const int RepeatAbove = 413;
 
+    /// <summary>Calls a common event by the index it has in
+    /// <c>CommonEvents.json</c>. The engine makes a child interpreter for it,
+    /// and the list that called it waits until the child has finished.</summary>
+    public const int CommonEvent = 117;
+
+    /// <summary>Waits a number of frames. The engine's
+    /// <c>updateWaitCount</c> counts them down one per frame, and a run that
+    /// has no frames to count is waiting, not finished.</summary>
+    public const int Wait = 230;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>

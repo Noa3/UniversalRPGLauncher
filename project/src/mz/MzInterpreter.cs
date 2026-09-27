@@ -169,6 +169,12 @@ public sealed class MzInterpreter
             }
             if (!ExecuteOne(pCommands, pBranchFacts))
             {
+                // A command that is not done leaves the index where it was. It
+                // is either waiting — the same 230 will be read again the
+                // frame after — or it stopped with a reason of its own, and
+                // both end the run here. **This is not the same as finishing**,
+                // and a caller that read `Stopped` as "the list ended" would
+                // take a game's dialogue for a completed event.
                 return;
             }
             _taken++;
@@ -385,5 +391,52 @@ public sealed class MzInterpreter
     {
         Stopped = pStep;
         Reason = pReason;
+    }
+
+    /// <summary>The frames a wait asked for, which a caller counts down itself.</summary>
+    public int WaitFrames { get; private set; }
+
+    /// <summary>
+    /// Records that a command is waiting, and leaves the index where it was.
+    /// The engine's <c>updateWaitCount</c> takes one off the count per frame and
+    /// breaks the frame while it is above zero, and the command is read again
+    /// the frame after — so a reader that moved the index on would run the rest
+    /// of a list before the wait was over.
+    /// </summary>
+    public void Wait(int pFrames)
+    {
+        WaitFrames = pFrames;
+        Stopped = MzStep.Waiting;
+        Reason = pFrames > 0
+            ? $"waiting {pFrames} frames at index {Index}"
+            : $"waiting at index {Index} for something outside this reader";
+    }
+
+    /// <summary>
+    /// Counts one frame off a wait, which is what the engine does before each
+    /// frame, and says whether the wait is over.
+    /// </summary>
+    public bool PassFrame()
+    {
+        // The engine's `updateWaitCount` is
+        // `if (this._waitCount > 0) { this._waitCount--; return true; }`, so a
+        // count of zero is over and only a count above zero is counted. **A
+        // reader that asked for a frame less than zero would let a count of
+        // zero hold the caller for ever**, and there is a state where that
+        // matters: a caller that passes frames past the end of the wait.
+        if (WaitFrames <= 0)
+        {
+            WaitFrames = 0;
+            Stopped = MzStep.Stepped;
+            return true;
+        }
+        WaitFrames--;
+        if (WaitFrames > 0)
+        {
+            return false;
+        }
+        WaitFrames = 0;
+        Stopped = MzStep.Stepped;
+        return true;
     }
 }
