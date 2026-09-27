@@ -30,12 +30,23 @@ public readonly record struct MzCommandEntry(
         {
             foreach (var item in value.Items)
             {
-                parameters.Add(item.Kind == MzKind.Number
+                // **A boolean is a value, and a first draft lost it.** A 232
+                // carries its "wait" in the eleventh slot as a real JSON
+                // boolean, and only a Number and a Text were handled here — so
+                // `true` and `false` both became the empty string, and this
+                // game's four moves came back as four that never ask to wait.
+                // The engine reads that slot as a truth value, so a boolean
+                // has to arrive as one rather than as nothing.
+                parameters.Add(item.Kind switch
+                {
                     // A number the game wrote as a float is read as the whole
                     // number the engine would compare it as, not as a formatted
                     // string with a decimal point in it.
-                    ? System.Math.Round(item.Number).ToString(CultureInfo.InvariantCulture)
-                    : item.Text);
+                    MzKind.Number =>
+                        System.Math.Round(item.Number).ToString(CultureInfo.InvariantCulture),
+                    MzKind.Bool => item.Boolean ? "true" : "false",
+                    _ => item.Text,
+                });
             }
         }
         return new MzCommandEntry(

@@ -220,6 +220,14 @@ public sealed class MzBranchFacts
     /// </summary>
     public bool ItemsAreKnown => KnownItems != null;
 
+    /// <summary>
+    /// What is on the screen, and who is looking at it. **A party is a part of
+    /// the facts and so is a screen**, for the same reason: the engine has one
+    /// <c>$gameScreen</c> and a 231 and a branch asking what is on the screen
+    /// must be looking at the same thing.
+    /// </summary>
+    public MzScreen Screen { get; init; } = new();
+
     public Dictionary<int, int> Weapons { get; init; } = new();
     public Dictionary<int, int> Armors { get; init; } = new();
 

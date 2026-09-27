@@ -103,6 +103,9 @@ public static class MzCommands
             or MzCommandTable.ControlSwitches
             or MzCommandTable.ControlVariables
             or MzCommandTable.ChangeItems
+            or MzCommandTable.ShowPicture
+            or MzCommandTable.MovePicture
+            or MzCommandTable.ErasePicture
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -115,6 +118,94 @@ public static class MzCommands
     {
         switch (pCommand.Code)
         {
+            case MzCommandTable.ShowPicture:
+            {
+                // `command231` is
+                //   const point = this.picturePoint(params);
+                //   $gameScreen.showPicture(params[0], params[1], params[2],
+                //       point.x, point.y, params[6], params[7], params[8], params[9]);
+                // and `picturePoint` is
+                //   if (params[3] === 0) { point.x = params[4]; point.y = params[5]; }
+                //   else { point.x = $gameVariables.value(params[4]);
+                //          point.y = $gameVariables.value(params[5]); }
+                // **so the fourth parameter decides where the other two are
+                // read from** — a number written in the event, or a variable
+                // to look up. A first draft read them as numbers and a game
+                // that places a picture from a variable would have put it at
+                // the variable's own number.
+                var show = Point(pCommand, pFacts, out var shownX, out var shownY);
+                var said = pFacts.Screen.Show(
+                    At(pCommand, 0),
+                    Text(pCommand, 1),
+                    At(pCommand, 2),
+                    shownX, shownY,
+                    At(pCommand, 6),
+                    At(pCommand, 7),
+                    At(pCommand, 8),
+                    At(pCommand, 9));
+                pActions.Add(new MzAction(pCommand, said));
+                _ = show;
+                return true;
+            }
+
+            case MzCommandTable.MovePicture:
+            {
+                // `command232` is
+                //   $gameScreen.movePicture(params[0], params[2], point.x, point.y,
+                //       params[6], params[7], params[8], params[9], params[10],
+                //       params[12] || 0);
+                //   if (params[11]) { this.wait(params[10]); }
+                // **and there is no second one** — the reader that assumed
+                // there was one would wait on every move, and this game asks
+                // for the wait on two of its four and not on the other two.
+                Point(pCommand, pFacts, out var movedX, out var movedY);
+                var moving = pFacts.Screen.Move(
+                    At(pCommand, 0),
+                    At(pCommand, 2),
+                    movedX, movedY,
+                    At(pCommand, 6),
+                    At(pCommand, 7),
+                    At(pCommand, 8),
+                    At(pCommand, 9),
+                    At(pCommand, 10),
+                    // `params[12] || 0` — an easing the game did not write is
+                    // zero, and not "whatever is in the next slot".
+                    At(pCommand, 12),
+                    Truth(pCommand, 11),
+                    out var frames);
+
+                // **The command runs and the index moves, and the wait is the
+                // interpreter's, not this command's.** A first draft returned
+                // false here to hold the list up, and that is what
+                // `return false` means to this reader: the index stays where
+                // it was. So the next frame read the same 232 again, set the
+                // same twenty frames again, and the picture never arrived —
+                // a move that had to wait became a move that waited for ever.
+                //
+                // The engine has none of this trouble because `command232`
+                // ends in `return true` whatever it asked for, and the wait it
+                // set lives in `this._waitCount` where the next command cannot
+                // reach it. **That is the shape to keep**: the command is done,
+                // and the frame belongs to the interpreter.
+                pActions.Add(new MzAction(pCommand, moving));
+                if (frames > 0)
+                {
+                    pActions.Add(MzAction.Wait(pCommand, frames));
+                    pInterpreter.Wait(frames);
+                }
+                return true;
+            }
+
+            case MzCommandTable.ErasePicture:
+            {
+                // `command235` is `$gameScreen.erasePicture(params[0])`, which
+                // sets the slot to null. One parameter, and a picture that is
+                // not there is not an error.
+                pActions.Add(new MzAction(
+                    pCommand, pFacts.Screen.Erase(At(pCommand, 0))));
+                return true;
+            }
+
             case MzCommandTable.ChangeItems:
             {
                 // `command126` is
@@ -361,6 +452,60 @@ public static class MzCommands
         MzOperation.Modulo => "mod",
         _ => "by an operation this reader has no name for",
     };
+
+    /// <summary>
+    /// Where a picture goes, as <c>picturePoint</c> answers it. **The fourth
+    /// parameter decides where the fifth and sixth are read from**: a number
+    /// written in the event, or the number a variable holds.
+    /// </summary>
+    private static bool Point(
+        MzCommandEntry pCommand, MzBranchFacts pFacts,
+        out int pX, out int pY)
+    {
+        pX = 0;
+        pY = 0;
+        var fromVariables = At(pCommand, 3) != 0;
+        pX = From(pCommand, pFacts, 4, fromVariables);
+        pY = From(pCommand, pFacts, 5, fromVariables);
+        return fromVariables;
+    }
+
+    private static int From(
+        MzCommandEntry pCommand, MzBranchFacts pFacts, int pIndex, bool pVariable) =>
+        pVariable
+        ? pFacts.Variables.TryGetValue(At(pCommand, pIndex), out var held)
+            ? held
+            : 0
+        : At(pCommand, pIndex);
+
+    /// <summary>
+    /// A parameter read the way <c>if (params[11])</c> reads it.
+    /// </summary>
+    /// <remarks>
+    /// **A truth value, not a number.** RPG Maker writes booleans into the
+    /// event list as <c>"1"</c> and <c>""</c>, and a game may leave the slot
+    /// out entirely. A reader that called <c>int.Parse</c> on the string
+    /// would throw on an empty one — and a reader that read an empty string as
+    /// zero would be right by accident, while a reader that read a missing
+    /// parameter as a number at all would not.
+    /// </remarks>
+    private static bool Truth(MzCommandEntry pCommand, int pIndex)
+    {
+        if (pIndex >= pCommand.Parameters.Count)
+        {
+            return false;
+        }
+        var written = pCommand.Parameters[pIndex];
+        return written == "1"
+            || string.Equals(written, "true", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A parameter the game wrote as text — a picture's file name, which is
+    /// the only string a 231 carries.
+    /// </summary>
+    private static string Text(MzCommandEntry pCommand, int pIndex) =>
+        pIndex < pCommand.Parameters.Count ? pCommand.Parameters[pIndex] : "";
 
     private static int At(MzCommandEntry pCommand, int pIndex) =>
         pIndex < pCommand.Parameters.Count

@@ -2430,3 +2430,138 @@ save path, no input, no audio.
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.
+
+
+### K-127 Put a picture on the screen and move it off again
+`DONE` — pictures, P2, no dependencies
+
+**What it is.** K-121 to K-126 read MZ data, walked event lists, changed what
+the party carries. **This is the first command in this game that needs
+something other than numbers to have an effect**: nine of them on the one map
+in the fixture, on images 1, 86 and 87 — three show a picture, four move one,
+two erase one. A reader with no place to put a picture has nothing to say
+about them.
+
+**Not 127 and not 128.** Those are Change Weapons and Change Armors, and this
+game's `Map002` has **none of them** — no 127, no 128, no 129, no 130. So
+carrying them would have meant writing rules no data in this repository can
+check, and the fixture has no `Weapons.json` and no `Armors.json` to check
+them against. The pictures were chosen because the data is here.
+
+**The rules, each read out of rmmz_objects.js 1.9.1 rather than inferred**
+
+1. **A shown picture is a new object.** `showPicture` makes
+   `new Game_Picture()` and puts it in the slot, so a tint, a rotation and any
+   movement are gone with the old one. A reader that changed the existing
+   picture in place would keep what the engine has just discarded.
+2. **A picture id is routed through `realPictureId`, which is not the
+   identity.** In a battle a map picture and a battle picture share the
+   editor's number. **This game's `System.json` sets `picturesUpperLimit` to
+   110**, not the hundred `maxPictures` falls back on, and a reader using the
+   hundred would put a battle picture on top of a map one at the wrong offset.
+3. **The fourth parameter says where the fifth and sixth are read from.**
+   `picturePoint` reads them as numbers when it is zero and out of variables
+   when it is not, and a reader that read them as numbers either way would
+   place a variable-positioned picture at the variable's own number.
+4. **A move sets a target, not a value.** `updateMove` only moves while
+   `_duration > 0`, so **a move of zero frames changes nothing at all** and asks
+   for no wait even when the game asked for one.
+5. **A move on an empty slot does nothing**, and is recorded rather than
+   dropped — a game that moves a picture it never showed has a reason a log
+   should hold.
+6. **Only a move that asks to wait holds the list up.** `if (params[11]) {
+   this.wait(params[10]); }` and there is no second one. This game asks for
+   the wait on **two of its four** moves and not on the other two.
+
+**A real fault this card found in reading, not in testing.**
+`MzCommandEntry.From` handled a Number and took `item.Text` for everything
+else, so a JSON **boolean** became the empty string. A 232 carries its wait in
+the eleventh slot as a real `true`/`false`, and this game's four moves came
+back as four that never ask to wait. No test had noticed, because no test had
+read a boolean out of an event list. It is a lost value in a file this
+repository claims to read, and it is fixed in the reader rather than worked
+around in the test.
+
+**A second one, of my own.** `if (params[11])` is a truth value, and a first
+draft called `int.Parse` on it — which throws on the empty string a game may
+leave in that slot. Reading it the way the engine reads it is now its own
+named method.
+
+**A third, and the worst of the three: a waiting move never arrived.**
+`ExecuteOne` did not step the index when a command left the interpreter in
+`Waiting`, and a `MovePicture` that asked to wait did `return false`, which
+means the same thing. So the next frame read the same 232 again, set the same
+twenty frames again, and **a picture that had to move across the screen
+waited for ever and never got there.**
+
+The engine has none of this trouble: `command232` ends in `return true`
+whatever it asked for, and the wait it set lives in `_waitCount` where the
+next command cannot reach it. The index moves and the run stops in two
+separate steps now, which is what the engine's frame does — the command is
+done, the frame is not. `MzInterpreter` runs 18 and `MzEventRunner` 16 tests
+and both are unchanged after it, so this was a fault in a rule nothing had
+exercised rather than a change to a rule something had.
+
+**And a fourth, of my own again.** A test that claims a picture is at
+`2000, 2000` because the scale is `2000, 2000` is reading the wrong line. The
+event says `1, "UI/Status_HelpCollision", 0, 0, 0, 0, 2000, 2000, 255, 0`:
+**a place of nothing and a picture two thousand times its own size**, and a
+reader that put the scale into the place would have shown it off the bottom
+left of the screen. The claim was corrected to the measured value, not
+adjusted until it passed.
+
+**A test that counted is not a test that ran.** The first draft's ninth test
+was called "every picture command in this game runs" and it counted: three
+shows, four moves, two erases, read out of the file without an interpreter in
+sight. Four mutation rules escaped because of it. The test that replaced it
+builds an interpreter, hands it the frames the two waiting moves ask for,
+and checks what the screen holds when the list is through — and it is the
+test that found the waiting-move fault.
+
+**And an equivalent mutant that was not equivalent at all, twice.** Removing
+`pInterpreter.Wait(frames)` entirely passed the suite, because the first draft
+of the walk-through drove the screen's frames from the test's own loop — so a
+reader that never waited still moved the picture and ended in the same place.
+**It is equivalent for the picture and wrong for the page:** without the wait
+the four commands after the move run in the same frame, and a game that fades
+a picture out over twenty frames would run the rest of the event while it is
+still at full opacity. The test that killed it claims frames and not an end
+state: the interpreter is held for exactly the movement's length, the index is
+already past the move, the command after it has not run, and it is released
+when the frames are counted off.
+
+**A fifth mistake of my own, in the same test.** A 122 written as four
+parameters — `1, 0, 0, 5` — has nowhere to read a value from, because
+`command122` is `startId, endId, operationType, operandType, operand` and
+**the operand is the fifth**. The page was not held by the move failing; it
+was held by a command that could not do what the test meant.
+
+**Two more test gaps, found the same way.** A move that does *not* ask to
+wait had no test of its own, so replacing the wait condition with `true`
+passed — the rule was only ever checked from the side where it says yes. And
+`if (params[11])` had no test with a parameter the game wrote as something
+other than a boolean, so reading it as `written != ""` passed too. **A rule
+checked from one side is half a rule**, and both halves are now tests of their
+own: one that the page runs on in the same frame and the picture still moves,
+and one that `true` and `1` ask while `false`, `""`, `0` and `no` do not.
+
+**Test evidence** 11 tests in `project/tests/core/test_mz_screen.cs`.
+**Total 935/935**, validator passed, build 0 errors.
+
+**Mutations** Twenty-two rules over four runs, and the shape of the escape is
+the same one this repository keeps meeting: **every rule that survived was a
+rule no test had asked about from the side it fails on.** Run one caught 7 of
+11. Run two caught 3 of 7. Run three caught 2 of 4. Run four is the full set
+on the finished suite. The three escapes in run two were the waiting-move
+fault, the boolean parameter and a direct-call gap; each one turned out to be
+a real fault in the reader or in the index, not a weak test.
+
+**What is deliberately not here.** A picture is a name, a place and some
+numbers; it is not a texture, and nothing here loads one. The blend mode and
+the scale are kept as the numbers the game wrote rather than resolved to a
+rendering, because a reader with no renderer must not pretend to have one. The
+easing is stored and not applied: `PassFrame` lands the last frame exactly on
+the target, as the engine's easing is built to do, and does not walk the
+straight line in between — which is stated rather than faked. 233 (rotate),
+234 (tint), 236 (weather) and 224 (fade) are the next pictures and are not
+here.

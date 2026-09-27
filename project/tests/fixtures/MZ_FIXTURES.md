@@ -203,3 +203,119 @@ A branch that asks about a switch nobody supplied returns `Unknown` and names
 the switch, rather than coming to false. A reader that treated what it does not
 know as off would skip a game's content with nothing to show for it, and that is
 the one failure in a branch evaluator that would be invisible.
+
+## Pictures: 231, 232 and 235
+
+The one map carries nine picture commands — three show, four move, two erase —
+on editor numbers 1, 86 and 87. They are the first commands in this game that
+need something other than numbers to have an effect, so K-127 gives them a
+place to go.
+
+### The game sets a hundred and ten, not the hundred
+
+```
+Game_Screen.prototype.maxPictures = function() {
+    if ("picturesUpperLimit" in $dataSystem.advanced) {
+        return $dataSystem.advanced.picturesUpperLimit;
+    } else {
+        return 100;
+    }
+};
+```
+
+**This game's `System.json` sets `picturesUpperLimit` to `110`.** The hundred is
+the fallback for a game that does not set it, and this one does. A reader that
+used the hundred would tell a battle picture from a map one by the wrong
+amount, because `realPictureId` adds `maxPictures()` to separate them:
+
+```
+Game_Screen.prototype.realPictureId = function(pictureId) {
+    return $gameScene.isBattle() ? pictureId + this.maxPictures() : pictureId;
+};
+```
+
+So picture 86 is at slot 86 on the map and at slot 196 in a battle. The two
+never meet, which is the whole of the rule.
+
+### A shown picture is a new picture
+
+```
+Game_Screen.prototype.showPicture = function(pictureId, name, origin, x, y,
+                                            scaleX, scaleY, opacity, blendMode) {
+    const realPictureId = this.realPictureId(pictureId);
+    const picture = new Game_Picture();
+    picture.show(name, origin, x, y, scaleX, scaleY, opacity, blendMode);
+    this._pictures[realPictureId] = picture;
+};
+```
+
+**A new object, and the old one is gone with it** — its tint, its rotation and
+any movement. A reader that changed the existing picture in place would keep
+what the engine has just thrown away, and a game that shows the same slot twice
+would have the first picture still moving.
+
+### The fourth parameter says where the place is read from
+
+```
+Game_Interpreter.prototype.picturePoint = function(params) {
+    const point = new Point();
+    if (params[3] === 0) {
+        point.x = params[4];
+        point.y = params[5];
+    } else {
+        point.x = $gameVariables.value(params[4]);
+        point.y = $gameVariables.value(params[5]);
+    }
+    return point;
+};
+```
+
+**The kind decides, not the value.** Zero means the fifth and sixth are the
+numbers; anything else means they are variables to look up. A reader that read
+them as numbers either way would place a variable-positioned picture at the
+variable's own number — here at 40 rather than at the 640 it holds.
+
+### A move sets a target, and a move of no frames does nothing
+
+```
+Game_Picture.prototype.updateMove = function() {
+    if (this._duration > 0) {
+        this._x = ...;
+        this._duration--;
+    }
+};
+```
+
+`move` writes the targets and the duration and **does not touch the current
+values**. So a move of zero frames changes nothing at all: the picture is still
+where it was, the target is never reached, and `this.wait(params[10])` becomes
+a wait of no frames, which is over at once even when the game asked for it.
+
+Only a move that asks to wait holds the list up:
+
+```
+if (params[11]) { this.wait(params[10]); }
+```
+
+and there is no second line like it. This game asks on **two of its four**
+moves and not on the other two, so a reader that waited on every move would
+stall a page that the engine runs straight through.
+
+### A boolean parameter is a value, and a first reader lost it
+
+`params[11]` is a real JSON boolean in this game's data — `true` and `false`,
+not `"1"` and `""`. `MzCommandEntry.From` handled a Number and took the text of
+everything else, so **both booleans became the empty string** and all four moves
+came back as "does not wait". It is fixed in the reader, and the test reads a
+boolean out of an event list rather than building one by hand, so the loss
+cannot come back unnoticed.
+
+### What is not here
+
+A picture is a name, a place and some numbers. Nothing in this repository
+loads a texture, and the blend mode and the scale are kept as the numbers the
+game wrote rather than resolved to a rendering. The easing is stored and not
+applied: `PassFrame` lands the last frame exactly on the target, as the
+engine's easing is built to do, and does not walk the straight line in between
+— which is stated rather than faked. 233 (rotate), 234 (tint), 224 (fade) and
+236 (weather) are the next picture commands and are not modelled.

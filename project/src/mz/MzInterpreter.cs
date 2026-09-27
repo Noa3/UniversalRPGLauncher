@@ -232,14 +232,23 @@ public sealed class MzInterpreter
             return false;
         }
 
-        // The command did not move the index and did not stop, so it is done
-        // and the interpreter steps over it, which is what the engine does after
-        // every command that returns true.
-        if (Stopped == MzStep.Stepped)
+        // **The index steps over a command that ran, and a wait does not hold
+        // it.** The engine's own rule is that every command which returns true
+        // is followed by `this._index++`, and the wait a command set lives in
+        // `_waitCount` where the next command cannot reach it. A first draft
+        // made the index wait for the wait, so a 232 that asked to wait held
+        // its own index on the command that asked — the next frame read the
+        // same command again, set the same frames again, and the picture never
+        // arrived.
+        //
+        // So the index moves and the run stops in two separate steps, which is
+        // what the engine's frame does: the command is done, the frame is not.
+        Index++;
+        if (Stopped != MzStep.Stepped)
         {
-            Index++;
+            return false;
         }
-        return Stopped == MzStep.Stepped;
+        return true;
     }
 
     /// <summary>

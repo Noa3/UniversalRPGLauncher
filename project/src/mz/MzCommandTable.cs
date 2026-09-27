@@ -51,6 +51,17 @@ public static class MzCommandTable
     /// and the list that called it waits until the child has finished.</summary>
     public const int CommonEvent = 117;
 
+    /// <summary>Puts a picture on the screen. The engine makes a new picture
+    /// and puts it in the slot, so anything the old one had is gone with it.</summary>
+    public const int ShowPicture = 231;
+
+    /// <summary>Moves a picture to a new place over a number of frames. It
+    /// sets a target, so a move of zero frames changes nothing at all.</summary>
+    public const int MovePicture = 232;
+
+    /// <summary>Removes a picture from the screen.</summary>
+    public const int ErasePicture = 235;
+
     /// <summary>Changes how many of an item the party has. The engine's
     /// <c>gainItem</c> clamps the count to <c>maxItems</c>, which is
     /// ninety-nine, and deletes the entry when it lands on zero.</summary>

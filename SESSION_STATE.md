@@ -1430,3 +1430,62 @@ notices to itself while the interpreter builds its own over the same facts, so
 the notice is on the action.
 
 **Total 924/924**, `TestMzParty: 12/12`, validator passed, build 0 errors.
+
+## K-127 Put a picture on the screen — DONE
+
+231, 232 and 235 on the one map in the fixture: nine commands, three shows,
+four moves, two erases, on images 1, 86 and 87. **Not 127 or 128** — this
+game's `Map002` has no 127, no 128, no 129 and no 130, and the fixture has
+no `Weapons.json` or `Armors.json`, so carrying weapons would have meant
+rules no data here can check. The pictures were chosen because the data is
+here, and because they are the first commands in this game that need
+something other than numbers to have an effect.
+
+Six rules out of rmmz_objects.js 1.9.1, in the card. The two that bite: **a
+shown picture is a new object and the old one is gone with it**, and **a move
+sets a target, not a value, so a move of zero frames changes nothing at all**.
+
+**A real fault in reading, not in testing.** `MzCommandEntry.From` handled a
+Number and took `item.Text` for everything else, so a JSON boolean became the
+empty string — and a 232 carries its wait in the eleventh slot as a real
+`true`/`false`. This game's four moves all came back as "does not ask to
+wait". No test had noticed because no test had read a boolean out of an event
+list. Fixed in the reader, not worked around in the test.
+
+**And one of my own:** `if (params[11])` is a truth value, and a first draft
+called `int.Parse` on it, which throws on the empty string a game may leave in
+that slot. Reading it the way the engine reads it is now its own named
+method.
+
+**A third fault, and the worst: a waiting move never arrived.**
+`ExecuteOne` stepped the index only when the interpreter was `Stepped`, and a
+`MovePicture` that asks to wait returns false — which means the same thing.
+So the next frame read the same 232 again, set the same twenty frames again,
+and a picture that had to cross the screen waited for ever. The engine has no
+such trouble: `command232` ends in `return true` whatever it asked for, and
+its wait lives in `_waitCount` where the next command cannot reach it. The
+index moves and the run stops in two separate steps now. `MzInterpreter` 18
+and `MzEventRunner` 16 are unchanged after it, so it was a rule nothing had
+exercised.
+
+**And a fourth of my own:** a test that claimed a picture sits at 2000, 2000
+because the *scale* is 2000, 2000 was reading the wrong line. The place is
+zero. Corrected to the measured value rather than adjusted until it passed.
+
+**A test that counts is not a test that runs.** The first draft's ninth test
+was named "every picture command in this game runs" and did nothing of the
+kind — it counted codes out of the file with no interpreter in sight, and four
+mutation rules escaped through it. The replacement builds an interpreter,
+hands it the frames the two waiting moves ask for, and checks the screen when
+the list is through. It is the test that found the waiting-move fault.
+
+**A fifth mistake:** a 122 written with four parameters has nowhere to read
+a value from — `command122` is `startId, endId, operationType, operandType,
+operand` and the operand is the fifth. The page was not held by the move
+failing; it was held by a command that could not do what the test meant.
+
+**935/935**, `TestMzScreen: 11/11`, `TestMzInterpreter: 18/18`,
+`TestMzEventRunner: 16/16`, `TestMzParty: 12/12`, validator passed, build 0
+errors. Second mutation run in flight. Next after this: 233, 234, 224, 236 —
+the other picture commands — then 355 and 357, which this map uses nine and
+three times.

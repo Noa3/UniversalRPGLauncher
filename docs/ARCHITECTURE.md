@@ -136,10 +136,24 @@ MzParty                what a 126 changes. The count is clamped to maxItems,
                        the event asked for; a count that lands on zero is
                        deleted rather than stored; and an id with no item behind
                        it changes nothing and says which id it was.
+MzScreen                what a 231, 232 and 235 change. Every value is a
+                       pair, because a picture is nearly always between two
+                       places: where it is and where it is going, and the
+                       frames left to get there. Three rules a first reading
+                       gets wrong: a shown picture is a NEW object and the old
+                       one is gone with it; a picture id is routed through
+                       realPictureId, so a battle picture lives a
+                       picturesUpperLimit above the map one — this game sets
+                       110, not the engine's fallback of 100; and a move sets
+                       a TARGET, so a move of zero frames changes nothing at
+                       all. PassFrame lands the last frame exactly on the
+                       target and does not walk the straight line in between:
+                       the easing is stored, not applied, and that is said
+                       rather than faked.
 ```
 
-`MzCommands` is where the commands that change numbers live (121 and 122, and
-230, which is a wait), and `MzControlFlow` is where the commands whose whole
+`MzCommands` is where the commands that change numbers live (121 and 122, 126,
+231, 232 and 235, and 230, which is a wait), and `MzControlFlow` is where the commands whose whole
 effect is the index live. A command the engine has no method for — 0, 401, 412,
 655 and 657, every one of which this game stores on purpose — is stepped over
 rather than refused, because the engine steps over it too.
