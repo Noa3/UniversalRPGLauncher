@@ -1,0 +1,167 @@
+using System;
+using System.Collections.Generic;
+
+namespace UniversalRPG.Web;
+
+/// <summary>
+/// What a number in an MZ event command list is, and which command owns it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A command list holds two kinds of number and telling them apart is the whole
+/// of reading one. A <b>command</b> is dispatched to a method of its own, and
+/// <see cref="MzCommandName"/> names every one of them as the engine does. A
+/// <b>data</b> number carries what a command above it works on: a line of text
+/// under a message, a purchase under a shop, a line of script under a script
+/// block. The engine never dispatches those to a method, it reads them inside the
+/// command above, and a reader that treated them as commands would run a line of
+/// dialogue as if it were an instruction.
+/// </para>
+/// <para>
+/// <b>The owner of each data number was read out of the engine, not derived.</b>
+/// Four of the five are three hundred above their command — 401 under 101, 405
+/// under 105, 408 under 108, 655 under 355 — and one is not: <b>605 belongs to
+/// 302, and three hundred above it is 305, which is a different command
+/// entirely.</b> A reader that used the rule rather than the measurement would
+/// attach a shop's purchase list to the wrong command, and the rule is not a
+/// rule, it is a coincidence in four cases out of five.
+/// </para>
+/// </remarks>
+public static class MzCommandTable
+{
+    private static readonly Dictionary<int, string> Names = BuildNames();
+
+    /// <summary>The owner of each data number, measured from the engine.</summary>
+    /// <summary>
+    /// The owner of each data number. Every entry here was measured, from the
+    /// engine's own source where it names one and from a real game's own event
+    /// lists where it does not, and **not one of them follows a rule**.
+    /// </summary>
+    /// <summary>
+    /// The command that reads each number as its own data.
+    /// </summary>
+    /// <remarks>
+    /// Every entry was measured, from the engine's own source where it
+    /// names one and from a real game's own event lists where it does not,
+    /// and <b>not one of them follows a rule</b>. Four of the first five are
+    /// three hundred above their command, which is how the rule was found,
+    /// and the fifth is not: 605 belongs to 302 while three hundred above it
+    /// is 305, a different command. The rest are not three hundred above
+    /// anything, and 412 belongs to 111 rather than to the 112 that three
+    /// hundred above it would name. A reader that used the rule would be
+    /// right often enough to look checked and wrong in a place nothing
+    /// else would show.
+    /// </remarks>
+    /// <summary>The command that reads each number as its own data.</summary>
+    /// <remarks>
+    /// Every entry was measured, from the engine source where it names one
+    /// and from a real game own event lists where it does not, and <b>none
+    /// of them follows a rule</b>. Some are three hundred above their
+    /// command, which is how the rule is found; 605 is not (three hundred
+    /// above it is 305, a different command) and 412 is not (three hundred
+    /// above it is 112, a loop and not a branch).
+    /// </remarks>
+    /// <summary>The command that reads each number as its own data.</summary>
+    /// <remarks>
+    /// A number in this map is one the engine gives <b>no method of its
+    /// own</b>, which is how a command and a piece of data are told apart
+    /// here. That is a measurement, not a rule, and the rule that is
+    /// tempting is wrong in both directions: 605 is three hundred above 605
+    /// minus 300 is 305, a different command, and <b>411 and 413 are commands
+    /// the engine does dispatch</b> (Else and Repeat Above) while 412 beside
+    /// them is not a command at all. A reader that assumed a whole family
+    /// was data would refuse a branch and run a structure as an
+    /// instruction.
+    /// </remarks>
+    private static readonly Dictionary<int, int> Owners = new()
+    {
+        [401] = 101,        // a line of text under Show Text
+        [405] = 105,        // a line under Show Scrolling Text
+        [408] = 108,        // a line under Comment
+        [412] = 111,        // the else of a branch that has one; the engine gives it no method of its own
+        [501] = 102,        // one choice under a Show Choices
+        [605] = 302,        // a purchase under Shop Processing
+        [655] = 355,        // a line of script under Script
+        [657] = 355,        // a further line of script under the same block
+    };
+
+    /// <summary>How many commands this generation dispatches.</summary>
+    public static int Count => Names.Count;
+
+    /// <summary>
+    /// The name the engine gives a command, and for a data number the name of the
+    /// command that reads it. Null when the number is neither.
+    /// </summary>
+    public static string? NameOf(int pCode)
+    {
+        if (Names.TryGetValue(pCode, out var name))
+        {
+            return name;
+        }
+        if (Owners.TryGetValue(pCode, out var owner))
+        {
+            return $"{Names[owner]} ({pCode})";
+        }
+        return null;
+    }
+
+    public static bool IsCommand(int pCode) => Names.ContainsKey(pCode);
+
+    /// <summary>
+    /// The command that reads this number as its own data, or 0 when the number
+    /// is a command of its own or is nothing this reader knows.
+    /// </summary>
+    public static int OwnerOf(int pCode) =>
+        Owners.TryGetValue(pCode, out var owner) ? owner : 0;
+
+    public static MzCommandKind KindOf(int pCode)
+    {
+        if (IsCommand(pCode))
+        {
+            return MzCommandKind.Command;
+        }
+        if (Owners.ContainsKey(pCode))
+        {
+            return MzCommandKind.Data;
+        }
+        return pCode == 0 ? MzCommandKind.Separator : MzCommandKind.Unknown;
+    }
+
+    /// <summary>
+    /// The name the engine gives a command.
+    /// </summary>
+    /// <remarks>
+    /// A command has exactly one name and it is written once, in the enum
+    /// member above. A name in a second table beside it could be changed
+    /// there without the enum noticing, and a reader would then hand out a
+    /// name no source in this repository carries. There is one place.
+    /// </remarks>
+    private static Dictionary<int, string> BuildNames()
+    {
+        // One place a name is written: MzCommandSet. A name in a second
+        // table beside the enum drifted from it once already, and the reader
+        // handed out the copy that nothing else carried.
+        var names = new Dictionary<int, string>();
+        foreach (var command in MzCommandSet.Commands)
+        {
+            names[command.Code] = command.Name;
+        }
+        return names;
+    }
+}
+
+/// <summary>What a number in a command list is.</summary>
+public enum MzCommandKind
+{
+    /// <summary>A command the engine dispatches to a method of its own.</summary>
+    Command,
+
+    /// <summary>A number another command reads as its own data.</summary>
+    Data,
+
+    /// <summary>A command this reader has no name for.</summary>
+    Unknown,
+
+    /// <summary>An indent of zero in the editor's own list.</summary>
+    Separator,
+}

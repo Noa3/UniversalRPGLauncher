@@ -69,3 +69,63 @@ Not claimed: that a game's data is understood. `MzDataFile` returns values.
 Nothing here knows what a command 231 does, what a `battlerName` is for, or how
 a page's conditions are evaluated. There is no JavaScript runtime here, no
 renderer, and no save path; an MZ game does not run.
+
+## The command numbering, read out of the engine
+
+The engine gives each command a method and the editor names the command after
+the method. Both the number and the name are in the engine's own source of this
+game, and `project/src/mz/MzCommandName.cs` was generated from it: **114 commands,
+from 101 to 603**, and every name is the one the engine carries.
+
+A first draft of `MzCommandTable.cs` was written from memory and **79 of its 178
+names were wrong** — 129 was written as "Change Hp" and the engine calls it
+"Change Party Member", 231 was "Move Event" and the engine calls it "Show
+Picture". A table built from memory is a table of plausible numbers, and a
+plausible command that a game does not use is invisible until the game uses it.
+
+### The rule that is not a rule
+
+"Which command does a piece of data belong to" invites a rule: the data number is
+three hundred above its command. Measured against this game, that rule is right
+**four times out of eight**:
+
+| Data number | Owner, measured | `code - 300` says | What that is |
+|---:|---:|---:|---|
+| 401 | 101 Show Text | 101 | right |
+| 405 | 105 Show Scrolling Text | 105 | right |
+| 408 | 108 Comment | 108 | right |
+| 655 | 355 Script | 355 | right |
+| 412 | 111 Conditional Branch | 112 | **Loop** |
+| 501 | 102 Show Choices | 201 | **Transfer Player** |
+| 605 | 302 Shop Processing | 305 | not a command here |
+| 657 | 355 Script | 357 | **Plugin Command** |
+
+Two of the four mistakes point at a command that exists in this generation and
+does something else entirely. A reader that used the rule would read a branch's
+else as a loop, a choice as a teleport, and a shop's purchases as a number that
+means nothing. **The owners are written down because none of them can be
+calculated.**
+
+### 411, 412 and 413 are two commands and one piece of data
+
+These three sit at an indent of their own under a branch, which makes all three
+look like the branch's options. The engine disagrees for two of them:
+
+- **411 is a command**, and the engine calls it `Else`.
+- **413 is a command**, and the engine calls it `Repeat Above`.
+- **412 has no method at all.** It is the one a branch reads.
+
+A reader that treated the family as data would refuse two real commands. One that
+treated it as commands would run a branch's structure as an instruction. Both
+fail silently, which is why the test checks all three separately.
+
+### A name written once
+
+An earlier shape of this was an enum whose members carried a name in a doc
+comment and a second table beside it carrying the same names as strings, because
+a C# identifier cannot be `Show Text`. **The two copies drifted, and three
+mutations of a name were invisible to the suite** — the reader handed out the
+string while the enum carried the prose, so changing either one alone changed
+nothing a test could see. It is a `readonly record struct MzCommand(int Code,
+string Name)` now: the number and the name are one value and there is nowhere for
+a second copy to live.

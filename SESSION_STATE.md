@@ -1154,3 +1154,34 @@ If validation fails, keep the failure signature here. Use at most three material
   numbering is the packed one, which is exactly the difference the second trap is
   about. For the RTP criterion: no RTP has been downloaded and none is needed for
   the data layer, and the user is asked before anything is fetched.
+
+## K-122 The MZ command table — checkpoint
+
+- What was added: `project/src/mz/MzCommandName.cs` and `MzCommandTable.cs`.
+  114 commands, 101 to 603, every number and every name generated out of the
+  engine source of the real MZ game. A command is now a number and a name, and a
+  caller can say what 121 is.
+- A hand written table was 79 of 178 names wrong and was replaced. 129 was
+  "Change Hp" and the engine calls it "Change Party Member"; 231 was "Move Event"
+  and the engine calls it "Show Picture". Do not write a table of an engine's
+  numbers from memory. Generate it or read it.
+- `code - 300` finds the owner of a data number four times out of eight and is
+  wrong the other four, twice pointing at a command that exists and does
+  something else. The owners are written down. A test runs the rule and counts
+  four so the rule cannot creep back in as a calculation.
+- 411 and 413 are commands the engine names Else and Repeat Above. 412 beside
+  them has no method and is data of a branch. A family is not a family.
+- A name was written in two places (enum doc comment and a string table) and the
+  copies drifted so that three name mutations were invisible. It is a
+  `record struct MzCommand(int Code, string Name)` now: one value, one name.
+- Tests: `TestMzCommandTable` 13/13, total 866/866, validator passed.
+- Mutations: 11, of which the first suite detected four of nine. The three name
+  mutations escaped because of the two-place problem, and one mutation tested
+  nothing at all because a command is decided before an owner is consulted. Both
+  are stated in the test file so they are not repeated.
+- Still missing, and this is the next step: **a command is named, not done.**
+  Nothing interprets 111's six comparisons or 121's three modes, there is no
+  renderer, and a 657 line is text. The next real step for MZ is the
+  interpretation of a few commands against the engine source, starting with 111,
+  whose whole semantics were read out of `command111` and are six comparisons
+  over six kinds of thing.

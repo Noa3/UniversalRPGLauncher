@@ -1907,6 +1907,98 @@ values and does not name a game. Neither is derived from the other.
   its command numbering is the packed one, which is exactly the difference the
   second trap above is about.
 
+### K-122 Name every command an RPG Maker MZ game stores
+`READY` → `IN PROGRESS` → `DONE`
+
+**The gap that started this** K-121 read a game's numbers and could say a
+command was 121, which told a caller nothing. A name per command needs a source,
+and the source is not a documentation page: it is the method the engine dispatches
+the command to, which the engine's own source carries the name of in the comment
+above it.
+
+**What was built**
+
+- `project/src/mz/MzCommandName.cs`: **114 commands, 101 to 603**, every number
+  and every name generated out of the engine source of a real game. A record
+  `MzCommand(int Code, string Name)`, so a number and its name are one value.
+- `project/src/mz/MzCommandTable.cs`: what a number in a command list is — a
+  command, the data of a command, the editor's own indent, or unknown — and which
+  command reads which data number.
+
+**A table written from memory, and what it cost**
+
+The first draft of the table was written by hand. Compared against the engine,
+**79 of its 178 names were wrong.** 129 was written "Change Hp" and the engine
+calls it "Change Party Member". 231 was "Move Event" and the engine calls it
+"Show Picture". Twenty six commands the engine has were missing and forty three
+that it does not have were there. A plausible command a game does not use is
+invisible until a game uses it, and this game uses 231.
+
+**The rule that is not a rule, measured**
+
+"Which command does this data belong to" invites `code - 300`. Against this game
+that is right **four times out of eight**:
+
+| Data | Owner measured | `-300` says | What that is |
+|---:|---:|---:|---|
+| 401 | 101 Show Text | 101 | right |
+| 405 | 105 Show Scrolling Text | 105 | right |
+| 408 | 108 Comment | 108 | right |
+| 655 | 355 Script | 355 | right |
+| 412 | 111 Conditional Branch | 112 | **Loop** |
+| 501 | 102 Show Choices | 201 | **Transfer Player** |
+| 605 | 302 Shop Processing | 305 | not a command here |
+| 657 | 355 Script | 357 | **Plugin Command** |
+
+Two of the four mistakes point at a command that exists in this generation and
+does something else. A reader that used the rule would read a branch's else as a
+loop, a choice as a teleport, a shop's purchases as a number meaning nothing, and
+a script line as a plugin call. **The owners are written down because none of them
+can be calculated**, and a test says so by running the rule and counting four.
+
+**411, 412 and 413: two commands and one piece of data**
+
+All three sit at an indent of their own under a branch, so all three look like the
+branch's options. The engine names **411 "Else"** and **413 "Repeat Above"** as
+commands of their own, and gives **412 no method at all**. A reader that treated
+the family as data would refuse two real commands; one that treated it as
+commands would run a branch's structure as an instruction. Both fail silently.
+
+**A name written twice, and three mutations nobody saw**
+
+The first shape was an enum with a name in each member's doc comment and a second
+table beside it carrying the same names as strings, because a C# identifier cannot
+be `Show Text`. **The two copies drifted and three name mutations were invisible**
+— the reader handed out the string while the enum carried the prose, so changing
+either alone changed nothing a test could see. It is a record now and a name is
+written once.
+
+**Tests and evidence**
+
+- `TestMzCommandTable` 13/13 — every command named, every command this game uses
+  named, the three data codes refused as commands, the four that are commands not
+  refused, the rule measured at four of eight, and every number the table does
+  not hold checked rather than the ones someone thought of.
+- Eleven mutations. **The first suite detected four of nine**, all three
+  name mutations escaping for the reason above. After the record replaced the
+  enum and two tests were added, the name mutations are all seen, and the
+  mutation that had nothing to test — adding a command to the owner map, which
+  cannot matter because a command is decided before an owner is consulted — was
+  replaced by one that can fail.
+- Total **866/866**, validator passed, build 0 warnings / 0 errors.
+- `grep` for `Execute`, `Run`, `Invoke` and `Eval` in `project/src/mz/`: none.
+  A 657 line is held as the text the author wrote and is never run.
+
+**Still not true of MZ**
+
+- **An MZ game does not play.** A command is now named, which is the opposite of
+  running it, and this repository will not run a game's script. A 657 line is
+  text here and stays text.
+- Nothing interprets 111's six comparisons or 121's three modes. Naming a command
+  is not doing it.
+- MV shares the format and has no fixture; its numbering is the packed one, which
+  is exactly what the second trap of K-121 is about.
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.
