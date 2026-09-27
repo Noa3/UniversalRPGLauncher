@@ -1375,3 +1375,58 @@ Thirteen of a hundred and fourteen commands have an effect. 126, 231, 232, 235,
 351 and 357 are read as text; a 355 or 657 line is text. A called list this
 repository has runs; one it does not have is named. Still no renderer, no save
 path, no input and no audio.
+
+## K-126 Change what the party is carrying
+
+**Built** `MzParty` (the inventory and the four rules), `MzCommandTable
+.ChangeItems`, the 126 case in `MzCommands`, and `MzBranchFacts.MaxItems`.
+
+**The rules, from `Game_Party`**
+1. `container[item.id] = newNumber.clamp(0, this.maxItems(item))` and
+   `maxItems` is `return 99` — no argument, no per-item case. **Five of this
+   game's eighteen 126s ask for 999.**
+2. `if (container[item.id] === 0) { delete container[item.id]; }` — a count
+   that lands on zero is deleted, not stored.
+3. The clamp is from below as well, so taking four of one is none.
+4. `itemContainer` returns null for an item that is not there, and the engine
+   steps over it. This reader says it did not happen.
+
+**And one that is easy to get wrong in the other direction** `operateValue`
+asks the operand's kind first, so a literal amount must not be read from a
+variable. `operation === 0 ? value : -value` has no third case: an operation of
+seven removes exactly as an operation of one does.
+
+**The clamp is invisible in the middle of the range** A test that only added
+four to an empty bag would pass with no clamp at all, so every rule is asked
+about at its boundary and the default is claimed to be ninety-nine.
+
+**Two countings that are different claims.** Eighteen 126s over fifteen items,
+five of them above ninety-nine — read straight off the game's data. A walk
+reaches only nine, because one page stops at a 230, and that is a statement
+about a reader with no frames. **A first draft counted the walk and called it
+the game**, which was wrong in the direction of under-reporting.
+
+**A known gap this card found and now names.** A lone `MzInterpreter` knows no
+common events, so a 117 is stepped over like a 0 — the silent step-over K-125
+refuses, still reachable through this door. Both answers are claimed side by
+side rather than one of them quietly assumed.
+
+**The wiring test found two real faults, and three mistakes of my own.**
+
+1. `new MzParty(pFacts)` knew no items, so every 126 was a silent no-op with
+   every count at zero and nothing saying why. The ids travel in
+   `MzBranchFacts.KnownItems` now.
+2. **An empty set of known ids was read as "everything exists"** — the
+   opposite of what it means, and it would have handed a player 999 of an item
+   the game never had while looking as if it worked.
+
+**And the three mistakes, which are the ones to remember.** A fresh
+`MzInterpreter` has `Stopped` at whatever it starts as, not at `Stepped`, so a
+hand-written `while (ExecuteOne(...))` gives up on the very first command —
+`Run` is the loop a caller should have used. `new(2, ...)` where the code
+belongs: **126 is the command, not the item**, and a page of codes 2, 3 and 4
+is a list the engine steps over. And a party the test made itself keeps its
+notices to itself while the interpreter builds its own over the same facts, so
+the notice is on the action.
+
+**Total 924/924**, `TestMzParty: 12/12`, validator passed, build 0 errors.

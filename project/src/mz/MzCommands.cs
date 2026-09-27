@@ -102,6 +102,7 @@ public static class MzCommands
             or MzCommandTable.JumpToLabel
             or MzCommandTable.ControlSwitches
             or MzCommandTable.ControlVariables
+            or MzCommandTable.ChangeItems
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -114,6 +115,37 @@ public static class MzCommands
     {
         switch (pCommand.Code)
         {
+            case MzCommandTable.ChangeItems:
+            {
+                // `command126` is
+                //   const value = this.operateValue(params[1], params[2], params[3]);
+                //   $gameParty.gainItem($dataItems[params[0]], value);
+                // and **all four parameters are read**: the item, the
+                // operation, the operand's kind and the operand itself. A first
+                // draft read the item and the number and left the other two
+                // out, which made every 126 in this game a gain of a literal —
+                // and the game writes nine of them as a gain of 999, which the
+                // engine refuses to hold.
+                // The party is built over **the facts this interpreter was
+                // given**, so it knows the ids only when the caller has read
+                // this game's `Items.json`. **A reader with no data behind it
+                // must not answer for an item it cannot name**, and building
+                // the party without the ids made every 126 a silent no-op:
+                // the first draft of the wiring test caught exactly that, with
+                // every count coming back zero and nothing saying why.
+                var party = new MzParty(pFacts, pFacts.KnownItems);
+                var said = party.GainItem(
+                    At(pCommand, 0),
+                    At(pCommand, 1),
+                    At(pCommand, 2),
+                    At(pCommand, 3),
+                    pFacts.Variables.TryGetValue(At(pCommand, 3), out var held)
+                        ? held
+                        : 0);
+                pActions.Add(new MzAction(pCommand, said));
+                return true;
+            }
+
             case MzCommandTable.Wait:
             {
                 // The engine's wait is `this._waitCount = params[0]`, and

@@ -177,7 +177,48 @@ public sealed class MzBranchFacts
     public HashSet<int> PartyMembers { get; init; } = new();
 
     /// <summary>What is in the party's bag, by item number and how many.</summary>
+    /// <remarks>
+    /// This is a count and not a presence, because the engine's is:
+    /// <c>container[item.id] === 0</c> deletes the entry rather than storing a
+    /// zero, and a reader that kept a zero would answer <c>hasItem</c>
+    /// differently the moment a game asked. <b>A 126 writes here through
+    /// <see cref="MzParty"/></b>, which owns the clamp to ninety-nine — this
+    /// dictionary is the count, and <see cref="MzParty"/> is the rule.
+    /// </remarks>
     public Dictionary<int, int> Items { get; init; } = new();
+
+    /// <summary>
+    /// The ninety-nine an item container holds, which is
+    /// <c>Game_Party.prototype.maxItems</c> — <c>return 99</c>, with no
+    /// argument and no per-item case. **Settable, because the clamp is the
+    /// whole of the rule and it is invisible in the middle of the range** — a
+    /// test has to be able to ask what happens at the boundary without waiting
+    /// for a party to carry ninety-nine of something.
+    /// </summary>
+    public int MaxItems { get; set; } = 99;
+
+    /// <summary>
+    /// The item ids the game actually stores, by their index in
+    /// <c>Items.json</c>. **A 126 names one of them, and a reader with no
+    /// game behind it must not answer for one it cannot name.**
+    /// </summary>
+    /// <remarks>
+    /// Empty means "nothing is known", **not** "everything exists". A reader
+    /// that read an empty set as "every id is fine" would hand a player a
+    /// thousand of an item the game never had, and a game that checks
+    /// <c>hasItem</c> afterwards would disagree with whatever filled the bag.
+    /// So an interpreter with no data refuses a 126 and says which id it could
+    /// not hand over — which is what the engine does with an item that is not
+    /// there, and this reader says it rather than stepping over it.
+    /// </remarks>
+    public HashSet<int> KnownItems { get; init; }
+
+    /// <summary>
+    /// Whether the ids this game stores are known here. A caller that has read
+    /// <c>Items.json</c> says so, and a caller that has not gets a 126 refused
+    /// by name rather than answered from nothing.
+    /// </summary>
+    public bool ItemsAreKnown => KnownItems != null;
 
     public Dictionary<int, int> Weapons { get; init; } = new();
     public Dictionary<int, int> Armors { get; init; } = new();

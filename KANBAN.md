@@ -2257,7 +2257,7 @@ field, and the test checks the field and the prose against each other.
 
 - **16 tests** in `project/tests/core/test_mz_event_runner.cs`; the interpreter
   suite stayed at 18 with the `Waiting` case added to the walk of a real list.
-- Total **912/912**, validator passed, build 0 warnings / 0 errors.
+- Total **924/924**, validator passed, build 0 warnings / 0 errors.
 **What a mutation run does and does not prove.** Three runs, 14 rule variants
 in all. **Fourteen caught** in the end, and the four that survived the first
 pass were each looked at rather than counted either way:
@@ -2328,6 +2328,104 @@ unreachable state.
 - A called list that this repository *has* runs; one it does not have is named.
   The 4.5 MB that would supply the eight is deliberately not in the fixture.
 - Still no renderer, no save path, no input and no audio.
+
+### K-126 Change what the party is carrying
+`DONE`
+
+**The gap that started this** K-121 to K-125 read MZ data and walked event
+lists, and neither needed to know what a game **owns**. A 126 does. It is
+`Change Items`, this game's map uses it **eighteen times** over fifteen
+different items, and it is the next command with a real effect that can be
+checked against the game's own `Items.json` — which the fixture carries, 75 KB
+of it.
+
+**Built** `project/src/mz/MzParty.cs`, `MzCommandTable.ChangeItems`, the 126
+case in `MzCommands`, and `MzBranchFacts.MaxItems`.
+
+**Four rules, each read out of `Game_Party`**
+
+1. **The count is clamped to ninety-nine, not to the number the event asked
+   for.** `container[item.id] = newNumber.clamp(0, this.maxItems(item))` and
+   `maxItems` is `return 99` — no argument, no per-item case. **Five of this
+   game's eighteen commands ask for 999.** An implementation that added the
+   number as written would hand a player a thousand of something the engine
+   refuses to hold.
+2. **A count that lands on zero is deleted**, not stored as a zero:
+   `if (container[item.id] === 0) { delete container[item.id]; }`. A reader
+   that kept a zero would answer `hasItem` differently the moment a game asked.
+3. **Losing more than there is clamps to zero**, because the clamp is from
+   below as well as above. Taking four of one is none, not minus three — and
+   adding three back then gives three, which is what the engine's clamp makes
+   true.
+4. **An id with no item behind it changes nothing and says so.**
+   `itemContainer` returns null and `gainItem` returns early, so the engine
+   steps over it. This reader says it did not happen, because a game asking
+   for an item this repository cannot hand over would otherwise look like a
+   game that had it and used it.
+
+**And one that is easy to get wrong in the other direction.** `operateValue`
+asks the operand's **kind** first — `operandType === 0 ? operand :
+$gameVariables.value(operand)` — and only reads the game for a variable
+operand. A first draft read the variable either way, which made every one of
+this game's seventeen literal amounts depend on whatever a variable held. And
+`operation === 0 ? value : -value` has **no third case**: an operation of
+seven removes, exactly as an operation of one does.
+
+**The clamp is invisible in the middle of the range.** A test that only ever
+added four to an empty bag would pass with no clamp at all. Every rule here is
+asked about at its boundary, and the default is claimed to be the engine's
+ninety-nine rather than a number chosen here.
+
+**Measured on the one map in the fixture, not guessed** Eighteen 126s, fifteen
+items, five above ninety-nine. **A first draft got nine** — it counted what a
+walk reached, and one of the two pages stops at a 230, so the counts are two
+different claims: one about the game's data, one about what a reader with
+frames sees. Both are now claimed, and the difference between them is the
+test.
+
+**Test evidence** 12 tests in `project/tests/core/test_mz_party.cs`; the
+interpreter's own suite is unchanged at 18. Total **924/924**, validator
+passed, build 0 warnings / 0 errors.
+
+**Mutations** Seventeen rules over two runs. The first run caught seven of
+eleven, and **all four that escaped were one gap in one place**: every test
+called `GainItem` directly, so nothing proved the interpreter passes the
+right four numbers. Writing the test for the wiring found the two faults above
+and killed all six rules in the second run, 6 of 6 caught.
+
+**The wiring between the interpreter and the party was untested, and writing
+that test found two real faults.**
+
+1. **The party was built without the ids.** `new MzParty(pFacts)` knew no
+   items, so every 126 was answered from a list the interpreter could not see
+   and every count came back zero — **silently**, with nothing saying why. The
+   ids now travel in `MzBranchFacts.KnownItems`, and a facts that carries none
+   means the game has not been read.
+2. **An empty set of known ids was read as "everything exists".** That is the
+   opposite of what it means, and it would have handed a player 999 of an item
+   the game never had while looking as if it worked. **Nothing known is nothing
+   allowed**, and the code says so.
+
+**Three mistakes of my own, recorded because the next one will make them too.**
+A first draft of the wiring test drove the interpreter by hand, and a fresh
+`MzInterpreter` has `Stopped` at whatever it starts as rather than at
+`Stepped` — so `ExecuteOne` answered false on the very first command and the
+loop gave up before it had run anything. It also wrote `new(2, ...)` where the
+code belongs: **126 is the command, not the item**, and a page of codes 2, 3
+and 4 is a list the engine steps over. And it read `party.Notices` on a party
+it had made itself while the interpreter builds its own over the same facts,
+so the notice was on the action and not where the test was looking.
+
+**A known gap this card found and now names.** A lone `MzInterpreter` knows no
+common events at all, so `HasEffect` is false for 117 and one is **stepped
+over like a 0**. That silent step-over is exactly what K-125 was written to
+refuse, and it is still reachable through this door. The runner is the door
+that names a missing call, and both answers are claimed side by side rather
+than one of them being quietly assumed.
+
+**Still not true of MZ** Twelve of a hundred and fourteen commands have an
+effect. 231, 232, 235, 351 and 357 are still read as text. No renderer, no
+save path, no input, no audio.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

@@ -130,6 +130,12 @@ MzEventRunner          a run over a list and every list it calls. A 117 makes a
                        engine's $gameVariables is one object. A common event the
                        repository has no list for is named and refused, not
                        stepped over.
+        ▼
+MzParty                what a 126 changes. The count is clamped to maxItems,
+                       which is the engine's own ninety-nine and not the number
+                       the event asked for; a count that lands on zero is
+                       deleted rather than stored; and an id with no item behind
+                       it changes nothing and says which id it was.
 ```
 
 `MzCommands` is where the commands that change numbers live (121 and 122, and
@@ -147,6 +153,14 @@ one list. `Refused` when it met something it will not guess at — a common even
 the repository has no list for, or a branch whose operand would need `eval`.
 A caller that read any of these as "the list ended" would be wrong about the
 other three, so each carries what it was.
+
+**The party is part of the facts, not a second owner of them.** `MzParty`
+reads and writes `MzBranchFacts.Items`, because the engine has one
+`$gameParty` and a reader that kept a count beside the facts would let a
+branch asking whether the party has a potion disagree with the event that gave
+it one. The members of the party, their equipment and the weapons and armors
+containers are **not** modelled; a caller asking about a member gets an empty
+one rather than a guess.
 
 **Nothing here is a JavaScript runtime.** A 355 or 655 line is held as the text
 its author wrote, a 357 plugin call is not made, and a branch of kind 12 or an

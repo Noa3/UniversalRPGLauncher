@@ -51,6 +51,11 @@ public static class MzCommandTable
     /// and the list that called it waits until the child has finished.</summary>
     public const int CommonEvent = 117;
 
+    /// <summary>Changes how many of an item the party has. The engine's
+    /// <c>gainItem</c> clamps the count to <c>maxItems</c>, which is
+    /// ninety-nine, and deletes the entry when it lands on zero.</summary>
+    public const int ChangeItems = 126;
+
     /// <summary>Waits a number of frames. The engine's
     /// <c>updateWaitCount</c> counts them down one per frame, and a run that
     /// has no frames to count is waiting, not finished.</summary>
