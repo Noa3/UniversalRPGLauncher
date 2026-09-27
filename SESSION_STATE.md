@@ -1121,3 +1121,36 @@ If validation fails, keep the failure signature here. Use at most three material
   `RgssEngineRuntime` is still metadata only. The XP games given to the repository
   keep their data in plain files, so the archive path needs either an encrypted
   game's data or a written archive from the engine's own format description.
+
+## K-121 RPG Maker MZ data — checkpoint
+
+- What was added: `project/src/mz/MzJson.cs` and `project/src/mz/MzDataFile.cs`,
+  a reader for the JSON an MV/MZ game keeps its database in. Eleven real data
+  files of a 1.9.1 game are in `project/tests/fixtures/mz`, with sizes and
+  SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`.
+- The three format facts, all measured from the file: a database file's first
+  entry is null; a command is a small number and is NOT the generation before's
+  `code * 1000`; a map's events are indexed by event and are not padded to the
+  field. Two of the three were wrong in a first draft of the test.
+- `MzDataFile.Top` was a one element list, which made `Top[0]` the file and
+  `Top[0][0]` its first element. That is not a root value; it is `Root` now, and
+  the test that read the array where the object was is what showed it.
+- The reader that was already here, `MzDataDirectoryResult`, counts entries and
+  takes names and caps a file at 2 MiB. `TestMzReaderBoundary` states that
+  difference so the two are not confused. Neither derives from the other.
+- Tests: `TestRealMzData` 15/15, `TestRealMzDetection` 3/3,
+  `TestMzReaderBoundary` 2/2, `TestMzDataDirectory` 8/8, total 853/853,
+  validator passed, 8/8 mutations detected.
+- Honest number worth keeping: **the first mutation suite of this reader
+  detected 1 of 8.** It found five real gaps (an unclosed string ran to the end
+  of the file, an unknown escape was taken as text, nesting was unbounded, a
+  broken exponent became a number, a file's own text was discarded) and one
+  anchor that did not exist. A suite that reports a high number on its first run
+  has usually been written from the code rather than against it.
+- Still missing, and this is the next step: **an MZ game does not play.** There is
+  no JavaScript runtime here, so no plugin, no script and no event command runs,
+  and the two `js` fixtures are placeholders carrying the real file names. MV
+  shares the data format and has no real fixture at all, and its command
+  numbering is the packed one, which is exactly the difference the second trap is
+  about. For the RTP criterion: no RTP has been downloaded and none is needed for
+  the data layer, and the user is asked before anything is fetched.

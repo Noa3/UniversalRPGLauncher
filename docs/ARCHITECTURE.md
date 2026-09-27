@@ -42,8 +42,8 @@ UniversalRPG/
 │   │   │   ├── interpreter/ # Event interpreter (first slice done)
 │   │   │   └── rendering/   # Future faithful renderer
 │   │   ├── rgss/            # Future XP/VX/VX Ace runtime
-│   │   ├── mv/              # Future MV runtime
-│   │   └── mz/              # Future MZ runtime
+│   │   ├── mz/              # MV/MZ data files read as values (no JS run)
+│   │   └── mv/              # Future MV runtime
 │   ├── platform/godot/      # Future explicit Godot adapter boundary
 │   ├── enhancement/         # Future optional Enhanced Mode features
 │   ├── plugins/             # Optional integration/plugin surfaces

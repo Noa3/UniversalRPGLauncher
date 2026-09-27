@@ -1824,6 +1824,89 @@ script execution, no save path, and `RgssEngineRuntime` is still metadata only.
 - No archive from any of the three engines is in the repository, so the
   `RgssArchiveReader` still has no real file to read.
 
+### K-121 Read the data an RPG Maker MZ game wrote
+`READY` → `IN PROGRESS` → `DONE`
+
+**The gap that started this** K-120 brought in real data for RGSS and RM2K and
+left MV and MZ where they were: **detection and a count of entries**. There was
+no reader that returned a game's values. An MZ game keeps its database as plain
+JSON, so a reader for it can exist without a runtime and without running a line
+of the game's own code, and none was written.
+
+An MZ 1.9.1 game was given to the repository. It was classified from its own
+files — `game.rmmzproject`, `node.dll`, `package.json`, `js/rmmz_core.js` — and
+nothing in it was executed.
+
+**What was built**
+
+- `project/src/mz/MzJson.cs`: JSON read the way a game wrote it, with nesting
+  bounded, a string that is not closed refused rather than run to the end, an
+  escape the editor never writes refused by name, and a number with an exponent
+  and no digits refused.
+- `project/src/mz/MzDataFile.cs`: one of a game's data files, holding **one root
+  value** and the file's own text so a caller can hash what was read.
+
+**Three things the format has, all found by reading the file and not a
+description, and two of which were wrong in a first draft of the test**
+
+1. **A database file's first entry is null.** `Actors.json` is `[
+null,
+{...}]`.
+   The editor numbers its actors from one so zero can mean "no actor".
+2. **A command is a small number and is not packed.** This game's commands are
+   `121`, `231`, `357`, `657` and nothing above a thousand anywhere in the file.
+   In the generation before, a command's number is its value times a thousand
+   and a reader divides by a thousand. **A reader written for MV and pointed at
+   this file would divide every command to zero.**
+3. **A map's events are indexed by event, not padded to the field.** `Map002` is
+   seventeen by thirteen and its `events` array holds seven entries, the first
+   null. A first draft of this test claimed the array ran over the whole field.
+
+**An API of mine that was a trap, and removed rather than documented**
+
+The first version of `MzDataFile` exposed `Top` as a `List<MzValue>` holding the
+one root value, so `Top[0]` was the file and `Top[0][0]` its first element. The
+test that was written against it then read the array where the object was and
+failed in four places at once. **A one element list is not a root value**, and it
+is now `Root`, an `MzValue`.
+
+**The reader that was already here is a different thing, and the difference is
+now stated by a test**
+
+`MzDataDirectoryResult` exists and counts entries, takes names and caps a file
+at 2 MiB. `TestMzReaderBoundary` says so and checks the cap it states. It returns
+no map, no event, no command and no coordinate, and the new reader returns
+values and does not name a game. Neither is derived from the other.
+
+**Tests and evidence**
+
+- `TestRealMzData` 15/15 — eleven real data files, the three format traps above,
+  and five refusals.
+- `TestRealMzDetection` 3/3 — the game is MZ, is not MV, and the folder with the
+  previous generation's runtime is answered differently.
+- `TestMzReaderBoundary` 2/2 — the boundary to the reader that was already here.
+- `TestMzDataDirectory` 8/8, unchanged.
+- Eight mutations of the new reader. **The first suite detected one of eight**,
+  and that is the honest number: it found five real gaps — an unclosed string was
+  run to the end of the file, an unknown escape was taken as text, nesting was
+  unbounded, a broken exponent became a number, and a file's own text was thrown
+  away — plus one anchor that did not exist. Each gap got a test of its own and
+  the suite was rerun.
+- Total **853/853**, validator passed, build 0 warnings / 0 errors.
+- `project/tests/fixtures/MZ_FIXTURES.md` holds every file with its size and
+  SHA-256. The two `js` files are **placeholders carrying the real names**: the
+  runtime is 175 KB and 83 KB of a game's own code and is not imported.
+
+**Still not true of MZ**
+
+- No JavaScript runtime, so **no plugin, no script, no event command runs.** An
+  MZ game does not play.
+- Nothing here knows what command 231 does or what a page's conditions mean.
+  Values are read; they are not understood.
+- MV shares the data format and has **no fixture at all** from a real game, and
+  its command numbering is the packed one, which is exactly the difference the
+  second trap above is about.
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

@@ -1,0 +1,71 @@
+# Real RPG Maker MZ fixture
+
+`Stranded with You`, an MZ 1.9.1 game, given to this repository to read. Nothing
+in it was executed. **The JavaScript is not here**: `js/rmmz_core.js` is 175 KB
+and `js/rmmz_managers.js` is 83 KB of a game's own code, and this repository does
+not run a game's code. Two files stand in for them by name, because a name is
+what the detector reads and a runtime is not an input to a data reader.
+
+## What is here
+
+Eleven data files, the two files that name the engine, and a package file: 15
+files, 238,133 bytes. `CommonEvents.json` was taken and dropped again — 4.5 MB of
+one game's text, and a test that needs it is not one that needed it.
+
+| Fixture | Bytes | SHA-256 |
+|---|---:|---|
+| `mz/data/Actors.json` | 1745 | `c8b04e1b5c95403d77bca447b14e320e56b4d3c663606892b464e43efd42c7ac` |
+| `mz/data/Animations.json` | 69868 | `9c3ba404a24ac64bfec06eda57304910e7f9fc4c9613b7311e7585282a4663d6` |
+| `mz/data/Classes.json` | 25503 | `adcff5b1c56403a877476909ada42a2e379f5d0b0e916c5a6fb8ae5c3b9dc342` |
+| `mz/data/Enemies.json` | 2273 | `3a9c9d857716c4aad0c8f392a0021a7c5535152c5b0c9ae02931c6db520dc8d7` |
+| `mz/data/Items.json` | 75061 | `f7d1c49202323864f52083e3d9acf2ea37431dcc71bc2aad5d640c1bbce315dd` |
+| `mz/data/Map001.json` | 3143 | `643061bad5203d76788a42c7e1232d6e906b8ce913fe424391abc14756b5bc73` |
+| `mz/data/Map002.json` | 20903 | `4124f8d6b213fa5625a3f0ebab39a08c4c8108502f3eb76c8d330bcc190fba20` |
+| `mz/data/MapInfos.json` | 1799 | `53c2d47813ea0b362c173b28a01cf72e99b8abd0625ae3b62e37537c44f5071b` |
+| `mz/data/Skills.json` | 4709 | `4d0dbc5f96274e7853343b05e27ee69af09c83c523d60db92afded339b33ac79` |
+| `mz/data/States.json` | 3719 | `ca40420aeb24819679a5afd9f03b3abc00a1799f186c4367bb78b41115eb3272` |
+| `mz/data/System.json` | 28890 | `2f6aff37d558f8e994a6501cd73bbd646ffc9cfba11b784b58266b6912e49045` |
+| `mz/game.rmmzproject` | 11 | `f52f065cf5c322d61d36a87085a6f333df72612b5884f9a9ca45aa3622f5a47d` |
+| `mz/js/rmmz_core.js` | 89 | `43673ba7c589f03e1268827cf6f1e55ffe61550cab571882afd7186279051cdb` |
+| `mz/js/rmmz_managers.js` | 125 | `4e6b73a471a2141bbaabaf634c9cbea07d158768f140c2c799bd50ec6d5bae54` |
+| `mz/package.json` | 295 | `a7c9f0419221040796f81452cf6f0324844ac8aff1934f32bbe0bb9ebd77bf46` |
+
+The two `js` files are **placeholders carrying the real file names**, and their
+hashes are the hashes of those placeholders. They are in the table so that what
+is in the repository can be checked; they are not the game's runtime.
+
+## The three things the format has that a reader written from a description gets wrong
+
+All three were found by reading these files, not by reading about them, and two of
+them were wrong in a first draft of the test that is now written down here so they
+are not wrong again.
+
+**One. A database file's first entry is null.** `Actors.json` is
+`[\nnull,\n{"id":1,...}]`. The editor numbers its actors from one so that zero can
+mean "no actor", and the same holds for items, enemies, classes, skills, states
+and animations. A reader that treats the first element as the first entry of the
+game reads a null and calls it a database.
+
+**Two. A command is a small number and is not packed.** This game's event
+commands are `121`, `231`, `357`, `657` and nothing above a thousand anywhere in
+the file. In the generation before this a command's number is its own value times
+a thousand and a reader divides by a thousand to learn what a command is. **A
+reader written for MV and pointed at this file would divide every command to
+zero.**
+
+**Three. A map's events are an array indexed by event, not padded to the field.**
+`Map002.json` is seventeen by thirteen and its `events` array holds seven entries,
+the first of them null. A first draft of this test claimed the array ran over the
+whole field. It does not, and the null is the editor writing from the first event
+number.
+
+## What is claimed and what is not
+
+Claimed: these files are read, and the values in them come back as they were
+written, including the fields the reader has no name for. The reader refuses a
+file that is not JSON and says why, and it bounds how deep a file may nest.
+
+Not claimed: that a game's data is understood. `MzDataFile` returns values.
+Nothing here knows what a command 231 does, what a `battlerName` is for, or how
+a page's conditions are evaluated. There is no JavaScript runtime here, no
+renderer, and no save path; an MZ game does not run.
