@@ -172,20 +172,34 @@ public partial class TestMarshalReader : TestBase
         // on both sides of zero. A reader that treated the first byte as a plain
         // length would decode the short ones and be wrong about the rest, so
         // each form carries the bytes that make its value.
+        // The bytes are the ones w_long in 1.8.7 produces, worked out by
+        // running its own loop. A negative number of two, three or four bytes is
+        // written with every byte after the first set to the top of the width,
+        // because the shift that ran the rest of the number out filled it.
+        //
+        // The first version of this list took the positive form's digits and
+        // appended a single 0xFF, which is not a form the engine writes at all:
+        // -0x1234 is FE CC ED, and the two high bytes are there because the
+        // number is carried to the width it was written in. Asking for a form
+        // the engine never writes is a test that can only fail, and it failed
+        // for a reason that had nothing to do with the reader.
         var cases = new (long, byte, byte[])[]
         {
             (0, 0x00, Array.Empty<byte>()),
-            (255, 0x01, [0xFF]),
-            (-255, 0xFF, [0xFF]),
-            (0x1234, 0x02, [0x34, 0x12]),
-            (-0x1234, 0xFE, [0x34, 0x12]),
-            (0x123456, 0x03, [0x56, 0x34, 0x12]),
-            (-0x123456, 0xFD, [0x56, 0x34, 0x12]),
-            (0x12345678, 0x04, [0x78, 0x56, 0x34, 0x12]),
-            (-0x12345678, 0xFC, [0x78, 0x56, 0x34, 0x12]),
+            (1, 0x06, Array.Empty<byte>()),
             (5, 0x0A, Array.Empty<byte>()),
             (122, 0x7F, Array.Empty<byte>()),
-            (1, 0x06, Array.Empty<byte>()),
+            (255, 0x01, [0xFF]),
+            (0x1234, 0x02, [0x34, 0x12]),
+            (0x123456, 0x03, [0x56, 0x34, 0x12]),
+            (0x12345678, 0x04, [0x78, 0x56, 0x34, 0x12]),
+            (-1, 0xFA, Array.Empty<byte>()),
+            (-123, 0x80, Array.Empty<byte>()),
+            (-255, 0xFF, [0x01]),
+            (-256, 0xFF, [0x00]),
+            (-0x1234, 0xFE, [0xCC, 0xED]),
+            (-0x123456, 0xFD, [0xAA, 0xCB, 0xED]),
+            (-0x12345678, 0xFC, [0x88, 0xA9, 0xCB, 0xED]),
         };
         foreach (var (value, first, rest) in cases)
         {
@@ -196,7 +210,8 @@ public partial class TestMarshalReader : TestBase
             var read = new MarshalReader(Stream(part)).Read();
             AssertTrue(read.Integer.HasValue, $"the integer {value} is read as an integer");
             AssertEq(read.Integer.Value, value,
-                $"0x{first:X2} with {rest.Length} bytes reads back as {value}");
+                $"0x{first:X2} with {rest.Length} bytes read back as"
+                + $" {read.Integer.Value} and not {value}");
         }
     }
 
@@ -671,6 +686,303 @@ public partial class TestMarshalReader : TestBase
         AssertEq(value.Integer!.Value, 5L, "and the value at the bottom is five");
     }
 
+    public void Test_AWholeNumberTooLargeForTheSmallFormIsReadFromItsDigits()
+    {
+        // In the Ruby these engines run, a whole number that fits in thirty one
+        // bits is written small and anything larger is written as a sign and one
+        // byte per digit. A game's data holds money, a stat and a coordinate,
+        // and a gold total saved often has passed thirty one bits, so refusing
+        // every such file would refuse a game that works.
+        var body = new List<byte>();
+        body.Add((byte)MarshalType.Bignum);
+        body.Add((byte)'+');
+        AddLong(body, 12);                                // twelve digits
+        AddRaw(body, "123456789012");
+
+        var stream = new List<byte> { 0x04, 0x08 };
+        stream.AddRange(body);
+        var value = new MarshalReader(stream.ToArray()).Read();
+
+        AssertEq(value.Kind, "integer", "which is still a whole number");
+        AssertEq(
+            value.Integer!.Value, 123456789012L,
+            "holding every digit and not a truncated number");
+    }
+
+    public void Test_ANegativeWholeNumberOfDigitsKeepsItsSign()
+    {
+        // The sign is a byte before the digits and not a byte before the length,
+        // which is the one detail that turns this into a number twice the size it
+        // was meant to be.
+        var body = new List<byte>();
+        body.Add((byte)MarshalType.Bignum);
+        body.Add((byte)'-');
+        AddLong(body, 5);
+        AddRaw(body, "54321");
+
+        var stream = new List<byte> { 0x04, 0x08 };
+        stream.AddRange(body);
+        var value = new MarshalReader(stream.ToArray()).Read();
+        AssertEq(value.Integer!.Value, -54321L, "held as a negative number");
+    }
+
+    public void Test_ASmallNumberAndALargeOneAreTheSameKind()
+    {
+        // Both arrive as "integer", because a script cannot tell them apart and
+        // asking a value to tell them apart would be a difference the language
+        // does not make.
+        var small = new List<byte> { 0x04, 0x08, (byte)MarshalType.Integer };
+        AddLong(small, 42);
+        var large = new List<byte> { 0x04, 0x08, (byte)MarshalType.Bignum };
+        large.Add((byte)'+');
+        AddLong(large, 2);
+        AddRaw(large, "42");
+
+        var smallValue = new MarshalReader(small.ToArray()).Read();
+        var largeValue = new MarshalReader(large.ToArray()).Read();
+        AssertEq(smallValue.Kind, largeValue.Kind, "one kind either way");
+        AssertEq(smallValue.Integer!.Value, largeValue.Integer!.Value, "and one number");
+    }
+
+    public void Test_AWholeNumberThatIsNotOneIsRefusedWithItsReason()
+    {
+        // Each way a number can be wrong is a different fault, and a reader that
+        // cannot tell them apart sends whoever is looking for it to the wrong
+        // place.
+        var badSign = new List<byte> { 0x04, 0x08, (byte)MarshalType.Bignum };
+        badSign.Add((byte)'*');
+        AddLong(badSign, 1);
+        badSign.Add((byte)'7');
+        var signError = Refusal(() => new MarshalReader(badSign.ToArray()).Read());
+        AssertTrue(
+            signError.Contains("neither a plus nor a minus"),
+            $"a wrong sign says so: {signError}");
+
+        var badDigit = new List<byte> { 0x04, 0x08, (byte)MarshalType.Bignum };
+        badDigit.Add((byte)'+');
+        AddLong(badDigit, 2);
+        badDigit.Add((byte)'4');
+        badDigit.Add((byte)'x');
+        var digitError = Refusal(() => new MarshalReader(badDigit.ToArray()).Read());
+        AssertTrue(
+            digitError.Contains("not a digit"),
+            $"a wrong digit says so: {digitError}");
+
+        var noDigits = new List<byte> { 0x04, 0x08, (byte)MarshalType.Bignum };
+        noDigits.Add((byte)'+');
+        AddLong(noDigits, 0);
+        var emptyError = Refusal(() => new MarshalReader(noDigits.ToArray()).Read());
+        AssertTrue(
+            emptyError.Contains("zero digits"),
+            $"a number of no digits says so: {emptyError}");
+    }
+
+    public void Test_AWholeNumberTooLargeForThisMachineIsReadButNotCarried()
+    {
+        // Forty digits is well past what this machine's whole number holds. The
+        // file is not corrupt and the reader says so plainly, because "a number
+        // this reader cannot carry" and "a file that is not marshal" send a
+        // person looking in opposite places.
+        var digits = new string('9', 40);
+        var body = new List<byte>();
+        body.Add((byte)MarshalType.Bignum);
+        body.Add((byte)'-');
+        AddLong(body, digits.Length);
+        AddRaw(body, digits);
+
+        var stream = new List<byte> { 0x04, 0x08 };
+        stream.AddRange(body);
+        var error = Refusal(() => new MarshalReader(stream.ToArray()).Read());
+        AssertTrue(
+            error.Contains("does not fit") && error.Contains("40 digits"),
+            $"which says how many digits it was: {error}");
+    }
+
+    public void Test_AWholeNumberOfMoreDigitsThanAReaderWillHoldIsRefused()
+    {
+        // A length is checked before the digits are read, so a corrupt length
+        // cannot make this reader allocate for a file that has no such number in
+        // it.
+        var body = new List<byte>();
+        body.Add((byte)MarshalType.Bignum);
+        body.Add((byte)'+');
+        AddLong(body, 100000);
+        body.Add((byte)'1');
+
+        var stream = new List<byte> { 0x04, 0x08 };
+        stream.AddRange(body);
+        var error = Refusal(() => new MarshalReader(stream.ToArray()).Read());
+        AssertTrue(
+            error.Contains("longer than"),
+            $"a length beyond what a game writes is refused: {error}");
+    }
+
+    public void Test_EveryWholeNumberInAWideRangeSurvivesThePacking()
+    {
+        // The whole-number packing, read off Ruby 1.8.7's own w_long and r_long
+        // rather than remembered. A reader that is right about most numbers and
+        // wrong about the rest is the worst kind of reader: the file loads, the
+        // map draws, and one value is quietly wrong.
+        //
+        // The check walks a wide range and compares what the reader says against
+        // what the writer below produces. An earlier version of this test found
+        // two faults, both in the reader: a one byte negative was read as the
+        // negative of the byte instead of as a number whose top bit is set, and
+        // a two or three byte negative was read one byte too many, so it took
+        // the first byte of whatever followed in the file. A game's negative
+        // coordinate would have had the next value's bytes inside it.
+        var mismatches = new List<string>();
+        var checkedCount = 0;
+        for (long number = -3000; number <= 3000; number++)
+        {
+            var written = PackWholeNumber(number);
+            if (written == null)
+            {
+                continue;
+            }
+
+            var stream = new List<byte> { 0x04, 0x08, (byte)MarshalType.Integer };
+            stream.AddRange(written);
+            long read;
+            try
+            {
+                read = new MarshalReader(stream.ToArray()).Read().Integer!.Value;
+            }
+            catch (Exception exception)
+            {
+                mismatches.Add($"{number} was refused: {exception.Message}");
+                continue;
+            }
+
+            checkedCount++;
+            if (read != number)
+            {
+                mismatches.Add(
+                    $"{number} written {Convert.ToHexString(written.ToArray())}"
+                    + $" came back as {read}");
+            }
+        }
+
+        AssertEq(checkedCount, 6001, "every number in the range is packable");
+        AssertTrue(
+            mismatches.Count == 0,
+            "and every one survives: "
+            + string.Join("; ", mismatches.GetRange(0, Math.Min(3, mismatches.Count))));
+    }
+
+    public void Test_AFixedSetOfNumbersIsEncodedTheWayTheEngineEncodesThem()
+    {
+        // The bytes below are the ones 1.8.7's w_long produces, worked out from
+        // its own source and not from this test's own writer. They are here so
+        // that a fault in the writer above cannot hide a fault in the reader:
+        // if the two ever disagree, this is what says so.
+        // These bytes are w_long out of Ruby 1.8.7, worked out by running its
+        // own loop and writing down what came out. The first version of them
+        // was written from memory and was wrong about four of the sixteen, which
+        // is the reason they are here: a hand written expectation can be wrong
+        // in the same way twice and hide the fault it was meant to show.
+        var cases = new (long pNumber, string pBytes)[]
+        {
+            (0, "00"),
+            (1, "06"),
+            (117, "7A"),
+            (122, "7F"),
+            (123, "017B"),
+            (255, "01FF"),
+            (256, "020001"),
+            (-1, "FA"),
+            (-123, "80"),
+            (-124, "FF84"),
+            (-255, "FF01"),
+            (-256, "FF00"),
+            (65535, "02FFFF"),
+            (-65536, "FE0000"),
+            (2147483647, "04FFFFFF7F"),
+            (-2147483648, "FC00000080"),
+        };
+
+        foreach (var (number, expected) in cases)
+        {
+            var written = PackWholeNumber(number)!;
+            AssertEq(
+                Convert.ToHexString(written.ToArray()), expected,
+                $"{number} is written the way the engine writes it");
+        }
+    }
+
+    public void Test_EveryPossibleCountByteIsReadOrRefusedWithAReason()
+    {
+        // Every one of the two hundred and fifty six values a count byte can hold,
+        // one at a time. A boundary a change moves has to show itself here, and
+        // the earlier version of this test guessed how many of the two hundred
+        // and fifty six would be read and guessed wrong.
+        //
+        // The reason for walking the whole byte is a count of more than four: the
+        // source refuses one wider than its own whole number, and without that
+        // check the bytes would be shifted out of this machine's number and the
+        // result would look like a number rather than like a fault.
+        var read = 0;
+        var refused = 0;
+        for (var byteValue = -128; byteValue <= 127; byteValue++)
+        {
+            var stream = new List<byte> { 0x04, 0x08, (byte)MarshalType.Integer };
+            stream.Add((byte)byteValue);
+            for (var filler = 0; filler < 4; filler++)
+            {
+                stream.Add(0xAA);
+            }
+
+            try
+            {
+                var value = new MarshalReader(stream.ToArray()).Read();
+                AssertTrue(
+                    value.Integer.HasValue,
+                    $"a count of {byteValue} is read as a number");
+                read++;
+            }
+            catch (MarshalFormatException exception)
+            {
+                AssertTrue(
+                    exception.Message.Length > 0,
+                    $"a count of {byteValue} is refused with a reason");
+                refused++;
+            }
+        }
+
+        AssertEq(read + refused, 256, "every count byte is either read or refused");
+        AssertEq(
+            refused, 0,
+            "and none of them is refused, because the rule has a form for every"
+            + " one of them; both ends of the byte are the one byte form and the"
+            + " middle is either form, and none of them is a fault");
+        AssertEq(read, 256, "so every one of them is read");
+    }
+
+    public void Test_ACountAboveFourIsANumberAndNotAWidth()
+    {
+        // Every count from five to one hundred and twenty seven is the one byte
+        // form, the number with five taken off. A count of one hundred and
+        // twenty seven is therefore the number one hundred and twenty two and
+        // not a hundred and twenty seven bytes wide.
+        //
+        // A version of this test asked for a wide count to be refused, on the
+        // reasoning that a signed byte of up to one hundred and twenty seven
+        // would shift that many bytes out of this machine's whole number. That
+        // reasoning was about a width that no count is: the source's own rule
+        // has no form above four bytes, and a check invented from a reading of
+        // the byte range rather than from the rule refused a length a game
+        // writes for every list it has.
+        for (var count = 5; count <= 127; count++)
+        {
+            var stream = new List<byte> { 0x04, 0x08, (byte)MarshalType.Integer };
+            stream.Add((byte)count);
+            var value = new MarshalReader(stream.ToArray()).Read();
+            AssertEq(
+                value.Integer!.Value, (long)count - 5,
+                $"a count of {count} is the number {count - 5}");
+        }
+    }
+
     public void Test_TheReaderReachesTheEndOfASimpleStream()
     {
         // A reader that stopped early would leave the rest of a database file
@@ -687,5 +999,63 @@ public partial class TestMarshalReader : TestBase
         var reader = new MarshalReader(bytes);
         reader.Read();
         AssertEq(reader.Position, bytes.Length, "the reader reached the end of the stream");
+    }
+
+    private static List<byte>? PackWholeNumber(long pValue)
+    {
+        // w_long out of Ruby 1.8.7, its own loop with no additions. The count
+        // goes in the first byte and the digits follow in the order they were
+        // shifted out, and the loop breaks the moment the rest is zero or all
+        // ones, so the count says how many digits there are and no more.
+        //
+        // Two earlier versions of this were wrong. One reversed the digits, and
+        // one wrote a sign byte a negative number does not have: -3000 is three
+        // bytes, FE 48 F4, with two digits, and not four. A writer that adds a
+        // byte and a reader that does not read one disagree about every value in
+        // a game, and the writer is the one that has to be fixed, because the
+        // reader's job is to read what the engine wrote.
+        if (pValue == 0)
+        {
+            return [(byte)0x00];
+        }
+        if (pValue > 0 && pValue < 123)
+        {
+            return [(byte)(pValue + 5)];
+        }
+        if (pValue > -124 && pValue < 0)
+        {
+            return [(byte)((pValue - 5) & 0xFF)];
+        }
+
+        var buffer = new byte[5];
+        var remaining = pValue;
+        for (var count = 1; count <= 4; count++)
+        {
+            buffer[count] = (byte)(remaining & 0xFF);
+            remaining >>= 8;
+            if (remaining == 0)
+            {
+                buffer[0] = (byte)count;
+                return Head(buffer, count);
+            }
+            if (remaining == -1)
+            {
+                buffer[0] = (byte)(-count & 0xFF);
+                return Head(buffer, count);
+            }
+        }
+
+        return null;
+    }
+
+    private static List<byte> Head(byte[] pBuffer, int pCount)
+    {
+        var taken = new List<byte>(pCount + 1);
+        for (var index = 0; index <= pCount; index++)
+        {
+            taken.Add(pBuffer[index]);
+        }
+
+        return taken;
     }
 }

@@ -146,10 +146,7 @@ public sealed class MarshalReader
             case MarshalType.Extended:
                 return ReadExtended(pDepth);
             case MarshalType.Bignum:
-                throw new MarshalFormatException(
-                    "A bignum cannot be read by this reader, because a game's data uses"
-                    + " fixnums for every value that fits and a bignum here would need"
-                    + " arbitrary precision this reader does not carry.");
+                return ReadBignum();
             default:
                 throw new MarshalFormatException(
                     $"0x{type:X2} is not a type the marshal specification defines, at byte {_offset - 1}.");
@@ -178,37 +175,82 @@ public sealed class MarshalReader
     /// </remarks>
     private long ReadLong()
     {
-        var first = ReadByte();
-        switch (first)
+        // This is r_long out of Ruby 1.8.7, in the order that source reads:
+        //
+        //   the count is a signed byte
+        //   zero                        is the number zero
+        //   five to 127                 is the number minus five, in one byte
+        //   minus 129 to minus 5        is the number plus five, in one byte
+        //   one to four                 is that many bytes as they are
+        //   minus one to minus four     is that many bytes with the sign
+        //                                carried to the width of the count
+        //
+        // The first version of this was a table of the eight byte values it had
+        // seen, and the table disagreed with the source in both directions: it
+        // read a one byte negative as the negative of the byte rather than as a
+        // number whose top bit is set, and it read two and three byte negatives
+        // one byte too many, taking the first byte of whatever followed in the
+        // file. A game holding a negative coordinate would then have had the
+        // next value's bytes inside its own.
+        var count = (sbyte)ReadByte();
+
+        if (count == 0)
         {
-            case 0x00:
-                return 0;
-            case 0x01:
-                return ReadByte();
-            case 0xFF:
-                return -ReadByte();
-            case 0x02:
-                return ReadWideLittleEndian(2);
-            case 0xFE:
-                return -ReadWideLittleEndian(2);
-            case 0x03:
-                return ReadWideLittleEndian(3);
-            case 0xFD:
-                return -ReadWideLittleEndian(3);
-            case 0x04:
-                return ReadWideLittleEndian(4);
-            case 0xFC:
-                return -ReadWideLittleEndian(4);
-            default:
-            {
-                // A sign extended byte with an offset of five. Values from
-                // 0x05 to 0x7F are five through one hundred and twenty six, and
-                // 0xFB down to 0x80 are minus four down to minus one hundred
-                // and twenty one.
-                var signed = (sbyte)first;
-                return signed > 0 ? signed - 5 : signed + 5;
-            }
+            return 0;
         }
+        if (count > 0)
+        {
+            if (count < 5)
+            {
+                return ReadWideLittleEndian(count);
+            }
+
+            // Five to one hundred and twenty seven is the one byte form: the
+            // number with five taken off. Every one of those counts is a number
+            // and not a width, so there is nothing here to refuse, and a check
+            // that refused one of them would refuse a length a game writes for
+            // every list it has.
+            return count - 5;
+        }
+        if (count < -4)
+        {
+            return count + 5;
+        }
+
+        return ReadSignExtended(-count);
+    }
+
+    /// <summary>
+    /// A number of the given width whose top bit is set, so it runs to the edge
+    /// of the width and has to be carried as a signed value.
+    /// </summary>
+    /// <remarks>
+    /// The short forms of a negative number are written as a negative count and
+    /// then as many bytes as the count says, with every byte after the first set
+    /// to its top value, so the whole thing is the number sign extended to the
+    /// width. Negating the unsigned value instead, which looks the same for a
+    /// one byte number and is not the same for any other, reads one byte too many
+    /// and takes the first byte of whatever follows in the file. A negative
+    /// number in a game's data would then come back as a number with bits from
+    /// the next value in it, which no later layer can tell from a real one.
+    /// </remarks>
+    private long ReadSignExtended(int pByteCount)
+    {
+        // The source starts at all ones and then, for each byte of the count,
+        // clears that byte's place and writes the byte read. So the value that
+        // comes out is the one whose bits above the count's width stay set, and
+        // the top of it is the sign. Testing only the top bit of what was read,
+        // which is what this did at first, is the same rule read the wrong way
+        // round: it says -256 is zero because the byte that was read is zero,
+        // while what makes it negative is the width it was written in.
+        long value = -1;
+        for (var index = 0; index < pByteCount; index++)
+        {
+            value &= ~((long)0xFF << (index * 8));
+            value |= (long)ReadByte() << (index * 8);
+        }
+
+        return value;
     }
 
     /// <summary>Reads a little endian unsigned value of the given width.</summary>
@@ -220,6 +262,84 @@ public sealed class MarshalReader
             value |= (long)ReadByte() << (index * 8);
         }
         return value;
+    }
+
+    /// <summary>
+    /// A whole number too large for the small form, written as decimal digits.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In the Ruby the engines of this repository's line run, a whole number
+    /// that fits in thirty one bits is written as a small number and anything
+    /// larger is written as a signed run of decimal digits, a leading sign and
+    /// then one byte per digit. That is a different thing from the large-number
+    /// form in Ruby 3, where the letters are the other way round and the digits
+    /// are binary shorts, so the two cannot be read with one reader and a file
+    /// from a modern Ruby is not a file from an engine.
+    /// </para>
+    /// <para>
+    /// A game's data holds money, a stat, a coordinate and an identifier, and any
+    /// of those can pass thirty one bits: a gold total that has been saved often
+    /// does. Refusing every such file would refuse a game that works, so the
+    /// digits are read and the number is carried when it fits this machine's
+    /// whole number, and refused with its digits in the reason when it does not.
+    /// The reason matters, because "a number too large" and "a corrupt file" are
+    /// different faults and a reader that cannot tell them apart sends whoever is
+    /// looking for the fault looking in the wrong place.
+    /// </para>
+    /// </remarks>
+    private MarshalValue ReadBignum()
+    {
+        var sign = ReadByte();
+        if (sign != (byte)'+' && sign != (byte)'-')
+        {
+            throw new MarshalFormatException(
+                $"A whole number's sign at byte {_offset - 1} is"
+                + $" 0x{sign:X2}, which is neither a plus nor a minus.");
+        }
+
+        var length = ReadLength("a whole number");
+        if (length <= 0)
+        {
+            throw new MarshalFormatException(
+                "A whole number of zero digits is not a number.");
+        }
+        if (length > 1024)
+        {
+            throw new MarshalFormatException(
+                $"A whole number of {length} digits at byte {_offset} is longer than"
+                + " this reader will hold, which a game's data never is.");
+        }
+
+        var digits = new StringBuilder(length);
+        for (var digit = 0; digit < length; digit++)
+        {
+            var value = ReadByte();
+            if (value < (byte)'0' || value > (byte)'9')
+            {
+                throw new MarshalFormatException(
+                    $"A whole number's digit at byte {_offset - 1} is 0x{value:X2},"
+                    + " which is not a digit.");
+            }
+
+            digits.Append((char)value);
+        }
+
+        var text = digits.ToString();
+        if (!long.TryParse(
+            text, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var number))
+        {
+            throw new MarshalFormatException(
+                $"A whole number of {length} digits does not fit this machine's"
+                + " whole number, so it is read but not carried.");
+        }
+
+        return new MarshalValue
+        {
+            Kind = "integer",
+            Integer = sign == (byte)'-' ? -number : number,
+        };
     }
 
     private MarshalValue ReadFloat()

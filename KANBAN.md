@@ -1552,6 +1552,73 @@ wrong.
   code: nothing crossed the logical/bitwise boundary, and nothing pinned `not`
   to its own level. Both now have tests.
 
+### K-119 Read a whole number wider than this machine holds
+`READY` → `IN PROGRESS` → `DONE`
+
+**The question that started this** The marshal work had been checked against
+Ruby 3.4, because that is the documentation that is easiest to reach. The
+engines of this repository's line run older rubies, so the whole ground truth
+was suspect. It was checked against the sources themselves:
+
+- **XP is Ruby 1.8.1, VX is 1.8.3, VX Ace is 1.9.2.** All three carry a marshal
+  format.
+- All twenty five type bytes are **identical** across 1.8.7, 1.9.3 and 3.4.1.
+  The format did not change for the engines in question.
+- The whole number form did change, and in the direction that matters:
+  **1.8 and 1.9 write `i` for a number that fits in thirty one bits and `l` for
+  the digits of anything larger. Ruby 3 swaps the two letters and writes the
+  large form in binary.** A reader built from the 3.4 table would refuse every
+  file an engine of this line writes.
+
+**What the reader had wrong, and it was wrong about the sign**
+
+A whole number that does not fit is written as a sign and one byte per digit,
+and the digits of a negative number are the number carried to the width it was
+written in, so every byte after the first is the top of the width. The reader
+was negating the unsigned value instead, which looks the same for a one byte
+number and is not the same for any other: **it read one byte too many and took
+the first byte of whatever followed in the file.** A game's negative coordinate
+would have had the next value's bytes inside it, and nothing downstream can tell
+that from a real number.
+
+The one byte negative form was also on the wrong side of the boundary. The rule
+is five to one hundred and twenty seven is the number with five taken off, and
+minus one hundred and twenty nine to minus five is the number with five added,
+with minus one to minus four the wide form. The reader had the last two the
+wrong way round.
+
+**How it was found** Not by three hand written cases. A test walks six thousand
+and one numbers through the writer taken from 1.8.7's own loop and compares
+each against what the reader says, and a second test holds sixteen numbers
+against the bytes that loop produces, because the first version of those was
+written from memory and was wrong about four of the sixteen. **Every fault found
+in this card was in the test rather than in the reader**, which is the opposite
+of what the range test was written expecting, and the reason it is worth having
+is that it is the only one of the two that can find a fault at all.
+
+**A fault this card found in a fault of an earlier card** The earlier card
+refused a wide number with the reason that it would need arbitrary precision.
+That reason was wrong: a game's number is written as decimal digits, so the
+number itself is readable, and the only question is whether it fits this
+machine. It is read now, and refused only when it does not fit, with the number
+of digits in the reason so that a number too large and a file that is not
+marshal are not the same fault.
+
+**One thing this card did not add** A check refusing a count byte wider than a
+whole number. Such a count cannot occur: five to one hundred and twenty seven is
+the one byte form, and a count of one hundred and twenty seven is the number one
+hundred and twenty two. The check was written from a reading of the byte range
+rather than of the rule, and it refused a length a game writes for every list it
+has. It is gone, and the fact it was based on is tested instead.
+
+- Tests: `TestMarshalReader` 39/39, total 818/818, validator passed, 0 warnings.
+- 8 mutations of the packing, all detected.
+
+**Still missing** A whole number wider than a whole number this machine holds is
+read and then refused, which is honest but means a game holding one will not
+load. No archive from any of the three engines is in the repository, so all of
+this is verified against the rubies' own sources and not against a game.
+
 ### K-118 Name what every child of a tree is for
 `READY` → `IN PROGRESS` → `DONE`
 

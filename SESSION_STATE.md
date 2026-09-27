@@ -1060,3 +1060,38 @@ If validation fails, keep the failure signature here. Use at most three material
   while every node holds at most one child under a role, and a lookup falling
   back to the first child passed every test that asked for a role that was there.
 - Next: a machine to run the tree. That is no longer blocked on the tree's shape.
+
+## Whole numbers the engine writes wider than this machine holds (2026-09-27)
+- The ground truth for all the marshal work had been Ruby 3.4, because that is
+  the documentation that is easiest to reach. Checked against the sources:
+  XP is Ruby 1.8.1, VX is 1.8.3, VX Ace is 1.9.2. All twenty five type bytes
+  are identical across 1.8.7, 1.9.3 and 3.4.1, so the format held.
+- The whole number form did not: 1.8 and 1.9 write `i` for a number that fits
+  in thirty one bits and `l` for the decimal digits of anything larger, and
+  Ruby 3 swaps those two letters and writes the large form in binary. A reader
+  built from the 3.4 table refuses every file an engine of this line writes.
+- **The reader's sign handling was wrong.** A negative number is written as its
+  bytes carried to the width it was written in, so every byte after the first
+  is the top of the width. The reader negated the unsigned value instead, which
+  is the same for a one byte number and not the same for any other: it read one
+  byte too many and took the first byte of whatever followed in the file. A
+  game's negative coordinate would have had the next value's bytes inside it.
+- The one byte negative form was on the wrong side of the boundary. Five to 127
+  is the number with five taken off, -129 to -5 is the number with five added,
+  and -1 to -4 is the wide form.
+- A wide number is now read from its digits and refused only when it does not
+  fit this machine's whole number, with the digit count in the reason. The
+  earlier card refused it outright for a reason that was wrong: a game's number
+  is decimal digits, so the number is readable and only the width is in doubt.
+- How it was found: a test walks 6001 numbers through the writer taken from
+  1.8.7's own loop, and a second holds sixteen against the bytes that loop
+  produces. The first version of those sixteen was written from memory and was
+  wrong about four. Every fault found in this work was in the test rather than
+  in the reader.
+- A check refusing a count byte wider than a whole number was written and then
+  removed: five to 127 is the one byte form, so no such count exists, and the
+  check refused a length a game writes for every list it has.
+- Tests: `TestMarshalReader` 39/39, total 818/818, validator passed, 0 warnings.
+  8 mutations of the packing, all detected.
+- Still missing: a number wider than this machine's whole number is read and then
+  refused, and no archive from any of the three engines is in the repository.
