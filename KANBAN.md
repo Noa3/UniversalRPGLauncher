@@ -1552,6 +1552,82 @@ wrong.
   code: nothing crossed the logical/bitwise boundary, and nothing pinned `not`
   to its own level. Both now have tests.
 
+### K-117 — The value layer between a game's data and its language
+**Status (2026-09-26) — DONE as a value layer. It names values and judges none.**
+
+**Where this sits** K-112 reads the archive, K-113 reads Marshal, K-115 reads
+the tokens and K-116 reads the tree. What was missing between "a file said this"
+and "the language calls this a value" is this card. Without it the two layers
+would each have their own idea of what a game's data means, and they would
+disagree without either being wrong.
+
+**What it does** `RubyValue` holds the seven kinds the language defines, as
+data, with a value's identity and its contents and nothing else.
+`RubyValueConverter` turns a decoded Marshal value into one, following the
+file's links, and refuses anything that has no equivalent.
+
+**The refusals are the point.** A kind the language has no name for, a payload
+that contradicts its kind, a mapping entry without its other half, a mapping that
+holds the same key twice, a link to an entry that was never decoded: each of
+these raises with the reason, and each refusal is counted and remembered. A value
+that is nearly right is a value a game cannot be trusted with, because nothing
+downstream can tell it apart from a real one.
+
+**What is deliberately not here**
+- No arithmetic, no comparison, no conversion between kinds.
+- No method dispatch, no calling of anything.
+- No class loading: a game's own class is kept as the text the file wrote.
+- No decoding of a string's bytes. A game's strings are in its author's
+  encoding, usually CP932, and choosing one is a decision this layer does not
+  make.
+
+**Verification (2026-09-26)**
+- `TestRubyValue` 15/15, `TestRubyValueConverter` 30/30, total 802/802,
+  `scripts/validate.sh` passed.
+- 13 mutations on the converter's kind names, its refusals, the link following
+  and the value identities, all detected.
+- The link tests read real byte streams written with the format's own packing.
+  A Marshal long is not eight bytes, and a stream written with eight would be a
+  different stream from the one a game writes.
+
+**A bug this work found in the reader the card before it**
+The converter was written against kind names spelled out from memory. The reader
+emits `array, false, float, integer, nil, object, regexp, string, struct,
+symbol, true` — and two of the converter's names were not on that list. A whole
+number arrives as `integer` and a string as `string`, so **every number and
+every string in a real game's data would have been refused**. The kind names are
+now taken from the reader itself rather than from memory, and two mutations that
+delete each of the two arms are both detected.
+
+**The numbering is the reader's, and the specification is explicit about it**
+A stream holds one copy of each object and one of each symbol. The first object
+has the number one and the first symbol the number zero. The converter reads
+that number from the value the reader handed over instead of counting again,
+because counting again would be a second opinion about a number that was
+already decided.
+
+A container is numbered **before** its contents are read. That is not an
+implementation detail: it is the only reason a container can hold a reference to
+itself, which a game's data does whenever a structure names itself. The
+documented stream for an array holding the same string twice,
+`"\004\b[\a\"\nhello@\006"`, has the array at one and the string at two, and
+the link names two.
+
+**Other bugs this work found in the converter**
+- The converter never recorded the stream's own entry numbers, so every link was
+  reported as pointing at nothing.
+- The first version numbered values from zero and after their contents, which
+  gave a container a higher number than its first member.
+- A value was filed under its number before its class was attached, so a link to
+  a game's value found an object that no longer said what class it was.
+- A value that points at itself is refused with the number in it, because there
+  is no value to return yet and returning something else would give it a second
+  identity inside its own contents.
+- The class name was being attached twice, once where the contents are read and
+  once afterwards. The second could never change anything, and a mutation that
+  removed it went unnoticed, which is how the duplicate was found. It and the
+  helper it alone used are gone.
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

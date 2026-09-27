@@ -186,6 +186,48 @@ Validation: build 0 errors/0 warnings; `All 427 tests passed`, exit 0; `TestRm2k
 
 **K-111 is DONE.** `All 525 tests passed`, build `0 Warnung(en)`, `0 Fehler`, `UniversalRPG validation passed.` No probes. Font artifact restored.
 
+## Ruby value layer for the RGSS engines (2026-09-26)
+- `RubyValue` holds the seven kinds the language defines, as data, with a value's
+  identity and its contents and nothing else. No arithmetic, no comparison, no
+  method dispatch, no class loading, no decoding of a game's string bytes.
+- `RubyValueConverter` turns a decoded Marshal value into one, following the
+  file's links so a link becomes the value it names rather than a second copy.
+- The refusals are the work. A kind the language has no name for, a payload that
+  contradicts its kind, a mapping entry without its other half, a mapping holding
+  the same key twice and a link to an entry that was never decoded each raise
+  with the reason, and each is counted and remembered.
+- **A bug this found in the reader from the card before it.** The converter was
+  written against kind names spelled out from memory. The reader emits `array,
+  false, float, integer, nil, object, regexp, string, struct, symbol, true`, and
+  two of the converter's names were not on that list: a whole number arrives as
+  `integer` and a string as `string`. Every number and every string in a real
+  game's data would have been refused. The names now come from the reader.
+- **The numbering, verified against the Ruby 3.4 specification.** A stream holds
+  one copy of each object and one of each symbol, the first object has the
+  number one and the first symbol the number zero. The converter reads that
+  number from the value the reader handed over rather than counting again.
+- A container is numbered before its contents are read, which is the only reason
+  a container can hold a reference to itself. In the documented stream
+  `"[\"
+hello@"` the array is one and the string is two, and
+  the link names two.
+- A Marshal long is not eight bytes. A stream written with eight bytes is a
+  different stream from the one a game writes, and three attempts to build one
+  that way failed before the packing was read off the format.
+- Other converter bugs found and fixed: the stream's own numbers were never
+  recorded, so every link pointed at nothing; values were numbered from zero and
+  after their contents, which gave a container a higher number than its first
+  member; a value was filed under its number before its class was attached, so a
+  link to a game's value found an object that no longer said what class it was.
+- A value that points at itself is refused with the number in it, because there
+  is no value to return yet.
+- Tests: `TestRubyValue` 15/15, `TestRubyValueConverter` 27/27, total 799/799,
+  validator passed. 12 mutations, all detected.
+- Still missing for XP, VX and VX Ace: anything that gives a value a meaning, a
+  renderer, saves, input, audio, and any playable runtime. `RgssEngineRuntime` is
+  still a metadata inspector and no real archive from any of the three engines is
+  in the repository, so all of this is structurally verified.
+
 ## Ruby parser for the RGSS engines (2026-09-26)
 - `RubyParser` turns a token stream into a tree of shapes. It names what was
   written and nothing more: no name resolution, no method or constant lookup, no
