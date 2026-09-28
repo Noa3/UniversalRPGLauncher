@@ -1569,6 +1569,97 @@ public sealed class GameSimulationState
     /// and changed nothing, and a game's battle background would have stayed
     /// whatever it was before the fight.
     /// </remarks>
+    // ---- 11210 and 13260, Show Battle Animation
+
+    /// <summary>
+    /// A battle animation that is playing, from 11210 and 13260.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The frames come out of the animation's own timing rows,</strong>
+    /// because the reference's <c>Game_Battle::ShowBattleAnimation</c> returns
+    /// <c>BattleAnimationBattle::GetFrames()</c> and the command writes that
+    /// number into the interpreter's wait. <strong>A reader that invented a
+    /// duration would have held the page for a number the game never
+    /// wrote</strong> — and a battle where the hero's sword animation is 30
+    /// frames would have frozen for 12.
+    /// </para>
+    /// <para>
+    /// And the last timing row's frame count is the length, because the rows
+    /// are absolute frame positions and the animation ends when the last one
+    /// has passed.
+    /// </para>
+    /// </remarks>
+    public int? BattleAnimationId { get; set; }
+
+    /// <summary>Which side the animation is aimed at, from the target.</summary>
+    /// <remarks>
+    /// <strong>Allies count from one and enemies from zero.</strong> The
+    /// reference subtracts one for a party member and not for a monster — so
+    /// a target of 0 is the first enemy and the <em>zeroth</em> ally, which
+    /// does not exist. A reader that used one numbering for both would have
+    /// played a game's first hero's animation on its second hero.
+    /// </remarks>
+    public bool BattleAnimationOnAllies { get; set; }
+
+    /// <summary>The index the animation was aimed at, in its side's numbering.</summary>
+    public int BattleAnimationTarget { get; set; }
+
+    /// <summary>Whether the animation plays on every member of its side.</summary>
+    /// <remarks>
+    /// <strong>A negative target means the whole side, and the flag says
+    /// which.</strong> The reference reads <c>target &lt; 0</c> and then
+    /// collects the party or the enemy party — so a target of -1 on the
+    /// enemies is every enemy, and without the flag it would be every party
+    /// member instead.
+    /// </remarks>
+    public bool BattleAnimationOnAllTargets { get; set; }
+
+    /// <summary>How many frames the animation runs, from its own timing rows.</summary>
+    public int BattleAnimationFrames { get; set; }
+
+    /// <summary>Whether the command asked to wait for the animation.</summary>
+    /// <remarks>
+    /// <strong>And the wait is the animation's own frame count</strong> — the
+    /// reference writes <c>_state.wait_time = frames</c> and not a constant,
+    /// so a game that wrote "wait" gets a wait as long as its animation.
+    /// </remarks>
+    public bool BattleAnimationWaitRequested { get; set; }
+
+    /// <summary>
+    /// The frame count of a battle animation, from its timing rows.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Zero for an animation that is not in the table</strong> — the
+    /// reference's <c>GetElement</c> returns nothing, it warns, and it returns
+    /// zero frames, so a game with a mistyped animation id waits for nothing
+    /// rather than for ever.
+    /// </remarks>
+    public int BattleAnimationFrameCount(int pAnimationId)
+    {
+        if (pAnimationId <= 0)
+        {
+            return 0;
+        }
+
+        return BattleAnimationDurations.TryGetValue(pAnimationId, out var frames)
+            ? frames
+            : 0;
+    }
+
+    /// <summary>
+    /// How long each battle animation runs, keyed by its id.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is the table the parser fills from the animation
+    /// database,</strong> and it holds one number per animation: the frame
+    /// count of its last timing row. A game's whole battle animation timing
+    /// lives here, and nothing else in the simulation needs it.
+    /// </remarks>
+    public System.Collections.Generic.Dictionary<int, int> BattleAnimationDurations
+    { get; init; } = new();
+
+
     public string BattleBackground { get; set; } = "";
 
     /// <summary>

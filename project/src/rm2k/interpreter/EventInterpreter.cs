@@ -444,6 +444,45 @@ public sealed class EventInterpreter
 	/// that looked in <c>parameters</c> would have found a single zero and
 	/// changed nothing.
 	/// </remarks>
+	/// <summary>
+	/// 11210, Show Battle Animation, from liblcf's
+	/// <c>Code::ShowBattleAnimation</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandShowBattleAnimation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 3, or 4, and the fourth exists only in a 2003
+	/// game.</strong> The reference's dispatch has two lines for this one
+	/// command — one with a width of 3 and the map form with 4 — and the
+	/// fourth parameter is read only <c>if (Player::IsRPG2k3() &amp;&amp;
+	/// com.parameters.size() &gt; 3)</c>. <strong>A reader that required four
+	/// would have refused every 2K game, and one that read the fourth
+	/// unconditionally would have shown a 2K game's "aim at the party" as
+	/// "aim at the enemies".</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And a negative target is the whole side.</strong> The
+	/// reference reads <c>target &lt; 0</c> and then collects either the party
+	/// or the enemy party, and the flag says which — so a target of -1 with
+	/// the flag at zero is every enemy, and a reader that treated -1 as
+	/// "no target" would have played nothing.
+	/// </para>
+	/// </remarks>
+	public const int ShowBattleAnimation = 11210;
+
+	/// <summary>
+	/// 13260, Show Battle Animation (the battle form), from liblcf's
+	/// <c>Code::ShowBattleAnimation_B</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 3, and the reference hands it to the very same
+	/// method</strong> — <c>CmdSetup&lt;&amp;CommandShowBattleAnimation,
+	/// 3&gt;</c>, with no second implementation. So the two codes differ in
+	/// nothing but their number, and a reader that gave them different
+	/// behaviour would have invented a difference the format does not have.
+	/// </remarks>
+	public const int ShowBattleAnimationBattle = 13260;
+
 	public const int ChangeBattleBg = 13210;
 	public const int PanScreen = 11060;
 
@@ -1095,6 +1134,14 @@ public sealed class EventInterpreter
 
 			case ShowHiddenMonster:
 				ExecuteShowHiddenMonster(cmd);
+				return Advance();
+
+			case ShowBattleAnimation:
+			case ShowBattleAnimationBattle:
+				// **The reference hands both codes to one method**, and this
+				// reader does the same — the two differ in their number and in
+				// nothing else.
+				ExecuteShowBattleAnimation(cmd);
 				return Advance();
 
 			case ChangeBattleBg:
@@ -4506,6 +4553,100 @@ public sealed class EventInterpreter
 			6 => GameSimulationState.EquipmentSlot.All,
 			_ => GameSimulationState.EquipmentSlot.All,
 		};
+	}
+
+	/// <summary>
+	/// Runs 11210 and 13260, Show Battle Animation, from liblcf's
+	/// <c>Code::ShowBattleAnimation</c> and
+	/// <c>Code::ShowBattleAnimation_B</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandShowBattleAnimation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Three parameters, or four, and the fourth is a 2003 form.</strong>
+	/// The reference reads it only
+	/// <c>if (Player::IsRPG2k3() &amp;&amp; com.parameters.size() &gt; 3)</c>, so
+	/// this takes three and reads the fourth only when there is one.
+	/// </para>
+	/// <para>
+	/// <strong>Allies count from one and enemies from zero.</strong> The
+	/// reference subtracts one from a party target and not from a monster
+	/// target — so a target of zero is the first enemy and the zeroth ally,
+	/// which does not exist. <strong>A reader that used one numbering for both
+	/// would have played a game's first hero's animation on its second
+	/// hero.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And a negative target is the whole side, with the flag
+	/// deciding which.</strong> The reference collects the party or the enemy
+	/// party accordingly, so a target of -1 without the flag is every
+	/// <em>enemy</em>.
+	/// </para>
+	/// <para>
+	/// <strong>And the wait is the animation's own length.</strong> The
+	/// reference writes <c>_state.wait_time = frames</c> and the frames come
+	/// from the animation's timing rows, so a game that wrote "wait" waits
+	/// as long as its animation and not for a constant.
+	/// </para>
+	/// </remarks>
+	private void ExecuteShowBattleAnimation(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Show battle animation");
+			return;
+		}
+
+		var animationId = pCmd.Parameters[0];
+		var ziel = pCmd.Parameters[1];
+		var warten = pCmd.Parameters[2] != 0;
+		// **The fourth parameter is read only when there is one**, and the
+		// reference guards it with the engine generation as well — so a 2K
+		// game with a fourth value would have it read here, and a 2003 game
+		// without one would not. The generation is not visible to this
+		// reader, so the count is what decides.
+		var aufVerbündete = pCmd.Parameters.Count > 3
+			&& pCmd.Parameters[3] != 0;
+
+		var frames = _state.BattleAnimationFrameCount(animationId);
+		if (frames == 0)
+		{
+			// **The reference's GetElement returns nothing, it warns, and it
+			// returns zero frames** — so a mistyped animation id plays
+			// nothing and waits for nothing.
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Show battle animation: animation "
+				+ $"{animationId} is not in the table, and the reference's "
+				+ "GetElement returns zero frames for it");
+			return;
+		}
+
+		_state.BattleAnimationId = animationId;
+		_state.BattleAnimationOnAllies = aufVerbündete;
+		_state.BattleAnimationOnAllTargets = ziel < 0;
+		// **A party target is one-based and an enemy target is not**, and the
+		// subtraction happens before the range check.
+		_state.BattleAnimationTarget = aufVerbündete ? ziel - 1 : ziel;
+		_state.BattleAnimationFrames = frames;
+		_state.BattleAnimationWaitRequested = warten;
+
+		if (warten)
+		{
+			// **The wait is the animation's own length**, through the
+			// interpreter's frame budget and not the state.
+			WaitForFrames(frames);
+		}
+
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Show battle animation {animationId}: "
+			+ (ziel < 0
+				? aufVerbündete ? "the whole party" : "the whole enemy party"
+				: aufVerbündete
+					? $"ally {_state.BattleAnimationTarget}"
+					: $"enemy {_state.BattleAnimationTarget}")
+			+ $", {frames} frames"
+			+ (warten ? ", and the page waits" : ""));
 	}
 
 	/// <summary>

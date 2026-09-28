@@ -4747,6 +4747,44 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 Befehlszeile, und es gehört in eine eigene Karte.
 
 
+## `11210` and `13260` Show Battle Animation are done — the first step on criterion 3
+
+**Two codes, one method.** The reference's dispatch hands both to
+`CmdSetup<&CommandShowBattleAnimation, 3>` with no second implementation — so
+they differ in their number and in nothing else, and a reader that gave them
+different behaviour would have invented a difference the format does not have.
+
+**Width 3, or 4, and the fourth is a 2003 form only.** The reference reads it
+under `if (Player::IsRPG2k3() && com.parameters.size() > 3)` — so a reader that
+required four would have refused every 2K game, and one that read the fourth
+unconditionally would have shown a 2K game's "aim at the party" as "aim at the
+enemies".
+
+**Allies count from one and enemies from zero.** The reference subtracts one
+from a party target and not from a monster target — so a target of 0 is the
+first enemy and the *zeroth* ally, which does not exist. **A reader that used
+one numbering for both would have played a game's first hero's animation on its
+second hero.**
+
+**A negative target is the whole side, and the flag says which.** The reference
+reads `target < 0` — not `<= 0` — and then collects the party or the enemy
+party, so a target of -1 without the flag is every *enemy*.
+
+**And the wait is the animation's own length.** The reference writes
+`_state.wait_time = frames` and the frames come from
+`BattleAnimationBattle::GetFrames()`, which is the animation's last timing row.
+**A reader that invented a duration would have held the page for a number the
+game never wrote** — and a battle where the hero's sword animation is 30 frames
+would have frozen for 12.
+
+**And an animation that is not in the table plays nothing and waits for
+nothing** — the reference's `GetElement` returns nothing, warns, and returns
+zero frames, so a game's mistyped animation id cannot freeze its page.
+
+**Test evidence** `test_rm2k_battle_animation.cs`, 9 tests.
+**1457/1457**, `TestRm2kBattleAnimation: 9/9`, validator passed.
+**Mutations** Ten rules over two runs, **10 of 10 caught**.
+
 ## The three actor commands are done — `10440`, `10450`, `10480`
 
 **Widths of 5, 5 and 4, all three starting with the reference's own

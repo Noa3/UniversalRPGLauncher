@@ -4156,6 +4156,51 @@ die Zerlegung schreiben.
 **Test evidence** `test_rm2k_enemy_encounter.cs` (7). **1382/1382**, Validator gruen.
 
 **Mutations** 9 Regeln, **9 von 9 gefangen**.## Current card
+## 11210 and 13260 Show Battle Animation are done — criterion 3, first step
+
+**Two codes, one method.** The reference's dispatch hands both to the same
+`CommandShowBattleAnimation`, so they differ in their number and in nothing
+else.
+
+**Width 3, or 4, and the fourth is a 2003 form only** — the reference reads it
+under `if (IsRPG2k3() && parameters.size() > 3)`. **Allies count from one and
+enemies from zero**, because the reference subtracts one for a party target
+and not for a monster target — so a target of 0 is the first enemy and the
+zeroth ally, which does not exist.
+
+**A negative target is the whole side, and the flag says which** — `target < 0`,
+not `<= 0`, so 0 is one battler and -1 is everybody.
+
+**And the wait is the animation's own length**, from its last timing row. An
+animation that is not in the table plays nothing and waits for nothing, which
+is the reference's `GetElement` returning nothing and zero frames.
+
+**Test evidence** `project/tests/core/test_rm2k_battle_animation.cs`, 9 tests.
+**1457/1457**, validator passed. **Mutations** 10 rules over two runs, **10 of
+10 caught**.
+
+### Failure log: a wait that was one frame longer than the animation
+
+The mutation run left three rules alive, and two of them were about the wait.
+The new test drove the interpreter and asked when the *next* command ran — and
+it measured `frames + 1`, not `frames`.
+
+**That is the reference mechanism and not an arithmetic error:**
+`ExecuteFrame` checks the wait budget *first*, so the frame that triggers the
+animation is not itself part of the wait. The page then stands for exactly
+`frames` frames and the command after it needs one more.
+
+**A reader that set `frames - 1` would have cut the animation's last second.**
+The test asserted the number the author expected rather than the number the
+runtime produced, and the runtime was right — as it had been for the pan's
+rounded wait, the choice options and the shop handlers before it.
+
+The third rule was the same shape one field over: a mutation making a target of
+zero the whole side survived because the test for a zero target read
+`BattleAnimationTarget` and not `BattleAnimationOnAllTargets` — **and the
+mutation left the field the test read untouched.** The field that says
+"everything" is the field the assertion has to name.
+
 ## 10440, 10450 and 10480 are done — and the island was the actor's
 
 **The card said "skills, equipment and conditions have no state at all", and it
