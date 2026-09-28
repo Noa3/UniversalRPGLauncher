@@ -246,6 +246,72 @@ public sealed class EventInterpreter
 	/// the two the board once listed for it. A reader that required fewer would
 	/// have read a wait flag that is not there.
 	/// </remarks>
+
+	/// <summary>
+	/// 13110, Change Monster HP, from liblcf's <c>Code::ChangeMonsterHP</c> and
+	/// EasyRPG's <c>CommandChangeMonsterHP</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 5, and three change modes of which the third is a share.</strong>
+	/// The reference's <c>CmdSetup&lt;..., 5&gt;</c> says five, the mode switch is
+	/// 0 a constant, 1 a variable and 2 a percentage of the monster's own
+	/// maximum, and the fifth is a lethal flag the reference hands to
+	/// <c>ChangeHp</c>. <strong>A reader that read mode 2 as another constant
+	/// would have healed a wounded boss for one hit point</strong> where the
+	/// game asked for a tenth of his life.
+	/// </remarks>
+	public const int ChangeMonsterHp = 13110;
+
+	/// <summary>
+	/// 13120, Change Monster MP, from liblcf's <c>Code::ChangeMonsterMP</c> and
+	/// EasyRPG's <c>CommandChangeMonsterMP</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 5, and two change modes and not three.</strong> The
+	/// reference's switch is 0 a constant and 1 a variable — <strong>and a third
+	/// case is absent</strong>, so a mode of 2 changes nothing at all. The
+	/// spirit points of a monster are read with the change's own switch and not
+	/// clamped by the reader.
+	/// </remarks>
+	public const int ChangeMonsterMp = 13120;
+
+	/// <summary>
+	/// 13130, Change Monster Condition, from liblcf's
+	/// <c>Code::ChangeMonsterCondition</c> and EasyRPG's
+	/// <c>CommandChangeMonsterCondition</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 3: enemy, remove-or-add, and the condition id.</strong>
+	/// There is no fourth parameter and no percentage, because the condition
+	/// is named and not scaled.
+	/// </remarks>
+	public const int ChangeMonsterCondition = 13130;
+
+	/// <summary>
+	/// 13150, Show Hidden Monster, from liblcf's
+	/// <c>Code::ShowHiddenMonster</c> and EasyRPG's
+	/// <c>CommandShowHiddenMonster</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 1, and the whole command is one flag being cleared.</strong>
+	/// The reference writes <c>enemy-&gt;SetHidden(false)</c> and returns, and
+	/// <strong>there is no arm that hides a monster</strong> — a monster is
+	/// hidden in its database row and this is the only command that shows it.
+	/// </remarks>
+	public const int ShowHiddenMonster = 13150;
+
+	/// <summary>
+	/// 13210, Change Battle BG, from liblcf's <c>Code::ChangeBattleBG</c> and
+	/// EasyRPG's <c>CommandChangeBattleBG</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 1, and the file name is in the command's text and not in
+	/// its parameters.</strong> The reference writes
+	/// <c>Game_Battle::ChangeBackground(ToString(com.string))</c>, and a reader
+	/// that looked in <c>parameters</c> would have found a single zero and
+	/// changed nothing.
+	/// </remarks>
+	public const int ChangeBattleBg = 13210;
 	public const int PanScreen = 11060;
 
 	/// <summary>
@@ -826,6 +892,26 @@ public sealed class EventInterpreter
 				// The reference calls `Game_Map::RemoveAllPendingMoves()`,
 				// which is a map-wide call and not a player one.
 				_state.HaltAllMovement();
+				return Advance();
+
+			case ChangeMonsterHp:
+				ExecuteChangeMonsterHp(cmd);
+				return Advance();
+
+			case ChangeMonsterMp:
+				ExecuteChangeMonsterMp(cmd);
+				return Advance();
+
+			case ChangeMonsterCondition:
+				ExecuteChangeMonsterCondition(cmd);
+				return Advance();
+
+			case ShowHiddenMonster:
+				ExecuteShowHiddenMonster(cmd);
+				return Advance();
+
+			case ChangeBattleBg:
+				ExecuteChangeBattleBg(cmd);
 				return Advance();
 
 			case PanScreen:
@@ -3528,6 +3614,276 @@ public sealed class EventInterpreter
 			+ (steps == 0
 				? " and zero means never — the reference writes it through"
 				: " and a game set this to zero to stop fighting"));
+	}
+
+	/// <summary>
+	/// Runs 13110, Change Monster HP, from liblcf's
+	/// <c>Code::ChangeMonsterHP</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandChangeMonsterHP</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Three change modes, and the third is a share of the monster's
+	/// own maximum.</strong> The reference's switch is 0 a constant, 1 a
+	/// variable and 2 a percentage — so mode 2 on a monster with 500 of 1000
+	/// hit points takes 250, and not 2. <strong>A reader that read mode 2 as
+	/// another constant would have healed a wounded boss for one hit
+	/// point</strong> where the game asked for a tenth of his life.
+	/// </para>
+	/// <para>
+	/// <strong>The sign is a flag and not the value's own sign.</strong> The
+	/// reference reads <c>bool lose = com.parameters[1] &gt; 0</c> and then
+	/// writes <c>change = -change</c> — so a game that wrote a negative number
+	/// with the flag at zero still heals, and a game that wrote a positive one
+	/// with the flag at one still hurts. The value's own sign is read never.
+	/// </para>
+	/// <para>
+	/// <strong>And the death is a timer and not a removal.</strong> A monster
+	/// at zero hit points gets the system's enemy-kill sound and a death
+	/// timer — a reader that dropped him from the troop at once would have had
+	/// him vanish in the middle of the frame, and the animation the timer
+	/// exists for would have had nothing to play on.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeMonsterHp(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Change monster HP");
+			return;
+		}
+
+		var index = pCmd.Parameters[0];
+		if (index < 0 || index >= _state.TroopMembers.Count)
+		{
+			_state.AddDiagnostic(
+				$"[Battle] Change monster HP: invalid enemy ID {index}, and the "
+				+ "reference warns and returns");
+			return;
+		}
+
+		var verlieren = pCmd.Parameters[1] > 0;
+		var wert = 0;
+		switch (pCmd.Parameters[2])
+		{
+			case 0:
+				wert = pCmd.Parameters[3];
+				break;
+			case 1:
+				wert = GetVariable(pCmd.Parameters[3]);
+				break;
+			case 2:
+				wert = pCmd.Parameters[3] * _state.MonsterMaxHp(index) / 100;
+				break;
+			default:
+				_state.AddDiagnostic(
+					$"[Battle] Change monster HP: mode {pCmd.Parameters[2]} is "
+					+ "not 0, 1 or 2, and the reference's switch changes nothing");
+				return;
+		}
+
+		if (verlieren)
+		{
+			wert = -wert;
+		}
+
+		_state.SetMonsterHp(index, _state.MonsterHp(index) + wert);
+		if (_state.IsMonsterDead(index))
+		{
+			// **The death is timed, and this is where the reference plays the
+			// system's enemy-kill sound.**
+			_state.SetMonsterExit(
+				index, GameSimulationState.MonsterExit.Timed);
+		}
+
+		_state.AddDiagnostic(
+			$"[Battle] Change monster HP: enemy {index} now at "
+			+ $"{_state.MonsterHp(index)} of {_state.MonsterMaxHp(index)}");
+	}
+
+	/// <summary>
+	/// Runs 13120, Change Monster MP, from liblcf's
+	/// <c>Code::ChangeMonsterMP</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandChangeMonsterMP</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Two change modes, and there is no third.</strong> The
+	/// reference's switch is 0 a constant and 1 a variable — so a mode of 2
+	/// changes nothing, and this command has no percentage mode where
+	/// <c>13110</c> has one. A reader that reused the hit-point command's
+	/// three modes would have healed a monster's mana for a share of a
+	/// maximum that is never read here.
+	/// </para>
+	/// <para>
+	/// <strong>The sign is a flag here too,</strong> and the reference's own
+	/// <c>sp += change; SetSp(sp)</c> is where a game that drains more than a
+	/// monster has ends up with a negative number — so this reader clamps at
+	/// zero and the difference is recorded rather than copied.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeMonsterMp(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Change monster MP");
+			return;
+		}
+
+		var index = pCmd.Parameters[0];
+		if (index < 0 || index >= _state.TroopMembers.Count)
+		{
+			_state.AddDiagnostic(
+				$"[Battle] Change monster MP: invalid enemy ID {index}, and the "
+				+ "reference warns and returns");
+			return;
+		}
+
+		var verlieren = pCmd.Parameters[1] > 0;
+		var wert = 0;
+		switch (pCmd.Parameters[2])
+		{
+			case 0:
+				wert = pCmd.Parameters[3];
+				break;
+			case 1:
+				wert = GetVariable(pCmd.Parameters[3]);
+				break;
+			default:
+				_state.AddDiagnostic(
+					$"[Battle] Change monster MP: mode {pCmd.Parameters[2]} is "
+					+ "not 0 or 1, and the reference's switch changes nothing");
+				return;
+		}
+
+		if (verlieren)
+		{
+			wert = -wert;
+		}
+
+		_state.SetMonsterSp(index, _state.MonsterSp(index) + wert);
+		_state.AddDiagnostic(
+			$"[Battle] Change monster MP: enemy {index} now at "
+			+ $"{_state.MonsterSp(index)}");
+	}
+
+	/// <summary>
+	/// Runs 13130, Change Monster Condition, from liblcf's
+	/// <c>Code::ChangeMonsterCondition</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandChangeMonsterCondition</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Removing the death condition is a death, and it is
+	/// immediate.</strong> The reference calls
+	/// <c>RemoveState(state_id, false)</c> and its own comment says the monster
+	/// disappears and does not animate death — written down as an RPG_RT bug
+	/// that it reproduces. <strong>So the two death paths differ:</strong> a
+	/// monster whose hit points reach zero gets a death timer, and one whose
+	/// death condition is removed vanishes at once.
+	/// </para>
+	/// <para>
+	/// <strong>And the flag is remove-or-add and not add-or-remove.</strong> The
+	/// reference reads <c>bool remove = com.parameters[1] &gt; 0</c> — so the
+	/// second parameter's truth means removal, and a reader that read it as
+	/// "add" would have healed a poisoned monster with the command meant to
+	/// cure him.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeMonsterCondition(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Change monster condition");
+			return;
+		}
+
+		var index = pCmd.Parameters[0];
+		if (index < 0 || index >= _state.TroopMembers.Count)
+		{
+			_state.AddDiagnostic(
+				$"[Battle] Change monster condition: invalid enemy ID "
+				+ $"{index}, and the reference warns and returns");
+			return;
+		}
+
+		var entfernen = pCmd.Parameters[1] > 0;
+		var zustand = pCmd.Parameters[2];
+		if (entfernen)
+		{
+			_state.RemoveMonsterCondition(index, zustand);
+		}
+		else
+		{
+			_state.AddMonsterCondition(index, zustand);
+		}
+
+		_state.AddDiagnostic(
+			$"[Battle] Change monster condition: enemy {index} "
+			+ (entfernen ? "loses" : "gains") + $" condition {zustand}");
+	}
+
+	/// <summary>
+	/// Runs 13150, Show Hidden Monster, from liblcf's
+	/// <c>Code::ShowHiddenMonster</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandShowHiddenMonster</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>One parameter and no second arm.</strong> The reference's whole
+	/// command is <c>enemy-&gt;SetHidden(false)</c> — <strong>so a monster is
+	/// hidden in its database row and this is the only command that shows
+	/// it</strong>, and a reader that added a "hide" direction would have given
+	/// a game a command the reference does not have.
+	/// </remarks>
+	private void ExecuteShowHiddenMonster(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 1.
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Show hidden monster");
+			return;
+		}
+
+		var index = pCmd.Parameters[0];
+		if (index < 0 || index >= _state.TroopMembers.Count)
+		{
+			_state.AddDiagnostic(
+				$"[Battle] Show hidden monster: invalid enemy ID {index}, and "
+				+ "the reference warns and returns");
+			return;
+		}
+
+		_state.ShowMonster(index);
+		_state.AddDiagnostic($"[Battle] Show hidden monster: enemy {index}");
+	}
+
+	/// <summary>
+	/// Runs 13210, Change Battle BG, from liblcf's
+	/// <c>Code::ChangeBattleBG</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandChangeBattleBG</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The file name is in the command's text, and the one parameter
+	/// is not it.</strong> The reference writes
+	/// <c>Game_Battle::ChangeBackground(ToString(com.string))</c> — and a
+	/// reader that looked in <c>parameters</c> would have found a single zero
+	/// and left every battle with the background the troop file named.
+	/// </remarks>
+	private void ExecuteChangeBattleBg(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 1.
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Change battle BG");
+			return;
+		}
+
+		_state.BattleBackground = pCmd.Text ?? "";
+		_state.AddDiagnostic(
+			$"[Battle] Change battle BG: '{_state.BattleBackground}'");
 	}
 
 	/// <summary>

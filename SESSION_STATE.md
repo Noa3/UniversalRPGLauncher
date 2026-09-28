@@ -1,4 +1,56 @@
 ## Current card
+## The battle-only monster family is done — 13110, 13120, 13130, 13150, 13210
+
+**Measured against liblcf's own `eventcommand.h` (`src/generated/lcf/rpg/`,
+not the path the card named): 164 codes, 32 unwired, and of those 32 only 32
+are real RM2K/2000/2003 commands** — the `Maniac_` and `EasyRpg_` patch
+extensions (3001-3029) and the engine features below 6000 are a separate set.
+**The card's claim that `13110`-`13410` and `20720`-`20732` did not exist was
+wrong; seven of them are real battle commands.**
+
+**`13110` has three change modes and the third is a share of the monster's own
+maximum** — so mode 2 on a 500-of-1000 monster takes 250 and not 2. `13120`
+has two modes and no third, and a mode of 2 there changes nothing.
+
+**The sign is a flag in both, and the value's own sign is read never.** The
+reference reads `bool lose = parameters[1] > 0` and then writes
+`change = -change` — a negative constant with the flag at zero still heals.
+
+**There are two deaths.** Hit points at zero give the enemy's kill sound and a
+death timer; removing the death condition with `13130` removes him at once and
+without an animation, which the reference's own comment calls an RPG_RT bug it
+reproduces. The exit is therefore three-valued, and a reader that treated the
+paths alike animated a death the reference does not animate.
+
+**`13210` reads its file name from `com.string`, not from `parameters`.**
+
+**Test evidence** `project/tests/core/test_rm2k_battle_monster_commands.cs`,
+15 tests. **1410/1410**, validator passed.
+**Mutations** Twelve rules, **12 of 12 caught**.
+
+### Failure log: a test that read 130 where it wanted 70
+
+Four of the fifteen failed on the first run, and the message was
+"a constant change of thirty takes a monster from 100 to 70" with no value in
+it — because this repository's `AssertEq` **drops the actual value whenever a
+message is given**, so a failing test that names both numbers shows neither.
+
+**The value came out at 130, and the implementation was right.** The test
+passed `0, 0, 0, 30` where the second parameter is the lose flag — so it
+measured a heal of thirty. Three more tests wanted losses and wrote the flag
+the same way. **A reader that trusts a test's own sentence over the bytes it
+sent will "fix" correct code**, and the cheapest check is the one that reads
+the fixture back: `13110`'s parameters are enemy, lose, mode, value, lethal.
+
+### And a Godot dictionary that does not convert
+
+`TroopMembers` is a `Godot.Collections.Dictionary`, so every read is a
+`Variant`. `Convert.ToInt32(m["hp"])` compiles and throws at run time with
+"Unable to cast object of type 'Godot.Variant' to type 'System.IConvertible'";
+`(int)m["hp"]` is the form that works. **Eleven tests failed on that one cast
+before it was found**, and the exception text named the type.
+
+
 ## 11060, 11340 and 11350 are done — three commands the card said did not exist
 
 **The card listed `11060`, `11340` and `11350` as "liblcf names them and

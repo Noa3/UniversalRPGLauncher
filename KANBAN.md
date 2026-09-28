@@ -2668,6 +2668,7 @@ look for the next island of that shape.**
 | labels | ~~`12110` `12120`~~ | **~~label and jump-to-label — DONE, see below~~** |
 | vehicles | ~~`10840` `10850` `10650`~~ | **~~enter/exit vehicle, set vehicle location, change vehicle graphic — DONE, see below~~** |
 | face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
+| ~~battle monsters~~ | ~~`13110` `13120` `13130` `13150` `13210`~~ | **~~change monster HP/MP/condition, show hidden monster, change battle BG — DONE, see below~~** |
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10920` | common event, flee, combo, class |
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
@@ -4745,6 +4746,61 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 
 Befehlszeile, und es gehört in eine eigene Karte.
 
+
+## The battle-only family is done — `13110`, `13120`, `13130`, `13150`, `13210`
+
+**The card listed `13110`–`13410` and `20720`–`20732` as codes liblcf names and this
+repository does not implement. Seven of them are real RM2K/2000/2003 battle
+commands**, and the card was right that they were missing and wrong about what
+they are. Measured against liblcf's own `eventcommand.h`: **32 of its 164 codes
+are unwired, of which 44 are `Maniac_`/`EasyRpg_` patch extensions and engine
+features below 6000 — and 32 are the real command set.**
+
+**`13110 Change Monster HP` has three change modes, and the third is a share.**
+0 is a constant, 1 a variable and 2 a percentage of the monster's own maximum —
+so mode 2 on a monster with 500 of 1000 hit points takes 250, and not 2. **A
+reader that read mode 2 as another constant would have healed a wounded boss
+for one hit point** where the game asked for a tenth of his life.
+
+**The sign is a flag and not the value's own sign.** The reference reads
+`bool lose = com.parameters[1] > 0` and then writes `change = -change` — so a
+game that wrote a negative number with the flag at zero still heals, and one
+that wrote a positive number with the flag at one still hurts. **The value's
+own sign is read never.**
+
+**`13120 Change Monster MP` has two modes and not three.** The reference's
+switch is a constant and a variable and no third case — **so a mode of 2
+changes nothing**, where `13110` has a percentage. A reader that reused the
+hit-point command's modes would have changed a share of a maximum this command
+never reads.
+
+**There are two deaths and they are not the same one.** A monster whose hit
+points reach zero gets the system's enemy-kill sound and a **death timer**; a
+monster whose death condition is removed by `13130` disappears **at once**,
+and the reference's own comment writes that down as an RPG_RT bug it
+reproduces — "Monster dissapears immediately and doesn't animate death". So
+the exit is one of three values here, and a reader that treated the two paths
+alike would have animated a death the reference does not animate.
+
+**`13130`'s second parameter is remove-or-add and not add-or-remove** — a
+reader that read it as "add" would have healed a poisoned monster with the
+command meant to cure him.
+
+**`13150` is one parameter, one flag cleared, and no second arm.** A monster is
+hidden in its database row and this is the only command that shows it.
+
+**`13210` reads its file name out of the command's text.** The reference writes
+`Game_Battle::ChangeBackground(ToString(com.string))` — a reader that looked in
+`parameters` would have found a single zero and left every battle with the
+background the troop file named.
+
+**And an id that is not in the troop warns and grows nothing** — the
+reference's `GetEnemy` returns nothing, and a reader that created a monster
+instead would have grown the troop with every bad id a game contains.
+
+**Test evidence** `test_rm2k_battle_monster_commands.cs`, 15 tests.
+**1410/1410**, `TestRm2kBattleMonsterCommands: 15/15`.
+**Mutations** Twelve rules over one run, **12 of 12 caught**.
 
 ## `10710` Enemy Encounter ist fertig — fünf Zustandsfelder, die kein Befehl erreichte
 

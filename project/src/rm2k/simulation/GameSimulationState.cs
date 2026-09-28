@@ -1010,6 +1010,269 @@ public sealed class GameSimulationState
     // Troop (active battle)
     public int ActiveTroopId { get; set; } = -1;
     public Godot.Collections.Array<Godot.Collections.Dictionary> TroopMembers { get; init; } = new();
+
+    /// <summary>
+    /// The battle background, from 13210 Change Battle BG.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The command has a width of 1 and the value is not a parameter —
+    /// it is the command's own text.</strong> The reference writes
+    /// <c>Game_Battle::ChangeBackground(ToString(com.string))</c>, and
+    /// <c>com.string</c> is where the editor puts the file name. A reader that
+    /// looked in <c>parameters</c> would have found an empty list of one zero
+    /// and changed nothing, and a game's battle background would have stayed
+    /// whatever it was before the fight.
+    /// </remarks>
+    public string BattleBackground { get; set; } = "";
+
+    /// <summary>
+    /// A monster's current hit points, from 13110 Change Monster HP.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Three change modes, and the third is a percentage.</strong> The
+    /// reference's switch is 0 a constant, 1 a variable and 2 a share of the
+    /// monster's own maximum. A reader that read mode 2 as another constant
+    /// would have healed a wounded boss for one hit point where the game asked
+    /// for a tenth of his life.
+    /// </remarks>
+    public int MonsterHp(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        return m is null ? 0 : (int)m["hp"];
+    }
+
+    /// <summary>
+    /// Sets a monster's hit points, clamped to zero at the bottom.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Zero is a floor and not a ceiling.</strong> The reference's
+    /// <c>ChangeHp</c> clamps at 0, so a game that subtracts more than a
+    /// monster has leaves him on zero and not on a negative number — and a
+    /// reader without the clamp would have a dead monster whose hit points
+    /// count backwards.
+    /// </remarks>
+    public void SetMonsterHp(int pIndex, int pValue)
+    {
+        var m = MonsterAt(pIndex);
+        if (m is null)
+        {
+            return;
+        }
+
+        m["hp"] = Math.Max(0, pValue);
+    }
+
+    /// <summary>
+    /// A monster's maximum hit points, which mode 2 of 13110 is a share of.
+    /// </summary>
+    public int MonsterMaxHp(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        return m is null ? 0 : (int)m["max_hp"];
+    }
+
+    /// <summary>
+    /// A monster's current spirit points, from 13120 Change Monster MP.
+    /// </summary>
+    public int MonsterSp(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        return m is null ? 0 : (int)m["sp"];
+    }
+
+    /// <summary>
+    /// Sets a monster's spirit points, clamped to zero at the bottom.
+    /// </summary>
+    public void SetMonsterSp(int pIndex, int pValue)
+    {
+        var m = MonsterAt(pIndex);
+        if (m is null)
+        {
+            return;
+        }
+
+        m["sp"] = Math.Max(0, pValue);
+    }
+
+    /// <summary>
+    /// Whether a monster is dead, and what its death timer holds.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A dead monster is not removed at once.</strong> The reference
+    /// plays the system's enemy-kill sound and then calls
+    /// <c>enemy->SetDeathTimer()</c>, and its own comment says the monster
+    /// disappears and animates. <strong>A reader that removed the monster from
+    /// the troop the moment its hit points reached zero would have had it
+    /// vanish mid-frame</strong>, and the sound and the animation would have
+    /// had nothing to play on.
+    /// </remarks>
+    public bool IsMonsterDead(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        return m is not null && (int)m["hp"] <= 0;
+    }
+
+    /// <summary>
+    /// How a monster leaves a battle, from 13110 and 13130 together.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Timed for a hit-point death and immediate for a state
+    /// removal.</strong> The reference's two paths are different on purpose:
+    /// a monster at zero hit points gets a death timer, and one whose death
+    /// state was removed disappears immediately and "doesn't animate death" —
+    /// which is written down as an RPG_RT bug the reference reproduces.
+    /// </remarks>
+    public enum MonsterExit
+    {
+        /// <summary>Still in the fight.</summary>
+        None,
+
+        /// <summary>Left the troop at once, without a death animation.</summary>
+        Immediate,
+
+        /// <summary>Left after a death animation ran.</summary>
+        Timed,
+    }
+
+    /// <summary>
+    /// How a monster left the troop, and when.
+    /// </summary>
+    public MonsterExit MonsterExitOf(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        if (m is null || !m.ContainsKey("exit"))
+        {
+            return MonsterExit.None;
+        }
+
+        return (MonsterExit)(int)m["exit"];
+    }
+
+    /// <summary>
+    /// Records how a monster left the troop.
+    /// </summary>
+    public void SetMonsterExit(int pIndex, MonsterExit pExit)
+    {
+        var m = MonsterAt(pIndex);
+        if (m is null)
+        {
+            return;
+        }
+
+        m["exit"] = (int)pExit;
+    }
+
+    /// <summary>
+    /// A monster's conditions, from 13130 Change Monster Condition.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A list, and it grows and shrinks.</strong> The reference calls
+    /// <c>AddState(id, true)</c> and <c>RemoveState(id, false)</c> — and the
+    /// second argument of the removal is the reference's own "don't animate
+    /// death", which is the bug it reproduces rather than a flag of its own.
+    /// </remarks>
+    public Godot.Collections.Array<int> MonsterConditions(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        if (m is null)
+        {
+            return new Godot.Collections.Array<int>();
+        }
+
+        if (!m.ContainsKey("conditions"))
+        {
+            m["conditions"] = new Godot.Collections.Array<int>();
+        }
+
+        return (Godot.Collections.Array<int>)m["conditions"];
+    }
+
+    /// <summary>
+    /// Adds a condition to a monster.
+    /// </summary>
+    public void AddMonsterCondition(int pIndex, int pStateId)
+    {
+        var zustand = MonsterConditions(pIndex);
+        if (!zustand.Contains(pStateId))
+        {
+            zustand.Add(pStateId);
+        }
+    }
+
+    /// <summary>
+    /// Removes a condition from a monster, and it is the death path.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Removing the death state is a death, and it is immediate.</strong>
+    /// The reference calls <c>RemoveState(state_id, false)</c> here and
+    /// <c>SetDeathTimer()</c> on the hit-point path, so the two commands
+    /// remove a monster differently and a reader that treated them alike would
+    /// have animated a death the reference does not animate.
+    /// </remarks>
+    public void RemoveMonsterCondition(int pIndex, int pStateId)
+    {
+        var zustand = MonsterConditions(pIndex);
+        zustand.Remove(pStateId);
+        if (pStateId == DeathConditionId)
+        {
+            SetMonsterExit(pIndex, MonsterExit.Immediate);
+        }
+    }
+
+    /// <summary>
+    /// The condition id RPG Maker uses for death, which is 1 in every 2K
+    /// database.
+    /// </summary>
+    public const int DeathConditionId = 1;
+
+    /// <summary>
+    /// Whether a monster is hidden, from 13150 Show Hidden Monster.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Only the false direction exists.</strong> The reference's whole
+    /// command is <c>enemy->SetHidden(false)</c> — there is no parameter and
+    /// no other arm, so a monster starts hidden in the database and this
+    /// command is the only thing that shows it again.
+    /// </remarks>
+    public bool IsMonsterHidden(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        return m is not null && m.ContainsKey("hidden") && (int)m["hidden"] != 0;
+    }
+
+    /// <summary>
+    /// Shows a monster that was hidden.
+    /// </summary>
+    public void ShowMonster(int pIndex)
+    {
+        var m = MonsterAt(pIndex);
+        if (m is null)
+        {
+            return;
+        }
+
+        m["hidden"] = 0;
+    }
+
+    /// <summary>
+    /// The troop member at an index, or null when the index is out of range.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Null and not a new empty monster.</strong> Every one of these
+    /// commands starts with the reference's own
+    /// <c>GetEnemy(id)</c> plus a warning when it returns nothing, and a
+    /// reader that created a monster instead would have grown the troop with
+    /// every bad id a game contains.
+    /// </remarks>
+    private Godot.Collections.Dictionary? MonsterAt(int pIndex)
+    {
+        if (pIndex < 0 || pIndex >= TroopMembers.Count)
+        {
+            return null;
+        }
+
+        return TroopMembers[pIndex];
+    }
     public bool IsBattleActive { get; set; }
     public int BattleTurn { get; set; }
     public int BattlePhase { get; set; } // 0=initial, 1=player, 2=enemy, 3=reward, 4=escape, -1=none
