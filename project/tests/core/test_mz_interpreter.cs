@@ -433,13 +433,67 @@ partial class TestMzInterpreter : TestBase
         AssertEq(
             interpreter.Stopped, MzStep.Finished,
             "a command with no method does not stop the interpreter");
+        // **The engine part of this claim still holds, and it is the part
+        // that matters:** `typeof this["command401"] === "function"` is false,
+        // and the engine steps over it. A reader that reported 401 as unknown
+        // would refuse a command the game runs past every time a line of text
+        // appears.
         AssertTrue(
-            !MzCommands.HasEffect(401),
-            "and it is known to have no method, which is what the engine asks");
+            !MzCommandSet.HasMethod(401),
+            "and the engine really has no method for it, which is what the"
+            + $" engine asks; it has {MzCommandSet.HasMethod(401)}");
+
+        // **The check is two terms, because 401 is not in the list of a
+        // hundred and fourteen at all.** A first draft read it as one term
+        // and wrote a test that passed for the wrong reason: taking 401 out
+        // of `NoMethodCodes` changed nothing, because the hundred and
+        // fourteen never held it.
+        //
+        // **And a first draft of that list claimed 601, 602 and 603 have no
+        // method. They do** — `command601`, `command602` and `command603` are
+        // three of the hundred and fourteen. **This test says so, because a
+        // claim about a list is worth exactly as much as the test that
+        // notices when the list is wrong.**
+        AssertTrue(
+            MzCommandSet.HasMethod(601),
+            "and 601, which a first draft listed as having no method, does"
+            + $" have one; it has {MzCommandSet.HasMethod(601)}");
+        AssertTrue(
+            MzCommandSet.HasMethod(602),
+            $"and so does 602; it has {MzCommandSet.HasMethod(602)}");
+        AssertTrue(
+            MzCommandSet.HasMethod(603),
+            $"and so does 603; it has {MzCommandSet.HasMethod(603)}");
         AssertEq(
-            actions.Count, 0,
-            "and it recorded nothing, because it did nothing; it recorded"
-            + $" {Describe(actions)}");
+            MzCommandSet.NoMethodCodes.Count, 9,
+            "and the numbers without a method are nine, not the twelve a"
+            + $" first draft wrote, and all nine lie outside the hundred and"
+            + $" fourteen; there are {MzCommandSet.NoMethodCodes.Count}");
+
+        // **What changed is the reader, and this is where the two answers
+        // differ.** The engine reads a 401 by position inside a 101's block,
+        // but the reader is asked a different question: *what did the game
+        // write?* and the game wrote nine hundred and thirty-eight of these
+        // lines. A reader that stepped over them would report a game that has
+        // no text in it at all, and that is a claim about the data rather than
+        // about the reader.
+        //
+        // **So the reader keeps the line and says what it asked of the
+        // player**, and the engine's own answer — step over — is a different
+        // question about a different thing.
+        AssertEq(
+            facts.Message.Count, 1,
+            "and the reader keeps the line the game wrote, because the"
+            + $" question it was asked is what the game said; it kept"
+            + $" {facts.Message.Count} line");
+        AssertEq(
+            facts.Message[0].Text, "a line of text",
+            "with the words the game wrote; they are"
+            + $" \"{facts.Message[0].Text}\"");
+        AssertEq(
+            actions.Count, 1,
+            $"and it says so once, so a caller can see it was read; it"
+            + $" recorded {Describe(actions)}");
     }
 
     public void Test_AListThatEndsInsideABranchIsReportedAndNotReadPast()

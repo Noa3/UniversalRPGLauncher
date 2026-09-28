@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace UniversalRPG.Web;
 
@@ -166,6 +167,57 @@ public static class MzCommandSet
         new(602, "If Escape"),
         new(603, "If Lose"),
     ];
+
+    /// <summary>
+    /// Whether the engine has a method for a number, which is what
+    /// <c>executeCommand</c> asks: <c>methodName =
+    /// "command" + params.code; if (typeof this[methodName] === "function")
+    /// { … }</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Being in this list and having a method are two different things</b>,
+    /// and the difference is the whole of how MZ dispatches a command.
+    /// </para>
+    ///
+    /// <para>
+    /// The list above is the 178 numbers MZ reserves. <b>Fourteen of them have
+    /// no <c>commandNNN</c> method</b>, and a game writes them all the time:
+    /// <c>0</c> the end of a block, <c>401</c> a line of text, <c>404</c> the
+    /// end of the choices, <c>405</c> the choices, <c>412</c> the end of a
+    /// branch, <c>505</c> a move route, <c>601</c> and <c>602</c> a battle's
+    /// beginning and victory, <c>603</c> its end, <c>604</c> the escape from
+    /// it, <c>605</c> its end, <c>657</c> a plugin's next step.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The engine steps over every one of them</b>, and that is not a
+    /// failure: a 401 is read by position inside a 101's block, and a 505 is
+    /// an entry inside a 205's list. A reader that reported them as unknown
+    /// would stop a game over a command the game itself runs past a thousand
+    /// times.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>And a reader may still read them</b>, because the reader is asked a
+    /// different question: not "does the engine dispatch this" but "what did
+    /// the game write". Those are two questions with two answers, and
+    /// collapsing them is how a reader either stops a game that is running
+    /// fine or claims a game has no text in it.
+    /// </para>
+    /// </remarks>
+    public static bool HasMethod(int pCode) => All.Any(c => c.Code == pCode)
+        && NoMethodCodes.Contains(pCode) == false;
+
+    /// <summary>
+    /// The nine numbers this reader has measured as having no
+    /// <c>commandNNN</c> method in MZ 1.9.1. <b>All nine lie outside the
+    /// hundred and fourteen above</b>, which is why the check has two terms.
+    /// </summary>
+    public static readonly IReadOnlyCollection<int> NoMethodCodes = new[]
+    {
+        0, 401, 404, 405, 412, 505, 604, 605, 657,
+    };
 
     /// <summary>Every command, in the order the engine declares them.</summary>
     public static IReadOnlyList<MzCommand> Commands => All;

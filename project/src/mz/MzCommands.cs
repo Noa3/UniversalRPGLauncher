@@ -103,6 +103,7 @@ public static class MzCommands
             or MzCommandTable.ControlSwitches
             or MzCommandTable.ControlVariables
             or MzCommandTable.ChangeItems
+            or MzCommandTable.ShowTextLine
             or MzCommandTable.MoveRoute
             or MzCommandTable.TransferPlayer
             or MzCommandTable.OpenMenu
@@ -207,6 +208,33 @@ public static class MzCommands
                 // not there is not an error.
                 pActions.Add(new MzAction(
                     pCommand, pFacts.Screen.Erase(At(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.ShowTextLine:
+            {
+                // **There is no `command401` in the engine.** A 401 is not
+                // dispatched at all: it is a *position* inside a 101's block,
+                // and the engine reads it while it walks that block. The 114
+                // `commandNNN` methods do not include it, and a reader that
+                // dispatched it as a command of its own would be running
+                // something the engine never runs.
+                //
+                // What a reader can honestly do: read the line, resolve the
+                // substitutions that come from data it has, and count the
+                // times it asks the player to wait. **The waiting is not a
+                // rendering detail** — a 402 follows a 401, and a line with
+                // three `\|` needs three decisions before the next line.
+                var line = MzMessage.Read(
+                    Text(pCommand, 0),
+                    id => pFacts.HasVariable(id)
+                        ? pFacts.Variable(id).ToString(
+                            System.Globalization.CultureInfo
+                                .InvariantCulture)
+                        : null,
+                    pFacts.Names);
+                pFacts.Message.Add(line);
+                pActions.Add(new MzAction(pCommand, line.ToString()));
                 return true;
             }
 

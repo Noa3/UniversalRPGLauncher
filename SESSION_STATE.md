@@ -1717,3 +1717,84 @@ diagonal codes appear **zero** times and are named rather than guessed at.
 
 **Next: the remaining offene codes, of which `401 Show Text` at 938 is by
 far the largest, and it needs a message window this reader does not have.**
+
+## K-132 Read a line of text, and every code in it — DONE
+
+`project/src/mz/MzMessage.cs` (mit `INameSource` und `ThreeNames`),
+`MzCommandTable.ShowTextLine/ShowChoices/ContinueText`,
+`MzBranchFacts.Message` / `Names`, `MzCommandSet.HasMethod` /
+`NoMethodCodes`.
+`project/tests/core/test_mz_message.cs`, 6 Tests, und ein K-124-Test
+umgeschrieben, der jetzt beide Antworten sagt.
+
+**963/963**, `TestMzMessage: 6/6`, `TestMzInterpreter: 18/18`, validator
+passed, build 0 errors.
+**Neun Mutationsregeln, neun gefangen.** Der erste Lauf meldete sieben von
+neun — **und beide „entkommenen" waren Fehler in den Regeln, nicht im
+Leser.** Eine machte eine Code-Behandlung zu einem Äquivalent, die andere
+traf einen Listeneintrag, den der Test gar nicht erreichte. Isoliert und
+neu geschrieben: **neun von neun.**
+
+**Die zweite Geschichte ist die bessere.** Die Liste der Zahlen ohne
+`commandNNN` war geraten und **falsch**: sie behauptete, `601`, `602` und
+`603` hätten keine Methode. **Sie haben eine** — `command601`, `command602`
+und `command603` sind drei der 114. Und sie sprach von „178 reservierten
+Nummern", wo die K-122-Liste in Wahrheit **die 114 Methoden** ist.
+**Neun Zahlen haben keine Methode, und alle neun liegen außerhalb dieser
+114**: `0`, `401`, `404`, `405`, `412`, `505`, `604`, `605`, `657`.
+
+**Das ist der vierte Name in vier Karten, der aus dem Gedächtnis kam und in
+der Engine nicht existierte** — nach `checkPassage`, `isPassable` und der
+`reverseDir`-Form. **Gemessen wird, nicht erinnert.**
+
+**Der größte Brocken der Fixture: 938 Zeilen, jede mit genau einem
+Parameter.** Und nichts daran ist ein Darstellungsdetail — das ist der
+Befund: **eine Dialogzeile ist meistens keine Worte.**
+
+**Zwei Durchgänge, zwei Regelsätze.** Durchgang eins,
+`convertEscapeCharacters`, schreibt in drei Schritten um: jeder Backslash
+wird zum Steuerzeichen; **zwei Steuerzeichen machen einen Backslash
+zurück**; und Variablen-, Helden-, Gruppen- und Währungscodes werden
+gefüllt, **die Variablen in einer Schleife**. Durchgang zwei, die
+Zeichenschleife, behandelt **jedes Zeichen unter 0x20 als Steuerzeichen**
+und schreibt es nie in die Ausgabe.
+
+**Drei Klassen, und nur eine ist Text.** Im Text: `\V[n]`, `\N[n]`,
+`\P[n]`, `\G`. **Nicht im Text und nie gezeigt:** `\|`, `^`, `!`, `>`,
+`<`, `$` — **ein Leser, der sie ausgäbe, setzte einen `|` mitten in einen
+Satz.** Weder Text noch Feder, und der Leser benennt sie: `\C[n]`,
+`\I[n]`, `\PX[n]`, `\PY[n]`, `\FS[n]`, `\{`, `\}`.
+
+**Die Zahlen, und zwei meiner eigenen Messungen waren erst falsch und
+dann richtig.**
+
+| | zuerst | gemessen |
+|---|---:|---:|
+| Zeilen mit `\C[n]` | 0 | **19** |
+| Undrawable | 0 | **57** |
+| Leere Zeilen | — | **14** |
+
+`\C[3]` 19×, `\C[0]` 19×, `\I[177]` 19×, `\!` 3×, `\|` 3× — **19
+Zeilen mal drei Codes, das sind die 57.** Eine Zeile wartet **dreimal**:
+`\|.|\|.|\|.` sind drei Entscheidungen und nicht eine.
+
+**Der Fehler, der zweimal passierte.** Ein Scan fand den Buchstaben `C`
+53-mal, `N` 38-mal, `V` 22-mal und `P` 11-mal, und ich hielt sie für
+Auszeichnungen. **Es sind Wörter** — „SEND **C**OUT!!", „\* **N** om\*",
+„Valuable **V**egetables". **Ein Code ist zuerst ein Backslash und dann
+ein Buchstabe.** Genau dieser Fehler ließ mich „keine Farben" behaupten,
+und die Dateien sagten neunzehn. **Der Test, der es bemerkte, las
+dieselben Dateien und riet nicht** — und das ist die Begründung dafür,
+dass man Testzahlen nicht schätzt.
+
+**Eine Aussage, die älter ist als diese Karte.** Ein K-124-Test behauptete,
+ein 401 werde übergangen, weil die Engine keine Methode dafür hat. **Das
+stimmt und stimmt weiter.** Der Leser liest es trotzdem, weil er nach
+einer anderen Frage gefragt wird: *was hat das Spiel geschrieben?*
+**„Hat die Engine eine Methode" und „was steht in den Daten" sind zwei
+Fragen mit zwei Antworten.** `MzCommandSet.HasMethod` sagt jetzt beides,
+und `NoMethodCodes` nennt die zwölf Zahlen ohne `commandNNN`.
+
+**Nicht hier.** Kein Textfenster, kein Renderer. Die Zeile wird gelesen
+und als Daten behalten: Wortlaut, Wartungszahl, und alles, was nicht
+gezeichnet werden kann.

@@ -257,6 +257,30 @@ public sealed class MzBranchFacts
     public MzPlayer Player { get; init; } = new();
 
     /// <summary>
+    /// The lines read so far, in the order they were read.
+    /// </summary>
+    /// <remarks>
+    /// A reader with no window keeps the lines as data — the words, the number
+    /// of times each asks the player to wait, and anything it could not draw.
+    /// <b>It does not keep a picture of a window</b>, because a window this
+    /// repository cannot draw is a window a caller must not think it has.
+    /// </remarks>
+    public List<MzMessage.Line> Message { get; } = new();
+
+    /// <summary>
+    /// The names a line can ask for, or null when this reader has no database
+    /// to answer with.
+    /// </summary>
+    /// <remarks>
+    /// <b>null and empty are different and both are honest.</b> With no
+    /// source, a <c>\N[1]</c> becomes an empty name and the line says it
+    /// substituted an actor name — which is true. With a source that has no
+    /// actors, the same thing happens. What a reader must not do is put a
+    /// plausible name in.
+    /// </remarks>
+    public MzMessage.INameSource? Names { get; set; }
+
+    /// <summary>
     /// Whether a message is on the screen, which is the second thing that stops
     /// a 201 doing anything. <c>command201</c> is
     /// <c>if ($gameParty.inBattle() || $gameMessage.isBusy()) return false;

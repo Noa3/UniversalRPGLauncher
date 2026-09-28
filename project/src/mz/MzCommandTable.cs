@@ -63,6 +63,23 @@ public static class MzCommandTable
     public const int ErasePicture = 235;
 
     /// <summary>
+    /// One line of text. **It has no <c>command401</c> method** — the engine
+    /// reads it by position, as the text of a 101's line, and
+    /// <c>command401</c> does not exist.
+    /// </summary>
+    public const int ShowTextLine = 401;
+
+    /// <summary>
+    /// The choices under a line, again with no method of its own.
+    /// </summary>
+    public const int ShowChoices = 405;
+
+    /// <summary>
+    /// Carries on with the next line, the counterpart of a 401.
+    /// </summary>
+    public const int ContinueText = 402;
+
+    /// <summary>
     /// Forces a move route onto a character. <c>command205</c> is
     /// <c>$gameMap.refreshIfNeeded(); this._characterId = params[0]; const
     /// character = this.character(params[0]); if (character) { character

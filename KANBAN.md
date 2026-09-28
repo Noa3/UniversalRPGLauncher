@@ -2881,3 +2881,87 @@ always read from the variables.
 position, not a picture of one, and the direction and fade type are kept as
 the numbers the game wrote. The other four wait modes need a scrolling map, a
 moving character and a plugin callback, and none of them is modellable here.
+
+
+### K-132 Read a line of text, and every code in it
+`DONE` — runtime, P1, depends on K-129
+
+**The biggest thing left in this fixture: 938 lines, and every one carries
+exactly one parameter.** But nothing about it is a rendering detail, and
+that is the finding: **a line of dialogue is mostly not words.**
+
+**Two passes, two rule sets.** Pass one, `convertEscapeCharacters`, rewrites
+in three steps — every backslash becomes the escape character; **two escape
+characters put one backslash back**; and the variable, actor, party and
+currency codes are filled in, **the variable one in a loop**. Pass two, the
+drawing loop, treats **every character below 0x20 as a control character**
+and never puts it in the output. A reader that does them in one shows a
+different line than the game does.
+
+**Three classes, and only one of them is text:**
+
+- **In the text:** `\V[n]`, `\N[n]`, `\P[n]`, `\G`.
+- **Not in the text, and never shown:** `\|`, `^`, `!`, `>`, `<`, `$`.
+  **A reader that emitted them would put a `|` in the middle of a
+  sentence.**
+- **Neither text nor pen, and this reader names them:** `\C[n]`, `\I[n]`,
+  `\PX[n]`, `\PY[n]`, `\FS[n]`, `\{`, `\}`. **A reader with no
+  renderer cannot draw them, and it says so rather than dropping them in
+  silence.**
+
+**This game's own numbers, measured over the files — and two of my own
+measurements were wrong before they were right.**
+
+| | zuerst behauptet | gemessen |
+|---|---:|---:|
+| Zeilen mit `\C[n]` | 0 | **19** |
+| Undrawable insgesamt | 0 | **57** |
+| Leere Zeilen | — | **14** |
+| Code-Klassen | 2 | **5** |
+
+`\C[3]` 19×, `\C[0]` 19×, `\I[177]` 19×, `\!` 3×, `\|` 3× — **19 Zeilen
+mal drei Codes, das sind die 57.** Eine Zeile wartet **dreimal**: `\|.|\|.|\|.`
+sind drei Entscheidungen und nicht eine.
+
+**Der Fehler, der zweimal passierte.** Ein Scan dieser Zeilen fand den
+Buchstaben `C` 53-mal, `N` 38-mal, `V` 22-mal und `P` 11-mal, und eine erste
+Lesart hielt sie für Auszeichnungen. **Es sind Wörter**: „SEND **C**OUT!!",
+„\* **N** om\*", „Valuable **V**egetables". **Ein Code ist zuerst ein
+Backslash und dann ein Buchstabe** — wer nach einem nackten Großbuchstaben
+sucht, liest Englisch. **Genau dieser Fehler ließ mich zuerst „keine Farben"
+behaupten, und die echten Dateien sagten neunzehn.** Der Test, der es
+bemerkte, las dieselben Dateien und riet nicht.
+
+**Was nicht hierher gehört.** Eine Zeile wird **gelesen und behalten**, nicht
+gezeichnet: `MzBranchFacts.Message` hält Wortlaut, Wartungszahl, und alles,
+was dieser Leser nicht zeichnen kann. **Kein Textfenster, kein Renderer.**
+
+**Und eine Aussage, die älter ist als diese Karte.** Ein Test aus K-124
+behauptete, ein 401 werde *übergangen*, weil die Engine keine Methode dafür
+hat — und das stimmt und stimmt weiter. **Der Leser liest es trotzdem**, weil
+er nach einer anderen Frage gefragt wird: *was hat das Spiel geschrieben?*
+**„Hat die Engine eine Methode" und „was steht in den Daten" sind zwei
+Fragen mit zwei Antworten**, und sie zu vermischen bringt entweder ein
+laufendes Spiel zum Stehen oder behauptet, ein Spiel habe keinen Text.
+
+**Test evidence** 6 tests in `project/tests/core/test_mz_message.cs`, and one
+K-124 test rewritten to say both answers.
+**Total 963/963**, validator passed, build 0 errors.
+
+**Mutations** Nine rules. The first run caught seven and reported two
+escaped — **and both were a fault in the rules, not in the reader.** One
+mutated a code's handling into an equivalent that changed nothing, and one
+mutated a list entry that the test did not actually reach. Isolated and
+rewritten, **nine of nine**. The second is the better story:
+
+> **Die Liste der Zahlen ohne `commandNNN` war geraten, und sie war falsch.**
+> Sie behauptete, `601`, `602` und `603` hätten keine Methode. **Sie haben
+> eine** — `command601`, `command602` und `command603` sind drei der 114.
+> Und sie behauptete „178 reservierte Nummern", wo die Liste in K-122 in
+> Wahrheit **die 114 Methoden** ist. **Neun Zahlen haben keine Methode, und
+> alle neun liegen außerhalb dieser 114** — `0`, `401`, `404`, `405`, `412`,
+> `505`, `604`, `605`, `657`. Der Test sagt es jetzt ausdrücklich.
+
+**Das ist der vierte Name in vier Karten, der aus dem Gedächtnis kam und in
+der Engine nicht existierte** — nach `checkPassage`, `isPassable` und der
+`reverseDir`-Form. **Gemessen wird, nicht erinnert.**

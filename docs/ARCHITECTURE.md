@@ -244,6 +244,29 @@ reader with no renderer cannot answer `bushDepth`, `terrainTag` or
 `regionId` honestly.
 
 
+### A line of text, read as data
+
+`MzMessage.Read` is `Window_Base`'s two passes and nothing more. The first
+turns every backslash into the escape character, **puts one backslash back
+for every two**, and fills in the variable, actor, party and currency codes —
+the variable one in a loop, because a line can name the same variable twice.
+The second treats **every character below 0x20 as a control character** and
+never lets it reach the output.
+
+A `Line` keeps the words, the number of times it waits, the number of
+choices, whether it ends early, **and a list of everything it asked for that
+this repository cannot draw** — colours, icons, positions, font sizes. The
+waiting is not a rendering detail: a 402 follows a 401, and a line with three
+`\|` needs three decisions.
+
+**`MzCommandSet.HasMethod` answers a different question from "what did the
+game write".** The engine asks `typeof this["command401"] === "function"`,
+and the answer is no — a 401 is read by position inside a 101's block. A
+reader is asked what the game wrote, and the answer is a line of text. **Two
+questions, two answers**, and `NoMethodCodes` names the nine that have no
+method so the difference can be stated rather than assumed.
+
+
 ## Compatibility Database
 
 The compatibility database is extensible and data-driven:
