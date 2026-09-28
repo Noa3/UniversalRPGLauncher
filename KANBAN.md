@@ -2727,6 +2727,80 @@ must not do; this one says what it can. **1772 of 2432 already run**, and the
 at 96, 123 at 42, 213 at 36 and 405 at 36.
 
 
+
+### K-131 Walk a character, one step a frame
+`DONE` — runtime, P1, depends on K-130
+
+**Why this one, and what it corrected.** K-129's list called `505` the
+biggest thing left, at 348. **`command505` does not exist.** `505` is a
+nested move-route entry that the editor writes, and a move route reaches the
+runtime through **`205 Move Route` — 96 of them**, over fourteen character
+ids, of which **60 say `wait` and 36 do not**. The 348 were never event
+commands at all.
+
+**The seventeen route codes this game uses, measured over its own
+ninety-six routes:** END 96, MOVE_LEFT 74, MOVE_RIGHT 59, MOVE_DOWN 50,
+MOVE_UP 45, JUMP 31, CHANGE_SPEED 26, TURN_UP 11, MOVE_BACKWARD 10,
+TURN_DOWN 10, TURN_RIGHT 9, TURN_LEFT 7, MOVE_FORWARD 4, WAIT 4,
+TRANSPARENT_ON 4, STEP_ANIME_ON 2, STEP_ANIME_OFF 2. **MOVE_LEFT leads and
+MOVE_DOWN follows** — the opposite of what "a game mostly walks about"
+would guess. MOVE_RANDOM, MOVE_TOWARD, MOVE_AWAY and all eight diagonal
+codes appear **zero** times and are named rather than guessed at.
+
+**Six rules, and every one of them is a place a first reading goes wrong:**
+
+1. **The API is `isMapPassable` and `canPass`, not `isPassable` and
+   `checkPassage`.** Those two names come from other RPG Maker engines;
+   `checkPassage` has **zero** occurrences in 1.9.1. A reader built from
+   memory would have compiled and tested nothing real.
+2. **MZ has two coordinates.** `_x`/`_y` is the tile, `_realX`/`_realY` is
+   where the character is drawn, and on a successful step the drawing
+   position is set to **one tile behind** —
+   `this._realX = $gameMap.xWithDirection(this._x, this.reverseDir(d))`. A
+   reader with one coordinate snaps, and a snapped character teleports.
+3. **`reverseDir` is `10 - d`, not `(d + 4) % 4`.** The first is right for a
+   0..3 numbering and wrong for MZ's 2/4/6/8: `reverseDir(2) = 8` is **Up**,
+   not Down. A first draft placed every "one tile behind" position **in
+   front** of the character, so every character walked away from where it
+   was going.
+4. **`isStopping` is `!isMoving() && !isJumping()` — two terms, and a first
+   draft added a third.** It wrote `... && !Waiting` and **every route with a
+   `ROUTE_WAIT` in it ran backwards**, re-issuing one step for ever. A
+   character waiting is a character that has arrived.
+5. **A refused step still turns.** `moveStraight` turns in both branches, and
+   on failure it calls `checkEventTriggerTouchFront`. A character that bumps
+   a wall faces the wall, and that facing is what triggers the action
+   button.
+6. **A route is a queue of single steps, not a batch.**
+   `updateRoutineMove` hands a command over only when the character has
+   arrived, so **five steps into open floor is five frames**. A reader that
+   ran the list in one call would teleport the character five tiles.
+
+**And a product fault with a wider reach than this card.** A 205's second
+parameter is a **nested object**, and `MzCommandEntry.From` turns every
+parameter into a string — anything that is not a number or a boolean became
+`item.Text`, which for an object is `""`. **Every move route in every game
+came back empty, and the reader could not have said why.** `MzJson.Write`
+now writes a value back out, because **a reader that cannot write a shape
+back has already half-lost it.**
+
+**Two more faults, found by the same tests:** `Truth` read a boolean out of
+`Text` where the parser puts it in `Boolean`, so **all three flags of all
+ninety-six routes came back false** and not one page was ever held by its
+route; and `From` read a route's `code` out of `Text`, which is empty for a
+number, so **every route code came back 0 — which is END** and all
+ninety-six routes did nothing while looking perfectly plausible.
+
+**Test evidence** 7 tests in `project/tests/core/test_mz_move_route.cs`.
+**Total 957/957**, validator passed, build 0 errors.
+
+**Mutations** Fourteen rules, thirteen caught in the main run. The one the
+run reported as escaped — "a route that is not forced hands out no steps" —
+**was not escaped**: an isolated second run killed it, three of seven tests
+down, with the tree bytewise unchanged. It is recorded here as
+**fourteen of fourteen**, because a number that was not checked is not a
+number that was counted.
+
 ### K-130 Send the player somewhere, and hold the page until they arrive
 `DONE` — runtime, P1, depends on K-124
 

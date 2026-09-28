@@ -21,8 +21,7 @@ namespace UniversalRPG.Web;
 /// </para>
 /// <para>
 /// The engine's own modes are <c>message</c>, <c>transfer</c>, <c>scroll</c>,
-/// <c>route</c> and <c>until</c>. **Only <see cref="Transfer"/> is modelled
-/// here**, because only a transfer is something this reader can be told about;
+/// <c>route</c> and <c>until</c>. **Two are modelled here**, because only a transfer is something this reader can be told about;
 /// the others need a scrolling map, a moving character and a plugin callback
 /// that this repository does not run.
 /// </para>
@@ -41,4 +40,17 @@ public enum MzWaitMode
     /// it is the reason this enum exists rather than a flag on the interpreter.
     /// </remarks>
     Transfer = 1,
+
+    /// <summary>
+    /// Held until a forced move route has been walked to its end — the page
+    /// waits for the character, not for a number of frames.
+    /// </summary>
+    /// <remarks>
+    /// **`command205` sets this only when the route's own `wait` flag is
+    /// set**: <c>if (params[1].wait) this.setWaitMode("route");</c>. **The
+    /// wait is the route's, not the command's** — sixty of this game's
+    /// ninety-six routes say so, and the other thirty-six do not, and a reader
+    /// that held every page would stall a game on the thirty-six.
+    /// </remarks>
+    Route = 2,
 }

@@ -103,6 +103,7 @@ public static class MzCommands
             or MzCommandTable.ControlSwitches
             or MzCommandTable.ControlVariables
             or MzCommandTable.ChangeItems
+            or MzCommandTable.MoveRoute
             or MzCommandTable.TransferPlayer
             or MzCommandTable.OpenMenu
             or MzCommandTable.PluginCommand
@@ -206,6 +207,59 @@ public static class MzCommands
                 // not there is not an error.
                 pActions.Add(new MzAction(
                     pCommand, pFacts.Screen.Erase(At(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.MoveRoute:
+            {
+                // `command205` is
+                //   $gameMap.refreshIfNeeded();
+                //   this._characterId = params[0];
+                //   const character = this.character(params[0]);
+                //   if (character) {
+                //       character.forceMoveRoute(params[1]);
+                //       if (params[1].wait) { this.setWaitMode("route"); }
+                //   }
+                //   return true;
+                //
+                // **Two things, and the first is that it always returns
+                // true.** A route for a character this reader has not got is
+                // a route that goes nowhere — `if (character)` guards the
+                // work, not the command. A reader that returned false there
+                // would stop the page on a character it simply does not have,
+                // and a game that moves event 9 in a map this reader has
+                // read half of would stall for ever.
+                var id = At(pCommand, 0);
+                var character = pFacts.Characters.TryGetValue(id, out var c)
+                    ? c
+                    : null;
+                if (character == null)
+                {
+                    pActions.Add(new MzAction(
+                        pCommand,
+                        $"character {id} is not one this reader has, so the"
+                        + " route is not carried out, and the page carries on"
+                        + " as the engine's own `if (character)` does"));
+                    return true;
+                }
+
+                // **The route is nested, not a flat list of numbers** —
+                // `{list: [{code, parameters, indent}], repeat, skippable,
+                // wait}`. A first reading expected `[1, 0, 3, 0, 0]` and got
+                // nothing, and the reason is in the test.
+                var route = MzRouteStep.ReadFromParameter(Text(pCommand, 1));
+                pActions.Add(new MzAction(
+                    pCommand,
+                    character.Route.Force(route)));
+
+                // **`if (params[1].wait)` and nothing else.** `repeat` and
+                // `skippable` are read by the character's index and by the
+                // input side, and a reader that invented a repeat would loop a
+                // route the engine loops only while the character is moving.
+                if (route.Wait)
+                {
+                    pInterpreter.WaitFor(MzWaitMode.Route);
+                }
                 return true;
             }
 

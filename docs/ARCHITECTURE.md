@@ -213,6 +213,37 @@ they were, with the reservation still standing — the map may be read later, an
 throwing the request away would lose the game's own intent.
 
 
+### A character, and a route it walks
+
+`MzCharacter` keeps **two positions**, because MZ does: `X`/`Y` is the tile
+every rule asks about, and `RealX`/`RealY` is where the character is drawn,
+part-way across. A successful step sets the tile first and then puts the
+drawing position **one tile behind** —
+`_realX = xWithDirection(_x, reverseDir(d))` — which is what makes a walk
+look like a walk. A reader with one coordinate snaps, and a snapped
+character teleports once per step.
+
+Directions are **2, 4, 6, 8** for down, left, right, up. Not `0..3`, and not
+the RM2K order used elsewhere in this repository. `ReverseDir` is
+`10 - d`, so the pairs are 2↔8 and 4↔6.
+
+`canPass` refuses in the engine's order, and **the order matters**: off the
+map first, then `isThrough()`, then the map, then other characters. A
+through character therefore walks over a wall **but not off the edge**.
+`isMapPassable` asks twice — the tile being left *and* the tile being
+entered looking back.
+
+`MzMoveRoute` is the queue. `Force` memorises, takes the route and starts at
+zero; `Step` hands out **one** entry, and only when the character has
+arrived, so five steps into open floor is five frames. A refused step still
+advances the index — otherwise a character facing a wall would hold that
+entry for ever.
+
+`IMzMapPassable` is deliberately two questions. The engine asks more, and a
+reader with no renderer cannot answer `bushDepth`, `terrainTag` or
+`regionId` honestly.
+
+
 ## Compatibility Database
 
 The compatibility database is extensible and data-driven:

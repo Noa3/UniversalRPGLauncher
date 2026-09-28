@@ -339,6 +339,117 @@ internal static class MzJson
             : new MzValue(MzKind.Bool) { Boolean = pValue };
     }
 
+    /// <summary>
+    /// Writes a value back out, so that nothing a game stored is lost.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reader exists to keep a game's data, and <b>a reader that cannot
+    /// write a shape back has already half-lost it</b>: anything a caller
+    /// flattened to a string and could not read again could not be checked,
+    /// reported or handed on. A 205's move route is a nested object, and
+    /// until this existed it was flattened to the empty string on the way in.
+    /// </para>
+    /// <para>
+    /// <b>The numbers are written the way a game writes them</b> — a whole
+    /// number without a decimal point, and everything else round-tripped
+    /// through the invariant culture so a machine with a comma as its decimal
+    /// separator still reads back what was written.
+    /// </para>
+    /// </remarks>
+    public static string Write(MzValue pValue)
+    {
+        var text = new StringBuilder();
+        Write(pValue, text);
+        return text.ToString();
+    }
+
+    private static void Write(MzValue pValue, StringBuilder pText)
+    {
+        switch (pValue.Kind)
+        {
+            case MzKind.Null:
+                pText.Append("null");
+                return;
+
+            case MzKind.Bool:
+                pText.Append(pValue.Boolean ? "true" : "false");
+                return;
+
+            case MzKind.Number:
+                // **A whole number has no decimal point**, because a game
+                // writes `3` and not `3.0`, and a reader that wrote `3.0` back
+                // would produce text the game never wrote.
+                pText.Append(
+                    pValue.Number == Math.Floor(pValue.Number)
+                        && Math.Abs(pValue.Number) < 1e15
+                            ? ((long)pValue.Number).ToString(CultureInfo.InvariantCulture)
+                            : pValue.Number.ToString(
+                                "R", CultureInfo.InvariantCulture));
+                return;
+
+            case MzKind.Array:
+                pText.Append('[');
+                for (var i = 0; i < pValue.Items.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        pText.Append(',');
+                    }
+                    Write(pValue.Items[i], pText);
+                }
+                pText.Append(']');
+                return;
+
+            case MzKind.Object:
+                pText.Append('{');
+                var first = true;
+                foreach (var key in pValue.Keys)
+                {
+                    if (!first)
+                    {
+                        pText.Append(',');
+                    }
+                    first = false;
+                    pText.Append('"').Append(Escape(key)).Append("\":");
+                    Write(pValue.Members[key], pText);
+                }
+                pText.Append('}');
+                return;
+
+            default:
+                pText.Append('"').Append(Escape(pValue.Text)).Append('"');
+                return;
+        }
+    }
+
+    private static string Escape(string pText)
+    {
+        var text = new StringBuilder(pText.Length);
+        foreach (var c in pText)
+        {
+            switch (c)
+            {
+                case '"': text.Append("\\\""); break;
+                case (char)92: text.Append("\\\\"); break;
+                case '\n': text.Append("\\n"); break;
+                case '\r': text.Append("\\r"); break;
+                case '\t': text.Append("\\t"); break;
+                default:
+                    if (c < 0x20)
+                    {
+                        text.Append("\\u").Append(
+                            ((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        text.Append(c);
+                    }
+                    break;
+            }
+        }
+        return text.ToString();
+    }
     private static void SkipSpace(string pText, ref int pPosition)
     {
         while (pPosition < pText.Length)

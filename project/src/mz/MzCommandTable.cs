@@ -62,6 +62,17 @@ public static class MzCommandTable
     /// <summary>Removes a picture from the screen.</summary>
     public const int ErasePicture = 235;
 
+    /// <summary>
+    /// Forces a move route onto a character. <c>command205</c> is
+    /// <c>$gameMap.refreshIfNeeded(); this._characterId = params[0]; const
+    /// character = this.character(params[0]); if (character) { character
+    /// .forceMoveRoute(params[1]); if (params[1].wait) setWaitMode("route"); }
+    /// return true;</c> — **it returns true even when there is no such
+    /// character**, so a route for a character this reader has not got is a
+    /// route that goes nowhere and is not an error.
+    /// </summary>
+    public const int MoveRoute = 205;
+
     /// <summary>Sends the player to another place. The engine's
     /// <c>command201</c> returns <b>false</b> in a battle or with a message on
     /// the screen, and otherwise only <i>reserves</i> the transfer and sets

@@ -1645,3 +1645,75 @@ seriellen Build ist der ehrliche, und `-m:1` gehört nicht in die Abnahme.**
 need a scrolling map, a moving character and a plugin callback.
 
 **Next: 505 Move Route at 348, which needs `Game_Character` first.**
+
+## K-131 Walk a character, one step a frame — DONE
+
+`project/src/mz/MzCharacter.cs`, `MzMoveRoute.cs`, `MzRouteStep.cs`,
+`MzJson.Write`, `MzCommandTable.MoveRoute = 205`,
+`MzBranchFacts.Characters`, `MzWaitMode.Route`.
+`project/tests/core/test_mz_move_route.cs`, 7 tests.
+
+**957/957**, `TestMzMoveRoute: 7/7`, validator passed, build 0 errors.
+**Vierteen Mutationsregeln, vierzehn gefangen.** Der Hauptlauf meldete
+13 von 14; die eine als entkommen gemeldete Regel habe ich isoliert
+nachgeprüft und sie fiel — **drei von sieben Tests**, Baum byteweise
+unverändert. Sie steht als 14 von 14 drin, denn **eine Zahl, die man
+nicht geprüft hat, ist keine Zahl, die man gezählt hat.**
+
+**The list in K-129 was wrong, and this card is what showed it.**
+`command505` **does not exist.** `505` is a nested move-route entry the
+editor writes, and a route reaches the runtime through **`205 Move Route`,
+96 of them** — not 348. Sixty say `wait`, thirty-six do not. The 348 were
+never event commands.
+
+**The API is `isMapPassable` and `canPass`, not `isPassable` and
+`checkPassage`.** `checkPassage` has **zero** occurrences in 1.9.1; those
+names come from other RPG Maker engines. A reader built from memory would
+have compiled, run, and tested nothing real. **This is the second time in
+two cards that a name from memory was not a name in the engine.**
+
+**`reverseDir` is `10 - d`, not `(d + 4) % 4`.** A first draft wrote the
+0..3 form, and `reverseDir(2)` then answered Left instead of Up — so every
+"one tile behind" position landed **in front** of the character and every
+character walked away from where it was going. The directions are 2/4/6/8
+for down/left/right/up, **not** the RM2K 0..3 order this repository uses
+elsewhere.
+
+**`isStopping` is `!isMoving() && !isJumping()`, two terms.** A draft added a
+third, `&& !Waiting`, and **every route with a `ROUTE_WAIT` in it ran
+backwards**, re-issuing one step for ever. A character waiting is a
+character that has arrived.
+
+**A product fault with a wider reach than this card.** `MzCommandEntry.From`
+turns every parameter into a string, and anything that is not a number or a
+boolean became `item.Text` — **which for a nested object is `""`**. A 205's
+second parameter is exactly such an object, so **every move route in every
+game came back empty and the reader could not have said why.**
+`MzJson.Write` now writes a value back out, because **a reader that cannot
+write a shape back has already half-lost it.**
+
+**Two more, found by the same tests.** `Truth` read a boolean out of `Text`
+where the parser puts it in `Boolean`, so **all three flags of all
+ninety-six routes came back false** and not one page was ever held. And
+`From` read a route's `code` out of `Text`, which is empty for a number, so
+**every route code came back 0 — which is END** and all ninety-six routes
+did nothing while looking perfectly plausible: five steps read, five ENDs
+run, every character standing still. **Both faults failed silently, and
+only real data showed them.**
+
+**A test fault, not a product fault, and worth naming.** The last failing
+test wrote `new(121, …)` and then asked why the variable was not set.
+**121 is Control Switches** — it set a switch, ran, and left the variable
+alone, and the run looked perfectly healthy. It is now
+`MzCommandTable.ControlVariables`, by name.
+
+**Also measured: this game's route codes.** END 96, MOVE_LEFT 74,
+MOVE_RIGHT 59, MOVE_DOWN 50, MOVE_UP 45, JUMP 31, CHANGE_SPEED 26, TURN_UP
+11, MOVE_BACKWARD 10, TURN_DOWN 10, TURN_RIGHT 9, TURN_LEFT 7,
+MOVE_FORWARD 4, WAIT 4, TRANSPARENT_ON 4, STEP_ANIME_ON 2, STEP_ANIME_OFF
+2. **MOVE_LEFT leads and MOVE_DOWN follows** — the opposite of "a game
+mostly walks about". MOVE_RANDOM, MOVE_TOWARD, MOVE_AWAY and all eight
+diagonal codes appear **zero** times and are named rather than guessed at.
+
+**Next: the remaining offene codes, of which `401 Show Text` at 938 is by
+far the largest, and it needs a message window this reader does not have.**

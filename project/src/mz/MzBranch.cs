@@ -235,6 +235,23 @@ public sealed class MzBranchFacts
     public bool InBattle { get; init; }
 
     /// <summary>
+    /// The characters this reader knows, by the id the game uses.
+    /// </summary>
+    /// <remarks>
+    /// <b>The ids are the interpreter's own numbering</b>, from
+    /// <c>Game_Interpreter.character</c>: <c>-1</c> is the player, <c>0</c> is
+    /// this event, and <c>1..n</c> are the other events by their order on the
+    /// map — <b>not</b> the event's id in the file. This game's ninety-six
+    /// routes use ids from <c>-1</c> to <c>15</c>, and the same event is a
+    /// different number on a different map.
+    ///
+    /// A 205 naming a character this reader has not got is <b>not</b> an
+    /// error: the engine's <c>if (character)</c> guards the work and the
+    /// command still returns true.
+    /// </remarks>
+    public Dictionary<int, MzCharacter> Characters { get; init; } = new();
+
+    /// <summary>
     /// Where the player is, and whether a transfer is still on its way.
     /// </summary>
     public MzPlayer Player { get; init; } = new();

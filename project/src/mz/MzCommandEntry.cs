@@ -45,6 +45,17 @@ public readonly record struct MzCommandEntry(
                     MzKind.Number =>
                         System.Math.Round(item.Number).ToString(CultureInfo.InvariantCulture),
                     MzKind.Bool => item.Boolean ? "true" : "false",
+                    // **A nested object or array is written out again, not
+                    // dropped.** A 205's second parameter is
+                    // `{list: [...], repeat, skippable, wait}` — a whole
+                    // object — and `_ => item.Text` turned it into the empty
+                    // string, so every move route in a game came back empty
+                    // and the reader could not have said why. A reader that
+                    // throws away a shape it does not recognise cannot tell
+                    // the difference between "this game has no routes" and
+                    // "this reader cannot read routes", and those are
+                    // different claims.
+                    MzKind.Object or MzKind.Array => MzJson.Write(item),
                     _ => item.Text,
                 });
             }

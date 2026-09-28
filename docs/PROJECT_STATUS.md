@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, renderer/system coverage, event counters, and walk animation beyond the bounded native event path, the working chipset passability, and the verified autotile animation steps.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `950/950` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `957/957` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
 
 Real LMU event pages now decode: the pinned RM2000/RM2003 fixtures yield 22 and 38 event pages with verified liblcf field ids (`condition 0x02`, `move_frequency 0x20`, `trigger 0x21`, `layer 0x22`, `move_route 0x29`, `event_commands_size 0x33`, `event_commands 0x34`). A command vector that cannot be decoded is contained per page with a diagnostic and its raw payload size instead of making the whole map unloadable, and such pages are skipped by the runtime instead of running empty. Page trigger ids follow liblcf `EventPage::Trigger` (`action=0`, `touched=1`, `collision=2`, `auto_start=3`, `parallel=4`). `ControlSwitches` and `Control Variables` follow the verified EasyRPG parameter layout (`[targetMode, start, end, …]`), which real games use, and a regression test executes a real fixture action page end to end through the RM2K runtime.
 
@@ -102,6 +102,42 @@ in this game to variable four.
 in an interpolated string `i:03` is a fill character and a *precision*, and a
 whole number with a precision is padded on the right. The reason is in the test
 now. Nine mutation rules, nine caught, first run.
+
+
+
+**K-131, and the list was wrong before the code was.** K-129 called `505`
+the biggest thing left, at 348 commands. **`command505` does not exist** —
+`505` is a nested move-route entry the editor writes, and a route reaches
+the runtime through `205 Move Route`: **96 of them**, sixty of which ask to
+hold the page and thirty-six of which do not. **The 348 were never event
+commands.**
+
+**And the API is not the one a reader would guess.** The passability methods
+are `isMapPassable` and `canPass`; `checkPassage` and `isPassable` have
+**zero** occurrences in 1.9.1 and come from other RPG Maker engines.
+`reverseDir` is `10 - d`, not the `0..3` form — so **down's opposite is up**,
+and a first draft that got it wrong placed every character one tile *in
+front* of where it had arrived.
+
+**Three rules the engine states plainly and a first reading gets wrong
+anyway.** A refused step **still turns the character** — a character that
+bumps a wall faces the wall, which is what triggers the action button. A
+jump of `3,1` goes **three right and not one down**, because only the
+bigger axis moves. And `isStopping` is `!isMoving() && !isJumping()`, two
+terms: a draft added `&& !Waiting`, and **every route with a wait in it ran
+backwards**, re-issuing one step for ever.
+
+**A product fault with a wider reach than move routes.** A 205's second
+parameter is a nested object, and the command reader turned every parameter
+into a string — anything that was not a number or a boolean became `""`.
+**Every move route in every game came back empty, and the reader could not
+have said why.** The reader can now write a value back out.
+
+**This game's own route codes, measured:** MOVE_LEFT 74 leads MOVE_DOWN 50 —
+**not the other way round** — then MOVE_RIGHT 59, MOVE_UP 45 and JUMP 31.
+MOVE_RANDOM, MOVE_TOWARD, MOVE_AWAY and all eight diagonal codes appear
+**zero** times and are named rather than guessed at. Fourteen mutation
+rules, fourteen caught.
 
 
 ## Phase Status Overview
