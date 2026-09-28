@@ -2669,7 +2669,7 @@ look for the next island of that shape.**
 | vehicles | ~~`10840` `10850` `10650`~~ | **~~enter/exit vehicle, set vehicle location, change vehicle graphic — DONE, see below~~** |
 | face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
 | ~~battle monsters~~ | ~~`13110` `13120` `13130` `13150` `13210`~~ | **~~change monster HP/MP/condition, show hidden monster, change battle BG — DONE, see below~~** |
-| battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
+| ~~battle branches~~ | ~~`13310` `23311` `13410` `23310`~~ | **~~the battle-only branch, terminate battle and else/end — DONE, see below~~** |
 | misc | `1005`–`1008` `10920` | common event, flee, combo, class |
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
@@ -4746,6 +4746,57 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 
 Befehlszeile, und es gehört in eine eigene Karte.
 
+
+## The battle branch family is done — `13310`, `13410`, `23310`, `23311`
+
+**Four codes, and the branch is the only one of the four with real work.**
+
+**`13310` has width 5 and six modes, and the last two are 2003-only** — the
+reference guards the fourth with `IsRPG2k3Commands() && targets_single_enemy &&
+target_enemy_index == parameters[1]` and the fifth with
+`IsRPG2k3Commands() && current_actor_id == parameters[1]`. **A reader that
+evaluated them anyway would have taken a 2K game's branch with an enemy's
+number in a file that never carried one.**
+
+**And the fourth mode needs a single target before it needs the right index** —
+the reference compares the flag first, so a battle with every monster aimed at
+once never matches, whatever the index says.
+
+**And the switch comparison is a boolean equality, not an inversion.** The
+reference writes `Get(id) == (parameters[2] == 0)` — and `0 == 0` is `true`, so
+a third parameter of zero asks whether the switch is **on** and a third
+parameter of one asks whether it is off. **A reader that read it as a bare
+"is it off" would have had every switch in every game the wrong way round.**
+
+**And six comparison kinds for the variable mode, where the third parameter
+chooses a constant or a variable and the fifth chooses the comparison** — equal,
+greater or equal, less or equal, greater, less, different. A seventh leaves the
+result false, because the reference's switch falls out with the false it
+started from.
+
+**`13410` is an abort and not a defeat.** The reference's whole command is
+`MakeTerminateBattle(BattleResult::Abort)` — **a fourth outcome beside victory,
+escape and defeat, and no handler is named for it.** A reader that wrote
+"defeat" would have had a game that deliberately abandons a fight reach the
+game over screen. **And it returns false**, so the frame stops: a reader that
+advanced would have run a game's victory rewards after it abandoned the fight.
+
+**And a false branch sets the sub-index and skips — both.** The reference does
+`SetSubcommandIndex` and then `SkipToNextConditional({ElseBranch_B,
+EndBranch_B})`. **A reader that only set the index would have run the then
+block**, which is exactly the block the branch is meant to skip, and one that
+only skipped would have left the else branch with nothing chosen.
+
+**A dying monster cannot act while it is still in the troop** — the reference
+gives him a death timer and not a removal, so **a reader that asked "is he in
+the troop" would have had a dying boss strike back on the frame he fell.**
+
+**Test evidence** `test_rm2k_battle_branch.cs`, 14 tests.
+**1471/1471**, `TestRm2kBattleBranch: 14/14`, validator passed.
+**Mutations** Twelve rules. The script reported 11 of 12 caught across three
+runs, with a **different** survivor each time; **every rule was then measured
+on its own and all twelve are caught.** The difference is the script's, not the
+suite's — see `SESSION_STATE.md` on MSBuild's timestamp comparison.
 
 ## `11210` and `13260` Show Battle Animation are done — the first step on criterion 3
 

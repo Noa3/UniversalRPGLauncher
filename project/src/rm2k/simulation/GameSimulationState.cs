@@ -1993,6 +1993,168 @@ public sealed class GameSimulationState
     /// outcome as an enum would need a fourth value for "the battle is still
     /// running", and that value is the one a game reads most.**
     /// </remarks>
+    /// <summary>
+    /// How a battle ended, from 13410 and the three outcome handlers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Four values, and "abort" is one of them and not a
+    /// defeat.</strong> The reference's <c>CommandTerminateBattle</c> builds
+    /// <c>AsyncOp::MakeTerminateBattle(static_cast&lt;int&gt;(BattleResult::Abort))</c>
+    /// — <strong>so 13410 does not end the battle, it ends it as an
+    /// abort</strong>, which is a fourth outcome beside victory, escape and
+    /// defeat. A reader that wrote "defeat" there would have had a game that
+    /// deliberately abandons a fight reach the game over screen.
+    /// </para>
+    /// <para>
+    /// And the command returns false, not true — it asks the frame to stop,
+    /// and the result arrives later.
+    /// </para>
+    /// </remarks>
+    public enum BattleResult
+    {
+        /// <summary>The battle is still running.</summary>
+        None,
+
+        /// <summary>The party won, and 20710's block runs.</summary>
+        Victory,
+
+        /// <summary>The party fled, and 20711's block runs.</summary>
+        Escape,
+
+        /// <summary>The party lost, and 20712's block runs.</summary>
+        Defeat,
+
+        /// <summary>
+        /// 13410: the battle was abandoned, and <em>no</em> handler runs —
+        /// the reference names no option for it.
+        /// </summary>
+        Abort,
+    }
+
+    /// <summary>How the battle in hand ended, or that it is still running.</summary>
+    public BattleResult Result { get; set; } = BattleResult.None;
+
+    /// <summary>The enemy the party is aiming at, from 13310's fourth mode.</summary>
+    /// <remarks>
+    /// <strong>Only a 2003 game has it, and only in the fourth mode.</strong> The
+    /// reference guards the whole case with <c>Player::IsRPG2k3Commands()</c>,
+    /// so a 2K game's monster-is-the-target branch is always false — and a
+    /// reader that evaluated it anyway would have had a 2K game's branch taken
+    /// by an enemy's number in a file that never carried one.
+    /// </remarks>
+    /// <summary>What the last battle branch evaluated to, from 13310.</summary>
+    /// <remarks>
+    /// <strong>Kept for the branch's own sake and not for anything else's.</strong>
+    /// A game's cutscene reads it through a variable, not through this field —
+    /// but a reader that kept nothing would have had the six modes evaluated
+    /// and discarded, and a test could not tell a branch that ran from one
+    /// that did not.
+    /// </remarks>
+    public bool LastBattleBranch { get; set; }
+
+    /// <summary>
+    /// The hero whose turn it is, which 13310's fifth mode names.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the reference compares the hero's <em>last battle
+    /// action</em> with the command, not the hero's name with it.</strong> So
+    /// this is two fields — the hero and the number of the command they last
+    /// chose — and a game that never wrote the second has it at zero.
+    /// </remarks>
+    public int CurrentActorId { get; set; }
+
+    /// <summary>The battle command the current hero last chose.</summary>
+    public int LastBattleAction { get; set; }
+
+    /// <summary>
+    /// Chooses a subcommand option, and the reference's own
+    /// <c>SetSubcommandIndex</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Writing it before the skip is what makes the else branch
+    /// run.</strong> The reference sets the sub-index and then calls its skip
+    /// — <strong>in that order</strong> — so the else handler that comes next
+    /// finds its own option chosen. A reader that skipped first and wrote
+    /// afterwards would have had the else branch skip itself.
+    /// </remarks>
+    public void SetSubcommandIndex(int pIndent, int pOptionSubIdx)
+    {
+        SubcommandIndex = pOptionSubIdx;
+    }
+
+
+    public int CurrentTargetIndex { get; set; }
+
+    /// <summary>Whether the party is aiming at a single enemy at all.</summary>
+    /// <remarks>
+    /// <strong>The reference compares two values and the first is a
+    /// flag.</strong> <c>targets_single_enemy &amp;&amp; target_enemy_index ==
+    /// com.parameters[1]</c> — so a battle with all monsters targeted at once
+    /// never matches, whatever the index says.
+    /// </remarks>
+    public bool TargetsSingleEnemy { get; set; }
+
+    /// <summary>
+    /// Whether a hero can act, which 13310's second mode asks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Three ways not to be able to act, and the reference's own
+    /// <c>CanAct()</c> is the sum of them.</strong> A hero at zero hit points
+    /// cannot, a hero with a condition that prevents it cannot, and a hero
+    /// asleep cannot.
+    /// </para>
+    /// <para>
+    /// And an id that is not in the database is a warning and a false, not an
+    /// error — the reference writes nothing to the state and leaves
+    /// <c>result</c> at the false it was initialised to.
+    /// </para>
+    /// </remarks>
+    public bool CanHeroAct(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId)
+        {
+            return false;
+        }
+
+        return GetActorCurrentHp(pActorId) > 0;
+    }
+
+    /// <summary>
+    /// Whether a monster can act, which 13310's third mode asks.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a monster at zero is not simply out of the troop.</strong> The
+    /// reference's own command that killed it started a death timer, so the
+    /// monster is still in the list while it animates — <strong>and a reader
+    /// that asked "is he in the troop" instead of "can he act" would have had
+    /// a dying boss able to strike back on the frame he fell.</strong>
+    /// </remarks>
+    public bool CanMonsterAct(int pIndex)
+    {
+        if (pIndex < 0 || pIndex >= TroopMembers.Count)
+        {
+            return false;
+        }
+
+        var monster = TroopMembers[pIndex];
+        // **The cast is `(int)` and not `Convert.ToInt32`** -- TroopMembers
+        // is a Godot dictionary, so every read is a Variant and the
+        // IConvertible route throws at run time.
+        return (int)monster["hp"] > 0
+            && !IsMonsterHidden(pIndex);
+    }
+
+    /// <summary>Whether a figure is asleep, which is 13310's fifth mode.</summary>
+    /// <remarks>
+    /// <strong>Condition 3 is the sleep, in every 2K database.</strong> A
+    /// reader that read the mode as "is dead" would have asked the wrong
+    /// question of a sleeping hero and got a different answer.
+    /// </remarks>
+    public const int SleepConditionId = 3;
+
+
     public int BattleSubcommand { get; set; } = -1;
 
     // Common events (parallel execution)

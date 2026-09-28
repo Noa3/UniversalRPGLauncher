@@ -481,6 +481,79 @@ public sealed class EventInterpreter
 	/// nothing but their number, and a reader that gave them different
 	/// behaviour would have invented a difference the format does not have.
 	/// </remarks>
+	/// <summary>
+	/// 13310, Conditional Branch (the battle form), from liblcf's
+	/// <c>Code::ConditionalBranch_B</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandConditionalBranchBattle</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 5, six modes, and two of them are 2003-only.</strong> The
+	/// reference's switch has cases 0 to 5 — switch, variable, hero can act,
+	/// monster can act, monster is the current target, and hero uses the
+	/// command. <strong>The last two are guarded by
+	/// <c>Player::IsRPG2k3Commands()</c> inside the case</strong>, so a 2K
+	/// game's fourth and fifth modes are always false and a reader that
+	/// evaluated them anyway would have taken a 2K game's branch with an
+	/// enemy's number in a file that never carried one.
+	/// </para>
+	/// <para>
+	/// <strong>And the switch comparison is a boolean equality, not an
+	/// inversion.</strong> The reference writes
+	/// <c>Get(parameters[1]) == (parameters[2] == 0)</c> — and <c>0 == 0</c> is
+	/// <c>true</c>, <strong>so a third parameter of zero asks whether the
+	/// switch is <em>on</em></strong>, and a third parameter of one asks
+	/// whether it is off. A reader that read the parameter as a bare "is it
+	/// off" would have had every switch in every game the wrong way round.
+	/// </para>
+	/// </remarks>
+	public const int ConditionalBranchBattle = 13310;
+
+	/// <summary>
+	/// 13410, Terminate Battle, from liblcf's
+	/// <c>Code::TerminateBattle</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandTerminateBattle</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 0, and it is an abort and not a defeat.</strong> The
+	/// reference's whole command is
+	/// <c>AsyncOp::MakeTerminateBattle(static_cast&lt;int&gt;(BattleResult::Abort))</c>
+	/// — <strong>a fourth outcome beside victory, escape and defeat</strong>,
+	/// and no handler is named for it. A reader that wrote "defeat" here would
+	/// have had a game that deliberately abandons a fight reach the game over
+	/// screen.
+	/// </para>
+	/// <para>
+	/// <strong>And it returns false</strong> — the frame stops and the result
+	/// arrives later, so a reader that advanced to the next command would have
+	/// run a game's victory rewards after it abandoned the fight.
+	/// </para>
+	/// </remarks>
+	public const int TerminateBattle = 13410;
+
+	/// <summary>
+	/// 23310, Else Branch (the battle form), from liblcf's
+	/// <c>Code::ElseBranch_B</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The same option mechanism as every other else branch,</strong>
+	/// and the reference's list is the end branch alone — so a battle branch
+	/// with an else stops there and one without does not.
+	/// </remarks>
+	public const int ElseBranchBattle = 23310;
+
+	/// <summary>
+	/// 23311, End Branch (the battle form), from liblcf's
+	/// <c>Code::EndBranch_B</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0 and the whole command is <c>return true;</c>**, which is
+	/// the same as 22011 End Branch and for the same reason: a branch is a
+	/// structure, and this only says the structure is over.
+	/// </remarks>
+	public const int EndBranchBattle = 23311;
+
 	public const int ShowBattleAnimationBattle = 13260;
 
 	public const int ChangeBattleBg = 13210;
@@ -1134,6 +1207,48 @@ public sealed class EventInterpreter
 
 			case ShowHiddenMonster:
 				ExecuteShowHiddenMonster(cmd);
+				return Advance();
+
+			case TerminateBattle:
+				// **Der vierte Ausgang, und der Befehl haelt den Frame
+				// an** -- die Referenz gibt false zurueck, weil das Ergebnis
+				// erst spaeter kommt. Ein Leser, der weitergewaert haette,
+				// wuerde die Siegesbelohnung eines Spiels ausgefuehrt haben,
+				// das den Kampf absichtlich abgebrochen hat.
+				_state.Result = GameSimulationState.BattleResult.Abort;
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Terminate battle: the battle is "
+					+ "aborted, which is a fourth result and not a defeat");
+				return true;
+
+			case ConditionalBranchBattle:
+				return ExecuteConditionalBranchBattle(cmd);
+
+			case ElseBranchBattle:
+				// **Nur laufen, wenn der Sub-Index wirklich auf diesen
+				// Zweig zeigt** -- die Referenz ruft auch hier
+				// CommandOptionGeneric, und ein Leser, der den Index
+				// gesetzt haette, ohne ihn hier zu pruefen, wuerde den
+				// else-Zweig auch dann laufen lassen, wenn die Bedingung
+				// wahr war und der Zweig gar nicht zu diesem Block gehoert.
+				if (_state.IsSubcommandChosen(SubIdxBranchBattleElse))
+				{
+					_state.AddDiagnostic(
+						$"[Event {_eventId}] Battle else branch: this is the "
+						+ "chosen option, so its block runs");
+					return Advance();
+				}
+
+				var uebersprungen2 = SkipToOneOf(
+					new[] { EndBranchBattle }, "battle else branch");
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Battle else branch: not the chosen "
+					+ $"option, so skipped {uebersprungen2} commands");
+				return Advance();
+
+			case EndBranchBattle:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] End battle branch: the branch is over");
 				return Advance();
 
 			case ShowBattleAnimation:
@@ -3860,6 +3975,7 @@ public sealed class EventInterpreter
 	private const int SubIdxVictory = 4;
 	private const int SubIdxEscape = 5;
 	private const int SubIdxDefeat = 6;
+	private const int SubIdxBranchBattleElse = 7;
 
 	/// <summary>
 	/// Runs 10720, Open Shop, from liblcf's <c>Code::OpenShop</c> and
@@ -4553,6 +4669,181 @@ public sealed class EventInterpreter
 			6 => GameSimulationState.EquipmentSlot.All,
 			_ => GameSimulationState.EquipmentSlot.All,
 		};
+	}
+
+	/// <summary>
+	/// Runs 13310, Conditional Branch (the battle form), from liblcf's
+	/// <c>Code::ConditionalBranch_B</c> and EasyRPG's
+	/// <c>Game_Interpreter_Battle::CommandConditionalBranchBattle</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 5, six modes, and the switch comparison is
+	/// inverted.</strong> The reference writes
+	/// <c>Get(parameters[1]) == (parameters[2] == 0)</c>, so the third
+	/// parameter asks "is it off" — <strong>and a reader that read it as "is it
+	/// on" would have run a game's "if the switch is off" branch when the
+	/// switch was on.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And the last two modes are 2003-only, guarded inside their
+	/// case.</strong> The reference's fourth mode reads
+	/// <c>IsRPG2k3Commands() &amp;&amp; targets_single_enemy &amp;&amp;
+	/// target_enemy_index == parameters[1]</c> and its fifth
+	/// <c>IsRPG2k3Commands() &amp;&amp; current_actor_id ==
+	/// parameters[1]</c> — <strong>so a 2K game's fourth and fifth modes are
+	/// always false</strong>, and a reader that evaluated them anyway would
+	/// have taken a branch with an enemy's number in a file that never
+	/// carried one.
+	/// </para>
+	/// <para>
+	/// <strong>An id that is not there is a warning and a false</strong> — the
+	/// reference leaves <c>result</c> at the false it was initialised to, so
+	/// the else branch runs.
+	/// </para>
+	/// </remarks>
+	private bool ExecuteConditionalBranchBattle(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Conditional branch, battle");
+			return true;
+		}
+
+		var ergebnis = false;
+		switch (pCmd.Parameters[0])
+		{
+			case 0:
+				// **Die Formel ist eine Gleichheit mit einem Boolean, und
+				// der dritte Parameter 0 bedeutet "der Schalter ist AN".**
+				// Die Referenz schreibt `Get(id) == (parameters[2] == 0)` --
+				// `0 == 0` ist `true`, also vergleicht sie den Schalter mit
+				// `true`. **Ein Leser, der den Parameter als "ist er aus"
+				// gelesen haette, haette jeden Schalter umgedreht.**
+				ergebnis = GetSwitch(pCmd.Parameters[1])
+					== (pCmd.Parameters[2] == 0);
+				break;
+			case 1:
+				{
+					var wert1 = GetVariable(pCmd.Parameters[1]);
+					var wert2 = pCmd.Parameters[2] == 0
+						? pCmd.Parameters[3]
+						: GetVariable(pCmd.Parameters[3]);
+					// **Sechs Vergleichsarten, und die Referenz bricht nach dem
+					// sechsten aus dem Switch heraus -- ein siebter Modus
+					// laesst das Ergebnis falsch.**
+					switch (pCmd.Parameters[4])
+					{
+						case 0:
+							ergebnis = wert1 == wert2;
+							break;
+						case 1:
+							ergebnis = wert1 >= wert2;
+							break;
+						case 2:
+							ergebnis = wert1 <= wert2;
+							break;
+						case 3:
+							ergebnis = wert1 > wert2;
+							break;
+						case 4:
+							ergebnis = wert1 < wert2;
+							break;
+						case 5:
+							ergebnis = wert1 != wert2;
+							break;
+					}
+
+					break;
+				}
+
+			case 2:
+				{
+					var held = pCmd.Parameters[1];
+					if (held < 1 || held > GameSimulationState.MaxActorId)
+					{
+						_state.AddDiagnostic(
+							$"[Event {_eventId}] Conditional branch, battle: "
+							+ $"invalid actor ID {held}, and the reference "
+							+ "warns and leaves the result false");
+					}
+					else
+					{
+						ergebnis = _state.CanHeroAct(held);
+					}
+
+					break;
+				}
+
+			case 3:
+				{
+					var monster = pCmd.Parameters[1];
+					if (monster < 0
+						|| monster >= _state.TroopMembers.Count)
+					{
+						_state.AddDiagnostic(
+							$"[Event {_eventId}] Conditional branch, battle: "
+							+ $"invalid enemy ID {monster}, and the reference "
+							+ "warns and leaves the result false");
+					}
+					else
+					{
+						ergebnis = _state.CanMonsterAct(monster);
+					}
+
+					break;
+				}
+
+			case 4:
+				// **Der Zielvergleich ist zweifach: erst der 2003-Schalter,
+				// dann derEinzelflag-Vergleich.** Ein Leser, der nur den
+				// Index verglich, haette einen Kampf mit mehreren Zielen
+				// getroffen, in dem gar keines das einzelne ist.
+				ergebnis = _state.TargetsSingleEnemy
+					&& _state.CurrentTargetIndex == pCmd.Parameters[1];
+				break;
+			case 5:
+				// **Der Held, der gerade handelt, und seine letzte
+				// Befehlsnummer** -- die Referenz vergleicht das Ergebnis
+				// seines Kampf Befehls, und ein Spiel, das es nicht gesetzt
+				// hat, vergleicht gegen nichts.
+				ergebnis = _state.CurrentActorId == pCmd.Parameters[1]
+					&& _state.LastBattleAction == pCmd.Parameters[2];
+				break;
+			default:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Conditional branch, battle: mode "
+					+ $"{pCmd.Parameters[0]} is not 0 to 5, and the reference's "
+					+ "switch leaves the result false");
+				return true;
+		}
+
+		_state.LastBattleBranch = ergebnis;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Conditional branch, battle: mode "
+			+ $"{pCmd.Parameters[0]} is {(ergebnis ? "true" : "false")}");
+
+		if (ergebnis)
+		{
+			return Advance();
+		}
+
+		// **Index setzen UND springen** -- das sind zwei Schritte, und die
+		// Referenz macht beide: `SetSubcommandIndex` und dann
+		// `SkipToNextConditional({ElseBranch_B, EndBranch_B})`.
+		//
+		// **Ein Leser, der nur den Index schriebe, wuerde den then-Block
+		// ausfuehren** -- genau den Block, den der Zweig ueberspringen soll.
+		// Und einer, der nur springe, wuerde den else-Zweig nicht nehmen,
+		// weil sein Befehl den Index nicht findet.
+		_state.SubcommandIndex = SubIdxBranchBattleElse;
+		var uebersprungen3 = SkipToOneOf(
+			new[] { ElseBranchBattle, EndBranchBattle }, "battle branch");
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Conditional branch, battle: false, so the "
+			+ $"then block was skipped ({uebersprungen3} commands)");
+		return Advance();
 	}
 
 	/// <summary>

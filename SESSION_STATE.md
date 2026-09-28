@@ -4156,6 +4156,102 @@ die Zerlegung schreiben.
 **Test evidence** `test_rm2k_enemy_encounter.cs` (7). **1382/1382**, Validator gruen.
 
 **Mutations** 9 Regeln, **9 von 9 gefangen**.## Current card
+## 13310, 13410, 23310 and 23311 are done — the battle branch family
+
+**Four codes. The branch is the only one with real work, and it has four facts
+a reader would not guess.**
+
+**The switch comparison is a boolean equality, not an inversion.** The
+reference writes `Get(id) == (parameters[2] == 0)` — and `0 == 0` is `true`, so
+a third parameter of zero asks whether the switch is **on**. I read it as "is
+it off", wrote that in three places, and the test failed with "mode 0 is true"
+for a switch I had switched **on**. **The implementation was right from the
+first minute; the sentence in the comment was wrong**, and the code under it
+was the reference formula.
+
+**A false branch sets the sub-index and skips — both.** The reference does
+`SetSubcommandIndex` and then `SkipToNextConditional({ElseBranch_B,
+EndBranch_B})`. My first version only set the index, so the then block ran
+before the else handler could take it: **the exact block the branch exists to
+skip.** Both halves are needed, and one without the other is a silent failure
+in the opposite direction.
+
+**`13410` is an abort, not a defeat** — `BattleResult::Abort`, a fourth outcome
+with no handler named for it. And it returns false, so the frame stops.
+
+**The last two branch modes are 2003-only, guarded inside their case**, so a 2K
+game's fourth and fifth modes are always false.
+
+**Test evidence** `project/tests/core/test_rm2k_battle_branch.cs`, 14 tests.
+**1471/1471**, `TestRm2kBattleBranch: 14/14`.
+
+### Failure log: a table that compared 5 with 3 only
+
+A mutation that turned `>` into `>=` survived the six-way comparison table,
+because every row compared 5 with 3 and on those two numbers the two operators
+agree. **A test that only ever uses unequal values cannot tell a strict
+comparison from a non-strict one** — and a game's "if the counter is more than
+what I have" fires on equality. The table is now run twice, once with 5 against
+3 and once with 5 against 5.
+
+The same run left two other rules alive, and both were tests that asked the
+wrong question. `23311` is a bare `return true` and changes nothing, so a
+dispatch that pointed it at nothing looked exactly like one that ran it —
+**a command that does nothing produces no diagnostic**, and the fix is the one
+used for the shop closers: drive it and ask what follows. The hero question had
+a living case but the false answer only in a second test, so a rule that made
+the *caller* return true left the first green.
+
+### And a mutation script whose survivors changed every run
+
+The same twelve rules, run twice in a row, reported **twelve different
+survivors** — once `23311`, once the hero's last battle command, once the
+strict comparison. A test suite does not flap like that; a tool does.
+
+**MSBuild decides whether to recompile from the modification time, not from
+the content.** A restore and the next mutation inside the same second look like
+"nothing changed", so the rule that survives is always the one whose mutation
+the build never saw. The fix is two `os.utime` calls that push the file's
+timestamp two seconds into the future — once after writing the mutation, once
+after restoring.
+
+**Two runs of one rule set reporting different survivors is the cheapest
+possible proof that the harness is the variable**, and it is worth more than
+any number the runs produce. The same shape appeared earlier as a stale
+`UniversalRPG.dll` after a timeout: a clean rebuild is the first thing to try,
+not the last.
+
+**What is left after the fix.** With the timestamps forced, three consecutive
+runs of the twelve rules reported eleven of twelve — and the survivor moved
+each time (`23311`, then the switch comparison, then `13310`). **Every rule
+was then measured on its own, one at a time with a fresh build, and all twelve
+are caught.** The script still has a race between its restore and the next
+build; the tests do not. **When a harness and a suite disagree, the harness
+that produced different answers to the same question three times is the one
+under suspicion** — and the honest report is "12 of 12 by single measurement,
+11 of 12 by the script", not the rounder number.
+
+### And a default arm that speaks the same language
+
+`23311` is a bare `return true` and changes nothing, so pointing its `case` at
+a wrong number moved it into the default arm — **which says "Unsupported RM2K
+command 23311 skipped" and moves on**, producing a diagnostic and leaving the
+page in a plausible state. The test asked for the command's own word and never
+looked at the default arm, so the mutation passed.
+
+**A test for a command that does nothing has to check that nothing *else*
+happened too**, and the cheapest way is to assert the absence of the word the
+fallback uses. That is the second half of every "reached the dispatch" test
+here, and it was missing for exactly the command that needed it most.
+
+### And a mutation run that a timeout cut in half
+
+`timeout 560` killed the script mid-rule, and the interrupted run reported
+**9 of 12** where the previous complete run had reported 12. The build output
+was stale, so two tests failed on a source file that was provably correct —
+`CanHeroAct` was intact and its test failed. **A mutation count from an
+interrupted run is not a count**, and the cheap check is a clean rebuild before
+believing it.
 ## 11210 and 13260 Show Battle Animation are done — criterion 3, first step
 
 **Two codes, one method.** The reference's dispatch hands both to the same
