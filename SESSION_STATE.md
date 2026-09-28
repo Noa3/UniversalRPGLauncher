@@ -2282,3 +2282,43 @@ Verweigerung nennt den Patch.
 
 **Test evidence** `test_rm2k_audio.cs` (12). **1055/1055**.
 **Mutations** 9 von 9 gefangen.
+
+## K-136 `11010` / `11020` / `11030` — DONE, und `11060` ist ein liblcf-Code ohne Engine
+
+**Die Transition-Tabellen sind das Schärfste in diesem Slice, weil die
+Paarung nicht regelmäßig ist.** Zeigen und Löschen sind dieselben zwanzig Arten
+von den beiden Enden gelesen, und jede Parameternummer benennt in jeder Tabelle
+etwas anderes — 4 ist `BlindClose` beim Löschen und `BlindOpen` beim Zeigen, 16
+ist `ZoomIn` und `ZoomOut`. **Streifen und Scroll spiegeln ihr Suffix, die
+Divisionen paaren mit den Combines** — wer den Namen spiegelte, paarte
+`CrossDivision` mit sich selbst und animierte gar nichts. Ein Test prüft genau
+das, über alle drei Divisionsarme.
+
+**Parameter −1 ist keine Art.** Er bedeutet „die eigene Teleport-Transition des
+Spiels", die in den Editor-Einstellungen steht und nicht im Befehl. Die beiden
+`switch` der Referenz haben **keinen default-Arm**, also fallen −1 *und* jede
+unbekannte Zahl **stillschweigend** auf none durch — **was jeder Teleport im
+Spiel seine Transition verlieren ließe, ohne ein Wort.** Dieser Leser hat die
+Einstellungen nicht gelesen, sagt das also und nennt die Zahl.
+
+**Die Sättigung ist ein Prozent, und 100 heißt ungetöntet.** Das ist rückwärts
+von dem, was ein Leser rät: wer 0 als „kein Tint" behandelte, tönte den Bildschirm
+in dem Wert grau, den ein Spiel schreibt, wenn es kein Tint will.
+
+**Die Dauer wird umgerechnet, nicht in Zehnteln gespeichert.** Die Referenz
+rechnet `tenths * DEFAULT_FPS / 10` und gibt Frames an den Bildschirm.
+
+**Und eine Wartezeit ist bedingt — was der erste Dispatch falsch hatte.** Die
+Referenz ruft `SetupWait` nur, wenn der sechste Parameter gesetzt ist, und ein
+erster Entwurf gab ein nacktes `true` zurück: **ein Tint, der warten wollte,
+lief die Seite trotzdem weiter, und die Wartezeit fand nie statt.** Genau die
+bedingte Form, die der Sprung diese Sitzung schon einmal falsch hatte.
+
+**`11060 Pan Screen` steht in liblcf — und EasyRPG hat dafür keinen `case` und
+kein `CommandPanScreen`.** Also implementiert dieses Repository es nicht: es
+gibt nichts, woraus die Parameter zu lesen wären, und wer einen Befehl
+implementiert, den die Referenz nicht hat, erfindet eine Semantik. **Es bleibt
+als benannte Lücke auf der Liste und nicht als Vermutung.**
+
+**Test evidence** `test_rm2k_screen.cs` (14), inklusive aller zwanzig Parameter
+beider Tabellen einzeln geprüft. **1069/1069**. **Mutations** 9 von 9 gefangen.

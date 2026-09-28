@@ -2572,7 +2572,8 @@ look for the next island of that shape.**
 
 | area | codes | what it needs |
 |---|---:|---|
-| screen effects | `11010` `11020` `11030` `11060` | erase/show/tint/pan — `PresentationState` has flash, shake and weather and none of these |
+| screen effects | ~~`11010` `11020` `11030`~~ | **~~erase, show and tint — DONE, see below~~** |
+| screen effects | `11060` | **Pan Screen — liblcf names it and EasyRPG dispatches it nowhere** |
 | audio | `11560` | Play Movie — the only audio command left of the six |
 | actor state | `10430`–`10490` `10620` `10630` | parameters, skills, equipment, HP, SP, conditions, full heal |
 | battle | `10500` `10710` `13110`–`13410` | simulated attack, encounter, monster HP/MP/conditions, battle BG, terminate |
@@ -2588,6 +2589,52 @@ look for the next island of that shape.**
 | face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10230` `10920` `11010` | common event, flee, combo, class, timer |
+
+## `11010`, `11020` and `11030` are done — and `11060` is a liblcf code with no engine
+
+**The transition tables are the sharpest thing in this slice, because the
+pairing is not regular.** Show and erase are the same twenty kinds read from
+opposite ends, and each parameter number names a different one in each table —
+4 is `BlindClose` for an erase and `BlindOpen` for a show, 16 is `ZoomIn` and
+`ZoomOut`. **The stripes and scrolls mirror their suffix, but the divisions
+pair with the combines**, so a reader that mirrored the name would pair
+`CrossDivision` with itself and animate nothing. There is a test for exactly
+that, over all three division arms.
+
+**Parameter -1 is not a kind.** It means "the game's own teleport transition",
+which lives in the editor's settings and not in the command at all. The
+reference's two `switch`es have no default arm, so -1 *and* every number it does
+not know fall through to none **in silence** — which is what would make every
+teleport in a game lose its transition without a word. This reader has not read
+those settings, so it says so, and names the number.
+
+**The saturation is a percentage where 100 means untinted.** That is backwards
+from what a reader guesses: a reader that treated 0 as "no tint" would tint the
+screen to grey at the one value a game writes when it wants no tint.
+
+**The duration is converted, not stored as tenths.** The reference does
+`tenths * DEFAULT_FPS / 10` and hands frames to the screen, so a reader that
+kept tenths would report a number the engine never had. The tint ticks with the
+flash and the shake, because a tint that outlived its flash would leave the
+screen coloured after the game said it was over.
+
+**And a wait is conditional — which the first dispatch got wrong.** The
+reference calls `SetupWait` only when the sixth parameter is set, and a first
+draft returned a bare `true` from the dispatch, so a tint that asked to wait
+still advanced the page and the wait never happened. The index moves only when
+the command set no wait, which is the same conditional the jump-to-label
+needed and got wrong once already this session.
+
+**`11060 Pan Screen` is in liblcf's enumeration and EasyRPG has no `case` for
+it and no `CommandPanScreen`.** So this repository does not implement it: there
+is nothing to read the parameters from, and a reader that implemented a command
+the reference does not would be inventing a semantic. **It stays on the list as
+a named gap rather than as a guess.**
+
+**Test evidence** `test_rm2k_screen.cs`, 14 tests, including all twenty
+parameters of both tables checked one at a time.
+**1069/1069**, `TestRm2kScreen: 14/14`.
+**Mutations** Nine rules over one run, **9 of 9 caught**.
 
 ## The five audio commands are done — `11510`, `11520`, `11530`, `11540`, `11550`
 

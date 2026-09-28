@@ -177,6 +177,104 @@ public sealed class PresentationState
     public Dictionary<int, PictureState> Pictures { get; } = new();
 
     // Screen effects (liblcf FlashScreen 11040, ShakeScreen 11050, WeatherEffects 11070).
+    // Screen tint, from command 11030 Tint Screen and EasyRPG's
+    // `Game_Screen::TintScreen`. **The four numbers are the screen's own
+    // channels, not a colour the reader picks** — the reference passes r, g, b
+    // and a saturation straight to the screen and never reads them back, so
+    // what is stored here is what was asked for.
+    public bool IsTintActive { get; private set; }
+
+    public int TintRed { get; private set; }
+    public int TintGreen { get; private set; }
+    public int TintBlue { get; private set; }
+
+    /// <summary>
+    /// The saturation in percent, from <c>parameters[3]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>0 to 100, and 100 is the untinted screen.</strong> A reader that
+    /// treated 0 as "no tint" would have tinted the screen to grey at the one
+    /// value that means "leave it alone" — and that is the value a game writes
+    /// when it wants no tint.
+    /// </remarks>
+    public int TintSaturation { get; private set; }
+
+    /// <summary>
+    /// The tint's duration in frames, from <c>tenths * DEFAULT_FPS / 10</c>.
+    /// </summary>
+    /// <remarks>
+    /// The reference converts tenths to frames itself rather than storing
+    /// tenths, and the conversion matters: at 60 frames per second tenths times
+    /// six is exact, but <c>DEFAULT_FPS</c> is a named constant and a reader
+    /// that hardcoded 6 would disagree with any game that declared another
+    /// rate.
+    /// </remarks>
+    public int TintFramesRemaining { get; private set; }
+
+    /// <summary>
+    /// The transition a command asked for, or <c>TransitionNone</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is data and not an animation.</strong> A transition is a
+    /// sequence the renderer plays; nothing here plays it, and a value in this
+    /// field is a request that a renderer may honour or may not.
+    /// </remarks>
+    public Rm2kTransition PendingTransition { get; private set; }
+
+    /// <summary>
+    /// Whether the last transition was a show or an erase, from
+    /// <c>11020</c> and <c>11010</c>.
+    /// </summary>
+    public Rm2kTransitionDirection PendingTransitionDirection
+    {
+        get; private set;
+    }
+
+    /// <summary>
+    /// Starts a screen tint, from <c>CommandTintScreen</c>.
+    /// </summary>
+    /// <returns>False when a value was out of range, and nothing changed.</returns>
+    public bool TintScreen(
+        int pRed, int pGreen, int pBlue, int pSaturation, int pFrames)
+    {
+        // **Saturation is bounded separately from the channels**, because it is
+        // a percentage and not a colour: 0 to 100, and 100 is untinted.
+        if (!IsChannel(pRed) || !IsChannel(pGreen) || !IsChannel(pBlue)
+            || pSaturation < 0 || pSaturation > 100
+            || pFrames < 0 || pFrames > MaxEffectFrames)
+        {
+            return false;
+        }
+        IsTintActive = true;
+        TintRed = pRed;
+        TintGreen = pGreen;
+        TintBlue = pBlue;
+        TintSaturation = pSaturation;
+        TintFramesRemaining = pFrames;
+        return true;
+    }
+
+    /// <summary>
+    /// Asks for a screen transition, from <c>11010</c> and <c>11020</c>.
+    /// </summary>
+    /// <remarks>
+    /// The kind comes straight from the command's one parameter, and the
+    /// reference's <c>switch</c> has no default arm — **a value it does not
+    /// know falls through to <c>TransitionNone</c>**, which is not an error and
+    /// not a no-op either: the screen changes with no transition at all.
+    /// </remarks>
+    public bool RequestTransition(
+        Rm2kTransitionDirection pDirection, Rm2kTransition pTransition)
+    {
+        if (!Enum.IsDefined(typeof(Rm2kTransition), pTransition))
+        {
+            return false;
+        }
+        PendingTransition = pTransition;
+        PendingTransitionDirection = pDirection;
+        return true;
+    }
+
     public bool IsFlashActive { get; private set; }
     public int FlashRed { get; private set; }
     public int FlashGreen { get; private set; }
@@ -205,6 +303,11 @@ public sealed class PresentationState
         PendingKeyInputIsTimed = false;
         PendingKeyInputTenths = 0;
         Pictures.Clear();
+        IsTintActive = false;
+        TintRed = 0; TintGreen = 0; TintBlue = 0; TintSaturation = 0;
+        TintFramesRemaining = 0;
+        PendingTransition = Rm2kTransition.None;
+        PendingTransitionDirection = Rm2kTransitionDirection.Show;
         IsFlashActive = false;
         FlashRed = FlashGreen = FlashBlue = FlashAlpha = 0;
         FlashFramesRemaining = 0;
@@ -227,6 +330,19 @@ public sealed class PresentationState
             {
                 IsFlashActive = false;
                 FlashFramesRemaining = 0;
+            }
+        }
+        if (IsTintActive)
+        {
+            // The tint runs on the same tick as the flash and the shake, so all
+            // three end together when they were given the same duration. **A
+            // tint that outlived its flash would be a screen that stayed
+            // coloured after the game said it was over.**
+            TintFramesRemaining -= pFrames;
+            if (TintFramesRemaining <= 0)
+            {
+                IsTintActive = false;
+                TintFramesRemaining = 0;
             }
         }
         if (IsShakeActive)
