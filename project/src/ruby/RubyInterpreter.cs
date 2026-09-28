@@ -80,6 +80,9 @@ public sealed class RubyInterpreter
 
     private int _steps;
 
+    /// <summary>Whether a <c>return</c> has been seen, which stops the loops.</summary>
+    private bool _returned;
+
     /// <summary>
     /// Runs a tree and answers with its value.
     /// </summary>
@@ -96,9 +99,48 @@ public sealed class RubyInterpreter
     public RubyValue Run(RubyNode pNode)
     {
         _steps = 0;
+        _returned = false;
         _diagnostics.Clear();
         _scopes.Clear();
         return Evaluate(pNode);
+    }
+
+    /// <summary>
+    /// Runs a parsed program, which is a list of statements.
+    /// </summary>
+    /// <param name="pProgram">The statements, as the parser produced them.</param>
+    /// <returns>The value of the last statement, or nil for an empty
+    /// program.</returns>
+    /// <remarks>
+    /// <strong>This and not <c>Run</c> called once per statement.</strong>
+    /// <c>Run</c> clears the scopes, because it starts a script from nothing —
+    /// <strong>and a caller that ran a program's statements one at a time
+    /// would have had the first statement's variables gone by the
+    /// second</strong>. The first version of the local-variable test did
+    /// exactly that and reported its own memory as a failure.
+    /// </remarks>
+    public RubyValue RunProgram(IReadOnlyList<RubyNode> pProgram)
+    {
+        _steps = 0;
+        _returned = false;
+        _diagnostics.Clear();
+        _scopes.Clear();
+        if (_scopes.Count == 0)
+        {
+            _scopes.Add(new Dictionary<string, RubyValue>());
+        }
+
+        var letztes = RubyValue.Nil;
+        foreach (var anweisung in pProgram)
+        {
+            letztes = Evaluate(anweisung);
+            if (_returned)
+            {
+                break;
+            }
+        }
+
+        return letztes;
     }
 
     // ---- Leaves
@@ -142,6 +184,10 @@ public sealed class RubyInterpreter
             RubyNodeKind.MethodCall => Call(pNode),
             RubyNodeKind.SelfCall => Call(pNode),
             RubyNodeKind.Assignment => Assign(pNode),
+            RubyNodeKind.OpAssignment => OpAssign(pNode),
+            RubyNodeKind.Ternary => Ternary(pNode),
+            RubyNodeKind.Until => EvaluateUntil(pNode),
+            RubyNodeKind.Return => EvaluateReturn(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
             RubyNodeKind.Begin => EvaluateBlock(pNode),
@@ -517,6 +563,140 @@ public sealed class RubyInterpreter
         _scopes[_scopes.Count - 1][pName] = pValue;
     }
 
+    /// <summary>
+    /// `a += 1`, and the read and the write are the same expression.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The current value is read once and written back once</strong>,
+    /// and a reader that evaluated the right side against a stale target would
+    /// have written the difference. <strong>And <c>+=</c> on a string
+    /// concatenates</strong>, because Ruby's <c>+</c> is the same operator
+    /// here and not a special case.
+    /// </remarks>
+    private RubyValue OpAssign(RubyNode pNode)
+    {
+        var op = pNode.Operator ?? "+=";
+
+        // **Der Operator ohne sein Zuweisungszeichen.** `**=` ist `**` und
+        // nicht `*` zweimal, und **der Parser erzeugt diesen Knoten nie mit
+        // einem nackten `=`** — ein Gleichheitszeichen ergibt einen
+        // `Assignment`-Knoten. Die erste Fassung behandelte `op == "="` trotzdem
+        // und schrieb in einem Test fuer einen Fall, den es nicht gibt.
+        var basis = op[..^1];
+        var ziel = pNode.Children.Count > 0
+            ? pNode.Children[0]
+            : Child(pNode, RubyNodeRole.Target);
+        var rechts = pNode.Children.Count > 1
+            ? pNode.Children[1]
+            : Child(pNode, RubyNodeRole.Value);
+        if (ziel == null || rechts == null)
+        {
+            return Refuse(pNode);
+        }
+
+        var istNeu = Evaluate(rechts);
+        if (ziel.Kind != RubyNodeKind.Identifier
+            && ziel.Kind != RubyNodeKind.InstanceVariable)
+        {
+            // **Ein Aufruf auf der linken Seite ist kein Ziel, das man
+            // belegen kann** -- Ruby wertet `a.b += 1` als einen Methodenaufruf
+            // aus, und genau so wird es hier auch getan.
+            return Refuse(pNode);
+        }
+
+        // **Der alte Wert kommt aus dem Ziel und der neue aus dem
+        // Operator** -- `x += 1` heisst `x = x + 1`, und **ein Leser, der den
+        // rechten Wert zurueckschriebe, haette `x += 1` zu `x = 1` gemacht**,
+        // was bei einer Schleife ein Spiel zum Stehen bringt.
+        var alt = Evaluate(ziel);
+        var neu = Apply(basis, alt, istNeu, pNode);
+
+        if (ziel.Kind == RubyNodeKind.Identifier)
+        {
+            SetLocal(ziel.Name ?? string.Empty, neu);
+        }
+        else
+        {
+            _instanceVariables[ziel.Name ?? string.Empty] = neu;
+        }
+
+        return neu;
+    }
+
+    /// <summary>
+    /// `a ? b : c`, and the two arms must be different numbers.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The condition decides which arm runs, and the other is not
+    /// evaluated.</strong> That is the whole point of the form: a game writes
+    /// <c>x &gt; 0 ? 1 / x : 0</c> to avoid dividing by zero, and a reader that
+    /// evaluated both arms would divide.
+    /// </remarks>
+    private RubyValue Ternary(RubyNode pNode)
+    {
+        var bedingung = Child(pNode, RubyNodeRole.Condition)
+            ?? (pNode.Children.Count > 0 ? pNode.Children[0] : null);
+        var dann = Child(pNode, RubyNodeRole.WhenTrue)
+            ?? (pNode.Children.Count > 1 ? pNode.Children[1] : null);
+        var sonst = Child(pNode, RubyNodeRole.WhenFalse)
+            ?? (pNode.Children.Count > 2 ? pNode.Children[2] : null);
+        if (bedingung == null || dann == null || sonst == null)
+        {
+            return Refuse(pNode);
+        }
+
+        return Truthy(Evaluate(bedingung)) ? Evaluate(dann) : Evaluate(sonst);
+    }
+
+    /// <summary>
+    /// `until`, which is `while` with the condition read the other way round.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a modifier <c>until</c> at the end of a statement is the
+    /// same form on one line</strong> — the parser writes the keyword into the
+    /// node's name, so the two read the same way here.
+    /// </remarks>
+    private RubyValue EvaluateUntil(RubyNode pNode)
+    {
+        var bedingung = Child(pNode, RubyNodeRole.Condition)
+            ?? (pNode.Children.Count > 0 ? pNode.Children[0] : null);
+        var rumpf = Child(pNode, RubyNodeRole.WhenTrue)
+            ?? (pNode.Children.Count > 1 ? pNode.Children[1] : null);
+        if (bedingung == null || rumpf == null)
+        {
+            return Refuse(pNode);
+        }
+
+        var letztes = RubyValue.Nil;
+        while (!Truthy(Evaluate(bedingung)) && !_returned)
+        {
+            letztes = Evaluate(rumpf);
+        }
+
+        return letztes;
+    }
+
+    /// <summary>
+    /// `return`, which leaves the method and the block it is in.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Ruby's <c>return</c> returns from the method, not from the
+    /// loop it is written in</strong> — a <c>break</c> does the latter. This
+    /// interpreter has no method frames yet, so <c>return</c> sets the flag
+    /// the outermost <see cref="Run"/> reads, and <strong>the loops below
+    /// check it and stop</strong>, which is what "leaves the method" means
+    /// once there is only one frame.
+    /// </remarks>
+    private RubyValue EvaluateReturn(RubyNode pNode)
+    {
+        var wert = pNode.Children.Count > 0
+            ? Evaluate(pNode.Children[0])
+            : RubyValue.Nil;
+        _returned = true;
+        return wert;
+    }
+
+
     // ---- Control flow
 
     private RubyValue EvaluateIf(RubyNode pNode)
@@ -561,7 +741,7 @@ public sealed class RubyInterpreter
         }
 
         var letztes = RubyValue.Nil;
-        while (Truthy(Evaluate(bedingung)))
+        while (Truthy(Evaluate(bedingung)) && !_returned)
         {
             if (rumpf == null)
             {
@@ -580,6 +760,12 @@ public sealed class RubyInterpreter
         foreach (var teil in Statements(pNode))
         {
             letztes = Evaluate(teil);
+            if (_returned)
+            {
+                // **Ein `return` verlaesst den Block und nicht nur die
+                // Schleife** -- und das ist der Unterschied zu `break`.
+                break;
+            }
         }
 
         return letztes;

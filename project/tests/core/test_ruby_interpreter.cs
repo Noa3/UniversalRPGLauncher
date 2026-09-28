@@ -445,4 +445,173 @@ public partial class TestRubyInterpreter : TestBase
         AssertEq(knoten.Children[1].Kind, RubyNodeKind.Integer,
             "**and the right side is the number**");
     }
+
+    /// <summary>
+    /// A parsed program, as the parser produces it.
+    /// </summary>
+    private static List<RubyNode> Statements(string pSource)
+    {
+        return new RubyParser(new RubyLexer(pSource).Tokenize()).ParseProgram();
+    }
+
+    /// <summary>
+    /// `x += 1` is `x = x + 1`, and the two are told apart by the value.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A reader that wrote the right side back would have turned
+    /// <c>x += 1</c> into <c>x = 1</c></strong> — and a game with a counter in
+    /// a loop would stand still. The fixture runs the line three times and
+    /// reads the name, so a wrong reader answers 1 every time.
+    /// <para>
+    /// <strong>It is one program and not a hand-built block</strong>, because
+    /// <c>RunProgram</c> is the entry point that keeps the scopes — a caller
+    /// that ran the statements one at a time with <c>Run</c> would have had
+    /// the first statement's variables gone by the second, and the first
+    /// version of this test did exactly that and reported its own memory as a
+    /// failure.
+    /// </para>
+    /// </remarks>
+    public void Test_APlusAssignIsTheOldValuePlusTheNew()
+    {
+        var wert = new RubyInterpreter(new RubyNullHost()).RunProgram(
+            Statements("x = 10\nx += 1\nx += 1\nx += 1"));
+
+        AssertEq(AsInteger(wert), 13,
+            "**thirteen after three increments** — a reader that wrote the "
+                + "right side back would have answered one every time, and a "
+                + "game's counter would have stood still");
+    }
+
+    /// <summary>
+    /// A ternary runs one arm and not the other.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The fixture is <c>nil ? 1 / nil : 7</c></strong>, which is how a
+    /// game writes "do not divide by zero". <strong>A reader that evaluated
+    /// both arms would have divided</strong>, and a game would have raised a
+    /// ZeroDivisionError on a line that never divides.
+    /// </remarks>
+    public void Test_ATernaryRunsOneArmAndNotTheOther()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        AssertEq(AsInteger(mit.Run(One("nil ? 1 / nil : 7"))), 7,
+            "**a false condition runs the else arm and does not divide** — a "
+                + "reader that evaluated both arms would have raised a "
+                + "ZeroDivisionError on a line that never divides");
+        AssertEq(AsInteger(mit.Run(One("1 ? 3 : 7"))), 3,
+            "**and a true one runs the then arm** — the two give different "
+                + "numbers, so a reader that always took one arm would fail "
+                + "one of the two");
+    }
+
+    /// <summary>
+    /// `until` runs while its condition is false.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The same loop as <c>while</c> with the test read the other
+    /// way round</strong>, and the fixture needs a counter — <strong>a reader
+    /// that read it as a <c>while</c> would have looped for ever</strong>,
+    /// and the step limit is what stopped that in the run that found it.
+    /// </remarks>
+    public void Test_UntilRunsWhileItsConditionIsFalse()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost()) { StepLimit = 10_000 };
+        var wert = mit.RunProgram(Statements(
+            "n = 0\nuntil n == 3\n  n = n + 1\nend"));
+
+        AssertEq(AsInteger(wert), 3,
+            "**the counter reached three** — an `until` runs while its "
+                + "condition is false, and a reader that read it as a `while` "
+                + "would have looped for ever");
+    }
+
+    /// <summary>
+    /// A `return` leaves the program, and not only the loop it is in.
+    /// </summary>
+    /// <remarks>
+    /// <strong>That is the difference from <c>break</c></strong>, and the
+    /// fixture is written so the two answers differ: the program returns 5,
+    /// and a reader that kept going would run the nine after it.
+    /// </remarks>
+    public void Test_AReturnLeavesTheProgramAndNotOnlyTheLoop()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost()) { StepLimit = 10_000 };
+        var wert = mit.RunProgram(Statements("return 5\n9"));
+
+        AssertEq(AsInteger(wert), 5,
+            "**the return's value is the program's value** — a reader that "
+                + "kept going would have run the nine and answered that");
+    }
+
+    /// <summary>
+    /// Every compound operator takes its own name apart correctly.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The operator is <c>+=</c> and the arithmetic is <c>+</c>, and
+    /// the same is true of every other one</strong> — <c>*=</c> is
+    /// <c>*</c>, <c>**=</c> is <c>**</c> and not <c>*</c> twice. **A reader
+    /// that took the first character would have turned <c>**=</c> into a
+    /// multiplication by nothing**, and one that assumed a two character
+    /// operator would have thrown on a one character one.
+    /// <para>
+    /// The fixture writes each of them and reads the name back, so a reader
+    /// that got one wrong shows a wrong number rather than an exception.
+    /// </para>
+    /// </remarks>
+    public void Test_EveryCompoundOperatorTakesItsOwnNameApart()
+    {
+        foreach (var (zeile, erwartet) in new[]
+                 {
+                     ("x = 2\nx += 3\nx", 5),
+                     ("x = 2\nx -= 3\nx", -1),
+                     ("x = 7\nx *= 3\nx", 21),
+                     ("x = 9\nx /= 2\nx", 4),
+                     ("x = 9\nx %= 2\nx", 1),
+                 })
+        {
+            var wert = new RubyInterpreter(new RubyNullHost())
+                .RunProgram(Statements(zeile));
+            AssertEq(AsInteger(wert), erwartet,
+                "**`" + zeile.Split('\n')[1] + "` leaves " + erwartet
+                    + "** — the operator without its assignment sign is the "
+                    + "arithmetic, and a reader that took the first character "
+                    + "would have answered something else");
+        }
+    }
+
+    /// <summary>
+    /// A `return` inside a block leaves that block too.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The test is a block and not a program, and that is the
+    /// whole point.</strong> <c>RunProgram</c> has its own check after each
+    /// statement, so a program with a <c>return</c> in the first line stops
+    /// there whatever the block does. <strong>A block nested in a program is
+    /// where the block's own check is the only one</strong> — and the first
+    /// version of the return test was a program, so it never touched it and
+    /// the mutation survived.
+    /// </remarks>
+    public void Test_AReturnInsideABlockLeavesThatBlockToo()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost()) { StepLimit = 10_000 };
+
+        // **Ein Block, dessen erstes Kind ein `return` ist und dessen zweites
+        // eine Neun.** Ohne den Abbruch im Block liefe die Neun.
+        var block = new RubyNode
+        {
+            Kind = RubyNodeKind.Block,
+            Line = 1,
+            Children = [One("return 5"), new RubyNode
+            {
+                Kind = RubyNodeKind.Integer,
+                Line = 1,
+                Integer = 9,
+            }],
+        };
+
+        AssertEq(AsInteger(mit.Run(block)), 5,
+            "**the return's value is the block's value** — a reader that kept "
+                + "running the block's statements would have answered 9, and "
+                + "that is the difference between `return` and `break`");
+    }
 }

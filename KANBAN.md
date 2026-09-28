@@ -4452,8 +4452,46 @@ plain source order otherwise; **an evaluator that demanded the roles would
 have answered "unknown node" for every operation the parser wrote plainly**,
 which is most of a game's own arithmetic.
 
-**Test evidence** `test_ruby_interpreter.cs`, 12 tests; `test_ruby_parser.cs`
-stays 52/52. **1553/1553**, validator passed.
+### The second group: `+=`, `? :`, `until` and `return`
+
+**`x += 1` is `x = x + 1` and the old value is read once.** A reader that
+wrote the right side back would have turned it into `x = 1` — and a game with a
+counter in a loop would stand still.
+
+**A ternary runs one arm and not the other.** The fixture is
+`nil ? 1 / nil : 7`, which is how a game writes "do not divide by zero"; a
+reader that evaluated both arms would have raised a ZeroDivisionError on a
+line that never divides.
+
+**`until` is `while` with the test read the other way round** — a reader that
+read it as a `while` loops for ever, and the step limit is what stopped that.
+
+**And `return` leaves the program, not only the loop it is in.** That is the
+difference from `break`, and the interpreter has no method frames yet, so
+`return` sets a flag that the loops and the block read.
+
+**And `RunProgram` exists beside `Run` because of a test that found it.** `Run`
+clears the scopes, because it starts a script from nothing — **and a caller
+that ran a program's statements one at a time had the first statement's
+variables gone by the second**, which is exactly what the first version of the
+local-variable test did, and it reported its own memory as a failure.
+
+**Still not evaluated:** `case`/`when` and `for`, because **the parser has
+neither** — the node kinds exist and nothing produces them. A class, a module,
+a `def` and a block pass are the same: a game's scripts define classes before
+they run anything, and those need method tables, which is the next card rather
+than this one.
+
+**And a dead branch that a mutation could not have caught.** `OpAssign`
+handled `op == "="`, **and the parser never produces this node with a bare
+`=`** — an equality sign yields an `Assignment`. The branch was dead, a test
+for it was a test for something that does not happen, and the mutation
+`op.Length > 1 ? op[..^1] : "="` -> `op[..^1]` survived because **no script
+reaches it**. It was removed, and the rule became the observable one:
+`**=` must take `**` and not `*`.
+
+**Test evidence** `test_ruby_interpreter.cs`, 18 tests; `test_ruby_parser.cs`
+stays 52/52. **1559/1559**, validator passed, mutations 6 of 6.
 
 ### K-090 MV/MZ: script files as data, no JavaScript executed
 `IN PROGRESS` — board, P4
