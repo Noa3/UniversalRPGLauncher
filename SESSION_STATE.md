@@ -2406,3 +2406,43 @@ Datei nie beschrieben hat.** `10910` und `10920` haben dieselbe Form.
 
 Beides steht jetzt hier, weil beide dieselbe Form haben: **Werkzeug und Zeile
 ansehen, bevor man sie beurteilt.**
+
+## K-136 `10120` / `10130` / `10230` — DONE, und einer davon fand einen Fehler im Save-Codec
+
+**`SetTimer` startete den Timer, und das sollte es nicht.** Die Referenz hat
+drei Operationen in einem Befehl: Sekunden setzen, starten mit den Flags
+sichtbar und Schlacht, und stoppen. **Wer beim Setzen startete, kollabierte die
+ersten beiden** — und ein Spiel, das `SetTimer` benutzt, um einen Countdown zu
+**scharfmachen**, den es später starten will, **startete ihn sofort**. Genau der
+Unterschied zwischen einem Timer, der zählt, und einem, der es nicht tut.
+
+**Und der Save-Codec hatte denselben Fehler.** Er stellte einen Timer mit
+`SetTimer` allein wieder her, also **kam jeder gespeicherte Countdown laufend
+zurück** — ein Spiel, das einen angehaltenen Timer speicherte und neu lud,
+bekam einen lebenden. Die zwei Alt-Tests, die an der Reparatur brachen,
+benutzten `SetTimer` als „Timer starten" — dieselbe Verwechslung. **Sie wurden
+korrigiert, nicht geschwächt**, und der Round Trip beweist jetzt beide
+Operationen getrennt.
+
+**`StopTimer` behält die Sekunden.** Wer einen Timer stoppt, um ihn zu zeigen,
+und ihn dann wieder startet, erwartet den Stand. Er wirft außerdem nicht mehr
+für eine unbekannte ID, denn eine veraltete Timer-ID soll kein totes Event sein.
+
+**`10120` ist vier Flags und kein „Stil".** Transparent, Position, fixiert,
+Continue-Events. **Parameter[2] ist invertiert** — eine Null heißt: das Fenster
+bleibt stehen, während die Karte scrollt. Wer ein Ungleich-Null auf „fixiert"
+abbildet, **scrollt jedes Fenster weg, das ein Spiel festgepinnt hat** — und das
+ist **nur während der Kartenbewegung sichtbar, also von keinem Test auf einem
+stillen Bild zu finden.** Parameter[1] hat **drei** Positionen.
+
+**`10130` setzt ein Gesicht — und ein Gesicht ist eine Anfrage, kein gezeichnetes
+Porträt.** Die Datei hat vier Slots; ein neunter wird mit der Zahl abgelehnt.
+
+**Ein sechster Parameter benennt den Timer**, und die Referenz liest ihn **nur,
+wenn der Befehl mehr als fünf Parameter hat und das Spiel RPG2K3 ist** — daher
+hat ein 2K-Spiel einen Timer und ein 2003 zwei. Ein Test prüft beide Lesarten
+desselben Befehls.
+
+**Test evidence** `test_rm2k_message_options.cs` (15). **1100/1100**.
+**Mutations** 10 von 10 gefangen, **einschließlich des Codes, der die Sekunden
+unbedingt wiederherstellte** — das ist die Save-Datei-Hälfte desselben Fehlers.

@@ -229,7 +229,10 @@ public partial class TestGameSimulationState : TestBase
 		_state.MapX = 1; _state.MapY = 1; _state.Gold = 1234; _state.FrameCount = 77;
 		_state.Switches.Add(true); _state.Variables.Add(42); _state.ItemCounts[3] = 2;
 		_state.PartyMemberIds.Add(5); _state.SceneStack.Add("Map"); _state.CurrentScene = "Map";
+		// **Set, then start** — the two are separate operations, and a reader
+		// that started on set made this round trip pass for the wrong reason.
 		_state.SetTimer(1, 9);
+		_state.StartTimer(1, pVisible: true, pInBattle: true);
 
 		var json = Rm2kSimulationSaveCodec.Serialize(_state);
 		var restored = new GameSimulationState();

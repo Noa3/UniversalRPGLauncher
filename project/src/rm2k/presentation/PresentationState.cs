@@ -294,6 +294,14 @@ public sealed class PresentationState
     {
         MessageVisible = false;
         MessageText = "";
+        MessageTransparent = false;
+        MessagePosition = MessagePositionBottom;
+        MessagePositionFixed = true;
+        MessageContinuesEvents = false;
+        FaceName = "";
+        FaceIndex = 0;
+        FaceOnRight = false;
+        FaceFlipped = false;
         ActiveChoice = null;
         PendingInputVariableId = null;
         InputValue = null;
@@ -543,6 +551,119 @@ public sealed class PresentationState
         pValue = value;
         PendingInputVariableId = null;
         InputValue = null;
+        return true;
+    }
+
+    // Message options, from 10120 Message Options. **Four independent flags and
+    // not one "style"**, because the reference stores four fields and a reader
+    // that collapsed them would make a transparent bottom message and a
+    // top-positioned one the same request.
+
+    /// <summary>
+    /// Whether the message window is transparent, from
+    /// <c>parameters[0] != 0</c>.
+    /// </summary>
+    public bool MessageTransparent { get; private set; }
+
+    /// <summary>
+    /// Where the window sits, from <c>parameters[1]</c>: 0 top, 1 middle,
+    /// 2 bottom.
+    /// </summary>
+    /// <remarks>
+    /// **Three positions and not two.** A reader that stored a boolean would put
+    /// the middle where the top belongs, and every game that centres its
+    /// dialogue would open its window at the top.
+    /// </remarks>
+    public int MessagePosition { get; private set; }
+
+    /// <summary>
+    /// Whether the window holds its position while the map scrolls, from
+    /// <c>parameters[2] == 0</c> — **inverted, so a zero means fixed**.
+    /// </summary>
+    public bool MessagePositionFixed { get; private set; } = true;
+
+    /// <summary>
+    /// Whether the map's events keep running while the message is open, from
+    /// <c>parameters[3] != 0</c>.
+    /// </summary>
+    public bool MessageContinuesEvents { get; private set; }
+
+    // Face graphic, from 10130 Change Face Graphic. **A request, not a drawn
+    // portrait** — nothing here loads a file, and a face that is "set" but has
+    // no renderer behind it is what this reader can honestly say.
+
+    /// <summary>The face file name, from the command's string field.</summary>
+    public string FaceName { get; private set; } = "";
+
+    /// <summary>
+    /// Which of the four faces in the file, from <c>parameters[0]</c>.
+    /// </summary>
+    public int FaceIndex { get; private set; }
+
+    /// <summary>
+    /// Whether the face sits on the right instead of the left, from
+    /// <c>parameters[1] != 0</c>.
+    /// </summary>
+    public bool FaceOnRight { get; private set; }
+
+    /// <summary>Whether the face is mirrored, from <c>parameters[2] != 0</c>.</summary>
+    public bool FaceFlipped { get; private set; }
+
+    /// <summary>The highest face index the file's four slots allow.</summary>
+    public const int MaxFaceIndex = 3;
+
+    /// <summary>
+    /// The longest a face file name may be, from
+    /// <see cref="MaxPictureNameCharacters"/> and the same reasoning: no
+    /// filesystem is touched, so the bound is about what a diagnostic carries.
+    /// </summary>
+    public const int MaxFaceNameCharacters = 256;
+
+    /// <summary>
+    /// The three message positions, from <c>parameters[1]</c>.
+    /// </summary>
+    public const int MessagePositionTop = 0;
+    public const int MessagePositionMiddle = 1;
+    public const int MessagePositionBottom = 2;
+
+    /// <summary>
+    /// Applies the four message options, from <c>10120</c>.
+    /// </summary>
+    /// <returns>
+    /// False when a value was out of range, and nothing changed — the reference
+    /// has no validation at all here, so a reader that stored a position of
+    /// seven would put a window nowhere.
+    /// </returns>
+    public bool SetMessageOptions(
+        bool pTransparent, int pPosition, bool pFixed, bool pContinuesEvents)
+    {
+        if (pPosition < MessagePositionTop || pPosition > MessagePositionBottom)
+        {
+            return false;
+        }
+        MessageTransparent = pTransparent;
+        MessagePosition = pPosition;
+        MessagePositionFixed = pFixed;
+        MessageContinuesEvents = pContinuesEvents;
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the face, from <c>10130</c>.
+    /// </summary>
+    /// <returns>False when the name was empty, too long or the index was out of range.</returns>
+    public bool SetFace(
+        string pName, int pIndex, bool pOnRight, bool pFlipped)
+    {
+        if (string.IsNullOrWhiteSpace(pName) || pName.Length > MaxFaceNameCharacters
+            || pIndex < 0 || pIndex > MaxFaceIndex)
+        {
+            return false;
+        }
+        FaceName = pName;
+        FaceIndex = pIndex;
+        FaceOnRight = pOnRight;
+        FaceFlipped = pFlipped;
         return true;
     }
 

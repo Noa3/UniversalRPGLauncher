@@ -268,8 +268,22 @@ public static class Rm2kSimulationSaveCodec
         pState.SceneStack.Clear(); foreach (var value in pData.SceneStack) pState.SceneStack.Add(value);
         pState.ActiveActorIndex = pData.ActiveActorIndex; pState.CurrentScene = pData.CurrentScene;
         pState.SaveTimestamp = pData.SaveTimestamp; pState.SaveComment = pData.SaveComment;
+        // **The seconds first, and the running flag second.** A first draft
+        // restored a timer with SetTimer alone, and because SetTimer used
+        // to start a timer that turned every saved countdown into a
+        // running one — a game that saved a paused timer and reloaded it
+        // got a live one. The two operations are separate now, and this
+        // is where the difference shows.
         pState.StopTimer(1); pState.StopTimer(2);
-        if (pData.Timer1Active) pState.SetTimer(1, pData.Timer1Seconds);
-        if (pData.Timer2Active) pState.SetTimer(2, pData.Timer2Seconds);
+        pState.SetTimer(1, pData.Timer1Seconds);
+        pState.SetTimer(2, pData.Timer2Seconds);
+        if (pData.Timer1Active)
+        {
+            pState.StartTimer(1, pState.Timer1Visible, pState.Timer1InBattle);
+        }
+        if (pData.Timer2Active)
+        {
+            pState.StartTimer(2, pState.Timer2Visible, pState.Timer2InBattle);
+        }
     }
 }

@@ -200,6 +200,20 @@ public sealed class GameSimulationState
     public bool Timer2Active { get; private set; }
     public int Timer1Seconds { get; private set; }
     public int Timer2Seconds { get; private set; }
+
+    /// <summary>
+    /// Whether timer 1 is drawn, from <c>StartTimer</c>'s first flag.
+    /// </summary>
+    public bool Timer1Visible { get; private set; } = true;
+
+    /// <summary>Whether timer 1 keeps running during a battle.</summary>
+    public bool Timer1InBattle { get; private set; } = true;
+
+    /// <summary>Whether timer 2 is drawn, from the same flag.</summary>
+    public bool Timer2Visible { get; private set; } = true;
+
+    /// <summary>Whether timer 2 keeps running during a battle.</summary>
+    public bool Timer2InBattle { get; private set; } = true;
     public bool IsPaused { get; set; }
     public bool IsMenuOpen { get; set; }
     public bool IsSaveEnabled { get; set; } = true;
@@ -551,21 +565,84 @@ public sealed class GameSimulationState
     private int _timer1TickRemainder;
     private int _timer2TickRemainder;
 
-    public void SetTimer(int pTimerId, int pSeconds)
+    /// <summary>
+    /// The longest a timer may hold, from <c>SetTimer</c>'s own bound in the
+    /// format and 86400 seconds being a day.
+    /// </summary>
+    public const int MaxTimerSeconds = 86400;
+
+    /// <summary>
+    /// Sets a timer's seconds <em>without starting it</em>, from
+    /// <c>Game_Party::SetTimer</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This used to start the timer, and that was a real fault.</strong>
+    /// The reference has three commands in one: <c>SetTimer</c> writes the
+    /// seconds, <c>StartTimer</c> starts it and takes the visible and battle
+    /// flags, and <c>StopTimer</c> stops it. A reader that started on set
+    /// collapsed the first two, and a game that wrote <c>SetTimer</c> to arm a
+    /// countdown it would start later <em>started it immediately</em> — which is
+    /// the exact difference between a timer that counts and one that does not.
+    /// </para>
+    /// </remarks>
+    /// <returns>False when the id or the seconds were out of range.</returns>
+    public bool SetTimer(int pTimerId, int pSeconds)
     {
-        if (pTimerId is not (1 or 2) || pSeconds < 0 || pSeconds > 86400)
+        if (pTimerId is not (1 or 2) || pSeconds < 0 || pSeconds > MaxTimerSeconds)
         {
-            throw new ArgumentOutOfRangeException(nameof(pSeconds));
+            return false;
         }
-        if (pTimerId == 1) { Timer1Seconds = pSeconds; Timer1Active = true; _timer1TickRemainder = 0; }
-        else { Timer2Seconds = pSeconds; Timer2Active = true; _timer2TickRemainder = 0; }
+        if (pTimerId == 1) { Timer1Seconds = pSeconds; _timer1TickRemainder = 0; }
+        else { Timer2Seconds = pSeconds; _timer2TickRemainder = 0; }
+        return true;
     }
 
-    public void StopTimer(int pTimerId)
+    /// <summary>
+    /// Starts a timer and says whether it is shown and whether it runs in
+    /// battle, from <c>Game_Party::StartTimer</c>.
+    /// </summary>
+    /// <remarks>
+    /// The two flags are separate because a game can want a timer it hides from
+    /// the player and one that stops for a battle — and **collapsing them into
+    /// one would make "hidden" and "not in battle" the same choice.**
+    /// </remarks>
+    /// <returns>False when the id was out of range.</returns>
+    public bool StartTimer(int pTimerId, bool pVisible, bool pInBattle)
     {
-        if (pTimerId == 1) Timer1Active = false;
-        else if (pTimerId == 2) Timer2Active = false;
-        else throw new ArgumentOutOfRangeException(nameof(pTimerId));
+        if (pTimerId is not (1 or 2))
+        {
+            return false;
+        }
+        if (pTimerId == 1)
+        {
+            Timer1Active = true; Timer1Visible = pVisible; Timer1InBattle = pInBattle;
+            _timer1TickRemainder = 0;
+        }
+        else
+        {
+            Timer2Active = true; Timer2Visible = pVisible; Timer2InBattle = pInBattle;
+            _timer2TickRemainder = 0;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Stops a timer, from <c>Game_Party::StopTimer</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>It does not reset the seconds, and that is the point.</strong> A
+    /// game that stops a timer to show the count and then starts it again
+    /// expects the count to still be there. This also stops throwing for an id
+    /// it does not know: the reference's own switch has no arm for one, and a
+    /// reader that threw would turn a stale timer id into a dead event.
+    /// </remarks>
+    /// <returns>False when the id was out of range.</returns>
+    public bool StopTimer(int pTimerId)
+    {
+        if (pTimerId == 1) { Timer1Active = false; return true; }
+        if (pTimerId == 2) { Timer2Active = false; return true; }
+        return false;
     }
 
     public void AdvanceTimers(int pSimulationTicks)
@@ -733,7 +810,9 @@ public sealed class GameSimulationState
         CharacterFrame = Rm2kCharacterAnimation.FrameMiddle;
         CharacterAnimCount = 0;
         HeroMoveSpeed = 3;
-        Timer1Active = false; Timer2Active = false; Timer1Seconds = 0; Timer2Seconds = 0; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
+        Timer1Active = false; Timer2Active = false; Timer1Seconds = 0; Timer2Seconds = 0;
+        Timer1Visible = true; Timer2Visible = true;
+        Timer1InBattle = true; Timer2InBattle = true; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear(); PassabilityMasks.Clear();

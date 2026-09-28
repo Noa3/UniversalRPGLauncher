@@ -408,8 +408,14 @@ public partial class TestEventInterpreter : TestBase
 	public void Test_EventPageSelectorEvaluatesDeterministicTimerConditions()
 	{
 		var state = new GameSimulationState();
+		// **Setting a timer does not start it** — the reference has a separate
+		// start operation, and a reader that started on set made this test
+		// pass for the wrong reason. Both are started explicitly here, so what
+		// is under test is the condition and not a side effect.
 		state.SetTimer(1, 2);
 		state.SetTimer(2, 4);
+		state.StartTimer(1, pVisible: true, pInBattle: true);
+		state.StartTimer(2, pVisible: true, pInBattle: true);
 		var eventData = new Rm2kMap.Event(13, 1, 1);
 		eventData.Pages.Add(new Rm2kMap.EventPage
 		{

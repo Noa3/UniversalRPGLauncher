@@ -2590,9 +2590,52 @@ look for the next island of that shape.**
 | vehicles | `10840` `10850` `10650` | enter/exit vehicle, set vehicle location, change vehicle graphic |
 | face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
-| misc | `1005`–`1008` `10230` `10920` `11010` | common event, flee, combo, class, timer |
+| misc | `1005`–`1008` `10920` | common event, flee, combo, class |
+| ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
 
-## `10820` is done — and its counterpart is a liblcf code with no engine
+## `10120`, `10130` and `10230` are done — and one of them fixed a fault in the save codec
+
+**`SetTimer` started the timer, and it should not have.** The reference has
+three operations in one command: set the seconds, start with the visible and
+battle flags, and stop. **A reader that started on set collapsed the first two**,
+and a game that wrote `SetTimer` to arm a countdown it would start later started
+it immediately — the exact difference between a timer that counts and one that
+does not.
+
+**And the save codec had the same fault.** It restored a timer with `SetTimer`
+alone, so **every saved countdown came back running** — a game that saved a
+paused timer and reloaded it got a live one. The two old tests that broke on the
+repair were using `SetTimer` as "start the timer", which is the same
+misreading; they were corrected, not weakened, and the round trip now proves
+both operations separately.
+
+**`StopTimer` keeps the seconds.** A game that stops a timer to show the count
+and then starts it again expects the count to still be there. It also no longer
+throws for an id it does not know, because a stale timer id should not be a dead
+event.
+
+**`10120` is four flags and not one style.** Transparent, position, fixed,
+continue-events. **Parameters[2] is inverted** — a zero means the window holds
+its position while the map scrolls — and a reader that mapped a non-zero to
+fixed would scroll every window a game had pinned, **which is visible only
+while the map moves, so no test of a still map could have caught it.**
+Parameters[1] has **three** positions, not two: top, middle, bottom.
+
+**`10130` sets a face, and a face is a request and not a drawn portrait.** The
+file has four slots and a ninth is refused with the number in the diagnostic.
+
+**A sixth parameter names the timer**, and the reference reads it *only* when
+the command carries more than five parameters and the game is RPG2K3 — which is
+why a 2K game has one timer and a 2003 game has two. There is a test for both
+readings of the same command.
+
+**Test evidence** `test_rm2k_message_options.cs`, 15 tests.
+**1100/1100**, `TestRm2kMessageOptions: 15/15`.
+**Mutations** Ten rules over two runs, **10 of 10 caught** — including the codec
+restoring the seconds unconditionally, which is the save-file half of the same
+fault.
+
+## `10820` is done## `10820` is done — and its counterpart is a liblcf code with no engine
 
 **The three parameters are the variables to write into, not the position to
 store.** `parameters[0]` gets the map id, `parameters[1]` the player's x and

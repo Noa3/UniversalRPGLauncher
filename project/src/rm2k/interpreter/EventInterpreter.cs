@@ -34,6 +34,19 @@ public sealed class EventInterpreter
 
 	// Verified RM2K/2003 event command codes (liblcf lcf::rpg::Cmd).
 	public const int End = 10;
+	/// <summary>10120, Message Options, <c>CmdSetup</c> width 4.</summary>
+	public const int MessageOptions = 10120;
+
+	/// <summary>
+	/// 10130, Change Face Graphic, from <c>Code::ChangeFaceGraphic</c>
+	/// and <c>CommandChangeFaceGraphic</c>, whose <c>CmdSetup</c> gives
+	/// it a minimum width of 3.
+	/// </summary>
+	public const int ChangeFaceGraphic = 10130;
+
+	/// <summary>10230, Timer Operation, <c>CmdSetup</c> width 5.</summary>
+	public const int TimerOperation = 10230;
+
 	public const int ShowMessage = 10110;
 	public const int ShowChoice = 10140;
 	public const int InputNumber = 10150;
@@ -374,6 +387,18 @@ public sealed class EventInterpreter
 				// liblcf END terminates the current frame; a nested CallEvent
 				// returns to its caller, the base frame stops the event.
 				return FinishFrame();
+
+			case MessageOptions:
+				ExecuteMessageOptions(cmd);
+				return Advance();
+
+			case ChangeFaceGraphic:
+				ExecuteChangeFaceGraphic(cmd);
+				return Advance();
+
+			case TimerOperation:
+				ExecuteTimerOperation(cmd);
+				return Advance();
 
 			case ShowMessage:
 			case Comment:
@@ -822,6 +847,199 @@ public sealed class EventInterpreter
 		_state.Variables[variableId - 1] = value;
 		_state.AddDiagnostic($"[Event {_eventId}] Input number -> variable {variableId}");
 		return true;
+	}
+
+	/// <summary>
+	/// 10120, Message Options, from EasyRPG's
+	/// <c>CommandMessageOptions</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Four independent flags and not one "style".</strong> The
+	/// reference sets four fields on the game system and a reader that
+	/// collapsed them would make a transparent bottom message and a
+	/// top-positioned one the same request.
+	/// </para>
+	/// <para>
+	/// <strong>Parameters[2] is inverted</strong> — <c>== 0</c> means the
+	/// window holds its position while the map scrolls. A reader that
+	/// mapped a non-zero to fixed would scroll every window a game had
+	/// pinned, and the difference is visible only while the map moves.
+	/// </para>
+	/// <remarks>
+	/// <strong>Parameters[1] has three values and not two</strong>: top,
+	/// middle, bottom. A reader that stored a boolean would put the
+	/// middle where the top belongs.
+	/// </para>
+	/// </remarks>
+	private void ExecuteMessageOptions(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null)
+		{
+			Malformed("Message options");
+			return;
+		}
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Message options");
+			return;
+		}
+		if (!_presentation.SetMessageOptions(
+			Param(pCmd, 0) != 0,
+			Param(pCmd, 1),
+		// **Inverted, and the comment is the whole reason.** The reference
+		// writes SetMessagePositionFixed(com.parameters[2] == 0), so a
+		// zero is the fixed case and not the moving one.
+		Param(pCmd, 2) == 0,
+			Param(pCmd, 3) != 0))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Message options refused: position"
+				+ $" {Param(pCmd, 1)} is not 0, 1 or 2, and nothing was changed");
+			return;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Message options: transparent is"
+			+ $" {Param(pCmd, 0) != 0}, position {Param(pCmd, 1)},"
+			+ $" fixed is {Param(pCmd, 2) == 0},"
+			+ $" continuing events is {Param(pCmd, 3) != 0}");
+	}
+
+	/// <summary>
+	/// 10130, Change Face Graphic, from EasyRPG's <c>CommandChangeFaceGraphic</c>.
+	/// </summary>
+	/// <remarks>
+	/// The name is in the command string field and the index in
+	/// <c>parameters[0]</c>, and <c>parameters[1]</c> and <c>parameters[2]</c>
+	/// are the right-side and flipped flags. This is <strong>a request and
+	/// not a drawn portrait</strong> — nothing loads a file, and a face that
+	/// is set with no renderer behind it is what this reader can say.
+	/// </remarks>
+	private void ExecuteChangeFaceGraphic(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null)
+		{
+			Malformed("Change face graphic");
+			return;
+		}
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Change face graphic");
+			return;
+		}
+		if (string.IsNullOrEmpty(pCmd.Text))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change face graphic: no file name, and the"
+				+ " string field is where the name lives; nothing was set");
+			return;
+		}
+		if (!_presentation.SetFace(
+			pCmd.Text, Param(pCmd, 0), Param(pCmd, 1) != 0, Param(pCmd, 2) != 0))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change face graphic refused: the index"
+				+ " is outside the file four slots, or the name was empty or too long");
+			return;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Face set to slot {Param(pCmd, 0)},"
+			+ $" on the right is {Param(pCmd, 1) != 0},"
+			+ $" flipped is {Param(pCmd, 2) != 0}");
+	}
+
+	/// <summary>
+	/// 10230, Timer Operation, from EasyRPG's <c>CommandTimerOperation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>One command, three operations, chosen by
+	/// <c>parameters[0]</c></strong>: 0 sets the seconds, 1 starts the timer
+	/// with the visible and battle flags, 2 stops it. Anything else is
+	/// <c>return false</c> in the reference, which holds the page.
+	/// </para>
+	/// <para>
+	/// <strong>The seconds can come from a variable</strong> — this is
+	/// <c>ValueOrVariable(parameters[1], parameters[2])</c> and not a plain
+	/// read, so a game can set a timer from a counter it already keeps.
+	/// </para>
+	/// <para>
+	/// <strong>A sixth parameter names the timer</strong>, and the reference
+	/// reads it <em>only</em> when the command carries more than five and
+	/// the game is RPG2K3. Without it, every timer command means timer one —
+	/// which is why a 2K game has only one timer and a 2003 game has two.
+	/// </para>
+	/// </remarks>
+	private void ExecuteTimerOperation(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Timer operation");
+			return;
+		}
+		// **The sixth parameter names the timer, and only when the command
+		// carries it and the game is RPG2K3.** A 2K game has one timer and a
+		// 2003 game has two, and that is the whole difference.
+		var timerId = pCmd.Parameters.Count > 5 && _state.SupportsRpg2k3ECommands
+			? pCmd.Parameters[5] : 1;
+		switch (pCmd.Parameters[0])
+		{
+			case 0:
+			{
+				var seconds = ValueOrVariable(Param(pCmd, 1), Param(pCmd, 2));
+				if (!_state.SetTimer(timerId, seconds))
+				{
+					_state.AddDiagnostic(
+						$"[Event {_eventId}] Timer {timerId}: {seconds} seconds is"
+						+ " outside 0 to 86400, and nothing was set");
+					return;
+				}
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Timer {timerId} set to {seconds} seconds,"
+					+ " and **not started**, because the reference has a separate"
+					+ " start operation and a reader that started on set would start a"
+					+ " countdown the game meant to arm");
+				return;
+			}
+			case 1:
+			{
+				if (!_state.StartTimer(
+					timerId, Param(pCmd, 3) != 0, Param(pCmd, 4) != 0))
+				{
+					_state.AddDiagnostic(
+						$"[Event {_eventId}] Timer {timerId} cannot be started, because"
+						+ " a game has two and that is not one of them");
+					return;
+				}
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Timer {timerId} started, visible is"
+					+ $" {Param(pCmd, 3) != 0}, in battle is {Param(pCmd, 4) != 0}");
+				return;
+			}
+			case 2:
+			{
+				if (!_state.StopTimer(timerId))
+				{
+					_state.AddDiagnostic(
+						$"[Event {_eventId}] Timer {timerId} cannot be stopped, because"
+						+ " a game has two and that is not one of them");
+					return;
+				}
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Timer {timerId} stopped, and its seconds"
+					+ " are kept, because the reference does not reset them and a game"
+					+ " that shows a count and restarts it expects it to still be there");
+				return;
+			}
+			default:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Timer operation {pCmd.Parameters[0]} is not"
+					+ " set, start or stop, and the reference holds the page for it");
+				return;
+		}
 	}
 
 	private void ExecuteMessageOrComment(Rm2kMap.EventCommand pCmd)
