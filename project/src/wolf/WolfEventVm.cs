@@ -35,7 +35,57 @@ public sealed class WolfEventVm
 
     /// <summary>The bands, for a caller that wants to address one directly.</summary>
     public WolfVariableBands VariableBands => _variables;
-    private readonly Dictionary<int, bool> _switches = new();
+    /// <summary>
+    /// The map and common event switches, kept apart.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Two maps and not one.</strong> The help's page-call note says
+    /// that 0 and above address a map event and 500,000 and above address a
+    /// common event, so a map event and a common event with the same switch
+    /// number are different switches. One dictionary would have them collide.
+    /// </remarks>
+    private readonly Dictionary<int, bool> _mapSwitches = new();
+
+    /// <summary>The common event switches, from 500,000 up.</summary>
+    private readonly Dictionary<int, bool> _commonSwitches = new();
+
+    /// <summary>The first number the common event switches use.</summary>
+    public const int CommonSwitchBase = 500_000;
+
+    /// <summary>The highest switch number, from the editor's own bound.</summary>
+    public const int MaxSwitch = 499_999;
+
+    /// <summary>
+    /// The map a switch number belongs to, or -1 when it is out of range.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The base is 500,000 and not a million.</strong> The help names
+    /// it in the page-call note: 0 and above for map events, 500,000 and above
+    /// for common events. A reader that used the variable bands' million for
+    /// switches would put every common switch into the map range and lose it.
+    /// </remarks>
+    public static int SwitchMapOf(int pNumber)
+    {
+        if (pNumber >= 0 && pNumber <= MaxSwitch)
+        {
+            return 0;
+        }
+        return pNumber >= CommonSwitchBase && pNumber <= CommonSwitchBase + MaxSwitch
+            ? 1
+            : -1;
+    }
+
+    /// <summary>The index within its map, or -1 when the number is out of range.</summary>
+    public static int SwitchIndexOf(int pNumber)
+    {
+        var map = SwitchMapOf(pNumber);
+        return map < 0 ? -1 : pNumber - (map == 0 ? 0 : CommonSwitchBase);
+    }
+
+    private Dictionary<int, bool> SwitchStore(int pMap)
+    {
+        return pMap == 0 ? _mapSwitches : _commonSwitches;
+    }
     private readonly List<WolfEventMessage> _messages = new();
     private readonly List<string> _trace = new();
     private WolfEventProgram? _program;
@@ -57,7 +107,19 @@ public sealed class WolfEventVm
     /// question WOLF answers with four.
     /// </remarks>
     public WolfVariableBands Variables => _variables;
-    public IReadOnlyDictionary<int, bool> Switches => _switches;
+    /// <summary>
+    /// The map switches, for a caller that only ever means a map event.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The common switches are not in here</strong>, because a caller
+    /// that iterates "all switches" to save them would silently leave the
+    /// common ones behind, and a game would come back from a save with its
+    /// common event progress gone.
+    /// </remarks>
+    public IReadOnlyDictionary<int, bool> Switches => _mapSwitches;
+
+    /// <summary>The common event switches, for a caller that means those.</summary>
+    public IReadOnlyDictionary<int, bool> CommonSwitches => _commonSwitches;
     public IReadOnlyList<WolfEventMessage> Messages => _messages;
     public IReadOnlyList<string> Trace => _trace;
     public IReadOnlyList<string> PendingChoices { get; private set; } = Array.Empty<string>();
@@ -226,9 +288,27 @@ public sealed class WolfEventVm
         return _variables.SetByReference(pCommand.Operand, result);
     }
 
-    public void SetSwitch(int pId, bool pValue) => _switches[pId] = pValue;
+    /// <summary>Writes a switch by its own number, map or common.</summary>
+    public void SetSwitch(int pId, bool pValue)
+    {
+        var map = SwitchMapOf(pId);
+        // **An out of range switch changes nothing and says nothing.** A reader
+        // that grew a dictionary would store a switch the editor cannot hold,
+        // and the next load would not carry it.
+        if (map >= 0)
+        {
+            SwitchStore(map)[SwitchIndexOf(pId)] = pValue;
+        }
+    }
 
-    public bool GetSwitch(int pId) => _switches.TryGetValue(pId, out var value) && value;
+    /// <summary>Reads a switch by its own number, map or common.</summary>
+    public bool GetSwitch(int pId)
+    {
+        var map = SwitchMapOf(pId);
+        return map >= 0
+            && SwitchStore(map).TryGetValue(SwitchIndexOf(pId), out var value)
+            && value;
+    }
 
     public void ResetState()
     {
@@ -238,7 +318,8 @@ public sealed class WolfEventVm
         _pendingChoiceIndex = -1;
         _messageSequence = 0;
         _variables.Clear();
-        _switches.Clear();
+        _mapSwitches.Clear();
+        _commonSwitches.Clear();
         _messages.Clear();
         _trace.Clear();
         PendingChoices = Array.Empty<string>();
@@ -283,11 +364,26 @@ public sealed class WolfEventVm
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.SetSwitch:
-                _switches[pCommand.Operand] = pCommand.Value != 0;
+                // **Through the map, and a switch number that is in neither
+                // range changes nothing.** The write is not a dictionary
+                // assignment here, so a switch number the editor cannot hold
+                // is dropped rather than stored where a load would not find it.
+                var switchMap = SwitchMapOf(pCommand.Operand);
+                if (switchMap >= 0)
+                {
+                    SwitchStore(switchMap)[SwitchIndexOf(pCommand.Operand)] =
+                        pCommand.Value != 0;
+                }
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.IfSwitch:
-                return Branch(GetSwitch(pCommand.Operand) == (pCommand.Value != 0), pCommand);
+                // **An out of range switch reads as off, and not as a
+                // condition that cannot be answered.** The help's condition
+                // list is "on" or "off" and nothing else, so a switch that does
+                // not exist is off — which is also what a game that has not set
+                // it yet expects.
+                return Branch(
+                    GetSwitch(pCommand.Operand) == (pCommand.Value != 0), pCommand);
             case WolfEventOpcode.IfVariable:
                 // **Seven comparisons, and not one.** A reader that kept the
                 // old equality test would take one branch in seven, and a chest

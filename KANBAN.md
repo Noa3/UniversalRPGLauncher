@@ -2595,6 +2595,7 @@ look for the next island of that shape.**
 | wolf | ~~variable branch~~ | **~~seven comparisons and two arms — DONE, see below~~** |
 | wolf | ~~variable bands~~ | **~~self, normal, system, database — DONE, see below~~** |
 | wolf | ~~variable operators~~ | **~~fourteen assignment operators — DONE, see below~~** |
+| wolf | ~~band offsets and switches~~ | **~~the real offsets, the database, map and common switches — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2607,6 +2608,70 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The band offsets were guessed and the help says otherwise — this card fixes both, and the switches
+
+**The last card read the four bands out of the help and then guessed their
+numbers.** It wrote "a million block per band" and moved to the next task, and
+the tests asserted that guess and passed. **The help names them, in two
+different pages, and they are not a run:** `1100000～:マップセルフ変数` and
+`1600000～:コモンセルフ変数` from the common event page call, `2000000` for
+normal variable 0, and `3000000` for string variable 0.
+
+**A computed block put map self at 1,000,000, common self at 2,000,000 — a
+normal variable — and the system band at 3,000,000, which is the string band.**
+So a game reading its system clock out of the string range would have got a
+number, and the number would have been plausible.
+
+**A mutation run did not catch it, and that is the lesson worth keeping.**
+The twelve rules of the operator card mutated the behaviour around the
+offsets and every one was caught, because the tests agreed with the code. Two
+wrong numbers that agree produce a green suite. **The check that would have
+caught it is reading the source, and the offsets are now pinned in a test that
+names the page they come from.**
+
+**The million itself is a reference that names no band, and the whole gap says
+so.** The help says a million or more is called, so 1,000,000 is a reference —
+and it is below the map self base, so it points at nothing. That is a different
+answer from "not a reference", and the code has two codes for it: `-1` is a
+value, `-2` is a reference naming no band. **A reader that merged them would
+tell a caller 1,050,000 is a value, and a caller that stored it would keep a
+pointer in a variable the game reads as a number.**
+
+**The string band is recognised and refused.** This reader has no string
+variables, and it says that rather than falling through to the normal band and
+answering a string reference with a number. **The variable database is not a
+band at all**: the branch help says a variable call such as `1600000` may not
+be given when the database is the source, so it has no offset to be indexed
+by. It is addressed by type and column, in a store of its own, keyed by the
+type shifted rather than multiplied so a large type cannot wrap into another
+type's cells.
+
+## And the switches were one dictionary where the help names two ranges
+
+**0 and above address a map event, 500,000 and above a common event.** The VM
+had one `Dictionary<int, bool>`, so **a map switch and a common switch with the
+same index collided** — and the collision is silent, because both reads answer
+with a boolean and only the wrong one.
+
+**The base is 500,000 and not a million,** and the variable bands start at
+1,100,000, so a reader that reused the variable scheme would leave 100,001 to
+500,000 unreachable and a game with a switch there would find it permanently
+off. **A switch number outside both ranges changes nothing**, because a reader
+that grew a dictionary would store a switch the editor cannot hold and the
+next load would not carry it — the switch would work during the session and
+vanish after it.
+
+**An unset switch is off, and so is one that cannot be read.** The condition list
+is "on" and "off" and nothing else, so an unreadable switch is off, which is
+also what a game expects before it has set it.
+
+**Test evidence** `test_wolf_switches.cs` (7) and `test_wolf_variable_bands.cs`
+(13, three rewritten because they asserted the guessed offsets).
+**1243/1243**, with the operator, comparison and runtime files re-measured.
+**Mutations** Thirteen rules in one run, **13 of 13 caught** — including each
+of the three offsets, the gap giving the wrong code, the database keyed by
+column alone, and the two switch maps folded back into one.
 
 ## The WOLF variable operators are done — the VM knew two of fourteen
 

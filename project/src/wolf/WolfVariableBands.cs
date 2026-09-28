@@ -31,34 +31,110 @@ public static class WolfVariable
 	/// <summary>The number at which a field stops being a value and becomes a reference.</summary>
 	public const int ReferenceBase = 1_000_000;
 
-	/// <summary>The band a reference of 1,000,000 plus n names.</summary>
-	public const int BandSelf = 0;
+	/// <summary>A map event's self variables.</summary>
+	/// <remarks>
+	/// <strong>1,100,000 and not 1,000,000.</strong> The help's own examples
+	/// name the offsets: <c>1100000～:マップセルフ変数</c> and
+	/// <c>1600000～:コモンセルフ変数</c> for the common event page call, and
+	/// <c>2000000</c> for normal variable 0 and <c>3000000</c> for string
+	/// variable 0. A reader that put self at one million — as this one did —
+	/// addresses a range the format does not have, and every self variable in
+	/// a real game lands in the middle of nothing.
+	/// </remarks>
+	public const int BaseMapSelf = 1_100_000;
+
+	/// <summary>A common event's self variables.</summary>
+	public const int BaseCommonSelf = 1_600_000;
 
 	/// <summary>Normal and reserve variables.</summary>
-	public const int BandNormal = 1;
+	public const int BaseNormal = 2_000_000;
+
+	/// <summary>String variables.</summary>
+	/// <remarks>
+	/// <strong>A number band and not a variable band.</strong> The help's
+	/// variable notation lists <c>S?</c> for string variable ? and gives
+	/// <c>3000000</c> as the number that names string variable 0. A number
+	/// band is not something this reader can execute — it has no string
+	/// variables yet — so it is recognised and refused rather than silently
+	/// read as a normal variable, which would answer a game's question with a
+	/// wrong number instead of admitting it does not know.
+	/// </remarks>
+	public const int BaseString = 3_000_000;
 
 	/// <summary>System variables.</summary>
-	public const int BandSystem = 2;
+	public const int BaseSystem = 4_000_000;
 
 	/// <summary>The variable database.</summary>
-	public const int BandDatabase = 3;
+	/// <remarks>
+	/// <strong>The database is not a fixed offset, and the help says so.</strong>
+	/// The branch help states that when the variable database is the comparison
+	/// source, a variable call such as <c>1600000</c> may not be given. The
+	/// database is therefore addressed by type and column rather than by a
+	/// block, and <see cref="BandDatabase"/> is the flag the command carries
+	/// rather than an offset this reader computes.
+	/// </remarks>
+	public const int BandDatabase = -1;
 
-	/// <summary>The highest band the editor offers.</summary>
+	/// <summary>A number below the million: a value, and not a reference.</summary>
+	public const int NoReference = -1;
+
+	/// <summary>
+	/// A number at or above the million that names no band, because the bands
+	/// are fixed offsets and not every million is one of them.
+	/// </summary>
+	/// <remarks>
+	/// <strong>A different answer from <see cref="NoReference"/>, on purpose.</strong>
+	/// The help says a number of a million or more is called, so 1,000,000 is a
+	/// reference — it is simply one that points at nothing this reader knows.
+	/// Reporting that as "not a reference" would tell a caller the number is a
+	/// value, and a caller that stores it would keep a pointer in a variable
+	/// the game reads as a number.
+	/// </remarks>
+	public const int NoBandForReference = -2;
+
+	/// <summary>The first offset this reader knows, used to name a band.</summary>
+	public const int BandMapSelf = 0;
+
+	/// <summary>The common self band.</summary>
+	public const int BandCommonSelf = 1;
+
+	/// <summary>The normal band.</summary>
+	public const int BandNormal = 2;
+
+	/// <summary>The system band.</summary>
+	public const int BandSystem = 3;
+
+	/// <summary>The highest number band this reader knows.</summary>
 	public const int MaxBand = 3;
 
 	/// <summary>
-	/// The offset each band starts at above <see cref="ReferenceBase"/>.
+	/// The offset one band starts at, or -1 when the name is not a band.
 	/// </summary>
 	/// <remarks>
-	/// **The million block per band**, so self variable 0 is 1,000,000 and
-	/// normal variable 0 is 2,000,000. A reader that packed the bands side by
-	/// side would make a normal reference and a self reference differ by a
-	/// small number, and a game computing one from the other would land in a
-	/// neighbouring band.
+	/// <strong>Fixed offsets and not a computed block.</strong> The bands are
+	/// not a single arithmetic run: 1.1, 1.6, 2.0 and 4.0 million. A reader that
+	/// computed <c>base * (band + 1)</c> would put the system band at three
+	/// million, which is the string band, and a game reading a system clock
+	/// would read a string variable's offset instead.
 	/// </remarks>
+	public static int BaseOf(int pBand)
+	{
+		return pBand switch
+		{
+			BandMapSelf => BaseMapSelf,
+			BandCommonSelf => BaseCommonSelf,
+			BandNormal => BaseNormal,
+			BandSystem => BaseSystem,
+			_ => -1,
+		};
+	}
+
+	/// <summary>
+	/// The offset each band starts at, from the help's own numbers.
+	/// </summary>
 	public static int BandOffset(int pBand)
 	{
-		return ReferenceBase * (pBand + 1);
+		return BaseOf(pBand);
 	}
 
 	/// <summary>
@@ -68,7 +144,7 @@ public static class WolfVariable
 	/// <strong>At or above the million, and not "above".</strong> The help
 	/// says a value of 1,000,000 or more is called rather than used, so a
 	/// reader that tested <c>&gt;</c> would treat exactly 1,000,000 as a value
-	/// and never resolve self variable 0.
+	/// and never resolve anything at all.
 	/// </remarks>
 	public static bool IsReference(int pNumber)
 	{
@@ -78,19 +154,57 @@ public static class WolfVariable
 	/// <summary>
 	/// The band a number names, or -1 when it is a value.
 	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>By the table and not by division.</strong> The bands are fixed
+	/// offsets, so the band is the one whose offset the number reaches — and a
+	/// reader that divided by a million and subtracted one would answer 0 for
+	/// 1,000,000, 1 for 1,100,000, 1 again for 1,600,000, and 3 for 4,000,000,
+	/// which is a table of answers none of them mean.
+	/// </para>
+	/// <para>
+	/// <strong>The string band is recognised and refused.</strong> It is a
+	/// number this reader cannot answer with a number, and a reader that fell
+	/// through to the normal band would return a normal variable's value for a
+	/// reference that means a string.
+	/// </para>
+	/// </remarks>
 	public static int BandOf(int pNumber)
 	{
 		if (!IsReference(pNumber))
 		{
 			return -1;
 		}
-		var block = pNumber / ReferenceBase;
-		// **The block is one based and the band is zero based.** 1,000,000 is
-		// block 1 and self band 0, so the band is the block minus one. A
-		// reader that used the block directly would address a band that does
-		// not exist for the first million and be off by one everywhere else.
-		var band = block - 1;
-		return band < 0 || band > MaxBand ? -1 : band;
+		// **The bands are tested widest first, so a number in a gap falls
+		// through to no band at all.** Each base is a million block, so the
+		// block between 1,600,000 and 2,000,000 is empty and a number in it
+		// names nothing. Rounding it into a neighbouring band would be a
+		// silent wrong answer, and a gap is a gap.
+		if (pNumber >= BaseSystem)
+		{
+			return BandSystem;
+		}
+		if (pNumber >= BaseNormal)
+		{
+			return BandNormal;
+		}
+		if (pNumber >= BaseCommonSelf)
+		{
+			return BandCommonSelf;
+		}
+		if (pNumber >= BaseMapSelf)
+		{
+			return BandMapSelf;
+		}
+		// **The whole gap below the map self base answers -2, not just the
+		// million itself.** Every number from 1,000,000 to 1,099,999 is at or
+		// above the boundary, so every one of them is a reference, and not one
+		// of them names a band. A reader that gave -2 to exactly 1,000,000 and
+		// -1 to the rest would tell a caller that 1,050,000 is a *value* — and
+		// a caller that stored it would keep a pointer in a variable the game
+		// reads as a number, which is the exact failure the two codes exist to
+		// keep apart.
+		return pNumber >= ReferenceBase ? NoBandForReference : NoReference;
 	}
 
 	/// <summary>
@@ -99,30 +213,24 @@ public static class WolfVariable
 	/// <returns>-1 when the number is a value or names no band.</returns>
 	public static int IndexInBand(int pNumber)
 	{
-		if (BandOf(pNumber) < 0)
+		var band = BandOf(pNumber);
+		if (band < 0)
 		{
 			return -1;
 		}
-		return pNumber % ReferenceBase;
+		var baseOf = BaseOf(band);
+		// **A negative index would address the dictionary and be wrong**, and
+		// the guard is here rather than at the call sites because the band
+		// check above is what produces the -2, and a caller that only looked
+		// for "less than zero" would have caught it — this one checks the code.
+		var index = pNumber - baseOf;
+		// **The bound belongs to the band container, and it is named here
+		// rather than duplicated**, so the reader that resolves a reference and
+		// the reader that writes one cannot disagree about where a band ends.
+		return index < 0 || index > WolfVariableBands.MaxIndex ? -1 : index;
 	}
 }
 
-/// <summary>
-/// The four WOLF variable bands, kept apart.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <strong>Four dictionaries and not one.</strong> That is the shape the help
-/// describes and the shape a game assumes: a self variable and a system
-/// variable with the same index are different values, and a reader that put
-/// them in one dictionary would have them collide.
-/// </para>
-/// <para>
-/// <strong>An index outside its band is refused and says which band.</strong> A
-/// reader that grew a dictionary on demand would answer a read of self
-/// variable 99,999 with a zero that looks like a variable the game set.
-/// </para>
-/// </remarks>
 public sealed class WolfVariableBands
 {
 	/// <summary>The highest index a band holds, from the editor's own bound.</summary>
@@ -131,13 +239,38 @@ public sealed class WolfVariableBands
 	/// <summary>The highest database row, from the editor's own bound.</summary>
 	public const int MaxDatabaseIndex = 999;
 
+	/// <summary>
+	/// One dictionary per number band, in the order
+	/// <see cref="WolfVariable.BandMapSelf"/> through
+	/// <see cref="WolfVariable.BandSystem"/>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Four bands and not one, and the order matches the help's
+	/// dropdown</strong> — self, normal and reserve, system, variable database.
+	/// A reader that kept every band in one dictionary would have a self
+	/// variable and a system variable with the same index collide, and the
+	/// collision is silent: both reads answer with a number and only the wrong
+	/// one.
+	/// </remarks>
 	private readonly Dictionary<int, int>[] _bands =
 	[
-		new(), // Self
+		new(), // Map self
+		new(), // Common self
 		new(), // Normal
 		new(), // System
-		new(), // Database
 	];
+
+	/// <summary>
+	/// The variable database, addressed by type and column and not by a band.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Separate and not a fifth dictionary in the array</strong>, because
+	/// the help says the database cannot be named with a variable call: when it
+	/// is the comparison source, a value such as 1,600,000 may not be given. A
+	/// reader that gave it a band would let a game address database row 50,000
+	/// through a block the format does not define.
+	/// </remarks>
+	private readonly Dictionary<long, int> _database = new();
 
 	/// <summary>Reads one band and index, or zero when it holds nothing.</summary>
 	public int Get(int pBand, int pIndex)
@@ -178,6 +311,11 @@ public sealed class WolfVariableBands
 		var band = WolfVariable.BandOf(pNumber);
 		if (band < 0)
 		{
+			// **Zero, and not an exception and not the number itself.** The
+			// number is a reference and this reader cannot answer it — it names
+			// the string band, or it is in a gap. Returning the number would put
+			// a pointer where a value belongs, and every comparison that used it
+			// would be comparing pointers.
 			return 0;
 		}
 		return Get(band, WolfVariable.IndexInBand(pNumber));
@@ -207,16 +345,55 @@ public sealed class WolfVariableBands
 		// **The database band is smaller than the others**, and a reader that
 		// used one bound for all four would let a game address database row
 		// 50,000 — a row the editor cannot hold and a save file cannot carry.
-		var max = pBand == WolfVariable.BandDatabase ? MaxDatabaseIndex : MaxIndex;
-		return pIndex >= 0 && pIndex <= max;
+		// **The database is not a band and is refused here** with the other
+		// out of range names, because it has its own accessor above. A reader
+		// that let BandDatabase index the array would read a dictionary that
+		// does not exist.
+		return pIndex >= 0 && pIndex <= MaxIndex;
 	}
 
-	/// <summary>Empties every band, for a new game.</summary>
+	/// <summary>Reads one database cell, by type and column.</summary>
+	public int GetDatabase(int pType, int pColumn)
+	{
+		return pType < 0 || pColumn < 0 || pColumn > MaxDatabaseIndex
+			? 0
+			: _database.TryGetValue(DatabaseKey(pType, pColumn), out var value) ? value : 0;
+	}
+
+	/// <summary>Writes one database cell, by type and column.</summary>
+	/// <returns>False when the type is negative or the column is out of range.</returns>
+	public bool SetDatabase(int pType, int pColumn, int pValue)
+	{
+		if (pType < 0 || pColumn < 0 || pColumn > MaxDatabaseIndex)
+		{
+			return false;
+		}
+		_database[DatabaseKey(pType, pColumn)] = pValue;
+		return true;
+	}
+
+	/// <summary>
+	/// The key one database cell is stored under.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Type and column in one number, and the type is shifted rather
+	/// than multiplied</strong>, so a caller cannot make a large type wrap into
+	/// another type's cells. The shift is 16 because a column of a thousand
+	/// needs ten bits and a shift that small would leave the two fields
+	/// overlapping.
+	/// </remarks>
+	private static long DatabaseKey(int pType, int pColumn)
+	{
+		return ((long)pType << 16) | (uint)pColumn;
+	}
+
+	/// <summary>Empties every band and the database, for a new game.</summary>
 	public void Clear()
 	{
 		foreach (var band in _bands)
 		{
 			band.Clear();
 		}
+		_database.Clear();
 	}
 }

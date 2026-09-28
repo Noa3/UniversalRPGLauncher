@@ -3013,3 +3013,67 @@ Operator durch die VM laufen lassen. **1233/1233**.
 **Mutations** 12 Regeln in einem Lauf, **12 von 12 gefangen** — darunter die
 Division-durch-null-Absicherung, die Zehntelgrad-Skala, Abschneiden statt Rundung,
 der nackte Arkustangens und `AddVariable`, das still zu Zuweisung wurde.
+
+## WOLF Band-Offsets — DONE: sie waren geraten, und die Hilfe nennt sie
+
+**Die letzte Karte hat die vier Bänder aus der Hilfe gelesen und ihre Zahlen dann
+geraten.** Sie schrieb „ein Millionenblock pro Band" und ging weiter, und die Tests
+behaupteten diese Vermutung und waren grün. **Die Hilfe nennt sie, auf zwei
+verschiedenen Seiten, und sie sind keine Reihe:** `1100000～:マップセルフ変数` und
+`1600000～:コモンセルフ変数` aus dem Seitenaufruf des Ko单调Events, `2000000` für
+Normalvariable 0, `3000000` für Stringvariable 0.
+
+**Ein berechneter Block legte Map-Self auf 1.000.000, Common-Self auf 2.000.000 —
+eine Normalvariable — und das Systemband auf 3.000.000, also das Stringband.** Ein
+Spiel, das seine Systemuhr aus dem Stringbereich las, hätte eine Zahl bekommen, und
+die Zahl wäre plausibel gewesen.
+
+**Ein Mutationslauf hat es nicht gefangen, und das ist die Lehre.** Die zwölf Regeln
+der Operator-Karte mutierten das Verhalten um die Offsets und alle wurden gefangen,
+weil die Tests mit dem Code übereinstimmten. **Zwei falsche Zahlen, die sich
+einig sind, ergeben eine grüne Suite.** Die Prüfung, die es gefangen hätte, war das
+Lesen der Quelle — und die Offsets stehen jetzt in einem Test, der die Seite nennt,
+aus der sie stammen.
+
+**Die Million selbst ist eine Referenz ohne Band, und die ganze Lücke sagt das.**
+Die Hilfe sagt „eine Million oder mehr wird aufgerufen", also ist 1.000.000 eine
+Referenz — und sie liegt unter der Map-Self-Basis, also zeigt sie auf nichts. Das ist
+eine andere Antwort als „keine Referenz", und der Code hat zwei Codes dafür: `-1` ist
+ein Wert, `-2` eine Referenz ohne Band. **Ein Leser, der sie verschmilzt, würde
+einem Aufrufer sagen, 1.050.000 sei ein Wert — und wer ihn speichert, behält einen
+Zeiger in einer Variablen, die das Spiel als Zahl liest.**
+
+**Das Stringband wird erkannt und abgelehnt.** Dieser Leser hat keine
+Stringvariablen, und das sagt er, statt in das Normalband durchzufallen und einer
+String-Referenz eine Zahl zu antworten. **Die Variable-Datenbank ist gar kein Band:**
+Die Bedingungshilfe sagt, dass beim Datenbank-Vergleich kein Variablenaufruf wie
+`1600000` angegeben werden darf, also hat sie keinen Offset, über den sie indiziert
+werden könnte. Sie wird nach Typ und Spalte adressiert, in einem eigenen Speicher,
+geschlüsselt mit verschobenem Typ statt multipliziert, damit ein großer Typ nicht in
+die Zellen eines anderen Typs überläuft.
+
+## Und die Schalter waren ein Wörterbuch, wo die Hilfe zwei Bereiche nennt
+
+**0 und aufwärts adressieren ein Map-Event, 500.000 und aufwärts ein Koモン-Event.**
+Die VM hatte ein `Dictionary<int, bool>`, also **kollidierten ein Map-Schalter und
+ein Common-Schalter mit demselben Index** — und die Kollision ist still, weil beide
+Lesen mit einem Boolean antworten und nur mit dem falschen.
+
+**Die Basis ist 500.000 und nicht eine Million**, und die Variablenbänder beginnen
+bei 1.100.000; ein Leser, der das Variablen-Schema wiederverwendete, ließe 100.001 bis
+500.000 unerreichbar, und ein Spiel mit einem Schalter dort fände ihn dauerhaft aus.
+**Eine Schalternummer außerhalb beider Bereiche ändert nichts**, denn ein Leser,
+der das Wörterbuch wachsen ließe, speicherte einen Schalter, den der Editor nicht hält,
+und der nächste Ladevorgang trüge ihn nicht — der Schalter funktionierte in der
+Sitzung und verschwände danach.
+
+**Ein nicht gesetzter Schalter ist aus, und ein nicht lesbarer auch.** Die
+Bedingungsliste lautet „an" und „aus" und nichts sonst, also ist ein unlesbarer
+Schalter aus — was ein Spiel vor dem Setzen ohnehin erwartet.
+
+**Test evidence** `test_wolf_switches.cs` (7) und `test_wolf_variable_bands.cs`
+(13, davon drei neu geschrieben, weil sie die geratenen Offsets behauptet hatten).
+**1243/1243**, mit Operator-, Vergleichs- und Laufzeitdatei nachgemessen.
+**Mutations** 13 Regeln in einem Lauf, **13 von 13 gefangen** — darunter jeder der
+drei Offsets, die Lücke mit dem falschen Code, die Datenbank nur nach Spalte
+geschlüsselt und die zwei Schalterkarten wieder zu einer gefaltet.
