@@ -2483,3 +2483,40 @@ abgelehnt, und der Test prüft, dass nichts angewandt wurde.
 Befehlen und der Werteklasse, neun im Save-Codec, darunter „der Codec schreibt
 überhaupt keine Helden" und „der Codec schreibt jeden Helden, ob berührt oder
 nicht".
+
+## K-136 `11840` / `11930` / `11960` — DONE: drei Ein-Zeiler und ein Default, der zählt
+
+**Die Referenz hat drei Ein-Zeiler-Methoden gleicher Form** —
+`SetAllowEscape(com.parameters[0] != 0)` und seine zwei Geschwister — und
+**das ist der ganze Befehl.** Ein Handler und drei Konstanten ist hier die
+ehrliche Lesart und keine Ersparnis.
+
+**Eine Null ist eine Entnahme und kein „keine Änderung".** Eine Cutscene, die
+das Menü sperrt, und eine, die es wieder freigibt, schreiben dasselbe Feld —
+**wer das Flag nur je auf true setzen könnte, könnte einem Spieler sein Menü
+nie zurückgeben**, und ein Spiel mit gesperrter Menü-Cutscene bliebe im
+gesperrten Menü stecken.
+
+**Jedes Ungleich-Null ist erlaubt, nicht nur eine Eins** — die Referenz prüft
+`!= 0`, nicht `== 1`, also wird ein Spiel nicht abgelehnt, das eine berechnete
+Wahrheitswert übergibt.
+
+**Alle drei stehen standardmäßig auf erlaubt, und das ist ein echter Default
+und keine Vermutung.** Eine Datenbank, die keinen dieser Befehle je lief, hat
+alle drei gesetzt, also ist ein neues Spiel ein Spiel, in dem der Spieler das
+Menü öffnen, speichern und fliehen darf. **Wer auf verboten defaultete, machte
+jedes unberührte Spiel unspielbar, sobald der Spieler Escape drückt** — und
+kein Test eines Befehls hätte das je gefunden, denn ein Spiel ohne Befehle ist
+der Fall, für den niemand einen Test schreibt. `Test_ANewGameAllowsEverything`
+existiert genau dafür.
+
+**Jeder Befehl schreibt sein eigenes Flag und lässt die anderen zwei stehen.**
+Wer alle drei aus Defaults schriebe, entsperrte eine gerade gesperrte Cutscene.
+Der Setter ist privat hinter einem `SetAccess`, aus demselben Grund wie der
+Timer `SetTimer` und `StartTimer` statt eines öffentlichen Feldes hat: Die
+Kollabierung zweier Operationen hat einmal eine Save-Datei gekostet.
+
+**Test evidence** `test_rm2k_access_commands.cs` (5). **1119/1119**.
+**Mutations** 8 Regeln, **8 von 8 gefangen** — darunter jede der drei Befehle,
+die die anderen zwei Flags aus Defaults statt aus dem aktuellen Stand schreibt,
+also genau der Fehler, den diese Familie teilt.

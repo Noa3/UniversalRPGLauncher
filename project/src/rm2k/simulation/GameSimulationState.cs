@@ -196,6 +196,45 @@ public sealed class GameSimulationState
         return (x, y);
     }
 
+    /// <summary>
+    /// Whether the player may leave a battle with the escape command, from
+    /// <c>11840 Change Escape Access</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>All three access flags default to allowed, and that is a real
+    /// default and not a guess</strong> — a database that never ran one of
+    /// these commands has all three set, so a new game is a game the player
+    /// may open the menu in, save from and escape from. A reader that
+    /// defaulted to forbidden would make every untouched game unplayable the
+    /// moment the player pressed Escape.
+    /// </remarks>
+    public bool AllowEscape { get; private set; } = true;
+
+    /// <summary>Whether the player may save, from <c>11930</c>.</summary>
+    public bool AllowSave { get; private set; } = true;
+
+    /// <summary>Whether the player may open the menu, from <c>11960</c>.</summary>
+    public bool AllowMenu { get; private set; } = true;
+
+    /// <summary>
+    /// Sets or clears one of the three access rights.
+    /// </summary>
+    /// <remarks>
+    /// The setter is private on purpose. A timer can only be set through
+    /// <see cref="SetTimer"/> and only started through
+    /// <see cref="StartTimer"/>, because the two are different operations that
+    /// were once collapsed and the collapse cost a save file. The access flags
+    /// are a single assignment each, so one method is enough — but it is one
+    /// method and not a public setter, so the next reader does not have to
+    /// rediscover that the three of them move together.
+    /// </remarks>
+    public void SetAccess(bool pEscape, bool pSave, bool pMenu)
+    {
+        AllowEscape = pEscape;
+        AllowSave = pSave;
+        AllowMenu = pMenu;
+    }
+
     public bool Timer1Active { get; private set; }
     public bool Timer2Active { get; private set; }
     public int Timer1Seconds { get; private set; }
@@ -896,6 +935,10 @@ public sealed class GameSimulationState
         UpperLayer = null; UpperPassability = null;
         Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); BattleCommands.Clear();
         ActorValues.Clear(); CurrentHp.Clear(); CurrentSp.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
+        // **The access flags go back to allowed with everything else.** A new
+        // game is a game the player may save and escape from, and a reset that
+        // left a cutscene's restrictions in place would lock the next game.
+        SetAccess(pEscape: true, pSave: true, pMenu: true);
         PlayerIsHidden = false; PlayerIsThrough = false;
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;

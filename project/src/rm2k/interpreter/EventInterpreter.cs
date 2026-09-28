@@ -143,6 +143,17 @@ public sealed class EventInterpreter
 	/// EasyRPG's <c>CommandMemorizeLocation</c>, whose <c>CmdSetup</c>
 	/// gives it a minimum width of 3.
 	/// </summary>
+	/// <summary>
+	/// 11840, 11930 and 11960, the three access commands: Change Escape
+	/// Access, Change Save Access and Change Main Menu Access.
+	/// </summary>
+	/// <remarks>
+	/// The reference has three one-line methods with the same shape, so one
+	/// handler and three constants is the honest reading and not a saving.
+	/// </remarks>
+	public const int ChangeEscapeAccess = 11840;
+	public const int ChangeSaveAccess = 11930;
+	public const int ChangeMainMenuAccess = 11960;
 	public const int MemorizeLocation = 10820;
 
 	public const int MoveEvent = 11330;
@@ -481,6 +492,18 @@ public sealed class EventInterpreter
 
 			case ErasePicture:
 				ExecuteErasePicture(cmd);
+				return Advance();
+
+			case ChangeEscapeAccess:
+				ExecuteAccessChange(cmd, pWhich: AccessFlag.Escape);
+				return Advance();
+
+			case ChangeSaveAccess:
+				ExecuteAccessChange(cmd, pWhich: AccessFlag.Save);
+				return Advance();
+
+			case ChangeMainMenuAccess:
+				ExecuteAccessChange(cmd, pWhich: AccessFlag.Menu);
 				return Advance();
 
 			case MemorizeLocation:
@@ -2146,6 +2169,64 @@ public sealed class EventInterpreter
 	/// rather than implementing a half from imagination.
 	/// </para>
 	/// </remarks>
+/// <summary>Which of the three player access rights a command addresses.</summary>
+private enum AccessFlag
+{
+	Escape,
+	Save,
+	Menu,
+}
+
+/// <summary>
+/// 11840, 11930 and 11960, from EasyRPG's <c>CommandChangeEscapeAccess</c>,
+/// <c>CommandChangeSaveAccess</c> and <c>CommandChangeMainMenuAccess</c>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// All three are one line in the reference —
+/// <c>SetAllowEscape(com.parameters[0] != 0)</c> and its two siblings — and
+/// <strong>that is the whole command</strong>. A zero is therefore not "no
+/// change" but a removal: a cutscene that locks the menu and a cutscene that
+/// unlocks it again write the same field, and **a reader that only ever set
+/// it to true could never give a player their menu back.**
+/// </para>
+/// <para>
+/// One parameter is the width, and the commands carry no more.
+/// </para>
+/// </remarks>
+private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
+{
+	if (pCmd.Parameters.Count < 1)
+	{
+		Malformed("Change access");
+		return;
+	}
+	var allowed = pCmd.Parameters[0] != 0;
+	// **One call, and the two other flags come along unchanged.** A reader
+	// that only ever wrote the flag its command named could never give a
+	// player their menu back, and one that wrote all three from defaults
+	// would unlock a cutscene the game had just locked.
+	switch (pWhich)
+	{
+		case AccessFlag.Escape:
+			_state.SetAccess(allowed, _state.AllowSave, _state.AllowMenu);
+			break;
+		case AccessFlag.Save:
+			_state.SetAccess(_state.AllowEscape, allowed, _state.AllowMenu);
+			break;
+		case AccessFlag.Menu:
+			_state.SetAccess(_state.AllowEscape, _state.AllowSave, allowed);
+			break;
+		default:
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change access: the flag is not one of the three");
+			return;
+	}
+	_state.AddDiagnostic(
+		$"[Event {_eventId}] Change access: {pWhich} is now {allowed}, from a"
+		+ $" {pCmd.Parameters[0]}");
+}
+
 	private void ExecuteMemorizeLocation(Rm2kMap.EventCommand pCmd)
 	{
 		// CmdSetup minimum width 3.

@@ -2592,7 +2592,43 @@ look for the next island of that shape.**
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10920` | common event, flee, combo, class |
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
+| ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `11840`, `11930` and `11960` are done — three one-liners and a default that matters
+
+**The reference has three one-line methods with the same shape** —
+`SetAllowEscape(com.parameters[0] != 0)` and its two siblings — and **that is
+the whole command.** One handler and three constants is the honest reading,
+not a saving.
+
+**A zero is a removal and not "no change".** A cutscene that locks the menu and
+a cutscene that unlocks it again write the same field, so **a reader that only
+ever set the flag to true could never give a player their menu back**, and a
+game with a locked-menu cutscene would be stuck in a locked menu.
+
+**Any non-zero is allowed, not just one** — the reference tests `!= 0` and not
+`== 1`, so a game that passed a computed boolean is not refused.
+
+**All three default to allowed, and that is a real default and not a guess.**
+A database that never ran one of these commands has all three set, so a new
+game is a game the player may open the menu in, save from and escape from.
+**A reader that defaulted to forbidden would make every untouched game
+unplayable the moment the player pressed Escape** — and no test of a command
+would ever have found it, because a command-free game is the case nobody
+writes a test for. `Test_ANewGameAllowsEverything` exists for exactly that.
+
+**Each command writes its own flag and leaves the other two alone.** A reader
+that wrote all three from defaults would unlock a cutscene the game had just
+locked. The setter is private behind one `SetAccess`, for the same reason the
+timer has `SetTimer` and `StartTimer` and not a public field: the collapse of
+two operations cost a save file once already.
+
+**Test evidence** `test_rm2k_access_commands.cs`, 5 tests.
+**1119/1119**, `TestRm2kAccessCommands: 5/5`.
+**Mutations** Eight rules, **8 of 8 caught** — including each of the three
+commands writing the other two flags from defaults instead of from the
+current state, which is the bug the family shares.
 
 ## `10430`, `10460` and `10470` are done — and the save codec had no idea actors existed
 
