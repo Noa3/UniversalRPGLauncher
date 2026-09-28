@@ -31,8 +31,12 @@ public partial class TestGameSimulationState : TestBase
 		AssertEq(_state.ActiveTroopId, -1);
 		AssertFalse(_state.IsBattleActive);
 		AssertEq(_state.BattlePhase, 0);
+		// **No scene is current, and the stack is empty.** A previous version
+		// asserted "Menu" here and pushed it onto the stack, but "Menu" is not
+		// an RPG_RT scene name — it was an invention that made this test pass
+		// against a fiction, and it contradicted the line above it.
 		AssertEq(_state.SceneStack.Count, 0);
-		AssertEq(_state.CurrentScene, "Menu");
+		AssertEq(_state.CurrentScene, "");
 		AssertEq(_state.Diagnostics.Count, 0);
 	}
 
@@ -74,8 +78,16 @@ public partial class TestGameSimulationState : TestBase
 		AssertEq(_state.ActiveTroopId, -1);
 		AssertFalse(_state.IsBattleActive);
 		AssertEq(_state.BattlePhase, -1);
-		AssertEq(_state.SceneStack.Count, 1);
-		AssertEq(_state.CurrentScene, "Menu");
+		// **A new game opens nothing.** The reset used to push "Menu" onto the
+		// stack and make it current, which meant a new game began with a scene
+		// open and a stack that had to be popped before anything else could
+		// happen.
+		AssertEq(_state.SceneStack.Count, 0);
+		AssertEq(_state.CurrentScene, "");
+		AssertFalse(_state.ExitRequested);
+		AssertFalse(_state.SupportsRpg2k3ECommands);
+		AssertEq(_state.AtbWaitMode, true);
+		AssertFalse(_state.FullscreenRequested);
 		AssertEq(_state.Diagnostics.Count, 0);
 	}
 

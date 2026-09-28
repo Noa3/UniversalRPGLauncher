@@ -277,7 +277,40 @@ public sealed class GameSimulationState
 
     // Scene stack
     public Godot.Collections.Array<string> SceneStack { get; init; } = new();
-    public string CurrentScene { get; set; } = "Menu";
+    public string CurrentScene { get; set; } = "";
+
+    /// <summary>
+    /// Whether the game declares the RPG2K3 E commands, which is the gate on
+    /// all five menu commands.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is read from the game, never assumed.</strong> EasyRPG's
+    /// <c>Player::IsRPG2k3ECommands()</c> decides it from the save data's
+    /// runtime flags, and every one of the five commands does nothing at all
+    /// when the answer is no. A reader that defaulted it to true would open
+    /// menus in a 2000 game that never asked for one, and a reader that
+    /// defaulted it to false would refuse them in a 2003 game. <em>The default
+    /// is false because a game that has not said yes has not said yes.</em>
+    /// </remarks>
+    public bool SupportsRpg2k3ECommands { get; set; }
+
+    /// <summary>Whether 5002 asked the game to exit.</summary>
+    public bool ExitRequested { get; set; }
+
+    /// <summary>
+    /// Whether the ATB gauge waits for the player's turn, toggled by 5003.
+    /// </summary>
+    public bool AtbWaitMode { get; set; } = true;
+
+    /// <summary>Whether 5004 asked the display to change, not a state of it.</summary>
+    /// <remarks>
+    /// <strong>A request, not a result.</strong> The engine asks the display
+    /// layer and the display layer may refuse — EasyRPG checks
+    /// <c>IsOptionVisible</c> and <c>IsLocked</c> first and logs
+    /// "not supported on this platform". A boolean that claimed to be the
+    /// screen state would be a claim this reader cannot keep.
+    /// </remarks>
+    public bool FullscreenRequested { get; set; }
 
     // Audio positions
     public double BgmPosition { get; set; }
@@ -574,7 +607,13 @@ public sealed class GameSimulationState
         Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;
-        SceneStack.Clear(); SceneStack.Add("Menu"); CurrentScene = "Menu";
+        // **The stack starts empty, not with an invented "Menu" scene.** A
+        // first draft pushed "Menu" and made it the current scene, which is
+        // not an RPG_RT scene name and made every scene test pass against a
+        // fiction. An empty stack says what is true: nothing is open.
+        SceneStack.Clear(); CurrentScene = "";
+        SupportsRpg2k3ECommands = false; ExitRequested = false;
+        AtbWaitMode = true; FullscreenRequested = false;
         BgmPosition = 0; BgsPosition = 0; MePosition = 0; SePosition = 0;
         SaveTimestamp = 0; SaveComment = "";
         ClearDiagnostics();

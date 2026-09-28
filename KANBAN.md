@@ -3252,12 +3252,48 @@ not a bool**, and the source says so in a comment.
 
 ## What is still not done, and why the card stays `VERIFY`
 
-- **The five menu commands are not executed.** They are named, range-tested
-  and parameter-verified, and no reader opens a load menu or toggles
-  fullscreen. EasyRPG gates all five on `Player::IsRPG2k3ECommands()` and
-  **returns true — a silent no-op — on any other engine version.** That is the
-  worst possible answer in an interpreter, because a player who pressed the
-  button to open the load menu watches the game do nothing.
+- **`1009` is decoded, not executed.** The battle command list is not a thing
+  this reader changes yet.
+- **`11610` is read, not wired.** `Rm2kKeyInput.Read` produces the set of keys
+  a command accepts and the value each produces. Nothing prompts yet, because
+  there is no window to prompt in.
+
+## The five menu commands now run — DONE
+
+`5001` and `5005` push a scene and **hold the page**, from the source's
+`return false` after `SetRequestedScene`. `5002`, `5003` and `5004` run through
+and advance. A scene that is already current is not pushed twice.
+
+**The gate is the whole command, and this reader does not copy the no-op.**
+EasyRPG guards all five on `Player::IsRPG2k3ECommands()` and returns `true` on
+any other game — a silent no-op, which is a bug that survives every test
+because nothing changed. This reader **refuses visibly**: a diagnostic names
+the command by its liblcf name, says it is an E command, and says that nothing
+opened. `SupportsRpg2k3ECommands` defaults to **false**, because a game that
+has not said yes has not said yes.
+
+**And the scene stack no longer starts with an invented scene.** It used to
+push `"Menu"` and make it current on reset. `"Menu"` is not an RPG_RT scene
+name; it was a fiction that made every scene test pass against it, and it
+contradicted the line above it, which asserted the stack was empty. A new game
+now starts with nothing open, and an old test was corrected rather than
+weakened.
+
+**`FullscreenRequested` is a request, not a state.** The engine asks the display
+layer and the display layer may refuse — EasyRPG checks `IsOptionVisible` and
+`IsLocked` and logs "not supported on this platform". A boolean claiming to be
+the screen state would be a claim this reader cannot keep.
+
+**Test evidence** `test_rm2k_menu_execution.cs` (9 tests, through
+`ExecuteFrame`, the real runner), `test_game_simulation_state.cs` corrected.
+**1005/1005**, `TestRm2kMenuExecution: 9/9`, `TestGameSimulationState: 20/20`.
+**Mutations** Eight effective rules over two runs, **8 of 8 caught**.
+
+**A first draft asserted on prose it had invented** — on the phrase "did not
+declare", when the diagnostic said "does not declare" — and the failure was the
+test's. **Asserting on prose a test made up makes the test the thing that has
+to be right, and it was the wrong one.** The assertions are now on the words
+that carry the meaning.
 - **`1009` is decoded, not executed.** The battle command list is not a thing
   this reader changes yet.
 - **`11610` is read, not wired.** `Rm2kKeyInput.Read` produces the set of keys

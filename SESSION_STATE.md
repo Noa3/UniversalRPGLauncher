@@ -1995,3 +1995,54 @@ zuerst geprüft**, damit DECISION auf der linken Maustaste kein Konflikt ist.
 **Test evidence** `test_rm2k_key_input.cs` (10), `test_rm2k_menu_commands.cs` (6).
 **996/996**, `TestRm2kKeyInput: 10/10`, `TestRm2kMenuCommands: 6/6`.
 **Mutations** 9 von 9 gefangen.
+
+## K-135 Die fünf Menübefehle laufen jetzt — DONE
+
+`5001` und `5005` schieben eine Szene und **halten die Seite an**, aus dem
+`return false` der Quelle nach `SetRequestedScene`. `5002`, `5003`, `5004` laufen
+durch. Eine bereits aktuelle Szene wird nicht doppelt gepusht.
+
+**Das Gate ist der ganze Befehl, und dieses Repository kopiert das No-Op nicht.**
+EasyRPG gated alle fünf auf `IsRPG2k3ECommands()` und gibt sonst `true`
+zurück — ein stilles No-Op, **ein Bug, der jeden Test übersteht, weil sich
+nichts geändert hat.** Dieser Leser **verweigert sichtbar**: eine Diagnose
+nennt den Befehl nach seinem liblcf-Namen, sagt, dass es ein E-Befehl ist, und
+dass nichts geöffnet wurde. `SupportsRpg2k3ECommands` ist **per Default
+`false`**, denn ein Spiel, das nicht ja gesagt hat, hat nicht ja gesagt.
+
+**Und der Szenen-Stack startet nicht mehr mit einer erfundenen Szene.** Er
+schob vorher `"Menu"` und machte sie bei Reset aktuell. **`"Menu"` ist kein
+RPG_RT-Szenenname** — es war eine Fiktion, gegen die jeder Szenentest grün war,
+und sie widersprach der Zeile darüber, die einen leeren Stack behauptete. Ein
+altes Test wurde korrigiert, nicht geschwächt.
+
+**`FullscreenRequested` ist eine Anfrage, kein Zustand.** Die Engine fragt die
+Anzeigeschicht, und die darf verweigern — EasyRPG prüft `IsOptionVisible` und
+`IsLocked`. Ein Boolean, der den Bildschirmzustand behauptete, wäre eine
+Behauptung, die dieser Leser nicht halten kann.
+
+**Test evidence** `test_rm2k_menu_execution.cs` (9, über `ExecuteFrame`, den
+echten Runner), `test_game_simulation_state.cs` korrigiert.
+**1005/1005**, `TestRm2kMenuExecution: 9/9`, `TestGameSimulationState: 20/20`.
+**Mutations** 8 von 8 gefangen.
+
+**Ein erster Entwurf prüfte auf Prosa, die er selbst erfunden hatte** — auf die
+Formulierung „did not declare", während die Diagnose „does not declare" sagt.
+**Auf erfundene Prosa zu prüfen macht das Test zum Ding, das recht haben muss —
+und es war das falsche Ding.** Die Prüfungen liegen jetzt auf den Wörtern, die
+die Bedeutung tragen.
+
+### Zwei eigene Werkzeugfehler in diesem Zyklus
+
+1. `GetActors`-Anker: die erste Mutantenrunde hatte zwei `NOMATCH` und ein
+   `BROKE` — Ankerprobleme, keine Befunde. **Die Regel zählt erst, wenn ihr
+   Anker sitzt.**
+2. `web_search` und `web_extract` sind in dieser Umgebung blockiert
+   (`ddgs` fehlt, Extract-Backend nicht gesetzt). **Die EasyRPG- und
+   liblcf-Quellen wurden deshalb per `curl` und `git clone` geholt** — das ist
+   kein Umweg, sondern der direktere Weg zu derselben Quelle.
+
+### Nächster Schritt
+
+`1009` anwenden (Battle-Command-Liste ändern) und `11610` verdrahten. Beides
+braucht keine Entscheidung vom Nutzer.

@@ -377,10 +377,110 @@ public sealed class EventInterpreter
 				ExecuteEndLoop();
 				return true; // index points at the matching Loop command
 
+			case OpenLoadMenu:
+			case ExitGame:
+			case ToggleAtbMode:
+			case ToggleFullscreen:
+			case OpenVideoOptions:
+				return ExecuteMenuCommand(cmd);
+
 			default:
 				_state.AddDiagnostic($"[Event {_eventId}] Unsupported RM2K command {cmd.Code} skipped");
 				return Advance();
 		}
+	}
+
+	/// <summary>
+	/// The five RPG2K3 menu commands, and the rule that decides whether they do
+	/// anything at all.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// **The version gate is the whole command.** EasyRPG's
+	/// <c>Player::IsRPG2k3ECommands()</c> guards all five, and every one of them
+	/// <c>return true</c> — a silent no-op — on a game that is not RPG2K3 E
+	/// commands. That is the worst answer an interpreter can give, because a
+	/// player who pressed a button to open the load menu watches the game do
+	/// nothing, and nothing in the log says why.
+	/// </para>
+	/// <para>
+	/// <strong>So this reader does not copy the no-op.</strong> It refuses
+	/// visibly: a diagnostic names the command and says the game is not an
+	/// E-command game. <em>A command that silently does nothing is a bug that
+	/// survives every test, because nothing changed.</em>
+	/// </para>
+	/// <para>
+	/// <strong>On an E-command game the menu opens and the interpreter waits
+	/// for it</strong>, which is the second half of the rule: EasyRPG returns
+	/// <c>false</c> from <c>CommandOpenVideoOptions</c> after pushing a scene,
+	/// so the page does not advance until the scene closes. A reader that
+	/// advanced immediately would run the rest of the page behind a menu nobody
+	/// had opened yet.
+	/// </para>
+	/// </remarks>
+	private bool ExecuteMenuCommand(Rm2kMap.EventCommand pCommand)
+	{
+		if (!_state.SupportsRpg2k3ECommands)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] {DescribeMenuCommand(pCommand.Code)} is an"
+				+ " RPG2K3 E command and this game does not declare them;"
+				+ " skipped, and nothing opened");
+			return Advance();
+		}
+
+		switch (pCommand.Code)
+		{
+			case OpenLoadMenu:
+				return PushScene("Load");
+			case OpenVideoOptions:
+				return PushScene("Settings");
+			case ExitGame:
+				_state.ExitRequested = true;
+				return Advance();
+			case ToggleAtbMode:
+				_state.AtbWaitMode = !_state.AtbWaitMode;
+				return Advance();
+			case ToggleFullscreen:
+				_state.FullscreenRequested = !_state.FullscreenRequested;
+				return Advance();
+			default:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] {DescribeMenuCommand(pCommand.Code)} is"
+					+ " not one of the five and was refused rather than guessed at");
+				return Advance();
+		}
+	}
+
+	/// <summary>
+	/// Pushes a scene and holds the page, from the source's <c>return false</c>.
+	/// </summary>
+	private bool PushScene(string pScene)
+	{
+		if (_state.CurrentScene != pScene)
+		{
+			_state.SceneStack.Add(pScene);
+			_state.CurrentScene = pScene;
+		}
+		// The page does not advance. It advances when the scene is popped, which
+		// is the caller's next decision and not this command's.
+		return true;
+	}
+
+	/// <summary>
+	/// The liblcf names of the five, for a diagnostic a reader can act on.
+	/// </summary>
+	private static string DescribeMenuCommand(int pCode)
+	{
+		return pCode switch
+		{
+			OpenLoadMenu => "Open Load Menu (5001)",
+			ExitGame => "Exit Game (5002)",
+			ToggleAtbMode => "Toggle ATB Mode (5003)",
+			ToggleFullscreen => "Toggle Fullscreen (5004)",
+			OpenVideoOptions => "Open Video Options (5005)",
+			_ => $"Command {pCode}",
+		};
 	}
 
 	private bool Advance()
