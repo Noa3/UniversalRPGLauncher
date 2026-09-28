@@ -2191,3 +2191,49 @@ ersten. **Eine Zählung, die die Struktur nicht prüft, zählt Dokumente statt
 Karten.** Gegen `git show HEAD` verifiziert: +1 Karte, +1 Zeile, Struktur
 unverändert.
 
+## K-136 `12110` / `12120` — DONE
+
+**Die beiden, die entscheiden, *wohin* eine Seite geht statt *was* sie tut.**
+
+**Die Suche beginnt bei null, nicht hier.** Die Referenz:
+`for (int idx = 0; idx < list.size(); idx++)`. Also ist **ein Rücksprung eine
+Schleife** — so schreibt ein Autor eine ohne Schleifenbefehl. Wer ab hier
+vorwärts sucht, macht aus jedem Rücksprung ein Durchfallen: **ein Spiel, das mit
+einem Sprung schleift, liefe seinen Rumpf einmal und hörte auf.**
+
+**Der Index landet auf der Marke, und die Regel der Engine sagt warum.** EasyRPG
+inkrementiert nur, wenn der Befehl den Index nicht bewegt hat:
+
+```cpp
+if (index_before_exec == frame->current_command) {
+    frame->current_command++;
+}
+```
+
+Ein Sprung, der seine Marke findet, hat den Index bewegt → kein Inkrement → die
+Seite landet **auf** der Marke, und die Marke ist ein No-Op, das einen Frame
+kostet. Ein Sprung, der **nichts** findet, lässt den Index stehen → die Regel
+inkrementiert → die Seite läuft weiter.
+
+**Zwei Entwürfe hatten das in entgegengesetzter Richtung falsch, beide still.**
+Einer gab ein nacktes `true` zurück und ließ die Seite **für immer auf dem Sprung
+stehen** — das sieht wie ein Hänger aus. Der andere inkrementierte bedingungslos
+und übersprang das No-Op, das das Format dort absichtlich hinstellt. Nur die
+bedingte Form ist beides. **Eine Suite, die Befehle statt Frames zählt, hätte die
+beiden nicht unterscheiden können.**
+
+**Eine Marke tut gar nichts.** Die Referenz hat dafür `return true` und sonst
+nichts — keine Methode, keine Parameter. **Eine Marke ist ein Name, kein Befehl**,
+und wer ihr eine Wirkung gibt, erfindet eine Semantik, die das Format nicht hat.
+Eine Marke ohne Parameter matcht nichts.
+
+**Test evidence** `test_rm2k_labels.cs` (8). **1043/1043**.
+**Mutations** 6 von 6 gefangen (ein siebter Versuch war ein erfundener Anker).
+
+### Ein weiterer API-Fehler von mir
+
+`Control Variables` hat **sechs** Parameter
+(`[targetMode, startId, endId, op, operandType, operand]`), ich schrieb fünf.
+Die fehlende End-ID verschob jedes Feld, der Befehl wurde abgelehnt, und **nichts
+wurde je markiert** — der Test „der Rücksprung schleift" prüfte damit eine Seite,
+in der nie etwas lief.

@@ -64,6 +64,24 @@ public sealed class EventInterpreter
 	/// <summary>11120, Move Picture.</summary>
 	public const int MovePicture = 11120;
 
+	/// <summary>
+	/// 12110, Label, from liblcf <c>Code::Label</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The reference's case for it is <c>return true</c> and nothing
+	/// else</strong> — it has no method, no parameters read, and no effect. A
+	/// label is a name, not an instruction, and a reader that gave it one would
+	/// invent a semantic the format does not have.
+	/// </remarks>
+	public const int Label = 12110;
+
+	/// <summary>
+	/// 12120, Jump to Label, from liblcf <c>Code::JumpToLabel</c> and EasyRPG's
+	/// <c>CommandJumpToLabel</c>, whose <c>CmdSetup</c> gives it a minimum
+	/// width of 1.
+	/// </summary>
+	public const int JumpToLabel = 12120;
+
 	public const int FlashScreen = 11040;
 	public const int ShakeScreen = 11050;
 	public const int WeatherEffects = 11070;
@@ -397,6 +415,37 @@ public sealed class EventInterpreter
 			case EndBranch:
 				ExecuteEndBranch();
 				return Advance();
+
+			case Label:
+				// `case Cmd::Label: return true;` in the reference. A label is a
+				// name, not an instruction, and giving it an effect would invent
+				// a semantic the format does not have.
+				return Advance();
+
+			case JumpToLabel:
+			{
+				// **The engine's own rule, in full.** EasyRPG increments the
+				// index only when the command left it alone:
+				//
+				//     if (index_before_exec == frame->current_command) {
+				//         frame->current_command++;
+				//     }
+				//
+				// A jump that finds its label moves the index, so it does not
+				// advance — the page lands *on* the label, and the label is a
+				// no-op that costs a frame of its own. A jump that finds
+				// nothing leaves the index where it was, so the rule increments
+				// it and the page carries on.
+				//
+				// **Two drafts got this wrong in opposite directions and both
+				// were silent**: one returned a bare true and left the page on
+				// the jump forever, which looks like a hang; the other advanced
+				// unconditionally and skipped the no-op the format puts there
+				// on purpose. Only the engine's conditional form is both.
+				var before = _commandIndex;
+				ExecuteJumpToLabel(cmd);
+				return _commandIndex == before ? Advance() : IsRunning;
+			}
 
 			case Loop:
 				_loopStack.Push(_commandIndex);
@@ -832,6 +881,81 @@ public sealed class EventInterpreter
 			_state.Variables.Add(0);
 		}
 		_state.Variables[pVariableId - 1] = pValue;
+	}
+
+	/// <summary>
+	/// 12120, Jump to Label, from EasyRPG's <c>CommandJumpToLabel</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The search is <strong>from the beginning of the page, not from here</strong>
+	/// — <c>for (int idx = 0; idx &lt; list.size(); idx++)</c> — so a jump can
+	/// go backwards, and a backward jump is how an author writes a loop
+	/// without a loop command. A reader that searched forwards from the current
+	/// index would turn every backward jump into a fall-through to the end of
+	/// the page.
+	/// </para>
+	/// <para>
+	/// <strong>The index lands on the label, not after it.</strong>
+	/// <c>index = idx</c> and the label itself does nothing, so the next step
+	/// runs the label and then the instruction after it. Pointing past the label
+	/// would work the same way — which is why this looks like a detail and is
+	/// not: <em>the loop the search runs is what makes a missing label
+	/// distinguishable from a label that is simply the next command.</em>
+	/// </para>
+	/// <para>
+	/// <strong>A label that is not there leaves the page where it was</strong>,
+	/// because the loop finds nothing and the assignment never runs. The
+	/// reference is silent about it, and a reader that reported a failure would
+	/// turn a page that merely falls through into a page that stops with an
+	/// error — so this one says so and carries on.
+	/// </para>
+	/// </remarks>
+	private void ExecuteJumpToLabel(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 1.
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Jump to label");
+			return;
+		}
+		var labelId = pCmd.Parameters[0];
+		var found = -1;
+		// **From the start of the page, not from here.** A backward jump is a
+		// loop, and the reference's own loop begins at zero.
+		for (var idx = 0; idx < _commands.Count; idx++)
+		{
+			if (_commands[idx].Code != Label)
+			{
+				continue;
+			}
+			if (_commands[idx].Parameters.Count == 0
+				|| _commands[idx].Parameters[0] != labelId)
+			{
+				continue;
+			}
+			found = idx;
+			break;
+		}
+		if (found < 0)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Jump to label {labelId}: no such label, and"
+				+ " the reference leaves the page where it was");
+			return;
+		}
+		// On the label itself, and **not** one past it. The engine's own rule
+		// is `if (index_before_exec == frame->current_command) { ++; }`, so a
+		// command that moved the index is not incremented again — and the label
+		// is a no-op that costs a frame of its own before the instruction
+		// behind it.
+		//
+		// A first draft pointed past the label and got a green suite, because
+		// a no-op that is skipped and a no-op that runs differ only in a frame
+		// nobody counts.
+		_commandIndex = found;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Jump to label {labelId} -> index {found}");
 	}
 
 	private void ExecuteChangeBattleCommands(Rm2kMap.EventCommand pCmd)

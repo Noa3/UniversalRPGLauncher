@@ -2582,7 +2582,8 @@ look for the next island of that shape.**
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
-| flow | `12110` `12120` `12420` `12510` | **label and jump-to-label, game over, return to title** |
+| flow | `12420` `12510` | game over, return to title |
+| labels | ~~`12110` `12120`~~ | **~~label and jump-to-label — DONE, see below~~** |
 | vehicles | `10840` `10850` `10650` | enter/exit vehicle, set vehicle location, change vehicle graphic |
 | face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
@@ -2604,6 +2605,48 @@ which looks like a game that quietly skipped half its script.
   real fixture.
 - Each is mutation checked, and a rule that survives is fixed or named as a
   harness fault.
+
+## `12110` and `12120` are done — the two that decide where a page goes
+
+They were the sharpest entry on this list, because they are the only two that
+change *where* the page goes rather than what it does.
+
+**The search starts at zero, not from here.** The reference's loop is
+`for (int idx = 0; idx < list.size(); idx++)`, so a **backward jump is a loop**,
+and that is how an author writes one without a loop command. A reader that
+searched forwards from the current index would turn every backward jump into a
+fall-through — a game that loops with a jump would run its body once and stop.
+
+**The index lands on the label, and the engine's own rule says why.** EasyRPG
+increments only when the command left the index alone:
+
+```cpp
+if (index_before_exec == frame->current_command) {
+    frame->current_command++;
+}
+```
+
+A jump that finds its label moved the index, so it is not incremented, and the
+page lands *on* the label — a no-op that costs a frame of its own. A jump that
+finds **nothing** leaves the index alone, so the rule increments it and the page
+carries on.
+
+**Two drafts got that wrong in opposite directions and both were silent.** One
+returned a bare `true` and left the page on the jump forever, which looks like a
+hang; the other advanced unconditionally and skipped the no-op the format puts
+there on purpose. Only the conditional form is both. **A suite that counted
+commands rather than frames could not have told the two apart.**
+
+**A label does nothing at all** — the reference's case for it is `return true`
+and nothing else, no method and no parameters read. A label is a name, not an
+instruction, and a reader that gave it an effect would invent a semantic the
+format does not have. A label with no parameters matches nothing, because the
+reference checks `parameters.empty()` first; a reader that defaulted it to zero
+would jump to a command that never said what it was.
+
+**Test evidence** `test_rm2k_labels.cs`, 8 tests through `ExecuteFrame`.
+**1043/1043**, `TestRm2kLabels: 8/8`.
+**Mutations** Six effective rules over two runs, **6 of 6 caught**.
 
 **Why the whole list and not one command**
 
