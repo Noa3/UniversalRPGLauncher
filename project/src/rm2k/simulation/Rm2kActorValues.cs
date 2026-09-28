@@ -57,6 +57,114 @@ public sealed class Rm2kActorValues
 	/// the reference does: <c>SetTitle</c> is its own field, and a game that
 	/// gives a hero a title keeps the database name for the party window.
 	/// </remarks>
+
+	/// <summary>
+	/// The sentinel the reference uses for "this hero still answers to the
+	/// name the database gives".
+	/// </summary>
+	/// <remarks>
+	/// <strong>An empty string is not the same thing.</strong> The reference's
+	/// <c>SetName</c> writes <c>kEmptyName</c> when the new name equals the
+	/// database's, and its <c>GetName</c> falls back to the database only for
+	/// that one value. <strong>A reader that stored "" for "unchanged" would
+	/// have made a hero nameless</strong> — and a save written with "" would
+	/// have lost the distinction between "never renamed" and "renamed to
+	/// nothing", which the reference can tell apart and a save file cannot
+	/// without the sentinel.
+	/// </remarks>
+	public const string UnchangedName = "\u0000";
+
+	/// <summary>
+	/// The name a hero answers to, from <c>10740</c> Enter Hero Name, and the
+	/// sentinel when the hero still answers to the database's name.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Only a name that differs from the database's is stored</strong>,
+	/// and that is the reference's own rule in
+	/// <c>Game_Actor::SetName</c>:
+	/// <c>data.name = (new_name != dbActor-&gt;name) ? new_name :
+	/// kEmptyName</c>. <strong>A reader that stored every name would have put
+	/// a hero's original name into every save file</strong> — which is not
+	/// only wasteful but <em>wrong</em>: rename a hero in the editor and an
+	/// old save would keep the old name instead of the new one.
+	/// </remarks>
+	public string Name { get; set; } = UnchangedName;
+
+	/// <summary>
+	/// Gives a hero a name, and stores nothing when it is the one the
+	/// database already gives.
+	/// </summary>
+	/// <param name="pName">The name the player typed or chose.</param>
+	/// <param name="pDatabaseName">The name that hero's database entry
+	/// carries.</param>
+	/// <remarks>
+	/// <para>
+	/// <strong>This is the reference's own rule, in
+	/// <c>Game_Actor::SetName</c>:</strong>
+	/// <c>data.name = (new_name != dbActor-&gt;name) ? new_name :
+	/// lcf::rpg::SaveActor::kEmptyName</c>. <strong>Only a name that differs
+	/// from the database's is kept</strong> — and that is not a
+	/// simplification. A save file that carried the database name into every
+	/// hero would keep the <em>old</em> name after the game was renamed in
+	/// the editor, <strong>and the reference's save format has a sentinel
+	/// precisely so that distinction survives.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>An empty name is a real name and not the sentinel.</strong> A
+	/// player may call a hero nothing, and the reference stores that as a
+	/// name of zero length — <strong>while the sentinel is a different value
+	/// entirely.</strong> A reader that used "" for "unchanged" would have
+	/// made every renamed hero nameless the moment the save was written.
+	/// </para>
+	/// </remarks>
+	public void SetName(string pName, string pDatabaseName)
+	{
+		Name = pName != pDatabaseName ? pName : UnchangedName;
+	}
+
+	/// <summary>
+	/// The name a hero answers to, given the name its database entry carries.
+	/// </summary>
+	/// <param name="pDatabaseName">The name that hero's database entry
+	/// carries.</param>
+	/// <returns>The saved name, or the database's when none was saved.</returns>
+	/// <remarks>
+	/// <strong>The mirror of <see cref="SetName"/> and its own rule:</strong>
+	/// the reference's <c>GetName</c> falls back to the database only for
+	/// <c>kEmptyName</c> and for nothing else. <strong>A reader that fell back
+	/// for every empty string would have answered with the database's name
+	/// for a hero the player deliberately named nothing</strong>.
+	/// </remarks>
+	public string ResolveName(string pDatabaseName)
+	{
+		return Name != UnchangedName ? Name : pDatabaseName;
+	}
+
+	/// <summary>
+	/// Whether the name screen for this hero should offer the database name.
+	/// </summary>
+	/// <remarks>
+	/// <strong>This is <c>10740</c>'s third parameter and it is a flag and
+	/// not a text.</strong> The reference passes it as
+	/// <c>use_default_name</c> to its name scene, and a reader that treated it
+	/// as part of the name would have shown every hero a name that ends in a
+	/// digit.
+	/// </remarks>
+	public bool OfferDefaultName { get; set; }
+
+	/// <summary>
+	/// The face index the name screen shows, from <c>10740</c>'s second
+	/// parameter.
+	/// </summary>
+	/// <remarks>
+	/// <strong>An index and not a file name.</strong> The reference's
+	/// <c>Scene_Name</c> takes an <c>int</c>, because a face is a position in
+	/// the actor's own face set. <strong>A reader that read the parameter as
+	/// a file name would have looked for a charset called "2"</strong> and
+	/// found nothing, and a game's naming screen would have shown no face at
+	/// all.
+	/// </remarks>
+	public int NameCharsetIndex { get; set; }
 	public string Title { get; set; } = "";
 
 	/// <summary>The walk sprite a hero wears, from <c>10630</c>.</summary>

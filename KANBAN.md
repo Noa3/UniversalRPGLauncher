@@ -4747,6 +4747,55 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 Befehlszeile, und es gehört in eine eigene Karte.
 
 
+## `10740` Enter Hero Name is done — and the sentinel in the save file
+
+**Width 3: the hero, the face index, and a flag.** The reference reads
+`actor_id`, `charset` and `use_default_name` and builds a name scene from all
+three. **The second is an index and not a file name** — a face is a position in
+the actor's own face set, and a reader that read it as a charset name would
+have looked for a file called "2". **And the third is a flag and not text**: a
+reader that treated it as part of a name would have shown every hero a name
+ending in a digit.
+
+**The command writes no name of its own.** The reference hands the work to a
+scene, and the scene writes the name when the player is done — **so a reader
+that stored the name here would have renamed a hero with no prompt at all**,
+which is a different game and a worse one.
+
+### The sentinel, which is the whole reason the command is worth wiring
+
+**The reference's `Game_Actor::SetName` is a comparison and not an
+assignment:**
+
+```
+data.name = (new_name != dbActor->name) ? new_name : SaveActor::kEmptyName;
+```
+
+**Only a name that differs from the database's is kept, and the rest is a
+sentinel.** A save that carried the database name into every hero would keep
+the *old* name after the game was renamed in the editor, and the reference's
+save format has a sentinel precisely so that distinction survives. **And an
+empty name is a real name** — a player may call a hero nothing, and the
+reference stores that as a name of zero length while the sentinel is a
+different value entirely. A reader that used `""` for "unchanged" would have
+made every renamed hero nameless the moment the save was written.
+
+### And looking up is not creating
+
+`CommandEnterHeroName` warns on a null from `GetActor` and moves on.
+`FindActorValues` in the interpreter **created the entry** — so a game that
+named hero 99 would have created hero 99, and that hero would then exist for
+every later command, in the party window and in the save file. The state now
+has `FindActorValues` beside `GetOrCreateActorValues`, and only `10740` uses
+the first.
+
+**Test evidence** `test_rm2k_enter_hero_name.cs`, 9 tests.
+**1509/1509**, `TestRm2kEnterHeroName: 9/9`, validator passed.
+**Mutations** Nine rules, **9 of 9 caught** once the harness's restore list was
+derived from the rules instead of written next to them. The first two runs
+reported `LEBT` and `NOMATCH` for lines the harness itself had just put back —
+see `SESSION_STATE.md`.
+
 ## `10830`, `10870` and `10910` are done — and the stale comment
 
 **Three commands, and each one has a fact a reader would guess wrong.**

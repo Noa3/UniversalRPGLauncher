@@ -4223,6 +4223,64 @@ exactly as `11330` treats an unreachable character, and for the same reason.
 **Test evidence** `project/tests/core/test_rm2k_flash_sprite.cs`, 10 tests.
 **1481/1481**, validator passed.
 
+### The harness only restored the two files it knew about
+
+`mut_name.py` had `for d in (INT, STATE)` in its backup and restore loop — and
+**four of the nine rules write to `Rm2kActorValues.cs`, which was in neither
+list.** The file was never copied, never written back, and **two mutations
+stayed in the source while their rules reported KILL**:
+
+```
+Name = pName;                                        // instead of the comparison
+return Name != "" ? Name : pDatabaseName;            // instead of the sentinel
+```
+
+The second one is the exact mutation the suite is about, and the test for it
+passed afterwards anyway — because the test had already been run against the
+mutated file and had not been re-run since.
+
+**A rule that reports KILL has measured the test suite, not the file. The
+backup list has to be derived from the rules, not written next to them:**
+`for d in dict.fromkeys(d for d, _, _, _ in RULES)`. This is the same class of
+mistake as the anchor that occurred twice, one level further out — a harness
+that is written to be edited must be checked for the same property it is
+checking.
+
+### The restore list was in two places, and I fixed one of them
+
+The backup loop became `for d in dict.fromkeys(d for d, _, _, _ in RULES)` —
+and the **restore inside the loop body was still `for d in (INT, STATE)`**. So
+`Rm2kActorValues.cs` was restored to its pre-run state after every single
+rule, while the rule reported KILL. Two rules then reported NOMATCH in the same
+run, because the line they were looking for had just been put back.
+
+**The lesson is not "check both places" — it is that a value which describes
+the work should appear once and be read from there.** The rule list already
+knows every file a rule touches; the backup, the restore and the anchor check
+should all be derived from it, and none of them should name a file at all.
+
+**And a run that reports NOMATCH for an anchor that was verified a moment ago
+is not a measurement.** The last run's `LEBT` for the flag inversion was also
+wrong — measured on its own, that rule is caught in two tests. The whole run
+was invalid because a line it needed had been moved back by the harness
+itself.
+
+### A harness that edits itself is worse than no harness
+
+`mut_map.py` stopped parsing. My own patching had cut the file in the wrong
+place, and the flash-sprite docstring ended up in the middle of the terrain
+rules. **It only surfaced because the run reported a SyntaxError instead of a
+mutation result** — a script that fails to parse cannot also fail quietly.
+
+Then the replacement was built by concatenating the head of one script with the
+tail of another, and *that* produced the same shape of damage. **The check that
+matters is `compile(open(p).read(), p, "exec")` before the run, and the check
+that follows is that the rule count is the one intended** — nine, not ten,
+because the dispatch rule for `10740` was lost in the splice.
+
+**A mutation harness that has been edited by string surgery needs the same
+scrutiny as the code it mutates.**
+
 ### The restore failed three times, and each time it left a different mutation
 
 This is now the third run in a row where the harness died at the restore with

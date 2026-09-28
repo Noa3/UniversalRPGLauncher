@@ -640,6 +640,28 @@ public sealed class EventInterpreter
 	/// have made a game's recall turn the hero.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 10740, Enter Hero Name, from liblcf's <c>Code::EnterHeroName</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandEnterHeroName</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 3, and the third is a flag and not a text.</strong> The
+	/// reference reads <c>actor_id</c>, <c>charset</c> and
+	/// <c>use_default_name</c> and hands all three to its name scene.
+	/// <strong>A reader that treated the third as part of a name would have
+	/// shown every hero a name ending in a digit.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And an actor that does not resolve is a warning and not a
+	/// refusal</strong> — the reference's own
+	/// <c>Output::Warning("EnterHeroName: Invalid actor ID {}")</c> and
+	/// <c>return true</c>, which is the same shape <c>11320</c> and
+	/// <c>11330</c> have.
+	/// </para>
+	/// </remarks>
+	public const int EnterHeroName = 10740;
+
 	public const int RecallToLocation = 10830;
 
 	/// <summary>
@@ -978,6 +1000,34 @@ public sealed class EventInterpreter
 	/// <summary>Moves a figure to a map and a tile, for command 10870.</summary>
 	public delegate void Rm2kEventPlaceMover(int pEventId, int pMapId, int pX, int pY);
 
+	/// <summary>
+	/// Shows the name screen for a hero, for command 10740.
+	/// </summary>
+	/// <param name="pActorId">The hero the command named.</param>
+	/// <param name="pCharsetIndex">The face index to show while the name is typed.</param>
+	/// <param name="pUseDefaultName">Whether to offer the database's name.</param>
+	/// <remarks>
+	/// <strong>A hook and not a field, and the interpreter does not own the
+	/// name.</strong> The reference builds a whole scene for this, and
+	/// <strong>a reader that wrote the name straight into the state would have
+	/// had a game's "name your hero" prompt rename the hero with no prompt
+	/// at all</strong> — which is a different game, and a worse one.
+	///
+	/// <para>
+	/// <strong>The face travels as an index and not as a file name.</strong>
+	/// The reference's <c>Scene_Name(*actor, charset, use_default_name)</c>
+	/// takes an <c>int</c>, because a face is an index into the actor's own
+	/// face set — <strong>and a reader that read it as a file name would have
+	/// looked for a charset file whose name happens to be a number.</strong>
+	/// </para>
+	/// </remarks>
+	public delegate void Rm2kHeroNameEntry(
+		int pActorId,
+		int pCharsetIndex,
+		bool pUseDefaultName);
+
+	private readonly Rm2kHeroNameEntry? _heroNameEntry;
+
 	private readonly Rm2kEventPlaceReader? _eventPlaceReader;
 
 	private readonly Rm2kEventPlaceMover? _eventPlaceMover;
@@ -1078,7 +1128,8 @@ public sealed class EventInterpreter
 		Func<bool>? vehicleBoardToggle = null,
 		Rm2kSpriteFlash? spriteFlasher = null,
 		Rm2kEventPlaceReader? eventPlaceReader = null,
-		Rm2kEventPlaceMover? eventPlaceMover = null)
+		Rm2kEventPlaceMover? eventPlaceMover = null,
+		Rm2kHeroNameEntry? heroNameEntry = null)
 			{
 		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
@@ -1093,6 +1144,7 @@ public sealed class EventInterpreter
 		_spriteFlasher = spriteFlasher;
 		_eventPlaceReader = eventPlaceReader;
 		_eventPlaceMover = eventPlaceMover;
+		_heroNameEntry = heroNameEntry;
 		_commandIndex = 0;
 	}
 
@@ -1377,6 +1429,10 @@ public sealed class EventInterpreter
 
 			case ShowHiddenMonster:
 				ExecuteShowHiddenMonster(cmd);
+				return Advance();
+
+			case EnterHeroName:
+				ExecuteEnterHeroName(cmd);
 				return Advance();
 
 			case TradeEventLocations:
@@ -4854,6 +4910,72 @@ public sealed class EventInterpreter
 			6 => GameSimulationState.EquipmentSlot.All,
 			_ => GameSimulationState.EquipmentSlot.All,
 		};
+	}
+
+	/// <summary>
+	/// Runs 10740, Enter Hero Name, from liblcf's <c>Code::EnterHeroName</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandEnterHeroName</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Three parameters, and the third is a flag.</strong> The
+	/// reference reads <c>actor_id</c>, <c>charset</c> and
+	/// <c>use_default_name</c> and builds a name scene from all three.
+	/// <strong>A reader that treated the third as text would have shown every
+	/// hero a name ending in a digit.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>The command itself writes nothing.</strong> The reference hands
+	/// the work to a scene and the scene writes the name when the player is
+	/// done — <strong>so a reader that stored the name here would have renamed
+	/// a hero with no prompt at all</strong>, which is a different game and a
+	/// worse one. What this command does is name the hero, say who it is, and
+	/// leave the name to whoever owns the screen.
+	/// </para>
+	/// </remarks>
+	private void ExecuteEnterHeroName(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Enter hero name");
+			return;
+		}
+
+		var actorId = pCmd.Parameters[0];
+		var charset = pCmd.Parameters[1];
+		var useDefaultName = pCmd.Parameters[2] != 0;
+
+		if (_heroNameEntry == null)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Enter hero name: no name screen is "
+				+ $"attached, so hero {actorId} keeps the name it has");
+			return;
+		}
+
+		// **Die Referenz warnt und laeuft weiter** -- und nicht umgekehrt.
+		// **Und sie schaut nur nach: `GetActor` gibt null fuer einen Helden,
+		// den es nicht gibt, und legt keinen an.** Ein Leser, der den Eintrag
+		// erzeugt haette, wuerde einem Spiel, das Held 99 benennt, Held 99
+		// erschaffen -- **und der Held waere danach fuer jeden Befehl da,
+		// in der Parteifenster und in der Speicherdatei.**
+		if (_state.FindActorValues(actorId) == null)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Enter hero name: the reference warns on an "
+				+ $"invalid actor ID {actorId} and moves on, and there is no "
+				+ "hero by that name; nothing was changed");
+			return;
+		}
+
+		_heroNameEntry(actorId, charset, useDefaultName);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Enter hero name: the name screen is up for "
+			+ $"hero {actorId} with the face {charset} and "
+			+ (useDefaultName
+				? "the database name offered"
+				: "the database name withheld"));
 	}
 
 	/// <summary>

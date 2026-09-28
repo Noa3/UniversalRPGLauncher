@@ -1557,6 +1557,27 @@ public sealed class GameSimulationState
     /// <summary>
     /// The base values of an actor, creating the entry on first use.
     /// </summary>
+    /// <summary>
+    /// The base values of an actor, or null when that actor does not exist.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Look and not create.</strong> The reference's
+    /// <c>Main_Data::game_actors-&gt;GetActor(id)</c> returns null for a hero
+    /// nobody made, and <c>CommandEnterHeroName</c> warns on that null. <strong>A
+    /// reader that created the entry would have made a game that names hero 99
+    /// create hero 99</strong> — and the hero would then exist for every
+    /// later command, in the party window and in the save file.
+    /// </remarks>
+    public Rm2kActorValues? FindActorValues(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId)
+        {
+            return null;
+        }
+
+        return ActorValues.TryGetValue(pActorId, out var values) ? values : null;
+    }
+
     public Rm2kActorValues GetOrCreateActorValues(int pActorId)
     {
         if (pActorId < 1 || pActorId > MaxActorId)
