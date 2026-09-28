@@ -111,6 +111,22 @@ public sealed class WolfEventVm
                 return result;
             }
             executed += 1;
+            // **A command that jumps, jumps.** The last command of a branch arm
+            // carries this, because an arm has to step over the other arm and
+            // an ordinary increment runs straight into it. -1 is the ordinary
+            // "next command", and the check is here rather than inside Execute
+            // so a command that returned early — an End, a wait — keeps the
+            // index it set for itself.
+            if (command.NextIndex >= 0)
+            {
+                if (command.NextIndex >= _program.Commands.Count)
+                {
+                    return Fail(
+                        $"A WOLF command jumps to {command.NextIndex}, which is"
+                        + $" outside the {_program.Commands.Count} commands.", "command");
+                }
+                _instructionIndex = command.NextIndex;
+            }
         }
         if (State == WolfVmState.Running && executed >= MaxCommandsPerTick)
         {
@@ -193,7 +209,18 @@ public sealed class WolfEventVm
             case WolfEventOpcode.IfSwitch:
                 return Branch(GetSwitch(pCommand.Operand) == (pCommand.Value != 0), pCommand);
             case WolfEventOpcode.IfVariable:
-                return Branch(GetVariable(pCommand.Operand) == pCommand.Value, pCommand);
+                // **Seven comparisons, and not one.** A reader that kept the
+                // old equality test would take one branch in seven, and a chest
+                // guarded by "V0 is at least 1" would never open.
+                if (!WolfComparisonEvaluator.TryEvaluate(
+                    pCommand.Comparison, GetVariable(pCommand.Operand),
+                    pCommand.Value, out var variableCondition))
+                {
+                    return Fail(
+                        $"A WOLF variable branch uses comparison"                        + $" {pCommand.Comparison}, which is not one of the seven"
+                        + " the editor offers.", "command");
+                }
+                return Branch(variableCondition, pCommand);
             case WolfEventOpcode.Wait:
                 _instructionIndex += 1;
                 _waitRemaining = pCommand.Frames;
@@ -234,22 +261,52 @@ public sealed class WolfEventVm
         }
     }
 
-    private PluginOperationResult Branch(bool pCondition, WolfEventCommand pCommand)
+        private PluginOperationResult Branch(bool pCondition, WolfEventCommand pCommand)
     {
+        // **Two targets, one per arm.** The fall-through used to be the true
+        // arm and the single jump the false one, which meant that when the
+        // condition held the true arm ran *and* the false arm ran.
+        //
+        // The arm a command belongs to is decided by the *arm ranges* the
+        // branch declares, not by a single end index: the true arm runs from
+        // its own start to where the other arm begins, and the false arm runs
+        // from there to the end. That is what makes a one-command arm end
+        // where it ends, and it needs no hidden state — a program with two
+        // branches in a row cannot leak one into the other.
         if (pCondition)
+        {
+            if (pCommand.TrueJumpIndex < 0)
+            {
+                _instructionIndex += 1;
+                return PluginOperationResult.Succeeded();
+            }
+            return JumpTo(pCommand.TrueJumpIndex, "true arm");
+        }
+        if (pCommand.JumpIndex < 0)
         {
             _instructionIndex += 1;
             return PluginOperationResult.Succeeded();
         }
-        if (pCommand.JumpIndex < 0 || _program == null || pCommand.JumpIndex >= _program.Commands.Count)
+        return JumpTo(pCommand.JumpIndex, "false arm");
+    }
+
+    /// <summary>
+    /// Jumps to a branch arm and remembers where that arm ends.
+    /// </summary>
+    private PluginOperationResult JumpTo(int pTarget, string pWhich)
+    {
+        if (_program == null || pTarget >= _program.Commands.Count)
         {
-            return Fail("A WOLF event branch target is outside the command list.", "command");
+            return Fail(
+                $"A WOLF event branch {pWhich} target {pTarget} is outside the"
+                + $" command list of {_program?.Commands.Count ?? 0} commands.",
+                "command");
         }
-        _instructionIndex = pCommand.JumpIndex;
+        _instructionIndex = pTarget;
         return PluginOperationResult.Succeeded();
     }
 
-    private PluginOperationResult Fail(string pMessage, string pPhase)
+private PluginOperationResult Fail(string pMessage, string pPhase)
     {
         LastError = PluginError.Create(PluginErrorCode.LifecycleFailure, pMessage, EnginePluginIds.WolfRpg, pPhase);
         State = WolfVmState.Faulted;

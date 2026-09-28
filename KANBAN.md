@@ -2592,6 +2592,7 @@ look for the next island of that shape.**
 | choice | ~~`20140` `20141`~~ | **~~choice option and choice end — DONE, see below~~** |
 | damage | ~~`10500`~~ | **~~simulated attack — DONE, see below~~** |
 | class data | ~~`0x1F` chunk~~ | **~~class parameters by level — DONE, the prerequisite for `1008`~~** |
+| wolf | ~~variable branch~~ | **~~seven comparisons and two arms — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2604,6 +2605,62 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The WOLF variable branch is done — and it had one comparison and no test
+
+**`IfVariable` compared with `==` and nothing else, and no test in the
+repository exercised it at all.** The one comparison it had was as unproven
+as the six it was missing — a reader with seven of them would have been
+half-verified without anyone knowing.
+
+**The editor offers seven and the help names them**: greater, greater or
+equal, equal, less or equal, less, not equal, and bit and. **A reader that
+implemented only `==` would take one branch in seven**, and every one of the
+other six would fall through to the else path — so a chest guarded by "V0 is
+at least 1" would never open.
+
+**The bit-and test is equal to the value and not "any bit set".** The help
+spends a paragraph on it: with V0 = 5 (`101`) and value 2 (`010`), `5 & 2` is
+0, not 2, so the test fails. **A reader that wrote `(variable & value) != 0`
+would pass every test with any bit set, and a game that guards a door with a
+bit test would open it for everyone.** And a value of zero satisfies it in
+every case, because anything anded with zero is zero — the help says so
+outright.
+
+## The branch had one target, and that is the second half
+
+**A WOLF branch has two arms and the VM had one jump.** The fall-through was
+the true arm and the single jump the false one, so when the condition held the
+true arm ran *and* the false arm ran — **a chest that opened and a guard that
+attacked in the same frame.** That is a different failure from the comparison
+and a worse one, because it is not visible in any single comparison.
+
+**Both arms are now their own target** (`TrueJumpIndex` and `JumpIndex`), and
+**the last command of an arm jumps over the other arm** (`NextIndex` on the
+command).
+
+**The arm-end was first modelled as a remembered end index, and that was
+wrong**: it needs hidden state that a program with two branches in a row leaks
+from one into the other, and the check fires before the arm runs if the branch
+has already jumped into it. The jump on the command has no such state and is
+also the shape a WOLF event list has — the editor writes the jump after the
+last command of an arm. **Three attempts were needed and the third is the one
+that is in the code; the first two are recorded here because the reason the
+model failed is the reason the model is right.**
+
+**Test evidence** `test_wolf_comparisons.cs`, 8 tests.
+**1208/1208**, `TestRm2kWolfComparisons: 8/8`.
+**Mutations** Ten rules, **10 of 10 caught** — including the bit test read as
+"any bit set", the arm jump removed, and an unknown comparison falling back to
+equality instead of being refused.
+
+**What is still missing on WOLF** and is stated rather than hidden: **there is
+no native WOLF fixture.** The `wolf` fixture directory holds a synthetic
+`urpg-wolf-plain-json` envelope and a README that says so, and the seven
+comparison numbers are pinned against the editor help page rather than a
+file on disk. The variable model is also still a flat `int` where WOLF has
+self, normal, system and database bands — **that is the next WOLF card, and it
+is larger than this one.**
 
 ## The class parameter chunk is decoded — `1008` is no longer missing data, only code
 

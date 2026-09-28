@@ -2852,3 +2852,57 @@ null-basierte Stufe.
 **Was `1008` noch braucht** die Klassen-Skill-Liste und die vier Modi, die der
 Befehl trägt. Die Parameter sind der Teil, ohne den der Befehl nicht zu schreiben
 war; der Rest ist ein Schalter.
+
+## WOLF `IfVariable` — DONE: ein Vergleich, kein Test, und ein Ast ohne den andern
+
+**`IfVariable` verglich mit `==` und sonst nichts, und kein Test im Repository
+hat es überhaupt benutzt.** Der eine Vergleich, den es hatte, war so wenig
+bewiesen wie die sechs, die fehlten.
+
+**Der Editor bietet sieben, und die Hilfe nennt sie:** größer, größer-gleich,
+gleich, kleiner-gleich, kleiner, ungleich, Bit-UND. **Wer nur `==`
+implementierte, nähme einen Zweig in sieben**, und die anderen sechs fielen in
+den Else-Pfad — **eine Truhe, die mit „V0 ist mindestens 1" gesichert ist,
+würde sich nie öffnen.**
+
+**Der Bit-UND-Test ist gleich dem Wert und nicht „irgendein Bit gesetzt".** Die
+Hilfe widmet ihm einen Absatz: Mit V0 = 5 (`101`) und Wert 2 (`010`) ist
+`5 & 2` gleich 0, nicht 2 — der Test scheitert. **Wer
+`(variable & wert) != 0` schriebe, bestünde jeden Test mit einem gesetzten
+Bit, und ein Spiel, das eine Tür mit einem Bit-Test sichert, öffnete sie für
+alle.** Und ein Wert von null erfüllt ihn immer, weil alles UND null null ist —
+die Hilfe sagt das ausdrücklich.
+
+## Und der Ast hatte ein Ziel, und das ist die zweite Hälfte
+
+**Ein WOLF-Ast hat zwei Arme, und die VM hatte einen Sprung.** Der
+Durchlauf war der wahre Arm und der einzige Sprung der falsche — also lief
+bei gehaltener Bedingung der wahre Arm *und* der falsche: **eine Truhe, die
+sich öffnet, und ein Wächter, der im selben Frame zuschlägt.** Das ist ein
+anderer Fehler als der Vergleich und ein schlimmerer, denn er ist in keinem
+einzelnen Vergleich sichtbar.
+
+**Beide Arme sind jetzt ein eigenes Ziel** (`TrueJumpIndex`, `JumpIndex`), und
+**der letzte Befehl eines Arms springt über den anderen** (`NextIndex` am
+Befehl).
+
+**Das Arm-Ende war zuerst ein gemerkter Endindex, und das war falsch:** Es
+braucht verborgenen Zustand, den ein Programm mit zwei Zweigen nacheinander
+aus einem in den anderen leckt, und die Prüfung feuert, bevor der Arm läuft,
+wenn der Zweig schon hineingesprungen ist. Der Sprung am Befehl hat keinen
+solchen Zustand und ist auch die Form, die eine WOLF-Ereignisliste hat. **Drei
+Versuche waren nötig, und der dritte ist der im Code; die ersten zwei stehen
+hier, weil der Grund des Scheiterns der Grund für die Richtigkeit ist.**
+
+**Test evidence** `test_wolf_comparisons.cs` (8). **1208/1208**.
+**Mutations** 10 Regeln, **10 von 10 gefangen** — darunter der Bit-Test als
+„irgendein Bit gesetzt", der Arm-Sprung entfernt und ein unbekannter Vergleich
+statt abgelehnt auf Gleichheit zurückfallend.
+
+**Was WOLF weiter fehlt und gesagt statt versteckt wird: Es gibt kein natives
+WOLF-Fixture.** Das Verzeichnis `wolf` enthält eine selbstgebaute
+`urpg-wolf-plain-json`-Envelope und ein README, das das sagt, und die sieben
+Vergleichsnummern sind gegen die Editor-Hilfe gepinnt, nicht gegen eine Datei.
+Das Variablenmodell ist außerdem noch ein flaches `int`, wo WOLF Selbst-,
+Normal-, System- und Datenbank-Bänder hat — **das ist die nächste WOLF-Karte
+und sie ist größer als diese.**
