@@ -4292,6 +4292,32 @@ in isolation.
 unparenthesised form throws, and the sheet's own form answers. Removing the
 parentheses from `WolfCharacterSheet.cs` kills two tests.
 
+## K-114 is DONE and K-110 cannot be closed here
+
+**K-114 stood at `VERIFY` because K-094 was not closed — and K-094 is `DONE`
+with no open child.** The parent condition is satisfied, so the card is
+closed, and the seven vehicle suites were re-measured before it was:
+vehicle 11/11, boarding 11/11, decision turn 12/12, vehicle decision turn
+8/8, sprite 9/9, compositing 6/6, get-on-off 4/4 — **61 tests, green inside
+the 1533/1533 run.**
+
+**A card can be held open by a reason that has since gone away**, and the
+only way to see it is to re-measure the reason rather than the work.
+
+**K-110 stands at `VERIFY` and cannot be closed on this machine.** The help
+index lists **76 pages and none documents a binary file format**;
+`11fileformat.html` and `12saveformat.html` answer `200` with **zero bytes**,
+and `01specifi.html` — the implicit specification page — contains no バイナリ,
+no 形式 and no ファイル構造. A search of the machine found **no `.mps`, no
+`.wolf`, no `Database.dat` / `CommonEvent.dat` / `Game.dat`**, and none of
+`WolfEdit.exe`, `WolfRPGEditor.exe` or `WolfTrans.exe`.
+
+**So the gap is a fact about the available material, not unfinished reading,
+and the unblock condition is one real WOLF game directory or the editor from
+the user.** The map transfer reader belongs to the same unblock: writing a
+binaries reader without a binary to check it against would be the same
+invention the card has avoided so far.
+
 ### The board's own inventory number was stale, and nothing re-measured it
 
 K-136 said "the eighty-nine commands liblcf names and this interpreter does

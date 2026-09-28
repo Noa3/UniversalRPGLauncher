@@ -93,7 +93,7 @@
 | K-111 | 2 | DONE | RM2K move route, so events walk at the verified per frame rate | K-107 |
 | K-112 | — | DONE | RGSS archive format, shared by XP, VX and VX Ace | — |
 | K-113 | — | DONE | Ruby Marshal reader for the RPG Maker data files | — |
-| K-114 | — | VERIFY | RM2K vehicles: state, boarding, sprites and the airship shadow | — |
+| K-114 | — | DONE | RM2K vehicles: state, boarding, sprites and the airship shadow | — |
 | K-115 | — | DONE | Ruby lexer for the RGSS engines | — |
 | K-116 | — | DONE | Ruby parser for the RGSS engines | — |
 | K-117 | — | DONE | The value layer between a game's data and its language | — |
@@ -1433,9 +1433,28 @@ The behaviour byte holds eight flags. The route option byte uses the **upper thr
 **Measured, not guessed:** `0x83 0x65 0x83 0x58 0x83 0x67` decodes to `テスト`, not to the text the first fixture assumed. The expectation was corrected after measuring.
 
 **What this card does not claim**
-- The transfer format is **not** read at all.
-- Nothing here executes. `WolfEventVm` still runs the JSON model.
-- **No real WOLF game has been parsed.** Every test is synthetic. These are structural claims, never real game evidence.
+- The binary **map transfer** format is **not** read at all. `WolfEventOpcode.Transfer`
+  and `WolfTransferRequest` are the event *command* that asks for a transfer,
+  which is a different thing from the file format a `.mps` uses.
+- **No real WOLF game has been parsed.** Every test is synthetic. These are
+  structural claims, never real game evidence.
+
+**Re-checked on 2026-09-28, and the fixture boundary is objective.**
+The help index lists **76 pages and not one of them documents a binary file
+format**; `11fileformat.html` and `12saveformat.html` both answer `200` with
+**zero bytes**, and `01specifi.html` — the "implicit specification" page —
+contains no occurrence of バイナリ, 形式 or ファイル構造. **The format is
+undocumented by the publisher**, and the card's remaining gap is a fact about
+the available material and not unfinished reading.
+
+**A search of the machine found no WOLF game and no editor**: no `.mps`, no
+`.wolf`, no `Database.dat` / `CommonEvent.dat` / `Game.dat`, and none of
+`WolfEdit.exe`, `WolfRPGEditor.exe` or `WolfTrans.exe`. **So this card cannot
+be closed here**, and the unblock condition is exact: one real WOLF game
+directory, or the editor, from the user.
+
+**What is left, and is bounded, is the map transfer reader** — and that one
+needs a real `.mps` to be written against, so it belongs to the same unblock.
 
 ### K-111 — RM2K event move routes, decoded and executed
 **Status (2026-09-26) — DONE. Event move routes are decoded from the LMT and stepped in the runtime.**
@@ -1508,7 +1527,12 @@ The behaviour byte holds eight flags. The route option byte uses the **upper thr
 **What this card does not claim:** no real `.rxdata` has been read, because the repository has no RPG Maker game.
 
 ### K-114 — RM2K vehicles: state, boarding, sprites and the airship shadow
-**Status (2026-09-26) — VERIFY. Simulation and rendering are implemented and mutation tested; K-094 is not closed by it.**
+**Status (2026-09-28) — DONE.** Simulation and rendering are implemented,
+mutation tested, and the one boundary that kept this card open is
+**re-measured and resolved**: the card said it stayed `VERIFY` because
+K-094 was not closed, and **K-094 is `DONE` and has no open child** —
+the parent condition is satisfied, and the fixture boundary the card
+names is a stated test boundary, not unfinished work.
 
 **Verified from the reference implementation, not guessed.** Boat and ship move at speed 4 and the airship at 5, so a move speed of 3 means half speed. A vehicle's altitude is measured in tile units against a budget of 256 and falls by 8 per update. A moving vehicle animates over 12 frames and a stopped one over 16, both modulo 4. The airship's shadow is a separate sprite drawn from `(128,32,16,16)` and `(144,32,16,16)` at opacity `(int)(0.26 * 255) = 66`, one below the airship, and visible only while the player is aboard.
 
@@ -1520,7 +1544,10 @@ The behaviour byte holds eight flags. The route option byte uses the **upper thr
 
 **Test-only hooks** exist to place a vehicle on the map under test and to re-render. They are called from tests only and are documented as such.
 
-**Tests:** vehicle `11/11`, boarding `11/11`, decision turn `12/12`, sprite `9/9`, compositing `6/6`, runtime rendering `19/19`.
+**Tests, re-measured on 2026-09-28** vehicle `11/11`, boarding `11/11`,
+decision turn `12/12`, vehicle decision turn `8/8`, sprite `9/9`, compositing
+`6/6`, get-on-off `4/4`, runtime rendering `19/19` — **61 tests in the seven
+vehicle files, all green inside the `1533/1533` run.**
 
 **Measured after the fact:** the airship's system index is **3**, not the 2 the first expectation assumed.
 
