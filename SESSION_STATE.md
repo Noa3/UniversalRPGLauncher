@@ -4292,6 +4292,37 @@ in isolation.
 unparenthesised form throws, and the sheet's own form answers. Removing the
 parentheses from `WolfCharacterSheet.cs` kills two tests.
 
+### The board's own inventory number was stale, and nothing re-measured it
+
+K-136 said "the eighty-nine commands liblcf names and this interpreter does
+not dispatch". A fresh count against `liblcf`'s `ec.h` gives **157 codes in
+the 1000..21999 range, 117 dispatched, 40 missing — and 36 of the 40 are the
+Maniac and EasyRPG patch extensions.** Of the four real gaps, `1005
+CallCommonEvent`, `1006 ForceFlee` and `1007 EnableCombo` **do not exist in
+EasyRPG at all**, and `1008 ChangeClass` is a real RPG2K3 command.
+
+**The number stayed on the board because the work that removed the gaps never
+replaced the number.** A card that describes a gap must be re-derived when the
+gap is closed, or the board becomes a place where a figure nobody has checked
+outlives the work that made it wrong. `1008` was the last real one, and the
+board row is now DONE with the count that can be re-derived.
+
+### And four of eleven mutations survived, and three were my own tests
+
+`Klasse ueber 5000` — no test used a class number outside the range, only
+short commands. `Reset-Modus` — the test took a fresh hero, whose base hit
+points are **one**, and one halved is zero, which the clamp puts back to one:
+**so the test passed for a reader that wrote in mode 3.** `RPG_RT-Fehler 1` —
+the bug is about the class being the *same* one, so the test needs two class
+changes, and mine had one. The level-flag rule was killed on its own and
+survived in the run, which is the stale-DLL signature again.
+
+**The middle one is the pattern worth keeping: a test whose fixture makes the
+wrong answer indistinguishable from the right one is worse than no test,
+because it reports green.** A fresh hero's default of one is the same trap as
+the empty map in the terrain family — **a fixture has to be chosen so the two
+answers differ.**
+
 ### Four harnesses carried the same bug, and one of them was already broken
 
 The battle-branch run reported `11 von 12` with `13310 erreicht den Dispatch

@@ -267,6 +267,49 @@ public sealed class Rm2kActorValues
 	/// Reads one base value by its parameter number, for a caller that wants to
 	/// report the result.
 	/// </summary>
+	/// <summary>
+	/// Writes one base value, from <c>1008</c> Change Class.
+	/// </summary>
+	/// <param name="pParameter">The parameter number, zero to five.</param>
+	/// <param name="pValue">The value to write, before the clamp.</param>
+	/// <returns>False when the parameter named none of the six.</returns>
+	/// <remarks>
+	/// <strong>Assignment and not addition.</strong>
+	/// <c>AddToParameter</c> exists for <c>10430</c>, which changes a value by
+	/// a difference; the class change writes the numbers the reference secured
+	/// at the top of <c>Game_Actor::ChangeClass</c> and puts back at the
+	/// bottom, after the parameter mode has halved them.
+	/// <strong>A reader that added a difference here would have doubled a
+	/// hero's statistics on every class change</strong>, and a game that
+	/// changes a class in a loop would have run the party's hit points away.
+	/// </remarks>
+	public bool SetBaseParameter(int pParameter, int pValue)
+	{
+		switch (pParameter)
+		{
+			case ParameterMaxHp:
+				BaseMaxHp = Clamp(pValue, 1, MaxHitPoints);
+				return true;
+			case ParameterMaxSp:
+				BaseMaxSp = Clamp(pValue, 0, MaxHitPoints);
+				return true;
+			case ParameterAttack:
+				BaseAttack = Clamp(pValue, 1, MaxStat);
+				return true;
+			case ParameterDefense:
+				BaseDefense = Clamp(pValue, 1, MaxStat);
+				return true;
+			case ParameterSpirit:
+				BaseSpirit = Clamp(pValue, 1, MaxStat);
+				return true;
+			case ParameterAgility:
+				BaseAgility = Clamp(pValue, 1, MaxStat);
+				return true;
+			default:
+				return false;
+		}
+	}
+
 	public int GetParameter(int pParameter)
 	{
 		return pParameter switch

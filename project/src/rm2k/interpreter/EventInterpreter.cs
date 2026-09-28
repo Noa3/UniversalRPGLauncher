@@ -864,6 +864,32 @@ public sealed class EventInterpreter
 	/// </remarks>
 	public const int KeyInputProc = 11610;
 
+	/// <summary>
+	/// 1008, Change Class, from liblcf's <c>Code::ChangeClass</c> and
+	/// EasyRPG's <c>Game_Interpreter::CommandChangeClass</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 7, and the first two are the actor selection.</strong> The
+	/// reference reads <c>class_id</c> from <c>parameters[2]</c>, the level
+	/// flag from <c>[3]</c>, the skill mode from <c>[4]</c>, the parameter
+	/// mode from <c>[5]</c> and the message flag from <c>[6]</c>, then walks
+	/// <c>GetActors(parameters[0], parameters[1])</c>. <strong>And the whole
+	/// body is 2003-only:</strong> the first line is
+	/// <c>if (!Player::IsRPG2k3Commands()) return true;</c> — <strong>a reader
+	/// that ran it in a 2K game would have changed a hero's class in a file
+	/// format that has no such command.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>Class 0 is "no class" and is not an error.</strong> The
+	/// reference reads it as a real value, checks <c>class_id != 0</c> before
+	/// warning about an invalid class, and falls back to the actor's own
+	/// database settings for the flags. A reader that refused zero would have
+	/// refused the one class a 2K3 game can remove a hero from.
+	/// </para>
+	/// </remarks>
+	public const int ChangeClass = 1008;
+
 	public const int ChangeBattleCommands = 1009;
 
 	/// <summary>5001, from liblcf <c>Code::OpenLoadMenu</c>.</summary>
@@ -1784,6 +1810,10 @@ public sealed class EventInterpreter
 				ExecuteKeyInputProc(cmd);
 				return true;
 
+			case ChangeClass:
+				ExecuteChangeClass(cmd);
+				return Advance();
+
 			case ChangeBattleCommands:
 				ExecuteChangeBattleCommands(cmd);
 				return Advance();
@@ -2617,6 +2647,94 @@ public sealed class EventInterpreter
 		_commandIndex = found;
 		_state.AddDiagnostic(
 			$"[Event {_eventId}] Jump to label {labelId} -> index {found}");
+	}
+
+	/// <summary>
+	/// Runs 1008, Change Class, from liblcf's <c>Code::ChangeClass</c> and
+	/// EasyRPG's <c>Game_Interpreter::CommandChangeClass</c> and
+	/// <c>Game_Actor::ChangeClass</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Seven parameters and a 2003 gate.</strong> The reference's
+	/// first line is <c>if (!Player::IsRPG2k3Commands()) return true;</c> —
+	/// <strong>a 2K game carries no such command</strong>, and a reader that
+	/// ran it anyway would have changed a hero's class in a file that has no
+	/// field for it.
+	/// </para>
+	/// <para>
+	/// <strong>And it removes the whole equipment first, always.</strong> The
+	/// reference's own comment says it: <c>// RPG_RT always removes all
+	/// equipment on level change.</c> <strong>A reader that kept the
+	/// equipment would have left a hero wearing the previous class's armour
+	/// with the new class's statistics</strong> — and RPG_RT does not allow
+	/// that, so a game that checks a hero's equipment afterwards would branch
+	/// on a state the original never produced.
+	/// </para>
+	/// <para>
+	/// <strong>And it resets the experience even when the level did not
+	/// change</strong> — <c>// RPG_RT always resets EXP when class is changed,
+	/// even if level unchanged.</c> <strong>A reader that only reset the
+	/// experience when the level moved would have left a hero carrying the
+	/// progress of a class they no longer have.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>Class 0 is "no class", not an error.</strong> The reference
+	/// guards its warning with <c>class_id != 0</c> and takes the actor's own
+	/// database settings for the flags when there is no class.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeClass(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 7.
+		if (pCmd.Parameters.Count < 7)
+		{
+			Malformed("Change class");
+			return;
+		}
+
+		// **Die ganze Sache ist 2003-only**, und das ist die erste Zeile der
+		// Referenz -- nicht eine Warnung, sondern ein Rueckkehr mit nichts
+		// getan.
+		if (!_state.SupportsRpg2k3ECommands)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change class: a 2K game has no class"
+				+ " command, and the reference's own guard returns before"
+				+ " anything changes");
+			return;
+		}
+
+		var actors = ResolveActors(
+			pCmd.Parameters[0], pCmd.Parameters[1], "Change class");
+		if (actors == null)
+		{
+			return;
+		}
+
+		var classId = pCmd.Parameters[2];
+		var level1 = pCmd.Parameters[3] > 0;
+		var skillMode = pCmd.Parameters[4];
+		var paramMode = pCmd.Parameters[5];
+
+		if (classId < 0 || classId > GameSimulationState.MaxClassId)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change class: class {classId} is outside"
+				+ " 0 to 5000, and the reference warns and touches nobody");
+			return;
+		}
+
+		foreach (var actorId in actors)
+		{
+			_state.ChangeActorClass(actorId, classId, level1, skillMode, paramMode);
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change class: actor {actorId} is now in"
+				+ $" class {classId}"
+				+ (level1 ? " at level 1" : " at the level it had")
+				+ $", skill mode {skillMode}, parameter mode {paramMode}"
+				+ ", and the whole equipment went with it");
+		}
 	}
 
 	private void ExecuteChangeBattleCommands(Rm2kMap.EventCommand pCmd)

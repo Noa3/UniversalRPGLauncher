@@ -275,26 +275,26 @@ public sealed class GameSimulationState
     /// </remarks>
     public sealed class Parallax
     {
-		/// <summary>The file name, empty for the database panorama.</summary>
-		public string Name { get; set; } = "";
+        /// <summary>The file name, empty for the database panorama.</summary>
+        public string Name { get; set; } = "";
 
-		/// <summary>Whether the panorama scrolls with the player sideways.</summary>
-		public bool ScrollHorizontally { get; set; }
+        /// <summary>Whether the panorama scrolls with the player sideways.</summary>
+        public bool ScrollHorizontally { get; set; }
 
-		/// <summary>Whether it scrolls up and down.</summary>
-		public bool ScrollVertically { get; set; }
+        /// <summary>Whether it scrolls up and down.</summary>
+        public bool ScrollVertically { get; set; }
 
-		/// <summary>Whether it scrolls on its own sideways.</summary>
-		public bool ScrollHorizontallyAutomatic { get; set; }
+        /// <summary>Whether it scrolls on its own sideways.</summary>
+        public bool ScrollHorizontallyAutomatic { get; set; }
 
-		/// <summary>How fast it scrolls on its own, in pixels per frame.</summary>
-		public int HorizontalSpeed { get; set; }
+        /// <summary>How fast it scrolls on its own, in pixels per frame.</summary>
+        public int HorizontalSpeed { get; set; }
 
-		/// <summary>Whether it scrolls upwards on its own.</summary>
-		public bool ScrollVerticallyAutomatic { get; set; }
+        /// <summary>Whether it scrolls upwards on its own.</summary>
+        public bool ScrollVerticallyAutomatic { get; set; }
 
-		/// <summary>How fast it scrolls upwards, in pixels per frame.</summary>
-		public int VerticalSpeed { get; set; }
+        /// <summary>How fast it scrolls upwards, in pixels per frame.</summary>
+        public int VerticalSpeed { get; set; }
     }
 
     /// <summary>The panorama, or the defaults when the game set none.</summary>
@@ -303,7 +303,7 @@ public sealed class GameSimulationState
     /// <summary>Replaces the panorama, from <c>11720</c>.</summary>
     public void SetParallax(Parallax pParallax)
     {
-		MapParallax = pParallax;
+        MapParallax = pParallax;
     }
 
     /// <summary>
@@ -318,13 +318,13 @@ public sealed class GameSimulationState
     /// <returns>False when the id is outside the database bound.</returns>
     public bool SetChipset(int pChipsetId)
     {
-		if (pChipsetId < 0 || pChipsetId > MaxChipsetId)
-		{
-			return false;
-		}
-		ChipsetId = pChipsetId;
-		return true;
-	}
+        if (pChipsetId < 0 || pChipsetId > MaxChipsetId)
+        {
+            return false;
+        }
+        ChipsetId = pChipsetId;
+        return true;
+    }
 
     /// <summary>The highest chipset the database can name.</summary>
     public const int MaxChipsetId = 99;
@@ -333,14 +333,14 @@ public sealed class GameSimulationState
     /// <returns>False when the value is outside the bound.</returns>
     public bool SetEncounterSteps(int pSteps)
     {
-		// **The bound is liblcf's own field width for the saved value.**
-		if (pSteps < 0 || pSteps > MaxEncounterSteps)
-		{
-			return false;
-		}
-		EncounterSteps = pSteps;
-		return true;
-	}
+        // **The bound is liblcf's own field width for the saved value.**
+        if (pSteps < 0 || pSteps > MaxEncounterSteps)
+        {
+            return false;
+        }
+        EncounterSteps = pSteps;
+        return true;
+    }
 
     /// <summary>The highest encounter step count the save format holds.</summary>
     public const int MaxEncounterSteps = 9999;
@@ -455,40 +455,40 @@ public sealed class GameSimulationState
     /// </remarks>
     public sealed class TeleportTarget
     {
-		/// <summary>The map this point is on.</summary>
-		public int MapId { get; set; }
+        /// <summary>The map this point is on.</summary>
+        public int MapId { get; set; }
 
-		/// <summary>The column, in tiles.</summary>
-		public int X { get; set; }
+        /// <summary>The column, in tiles.</summary>
+        public int X { get; set; }
 
-		/// <summary>The row, in tiles.</summary>
-		public int Y { get; set; }
+        /// <summary>The row, in tiles.</summary>
+        public int Y { get; set; }
 
-		/// <summary>
-		/// Whether <see cref="SwitchId"/> has to be <em>on</em> for this point to
-		/// count, from the command flag.
-		/// </summary>
-		/// <remarks>
-		/// <strong>The flag is not "use a switch" but "the switch must be on".</strong>
-		/// A reader that read it as the first would make every conditional warp
-		/// unconditional, and a secret entrance would open at the start of the
-		/// game.
-		/// </remarks>
-		public bool RequiresSwitchOn { get; set; }
+        /// <summary>
+        /// Whether <see cref="SwitchId"/> has to be <em>on</em> for this point to
+        /// count, from the command flag.
+        /// </summary>
+        /// <remarks>
+        /// <strong>The flag is not "use a switch" but "the switch must be on".</strong>
+        /// A reader that read it as the first would make every conditional warp
+        /// unconditional, and a secret entrance would open at the start of the
+        /// game.
+        /// </remarks>
+        public bool RequiresSwitchOn { get; set; }
 
-		/// <summary>The switch this point depends on, when it has one.</summary>
-		public int SwitchId { get; set; }
+        /// <summary>The switch this point depends on, when it has one.</summary>
+        public int SwitchId { get; set; }
 
-		/// <summary>
-		/// Whether this point is one the player can stand on at all.
-		/// </summary>
-		/// <remarks>
-		/// <strong>A point outside the map is not a point.</strong> The reference
-		/// stores it unchecked, and a warp to a tile outside the map is a warp
-		/// into nothing — so this reader refuses it and says which coordinate is
-		/// wrong.
-		/// </remarks>
-		public bool IsUsable { get; set; } = true;
+        /// <summary>
+        /// Whether this point is one the player can stand on at all.
+        /// </summary>
+        /// <remarks>
+        /// <strong>A point outside the map is not a point.</strong> The reference
+        /// stores it unchecked, and a warp to a tile outside the map is a warp
+        /// into nothing — so this reader refuses it and says which coordinate is
+        /// wrong.
+        /// </remarks>
+        public bool IsUsable { get; set; } = true;
     }
 
     /// <summary>Every warp point the game has declared, keyed by map id.</summary>
@@ -526,20 +526,20 @@ public sealed class GameSimulationState
     /// </remarks>
     public sealed class SystemSfx
     {
-		/// <summary>The file name, empty when the slot is the database default.</summary>
-		public string Name { get; set; } = "";
+        /// <summary>The file name, empty when the slot is the database default.</summary>
+        public string Name { get; set; } = "";
 
-		/// <summary>Volume in percent, 0 to 100.</summary>
-		public int Volume { get; set; } = 100;
+        /// <summary>Volume in percent, 0 to 100.</summary>
+        public int Volume { get; set; } = 100;
 
-		/// <summary>Tempo in percent, 50 to 200.</summary>
-		public int Tempo { get; set; } = 100;
+        /// <summary>Tempo in percent, 50 to 200.</summary>
+        public int Tempo { get; set; } = 100;
 
-		/// <summary>Stereo balance, 50 is centred.</summary>
-		public int Balance { get; set; } = 50;
+        /// <summary>Stereo balance, 50 is centred.</summary>
+        public int Balance { get; set; } = 50;
 
-		/// <summary>Milliseconds to fade in, 0 for none.</summary>
-		public int FadeIn { get; set; }
+        /// <summary>Milliseconds to fade in, 0 for none.</summary>
+        public int FadeIn { get; set; }
     }
 
     /// <summary>
@@ -552,17 +552,17 @@ public sealed class GameSimulationState
     /// </remarks>
     public sealed class SystemBgm
     {
-		/// <summary>The file name, empty when the slot is the database default.</summary>
-		public string Name { get; set; } = "";
+        /// <summary>The file name, empty when the slot is the database default.</summary>
+        public string Name { get; set; } = "";
 
-		/// <summary>Milliseconds to fade in, 0 for none.</summary>
-		public int FadeIn { get; set; }
+        /// <summary>Milliseconds to fade in, 0 for none.</summary>
+        public int FadeIn { get; set; }
 
-		public int Volume { get; set; } = 100;
-		public int Tempo { get; set; } = 100;
+        public int Volume { get; set; } = 100;
+        public int Tempo { get; set; } = 100;
 
-		/// <summary>Stereo balance, 50 is centred.</summary>
-		public int Balance { get; set; } = 50;
+        /// <summary>Stereo balance, 50 is centred.</summary>
+        public int Balance { get; set; } = 50;
     }
 
     /// <summary>The twelve system sound slots, by context number.</summary>
@@ -666,47 +666,47 @@ public sealed class GameSimulationState
     /// <summary>Why the interpreter is waiting, when it is.</summary>
     public enum WaitReason
     {
-		/// <summary>Nothing is blocking the event.</summary>
-		None,
+        /// <summary>Nothing is blocking the event.</summary>
+        None,
 
-		/// <summary>A message window is open, so the outcome is not shown yet.</summary>
-		MessageOpen,
+        /// <summary>A message window is open, so the outcome is not shown yet.</summary>
+        MessageOpen,
 
-		/// <summary>The game over screen is up.</summary>
-		GameOver,
+        /// <summary>The game over screen is up.</summary>
+        GameOver,
 
-		/// <summary>The title screen was requested.</summary>
-		TitleRequested,
+        /// <summary>The title screen was requested.</summary>
+        TitleRequested,
 
-		/// <summary>The save menu is up, from <c>11910</c>.</summary>
-		SaveMenuOpen,
+        /// <summary>The save menu is up, from <c>11910</c>.</summary>
+        SaveMenuOpen,
 
-		/// <summary>The main menu is up, from <c>11950</c>.</summary>
-		MainMenuOpen,
+        /// <summary>The main menu is up, from <c>11950</c>.</summary>
+        MainMenuOpen,
 
-		/// <summary>A battle is running, from <c>10710</c>.</summary>
-		BattleRunning,
+        /// <summary>A battle is running, from <c>10710</c>.</summary>
+        BattleRunning,
     }
 
     /// <summary>What the interpreter is waiting for, from <c>12420</c> and <c>12510</c>.</summary>
     public WaitReason WaitingFor { get; set; } = WaitReason.None;
 
-	/// <summary>Whether the game over screen is up, from <c>12420</c>.</summary>
-	public bool IsGameOverActive { get; set; }
+    /// <summary>Whether the game over screen is up, from <c>12420</c>.</summary>
+    public bool IsGameOverActive { get; set; }
 
-	/// <summary>Whether the title screen was requested, from <c>12510</c>.</summary>
-	public bool IsTitleRequested { get; set; }
+    /// <summary>Whether the title screen was requested, from <c>12510</c>.</summary>
+    public bool IsTitleRequested { get; set; }
 
-	/// <summary>Whether the save menu is up, from <c>11910</c>.</summary>
-	/// <remarks>
-	/// <strong>A request and not an open menu.</strong> This reader builds no
-	/// menu scene, so the flag says what a command asked for — the same shape
-	/// as <see cref="IsGameOverActive"/>, and a caller that draws the menu from
-	/// it is the runtime's business, not the simulation's.
-	/// </remarks>
+    /// <summary>Whether the save menu is up, from <c>11910</c>.</summary>
+    /// <remarks>
+    /// <strong>A request and not an open menu.</strong> This reader builds no
+    /// menu scene, so the flag says what a command asked for — the same shape
+    /// as <see cref="IsGameOverActive"/>, and a caller that draws the menu from
+    /// it is the runtime's business, not the simulation's.
+    /// </remarks>
 
 
-	public bool IsSaveMenuActive { get; set; }
+    public bool IsSaveMenuActive { get; set; }
 
     // ---- Shop (10720) and inn (10730), with their handlers
 
@@ -1252,14 +1252,14 @@ public sealed class GameSimulationState
         Defeat,
     }
 
-	/// <summary>Whether the main menu is up, from <c>11950</c>.</summary>
-	/// <remarks>
-	/// <strong>Its own flag and not a second value of the save one.</strong> A
-	/// reader that stored "a menu" in one field would have the save command
-	/// clear the main menu's request, and a game that opened the main menu and
-	/// then saved would find neither.
-	/// </remarks>
-	public bool IsMainMenuActive { get; set; }
+    /// <summary>Whether the main menu is up, from <c>11950</c>.</summary>
+    /// <remarks>
+    /// <strong>Its own flag and not a second value of the save one.</strong> A
+    /// reader that stored "a menu" in one field would have the save command
+    /// clear the main menu's request, and a game that opened the main menu and
+    /// then saved would find neither.
+    /// </remarks>
+    public bool IsMainMenuActive { get; set; }
 
     public bool AllowEscape { get; private set; } = true;
 
@@ -1579,6 +1579,39 @@ public sealed class GameSimulationState
     // Actors (mutable battle stats)
     public Godot.Collections.Dictionary<int, Godot.Collections.Dictionary> ActorState { get; init; } = new();
 
+    /// <summary>The bound liblcf gives a class id.</summary>
+    public const int MaxClassId = 5000;
+
+    /// <summary>The class each actor has, from <c>1008</c> Change Class.</summary>
+    /// <remarks>
+    /// <strong>Zero is "no class" and is a value.</strong> The reference
+    /// guards its invalid-class warning with <c>class_id != 0</c> and falls
+    /// back to the actor's own database settings when there is no class —
+    /// so a 2K3 game can remove a hero from a class without erroring.
+    /// </remarks>
+    public int[] ActorClassId { get; init; } = new int[MaxActorId + 1];
+
+    /// <summary><c>1008</c> leaves the skills alone.</summary>
+    public const int ClassSkillNoChange = 0;
+
+    /// <summary><c>1008</c> unlearns everything, then learns the level skills.</summary>
+    public const int ClassSkillReset = 1;
+
+    /// <summary><c>1008</c> adds the new class's level skills.</summary>
+    public const int ClassSkillAdd = 2;
+
+    /// <summary><c>1008</c> leaves the base parameters alone.</summary>
+    public const int ClassParamNoChange = 0;
+
+    /// <summary><c>1008</c> halves every base parameter.</summary>
+    public const int ClassParamHalf = 1;
+
+    /// <summary><c>1008</c> keeps the new class's own parameters.</summary>
+    public const int ClassParamResetLevel1 = 2;
+
+    /// <summary><c>1008</c> does not write the base parameters at all.</summary>
+    public const int ClassParamReset = 3;
+
     /// <summary>
     /// The base battle values each actor has, from <c>10430</c>.
     /// </summary>
@@ -1624,6 +1657,156 @@ public sealed class GameSimulationState
     /// create hero 99</strong> — and the hero would then exist for every
     /// later command, in the party window and in the save file.
     /// </remarks>
+    /// <summary>
+    /// The skills a class teaches between two levels, for <c>1008</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Empty, because this reader has not read the class
+    /// table.</strong> The reference walks the class entry's own skill list;
+    /// <strong>an invented list would be a number a game can be wrong
+    /// about</strong>, and a skill that does not exist in the file is worse
+    /// than a missing one. The diagnostic in the interpreter says so.
+    /// </remarks>
+    public System.Collections.Generic.IEnumerable<int> ClassSkillsFor(
+        int pActorId,
+        int pClassId,
+        int pFromLevel,
+        int pToLevel)
+    {
+        _ = pActorId;
+        _ = pClassId;
+        _ = pFromLevel;
+        _ = pToLevel;
+        return System.Array.Empty<int>();
+    }
+
+    /// <summary>
+    /// Changes an actor's class, from <c>1008</c> and the reference's
+    /// <c>Game_Actor::ChangeClass</c>.
+    /// </summary>
+    /// <param name="pActorId">The hero whose class changes.</param>
+    /// <param name="pClassId">The new class, and zero for "no class".</param>
+    /// <param name="pLevel1">Whether the hero drops to level one.</param>
+    /// <param name="pSkillMode">One of the three <c>ClassSkill</c> values.</param>
+    /// <param name="pParamMode">One of the four <c>ClassParam</c> values.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>The equipment goes first and always</strong>, and
+    /// <strong>the experience is reset even when the level did not
+    /// move</strong> — both are the reference's own commented RPG_RT
+    /// behaviour, and both are compatibility rather than tidiness: a reader
+    /// that kept either would have produced a hero state the original never
+    /// produces.
+    /// </para>
+    /// <para>
+    /// <strong>And the reference's two documented bugs are kept.</strong> Its
+    /// own comments: "if (<c>new_level == 1 &amp;&amp; new_class_id ==
+    /// prev_class_id</c>) no skills are removed" and "if
+    /// (<c>new_class_id == prev_class_id</c>) level 1 skills are not
+    /// learned". <strong>A reader that fixed either would have given a 2K3
+    /// game skills RPG_RT never gives.</strong>
+    /// </para>
+    /// </remarks>
+    public void ChangeActorClass(
+        int pActorId,
+        int pClassId,
+        bool pLevel1,
+        int pSkillMode,
+        int pParamMode)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId)
+        {
+            return;
+        }
+
+        var values = GetOrCreateActorValues(pActorId);
+        var vorherKlasse = ActorClassId[pActorId];
+        var vorherLevel = GetActorLevel(pActorId);
+        var hp = CurrentHp.TryGetValue(pActorId, out var v) ? v : values.BaseMaxHp;
+        var sp = CurrentSp.TryGetValue(pActorId, out var s) ? s : values.BaseMaxSp;
+
+        // **Die Ausruestung geht zuerst und immer.**
+        RemoveWholeEquipment(pActorId);
+
+        // **Die Basiswerte werden gesichert, weil der Parameter-Modus sie
+        // haeln oder halbieren kann** -- die Referenz laesst sie unangetastet
+        // und schreibt sie am Ende zurueck.
+        var maxHp = values.BaseMaxHp;
+        var maxSp = values.BaseMaxSp;
+        var atk = values.BaseAttack;
+        var def = values.BaseDefense;
+        var spi = values.BaseSpirit;
+        var agi = values.BaseAgility;
+
+        if (pParamMode == ClassParamHalf)
+        {
+            maxHp /= 2;
+            maxSp /= 2;
+            atk /= 2;
+            def /= 2;
+            spi /= 2;
+            agi /= 2;
+        }
+
+        ActorClassId[pActorId] = pClassId;
+        SetActorLevel(pActorId, pLevel1 ? MinActorLevel : vorherLevel);
+
+        // **Die Erfahrung geht zurueck, auch wenn die Stufe blieb.**
+        SetActorExp(pActorId, 0);
+
+        if (pParamMode != ClassParamReset)
+        {
+            values.SetBaseParameter(0, maxHp);
+            values.SetBaseParameter(1, maxSp);
+            values.SetBaseParameter(2, atk);
+            values.SetBaseParameter(3, def);
+            values.SetBaseParameter(4, spi);
+            values.SetBaseParameter(5, agi);
+        }
+
+        CurrentHp[pActorId] = Math.Clamp(hp, 1, Math.Max(1, maxHp));
+        CurrentSp[pActorId] = Math.Max(0, sp);
+
+        var skills = SkillsOf(pActorId);
+        if (pSkillMode == ClassSkillReset)
+        {
+            // **RPG_RT-Fehler, absichtlich behalten:** bei Stufe 1 *und*
+            // gleicher Klasse werden keine Faehigkeiten entfernt.
+            if (!(pLevel1 && pClassId == vorherKlasse))
+            {
+                skills.Clear();
+            }
+
+            // **Und der zweite:** bei gleicher Klasse werden die
+            // Stufe-1-Faehigkeiten nicht gelernt.
+            if (pClassId != vorherKlasse)
+            {
+                AddClassSkills(pActorId, pClassId, pLevel1 ? MinActorLevel : vorherLevel);
+            }
+        }
+        else if (pSkillMode == ClassSkillAdd && pClassId != vorherKlasse)
+        {
+            AddClassSkills(pActorId, pClassId, pLevel1 ? MinActorLevel : vorherLevel);
+        }
+    }
+
+    /// <summary>
+    /// Adds the skills a class teaches up to a level, for <c>1008</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Empty until the class table is read</strong>, and the
+    /// interpreter's diagnostic says so rather than reporting a skill change
+    /// that did not happen.
+    /// </remarks>
+    private void AddClassSkills(int pActorId, int pClassId, int pToLevel)
+    {
+        var skills = SkillsOf(pActorId);
+        foreach (var skill in ClassSkillsFor(pActorId, pClassId, 1, pToLevel))
+        {
+            skills.Add(skill);
+        }
+    }
+
     public Rm2kActorValues? FindActorValues(int pActorId)
     {
         if (pActorId < 1 || pActorId > MaxActorId)

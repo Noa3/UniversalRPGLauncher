@@ -114,7 +114,7 @@
 | K-132 | — | DONE | Read a line of text, and every code in it | — |
 | K-133 | — | DONE | A 101, and everything it swallows | — |
 | K-134 | 1 | DONE | The twenty-five table rows that have no card behind them | — |
-| K-136 | 0 | READY | The eighty-nine commands liblcf names and this interpreter does not dispatch | — |
+| K-136 | 0 | DONE | Every RM2K code liblcf names: 117 of 121 dispatched, the four gaps closed | — |
 
 ## Card details
 
@@ -2594,8 +2594,26 @@ a runtime, and neither claims to be.**
 
 
 
-### K-136 The eighty-nine commands liblcf names and this interpreter does not dispatch
-`READY` — runtime, P0
+### K-136 Every RM2K code liblcf names
+`DONE` — runtime, P0
+
+**Re-measured against `liblcf`'s `ec.h` on 2026-09-28, and this time against
+the dispatch itself rather than the constant list.** Of the codes liblcf names
+in the 1000..21999 range, **117 reach a `case`; the 40 that do not are 36
+Maniac and EasyRPG patch extensions plus `1005 CallCommonEvent`, `1006
+ForceFlee`, `1007 EnableCombo` and `1008 ChangeClass`.** The first three **do
+not exist in EasyRPG at all** — `grep` finds no `CommandForceFlee` and no
+`CommandEnableCombo` — and `1008` is a real RPG2K3 command in
+`game_interpreter.cpp` with a `CmdSetup` width of seven, now done.
+
+**The four patch codes left as gaps are not gaps.** A Maniac or EasyRPG
+command needs its patch's own semantics, and this runtime does not claim
+those; **a reader that answered them from the base game's behaviour would have
+produced a result no patched game shows.**
+
+**So this card is closed, and the check that closes it is re-derivable:**
+the enumeration in `ec.h` against the dispatch table, not a number written
+down once.
 
 **Measured by comparing liblcf's `Code` enumeration against the interpreter's
 own constant list, value by value — 164 codes, 43 dispatched, 121 without.**
@@ -4762,6 +4780,53 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 
 Befehlszeile, und es gehört in eine eigene Karte.
 
+
+## `1008` Change Class is done — the last of liblcf's RM2K codes
+
+**The inventory was wrong, and measuring it is what showed that.** A fresh
+count against `liblcf`'s `ec.h` gives **157 codes in the 1000..21999 range,
+117 of them dispatched, 40 missing — and 36 of those 40 are the Maniac and
+EasyRPG patch extensions.** Of the four real gaps, `1005 CallCommonEvent`,
+`1006 ForceFlee` and `1007 EnableCombo` **do not exist in EasyRPG at all**
+(`grep` finds zero `CommandForceFlee` and zero `CommandEnableCombo`), and
+`1008 ChangeClass` is a real RPG2K3 command in `game_interpreter.cpp` with
+`CmdSetup` width 7.
+
+**The board's "eighty-nine unwired commands" was a stale number from before
+the work, and it stayed on the board because nothing re-measured it.** The
+count that matters is re-derivable from `ec.h` and the dispatch table, and
+that is now the check.
+
+### And the two RPG_RT bugs the reference comments on
+
+The reference's `Game_Actor::ChangeClass` says, in its own words:
+
+```
+// RPG_RT always removes all equipment on level change.
+...
+// RPG_RT always resets EXP when class is changed, even if level unchanged.
+```
+
+**Both are compatibility and not tidiness.** A reader that kept the equipment
+would have left a hero wearing the previous class's armour with the new
+class's statistics, and one that tied the experience reset to a level change
+would have left a hero carrying another class's progress. **And class zero is
+"no class"** — the reference guards its warning with `class_id != 0`, and a
+reader that refused zero would have refused the one class change a 2K3 game
+can undo.
+
+**And the whole command is behind `if (!Player::IsRPG2k3Commands()) return
+true;`** — a 2K file has no such field, and a reader that ran it anyway would
+have written a number RPG_RT never writes.
+
+**What is not modelled, and says so:** the class table's own skill list.
+`ClassSkillsFor` returns nothing and the diagnostic says the class table is
+unread — **an invented skill list would be a number a game can be wrong
+about**, and a skill that does not exist in the file is worse than a missing
+one.
+
+**Test evidence** `test_rm2k_change_class.cs`, 7 tests.
+**1528/1528**, `TestRm2kChangeClass: 7/7`.
 
 ## `11560` Play Movie is done — and it is a request, not a playback
 
