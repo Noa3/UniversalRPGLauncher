@@ -4292,6 +4292,26 @@ in isolation.
 unparenthesised form throws, and the sheet's own form answers. Removing the
 parentheses from `WolfCharacterSheet.cs` kills two tests.
 
+### Four harnesses carried the same bug, and one of them was already broken
+
+The battle-branch run reported `11 von 12` with `13310 erreicht den Dispatch
+nicht` as the survivor. Measured on its own that rule produces **18 failures**.
+So the rule is real, the suite catches it, and the run had not measured it.
+
+**The cause: `mut_branch.py` still had the pre-fix `for d in (INT, STATE)`
+restore, with no retry.** The rule is the third in the run, and the DLL the
+Godot process loaded was still the second rule's — so the mutation was never
+compiled. `grep` over the harness directory found four scripts with the old
+list (`mut_actor`, `mut_branch`, `mut_flash`, `mut_shop`) and one that no
+longer parsed at all (`mut_map`).
+
+**The fix is one body, extracted once, and every script uses it:** the backup
+list and the restore list both come from `RULES`, and the restore retries five
+times on `WinError 1224`. Keeping ten copies of a loop whose correctness the
+whole run depends on is the same mistake as keeping ten copies of a
+command-width check — **the property has to live in one place, and the copies
+have to be checked for it.**
+
 ### A surviving rule that was my mistake, and the shape it took
 
 `Reset laesst eine alte Filmanfrage stehen` survived, and measured on its own

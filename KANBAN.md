@@ -5005,6 +5005,17 @@ restore race documented in `SESSION_STATE.md`, and not a test gap.
 
 ## The battle branch family is done — `13310`, `13410`, `23310`, `23311`
 
+**Mutations** Twelve rules, **12 of 12 caught.** The first run reported
+`11 von 12` with `13310 erreicht den Dispatch nicht` as the survivor —
+and that rule, measured on its own, produces **eighteen failures**. The
+harness still carried the pre-fix restore list, so the mutation of rule
+three was never compiled into the DLL the runner loaded. **A survivor in
+a run whose harness has a known defect is not evidence about the test
+suite**; measure the rule alone before believing either number. The body
+is now shared by every script, with the backup and restore lists derived
+from `RULES` and a five-times retry on `WinError 1224`.
+
+
 **Four codes, and the branch is the only one of the four with real work.**
 
 **`13310` has width 5 and six modes, and the last two are 2003-only** — the
