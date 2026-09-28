@@ -704,7 +704,272 @@ public sealed class GameSimulationState
 	/// as <see cref="IsGameOverActive"/>, and a caller that draws the menu from
 	/// it is the runtime's business, not the simulation's.
 	/// </remarks>
+
+
 	public bool IsSaveMenuActive { get; set; }
+
+    // ---- Shop (10720) and inn (10730), with their handlers
+
+    /// <summary>
+    /// What a shop or an inn is doing, and the option a command offers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Five states, and the reference's own names for them.</strong>
+    /// <c>eOptionShopTransaction</c>, <c>eOptionShopNoTransaction</c>,
+    /// <c>eOptionInnStay</c> and <c>eOptionInnNoStay</c> are the four, and
+    /// <c>None</c> is this reader's own for "no option on the table". <strong>A
+    /// reader with a single "is a shop open" flag could not tell</strong>
+    /// which of the two shop options a handler answered, and the handler list
+    /// it has to walk is built from exactly that.
+    /// </para>
+    /// </remarks>
+    public enum ShopOption
+    {
+        /// <summary>No shop or inn option is on the table.</summary>
+        None,
+
+        /// <summary>10720, Open Shop: the player may buy and sell.</summary>
+        ShopTransaction,
+
+        /// <summary>20720, Transaction: the shop runs and the player buys.</summary>
+        Transaction,
+
+        /// <summary>20721, No Transaction: the shop runs and nothing is traded.</summary>
+        NoTransaction,
+
+        /// <summary>10730, Show Inn: the player may stay and rest.</summary>
+        InnStay,
+
+        /// <summary>20730, Stay: the inn runs and the party rests.</summary>
+        Stay,
+
+        /// <summary>20731, No Stay: the inn runs and nothing is rested.</summary>
+        NoStay,
+    }
+
+    /// <summary>
+    /// The option the last shop or inn command offered.
+    /// </summary>
+    public ShopOption ActiveShopOption { get; set; } = ShopOption.None;
+
+    /// <summary>
+    /// The subcommand index a command block belongs to, from the shop's and
+    /// the inn's own option.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is the one number the reference's handler depends on.</strong>
+    /// <c>CommandOptionGeneric</c> reads the sub-index and compares it with
+    /// the option the handler is for — <strong>so a handler runs its block
+    /// only when it is the option that was chosen, and skips it when it is
+    /// not.</strong> A reader without this would run every handler in a shop,
+    /// and a game's "you bought nothing" branch would have run beside its
+    /// "you bought something" branch.
+    /// </para>
+    /// <para>
+    /// <strong>And the chosen sub-index is cleared when its handler runs,</strong>
+    /// so the next handler of the same list finds nothing chosen and skips.
+    /// That is the reference's own sentinel, and it is why a shop with two
+    /// handlers runs one of them and not both.
+    /// </para>
+    /// </remarks>
+    public int SubcommandIndex { get; set; }
+
+    /// <summary>
+    /// The reference's own sentinel for "this option has already run".
+    /// </summary>
+    public const int SubcommandSentinel = -1;
+
+    /// <summary>
+    /// Whether a handler for a sub-index should run its block, and clears the
+    /// choice when it does.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is the reference's own if/else and it is one
+    /// comparison.</strong> The other arm is the caller skipping to the next
+    /// handler, and the two together are the whole of a handler.
+    /// </remarks>
+    public bool IsSubcommandChosen(int pOptionSubIdx)
+    {
+        if (SubcommandIndex != pOptionSubIdx)
+        {
+            return false;
+        }
+
+        SubcommandIndex = SubcommandSentinel;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether a shop or an inn is open, and which of the two it is.
+    /// </summary>
+    /// <remarks>
+    /// <strong>It is the shape of the option and not a separate flag.</strong>
+    /// The reference calls <c>Game_Shop::SetMode()</c> from the opener and
+    /// clears it from the closer, so a second flag would be free to disagree
+    /// with the option it is supposed to follow.
+    /// </remarks>
+    public bool IsShopOpen { get; private set; }
+
+    /// <summary>
+    /// Whether an inn is open.
+    /// </summary>
+    public bool IsInnOpen { get; private set; }
+
+    /// <summary>The gold a stay in an inn costs, from 10730's second
+    /// parameter.</summary>
+    public int InnPrice { get; set; }
+
+    /// <summary>The inn's type, from 10730's first parameter.</summary>
+    public int InnType { get; private set; }
+
+    /// <summary>
+    /// The shop's own items, from 10720 Open Shop.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Three values per item and not two.</strong> The reference's
+    /// <c>CmdSetup&lt;..., 4&gt;</c> says four, and the first is the item id
+    /// while the second is a <em>price</em> and not a stock count. <strong>A
+    /// reader that read the second parameter as "how many" would have shown
+    /// one item where the shopkeeper has fifty</strong>, and a game's shop
+    /// would have sold its wares one at a time and then stopped.
+    /// </remarks>
+    public Godot.Collections.Array<int> ShopItemIds { get; } = new();
+
+    /// <summary>
+    /// The shop's own prices, in the same order as
+    /// <see cref="ShopItemIds"/>.
+    /// </summary>
+    public Godot.Collections.Array<int> ShopPrices { get; } = new();
+
+    /// <summary>
+    /// Whether a shop is open, from 10720 and 20722.
+    /// </summary>
+    /// <summary>
+    /// Whether the shop lets the player buy, from 10720's first parameter.
+    /// </summary>
+    public bool CanBuy { get; private set; }
+
+    /// <summary>
+    /// Whether the shop lets the player sell, from the same parameter.
+    /// </summary>
+    public bool CanSell { get; private set; }
+
+    /// <summary>
+    /// The shop's type, from 10720's second parameter.
+    /// </summary>
+    public int ShopType { get; private set; }
+
+    /// <summary>
+    /// Whether the shop's own handlers are written, from its third parameter.
+    /// </summary>
+    public bool ShopHasHandlers { get; private set; }
+
+    /// <summary>
+    /// Opens a shop of a type, from 10720.
+    /// </summary>
+    public void OpenShop(
+        int pType,
+        bool pCanBuy,
+        bool pCanSell,
+        bool pHasHandlers)
+    {
+        IsShopOpen = true;
+        IsInnOpen = false;
+        ShopType = pType;
+        CanBuy = pCanBuy;
+        CanSell = pCanSell;
+        ShopHasHandlers = pHasHandlers;
+    }
+
+    /// <summary>
+    /// Adds one of the shop's goods, from 10720's fourth parameter onward.
+    /// </summary>
+    public void AddShopGood(int pItemId)
+    {
+        ShopItemIds.Add(pItemId);
+        // **The price is not a parameter of its own** — the reference copies
+        // everything from the fourth parameter on into one list, so this
+        // reader keeps the ids and reports no price of its own.
+        ShopPrices.Add(0);
+    }
+
+    /// <summary>
+    /// Closes a shop, from 20722 End Shop.
+    /// </summary>
+    public void CloseShop()
+    {
+        IsShopOpen = false;
+        ActiveShopOption = ShopOption.None;
+        ShopItemIds.Clear();
+        ShopPrices.Clear();
+    }
+
+    /// <summary>
+    /// Opens an inn with a price, from 10730 Show Inn.
+    /// </summary>
+    public void OpenInn(int pType, int pPrice)
+    {
+        IsInnOpen = true;
+        IsShopOpen = false;
+        InnType = pType;
+        InnPrice = pPrice;
+    }
+
+    /// <summary>
+    /// Closes an inn, from 20732 End Inn.
+    /// </summary>
+    public void CloseInn()
+    {
+        IsInnOpen = false;
+        ActiveShopOption = ShopOption.None;
+    }
+
+    /// <summary>
+    /// The gold a stay costs, and it is a third parameter and not a division.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The reference's <c>CmdSetup</c> gives 10730 a width of 3</strong>
+    /// — item, who shows the price, and the price. <strong>A reader that read
+    /// the price as the second parameter would have taken the "show the price
+    /// or not" flag for the amount</strong> and charged a party one gold for a
+    /// night's rest, or nothing at all.
+    /// </remarks>
+    public bool ShouldShowInnPrice { get; set; }
+
+    // ---- The battle outcome handlers (20710, 20711, 20712, 20713)
+
+    /// <summary>
+    /// Which battle outcome a handler answers, from the encounter's own
+    /// options.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The reference's option is per outcome and not per battle.</strong>
+    /// <c>eOptionEnemyEncounterVictory</c>, <c>…Escape</c> and <c>…Defeat</c>
+    /// are three separate values, and the encounter command's third and
+    /// fourth parameters pick which handler list belongs to the battle in
+    /// hand.
+    /// </remarks>
+    public BattleOutcome ActiveBattleOption { get; set; } = BattleOutcome.None;
+
+    /// <summary>
+    /// The battle outcome a handler answers.
+    /// </summary>
+    public enum BattleOutcome
+    {
+        /// <summary>No outcome is being handled.</summary>
+        None,
+
+        /// <summary>10710's victory option: what runs when the party wins.</summary>
+        Victory,
+
+        /// <summary>10710's escape option: what runs when the party flees.</summary>
+        Escape,
+
+        /// <summary>10710's defeat option: what runs when the party loses.</summary>
+        Defeat,
+    }
 
 	/// <summary>Whether the main menu is up, from <c>11950</c>.</summary>
 	/// <remarks>

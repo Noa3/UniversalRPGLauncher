@@ -2634,7 +2634,7 @@ look for the next island of that shape.**
 | battle | ~~`10500` `10710`~~ | **~~simulated attack and the encounter — DONE, see below~~** |
 | movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
 | movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — done: one flag and one map-wide call** |
-| shop and inn | `10720` `10730` `20720`–`20732` | a shop scene, an inn scene, and the four transaction states |
+| ~~shop and inn~~ | ~~`10720` `10730` `20710`–`20732`~~ | **~~open shop, show inn and the ten battle/shop/inn handlers — DONE, see below~~** |
 | memory | ~~`10820` `11530` `11540`~~ | **~~memorize location, memorize and play BGM — DONE~~** |
 | memory | `10830` `10910` | **Recall To Location is in liblcf and has no method in this EasyRPG build; Store Terrain ID likewise** |
 | memory | `10920` | **Store Event ID — DONE; the note that it had no method was wrong, see below** |
@@ -4746,6 +4746,59 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 
 Befehlszeile, und es gehört in eine eigene Karte.
 
+
+## The shop and inn family is done — `10720`, `10730` and the ten handlers
+
+**Twelve commands, and ten of them have a width of zero.** 20710, 20711, 20712,
+20713, 20720, 20721, 20722, 20730, 20731 and 20722 are `CmdSetup<..., 0>` —
+a handler is a name for a block, and a reader that expected parameters to read
+would be reading past the end of a list that is not there. The two openers are
+10720 with a width of 4 and 10730 with a width of 3.
+
+**10720's first parameter is a mode and not a value, and its switch has three
+cases and a default that does nothing** — 0 buys and sells, 1 buys, 2 sells, and
+a fourth buys and sells nothing. **Its goods start at the *fourth* parameter:**
+the reference copies everything from `parameters.begin() + 4` on into one list,
+so a width of 4 means a shop with no goods at all. **Its second parameter is
+the shop's type and not a price**, and its third is a handler flag the
+reference reads and does not use.
+
+**10730's price is the *second* parameter, and the first is the inn's type** —
+the reference writes `int inn_price = com.parameters[1]` in the command's first
+two lines. A reader that took the type for the price would have charged a party
+the inn's kind for a night's rest. **A price of zero skips the prompt** — the
+reference has its own branch for it and the comment there says "Skip prompt".
+
+**And a handler runs its block only when it is the option that was chosen.**
+`CommandOptionGeneric` reads the sub-index, compares it with the option, and
+then either writes the sentinel or skips to the next handler — **so a reader
+that always skipped would run a shop's "you bought nothing" branch beside its
+"you bought something" branch**, and one that always ran would run both.
+
+**Each handler has its own closing list and the lists are different lengths.**
+A shop transaction ends at the no-transaction or the end shop; a
+no-transaction at the end shop alone. A victory ends at the escape, the defeat
+or the end battle; a defeat at the end battle alone. **And the closing list is
+only ever read in the skipping arm**, because a chosen handler runs its block
+and goes on — which is why two mutations that lengthened the one-entry lists
+survived a suite whose tests all *chose* their handlers.
+
+**20722 changes nothing.** The reference's `CommandEndShop` is a bare
+`return true;` with the parameter named away — the shop's own scene closed when
+the player left it. **A reader that cleared the shop state here would have had
+a game's shop close the moment its own block ended**, which is a different
+event. 20732 and 20713 do clear state.
+
+**And a stay does not heal the party** — the reference's `CommandStay` is the
+handler, and what a stay does to the party's hit points is the inn's own
+business, the same split the reference makes for a shop's trading.
+
+**Test evidence** `test_rm2k_shop_and_inn.cs`, 23 tests.
+**1433/1433**, `TestRm2kShopAndInn: 23/23`, validator passed.
+**Mutations** Twenty-one rules over three runs, **21 of 21 caught** — the
+handler that runs unchosen, the sentinel, both one-entry closing lists, the
+three shop modes, the goods' start parameter, the inn's price parameter, the
+battle ending, the skip loop, and all twelve dispatch arms.
 
 ## The battle-only family is done — `13110`, `13120`, `13130`, `13150`, `13210`
 

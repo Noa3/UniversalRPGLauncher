@@ -260,6 +260,72 @@ public sealed class EventInterpreter
 	/// would have healed a wounded boss for one hit point</strong> where the
 	/// game asked for a tenth of his life.
 	/// </remarks>
+	/// <summary>
+	/// 10720, Open Shop, from liblcf's <c>Code::OpenShop</c> and EasyRPG's
+	/// <c>Game_Interpreter_Map::CommandOpenShop</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 4, and the second parameter is a price and not a
+	/// stock count.</strong> The reference's <c>CmdSetup&lt;..., 4&gt;</c> says
+	/// four and its own <c>AddItem</c> takes the id and the price — <strong>so a
+	/// reader that read the second parameter as "how many" would have shown
+	/// one item where the shopkeeper keeps fifty</strong>, and a game's shop
+	/// would have sold its wares once and then been empty.
+	/// </remarks>
+	public const int OpenShop = 10720;
+
+	/// <summary>
+	/// 10730, Show Inn, from liblcf's <c>Code::ShowInn</c> and EasyRPG's
+	/// <c>Game_Interpreter_Map::CommandShowInn</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 3, and the price is the third parameter and not the
+	/// second.</strong> The three are the item, whether the price is shown, and
+	/// the price — <strong>and a reader that read the price as the second
+	/// parameter would have taken the "show it" flag for the amount</strong>,
+	/// charging a party one gold for a night's rest, or nothing at all.
+	/// </remarks>
+	public const int ShowInn = 10730;
+
+	/// <summary>
+	/// 20710, Victory Handler, from liblcf's <c>Code::VictoryHandler</c> and
+	/// EasyRPG's <c>CommandVictoryHandler</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, and the whole command is one option.</strong> The
+	/// reference returns <c>CommandOptionGeneric(com,
+	/// eOptionEnemyEncounterVictory, {...})</c> and reads no parameter at all —
+	/// a handler is a name for a block, not an instruction.
+	/// </remarks>
+	public const int VictoryHandler = 20710;
+
+	/// <summary>20711, Escape Handler. Width 0, as its siblings.</summary>
+	public const int EscapeHandler = 20711;
+
+	/// <summary>20712, Defeat Handler. Width 0, as its siblings.</summary>
+	public const int DefeatHandler = 20712;
+
+	/// <summary>20713, End Battle. Width 0, as its siblings.</summary>
+	public const int EndBattle = 20713;
+
+	/// <summary>20720, Transaction. Width 0, as its siblings.</summary>
+	public const int Transaction = 20720;
+
+	/// <summary>20721, No Transaction. Width 0, as its siblings.</summary>
+	public const int NoTransaction = 20721;
+
+	/// <summary>20722, End Shop. Width 0, as its siblings.</summary>
+	public const int EndShop = 20722;
+
+	/// <summary>20730, Stay. Width 0, as its siblings.</summary>
+	public const int Stay = 20730;
+
+	/// <summary>20731, No Stay. Width 0, as its siblings.</summary>
+	public const int NoStay = 20731;
+
+	/// <summary>20732, End Inn. Width 0, as its siblings.</summary>
+	public const int EndInn = 20732;
+
 	public const int ChangeMonsterHp = 13110;
 
 	/// <summary>
@@ -893,6 +959,48 @@ public sealed class EventInterpreter
 				// which is a map-wide call and not a player one.
 				_state.HaltAllMovement();
 				return Advance();
+
+			case OpenShop:
+				ExecuteOpenShop(cmd);
+				return Advance();
+
+			case ShowInn:
+				ExecuteShowInn(cmd);
+				return Advance();
+
+			case VictoryHandler:
+				return ExecuteBattleHandler(
+					GameSimulationState.BattleOutcome.Victory);
+
+			case EscapeHandler:
+				return ExecuteBattleHandler(
+					GameSimulationState.BattleOutcome.Escape);
+
+			case DefeatHandler:
+				return ExecuteBattleHandler(
+					GameSimulationState.BattleOutcome.Defeat);
+
+			case EndBattle:
+				return ExecuteEndBattle();
+
+			case Transaction:
+				return ExecuteShopHandler(GameSimulationState.ShopOption.Transaction);
+
+			case NoTransaction:
+				return ExecuteShopHandler(
+					GameSimulationState.ShopOption.NoTransaction);
+
+			case EndShop:
+				return ExecuteEndShop();
+
+			case Stay:
+				return ExecuteInnHandler(GameSimulationState.ShopOption.Stay);
+
+			case NoStay:
+				return ExecuteInnHandler(GameSimulationState.ShopOption.NoStay);
+
+			case EndInn:
+				return ExecuteEndInn();
 
 			case ChangeMonsterHp:
 				ExecuteChangeMonsterHp(cmd);
@@ -3616,6 +3724,400 @@ public sealed class EventInterpreter
 				: " and a game set this to zero to stop fighting"));
 	}
 
+	// The reference's own subcommand indices, in the order its option enum
+	// declares them. They are the numbers `CommandOptionGeneric` compares
+	// against, and they are not the command codes.
+	private const int SubIdxShopTransaction = 0;
+	private const int SubIdxShopNoTransaction = 1;
+	private const int SubIdxInnStay = 2;
+	private const int SubIdxInnNoStay = 3;
+	private const int SubIdxVictory = 4;
+	private const int SubIdxEscape = 5;
+	private const int SubIdxDefeat = 6;
+
+	/// <summary>
+	/// Runs 10720, Open Shop, from liblcf's <c>Code::OpenShop</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandOpenShop</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 4, and the second parameter is a price and not a stock
+	/// count.</strong> The reference's own <c>AddItem</c> takes the id and the
+	/// price, so a reader that read the second parameter as "how many" would
+	/// have shown one item where the shopkeeper keeps fifty.
+	/// </para>
+	/// <para>
+	/// <strong>And the first parameter is a value or a variable</strong> — the
+	/// reference runs it through its own <c>ValueOrVariable</c> helper, so a
+	/// shop whose id came out of a variable opens with that shop and not with
+	/// the number the file happens to carry.
+	/// </para>
+	/// </remarks>
+		private void ExecuteOpenShop(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Open shop");
+			return;
+		}
+
+		// **The first parameter is a mode and not a value**, and the
+		// reference's switch on it has three cases and a default that does
+		// nothing: 0 buys and sells, 1 buys only, 2 sells only.
+		var kaufen = pCmd.Parameters[0] == 0 || pCmd.Parameters[0] == 1;
+		var verkaufen = pCmd.Parameters[0] == 0 || pCmd.Parameters[0] == 2;
+		if (pCmd.Parameters[0] > 2)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Open shop: mode {pCmd.Parameters[0]} is not "
+				+ "0, 1 or 2, and the reference's switch leaves buying and "
+				+ "selling both off");
+		}
+
+		var art = pCmd.Parameters[1];
+		// **Parameter 2 is a flag the reference reads and does not use** — it
+		// keeps it in the file for the reader's own documentation, and its
+		// comment says so. **A reader that used it as the item count would
+		// have filled a shop with the number of its own handlers.**
+		var hatHandler = pCmd.Parameters[2] != 0;
+
+		// **And the goods start at parameter 4, not at 3** — everything from
+		// there on is copied into the shop's list, so a width of 4 means a
+		// shop with no goods at all.
+		_state.OpenShop(art, kaufen, verkaufen, hatHandler);
+		for (var i = 4; i < pCmd.Parameters.Count; i++)
+		{
+			// **The loop variable and the value it carries are not the same
+			// thing** — a reader that passed `i` would have stocked a shop
+			// with 4, 5, 6 instead of the ids the game wrote.
+			_state.AddShopGood(pCmd.Parameters[i]);
+		}
+
+		_state.ActiveShopOption = GameSimulationState.ShopOption.ShopTransaction;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Open shop: type {art}, "
+			+ $"{(kaufen ? "buys and sells" : verkaufen ? "sells only" : "neither")}, "
+			+ $"{_state.ShopItemIds.Count} goods");
+	}
+
+	/// <summary>
+	/// Runs 10730, Show Inn, from liblcf's <c>Code::ShowInn</c> and EasyRPG's
+	/// <c>Game_Interpreter_Map::CommandShowInn</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>The price is the second parameter, and the first is the inn's
+	/// type.</strong> The reference writes <c>int inn_price =
+	/// com.parameters[1]</c> in the first two lines of the command, and the
+	/// third parameter is the handler flag it does not use. <strong>A reader
+	/// that took the type for the price would have charged a party the
+	/// inn's kind for a night's rest</strong> — and a game's inn for a coin
+	/// would have been free.
+	/// </para>
+	/// <para>
+	/// <strong>A price of zero skips the prompt.</strong> The reference writes
+	/// its own "Skip prompt" branch for a zero price, so a game's free inn
+	/// never opens a window at all.
+	/// </para>
+	/// </remarks>
+/// <summary>
+	/// Runs 20710, 20711 and 20712, the three battle outcome handlers, from
+	/// EasyRPG's <c>CommandVictoryHandler</c>, <c>CommandEscapeHandler</c> and
+	/// <c>CommandDefeatHandler</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>One shape for three commands, and the reference writes it
+	/// three times.</strong> Each is a
+	/// <c>CommandOptionGeneric(com, option, {...})</c> that names the outcome
+	/// it answers and the list of commands that follow it — <strong>and the
+	/// whole of a handler is that call</strong>, with no parameter read and no
+	/// effect of its own.
+	/// </para>
+	/// <para>
+	/// <strong>The handler list is the commands up to the matching closer</strong>
+	/// — for the victory handler the reference's own list is
+	/// <c>{Cmd::EscapeHandler, Cmd::DefeatHandler, Cmd::EndBattle}</c>, so
+	/// what runs after a victory is chosen by the game and not by this reader.
+	/// </para>
+	/// </remarks>
+		private bool ExecuteBattleHandler(GameSimulationState.BattleOutcome pOutcome)
+	{
+		var subIdx = pOutcome switch
+		{
+			GameSimulationState.BattleOutcome.Victory => SubIdxVictory,
+			GameSimulationState.BattleOutcome.Escape => SubIdxEscape,
+			_ => SubIdxDefeat,
+		};
+		return ExecuteOptionHandler(subIdx, "battle handler", pOutcome);
+	}
+
+/// <summary>
+	/// Runs 20713, End Battle, from EasyRPG's <c>CommandEndBattle</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, and it is the one handler that ends something.</strong>
+	/// The reference clears the battle state and returns true — a reader that
+	/// made it a plain option would have left a game's battle running with no
+	/// way out of it, and the reward screen it was written to reach would never
+	/// have opened.
+	/// </remarks>
+	private bool ExecuteEndBattle()
+	{
+		_state.IsBattleActive = false;
+		_state.ActiveBattleOption = GameSimulationState.BattleOutcome.None;
+		_state.AddDiagnostic("[Event " + _eventId + "] End battle");
+		return Advance();
+	}
+
+	/// <summary>
+	/// Runs 20720 and 20721, the two shop handlers, from EasyRPG's
+	/// <c>CommandTransaction</c> and <c>CommandNoTransaction</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The two are not the same with a flag.</strong> The reference's
+	/// lists are <c>{Cmd::NoTransaction, Cmd::EndShop}</c> and
+	/// <c>{Cmd::EndShop}</c> — <strong>so a shop with two handlers can run
+	/// one and then the other, and a shop with one runs it and
+	/// ends.</strong> The trading itself is the shop's, and the handler list is
+	/// what the game wrote between the opener and the closer.
+	/// </remarks>
+		private bool ExecuteShopHandler(GameSimulationState.ShopOption pOption)
+	{
+		var subIdx = pOption == GameSimulationState.ShopOption.Transaction
+			? SubIdxShopTransaction
+			: SubIdxShopNoTransaction;
+		return ExecuteOptionHandler(subIdx, "shop handler", pOption);
+	}
+
+/// <summary>
+	/// Runs 20722, End Shop, from EasyRPG's <c>CommandEndShop</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, and it closes rather than opens.</strong> The
+	/// reference calls <c>Game_Shop::SetMode(Game_Shop::Close)</c> and clears
+	/// the option, and a reader that only set the option would have left a
+	/// shop on screen with the command meant to shut it gone.
+	/// </remarks>
+		private bool ExecuteEndShop()
+	{
+		// **The reference's whole command is `return true;` and it changes
+		// nothing** — the shop's own scene closed when the player left it,
+		// and this command only tells the interpreter to carry on. **A reader
+		// that cleared the shop state here would have had a game's shop
+		// close the moment its own block ended**, which is a different event.
+		_state.AddDiagnostic("[Event " + _eventId + "] End shop");
+		return Advance();
+	}
+
+/// <summary>
+	/// Runs 20730 and 20731, the two inn handlers, from EasyRPG's
+	/// <c>CommandStay</c> and <c>CommandNoStay</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Same shape as the shop's two, with the same two-arm list.</strong>
+	/// The reference's lists are <c>{Cmd::NoStay, Cmd::EndInn}</c> and
+	/// <c>{Cmd::EndInn}</c> — <strong>and the party is not healed here</strong>:
+	/// the reference's <c>CommandStay</c> is the handler, and what a stay does
+	/// to the party's hit points is the inn's own business, which is the same
+	/// split the reference makes for a shop's trading.
+	/// </remarks>
+		private bool ExecuteInnHandler(GameSimulationState.ShopOption pOption)
+	{
+		var subIdx = pOption == GameSimulationState.ShopOption.Stay
+			? SubIdxInnStay
+			: SubIdxInnNoStay;
+		return ExecuteOptionHandler(subIdx, "inn handler", pOption);
+	}
+
+/// <summary>
+	/// Runs 20732, End Inn, from EasyRPG's <c>CommandEndInn</c>.
+	/// </summary>
+	 /// <remarks>
+	/// <strong>Width 0, and it is the inn's counterpart of 20722.</strong>
+	/// </remarks>
+	private bool ExecuteEndInn()
+	{
+		_state.CloseInn();
+		_state.AddDiagnostic("[Event " + _eventId + "] End inn");
+		return Advance();
+	}
+
+	/// <summary>
+	/// Runs one handler, the reference's <c>CommandOptionGeneric</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>A handler runs its block only when it is the option that was
+	/// chosen, and skips it when it is not.</strong> That is the reference's
+	/// whole method: one comparison of the sub-index against the option, and
+	/// then either the sentinel write or the skip. <strong>A reader that always
+	/// skipped would run a shop's "you bought nothing" branch beside its "you
+	/// bought something" branch</strong>, and a reader that always ran would
+	/// run both.
+	/// </para>
+	/// <para>
+	/// <strong>And the index is not moved when the handler ran</strong> — the
+	/// reference's sentinel is what stops the second handler, and the commands
+	/// after the handler are the ones the reference returns to.
+	/// </para>
+	/// </remarks>
+	private bool ExecuteOptionHandler(
+		int pSubIdx,
+		string pName,
+		object pOption)
+	{
+		if (_state.IsSubcommandChosen(pSubIdx))
+		{
+			_state.ActiveShopOption = pOption is GameSimulationState.ShopOption s
+				? s
+				: _state.ActiveShopOption;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] {pName}: this is the chosen option, so "
+				+ "its block runs");
+			return Advance();
+		}
+
+		// **The other arm: skip to the next handler in the list.** The
+		// reference's `SkipToNextConditional` and this reader's walk are the
+		// same walk, and the bound is checked before the step.
+		var schliesser = SchliesserOf(pSubIdx);
+		var uebersprungen = SkipToOneOf(schliesser, pName);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] {pName}: not the chosen option, so skipped "
+			+ $"{uebersprungen} commands");
+		return Advance();
+	}
+
+	/// <summary>
+	/// The commands that end a handler's block, from the sub-index.
+	/// </summary>
+	/// <remarks>
+	/// <strong>These are the reference's own lists, and their lengths
+	/// differ.</strong> A shop transaction ends at the no-transaction or the
+	/// end-shop command; a no-transaction ends at the end shop alone. A
+	/// victory ends at the escape, defeat or end-battle command; a defeat at
+	/// the end battle alone.
+	/// </remarks>
+	private static int[] SchliesserOf(int pSubIdx)
+	{
+		return pSubIdx switch
+		{
+			SubIdxShopTransaction => new[]
+			{
+				NoTransaction, EndShop,
+			},
+			SubIdxShopNoTransaction => new[] { EndShop },
+			SubIdxInnStay => new[] { NoStay, EndInn },
+			SubIdxInnNoStay => new[] { EndInn },
+			SubIdxVictory => new[]
+			{
+				EscapeHandler, DefeatHandler, EndBattle,
+			},
+			SubIdxEscape => new[] { DefeatHandler, EndBattle },
+			_ => new[] { EndBattle },
+		};
+	}
+
+	/// <summary>
+	/// Skips the commands a handler owns, up to the closer that matches it.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Each handler has its own closer, and the closer is the
+	/// command that follows the block.</strong> A victory handler's block ends
+	/// at the escape, defeat or end-battle command; a shop transaction's ends
+	/// at the no-transaction or end-shop command; an inn's at the no-stay or
+	/// end-inn command. <strong>A reader that skipped to one global "end" would
+	/// have taken a game's second handler with its first.</strong>
+	/// </para>
+	/// <para>
+	/// The bound is checked before the step, exactly as
+	/// <see cref="SkipToNextChoiceEnd"/> does — a block with no closer is a
+	/// game bug, and the index is left on the last command so the page finishes
+	/// instead of walking past the list.
+	/// </para>
+	/// </remarks>
+	private int SkipToHandlerEnd(GameSimulationState.BattleOutcome pOutcome)
+	{
+		var schliesser = pOutcome switch
+		{
+			GameSimulationState.BattleOutcome.Victory => new[]
+			{
+				EscapeHandler, DefeatHandler, EndBattle,
+			},
+			GameSimulationState.BattleOutcome.Escape => new[]
+			{
+				DefeatHandler, EndBattle,
+			},
+			_ => new[] { EndBattle },
+		};
+		return SkipToOneOf(schliesser, "battle handler");
+	}
+
+	/// <summary>
+	/// Skips the commands a shop or inn handler owns, up to its closer.
+	/// </summary>
+	private int SkipToHandlerEnd(GameSimulationState.ShopOption pOption)
+	{
+		int[] schliesser = pOption switch
+		{
+			GameSimulationState.ShopOption.ShopTransaction => new[]
+			{
+				NoTransaction, EndShop,
+			},
+			GameSimulationState.ShopOption.Transaction => new[]
+			{
+				NoTransaction, EndShop,
+			},
+			GameSimulationState.ShopOption.NoTransaction => new[]
+			{
+				EndShop,
+			},
+			GameSimulationState.ShopOption.InnStay => new[]
+			{
+				NoStay, EndInn,
+			},
+			GameSimulationState.ShopOption.Stay => new[]
+			{
+				NoStay, EndInn,
+			},
+			_ => new[] { EndInn },
+		};
+		return SkipToOneOf(schliesser, "shop handler");
+	}
+
+	/// <summary>
+	/// Skips forward to the first of a set of closing codes, or to the end of
+	/// the list when there is none.
+	/// </summary>
+	/// <param name="pClosers">The codes that end the block.</param>
+	/// <param name="pName">What the block is, for the diagnostic.</param>
+	/// <returns>How many commands were skipped.</returns>
+	private int SkipToOneOf(int[] pClosers, string pName)
+	{
+		var start = _commandIndex;
+		while (_commandIndex + 1 < _commands.Count)
+		{
+			_commandIndex++;
+			var code = _commands[_commandIndex].Code;
+			foreach (var closer in pClosers)
+			{
+				if (code == closer)
+				{
+					return _commandIndex - start;
+				}
+			}
+		}
+
+		_commandIndex = _commands.Count - 1;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] {pName} has no closer in the list, so the "
+			+ "commands after it ran as ordinary ones");
+		return _commandIndex - start;
+	}
+
 	/// <summary>
 	/// Runs 13110, Change Monster HP, from liblcf's
 	/// <c>Code::ChangeMonsterHP</c> and EasyRPG's
@@ -5731,4 +6233,29 @@ public sealed class EventInterpreter
 	{
 		_state.AddDiagnostic($"[Event {_eventId}] {pCommand}: malformed parameters skipped");
 	}
+
+
+private void ExecuteShowInn(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Show inn");
+			return;
+		}
+
+		var art = pCmd.Parameters[0];
+		// **The price is the second parameter, and the reference reads it in
+		// the command's first two lines.**
+		var preis = pCmd.Parameters[1];
+		// **And a price of zero skips the prompt** — the reference has its
+		// own branch for it, so a game's free inn never opens a window.
+		var zeigtPreis = preis != 0;
+		_state.OpenInn(art, preis);
+		_state.ShouldShowInnPrice = zeigtPreis;
+		_state.ActiveShopOption = GameSimulationState.ShopOption.InnStay;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Show inn: type {art}, {preis} gold"
+			+ (zeigtPreis ? string.Empty : ", and the prompt is skipped"));
 	}
+}
