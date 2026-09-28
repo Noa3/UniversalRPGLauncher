@@ -2630,7 +2630,7 @@ look for the next island of that shape.**
 | screen effects | ~~`11010` `11020` `11030`~~ | **~~erase, show and tint — DONE, see below~~** |
 | screen effects | `11060` | **Pan Screen — done: four modes, a clamped speed and a rounded wait** |
 | audio | `11560` | Play Movie — the only audio command left of the six |
-| actor state | ~~`10430`–`10490`~~ | **~~parameters, HP, SP and full heal — DONE, see below; skills, equipment and conditions have no state at all~~** |
+| ~~actor state~~ | ~~`10430`–`10490`~~ | **~~parameters, HP, SP, full heal, skills, equipment and conditions — all DONE, see below~~** |
 | battle | ~~`10500` `10710`~~ | **~~simulated attack and the encounter — DONE, see below~~** |
 | movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
 | movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — done: one flag and one map-wide call** |
@@ -4746,6 +4746,45 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 
 Befehlszeile, und es gehört in eine eigene Karte.
 
+
+## The three actor commands are done — `10440`, `10450`, `10480`
+
+**Widths of 5, 5 and 4, all three starting with the reference's own
+`GetActors(mode, id)` and all three ending in `CheckGameOver()`.**
+
+**The remove flag is the third parameter in all of them, and it means remove.**
+A reader that read it as "add" would have taught a skill to a hero whose
+command meant to take it away, and would have healed a poisoned hero with the
+condition command meant to cure him.
+
+**`10450`'s slot comes from the item's own type in the first mode and from the
+parameter in the second.** The reference reads the item and writes
+`slot = item->type` across weapon, shield, armor, helmet and accessory — **so a
+reader that took the slot from the parameter in both modes would have put a
+helmet where a sword goes.** Mode 1 is `parameters[3] + 1`, and its
+`item_id` is zero: the direct slot *removes* rather than equips.
+
+**The sixth slot is not a slot.** The reference checks `slot == 6` before any
+of the five and empties the whole actor — so a reader that wrote the sixth
+value as a sixth slot would have left a hero's armour on and hidden the
+removal. **An item that is not equipment is left alone and says so**, and a
+third mode is refused — the only one of the three commands that returns false
+instead of repairing.
+
+**Two rules for a two-weapon actor, and both are about the same hero.** The
+reference skips a shield outright for a two-weapon actor while the shield is
+in hand, and puts a one-handed weapon into the second slot when the first is
+empty and *neither* weapon is two-handed.
+
+**And `10480`'s removal does not ask where the condition came from.** The
+reference's own comment records it as an RPG_RT quirk: on the map it removes a
+state even when the actor has it from equipment. **A reader that respected the
+equipment's own state would have left a hero permanently poisoned by a ring he
+never took off**, in a game the reference lets him walk out of.
+
+**Test evidence** `test_rm2k_actor_commands.cs`, 15 tests.
+**1448/1448**, `TestRm2kActorCommands: 15/15`, validator passed.
+**Mutations** Thirteen rules over three runs, **13 of 13 caught**.
 
 ## The shop and inn family is done — `10720`, `10730` and the ten handlers
 

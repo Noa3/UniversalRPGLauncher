@@ -326,6 +326,73 @@ public sealed class EventInterpreter
 	/// <summary>20732, End Inn. Width 0, as its siblings.</summary>
 	public const int EndInn = 20732;
 
+	/// <summary>
+	/// 10440, Change Skills, from liblcf's <c>Code::ChangeSkills</c> and
+	/// EasyRPG's <c>Game_Interpreter::CommandChangeSkills</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 5, and the flag is the third parameter and it means
+	/// remove.</strong> The reference reads
+	/// <c>bool remove = com.parameters[2] != 0</c> and then branches on it —
+	/// <strong>so a truth in the third parameter unlearns</strong>, and a
+	/// reader that read it as "add" would have taught a skill to a hero whose
+	/// command meant to take it away.
+	/// </para>
+	/// <para>
+	/// <strong>And the skill id is a value or a variable</strong>, read
+	/// through the reference's own <c>ValueOrVariable(parameters[3],
+	/// parameters[4])</c> — so a game whose skill came out of a variable
+	/// teaches that skill and not the number the file happens to carry.
+	/// </para>
+	/// <para>
+	/// <strong>And the command ends in <c>CheckGameOver()</c>.</strong>
+	/// </para>
+	/// </remarks>
+	public const int ChangeSkills = 10440;
+
+	/// <summary>
+	/// 10450, Change Equipment, from liblcf's <c>Code::ChangeEquipment</c>
+	/// and EasyRPG's <c>Game_Interpreter::CommandChangeEquipment</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 5, and the slot comes from the item's own type in the
+	/// first mode and from the parameter in the second.</strong> The
+	/// reference's switch on <c>parameters[2]</c> has two cases: 0 reads the
+	/// item and takes <c>slot = item-&gt;type</c> across five types, and 1
+	/// reads <c>slot = com.parameters[3] + 1</c> directly. <strong>A reader
+	/// that took the slot from the parameter in both modes would have put a
+	/// helmet where a sword goes.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>A third mode returns false and does nothing</strong> — it is
+	/// the only one of the three that refuses rather than repairing.
+	/// </para>
+	/// </remarks>
+	public const int ChangeEquipment = 10450;
+
+	/// <summary>
+	/// 10480, Change Condition, from liblcf's <c>Code::ChangeCondition</c>
+	/// and EasyRPG's <c>Game_Interpreter::CommandChangeCondition</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 4, and the remove flag is the third parameter.</strong>
+	/// The reference reads <c>bool remove = com.parameters[2] != 0</c> and the
+	/// state id from the fourth.
+	/// </para>
+	/// <para>
+	/// <strong>And the reference's own comment records two RPG_RT quirks
+	/// it reproduces.</strong> On the map it removes a state even when the
+	/// actor has it from equipment — <c>RemoveState(id, !IsBattleRunning())</c>
+	/// — and it always adds a state from an event command, even a battle
+	/// state. Both are written down in the source as RPG_RT behaviour, and
+	/// both are cases where the "right" implementation is the wrong one.
+	/// </para>
+	/// </remarks>
+	public const int ChangeCondition = 10480;
+
 	public const int ChangeMonsterHp = 13110;
 
 	/// <summary>
@@ -1001,6 +1068,18 @@ public sealed class EventInterpreter
 
 			case EndInn:
 				return ExecuteEndInn();
+
+			case ChangeSkills:
+				ExecuteChangeSkills(cmd);
+				return Advance();
+
+			case ChangeEquipment:
+				ExecuteChangeEquipment(cmd);
+				return Advance();
+
+			case ChangeCondition:
+				ExecuteChangeCondition(cmd);
+				return Advance();
 
 			case ChangeMonsterHp:
 				ExecuteChangeMonsterHp(cmd);
@@ -4116,6 +4195,317 @@ public sealed class EventInterpreter
 			$"[Event {_eventId}] {pName} has no closer in the list, so the "
 			+ "commands after it ran as ordinary ones");
 		return _commandIndex - start;
+	}
+
+	/// <summary>
+	/// Runs 10440, Change Skills, from liblcf's <c>Code::ChangeSkills</c> and
+	/// EasyRPG's <c>Game_Interpreter::CommandChangeSkills</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Actors, then a flag that means remove, then a value or a
+	/// variable.</strong> The first two parameters are the reference's own
+	/// <c>GetActors(mode, id)</c>, and its three modes are 0 the party, 1 one
+	/// hero by id and 2 the hero a variable names.
+	/// </para>
+	/// <para>
+	/// <strong>And the command ends in <c>CheckGameOver()</c></strong> — so a
+	/// game whose last hero is killed reaches the game-over screen from a
+	/// skill command, which is odd and is what the reference does.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeSkills(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Change skills");
+			return;
+		}
+
+		var actoren = ResolveActors(
+			pCmd.Parameters[0], pCmd.Parameters[1], "Change skills");
+		if (actoren is null)
+		{
+			return;
+		}
+
+		// **The reference's own read: a truth removes.** A reader that read
+		// it as "add" would have taught a skill to a hero whose command meant
+		// to take it away.
+		var entfernen = pCmd.Parameters[2] != 0;
+		var skillId = ValueOrVariable(pCmd.Parameters[3], pCmd.Parameters[4]);
+
+		foreach (var actorId in actoren)
+		{
+			var skills = _state.SkillsOf(actorId);
+			if (entfernen)
+			{
+				skills.Remove(skillId);
+			}
+			else
+			{
+				skills.Add(skillId);
+			}
+		}
+
+		// **And this is the reference's last line.**
+		_state.CheckGameOver();
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Change skills: {(entfernen ? "unlearn" : "learn")}"
+			+ $" skill {skillId} on {actoren.Count} actors");
+	}
+
+	/// <summary>
+	/// Runs 10450, Change Equipment, from liblcf's
+	/// <c>Code::ChangeEquipment</c> and EasyRPG's
+	/// <c>Game_Interpreter::CommandChangeEquipment</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Two modes, and the slot means something different in
+	/// each.</strong> Mode 0 reads the item and takes its slot from the
+	/// item's <em>type</em> across five types; mode 1 reads
+	/// <c>parameters[3] + 1</c> directly. <strong>A reader that took the slot
+	/// from the parameter in both modes would have put a helmet where a sword
+	/// goes</strong>, and it is the item's type that says which.
+	/// </para>
+	/// <para>
+	/// <strong>And the sixth slot is not a slot.</strong> The reference checks
+	/// <c>slot == 6</c> before any of the five and empties the whole actor — so
+	/// a reader that treated the sixth value as a sixth slot would have had a
+	/// game's "unequip everything" write a hidden entry and leave every real
+	/// slot on.
+	/// </para>
+	/// <para>
+	/// <strong>And a third mode returns false and does nothing</strong> — the
+	/// only one of the three that refuses rather than repairing.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeEquipment(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Change equipment");
+			return;
+		}
+
+		var itemId = 0;
+		GameSimulationState.EquipmentSlot slot;
+		switch (pCmd.Parameters[2])
+		{
+			case 0:
+				{
+					itemId = ValueOrVariable(pCmd.Parameters[3], pCmd.Parameters[4]);
+					var art = EquipmentKindOf(itemId);
+					if (art == GameSimulationState.EquipmentKind.None)
+					{
+						// **The reference's default arm returns true and
+						// touches nothing** — an item that is not equipment
+						// is a game bug, and it is not a refusal.
+						_state.AddDiagnostic(
+							$"[Event {_eventId}] Change equipment: item {itemId} "
+							+ "is not equipment, and the reference's own "
+							+ "switch leaves it alone");
+						return;
+					}
+
+					slot = SlotOf(art);
+					break;
+				}
+
+			case 1:
+				{
+					// **The direct slot is the parameter plus one**, because
+					// the reference's slot numbers start at one and its
+					// enum at zero.
+					itemId = 0;
+					slot = SlotOfNumber(pCmd.Parameters[3] + 1);
+					break;
+				}
+
+			default:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Change equipment: mode {pCmd.Parameters[2]} "
+					+ "is not 0 or 1, and the reference's switch returns false "
+					+ "and does nothing");
+				return;
+		}
+
+		var actoren = ResolveActors(
+			pCmd.Parameters[0], pCmd.Parameters[1], "Change equipment");
+		if (actoren is null)
+		{
+			return;
+		}
+
+		foreach (var actorId in actoren)
+		{
+			if (slot == GameSimulationState.EquipmentSlot.All)
+			{
+				// **The reference's own branch: everything goes at once.**
+				_state.RemoveWholeEquipment(actorId);
+				continue;
+			}
+
+			// **A two-weapon actor with a shield in hand keeps it** — the
+			// reference skips the assignment outright, and a reader that only
+			// wrote into the shield slot would have given him a shield and
+			// then a second shield in the same slot.
+			if (_state.HasTwoWeapons(actorId)
+				&& slot == GameSimulationState.EquipmentSlot.Shield
+				&& itemId != 0)
+			{
+				continue;
+			}
+
+			// **And the second weapon: the reference puts a one-handed
+			// weapon into the second slot when the first is empty and
+			// neither weapon is two-handed.** A reader that only wrote into
+			// the weapon slot would have given a two-handed swordsman a
+			// second sword in his shield hand.
+			if (_state.HasTwoWeapons(actorId)
+				&& slot == GameSimulationState.EquipmentSlot.Weapon
+				&& itemId != 0
+				&& _state.GetEquipment(
+					actorId, GameSimulationState.EquipmentSlot.Weapon) == 0
+				&& !_state.TwoHandedWeapons.Contains(itemId))
+			{
+				_state.ChangeEquipment(
+					actorId, GameSimulationState.EquipmentSlot.Shield, itemId);
+				continue;
+			}
+
+			_state.ChangeEquipment(actorId, slot, itemId);
+		}
+
+		// **And this is the reference's last line.**
+		_state.CheckGameOver();
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Change equipment: {slot} on "
+			+ $"{actoren.Count} actors, item {itemId}");
+	}
+
+	/// <summary>
+	/// Runs 10480, Change Condition, from liblcf's <c>Code::ChangeCondition</c>
+	/// and EasyRPG's <c>Game_Interpreter::CommandChangeCondition</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 4, and the reference's own comment records two RPG_RT
+	/// quirks it reproduces.</strong> On the map it removes a state even when
+	/// the actor has it from equipment — <c>RemoveState(id,
+	/// !IsBattleRunning())</c> — and it always adds a state from an event
+	/// command, even a battle state. <strong>Both are cases where the obvious
+	/// implementation is the wrong one</strong>: a reader that respected the
+	/// equipment's own state would have left a hero permanently poisoned by a
+	/// ring he never took off, in a game the reference lets him walk out of.
+	/// </para>
+	/// <para>
+	/// <strong>And the flag is the third parameter and it means remove.</strong>
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeCondition(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Change condition");
+			return;
+		}
+
+		var actoren = ResolveActors(
+			pCmd.Parameters[0], pCmd.Parameters[1], "Change condition");
+		if (actoren is null)
+		{
+			return;
+		}
+
+		var entfernen = pCmd.Parameters[2] != 0;
+		var zustand = pCmd.Parameters[3];
+
+		foreach (var actorId in actoren)
+		{
+			var zustaende = _state.ConditionsOf(actorId);
+			if (entfernen)
+			{
+				// **The reference removes it and does not ask where it came
+				// from** -- its own comment says so in as many words.
+				zustaende.Remove(zustand);
+			}
+			else
+			{
+				zustaende.Add(zustand);
+			}
+		}
+
+		// **And this is the reference's last line**, for the third command
+		// that carries it.
+		_state.CheckGameOver();
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Change condition: {(entfernen ? "remove" : "add")}"
+			+ $" condition {zustand} on {actoren.Count} actors");
+	}
+
+	/// <summary>
+	/// What kind of equipment an item is, for 10450's first mode.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Five kinds, and the sixth — "everything" — is not one of
+	/// them.</strong> A reader that mapped "all" onto an item kind would have
+	/// had a game's "unequip everything" command equip a sixth slot.
+	/// </remarks>
+	private GameSimulationState.EquipmentKind EquipmentKindOf(int pItemId)
+	{
+		return _state.EquipmentKindOf(pItemId);
+	}
+
+	/// <summary>
+	/// The slot a kind of equipment goes in, from the reference's own
+	/// <c>slot = item-&gt;type</c>.
+	/// </summary>
+	private static GameSimulationState.EquipmentSlot SlotOf(
+		GameSimulationState.EquipmentKind pKind)
+	{
+		return pKind switch
+		{
+			GameSimulationState.EquipmentKind.Weapon =>
+				GameSimulationState.EquipmentSlot.Weapon,
+			GameSimulationState.EquipmentKind.Shield =>
+				GameSimulationState.EquipmentSlot.Shield,
+			GameSimulationState.EquipmentKind.Armor =>
+				GameSimulationState.EquipmentSlot.Armor,
+			GameSimulationState.EquipmentKind.Helmet =>
+				GameSimulationState.EquipmentSlot.Helmet,
+			GameSimulationState.EquipmentKind.Accessory =>
+				GameSimulationState.EquipmentSlot.Accessory,
+			_ => GameSimulationState.EquipmentSlot.All,
+		};
+	}
+
+	/// <summary>
+	/// A slot from the reference's one-based number, including its sixth
+	/// "everything".
+	/// </summary>
+	/// <remarks>
+	/// <strong>Six is not out of range.</strong> The reference's own numbers
+	/// run one to six with six meaning "remove everything", and a reader that
+	/// treated a six as an invalid slot would have refused the one number
+	/// that means something.
+	/// </remarks>
+	private static GameSimulationState.EquipmentSlot SlotOfNumber(int pNumber)
+	{
+		return pNumber switch
+		{
+			1 => GameSimulationState.EquipmentSlot.Weapon,
+			2 => GameSimulationState.EquipmentSlot.Shield,
+			3 => GameSimulationState.EquipmentSlot.Armor,
+			4 => GameSimulationState.EquipmentSlot.Helmet,
+			5 => GameSimulationState.EquipmentSlot.Accessory,
+			6 => GameSimulationState.EquipmentSlot.All,
+			_ => GameSimulationState.EquipmentSlot.All,
+		};
 	}
 
 	/// <summary>

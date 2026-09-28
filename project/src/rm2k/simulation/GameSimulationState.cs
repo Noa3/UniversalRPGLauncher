@@ -835,6 +835,287 @@ public sealed class GameSimulationState
     /// one item where the shopkeeper has fifty</strong>, and a game's shop
     /// would have sold its wares one at a time and then stopped.
     /// </remarks>
+    // ---- 10440 Change Skills, 10450 Change Equipment, 10480 Change Condition
+
+    /// <summary>
+    /// The five equipment slots, in the reference's own order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Five slots and a sixth "all of them", and the slot comes from
+    /// the item's own type.</strong> The reference's <c>CommandChangeEquipment</c>
+    /// reads the item, switches on <c>item-&gt;type</c> across weapon, shield,
+    /// armor, helmet and accessory, and assigns <c>slot = item-&gt;type</c> —
+    /// <strong>so a reader that took the slot from the command's parameter
+    /// would have put a helmet where a sword goes</strong>, because the
+    /// parameter is only a *direct* slot when the mode says so.
+    /// </para>
+    /// <para>
+    /// And the sixth value is not a slot: <c>slot == 6</c> is the reference's
+    /// own "remove everything", and it is checked before any of the five.
+    /// </para>
+    /// </remarks>
+    public enum EquipmentSlot
+    {
+        /// <summary>A weapon, and with two weapons a second one.</summary>
+        Weapon,
+
+        /// <summary>A shield.</summary>
+        Shield,
+
+        /// <summary>A body armour.</summary>
+        Armor,
+
+        /// <summary>A helmet.</summary>
+        Helmet,
+
+        /// <summary>An accessory.</summary>
+        Accessory,
+
+        /// <summary>Every slot at once — the reference's sixth value.</summary>
+        All,
+    }
+
+    /// <summary>
+    /// What an item is, in the five types the equipment command distinguishes.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Five, and this repository's item database had three.</strong> It
+    /// distinguished a weapon, an armour and a consumable, so a shield, a
+    /// helmet and an accessory were all "armour" — and a reader that
+    /// derived the slot from that would have equipped a party's helmets into
+    /// their body slot, three at a time.
+    /// </remarks>
+    public enum EquipmentKind
+    {
+        /// <summary>Not equipment, and never assigned to a slot.</summary>
+        None,
+
+        /// <summary>A weapon.</summary>
+        Weapon,
+
+        /// <summary>A shield.</summary>
+        Shield,
+
+        /// <summary>A body armour.</summary>
+        Armor,
+
+        /// <summary>A helmet.</summary>
+        Helmet,
+
+        /// <summary>An accessory.</summary>
+        Accessory,
+    }
+
+    /// <summary>The items each actor wears, keyed by actor id and then by slot.</summary>
+    /// <remarks>
+    /// <strong>A dictionary and not an array</strong>, because the reference's
+    /// own <c>ChangeEquipment(slot, id)</c> is addressed by slot and an array
+    /// of five would have made the sixth value — "everything" — impossible to
+    /// write.
+    /// </remarks>
+    public System.Collections.Generic.Dictionary<int,
+        System.Collections.Generic.Dictionary<EquipmentSlot, int>> ActorEquipment
+    { get; init; } = new();
+
+    /// <summary>The skill ids each actor knows, from <c>10440</c>.</summary>
+    public System.Collections.Generic.HashSet<int>[] ActorSkills { get; init; } =
+        new System.Collections.Generic.HashSet<int>[MaxActorId + 1];
+
+    /// <summary>The condition ids each actor has, from <c>10480</c>.</summary>
+    /// <remarks>
+    /// <strong>An array of sets, and not a set of sets,</strong> because the
+    /// reference asks an actor whether it has <em>a</em> state and never asks
+    /// which actors share one.
+    /// </remarks>
+    public System.Collections.Generic.HashSet<int>[] ActorConditions { get; init; } =
+        new System.Collections.Generic.HashSet<int>[MaxActorId + 1];
+
+    /// <summary>
+    /// Whether an actor fights with two weapons, which is the reference's
+    /// <c>HasTwoWeapons()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>It changes what a shield and a weapon do, and not only
+    /// whether.</strong> The reference skips a shield outright for a
+    /// two-weapon actor while a shield is in hand, and puts a second weapon
+    /// into the second slot when the first is empty and neither weapon is
+    /// two-handed.
+    /// </remarks>
+    /// <summary>
+    /// What kind of equipment each item is, from the item database.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is the bridge 10450's first mode needs,</strong> because
+    /// the reference reads the item and takes its slot from
+    /// <c>item-&gt;type</c> — and a reader that had no item table could only
+    /// guess. An id that is not here is not equipment, and the reference's own
+    /// switch returns without touching anything.
+    /// </para>
+    /// <para>
+    /// <strong>Five kinds, and "everything" is not one of them</strong> — it is
+    /// the sixth slot value and no item has it.
+    /// </para>
+    /// </remarks>
+    public System.Collections.Generic.Dictionary<int, EquipmentKind> ItemEquipmentKinds
+    { get; init; } = new();
+
+    /// <summary>What kind of equipment an item is, or none.</summary>
+    public EquipmentKind EquipmentKindOf(int pItemId)
+    {
+        return ItemEquipmentKinds.TryGetValue(pItemId, out var art)
+            ? art
+            : EquipmentKind.None;
+    }
+
+    /// <summary>Whether a weapon is two-handed, which the reference checks.</summary>
+    /// <remarks>
+    /// <strong>It decides where a second weapon goes.</strong> The reference
+    /// puts a one-handed weapon into the second slot when the first is empty
+    /// and <em>neither</em> weapon is two-handed, so a reader that ignored
+    /// this would have given a two-handed swordsman a second sword in his
+    /// shield hand.
+    /// </remarks>
+    public System.Collections.Generic.HashSet<int> TwoHandedWeapons { get; init; } = new();
+
+
+    public System.Collections.Generic.Dictionary<int, bool> ActorHasTwoWeapons
+    { get; init; } = new();
+
+    /// <summary>
+    /// Whether a hero is dead, and the reference's own rule for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Every one of the three commands ends in
+    /// <c>CheckGameOver()</c></strong>, so a game whose last hero is killed by
+    /// a condition command reaches the game-over screen from the condition
+    /// command and not from a battle's defeat arm. A reader that left the
+    /// check out would have had a party walk on with every hero at zero.
+    /// </para>
+    /// <para>
+    /// And the reference's check is over the *party*, not over every actor in
+    /// the database — a hero left behind in a town who is dead changes
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    public void CheckGameOver()
+    {
+        // **The index loop and not the enumeration.** PartyMemberIds is a
+        // Godot.Collections.Array, so its enumerator hands out Variants and
+        // GetActorCurrentHp's int parameter refuses them — and the exception
+        // is "The given key was not present in the dictionary", which names
+        // neither the array nor the party.
+        for (var i = 0; i < PartyMemberIds.Count; i++)
+        {
+            if (GetActorCurrentHp(PartyMemberIds[i]) > 0)
+            {
+                return;
+            }
+        }
+
+        IsGameOverActive = true;
+    }
+
+    /// <summary>The conditions an actor has, and the set is created on demand.</summary>
+    public System.Collections.Generic.HashSet<int> ConditionsOf(int pActorId)
+    {
+        if (pActorId < 0 || pActorId > MaxActorId)
+        {
+            return new System.Collections.Generic.HashSet<int>();
+        }
+
+        ActorConditions[pActorId] ??= new System.Collections.Generic.HashSet<int>();
+        return ActorConditions[pActorId];
+    }
+
+    /// <summary>The skills an actor knows, and the set is created on demand.</summary>
+    public System.Collections.Generic.HashSet<int> SkillsOf(int pActorId)
+    {
+        if (pActorId < 0 || pActorId > MaxActorId)
+        {
+            return new System.Collections.Generic.HashSet<int>();
+        }
+
+        ActorSkills[pActorId] ??= new System.Collections.Generic.HashSet<int>();
+        return ActorSkills[pActorId];
+    }
+
+    /// <summary>
+    /// Puts an item in a slot, and the reference's own <c>ChangeEquipment</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>One of the five slots only.</strong> The sixth value is the
+    /// interpreter's own <see cref="RemoveWholeEquipment"/>, and the reference
+    /// checks it before it reaches this method.
+    /// </remarks>
+    /// <remarks>
+    /// <strong>A slot of "everything" is not a slot and empties instead.</strong>
+    /// The reference checks <c>slot == 6</c> before any of the five and calls
+    /// <c>RemoveWholeEquipment()</c>, so a reader that treated the sixth
+    /// value as a sixth slot would have had a game's "unequip everything"
+    /// write a hidden sixth entry and leave every real slot on.
+    /// </remarks>
+    public void ChangeEquipment(int pActorId, EquipmentSlot pSlot, int pItemId)
+    {
+        // **TryGetValue and not `??=` on an indexer.** A dictionary's indexer
+        // throws on a missing key, and `??=` compiles to a get followed by a
+        // set -- so the first question asked about a hero who has never worn
+        // anything threw "The given key was not present in the dictionary",
+        // which names neither the party nor the slot.
+        if (!ActorEquipment.TryGetValue(
+                pActorId, out var slots) || slots is null)
+        {
+            slots = new System.Collections.Generic.Dictionary<EquipmentSlot, int>();
+            ActorEquipment[pActorId] = slots;
+        }
+        // **"Everything" is not this method's business.** The reference
+        // branches on the sixth slot in the interpreter and calls its own
+        // RemoveWholeEquipment; a reader that also handled it here would have
+        // had two places to change the same fact, and a mutation of either
+        // one would be invisible to the other.
+
+        if (pItemId == 0)
+        {
+            slots.Remove(pSlot);
+            return;
+        }
+
+        slots[pSlot] = pItemId;
+    }
+
+    /// <summary>
+    /// Empties every slot of an actor, from 10450's sixth slot.
+    /// </summary>
+    public void RemoveWholeEquipment(int pActorId)
+    {
+        ActorEquipment.Remove(pActorId);
+    }
+
+    /// <summary>What an actor wears in a slot, or zero.</summary>
+    public int GetEquipment(int pActorId, EquipmentSlot pSlot)
+    {
+        // **TryGetValue on the outer and on the inner dictionary.** An actor
+        // with no equipment at all has no entry, and a reader that indexed
+        // the outer dictionary would have thrown on the first question
+        // asked about a hero who has never worn anything.
+        if (!ActorEquipment.TryGetValue(pActorId, out var slots)
+            || slots is null)
+        {
+            return 0;
+        }
+
+        return slots.TryGetValue(pSlot, out var id) ? id : 0;
+    }
+
+    /// <summary>Whether an actor fights with two weapons.</summary>
+    public bool HasTwoWeapons(int pActorId)
+    {
+        return ActorHasTwoWeapons.TryGetValue(pActorId, out var flag) && flag;
+    }
+
+
     public Godot.Collections.Array<int> ShopItemIds { get; } = new();
 
     /// <summary>

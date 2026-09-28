@@ -4156,6 +4156,60 @@ die Zerlegung schreiben.
 **Test evidence** `test_rm2k_enemy_encounter.cs` (7). **1382/1382**, Validator gruen.
 
 **Mutations** 9 Regeln, **9 von 9 gefangen**.## Current card
+## 10440, 10450 and 10480 are done — and the island was the actor's
+
+**The card said "skills, equipment and conditions have no state at all", and it
+was right.** `Rm2kActorValues` held a name, a title, a sprite and a face — and
+not one set of skills, conditions, equipment or two-weapon flags. Three
+commands had nowhere to write.
+
+**All three take their actors from the reference's own `GetActors(mode, id)`,
+whose three modes `ResolveActors` already implemented, and all three end in
+`CheckGameOver()`** — which is why a game's last hero dying in a condition
+command reaches the game over screen from the *condition* command.
+
+**10450's slot comes from the item's own type in the first mode and from
+`parameters[3] + 1` in the second**, and mode 1 sets `item_id = 0`, so the
+direct slot removes rather than equips. **The sixth slot is not a slot** — the
+reference checks `slot == 6` before any of the five.
+
+**Two rules for a two-weapon actor:** the shield is skipped while it is in
+hand, and a one-handed weapon goes into the second slot when the first is empty
+and neither weapon is two-handed.
+
+**Test evidence** `project/tests/core/test_rm2k_actor_commands.cs`, 15 tests.
+**1448/1448**, validator passed. **Mutations** 13 rules over three runs, **13
+of 13 caught**.
+
+### Failure log: a rule that was not a mutation, and one that could not be
+
+Two rules survived repeatedly, and neither was a test gap at first glance.
+
+**The first changed `if (slot == All)` to `if (false)` in the interpreter.**
+It could not be killed because `GameSimulationState.ChangeEquipment` had a
+*second* `if (pSlot == All) { slots.Clear(); }` — so removing the first changed
+the path and not the state. **That duplication was my error, not the test's:**
+one fact about the sixth slot lived in two places, and only one of them was on
+the reference's path. The second was removed, with a comment saying why.
+
+**The second replaced `ActorEquipment.Remove(id)` with a `TryGetValue` and
+`Clear` — which is a different implementation and the same result.** No test can
+distinguish those, and a rule that cannot be killed is not evidence of a gap;
+it is evidence that the rule was not a mutation. It was rewritten to make the
+method do nothing at all, which is a real fault, and that one died.
+
+**A rule that keeps surviving is a question about the rule**, and the honest
+next step is to ask whether the code has one place too many — not to write a
+third test for it.
+
+### And `??=` on a dictionary indexer throws
+
+`ActorEquipment[actorId] ??= new ...` compiles to a get followed by a set, and
+a `Dictionary`'s indexer throws on a missing key — so the first question asked
+about a hero who had never worn anything failed with "The given key was not
+present in the dictionary", naming neither the party nor the slot. Three tests
+died on that one line. `TryGetValue` is the form that works.
+
 ## The shop and inn family is done — 10720, 10730 and ten handlers
 
 **Twelve commands, ten of them with a width of zero.** The two openers are
