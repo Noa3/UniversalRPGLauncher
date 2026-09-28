@@ -2621,3 +2621,48 @@ Schreiben ins Leere sonst. Dieser Leser nennt die sechs erlaubten Werte.
 **Mutations** 12 Regeln über zwei Läufe, **12 von 12 gefangen** — darunter die
 Kontextgrenze ab 1, die SFX-Breite auf die Menüvier gekürzt und die
 Maniac-Warnung abgeschaltet.
+
+## K-136 `10620`/`10630`/`10640`/`10650`/`10850` — DONE, und `10850` hat einen Wert, der kein Fahrzeug ist
+
+**Fahrzeug-ID -1 bewegt die Partei und ist keine ungültige ID.** Die Referenz
+hat einen Kommentar dazu: In RPG_RT hat eine Partei in keinem Fahrzeug die ID
+-1, und -1 zu übergeben bewegt die Partei allein. **Wer sie ablehnte, ließe
+jeden „teleportiere den Helden"-Befehl eines Spiels nichts tun** — und das ist
+ein sehr häufiger Befehl. Ein Test prüft beides: fehlendes Fahrzeug wird
+abgelehnt, -1 funktioniert trotzdem. Zwei Bedeutungen für ein Feld.
+
+**Die Fahrzeug-ID wird um eins verschoben**, weil das liblcf-Enum
+`None = 0, Boat = 1, Ship = 2, Airship = 3` ist und die Referenz
+`(Game_Vehicle::Type)(com.parameters[0] + 1)` schreibt. Diese Zahlen stehen im
+Save-Format. Wer den Parameter direkt nähme, spräche Fahrzeug 0 an — und
+Fahrzeug 0 ist die Partei, kein Boot.
+
+**`10650` setzt zwei Felder**, das aktuelle Sprite und das ursprüngliche. Das
+ursprüngliche ist das, wozu das Fahrzeug beim Aussteigen zurückkehrt — **wer
+nur das aktuelle setzte, ließe ein Fahrzeug in Kostüm zurück, nachdem die
+Partei ausgestiegen ist.**
+
+**Eine Partei im Fahrzeug fährt mit**, und die Referenz kehrt danach sofort
+zurück. Nur das Fahrzeug zu bewegen ließe den Helden auf der verlassenen Karte
+stehen — bei einem Boot also eine Partei auf offenem Wasser.
+
+**`Boarding` ist nullable, und das ist eine Entscheidung.** Ein Spiel, das nie
+ein Fahrzeug anfasst, allokiert keins, und wer es dereferenzierte, würde bei
+jedem `10850` in einem Spiel ohne Schiff werfen — **und der Normalfall ist
+genau dieses Spiel.** Der erste Lauf dieses Schnitts hat genau das getan; die
+Tests haben es gefunden.
+
+**`10630` nimmt die Transparenz direkt aus `parameters[2]` und nicht aus dem
+Bitfeld** — das ist die Aufteilung der Referenz. **Und der Index ist eine Pose,
+keine Charakter-Nummer:** ein Kostüm ist dieselbe Datei mit anderem Index, und
+der Dateiname bleibt richtig, also fängt keine Sichtprüfung einen Leser, der es
+falsch hat.
+
+**Ein fehlender Held ist eine Warnung und keine Ablehnung.** Die Referenz prüft
+`GetActor`, warnt und gibt `true` zurück. **Wer die Seite hielte, ließe eine
+Cutscene auf einen Helden warten, den die Datenbank nie hatte.**
+
+**Test evidence** `test_rm2k_actor_graphics.cs` (14). **1167/1167**.
+**Mutations** 11 Regeln, **11 von 11 gefangen** im ersten Lauf — darunter die
+nicht verschobene Fahrzeug-ID, das nicht gesetzte ursprüngliche Sprite und das
+nullable Booting dereferenziert.

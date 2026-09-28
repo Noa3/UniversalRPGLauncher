@@ -164,6 +164,21 @@ public sealed class EventInterpreter
 	/// </summary>
 	public const int GameOver = 12420;
 	public const int ReturnToTitleScreen = 12510;
+	/// <summary>10620, Change Hero Title, <c>CmdSetup</c> width 4.</summary>
+	public const int ChangeHeroTitle = 10620;
+
+	/// <summary>10630, Change Sprite Association, <c>CmdSetup</c> width 5.</summary>
+	public const int ChangeSpriteAssociation = 10630;
+
+	/// <summary>10640, Change Actor Face, <c>CmdSetup</c> width 4.</summary>
+	public const int ChangeActorFace = 10640;
+
+	/// <summary>10650, Change Vehicle Graphic, <c>CmdSetup</c> width 2.</summary>
+	public const int ChangeVehicleGraphic = 10650;
+
+	/// <summary>10850, Set Vehicle Location, <c>CmdSetup</c> width 5.</summary>
+	public const int SetVehicleLocation = 10850;
+
 	/// <summary>10660, Change System BGM, <c>CmdSetup</c> width 7.</summary>
 	public const int ChangeSystemBGM = 10660;
 
@@ -568,6 +583,26 @@ public sealed class EventInterpreter
 				// the index does not move, so the next frame runs this case
 				// again until the screen is gone.
 				return false;
+
+			case ChangeHeroTitle:
+				ExecuteChangeHeroTitle(cmd);
+				return Advance();
+
+			case ChangeSpriteAssociation:
+				ExecuteChangeSpriteAssociation(cmd);
+				return Advance();
+
+			case ChangeActorFace:
+				ExecuteChangeActorFace(cmd);
+				return Advance();
+
+			case ChangeVehicleGraphic:
+				ExecuteChangeVehicleGraphic(cmd);
+				return Advance();
+
+			case SetVehicleLocation:
+				ExecuteSetVehicleLocation(cmd);
+				return Advance();
 
 			case ChangeSystemBGM:
 				ExecuteChangeSystemBgm(cmd);
@@ -2822,6 +2857,333 @@ public sealed class EventInterpreter
 	/// something else here.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 10620, Change Hero Title, from EasyRPG's <c>CommandChangeHeroTitle</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>An invalid hero is a warning and not a refusal</strong> — the
+	/// reference writes <c>Output::Warning</c> and <c>return true</c>. A reader
+	/// that held the page would leave a cutscene waiting for a hero the database
+	/// never had, and a game that changes a title for an actor slot it did not
+	/// fill would hang on that line forever.
+	/// </para>
+	/// <para>
+	/// <strong>The title is its own field and not the name.</strong> That is
+	/// what <c>SetTitle</c> does, and a game that gives a hero a title keeps the
+	/// database name for the party window.
+	/// </para>
+	/// </remarks>
+	/// <summary>
+	/// The offset between a command vehicle id and the liblcf vehicle type.
+	/// </summary>
+	/// <remarks>
+	/// <strong>One, and not zero.</strong> The reference writes
+	/// <c>(Game_Vehicle::Type)(com.parameters[0] + 1)</c> and its enum is
+	/// <c>None = 0, Boat = 1, Ship = 2, Airship = 3</c> — those numbers are in
+	/// the save format, so they are not an internal detail. Parameter 0 is the
+	/// boat; a reader that used it directly would address vehicle 0, and
+	/// vehicle 0 is the party and not a vehicle.
+	/// </remarks>
+	private const int FirstVehicleIdOffset = 1;
+	private void ExecuteChangeHeroTitle(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Change hero title");
+			return;
+		}
+		var actorId = SystemBitfield(pCmd, 0);
+		var values = FindActorValues(actorId, "Change hero title");
+		if (values == null)
+		{
+			return;
+		}
+		var title = CommandStringOrVariable(pCmd, 1, 1, 2);
+		values.Title = title;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Hero {actorId} is now called \"{title}\"");
+	}
+
+	/// <summary>
+	/// 10630, Change Sprite Association, from EasyRPG's
+	/// <c>CommandChangeSpriteAssociation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>The index is a walk-cycle offset and not a character
+	/// number.</strong> A costume is the same file with a different index, and a
+	/// reader that read the index as a character number would put a hero in
+	/// somebody else's costume.
+	/// </para>
+	/// <para>
+	/// <strong>The transparency flag is <c>parameters[2]</c> and not part of
+	/// the bitfield</strong>, which is what the reference does: it reads the
+	/// mode index for the other two values and this one directly. A reader that
+	/// took all three from the bitfield would make a costume transparent
+	/// whenever a Maniac game packed a different value there.
+	/// </para>
+	/// <para>
+	/// The reference also calls <c>ResetGraphic</c> afterwards. <strong>Without
+	/// that the hero keeps the old sprite until the next redraw</strong>, which
+	/// in a turn-based engine is at the end of the move — so a costume change
+	/// would show up one step late.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeSpriteAssociation(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Change sprite association");
+			return;
+		}
+		var actorId = SystemBitfield(pCmd, 0);
+		var values = FindActorValues(actorId, "Change sprite association");
+		if (values == null)
+		{
+			return;
+		}
+		var name = CommandStringOrVariable(pCmd, 3, 1, 4);
+		values.SpriteName = name;
+		values.SpriteIndex = SystemBitfield(pCmd, 1);
+		// **parameters[2] and not the bitfield, which is the reference's own
+		// split and the reason a Maniac game does not change the transparency
+		// through this command.**
+		values.SpriteTransparent = pCmd.Parameters[2] != 0;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Hero {actorId} now wears \"{name}\" index"
+			+ $" {values.SpriteIndex}, transparent is {values.SpriteTransparent}");
+	}
+
+	/// <summary>
+	/// 10640, Change Actor Face, from EasyRPG's <c>CommandChangeActorFace</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Two parameters and not three</strong> — the name and the index —
+	/// and the index is a plain value. A reader that read a transparency flag
+	/// here would shift the index by one and put a hero in the wrong face.
+	/// </remarks>
+	private void ExecuteChangeActorFace(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Change actor face");
+			return;
+		}
+		var actorId = SystemBitfield(pCmd, 0);
+		var values = FindActorValues(actorId, "Change actor face");
+		if (values == null)
+		{
+			return;
+		}
+		var name = CommandStringOrVariable(pCmd, 2, 1, 3);
+		var index = SystemBitfield(pCmd, 1);
+		if (index < 0 || index > Rm2kActorValues.MaxFaceIndex)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change actor face: index {index} is outside the"
+				+ $" file's four slots for hero {actorId}, and nothing was set");
+			return;
+		}
+		values.FaceName = name;
+		values.FaceIndex = index;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Hero {actorId} now shows \"{name}\" slot {index}");
+	}
+
+	/// <summary>
+	/// 10650, Change Vehicle Graphic, from EasyRPG's
+	/// <c>CommandChangeVehicleGraphic</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Parameter 0 plus one.</strong> The reference writes
+	/// <c>(Game_Vehicle::Type)(com.parameters[0] + 1)</c>, because the enum
+	/// starts at one for the party-less case. A reader that used the parameter
+	/// directly would address vehicle 0 where the game meant vehicle 1 — and
+	/// vehicle 0 is not a vehicle at all.
+	/// </para>
+	/// <para>
+	/// The reference sets <strong>two</strong> fields: the current sprite and
+	/// the original one. The original is what the vehicle goes back to when a
+	/// board is left, so <strong>setting only the current one would leave a
+	/// vehicle in its costume after the party got out.</strong>
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeVehicleGraphic(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 2.
+		if (pCmd.Parameters.Count < 2)
+		{
+			Malformed("Change vehicle graphic");
+			return;
+		}
+		var vehicle = FindVehicle(pCmd.Parameters[0], "Change vehicle graphic");
+		if (vehicle == null)
+		{
+			return;
+		}
+		vehicle.CharacterName = pCmd.Text;
+		vehicle.SpriteIndex = pCmd.Parameters[1];
+		// The original is the same value today, and **a reader that set only the
+		// current sprite would leave a vehicle in its costume after a board**.
+		vehicle.OriginalCharacterName = pCmd.Text;
+		vehicle.OriginalSpriteIndex = pCmd.Parameters[1];
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Vehicle {pCmd.Parameters[0]} is now \"{pCmd.Text}\""
+			+ $" index {pCmd.Parameters[1]}, and that is also what it returns to");
+	}
+
+	/// <summary>
+	/// 10850, Set Vehicle Location, from EasyRPG's
+	/// <c>CommandSetVehicleLocation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Vehicle id -1 moves the party and not a vehicle.</strong> The
+	/// reference has a comment on it: in RPG_RT a party in no vehicle has the
+	/// id -1, and passing -1 moves the party on its own. A reader that refused
+	/// it as an invalid id would make every "teleport the hero" command in a
+	/// game do nothing — and that is a very common command.
+	/// </para>
+	/// <para>
+	/// <strong>When the party is in that vehicle, both move together</strong>,
+	/// and the reference returns right after. A reader that moved only the
+	/// vehicle would leave the hero standing in the old map.
+	/// </para>
+	/// <para>
+	/// <strong>All three coordinates go through <c>ValueOrVariable</c></strong>
+	/// with the mode in <c>parameters[1]</c>, so a game can follow a variable.
+	/// </para>
+	/// </remarks>
+	private void ExecuteSetVehicleLocation(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Set vehicle location");
+			return;
+		}
+		// **-1 is the party, and a reader that read it as an invalid id would
+		// make every "move the hero" command in a game do nothing.**
+		var rawId = pCmd.Parameters[0];
+		var vehicle = rawId < 0 ? null : FindVehicle(rawId, "Set vehicle location");
+		if (rawId >= 0 && vehicle == null)
+		{
+			return;
+		}
+		var mode = pCmd.Parameters[1];
+		var mapId = ValueOrVariable(mode, pCmd.Parameters[2]);
+		var x = ValueOrVariable(mode, pCmd.Parameters[3]);
+		var y = ValueOrVariable(mode, pCmd.Parameters[4]);
+		// **IsBoarding and not a vehicle id.** The reference compares the
+		// player Vehicle() with the vehicle it is moving, and this reader has
+		// the same two pieces: whether the player is aboard, and which type.
+		// **Boarding is nullable and that is a design, not a gap.** A game that
+		// never touches a vehicle never allocates one, so a reader that
+		// dereferenced it would throw on every 10850 in a game with no ship —
+		// and the common case is exactly that game.
+		var partyRides = _state.Boarding != null
+			&& _state.Boarding.IsBoarding
+			&& _state.Boarding.VehicleType == rawId + FirstVehicleIdOffset;
+		if (partyRides)
+		{
+			// **The party and the vehicle move as one, and the reference returns
+			// right after.** Moving only the vehicle would leave the hero
+			// standing in the map they left.
+			if (vehicle != null)
+			{
+				vehicle.MapId = mapId;
+				vehicle.X = x;
+				vehicle.Y = y;
+			}
+			_state.MapId = mapId;
+			_state.MapX = x;
+			_state.MapY = y;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Vehicle {rawId} and the party inside it are"
+				+ $" now on map {mapId} at {x},{y}");
+			return;
+		}
+		if (vehicle == null)
+		{
+			// **No vehicle and nobody in one: this is the party on its own.**
+			_state.MapId = mapId;
+			_state.MapX = x;
+			_state.MapY = y;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] The party is now on map {mapId} at {x},{y},"
+				+ " because id -1 means the party and not a vehicle");
+			return;
+		}
+		vehicle.MapId = mapId;
+		vehicle.X = x;
+		vehicle.Y = y;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Vehicle {rawId} is now on map {mapId} at {x},{y},"
+			+ " and the party stays where it is");
+	}
+
+	/// <summary>
+	/// The base values of a hero, or null with a diagnostic when the database
+	/// has no such hero.
+	/// </summary>
+	/// <remarks>
+	/// <strong>A missing hero is a warning and not an exception.</strong> The
+	/// reference calls <c>GetActor</c>, checks the result and writes a warning;
+	/// a reader that threw would take a game down over an actor slot it chose
+	/// not to fill.
+	/// </remarks>
+	private Rm2kActorValues? FindActorValues(int pActorId, string pCommand)
+	{
+		if (pActorId < 1 || pActorId > GameSimulationState.MaxActorId)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] {pCommand}: hero {pActorId} is outside 1 to"
+				+ $" {GameSimulationState.MaxActorId}, and the reference warns"
+				+ " and moves on; nothing was changed");
+			return null;
+		}
+		return _state.GetOrCreateActorValues(pActorId);
+	}
+
+	/// <summary>
+	/// A vehicle, or null with a diagnostic.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The parameter plus one</strong>, because the reference's enum
+	/// starts at one. A reader that used the parameter directly would address
+	/// vehicle 0 where the game meant vehicle 1.
+	/// </remarks>
+	private Rm2kVehicleState? FindVehicle(int pRawId, string pCommand)
+	{
+		// **The plus one is the reference's own line** and the liblcf enum is
+		// None 0, Boat 1, Ship 2, Airship 3 — so parameter 0 is the boat.
+		var vehicleId = pRawId + FirstVehicleIdOffset;
+		if (vehicleId <= 0)
+			{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] {pCommand}: vehicle {pRawId} would be type 0,"
+				+ " which is the party and not a vehicle; the reference only allows"
+				+ " that through 10850");
+			return null;
+			}
+		foreach (var vehicle in _state.Vehicles)
+		{
+			if (vehicle.VehicleType == vehicleId)
+			{
+				return vehicle;
+			}
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] {pCommand}: vehicle {pRawId} is not on this map,"
+			+ " and the reference warns and moves on; nothing was changed");
+		return null;
+	}
+
 	private int SystemBitfield(Rm2kMap.EventCommand pCmd, int pIndex)
 	{
 		if (_state.SupportsManiacPatch)

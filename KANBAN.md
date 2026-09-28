@@ -2586,6 +2586,8 @@ look for the next island of that shape.**
 | teleport | ~~`11810` `11820` `11830`~~ | **~~teleport targets, teleport access, escape target — DONE, see below~~** |
 | outcome | ~~`12420` `12510`~~ | **~~game over, return to title — DONE~~** |
 | system | ~~`10660` `10670` `10680` `10690`~~ | **~~system BGM, SFX, graphics, transitions — DONE, see below~~** |
+| heroes | ~~`10620` `10630` `10640`~~ | **~~hero title, sprite, face — DONE~~** |
+| vehicles | ~~`10650` `10850`~~ | **~~vehicle graphic and location — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2598,6 +2600,55 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `10620`, `10630`, `10640`, `10650` and `10850` are done — and `10850` has a value that is not a vehicle
+
+**Vehicle id -1 moves the party and is not an invalid id.** The reference has a
+comment on it: in RPG_RT a party in no vehicle has the id -1, and passing -1
+moves the party on its own. **A reader that refused it would make every
+"teleport the hero" command in a game do nothing** — and that is a very common
+command. There is a test that a missing vehicle is refused and -1 still works,
+because they are two different meanings for one field.
+
+**The vehicle id is shifted by one, because the liblcf enum is
+`None = 0, Boat = 1, Ship = 2, Airship = 3`** and the reference writes
+`(Game_Vehicle::Type)(com.parameters[0] + 1)`. Those numbers are in the save
+format, so they are not an internal detail. A reader that used the parameter
+directly would address vehicle 0 — and vehicle 0 is the party, not a boat.
+
+**`10650` sets two fields, the current sprite and the original one.** The
+original is what the vehicle returns to when a board ends, so **a reader that
+set only the current one would leave a vehicle in its costume after the party
+got out.**
+
+**A party inside a vehicle moves with it**, and the reference returns right
+after. Moving only the vehicle would leave the hero standing in the map they
+left — in a game with a boat, that is a party in open water.
+
+**`Boarding` is nullable and that is a design.** A game that never touches a
+vehicle never allocates one, and a reader that dereferenced it would throw on
+every `10850` in a game with no ship — **and the common case is exactly that
+game.** The first run of this slice did exactly that; the tests found it.
+
+**`10630` takes the transparency straight from `parameters[2]` and not from the
+bitfield**, which is the reference's own split: it reads the mode index for the
+file and the pose and this one directly. A reader that took all three from the
+bitfield would make a costume transparent whenever a Maniac game packed a
+different value there. **And the index is a pose, not a character number** — a
+costume is the same file with a different index, and the file name stays right,
+so no visual check catches a reader that got it wrong.
+
+**A missing hero is a warning and not a refusal.** The reference calls
+`GetActor`, checks the result, writes a warning and returns true. **A reader
+that held the page would leave a cutscene waiting for a hero the database never
+had**, and a game that addresses an actor slot it chose not to fill would hang
+there forever.
+
+**Test evidence** `test_rm2k_actor_graphics.cs`, 14 tests.
+**1167/1167**, `TestRm2kActorGraphics: 14/14`.
+**Mutations** Eleven rules, **11 of 11 caught** in the first run — including the
+vehicle id not shifted, the original sprite not set, and the nullable boarding
+dereferenced.
 
 ## `10660`, `10670`, `10680` and `10690` are done — the second block that was never on the board
 

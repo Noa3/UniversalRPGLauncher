@@ -51,6 +51,42 @@ public sealed class Rm2kActorValues
 	/// <summary>The base agility.</summary>
 	public int BaseAgility { get; private set; }
 
+	/// <summary>The name a hero is called by, from <c>10620</c>.</summary>
+	/// <remarks>
+	/// <strong>Separate from the database name</strong>, because that is what
+	/// the reference does: <c>SetTitle</c> is its own field, and a game that
+	/// gives a hero a title keeps the database name for the party window.
+	/// </remarks>
+	public string Title { get; set; } = "";
+
+	/// <summary>The walk sprite a hero wears, from <c>10630</c>.</summary>
+	/// <remarks>
+	/// <strong>The index is a walk-cycle offset and not a character number.</strong>
+	/// A costume is the same file with a different index, and a reader that
+	/// treated the index as a character number would put a hero in somebody
+	/// else's costume.
+	/// </remarks>
+	public string SpriteName { get; set; } = "";
+
+	/// <summary>Which pose of that file the hero wears.</summary>
+	public int SpriteIndex { get; set; }
+
+	/// <summary>Whether the hero is drawn transparent, from <c>parameters[2]</c>.</summary>
+	public bool SpriteTransparent { get; set; }
+
+	/// <summary>The face a hero shows in a message, from <c>10640</c>.</summary>
+	/// <remarks>
+	/// <strong>A request and not a drawn portrait</strong>, like <c>10130</c>:
+	/// nothing here loads a file.
+	/// </remarks>
+	public string FaceName { get; set; } = "";
+
+	/// <summary>Which of the four faces in the file.</summary>
+	public int FaceIndex { get; set; }
+
+	/// <summary>The highest face index a file's four slots allow.</summary>
+	public const int MaxFaceIndex = 3;
+
 	/// <summary>
 	/// A fresh actor, from the bounds liblcf writes into an empty database row.
 	/// </summary>

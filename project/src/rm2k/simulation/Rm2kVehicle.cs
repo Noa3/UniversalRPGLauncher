@@ -123,6 +123,18 @@ public sealed class Rm2kVehicleState
 	/// <summary>The character name, from the system section's name field.</summary>
 	public string CharacterName { get; set; } = "";
 
+	/// <summary>What the vehicle returns to when a board is left.</summary>
+	/// <remarks>
+	/// <strong>Two fields and not one.</strong> <c>10650</c> sets the current
+	/// sprite <em>and</em> the original one, and a reader that set only the
+	/// current one would leave a vehicle in its costume after the party got
+	/// out. The two are the same value until a board changes them.
+	/// </remarks>
+	public string OriginalCharacterName { get; set; } = "";
+
+	/// <summary>The pose of the original sprite.</summary>
+	public int OriginalSpriteIndex { get; set; }
+
 	/// <summary>liblcf <c>EventPage::move_speed</c> for this vehicle.</summary>
 	public int MoveSpeed { get; }
 
