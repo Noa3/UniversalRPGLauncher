@@ -33,6 +33,30 @@ public sealed class WolfEventVm
     /// </remarks>
     private readonly WolfVariableBands _variables = new();
 
+    /// <summary>
+    /// The characters on the map and the routes they are running.
+    /// </summary>
+    /// <remarks>
+    /// **A board of its own and not a field the caller fills in.** The move
+    /// route reader produces routes, the route type table verifies the steps,
+    /// and until this card nothing held a figure to run them on — so a game
+    /// with a patrol route loaded and stood still, and the suite stayed green
+    /// because it only ever read steps.
+    /// </remarks>
+    public WolfCharacterBoard Board { get; }
+
+    /// <summary>Creates a VM whose board shares this VM's variable bands.</summary>
+    /// <remarks>
+    /// **The board gets this VM's bands and not its own.</strong> A route step
+    /// that stores to a variable has to write where the event can read it, and
+    /// two band sets would mean a route's value vanished into a store nobody
+    /// looks at.
+    /// </remarks>
+    public WolfEventVm()
+    {
+        Board = new WolfCharacterBoard(_variables);
+    }
+
     /// <summary>The bands, for a caller that wants to address one directly.</summary>
     public WolfVariableBands VariableBands => _variables;
     /// <summary>
@@ -91,6 +115,27 @@ public sealed class WolfEventVm
     private WolfEventProgram? _program;
     private int _instructionIndex;
     private int _waitRemaining;
+
+    /// <summary>
+    /// Whether the VM is waiting for a route rather than for frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Two waits and one flag, because they end differently.</strong>
+    /// The frame wait counts down. The route wait ends when the board says the
+    /// movement is finished — and the instruction index has to advance at that
+    /// moment, because the move route command deliberately left it where it
+    /// was.
+    /// </para>
+    /// <para>
+    /// <strong>The bug this flag exists to prevent:</strong> without it the VM
+    /// resumed on the move route command itself and started the route over,
+    /// forever. The event would hang with no error anywhere — the frames were
+    /// zero, the route was finished, and the command at the index was the one
+    /// that had started it.
+    /// </para>
+    /// </remarks>
+    private bool _waitingForRoute;
     private int _pendingChoiceIndex = -1;
     private long _messageSequence;
 
@@ -160,8 +205,28 @@ public sealed class WolfEventVm
         {
             return Fail($"The WOLF event VM cannot step from state {State}.", "tick");
         }
+        // **The board moves every frame, waiting or not.** A figure on a patrol
+        // keeps walking while a message is on screen, and a reader that ticked
+        // it only in the move-route wait would freeze every figure for the
+        // length of a text box. The tick sits above the state check on purpose.
+        Board.Tick();
+
         if (State == WolfVmState.Waiting)
         {
+            // **The route branch comes first, because its frames are zero.**
+            // A reader that checked the frame count first would fall through
+            // to the frame branch, decrement nothing, and never leave the
+            // state — the event would hang with the route long finished.
+            if (_waitingForRoute)
+            {
+                if (Board.IsEveryRouteFinished())
+                {
+                    _waitingForRoute = false;
+                    _instructionIndex += 1;
+                    State = WolfVmState.Running;
+                }
+                return PluginOperationResult.Succeeded();
+            }
             if (_pendingChoiceIndex < 0 && _waitRemaining > 0)
             {
                 _waitRemaining -= 1;
@@ -169,7 +234,9 @@ public sealed class WolfEventVm
                 {
                     State = WolfVmState.Running;
                 }
+                return PluginOperationResult.Succeeded();
             }
+
             return PluginOperationResult.Succeeded();
         }
 
@@ -317,7 +384,13 @@ public sealed class WolfEventVm
         _waitRemaining = 0;
         _pendingChoiceIndex = -1;
         _messageSequence = 0;
+        _waitRemaining = 0;
+        _waitingForRoute = false;
         _variables.Clear();
+        // **The board is cleared with the variables, and not left behind.** A
+        // new game that kept the last game's figures would have two heroes on
+        // the same tile, and a route that walked into a map with no walls.
+        Board.Clear();
         _mapSwitches.Clear();
         _commonSwitches.Clear();
         _messages.Clear();
@@ -410,6 +483,70 @@ public sealed class WolfEventVm
                 _waitRemaining = pCommand.Frames;
                 if (_waitRemaining > 0)
                 {
+                    State = WolfVmState.Waiting;
+                }
+                return PluginOperationResult.Succeeded();
+            case WolfEventOpcode.MoveRoute:
+                // **The route is a list on the command, and not a name looked up
+                // somewhere.** The reader produced the steps; this hands them
+                // to the board, which owns the index and the frame budget. A
+                // reader that ran the steps here would have no place to keep
+                // "how many frames are left on this one", and that state is
+                // the whole reason a route takes time.
+                if (pCommand.Route is not { } route)
+                {
+                    // **No route and no movement, and the event continues.**
+                    // A command with no route is a command that says nothing;
+                    // stopping the event would fail a game whose program has a
+                    // route step this reader's file did not carry.
+                    _instructionIndex += 1;
+                    return PluginOperationResult.Succeeded();
+                }
+                Board.StartRoute(pCommand.CharacterId, route);
+                if (route.WaitUntilDone)
+                {
+                    // **The wait is remembered, and not only the state.** The
+                    // state is the same Waiting the frame wait uses, so the
+                    // branch that ends this one has to be able to tell them
+                    // apart — see _waitingForRoute.
+                    _waitingForRoute = true;
+                    // **The instruction index does not move, and that is the
+                    // whole of the wait.** A reader that advanced first would
+                    // run the *next* command and then wait, so the event would
+                    // do one thing too many before it stopped — and the
+                    // difference is one command per wait, which is exactly the
+                    // kind of error a game never reports.
+                    State = WolfVmState.Waiting;
+                }
+                else
+                {
+                    // **Wait only when the route says to.** The flag is the
+                    // format's, and a reader that always waited would hold
+                    // every event in the game until its figure stopped moving.
+                    _instructionIndex += 1;
+                }
+                return PluginOperationResult.Succeeded();
+            case WolfEventOpcode.WaitUntilRouteDone:
+                // **The event waits for the board, and not for a frame count.**
+                // The format's option holds the event until the movement
+                // finishes, so a reader that counted frames would let the
+                // event continue while the figure is still walking.
+                //
+                // **The index advances only once the board is done**, for the
+                // same reason the move route does not advance: one command too
+                // many is a command the game never wrote.
+                if (Board.IsEveryRouteFinished())
+                {
+                    _instructionIndex += 1;
+                }
+                else
+                {
+                    // **The flag, and not just the state.** This is the second
+                    // way into the route wait, and it ends in the same place:
+                    // the index advances once the board is done. Without the
+                    // flag this wait would fall through to the frame branch,
+                    // where the frames are zero and nothing ever ends it.
+                    _waitingForRoute = true;
                     State = WolfVmState.Waiting;
                 }
                 return PluginOperationResult.Succeeded();

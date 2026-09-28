@@ -111,6 +111,8 @@ public enum WolfEventOpcode
     IfSwitch,
     IfVariable,
     Wait,
+    MoveRoute,
+    WaitUntilRouteDone,
     Choice,
     Transfer,
     End,
@@ -221,6 +223,29 @@ public sealed class WolfEventCommand
 	public int NextIndex { get; init; } = -1;
 
     public int Frames { get; init; }
+
+    /// <summary>
+    /// Which character a move command acts on.
+    /// </summary>
+    /// <remarks>
+    /// <strong>An event id, and 0 is the hero.</strong> The format's character
+    /// commands pick a figure from a list that starts with the hero, so a
+    /// command that acted on "the current event" would move the wrong figure
+    /// whenever a program ran for an event instead of the hero.
+    /// </remarks>
+    public int CharacterId { get; init; }
+
+    /// <summary>
+    /// The route a move command starts, or null when it carries none.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The steps on the command and not a name.</strong> The route
+    /// reader produced the steps, and a reader that looked a route up by name
+    /// at execution time would have to load it again for every step, and a
+    /// program that ran a route the reader could not find would have no way to
+    /// say so.
+    /// </remarks>
+    public WolfMoveRoute? Route { get; init; }
     public int MapId { get; init; }
     public int X { get; init; }
     public int Y { get; init; }

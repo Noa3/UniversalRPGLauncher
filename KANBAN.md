@@ -2597,6 +2597,7 @@ look for the next island of that shape.**
 | wolf | ~~variable operators~~ | **~~fourteen assignment operators — DONE, see below~~** |
 | wolf | ~~band offsets and switches~~ | **~~the real offsets, the database, map and common switches — DONE, see below~~** |
 | wolf | ~~move route execution~~ | **~~24 verified route types, finally run — DONE, see below~~** |
+| wolf | ~~character board and VM routing~~ | **~~a board that moves in time, and two opcodes — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2609,6 +2610,81 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The board, the timing, and a bug that ran every step in every second frame
+
+**The last card built a runner that can be called. That is not a game.** The
+route reader produced steps, the type table verified them, and nothing held a
+figure to run them on — the VM had no characters and no map. This card adds the
+board, the two opcodes, and the clock.
+
+**The board is the VM's own, over the VM's own variable bands.** A route step
+that stores to a variable has to write where the event can read it, and two
+band sets would mean a patrol counting steps into a store nobody looks at.
+
+## The timing was wrong three times, and the order of two lines is why
+
+**First: the index was checked before the frame budget.** A step advances the
+index when it runs, so the index points at the *next* step — and a step that had
+advanced past the last one was already "at the end" on the next frame. The route
+ended, the repeat flag reset the index to zero, **and the fifteen frames the step
+had asked for were thrown away with it.** The step then ran every second frame,
+and a guard at speed 1 crossed the screen eight times too fast. The symptom the
+test reported was a figure at X = 9 after seventeen frames, and every function
+involved measured correct in isolation.
+
+**Second: checking the frames first fixed the order and ended every step a frame
+late,** because the tick that spent the last frame returned instead of looking at
+what came next.
+
+**Third, and the one in the code: a flag and not a frames-left test.** A
+`FramesLeft` of zero is ambiguous — it means either "still on the last frame" or
+"no step has started" — and both readings were in the code. `IsStepRunning` makes
+the arithmetic exact: a step of n frames is started by one of them, so it is
+finished on the nth tick, and the tick that finishes it also looks at the next
+step. **A step of sixteen frames is stored as fifteen, because the tick that
+starts it is its first frame.**
+
+**The two refusals are decided before the timing, and that order matters too.**
+Asking the timing of a step that did not run is a question with no answer, and a
+reader that asked first gave a refused step a frame budget — a guard would stand
+at a wall for sixteen frames and then stop. Skipping means carrying on in the
+same frame, not falling through to the timing.
+
+**The refusals themselves are two answers, and the second card got it wrong.**
+The runner threw `Step`'s return value away and reported a move into a wall as
+`Stepped`, so the board's skip flag had nothing to act on. A refused movement is
+now `Refused` and a refused one is not the same as a step that did not move.
+
+**The ten key facing table is still not implemented, and the guess is gone.** The
+help points at a figure that is not in the text; an earlier draft of the previous
+card guessed the table and it had duplicate values. **That card is the argument for
+reading first and guessing never** — the band offsets cost a card the same way.
+
+## The two waits share one state and need two endings
+
+**The frame wait counts down; the route wait ends when the board says the movement
+is finished.** They use the same `Waiting` state, so a flag tells them apart — and
+**the bug that flag exists to prevent is that without it the VM resumes on the
+move route command itself and starts the route over, forever.** The frames are
+zero for the whole wait, so a reader that only counted frames would leave the
+event hanging with no error anywhere. **The instruction index advances at that
+moment and nowhere else**, because the move route command deliberately left it
+on itself so the event would be held there.
+
+**The board is ticked above the state check.** A figure on a patrol keeps walking
+while a message is on screen, and a reader that ticked it only in the route wait
+would freeze every figure for the length of a text box.
+
+**Test evidence** `test_wolf_character_board.cs` (14) and
+`test_wolf_move_route_runner.cs` (14, one new test for the refusal), with the
+existing `test_wolf_move_route.cs` (11) re-measured. **1271/1271**.
+**Mutations** Sixteen effective rules over two runs, **16 of 16 caught** —
+including the frame budget not being charged, the first frame counted twice, the
+index checked before the frames, the wrap not clearing the flag, the index not
+advancing on a route wait, the board not ticking during a frame wait, and a
+refused movement reported as stepped. One rule was a rename that does not compile
+and is not counted.
 
 ## The move route was read, tested and never run — 24 verified types and no executor
 

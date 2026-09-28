@@ -95,10 +95,16 @@ public partial class TestWolfMoveRouteRunner : TestBase
 		var character = new WolfCharacter { X = 5, Y = 5 };
 		character.Passability = WolfCharacter.PassUp | WolfCharacter.PassLeft;
 
+		// **The real call, once.** An earlier version of this test asked
+		// CanStep twice and then asserted the facing, which no code path
+		// reaches: CanStep only answers the question, and Step is what turns
+		// the figure. The test passed the first assertion and failed the
+		// second, and the reason was the test's own shape.
+		var stepped = character.Step(WolfCharacter.PassRight);
 		AssertEq(
-			character.Step(WolfCharacter.PassRight), false,
+			stepped, false,
 			"**and stepping right is refused**, because the passability does not"
-			+ $" include it; it is {character.Step(WolfCharacter.PassRight)}");
+			+ $" include it; it is {stepped}");
 		AssertEq(
 			character.X, 5,
 			"**and the character has not moved**, because a refused step leaves"
@@ -118,6 +124,25 @@ public partial class TestWolfMoveRouteRunner : TestBase
 	/// A reader that treated a diagonal as its horizontal half would walk a
 	/// guard along a wall that it was told to go around.
 	/// </remarks>
+	public void Test_ARunnerStepReportsARefusal()
+	{
+		var runner = Runner(out _);
+		var character = new WolfCharacter { X = 4, Y = 4 };
+		character.Passability = WolfCharacter.PassUp;
+
+		AssertEq(
+			runner.Run(Step(WolfMoveRouteType.MoveRight), character),
+			WolfMoveRouteOutcome.Refused,
+			"**and a move step into a wall reports refused**, and not stepped —"
+			+ " the two are different outcomes because the board's skip flag has"
+			+ " to decide between continuing and stopping, and a reader that"
+			+ " reported stepped gave it nothing to decide on");
+		AssertEq(
+			character.X, 4,
+			"**and the figure did not move**, which is what a refusal means;"
+			+ $" X is {character.X}");
+	}
+
 	public void Test_TheEightDirectionsMoveTheRightWay()
 	{
 		AssertEq(WolfDirection.DeltaX(WolfCharacter.PassUpLeft), -1,

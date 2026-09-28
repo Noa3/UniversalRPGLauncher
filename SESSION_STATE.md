@@ -3143,3 +3143,75 @@ darunter rechts als Bit 3, eine Diagonale als oben-plus-links, die entfernte
 Passierbarkeitsprüfung, die Blickrichtung, die einer Verweigerung nicht folgt,
 Tempo 6 mit sechzehn Bildern und der Add-Schritt ohne vorheriges Lesen. Eine Regel
 war eine Umbenennung, die nicht übersetzt, und zählt nicht.
+
+## WOLF Figurenbrett — DONE: ein aufrufbares Ding ist noch kein Spiel
+
+**Die letzte Karte baute einen Runner, den man aufrufen kann. Das ist noch kein
+Spiel.** Der Routenleser lieferte Schritte, die Typentabelle verifizierte sie, und
+nirgends stand eine Figur, auf der sie laufen könnten — die VM hatte weder Figuren
+noch Karte. Diese Karte fügt Brett, zwei Opcodes und die Uhr hinzu.
+
+**Das Brett gehört der VM und benutzt ihre Bänder.** Ein Routenschritt, der in eine
+Variable schreibt, muss dorthin schreiben, wo das Event liest, und zwei Bänder
+hießen, dass eine Patrouille Schritte in einen Speicher zählt, den niemand ansieht.
+
+## Das Timing war dreimal falsch, und die Reihenfolge zweier Zeilen ist der Grund
+
+**Erstens: der Index wurde vor dem Frame-Budget geprüft.** Ein Schritt rückt den
+Index vor, wenn er läuft, also zeigt der Index auf den *nächsten* Schritt — und ein
+Schritt, der über den letzten hinausgerückt war, war im nächsten Frame schon „am
+Ende". Die Route endete, die Wiederholungsflagge setzte den Index auf null, **und die
+fünfzehn Bilder, die der Schritt verlangt hatte, wurden mit weggeworfen.** Der Schritt
+lief danach in jedem zweiten Frame, und ein Wächter mit Tempo 1 überquerte den
+Bildschirm achtmal zu schnell. Das Symptom, das der Test meldete, war eine Figur bei
+X = 9 nach siebzehn Frames, und jede beteiligte Funktion misst für sich allein
+korrekt.
+
+**Zweitens: die Bilder zuerst zu prüfen reparierte die Reihenfolge und ließ jeden
+Schritt einen Frame zu spät enden**, weil der Tick, der das letzte Bild verbrauchte,
+zurückkehrte, statt zu prüfen, was als nächstes kommt.
+
+**Drittens, und das ist im Code: ein Flag und nicht ein Test auf die Restbilder.** Ein
+`FramesLeft` von null ist mehrdeutig — es heißt entweder „noch im letzten Bild" oder
+„kein Schritt begonnen" — und beide Lesarten standen im Code. `IsStepRunning` macht
+die Rechnung exakt: Ein Schritt von n Bildern wird von einem davon gestartet, also ist
+er im n-ten Tick fertig, und der Tick, der ihn beendet, sieht auch den nächsten
+Schritt. **Ein Schritt von sechzehn Bildern wird als fünfzehn gespeichert, weil der
+Tick, der ihn startet, sein erstes Bild ist.**
+
+**Die zwei Verweigerungen werden vor dem Timing entschieden, und auch diese
+Reihenfolge zählt.** Das Timing eines Schritts zu fragen, der nicht lief, ist eine
+Frage ohne Antwort, und wer zuerst fragte, gab einem verweigerten Schritt ein
+Frame-Budget — ein Wächter stünde sechzehn Bilder vor einer Wand und stoppte dann.
+Überspringen heißt im selben Frame weitergehen, nicht ins Timing fallen.
+
+**Die Verweigerungen selbst sind zwei Antworten, und die letzte Karte hatte es
+falsch.** Der Runner hat den Rückgabewert von `Step` weggeworfen und einen Schritt in
+eine Wand als `Stepped` gemeldet, also hatte die Skip-Flagge des Bretts nichts, worauf
+sie reagieren konnte. Eine verweigerte Bewegung ist jetzt `Refused`, und eine
+verweigerte ist nicht dasselbe wie ein Schritt, der sich nicht bewegt hat.
+
+## Die beiden Wartezustände teilen sich einen Status und brauchen zwei Enden
+
+**Das Bild-Warten zählt herunter; das Routen-Warten endet, wenn das Brett sagt, dass
+die Bewegung fertig ist.** Sie benutzen denselben `Waiting`-Status, also unterscheidet
+ein Flag sie — **und der Bug, den dieses Flag verhindert, ist: ohne es läuft die VM auf
+dem MoveRoute-Befehl selbst weiter und startet die Route endlos neu.** Die Bilder
+sind während des ganzen Wartens null, also hinge ein Leser, der nur Bilder zählte,
+ewig fest — ohne Fehler irgendwo. **Der Befehlsindex rückt in diesem Moment vor und
+sonst nirgends**, weil der MoveRoute-Befehl ihn absichtlich auf sich selbst stehen
+ließ, damit das Event dort gehalten wird.
+
+**Das Brett tickt über der Statusprüfung.** Eine Figur auf Patrouille läuft weiter,
+während ein Text auf dem Bildschirm steht, und ein Leser, der es nur im Routen-Warten
+tickte, frierte jede Figur für die Länge einer Textbox ein.
+
+**Test evidence** `test_wolf_character_board.cs` (14) und
+`test_wolf_move_route_runner.cs` (14, ein neuer Test für die Verweigerung), mit dem
+bestehenden `test_wolf_move_route.cs` (11) nachgemessen. **1271/1271**.
+**Mutations** 16 wirksame Regeln über zwei Läufe, **16 von 16 gefangen** — darunter
+das nicht abgebuchte Frame-Budget, das doppelt gezählte erste Bild, der vor den
+Bildern geprüfte Index, der Wrap ohne Flag-Löschung, der nicht vorrückende Index beim
+Routen-Warten, das nicht tickende Brett während eines Bild-Wartens und eine als
+`Stepped` gemeldete verweigerte Bewegung. Eine Regel war eine Umbenennung, die nicht
+übersetzt, und zählt nicht.

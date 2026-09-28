@@ -139,12 +139,21 @@ public sealed class WolfMoveRouteRunner
 			case WolfMoveRouteType.MoveDownRight:
 			case WolfMoveRouteType.MoveUpLeft:
 			case WolfMoveRouteType.MoveUpRight:
-				// **The route's own direction, and not the character's
-				// passability.** A step that is not in the character's
-				// passability changes the facing and leaves the position, which
-				// is what a guard pressed against a wall does.
-				pCharacter.Step(DirectionOf(pStep.Type));
-				return WolfMoveRouteOutcome.Stepped;
+				// **The step's outcome is the step's, and the refusal inside it
+				// is the character's.** `Step` decides whether the figure may
+				// move — it turns the facing either way and reports the refusal
+				// by returning false. An earlier version threw that return away
+				// and reported Stepped, so a route could not tell a step that
+				// moved from one that hit a wall, and the board's skip flag had
+				// nothing to act on.
+				//
+				// **Two answers, because the format needs both:** a step that
+				// did not move is not the same as a step that was refused. The
+				// first is a step the route moves on from, the second is one the
+				// skip flag decides about.
+				return pCharacter.Step(DirectionOf(pStep.Type))
+					? WolfMoveRouteOutcome.Stepped
+					: WolfMoveRouteOutcome.Refused;
 
 			// ---- Die vier Blickrichtungen
 			case WolfMoveRouteType.FacingDown:
