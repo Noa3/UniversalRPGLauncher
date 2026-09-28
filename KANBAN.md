@@ -4763,6 +4763,72 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 Befehlszeile, und es gehört in eine eigene Karte.
 
 
+## `11560` Play Movie is done — and it is a request, not a playback
+
+**Width 5 and a string, and the string is the file name.** The reference reads
+`ToString(com.string)` for the file and `parameters[0..4]` for everything
+else. **A reader that looked for the name in the first parameter would have
+read the mode byte as a file name** — and that byte is 0 or 1, so every movie
+would have been one file called "0".
+
+**And the first parameter is the mode for both positions**, the same shape
+`10910` has.
+
+**There is no timer, because the reference has none.** `Game_Screen::PlayMovie`
+is five assignments — a file name, two positions and two resolutions — and
+nothing else. **A reader that modelled a movie as something that plays and then
+ends would have had to invent the end**, and an invented end is a number a game
+can be wrong about: a cutscene would advance before its last frame on a machine
+slower than the author's.
+
+**The reference's own body says it plainly:**
+
+```
+Output::Warning("Couldn't play movie: {}. Movie playback is not implemented
+                 (yet).", filename);
+```
+
+**and then it stores the request and returns true, which advances the page.** A
+reader that refused the command would have stalled a game's event on a cutscene
+it cannot show, and one that reported success would have claimed a capability
+the reference does not have. This stores the request and says in the
+diagnostics that nothing is playing it.
+
+**A position of zero is a position.** The reference has no range check, so a
+movie at 0, 0 is asked for at the screen's corner — **and a reader that used
+zero as "unset" would have drawn a game's cutscene somewhere the file did not
+say.**
+
+**Test evidence** `test_rm2k_play_movie.cs`, 11 tests.
+**1521/1521**, `TestRm2kPlayMovie: 11/11`, validator passed.
+**Mutations** Seven rules, **7 of 7 caught**. The first run was 5 of 7, and both
+survivors were mine: the mode-byte test had both coordinates on values that
+would answer the same way, and no test covered `Reset` at all — **and `Reset`
+is what `Rm2kEngineRuntime` calls before every game**, so a reader that left
+the movie fields alone would have started a second game with the first game's
+cutscene still marked as requested.
+
+### And the anchor that eleven methods share
+
+`if (pCmd.Parameters.Count < 5)` occurs twelve times in the interpreter and the
+comment `// CmdSetup minimum width 5.` eleven times — **one per command whose
+CmdSetup width is five.** A mutation rule anchored on either of them would have
+edited whichever came first and reported on that command. **The anchor has to
+carry the method signature**, which is what makes it unique:
+
+```
+private void ExecutePlayMovie(Rm2kMap.EventCommand pCmd)
+{
+    // CmdSetup minimum width 5.
+    if (pCmd.Parameters.Count < 5)
+```
+
+**This is now the third time the same class of mistake has cost a run** — the
+variable check in two command handlers, the map index in two methods, and now a
+format width in eleven. **The pattern is worth stating once: an anchor that is
+not unique is not an anchor, and the fix is always to add more context until
+`count() == 1` holds.**
+
 ## `10740` Enter Hero Name is done — and the sentinel in the save file
 
 **Width 3: the hero, the face index, and a flag.** The reference reads

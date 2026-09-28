@@ -4292,6 +4292,37 @@ in isolation.
 unparenthesised form throws, and the sheet's own form answers. Removing the
 parentheses from `WolfCharacterSheet.cs` kills two tests.
 
+### A surviving rule that was my mistake, and the shape it took
+
+`Reset laesst eine alte Filmanfrage stehen` survived, and measured on its own
+it is caught in one test. The difference: **the rule inserted
+`IsMoviePending = true` one line *before* the line that assigns it** — and
+`Reset` assigns it again on the next line, so the mutation wrote a value that
+was overwritten one line later. It was a rule that changes nothing, which is
+the same shape as the `WaitForFrames(0)` rule and the opposite of what a
+survivor is supposed to mean.
+
+**A rule that survives is a question, and the first question is whether the
+rule does anything.** Here the answer was "it writes a value that is
+overwritten one line later", and the second was "measure it alone". A rule
+whose replacement is not in the document afterwards is a no-op, and the check
+is one line: the mutated text must contain the replacement.
+
+### And the same harness bug lived in the next script too
+
+`mut_movie.py` was built from `mut_flash.py`'s body, and **that body still had
+the old `for d in (INT, STATE)`** — so the run died at the first restore with
+`NameError: name 'STATE' is not defined`. The repair for `mut_name.py` had been
+made in that file and nowhere else.
+
+**The lesson generalises past mutation testing: a fix applied to one instance
+of a copied pattern is a fix to one instance.** When a fix is about a property
+every copy of the code must have — a list derived from its data, an anchor
+checked for uniqueness, a restore that covers every file a rule writes — it
+belongs in the shared source, not in one script. These harnesses are copies of
+each other, and the fourth one will fail the same way unless the check is in
+the body that gets copied.
+
 ### A harness that edits itself is worse than no harness
 
 `mut_map.py` stopped parsing. My own patching had cut the file in the wrong

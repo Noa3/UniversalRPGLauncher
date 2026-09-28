@@ -1331,6 +1331,62 @@ public sealed class GameSimulationState
     public int PendingFacing { get; set; } = -1;
 
     /// <summary>
+    /// The movie 11560 asked for, and the place and size it was given.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Five fields, and none of them is a timer.</strong> The
+    /// reference's <c>Game_Screen::PlayMovie</c> writes the file name, the two
+    /// positions and the two resolutions, and that is the whole method — no
+    /// frame counter, no duration, no stop. <strong>A reader that modelled a
+    /// movie as something that plays and then ends would have had to invent
+    /// the end</strong>, and an invented end is a number a game can be wrong
+    /// about.
+    /// </para>
+    /// <para>
+    /// <strong>The name is a string and the rest are numbers.</strong> The
+    /// reference reads <c>com.string</c> for the file and
+    /// <c>parameters[0..4]</c> for everything else — <strong>and the first
+    /// parameter is the mode that governs the two positions</strong>, exactly
+    /// as it does in <c>10910</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And a position of zero is a position.</strong> The reference
+    /// stores whatever it is given without a range check, so a movie asked for
+    /// at 0, 0 is asked for at the screen's corner and not "nowhere" — <strong>
+    /// and a reader that used zero as "unset" would have drawn a game's
+    /// cutscene somewhere the file did not say.</strong>
+    /// </para>
+    /// </remarks>
+    public string MovieFileName { get; set; } = "";
+
+    /// <summary>The movie's left edge, from 11560's second parameter.</summary>
+    public int MoviePosX { get; set; }
+
+    /// <summary>The movie's top edge, from 11560's third parameter.</summary>
+    public int MoviePosY { get; set; }
+
+    /// <summary>The movie's width, from 11560's fourth parameter.</summary>
+    public int MovieResX { get; set; }
+
+    /// <summary>The movie's height, from 11560's fifth parameter.</summary>
+    public int MovieResY { get; set; }
+
+    /// <summary>
+    /// Whether a movie has been asked for, from 11560.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is a description and not a playback.</strong> The
+    /// reference's own warning says it plainly — "Movie playback is not
+    /// implemented (yet)" — <strong>and the command still stores the request
+    /// and returns true, which advances the page.</strong> A reader that
+    /// refused the command would have stalled a game's event on a cutscene it
+    /// could not show, and a reader that pretended to play it would have
+    /// claimed a capability the reference itself does not have.
+    /// </remarks>
+    public bool IsMoviePending { get; set; }
+
+    /// <summary>
     /// The terrain id of a tile, from 10910 Store Terrain ID.
     /// </summary>
     /// <remarks>
@@ -2670,6 +2726,8 @@ public sealed class GameSimulationState
         Timer1InBattle = true; Timer2InBattle = true; _timer1TickRemainder = 0; _timer2TickRemainder = 0;
         IsPaused = false; IsMenuOpen = false; IsSaveEnabled = true;
         IsTransferPending = false; PendingMapId = 0; PendingX = 0; PendingY = 0; ActiveActorIndex = 0;
+        PendingFacing = -1; IsMoviePending = false; MovieFileName = "";
+        MoviePosX = 0; MoviePosY = 0; MovieResX = 0; MovieResY = 0;
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear(); PassabilityMasks.Clear();
         TerrainData = []; TileSubstitution = null; LowerLayer = null;
         UpperLayer = null; UpperPassability = null;

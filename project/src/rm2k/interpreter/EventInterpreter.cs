@@ -662,6 +662,39 @@ public sealed class EventInterpreter
 	/// </remarks>
 	public const int EnterHeroName = 10740;
 
+	/// <summary>
+	/// 11560, Play Movie, from liblcf's <c>Code::PlayMovie</c> and EasyRPG's
+	/// <c>Game_Interpreter_Map::CommandPlayMovie</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 5, and the file name is a string and not a
+	/// parameter.</strong> The reference reads <c>ToString(com.string)</c> for
+	/// the file and <c>parameters[0..4]</c> for everything else. <strong>A
+	/// reader that looked for the name in the first parameter would have read
+	/// the mode byte as a file name</strong> — and that byte is 0 or 1, so
+	/// every movie would have been one file called "0".
+	/// </para>
+	/// <para>
+	/// <strong>And the first parameter is the mode for both positions,</strong>
+	/// exactly as in <c>10910</c>:
+	/// <c>ValueOrVariable(com.parameters[0], com.parameters[1])</c> for x and
+	/// the same mode with <c>parameters[2]</c> for y. The fourth and fifth are
+	/// the width and the height, read plainly.
+	/// </para>
+	/// <para>
+	/// <strong>And the command advances even though the reference cannot play
+	/// the movie.</strong> Its own body says so: <c>Output::Warning("Couldn't
+	/// play movie: {}. Movie playback is not implemented (yet).", filename)</c>
+	/// and then <c>return true</c>. <strong>A reader that refused the command
+	/// would have stalled a game's event</strong> on a cutscene it cannot show,
+	/// and one that pretended to play it would have claimed a capability the
+	/// reference does not have. This stores the request and says plainly that
+	/// nothing is playing it.
+	/// </para>
+	/// </remarks>
+	public const int PlayMovie = 11560;
+
 	public const int RecallToLocation = 10830;
 
 	/// <summary>
@@ -1429,6 +1462,10 @@ public sealed class EventInterpreter
 
 			case ShowHiddenMonster:
 				ExecuteShowHiddenMonster(cmd);
+				return Advance();
+
+			case PlayMovie:
+				ExecutePlayMovie(cmd);
 				return Advance();
 
 			case EnterHeroName:
@@ -4910,6 +4947,60 @@ public sealed class EventInterpreter
 			6 => GameSimulationState.EquipmentSlot.All,
 			_ => GameSimulationState.EquipmentSlot.All,
 		};
+	}
+
+	/// <summary>
+	/// Runs 11560, Play Movie, from liblcf's <c>Code::PlayMovie</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandPlayMovie</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Five parameters and a string.</strong> The reference reads
+	/// <c>ToString(com.string)</c> for the file name and
+	/// <c>parameters[0..4]</c> for the rest. <strong>The name is not a
+	/// parameter</strong>, and the first parameter is the mode that governs both
+	/// positions — the same shape <c>10910</c> has.
+	/// </para>
+	/// <para>
+	/// <strong>This stores the request and does not claim to play it.</strong>
+	/// The reference's own body is explicit:
+	/// <c>Output::Warning("Couldn't play movie: {}. Movie playback is not
+	/// implemented (yet).", filename)</c> — and then it stores the request and
+	/// returns true, which advances the page. <strong>A reader that refused the
+	/// command would have stalled a game's event</strong> on a cutscene it
+	/// cannot show, and a reader that reported success would have claimed a
+	/// capability the reference does not have.
+	/// </para>
+	/// </remarks>
+	private void ExecutePlayMovie(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Play movie");
+			return;
+		}
+
+		// **Der Name steht im String und nicht in den Parametern.**
+		var file = pCmd.Text ?? "";
+
+		// **Derselbe Modus fuer beide Positionen.**
+		var posX = ValueOrVariable(pCmd.Parameters[0], pCmd.Parameters[1]);
+		var posY = ValueOrVariable(pCmd.Parameters[0], pCmd.Parameters[2]);
+		var resX = pCmd.Parameters[3];
+		var resY = pCmd.Parameters[4];
+
+		_state.MovieFileName = file;
+		_state.MoviePosX = posX;
+		_state.MoviePosY = posY;
+		_state.MovieResX = resX;
+		_state.MovieResY = resY;
+		_state.IsMoviePending = true;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Play movie: \"{file}\" at ({posX}, {posY}) "
+			+ $"sized {resX} by {resY} is requested and nothing is playing it, "
+			+ "which is what the reference does too — its own warning says "
+			+ "movie playback is not implemented yet");
 	}
 
 	/// <summary>
