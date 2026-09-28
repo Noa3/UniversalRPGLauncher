@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, renderer/system coverage, event counters, and walk animation beyond the bounded native event path, the working chipset passability, and the verified autotile animation steps.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `963/963` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `972/972` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
 
 Real LMU event pages now decode: the pinned RM2000/RM2003 fixtures yield 22 and 38 event pages with verified liblcf field ids (`condition 0x02`, `move_frequency 0x20`, `trigger 0x21`, `layer 0x22`, `move_route 0x29`, `event_commands_size 0x33`, `event_commands 0x34`). A command vector that cannot be decoded is contained per page with a diagnostic and its raw payload size instead of making the whole map unloadable, and such pages are skipped by the runtime instead of running empty. Page trigger ids follow liblcf `EventPage::Trigger` (`action=0`, `touched=1`, `collision=2`, `auto_start=3`, `parallel=4`). `ControlSwitches` and `Control Variables` follow the verified EasyRPG parameter layout (`[targetMode, start, end, …]`), which real games use, and a regression test executes a real fixture action page end to end through the RM2K runtime.
 
@@ -384,3 +384,36 @@ Eleven of those 114 commands have an effect; the rest are read as text. **There
 is still no renderer, no save path, no input and no audio, and no line of a
 game's JavaScript is executed** — a branch or an operand that would need `eval`
 is refused and named.
+
+**K-133, and the first command in this reader that eats other commands.**
+`command101` runs `while (this.nextEventCode() === 401) { this._index++;
+$gameMessage.add(…); }` — so **a line of dialogue is never dispatched**, because
+there is no `command401` for it to be dispatched to. Every one of this game's
+938 lines belongs to a 101 and to nothing else.
+
+**Measured over the files:** 414 dialogues, one to four lines each — 118 with
+one, 130 with two, 104 with three, 62 with four — totalling exactly 938. Eight
+are followed by a 102; there is no 103, no 104 and no 403 in nineteen maps.
+**And a dialogue that is already up is refused**, because `isBusy()` is text
+*or* a choice *or* a number *or* an item to choose — so a 101 behind an
+unanswered choice is refused as firmly as one behind a line. It always ends in
+a wait, `setWaitMode` being outside the `switch`, so a dialogue with no choice
+holds its page all the same.
+
+**Two names that had to be measured.** `102` is not `405`: `ShowChoices` has
+meant 405 since K-132, and comparing the follower against it meant **not one
+of this game's eight choices was ever found** — 1352 commands instead of 1360,
+across four runs, because the tests that failed were the ones checking a sum.
+And `params[0]` is an **array**, not a bar-separated string, so a first draft's
+`split("|")` would have read one option reading `["Yes", "No"]` with its
+brackets in it.
+
+**`params[1] || 2` is 2, and a written zero is 2 as well** — 0 is falsy in
+JavaScript, so a 104 with no category and a 104 with `0` both get the whole
+party.
+
+**And a guard with no test.** `ExecuteOne` had a bounds check that a mutation
+switched off without a single test noticing, because `IsRunning` meant the
+guard was never asked. The repair was not a test for it but **its removal**:
+the case is handled one level up. **A second check that can never fire is a
+claim a reader will believe and nobody can prove.**

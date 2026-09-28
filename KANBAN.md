@@ -2965,3 +2965,103 @@ rewritten, **nine of nine**. The second is the better story:
 **Das ist der vierte Name in vier Karten, der aus dem Gedächtnis kam und in
 der Engine nicht existierte** — nach `checkPassage`, `isPassable` und der
 `reverseDir`-Form. **Gemessen wird, nicht erinnert.**
+
+### K-133 A 101, and everything it swallows
+`DONE` — runtime, P1, depends on K-132
+
+**The first command in this reader that eats other commands.** And that one
+fact reorganises K-132: `command101` is
+
+```
+if ($gameMessage.isBusy()) { return false; }
+$gameMessage.setFaceImage(params[0], params[1]);
+$gameMessage.setBackground(params[2]);
+$gameMessage.setPositionType(params[3]);
+$gameMessage.setSpeakerName(params[4]);
+while (this.nextEventCode() === 401) { this._index++; add(…); }
+switch (this.nextEventCode()) {
+    case 102: this._index++; this.setupChoices(…); break;
+    case 103: this._index++; this.setupNumInput(…); break;
+    case 104: this._index++; this.setupItemChoice(…); break;
+}
+this.setWaitMode("message");
+return true;
+```
+
+**So a line of dialogue is never dispatched.** There is no `command401` to
+dispatch it to — `nextEventCode()` looks one ahead and the 101 steps the index
+over each line itself. **Every one of this game's 938 lines belongs to a 101
+and to nothing else**, and a reader that ran a 401 as a command of its own
+would be running 938 commands the engine never runs.
+
+**This game's numbers, measured over the files:** 414 dialogues, one to four
+lines each — **118 with one, 130 with two, 104 with three, 62 with four** —
+and the total is exactly 938. **Eight are followed by a 102**, six under a
+one-line dialogue and two under a two-line one; there is no 103, no 104, no
+403 anywhere in nineteen maps. Commands eaten: **112, 134, 106, 62** — 1360
+rather than 414 + 938, because the eight choices are inside it.
+
+**Three rules, and a fourth that is only visible in this game.** A dialogue
+that is already up is refused — and `isBusy()` is **text or choice or number
+or item**, so a 101 behind an unanswered choice is refused as firmly as one
+behind a line. Exactly **one** of 102, 103 and 104 is taken, and it is the one
+directly after the last line: the `switch` runs once, so a 102 that is not
+right there is reached later as a command of its own. **And it always ends in
+a wait**, `setWaitMode` being outside the `switch`, so a dialogue with no
+choice holds its page all the same.
+
+**268 of the 414 name somebody and 146 name nobody** — Camellia 32 times,
+Mary 27, and `???` 45 times, which is the editor's placeholder for a person
+not yet named. All 414 have five parameters. **Not one asks for a face**, so
+this game has a name box that is filled in and no portrait beside it.
+
+**`102` is not `405`, and that is the fifth name in five cards that had to be
+measured.** `ShowChoices` has meant 405 since K-132 — the choices as data —
+and the follower was compared against it, so **not one of this game's eight
+choices was ever found**: 1352 commands instead of 1360, and a dialogue that
+ended on a choice the engine would have taken. **Four runs**, because the
+tests that failed were the ones checking a sum.
+
+**`params[0]` is an array, not a bar-separated string.** A first draft wrote
+`params[0].split("|")` — the shape an older RPG Maker used — and would have
+read one option that reads `["Yes", "No"]`, brackets and comma included, and
+compared the cancel number against the wrong length. **And
+`cancelType = params[1] < choices.length ? params[1] : -2`**: a cancel number
+that is not below the number of choices becomes "no cancel". This game's eight
+are all two options with a cancel of 0 or 1, **so the rule never fires in the
+real data** — which is why it had to be built by hand.
+
+**`params[1] || 2` is 2, and a written zero is 2 as well** — 0 is falsy in
+JavaScript. A 104 with no category and a 104 with `0` both get the whole
+party, and a reader that defaulted to 0 would offer the player nothing.
+
+**And the index moves by what was eaten, not by one.** `command101` steps the
+index once per line and once for the 102 its switch took, and then
+`executeCommand`'s own `this._index++` steps it once more — so a 101 that is
+the last thing in a list leaves the index **one past the end**, and no other
+command in this reader can, because every other one moves it by one.
+
+**The off-by-one that cost the most.** Three times, in three different files,
+an index that was one out was blamed on the nearest thing rather than
+measured. The first draft's `nextEventCode(pCommands, i)` with `i` already one
+past the 101 **started the read at the second line** — 524 lines instead of
+938. The test helper's `k += eaten` was then "fixed" to step one further, on
+the strength of a distribution that was one bucket out, and **the numbers got
+worse** — 88 and 102 where the files say 118 and 130. **The fault was never
+in the test.**
+
+**And a guard with no test.** `ExecuteOne` had a bounds check that a mutation
+switched off and every test passed, because `IsRunning` is
+`Index < _commands.Count` and the guard was **never asked**. The repair was
+not a test for it but **its removal** — the case is handled one level up, in
+`Run`, which now checks before it enters its loop and says where the index was.
+**A second check that can never fire is a claim a reader will believe and
+nobody can prove.**
+
+**Test evidence** 9 tests in `project/tests/core/test_mz_dialogue.cs`, plus
+three rewritten in K-124's and K-132's files.
+**Total 972/972**, validator passed, build 0 errors.
+**Mutations** Twelve rules over four runs. Every escaped rule turned out to be
+either a broken rule or a test that could not reach the thing it mutated; two
+of them found real product faults — the 102 read from the wrong command, and
+a 103/104 read as a list of options.

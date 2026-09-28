@@ -1798,3 +1798,55 @@ und `NoMethodCodes` nennt die zwölf Zahlen ohne `commandNNN`.
 **Nicht hier.** Kein Textfenster, kein Renderer. Die Zeile wird gelesen
 und als Daten behalten: Wortlaut, Wartungszahl, und alles, was nicht
 gezeichnet werden kann.
+
+## K-133 A 101, and everything it swallows — DONE
+
+`project/src/mz/MzDialogue.cs`, `MzChoice.cs`, `MzPrompt.cs`;
+`MzCommandTable.ShowDialogue = 101` und `ShowChoiceList = 102`;
+`MzWaitMode.Message`; `MzBranchFacts.MessageBusy`, `LastDialogue`,
+`LastChoice`, `LastPrompt`; `MzCommands` 101-Fall und 401-Verweigerung;
+`MzInterpreter` Run-Vorcheck.
+`project/tests/core/test_mz_dialogue.cs`, 9 Tests, plus drei umgeschriebene
+in den K-124- und K-132-Dateien.
+
+**972/972**, `TestMzDialogueAndChoice: 9/9`, `TestMzInterpreter: 18/18`,
+`TestMzMessage: 6/6`, validator passed, build 0 errors.
+
+**Die erste Karte, in der ein Befehl andere Befehle isst.** `command101` macht
+`while (this.nextEventCode() === 401) { this._index++; add(…); }` — **eine
+Zeile Dialog wird nie dispatcht**, weil es kein `command401` gibt, zu dem sie
+dispatcht werden könnte. **Alle 938 Zeilen dieses Spiels hängen an einem 101
+und an nichts anderem.**
+
+**414 Dialoge, je eine bis vier Zeilen — 118 mit einer, 130 mit zwei, 104 mit
+drei, 62 mit vier** — und die Summe ist genau 938. **Acht haben einen 102
+darunter**, sechs unter einem einzeiligen und zwei unter einem zweizeiligen;
+**kein 103, kein 104, kein 403** in neunzehn Karten. Befehle gefressen:
+**112, 134, 106, 62** — 1360 statt 414 + 938, weil die acht Wahlen drin sind.
+
+**Drei Regeln, und eine vierte, die nur dieses Spiel zeigt.** Eine belegte
+Seite wird verweigert — und `isBusy()` ist **Text oder Wahl oder Zahl oder
+Gegenstand**, also wird ein 101 hinter einer unbeantworteten Wahl so fest
+verweigert wie einer hinter einer Zeile. Genau **eines** von 102, 103 und 104
+wird genommen, und zwar das direkt nach der letzten Zeile, denn der `switch`
+läuft einmal. **Und es wartet immer**, denn `setWaitMode` liegt außerhalb des
+`switch`.
+
+**`102` ist nicht `405` — der fünfte Name in fünf Karten, der gemessen werden
+musste.** `ShowChoices` bedeutet seit K-132 das 405, und der Folger wurde
+dagegen verglichen, also **wurde keine der acht Wahlen dieses Spiels je
+gefunden**: 1352 Befehle statt 1360. **Vier Läufe**, weil die Tests, die
+fielen, die mit der Summe waren.
+
+**Und ein Guard ohne Test.** `ExecuteOne` hatte eine Grenzprüfung, die eine
+Mutation ausschaltete und alle Tests blieben grün, weil `IsRunning` sie nie
+erreicht. **Die Reparatur war nicht ein Test dafür, sondern ihre Entfernung** —
+der Fall wird eine Ebene höher behandelt, in `Run`, das jetzt vor der Schleife
+prüft. **Eine zweite Prüfung, die nie feuern kann, ist eine Behauptung, der ein
+Leser glaubt und niemand belegen kann.**
+
+**Test evidence** 9 Tests, drei umgeschrieben.
+**Mutations** Zwölf Regeln über vier Läufe. Jede entkommene Regel war
+entweder eine kaputte Regel oder ein Test, der das Mutierte nicht erreichte;
+**zwei fanden echte Produktfehler** — den 102 aus dem falschen Befehl und
+103/104 als Optionsliste gelesen.

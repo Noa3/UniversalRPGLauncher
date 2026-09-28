@@ -103,6 +103,7 @@ public static class MzCommands
             or MzCommandTable.ControlSwitches
             or MzCommandTable.ControlVariables
             or MzCommandTable.ChangeItems
+            or MzCommandTable.ShowDialogue
             or MzCommandTable.ShowTextLine
             or MzCommandTable.MoveRoute
             or MzCommandTable.TransferPlayer
@@ -211,31 +212,169 @@ public static class MzCommands
                 return true;
             }
 
+            case MzCommandTable.ShowDialogue:
+            {
+                // `command101` is
+                //   if ($gameMessage.isBusy()) { return false; }
+                //   $gameMessage.setFaceImage(params[0], params[1]);
+                //   $gameMessage.setBackground(params[2]);
+                //   $gameMessage.setPositionType(params[3]);
+                //   $gameMessage.setSpeakerName(params[4]);
+                //   while (this.nextEventCode() === 401) {
+                //       this._index++;
+                //       $gameMessage.add(this.currentCommand().parameters[0]);
+                //   }
+                //   switch (this.nextEventCode()) {
+                //       case 102: this._index++; this.setupChoices(…); break;
+                //       case 103: this._index++; this.setupNumInput(…); break;
+                //       case 104: this._index++; this.setupItemChoice(…); break;
+                //   }
+                //   this.setWaitMode("message");
+                //   return true;
+                //
+                // **This is the first command in this reader that eats other
+                // commands.** The lines of a dialogue are never dispatched:
+                // `nextEventCode()` looks one ahead and this command steps
+                // the index over each line itself. A reader that ran a 401 as
+                // a command of its own would be running something the engine
+                // never runs.
+                //
+                // **And a dialogue that is already up is refused** —
+                // `isBusy()` is text *or* a choice *or* a number *or* an item
+                // to choose, so a 101 behind an unanswered choice is refused
+                // as firmly as one behind a line.
+                if (pFacts.MessageBusy)
+                {
+                    pInterpreter.Refuse(
+                        "a dialogue is not shown, because the engine puts"
+                        + " nobody's words on the screen while another"
+                        + " message is up, and the run stops at index"
+                        + $" {pInterpreter.Index} to try again later");
+                    return false;
+                }
+
+                var (block, consumed) =
+                    MzDialogue.Read(pInterpreter.Commands, pInterpreter.Index, pFacts);
+                pFacts.LastDialogue = block;
+                pFacts.MessageBusy = true;
+                pActions.Add(new MzAction(pCommand, block.ToString()));
+
+                // **The index moves by what was eaten, not by one** — and
+                // `consumed` counts the 101 itself.
+                //
+                // The lines are behind the index now, and a reader that moved
+                // it by one would run the first line as a command of its own
+                // — which is the thing this whole method exists to avoid.
+                // **A first draft wrote `consumed - 1`**, on the reading that
+                // the index was already on the last thing taken, and it is
+                // not: it is on the 101. So the index landed on the first
+                // line, the next frame read that line as a command of its own,
+                // and every dialogue in this game ended in a refusal.
+                // **`this._index++` happens after every command that returns
+                // true**, in the interpreter and not in the command. And
+                // `command101` has already moved the index itself: once per
+                // line in its own `while` loop, and once more for the 102
+                // its `switch` took.
+                //
+                // **So `Index += consumed` is the whole move**, and a 101 at
+                // the end of a list leaves the index **one past the end** —
+                // which is what the engine's own arithmetic says and what
+                // this reader reproduces. **A first draft "fixed" this to
+                // `consumed - 1`** on the strength of a test that had
+                // forgotten the interpreter's own step, and the fix broke
+                // four index assertions in this file and one in K-124's.
+                var after = pInterpreter.Index + consumed;
+
+                // **The one the 101 took is the *last* thing it ate**, which
+                // is `Index + consumed - 1` before the jump and not the
+                // index after it.
+                //
+                // **A first draft read `Commands[Index]` after
+                // `Index += consumed`** — one further on, which in a real
+                // game is a 122 and here a variable assignment. **Eight
+                // choices in this game, and every one of them was read from
+                // the wrong command.** A first draft that then read
+                // `Index + 1` was one further on again.
+                var genommen = pInterpreter.Index + consumed - 1;
+                pInterpreter.Index = after;
+
+                // **One of 102, 103 and 104, and the switch ran once.** A
+                // 102 that does not sit directly after the last line is not
+                // taken here and is reached later as a command of its own.
+                //
+                // **The one it took is *at* the index**, because
+                // `consumed` counted it and the index moved past everything
+                // the command ate. **A first draft read it at
+                // `Index + 1`** and so read the command *after* the choice —
+                // a 122, usually — and built a set of options out of a
+                // variable assignment. **Eight choices in this game, and every
+                // one of them was wrong.**
+                //
+                // **And the index is only read when it is inside the list.**
+                // A dialogue at the end of a list takes a 102 that is the last
+                // command, the index lands on it, and a reader that walked
+                // past the end to read the next one would throw on a list
+                // that is perfectly good. `nextEventCode` returns 0 at the
+                // end of a list, and the engine's switch simply does not
+                // match — so neither does this.
+                if (block.Follower == MzCommandTable.ShowChoiceList
+                    && genommen < pInterpreter.Commands.Count)
+                {
+                    pFacts.LastChoice = MzChoice.Read(
+                        pInterpreter.Commands[genommen].Parameters);
+                }
+                else if (block.Follower is 103 or 104
+                    && genommen < pInterpreter.Commands.Count)
+                {
+                    // **A 103 asks for a number and a 104 for an item, and
+                    // neither is a list of options** — so neither is read
+                    // through `MzChoice`, which would count an item id as an
+                    // option and a digit count as a choice.
+                    //
+                    // **`setupNumInput(params)` is `setNumberInput(params[0],
+                    // params[1])`** and **`setupItemChoice(params)` is
+                    // `setItemChoice(params[0], params[1] || 2)`** — so a
+                    // missing second parameter is **2, the whole party**, and
+                    // not zero. **This game has neither a 103 nor a 104**, so
+                    // a reader that got that default wrong would never hear
+                    // about it from the data — and the one that wrote them
+                    // through `MzChoice` would have read an item id as a list
+                    // of options.
+                    var befehl = pInterpreter.Commands[genommen];
+                    pFacts.LastPrompt = MzPrompt.Read(
+                        befehl.Code, befehl.Parameters);
+                }
+
+                // **`setWaitMode("message")` is outside the switch**, so a
+                // dialogue with no choice holds its page all the same.
+                pInterpreter.WaitFor(MzWaitMode.Message);
+                return true;
+            }
+
             case MzCommandTable.ShowTextLine:
             {
-                // **There is no `command401` in the engine.** A 401 is not
-                // dispatched at all: it is a *position* inside a 101's block,
-                // and the engine reads it while it walks that block. The 114
-                // `commandNNN` methods do not include it, and a reader that
-                // dispatched it as a command of its own would be running
-                // something the engine never runs.
+                // **A 401 that arrives on its own is not a line of a
+                // dialogue — it is a line whose 101 is missing, and the
+                // engine never runs one of these.**
                 //
-                // What a reader can honestly do: read the line, resolve the
-                // substitutions that come from data it has, and count the
-                // times it asks the player to wait. **The waiting is not a
-                // rendering detail** — a 402 follows a 401, and a line with
-                // three `\|` needs three decisions before the next line.
-                var line = MzMessage.Read(
-                    Text(pCommand, 0),
-                    id => pFacts.HasVariable(id)
-                        ? pFacts.Variable(id).ToString(
-                            System.Globalization.CultureInfo
-                                .InvariantCulture)
-                        : null,
-                    pFacts.Names);
-                pFacts.Message.Add(line);
-                pActions.Add(new MzAction(pCommand, line.ToString()));
-                return true;
+                // K-132 read them one by one here, which was true of the
+                // data and false of the engine: `command101` eats its own
+                // lines with `while (this.nextEventCode() === 401) {
+                // this._index++; … }`, so a line that reaches the dispatcher
+                // is a line **without a dialogue over it**. A first draft of
+                // this case read it as a line in its own right and reported
+                // a game whose dialogue begins with a line rather than a
+                // 101.
+                //
+                // **So it is refused, and named.** A game that ships one has
+                // an event list the editor would not write, and a reader that
+                // quietly showed the line would be papering over it.
+                pInterpreter.Refuse(
+                    "a line of text has no dialogue over it, because the"
+                    + " engine's command101 reads its own lines and there is"
+                    + " no command401 to run one on its own, and the words"
+                    + $" are kept unread at index {pInterpreter.Index}");
+                return false;
             }
 
             case MzCommandTable.MoveRoute:
@@ -325,7 +464,7 @@ public static class MzCommands
                 // `waiting = $gamePlayer.isTransferring()`. So the page is held
                 // by a **condition** and not by a frame count, which is a third
                 // shape next to a 230's frames and a 232's movement.
-                if (pFacts.InBattle || pFacts.MessageOpen)
+                if (pFacts.InBattle || pFacts.MessageBusy)
                 {
                     pActions.Add(new MzAction(
                         pCommand,

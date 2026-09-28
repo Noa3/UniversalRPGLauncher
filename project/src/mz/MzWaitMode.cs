@@ -53,4 +53,22 @@ public enum MzWaitMode
     /// that held every page would stall a game on the thirty-six.
     /// </remarks>
     Route = 2,
+
+    /// <summary>
+    /// Held while a line, a choice, a number to enter or an item to choose is
+    /// on the screen — the engine's <c>"message"</c>.
+    /// </summary>
+    /// <remarks>
+    /// **`updateWaitMode` asks <c>$gameMessage.isBusy()</c>**, and
+    /// <c>isBusy</c> is <c>hasText() || isChoice() || isNumberInput() ||
+    /// isItemChoice()</c> — **four things, and the one that matters most is
+    /// the choice**, because a choice is up while the player is still deciding
+    /// and a reader that waited only for text would let the page run on
+    /// before the player had answered.
+    ///
+    /// <b>And it is the same condition a 101 refuses on</b>: a second
+    /// dialogue while one is up returns false, so the two are one fact asked
+    /// twice.
+    /// </remarks>
+    Message = 3,
 }

@@ -73,6 +73,29 @@ partial class TestMzMessage : TestBase
         return found;
     }
 
+
+    /// <summary>
+    /// What was recorded, in a form a failure message can carry.
+    /// </summary>
+    private static string Describe(List<MzAction> pActions)
+    {
+        if (pActions.Count == 0)
+        {
+            return "nothing at all";
+        }
+        var text = new System.Text.StringBuilder();
+        for (var i = 0; i < pActions.Count; i++)
+        {
+            if (i > 0)
+            {
+                text.Append("; ");
+            }
+            text.Append(pActions[i].Code).Append('@')
+                .Append(pActions[i].Indent).Append('=').Append(pActions[i].What);
+        }
+        return text.ToString();
+    }
+
     public void Test_EveryLineOfThisGamesTextIsOneParameterAndWhatCodesItActuallyUses()
     {
         // **938 lines, one parameter each — and fourteen of them are empty.**
@@ -387,27 +410,51 @@ partial class TestMzMessage : TestBase
             + $" asking, which it is nine hundred times over; it has"
             + $" {zeilen.Count}");
 
-        // **What the reader does instead, and does say.**
+        // **What the reader does instead, and says.**
+        //
+        // **A first draft ran a 401 through the interpreter on its own and
+        // checked `facts.Message`.** That was true while 101 was unread, and
+        // it broke the moment K-133 gave 101 to the 101 — because then the
+        // 401 is **refused**, which is the honest answer: there is no
+        // `command401`, and a line with no dialogue over it is a line
+        // nothing would have read.
+        //
+        // **So a 401 is read the way the engine reads it — under a 101 —
+        // and this test says both answers.** One dialogue holding one line is
+        // what the engine produces; a reader that dispatched the line would
+        // have produced a command of its own, and there is no such thing.
         var facts = new MzBranchFacts();
         var actions = new List<MzAction>();
         var interpreter = new MzInterpreter(new List<MzCommandEntry>
         {
+            new(MzCommandTable.ShowDialogue,
+                new List<string> { "0", "0", "0", "0", "Rin" }, 0),
             new(MzCommandTable.ShowTextLine, new List<string> { "Hallo" }, 0),
             new(0, new List<string>(), 0),
         });
         interpreter.Run(actions, facts);
 
         AssertEq(
-            facts.Message.Count, 1,
-            "and a 401 read through the reader lands as one line of text, and"
-            + $" the reader keeps it as data; it kept {facts.Message.Count}");
+            facts.LastDialogue!.Lines.Count, 1,
+            "and a 401 under a 101 lands in that dialogue's block, because"
+            + " the 101 read it and nobody dispatched it; there is"
+            + $" {facts.LastDialogue!.Lines.Count}");
         AssertEq(
-            facts.Message[0].Text, "Hallo",
-            $"with the words the game wrote; they are"
-            + $" \"{facts.Message[0].Text}\"");
+            facts.LastDialogue.Lines[0].Text, "Hallo",
+            "with the words the game wrote; they are"
+            + $" \"{facts.LastDialogue.Lines[0].Text}\"");
+        AssertEq(
+            facts.LastDialogue.SpeakerName, "Rin",
+            "and the name the 101 carried, which is why the 101 needs five"
+            + $" parameters; it is \"{facts.LastDialogue.SpeakerName}\"");
+        AssertEq(
+            actions.Count, 1,
+            "and it is recorded once, for the dialogue and not for the line,"
+            + $" because the line is not a command; it recorded"
+            + $" {Describe(actions)}");
         AssertTrue(
             actions[0].What.Contains("Hallo"),
-            "and what the action says names the line, so a caller can see"
-            + $" what was read; it says {actions[0].What}");
+            "and what was recorded names the words, so a caller can see"
+            + $" what was read; it says \"{actions[0].What}\"");
     }
 }

@@ -203,7 +203,7 @@ partial class TestMzPlayerTransfer : TestBase
         messagePlayer.StandAt(1, 5, 5);
         var duringMessage = new MzBranchFacts
         {
-            MessageOpen = true,
+            MessageBusy = true,
             Player = messagePlayer,
         };
         var messageActions = new List<MzAction>();

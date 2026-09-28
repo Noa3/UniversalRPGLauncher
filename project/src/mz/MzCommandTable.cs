@@ -63,6 +63,19 @@ public static class MzCommandTable
     public const int ErasePicture = 235;
 
     /// <summary>
+    /// A dialogue, and <b>the lines under it are eaten by this command rather
+    /// than dispatched</b>: <c>while (this.nextEventCode() === 401) {
+    /// this._index++; $gameMessage.add(…); }</c>. There is no
+    /// <c>command401</c> for them to be dispatched to, because this one does
+    /// it.
+    /// </summary>
+    /// <remarks>
+    /// **And it refuses a second dialogue while one is up**, and takes one
+    /// of 102, 103 and 104 — but only the one directly after its last line.
+    /// </remarks>
+    public const int ShowDialogue = 101;
+
+    /// <summary>
     /// One line of text. **It has no <c>command401</c> method** — the engine
     /// reads it by position, as the text of a 101's line, and
     /// <c>command401</c> does not exist.
@@ -71,6 +84,30 @@ public static class MzCommandTable
 
     /// <summary>
     /// The choices under a line, again with no method of its own.
+    /// </summary>
+    /// <summary>
+    /// The 102 under a dialogue: <b>the event command that asks the
+    /// player</b>. <c>command102</c> calls <c>setupChoices</c> and steps the
+    /// index over itself, so a 101 takes it — <b>there is nothing left of it
+    /// to dispatch</b>.
+    /// </summary>
+    /// <remarks>
+    /// **And this is the fifth name in five cards that had to be measured
+    /// rather than remembered.** `ShowChoices` has been in this table since
+    /// K-132, and it was 405 — the 405 that carries the choice list <b>as
+    /// data</b>, not the 102 that shows it. A first draft of K-133 compared
+    /// the follower against <c>ShowChoices</c>, so not one of this game's
+    /// eight choices was ever found: 1352 commands instead of 1360, and a
+    /// dialogue that ended on a choice the engine would have taken.
+    /// <b>One constant, two meanings, and the tests did not notice for four
+    /// runs** — because the ones that failed were the ones checking the sum.
+    /// </remarks>
+    public const int ShowChoiceList = 102;
+
+    /// <summary>
+    /// The 405: <b>the choices as the editor wrote them</b>, under a 102. It
+    /// has no <c>command405</c> method, because the 102 that shows them reads
+    /// it by position.
     /// </summary>
     public const int ShowChoices = 405;
 

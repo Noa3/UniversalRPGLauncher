@@ -157,6 +157,29 @@ public sealed class MzInterpreter
     public void Run(
         List<MzAction> pCommands, MzBranchFacts pBranchFacts)
     {
+        // **A run that starts past the end of the list says so.**
+        //
+        // **`IsRunning` is `Index < _commands.Count`**, so a `while` built on
+        // it is never entered when the index is already beyond the list — and
+        // a caller that was told nothing would be left with `Stopped ==
+        // Stepped`, which is the answer for "I have not run yet".
+        //
+        // **A first draft had no check here**, and a truncated fixture — a
+        // file cut off in the middle of a command, which is what a
+        // half-written event file looks like — left the caller with an
+        // interpreter that had neither run nor stopped. **A guard that is
+        // never asked is not a guard**, and the index guard in `ExecuteOne`
+        // was exactly that until this one existed beside it.
+        if (!IsRunning)
+        {
+            Stopped = MzStep.Finished;
+            Reason =
+                $"the event's list has {Commands.Count} commands and the"
+                + $" index is at {Index}, so it ran off the end of its list"
+                + " before it started";
+            return;
+        }
+
         while (IsRunning)
         {
             if (_taken >= CommandLimit)
@@ -190,6 +213,26 @@ public sealed class MzInterpreter
     public bool ExecuteOne(
         List<MzAction> pCommands, MzBranchFacts pBranchFacts)
     {
+        // **The index is inside the list, and that is not a claim — it is
+        // `Run`'s job to keep it so.**
+        //
+        // **A first draft put a guard here**, on the reasoning that a 101
+        // moves the index by however many commands it swallowed and could
+        // therefore land past the end. It can, and it does — and
+        // **`IsRunning` is `Index < _commands.Count`**, so `Run`'s `while` is
+        // never entered with the index beyond the list, and the guard was
+        // **never asked.**
+        //
+        // **A mutation that switched it off passed every test in the file**,
+        // which is what a guard with no test looks like from the outside. The
+        // honest repair is not a test for the guard but **its removal**: the
+        // case it was written for is handled one level up, where it is
+        // reachable, and a second check that can never fire is a claim a
+        // reader will believe and nobody can prove.
+        //
+        // **What a truncated file does get** is said in `Run`, which checks
+        // before it enters its loop and says where the index was.
+
         var command = _commands[Index];
 
         // Three answers, read apart: a command that is not about where the index

@@ -346,3 +346,28 @@ InputExtension
 
 Compatibility report saved.
 ```
+
+### A 101, and the commands it swallows
+
+`command101` is the first command in this reader that moves the index over
+other commands: `while (this.nextEventCode() === 401) { this._index++;
+$gameMessage.add(…); }`, then one `switch` that takes the 102, 103 or 104
+directly after the last line, then `setWaitMode("message")` **outside** the
+switch — so a dialogue with no choice holds its page all the same.
+
+`MzDialogue.Read` returns the block **and how many commands it ate**, because
+the index moves by that and not by one: the 101 steps the index once per line
+and once for the 102, and `executeCommand`'s own `this._index++` steps it once
+more. **A 101 that is the last thing in a list therefore leaves the index one
+past the end**, and no other command here can, because every other one moves
+it by one.
+
+`MzChoice` is a separate type from `MzPrompt`, and that is the point: a 102
+carries a list of options, a 103 a digit count and a 104 an item id, and
+reading the last two through the first would count a `4` as four options.
+**This game has neither command in nineteen maps**, so everything about them
+comes from the engine and not from data.
+
+`MzInterpreter.Run` checks `IsRunning` **before** its loop, so a list that was
+cut off in the middle of a command is said rather than silently left at
+`Stepped` — which is the answer for "I have not run yet".

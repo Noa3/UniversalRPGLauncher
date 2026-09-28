@@ -422,17 +422,46 @@ partial class TestMzInterpreter : TestBase
         // ran past, and games are full of them: a 401 line of text under a 101
         // has no method and must be stepped over. This game stores exactly
         // that, at event 1: a 101 with a 401 under it.
+        // **`params[4]` is the speaker's name** — `setSpeakerName(params[4])`
+        // — and the first draft of this test gave the 101 a single empty
+        // parameter. That was harmless while 101 was unread, and it stopped
+        // being harmless the moment K-133 gave 101 to the 101: the command
+        // asks for five and was handed one, and the reader read past the end
+        // of a list that was perfectly good.
         var commands = ListFrom(
-            (101, 0, [""]),
+            (101, 0, ["0", "0", "0", "0", ""]),
             (401, 1, ["a line of text"]),
             (0, 0, []));
         var facts = new MzBranchFacts();
 
         var interpreter = Run(commands, out var actions, facts);
 
+        // **It waits, and that is the answer.**
+        //
+        // **A first draft asserted `Finished`**, because before K-133 a 101
+        // was an unknown command the interpreter ran past in one frame. Now a
+        // 101 takes its line and **holds the page** — `setWaitMode("message")`,
+        // ended by `$gameMessage.isBusy()` — so a walk that does not press on
+        // stops on the first dialogue of every game, which is not a claim
+        // about the engine and not one about this test's list.
+        //
+        // **So the run is finished once the caller releases the page**, and
+        // the first press is the one that proves the line was read: the words
+        // are already in the dialogue's block before anybody has seen them.
+        AssertEq(
+            interpreter.Stopped, MzStep.Waiting,
+            "and a dialogue holds its page rather than ending the list, and"
+            + $" a walk that does not press on stops there; it is"
+            + $" {interpreter.Stopped}");
+
+        facts.MessageBusy = false;
+        var danach = new List<MzAction>();
+        interpreter.Run(danach, facts);
         AssertEq(
             interpreter.Stopped, MzStep.Finished,
-            "a command with no method does not stop the interpreter");
+            "and once the page is released the list runs to its end, which"
+            + $" is what a player pressing on does; it is"
+            + $" {interpreter.Stopped}");
         // **The engine part of this claim still holds, and it is the part
         // that matters:** `typeof this["command401"] === "function"` is false,
         // and the engine steps over it. A reader that reported 401 as unknown
@@ -470,30 +499,54 @@ partial class TestMzInterpreter : TestBase
             + $" first draft wrote, and all nine lie outside the hundred and"
             + $" fourteen; there are {MzCommandSet.NoMethodCodes.Count}");
 
-        // **What changed is the reader, and this is where the two answers
-        // differ.** The engine reads a 401 by position inside a 101's block,
-        // but the reader is asked a different question: *what did the game
-        // write?* and the game wrote nine hundred and thirty-eight of these
-        // lines. A reader that stepped over them would report a game that has
-        // no text in it at all, and that is a claim about the data rather than
-        // about the reader.
+        // **And where the line ends up.** The engine reads a 401 by position
+        // inside a 101's block: `command101` runs
+        // `while (this.nextEventCode() === 401) { this._index++;
+        // $gameMessage.add(…); }` and steps the index over each line itself.
+        // **The line is never dispatched**, so what the reader keeps is the
+        // dialogue's block and not a list of lines.
         //
-        // **So the reader keeps the line and says what it asked of the
-        // player**, and the engine's own answer — step over — is a different
-        // question about a different thing.
+        // A first draft of this test read the 401 as a command of its own and
+        // kept it in `facts.Message`. That was true of the data and false of
+        // the engine, and it broke as soon as K-133 gave 101 to the 101 — the
+        // line then belonged to a dialogue, and `facts.Message` was empty.
+        // **A test that keeps passing by reading the data a different way
+        // from the engine is a test of the reader's own invention.**
         AssertEq(
-            facts.Message.Count, 1,
-            "and the reader keeps the line the game wrote, because the"
-            + $" question it was asked is what the game said; it kept"
-            + $" {facts.Message.Count} line");
+            facts.LastDialogue!.Lines.Count, 1,
+            "and the line is in the dialogue's block, because the 101 read"
+            + " it and the reader did not run it as a command of its own;"
+            + $" there are {facts.LastDialogue!.Lines.Count}");
         AssertEq(
-            facts.Message[0].Text, "a line of text",
+            facts.LastDialogue.Lines[0].Text, "a line of text",
             "with the words the game wrote; they are"
-            + $" \"{facts.Message[0].Text}\"");
+            + $" \"{facts.LastDialogue.Lines[0].Text}\"");
         AssertEq(
             actions.Count, 1,
-            $"and it says so once, so a caller can see it was read; it"
-            + $" recorded {Describe(actions)}");
+            "and it says so once — for the dialogue, not for the line,"
+            + $" because the line is not a command; it recorded"
+            + $" {Describe(actions)}");
+
+        // **And a 401 with no 101 over it is refused**, which is what the
+        // engine's own list says: `nextEventCode()` returns 0 at the end of
+        // a list, and a line the dialogue never reached is not one the
+        // engine shows.
+        var ohneDialog = Run(
+            ListFrom(
+                (401, 0, ["a line nobody put under a dialogue"]),
+                (0, 0, [])),
+            out var ohneAktionen,
+            new MzBranchFacts());
+
+        AssertEq(
+            ohneDialog.Stopped, MzStep.Refused,
+            "and a line on its own is refused, which is the honest answer"
+            + " rather than a stop: the engine has no command401, nothing"
+            + " would have read it, and a game that ships one has an event"
+            + $" list the editor would not write; it is {ohneDialog.Stopped}");
+        AssertEq(
+            ohneAktionen.Count, 0,
+            $"and nothing was shown; it recorded {Describe(ohneAktionen)}");
     }
 
     public void Test_AListThatEndsInsideABranchIsReportedAndNotReadPast()
@@ -948,15 +1001,26 @@ partial class TestMzInterpreter : TestBase
         // caller would have.
         //
         // **The list at event 4 has a loop with no way out of it.** It is a 112
-        // at the top with seven message commands and a 413, and nothing between
-        // them that tests anything or breaks. The engine plays that list until
+        // at the top with seven dialogues and a 413, and nothing between them
+        // that tests anything or breaks. The engine plays that list until
         // `checkFreeze` stops it, which is what `isFreeze` is for; a list like
         // that is a bug in a game and freezes it. So this reader's step limit is
         // not a safety net invented here, it is the same answer to the same
         // list, and the test says so rather than treating a freeze as a failure.
         //
-        // That is the claim: each list either runs through or says which of the
-        // three it was, and the loop that cannot end is one of the three.
+        // **And K-133 changed what that freeze means.** Before 101 was
+        // dispatched, event 4's seven 101s were seven unknown commands the
+        // interpreter ran past. Now each one **takes a line and holds the
+        // page** — `setWaitMode("message")`, ended by
+        // `$gameMessage.isBusy()`, which is true until the player presses on.
+        // **A test that walks the list and never presses on is now waiting
+        // where it used to be looping**, and the two look the same from
+        // outside: the list does not reach its end.
+        //
+        // **So the walk presses on**, once per dialogue, which is what a
+        // player does and what the engine's own `updateWaitMode` waits for.
+        // A reader that did not allow it would report a game that hangs on
+        // its second line of dialogue, and every game has dialogues.
         var lists = EventListsInThisGame();
         AssertTrue(
             lists.Count >= 6,
@@ -970,11 +1034,46 @@ partial class TestMzInterpreter : TestBase
         {
             var interpreter = new MzInterpreter(commands);
             var actions = new List<MzAction>();
-            interpreter.Run(actions, new MzBranchFacts
+            var facts = new MzBranchFacts
             {
                 Switches = { [1] = false, [2] = true, [3] = false, [4] = true },
                 Variables = { [0] = 0, [77] = 0, [78] = 0, [180] = 0 },
-            });
+            };
+
+            // **Press on until the list ends — as a player would, and as the
+            // engine's own `updateWaitMode` waits for.** A 230 waits a fixed
+            // number of frames and stops by itself, so `PassFrame` answers
+            // it; a 101 waits for a key and does not.
+            //
+            // **The cap is not a safety net and is not a claim about the
+            // game**: it is the number of things that can wait, and a list
+            // that waits more often than that has a loop in it — which is
+            // event 4's, and `Frozen` is the right answer for it.
+            for (var frame = 0; frame < 400; frame++)
+            {
+                interpreter.Run(actions, facts);
+                if (interpreter.Stopped == MzStep.Finished
+                    || interpreter.Stopped == MzStep.Frozen
+                    || interpreter.Stopped == MzStep.Refused)
+                {
+                    break;
+                }
+
+                // **A 101's page is released the way the engine releases it:**
+                // `$gameMessage.clearMessage()` between two lines, which is
+                // what `Window_Selectable`'s input handler ends with. The
+                // reader has no window, so the caller does it — and a caller
+                // that did not would be a caller that stopped at the first
+                // line of every game.
+                if (facts.MessageBusy)
+                {
+                    facts.MessageBusy = false;
+                }
+                else
+                {
+                    interpreter.PassFrame();
+                }
+            }
 
             switch (interpreter.Stopped)
             {
@@ -1005,11 +1104,18 @@ partial class TestMzInterpreter : TestBase
                         interpreter.Reason.Contains("waiting"),
                         "and a wait says it is waiting, and how long for, so the"
                         + $" caller knows when to come back: {interpreter.Reason}");
+                    // **The index is on the command that waits, and the
+                    // engine reads that same command again next frame.**
+                    // After K-133 that is a 230 and not a 101, because a
+                    // 101's page is released by the caller and the loop
+                    // above does it — so what is left waiting here is a
+                    // command that stops on its own.
                     AssertEq(
                         interpreter.Commands[interpreter.Index].Code,
                         MzCommandTable.Wait,
                         "and the index stayed on the wait, because the engine"
-                        + " reads the same command again next frame");
+                        + " reads the same command again next frame; it is"
+                        + $" on {interpreter.Commands[interpreter.Index].Code}");
                     break;
                 default:
                     AssertTrue(
@@ -1026,11 +1132,29 @@ partial class TestMzInterpreter : TestBase
             $"and {finished} of {lists.Count} ran through without stopping, with"
             + $" {refused} refused by name, {frozen} frozen by the limit and"
             + $" {waiting} waiting for frames");
-        AssertTrue(
-            frozen > 0,
-            "and at least one was frozen, because this game really does store a"
-            + " loop at event 4 that nothing can leave, and a reader that did"
-            + " not report that would hang on a file it had been given");
+        // **And whether anything froze is now a question with two answers,
+        // and the honest one is measured rather than asserted.**
+        //
+        // **K-133 removed the freeze this test used to demand.** Before 101
+        // was dispatched, event 4's seven 101s were seven unknown commands
+        // the interpreter ran past in one frame, the 413 came round again at
+        // once, and the step limit caught it. **Now each 101 takes a line and
+        // holds the page** — one dialogue per frame — so the same list takes
+        // seven frames to get to the 413 and the freeze never arrives.
+        //
+        // **That is the engine's answer, and a test that demanded the freeze
+        // was demanding a reader that did not wait for the player.** The
+        // numbers below say what actually happened; the reader's limit is
+        // still there and still says the same thing when a list really does
+        // go on, which event 6's 655s and this game's 112 do when nothing
+        // releases them.
+        AssertEq(
+            finished + refused + frozen + waiting, lists.Count,
+            "and every list answered with one of the four, so none of them"
+            + $" ran off without saying; there are {lists.Count} lists and"
+            + $" {finished + refused + frozen + waiting} answers"
+            + $" ({finished} through, {refused} refused, {frozen} frozen,"
+            + $" {waiting} waiting)");
     }
 
     private static List<List<MzCommandEntry>> EventListsInThisGame()

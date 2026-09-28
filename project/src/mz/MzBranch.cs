@@ -288,8 +288,36 @@ public sealed class MzBranchFacts
     /// box is up, and a reader that moved the player through one would put them
     /// on a new map with the old message still running.
     /// </summary>
-    public bool MessageOpen { get; set; }
+        public bool MessageBusy { get; set; }
 
+    /// <summary>
+    /// The last dialogue, as <c>command101</c> left it.
+    /// </summary>
+    /// <remarks>
+    /// A reader with no window keeps the block as data: the speaker, the
+    /// lines, and what followed them. <b>It does not pretend to be showing
+    /// it</b>, and it does not offer a "close" the engine has no method for.
+    /// </remarks>
+    public MzDialogue.Block? LastDialogue { get; set; }
+
+    /// <summary>
+    /// The choices under the last dialogue, as <c>setupChoices</c> left them.
+    /// </summary>
+    public MzChoice.Set? LastChoice { get; set; }
+
+    /// <summary>
+    /// The number to enter or the item to choose, when the last dialogue was
+    /// followed by a 103 or a 104.
+    /// </summary>
+    /// <remarks>
+    /// **A separate field from <see cref="LastChoice"/>, and that is the
+    /// point.** A 103 asks for a digit count and a 104 for an item id, and
+    /// neither is a list of options — a reader that put both through the
+    /// choice reader would have counted a 103's `4` as four options. **This
+    /// game has neither command anywhere in nineteen maps**, so a reader that
+    /// got it wrong would never hear about it from the data.
+    /// </remarks>
+    public MzPrompt? LastPrompt { get; set; }
     /// <summary>
     /// Whether a menu is open, as the last 351 left it.
     /// </summary>
