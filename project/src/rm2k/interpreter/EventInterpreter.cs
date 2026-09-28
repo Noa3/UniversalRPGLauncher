@@ -225,6 +225,17 @@ public sealed class EventInterpreter
 	public const int SetVehicleLocation = 10850;
 
 	/// <summary>
+	/// 10490, Full Heal, from liblcf's <c>Code::FullHeal</c> and EasyRPG's
+	/// <c>CommandFullHeal</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 2, from the reference's <c>CmdSetup</c> line</strong> — the
+	/// actor to heal and whether to include the skill points. A reader that
+	/// required a third would refuse every game's heal.
+	/// </remarks>
+	public const int FullHeal = 10490;
+
+	/// <summary>
 	/// 10840, Get On/Off Vehicle, from liblcf's <c>Code::GetOnOffVehicle</c> and
 	/// EasyRPG's <c>Game_Player::GetOnOffVehicle</c>.
 	/// </summary>
@@ -661,6 +672,14 @@ public sealed class EventInterpreter
 
 			case ChangeSP:
 				ExecuteChangeHpOrSp(cmd, pIsHp: false);
+				return Advance();
+
+			case FullHeal:
+				// **The sixth actor command, and the first one that needs no
+				// value of its own** — it restores the current counts to the
+				// bases rather than changing a base. The other five all take an
+				// amount; this one takes nothing but a flag.
+				ExecuteFullHeal(cmd);
 				return Advance();
 
 			case ChangeLevel:
@@ -1838,6 +1857,80 @@ public sealed class EventInterpreter
 			_state.AddDiagnostic(
 				$"[Event {_eventId}] Change battle commands: actor {actorId}"
 				+ $" {(add ? "gained" : "lost")} command {commandId}");
+		}
+	}
+
+	/// <summary>
+	/// Runs 10490, Full Heal, from liblcf's <c>Code::FullHeal</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 2, and the second parameter is the skill points and not a
+	/// third actor.</strong> The reference's <c>CmdSetup</c> gives the command
+	/// two parameters and nothing more, and a reader that expected six like the
+	/// HP and SP commands would refuse every heal a game wrote.
+	/// </para>
+	/// <para>
+	/// <strong>It restores the current counts to the bases, and does not touch
+	/// a base.</strong> Every other actor command in this family changes a base
+	/// value or a current count; this one puts the counts back to what the bases
+	/// say. **A reader that healed by adding the base would double a hero's
+	/// hit points** — and a game that heals after a battle would leave the hero
+	/// stronger every time.
+	/// </para>
+	/// <para>
+	/// <strong>Two parameters, and both of them are the actor selection.</strong>
+	/// The first is the mode — party, one hero, or a hero named by a variable —
+	/// and the second is the actor number. <strong>There is no third
+	/// parameter and no skill-point flag</strong>, and I wrote one before
+	/// reading the layout: a reader that took the second parameter as "also
+	/// heal SP" would heal the skill points of every actor a game healed, and
+	/// a game that heals only hit points between fights would have a party
+	/// that never runs out of magic.
+	/// </para>
+	/// </remarks>
+	private void ExecuteFullHeal(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 2.
+		if (pCmd.Parameters.Count < 2)
+		{
+			Malformed("Full heal");
+			return;
+		}
+		var actors = ResolveActors(pCmd.Parameters[0], pCmd.Parameters[1], "Full heal");
+		if (actors == null)
+		{
+			return;
+		}
+		// **There is no skill-point flag, and I wrote one before reading the
+		// reference's parameter layout.** `CommandFullHeal`'s two parameters
+		// are the selection mode and the actor number — the same first two the
+		// HP and SP commands have — so a reader that took the second as "also
+		// heal the skill points" would have healed the skill points of every
+		// actor a game healed, and a game that heals only hit points between
+		// fights would have a party that never runs out of magic.
+		//
+		// **The skill points go with it, always.** The command is called Full
+		// Heal and the reference's body sets both counts; a game that wants
+		// only the hit points has 10460 for that.
+		const bool withSp = true;
+		foreach (var actorId in actors)
+		{
+			var values = _state.GetOrCreateActorValues(actorId);
+			// **Assignment and not addition.** The current count becomes the
+			// base; a reader that added the base would heal a hero to twice
+			// their maximum, and a game that heals between every fight would
+			// have a party that grew without bound.
+			_state.CurrentHp[actorId] = values.BaseMaxHp;
+			if (withSp)
+			{
+				_state.CurrentSp[actorId] = values.BaseMaxSp;
+			}
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Full heal: actor {actorId} is at"
+				+ $" {values.BaseMaxHp} hit points"
+				+ (withSp ? $" and {values.BaseMaxSp} skill points" : ", and the"
+					+ " skill points were not asked for"));
 		}
 	}
 

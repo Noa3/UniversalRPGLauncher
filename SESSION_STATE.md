@@ -3953,3 +3953,57 @@ Lehre aus dem letzten Mal hat gehalten.**
 **Test evidence** `test_rm2k_get_on_off_vehicle.cs` (4). **1370/1370**, Validator gruen.
 
 **Mutations** 5 Regeln, **5 von 5 gefangen**.
+
+## `10490` Full Heal — DONE
+
+**Die sechs Actor-Befehle: fuenf veraenderten etwas, dieser stellt wieder her.** Fuenf waren
+
+verdrahtet, `FullHeal` nicht — **obwohl er als einziger der Familie gar keinen eigenen Wert
+
+braucht.**
+
+
+
+### Die Regel, die der Test gestrichen hat
+
+
+
+**Ich hatte eine SP-Flagge erfunden.** Der zweite Parameter sollte heissen „heile auch die
+
+SP-Punkte" — **und die Referenz hat zwei Parameter, und beide sind die Actor-Auswahl.** Ein Leser,
+
+der den zweiten als SP-Flagge gelesen haette, haette von jedem geheilten Actor auch die SP geheilt
+
+**und nur einem einzigen Helden die Trefferpunkte.**
+
+
+
+**Zwei Parameter, und beide sind die Auswahl** — 0 ist die ganze Mannschaft, 1 ein Held nach
+
+Nummer, 2 ein Held aus einer Variable. **Modus 0 heilt die ganze Mannschaft.**
+
+
+
+**Und es stellt wieder her und rechnet nicht:** ein Zaehler wird auf das gesetzt, was eine Basis
+
+sagt. **Ein Leser, der es wie seine Nachbarn behandelt haette, haette addiert — und ein Spiel,
+
+das nach jedem Kampf heilt, haette eine Mannschaft ohne Grenze.**
+
+
+
+### Und die Grenze dieser Karte
+
+
+
+**`10440`/`10450`/`10480` sind keine Verdrahtung.** Skills, Ausruestung und Bedingungen haben **im
+
+Zustand ueberhaupt keine Felder** — das ist neues Zustandsdesign und keine Befehlszeile, **und es
+
+gehoert in eine eigene Karte.**
+
+
+
+**Test evidence** `test_rm2k_full_heal.cs` (5). **1375/1375**, Validator gruen.
+
+**Mutations** 6 Regeln, **6 von 6 gefangen**.

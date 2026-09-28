@@ -1138,3 +1138,23 @@ behaviour. **A missing hook is a refusal with a name**, because "there is no veh
 "this reader cannot board" are two different things.
 
 **1370/1370, five effective mutation rules, five caught.**
+
+**And of the six actor commands, five change something and this one restores.** ChangeExp,
+ChangeLevel, ChangeParameters, ChangeHP and ChangeSP were dispatched; FullHeal (10490) was not —
+**and it is the only one of the family that needs no value of its own.**
+
+**A test made me delete a rule I had invented.** I had written the second parameter as "also heal
+the skill points" — and the reference's two parameters are both the actor selection, the mode and
+the number. A reader that took the second as a skill-point flag would have healed the skill points
+of every actor and the hit points of only one hero, and a game that heals only hit points between
+fights would have a party that never runs out of magic. **The skill points go with it, always.**
+
+**And it restores rather than adding**: a current count is set to what a base says. A reader that
+treated it like its neighbours would have healed by addition, and a game that heals after every
+fight would have a party that grows without bound.
+
+**And `10440`, `10450` and `10480` are not wiring.** Skills, equipment and conditions have no
+fields in the state at all — that is new state design and not a command line, and it belongs in
+its own card.
+
+**1375/1375, six effective mutation rules, six caught.**

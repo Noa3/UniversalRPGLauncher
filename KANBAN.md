@@ -2630,7 +2630,7 @@ look for the next island of that shape.**
 | screen effects | ~~`11010` `11020` `11030`~~ | **~~erase, show and tint — DONE, see below~~** |
 | screen effects | `11060` | **Pan Screen — liblcf names it and EasyRPG dispatches it nowhere** |
 | audio | `11560` | Play Movie — the only audio command left of the six |
-| actor state | `10430`–`10490` `10620` `10630` | parameters, skills, equipment, HP, SP, conditions, full heal |
+| actor state | ~~`10430`–`10490`~~ | **~~parameters, HP, SP and full heal — DONE, see below; skills, equipment and conditions have no state at all~~** |
 | battle | `10500` `10710` `13110`–`13410` | simulated attack, encounter, monster HP/MP/conditions, battle BG, terminate |
 | movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
 | movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — liblcf names them and EasyRPG dispatches them nowhere** |
@@ -4620,6 +4620,99 @@ aus einer selbst geschriebenen 1.
 Dispatch nicht erreicht, der nicht aufgerufene Hook, der fehlende Hook als Erfolg, die gehaltene
 
 Seite und der Hook, der die Fähigkeit statt der Tat bekommt.
+
+
+## `10490` Full Heal ist fertig — und der Test hat eine Regel gestrichen, die ich erfunden hatte
+
+**Die sechs Actor-Befehle: fünf veränderten etwas, dieser stellt wieder her.** `ChangeExp`,
+
+`ChangeLevel`, `ChangeParameters`, `ChangeHP` und `ChangeSP` waren verdrahtet — und `FullHeal`
+
+war es nicht, **obwohl es als einziges der Familie gar keinen eigenen Wert braucht.**
+
+
+
+### Die Regel, die der Test gestrichen hat
+
+
+
+**Ich hatte eine SP-Flagge erfunden.** Der zweite Parameter sollte heißen „heile auch die
+
+SP-Punkte" — **und die Referenz hat zwei Parameter, und beide sind die Actor-Auswahl:** der
+
+Modus und die Nummer. Ein Leser, der den zweiten als SP-Flagge gelesen hätte, hätte von jedem
+
+geheilten Actor auch die SP geheilt **und nur einem einzigen Helden die Trefferpunkte** — und ein
+
+Spiel, das zwischen zwei Kämpfen nur die Trefferpunkte heilt, hätte eine Mannschaft, der die
+
+Magie nie ausgeht.
+
+
+
+**Die SP-Punkte gehen mit, immer.** Der Befehl heißt Full Heal, und der Rumpf der Referenz setzt
+
+beide Zähler; wer nur die Trefferpunkte will, hat `10460` dafür.
+
+
+
+### Und die zweite Regel, die sich daraus ergab
+
+
+
+**Zwei Parameter, und beide sind die Auswahl** — 0 ist die ganze Mannschaft, 1 ein Held nach
+
+Nummer, 2 ein Held aus einer Variable. **Modus 0 heilt die ganze Mannschaft und die Nummer im
+
+zweiten Parameter wird ignoriert.**
+
+
+
+**Und der Unterschied zu `10460`, der sechs Parameter hat.** Ein Leser, der dessen Breite
+
+kopiert und dessen dritten Parameter als SP-Flagge liest, hätte jede kurze Heilung abgelehnt, die
+
+ein Spiel geschrieben hat.
+
+
+
+**Und die dritte Regel, die den Unterschied zu seinen Nachbarn ausmacht: es stellt wieder her und
+
+rechnet nicht.** Fünf der sechs verändern eine Basis oder einen Zähler, **und dieser setzt einen
+
+Zähler auf das zurück, was eine Basis sagt.** Ein Leser, der ihn wie seine Nachbarn behandelt hätte,
+
+hätte addiert — und ein Spiel, das nach jedem Kampf heilt, hätte eine Mannschaft ohne Grenze.
+
+
+
+**Zwei der fünf Tests waren über die Fixture gestolpert.** `Rm2kActorValues` startet bei **einer**
+
+Trefferpunktzahl und null SP — nicht bei null, damit eine Änderung um minus eins keine negative
+
+Basis erzeugt — **und die Basis wird über `AddToParameter` gesetzt, nicht über einen Setter, weil
+
+es keinen gibt.**
+
+
+
+**Test evidence** `test_rm2k_full_heal.cs` (5).
+
+**1375/1375**, Validator grün.
+
+**Mutations** 6 Regeln über einen Lauf, **6 von 6 gefangen** — darunter der Befehl, der den
+
+Dispatch nicht erreicht, die Heilung durch Addition, die mitgeheilte Basis, die nicht geheilten SP,
+
+die auf sechs gesetzte Mindestbreite und der ignorierte Auswahlmodus.
+
+
+
+**Und was damit klar ist: `10440`/`10450`/`10480` sind keine Verdrahtung.** Skills, Ausrüstung und
+
+Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zustandsdesign und keine
+
+Befehlszeile, und es gehört in eine eigene Karte.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
