@@ -628,6 +628,18 @@ public sealed class EventInterpreter
 				ExecuteErasePicture(cmd);
 				return Advance();
 
+			case MovePicture:
+				// **The three picture commands are one family and only two of
+				// them were reachable.** ShowPicture and ErasePicture ran; this
+				// one was named in the constant list and had no case, so a game
+				// that slid a title card across the screen had it jump to its
+				// destination the moment the command ran -- or, before that,
+				// fall into the default arm and be reported as an unsupported
+				// command. A reader that looked at the constant list and not at
+				// the dispatch would not have seen the gap.
+				ExecuteMovePicture(cmd);
+				return Advance();
+
 			case StoreEventID:
 				ExecuteStoreEventId(cmd);
 				return Advance();
@@ -2210,6 +2222,67 @@ public sealed class EventInterpreter
 		_state.AddDiagnostic(
 			$"[Event {_eventId}] Show picture {pictureId} \"{Truncate(pCmd.Text)}\""
 			+ $" at {x},{y}");
+	}
+
+	/// <summary>
+	/// Runs command 11120, Move Picture, from liblcf's <c>Code::MovePicture</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Eight parameters, and the width is a minimum and not a
+	/// count.</strong> EasyRPG's <c>CmdSetup</c> gives the command a minimum
+	/// width of 8; anything past that is the Maniac patch's own packing and is
+	/// not read here, and saying so beats guessing what a ninth parameter
+	/// means in a game this reader has not seen.
+	/// </para>
+	/// <para>
+	/// <strong>The id is resolved through the mode and the target is
+	/// resolved through the same mode</strong> — the reference reads the
+	/// picture number, the position mode, the X and the Y with the same helper
+	/// the show command uses, so a game can move a picture to a position it
+	/// computed. A reader that read the target as a constant would only ever be
+	/// able to move a picture to a number the author typed.
+	/// </para>
+	/// <para>
+	/// <strong>Zero frames is a placement.</strong> An editor field the author
+	/// never touched reads as zero, and the reference sets the position and
+	/// returns; refusing it would stop the event, and a game whose title card
+	/// is placed by a zero-frame move would lose the card.
+	/// </para>
+	/// </remarks>
+	private void ExecuteMovePicture(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null)
+		{
+			Malformed("Move picture");
+			return;
+		}
+		// CmdSetup minimum width 8. A command that is shorter is a truncated
+		// file and not a move with defaults.
+		if (pCmd.Parameters.Count < 8)
+		{
+			Malformed("Move picture");
+			return;
+		}
+		var mode = pCmd.Parameters[1] & 0xFF;
+		var pictureId = ValueOrVariable(mode, pCmd.Parameters[0]);
+		var x = ValueOrVariable(mode, pCmd.Parameters[2]);
+		var y = ValueOrVariable(mode, pCmd.Parameters[3]);
+		// **The duration is the last of the four and not the fifth.** The
+		// reference reads parameters[4] and stops; a reader that went on to the
+		// patch's own parameters would read a number that means something
+		// else entirely in a game that carries the patch.
+		var frames = pCmd.Parameters[4];
+		// **The state, not the adapter.** The interpreter holds the state
+		// itself, and the adapter is the runtime's way in; a command that went
+		// through the adapter would have to know which of the two it was
+		// talking to, and the answer would be "whichever the caller gave it".
+		if (!_presentation.MovePicture(pictureId, x, y, frames))
+		{
+			_state.AddDiagnostic(
+				$"Move picture {pictureId} was refused: no such picture is on the"
+				+ " screen, so there is nothing to move.");
+		}
 	}
 
 	/// <summary>

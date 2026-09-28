@@ -2603,6 +2603,21 @@ After the Maniac and EasyRPG patch codes are set aside, **89 real RPG commands
 have no case in this reader.** They are not refused one by one; they fall into
 the default branch and are reported as "Unsupported RM2K command NNNN skipped".
 
+**Re-measured on 2026-09-28, and the number was 89 and not 43 — it was written
+before thirty cards landed.** The interpreter's constant list holds 94 numbers,
+of which **89 are wired into the dispatch** and five are bounds rather than
+codes: `MaxScriptRecursion`, `MaxWaitFrames`, `MaxItemId` and `MaxItemCount`,
+and one real command. **So the gap this card describes is not eighty-nine
+dispatched commands; it is a family-by-family list, and the list below is
+where the next island of that shape is.**
+
+**And the one real command in that five is exactly the shape this card is
+about.** `MovePicture` (11120) had a constant, a summary and no `case` — so it
+was in the constant list, which is what a reader looks at, and not in the
+dispatch, which is what a command has to reach. **A reader that checks its own
+constant list for a gap will never find this one.** That is now done; the
+measurement is in the section below.
+
 **And that default is the same fault K-094 was written for.** `ShowPicture` and
 `ErasePicture` were *implemented in `PresentationState`, bounded, and tested* —
 and no command could reach either, so a game's picture command did nothing and
@@ -4294,6 +4309,123 @@ one skipped diagnostic at a time.
 ### K-136 The eighty-nine commands liblcf names and this interpreter does not dispatch
 `READY` — runtime, P0
 
+
+
+## `11120` Move Picture is done — the third picture command, and the only gap the constant list had
+
+**`ShowPicture` (11110) and `ErasePicture` (11130) both ran. `MovePicture`
+
+(11120) sat in the constant list with a summary and no `case`** — also the shape
+
+K-094 was written for, when `ShowPicture` and `ErasePicture` were implemented in
+
+`PresentationState`, bounded and tested, and no command could reach either.
+
+
+
+**So a game that slid a title card across the screen fell into the default arm** and was
+
+reported as an unsupported command. The card did not appear, and the diagnostic named a
+
+code the author had every reason to believe worked.
+
+
+
+### The three rules the command turns on
+
+
+
+**The movement is a state and not a position.** A reader that set the target straight away
+
+would have the picture arrive the instant the command ran, and a game that slides a title
+
+across the screen would show it at its destination with nothing in between. The reference
+
+holds the picture, the target and the frames left, and the render reads where the picture is
+
+*now* — so the state carries a start, a target, a total and a remainder.
+
+
+
+**Zero frames is a placement and not a refusal.** An editor field the author never touched
+
+reads as zero, and the reference sets the position and returns. **A reader that refused it
+
+would stop the event** — and a game whose title card is placed by a zero-frame move would
+
+lose the card instead of having it appear.
+
+
+
+**Moving a picture that is not on the screen is refused and named.** A game that moves an id
+
+it never showed has a file that does not mean what it says, and a reader that created a
+
+picture there would put an image on the screen that no command asked for. **One movement
+
+per picture, and a second movement replaces the first** — the reference holds a single move
+
+per id, so a game that moves a card and then moves it again starts the second from where
+
+the picture actually is.
+
+
+
+**The minimum width is eight, from the reference's own `CmdSetup`.** A first draft read
+
+four — the id, the mode, X and Y — and a game that left the frame field empty by using the
+
+short form would have had its move rejected as a truncated file, which no RM2K/2003 game
+
+writes.
+
+
+
+**The pictures move on the same tick as the screen effects**, and for the same reason as the
+
+tint on the flash: a movement on a different clock would end at a different moment than the
+
+flash that was told to end with it.
+
+
+
+**And the position is interpolated from the frames already spent over the frames in total**,
+
+so the last frame lands exactly on the target. A reader that rounded would have a picture
+
+that stopped one pixel short and then jumped.
+
+
+
+**Four of the seven tests were wrong about the fixture, and two about the code.** The show
+
+command takes the file name from the command's *text* and not from a parameter, and a
+
+magnification of zero is refused — so a fixture that put a name index in `parameters[0]` and
+
+a zero in the magnification showed no picture, and every move then had nothing to move. One
+
+test demanded silence from the trace, which would have meant demanding a command that says
+
+nothing happened. One put two moves in one program and read the result as the first move's
+
+end.
+
+
+
+**Test evidence** `test_rm2k_move_picture.cs` (7).
+
+**1360/1360**, Validator gruen.
+
+**Mutations** 10 Regeln ueber einen Lauf, **10 von 10 gefangen** — darunter der Befehl, der den
+
+Dispatch nicht erreicht, die Mindestbreite 4 statt 8, die Dauer vom falschen Parameter, das
+
+nicht aufgeloeste Ziel, die Bewegung, die sofort ans Ziel springt, null Bilder als
+
+Platzierung, das erzeugte fehlende Bild, das nicht tickende Brett und der Reset, der die
+
+Bewegung stehen laesst.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

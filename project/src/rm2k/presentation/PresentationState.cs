@@ -275,6 +275,146 @@ public sealed class PresentationState
         return true;
     }
 
+    /// <summary>
+    /// A picture's movement, from command 11120, and the frames it has left.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The movement is a state and not a position.</strong> A reader that
+    /// set the target straight away would have the picture arrive the instant
+    /// the command ran, and a game that slides a title across the screen would
+    /// show it at its destination with nothing in between. The reference holds
+    /// the picture, the target and the remaining frames, and the render reads
+    /// where the picture is <em>now</em>.
+    /// </para>
+    /// <para>
+    /// <strong>Moving a picture that is not there is refused</strong> and not
+    /// silently created: a game that moves an id it never showed has a file
+    /// that does not mean what it says, and inventing a picture there would put
+    /// an image on the screen that no command asked for.
+    /// </para>
+    /// </remarks>
+    public bool IsPictureMoving(int pId) =>
+        _movingPictures.ContainsKey(pId);
+
+    /// <summary>Where a moving picture will end up.</summary>
+    public int PictureMoveTargetX(int pId) =>
+        _movingPictures.TryGetValue(pId, out var move) ? move.TargetX : 0;
+
+    /// <summary>Where a moving picture will end up, vertically.</summary>
+    public int PictureMoveTargetY(int pId) =>
+        _movingPictures.TryGetValue(pId, out var move) ? move.TargetY : 0;
+
+    /// <summary>How many frames a picture's movement has left.</summary>
+    public int PictureMoveFramesLeft(int pId) =>
+        _movingPictures.TryGetValue(pId, out var move) ? move.FramesLeft : 0;
+
+    /// <summary>How far a picture has come along its movement.</summary>
+    public int PictureMoveFrame(int pId) =>
+        _movingPictures.TryGetValue(pId, out var move)
+            ? move.TotalFrames - move.FramesLeft
+            : 0;
+
+    private readonly Dictionary<int, PictureMove> _movingPictures = new();
+
+    private sealed class PictureMove
+    {
+        public int StartX { get; init; }
+        public int StartY { get; init; }
+        public int TargetX { get; init; }
+        public int TargetY { get; init; }
+        public int TotalFrames { get; init; }
+        public int FramesLeft { get; set; }
+    }
+
+    /// <summary>
+    /// Moves a picture to a position over a number of frames, from command
+    /// 11120.
+    /// </summary>
+    /// <param name="pId">The picture, which has to exist.</param>
+    /// <param name="pTargetX">Where it ends up.</param>
+    /// <param name="pTargetY">Where it ends up, vertically.</param>
+    /// <param name="pFrames">
+    /// How long the movement takes. **Zero is a jump and not a refusal**: the
+    /// reference sets the position and calls it done, and a game that wrote a
+    /// zero because the editor left the field empty means "now".
+    /// </param>
+    /// <returns>True when the picture exists and the movement was recorded.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Zero frames is a placement and not an error.</strong> An editor
+    /// field the author never touched reads as zero, and refusing it would stop
+    /// the event — so a game whose title card is positioned by a zero-frame
+    /// move would lose its title card instead of having it appear.
+    /// </para>
+    /// <para>
+    /// <strong>The picture has to exist.</strong> Moving an id that was never
+    /// shown is a file that does not mean what it says, and creating one there
+    /// would put an image on the screen that no command asked for.
+    /// </para>
+    /// </remarks>
+    public bool MovePicture(int pId, int pTargetX, int pTargetY, int pFrames)
+    {
+        if (!Pictures.ContainsKey(pId))
+        {
+            return false;
+        }
+        var picture = Pictures[pId];
+        if (pFrames <= 0)
+        {
+            // **The place, now.** The reference writes the position and returns,
+            // so a zero-frame move is a move that has already happened and not
+            // a move that never starts.
+            Pictures[pId] = CloneAt(picture, pTargetX, pTargetY);
+            _movingPictures.Remove(pId);
+            return true;
+        }
+        _movingPictures[pId] = new PictureMove
+        {
+            StartX = picture.X,
+            StartY = picture.Y,
+            TargetX = pTargetX,
+            TargetY = pTargetY,
+            TotalFrames = pFrames,
+            FramesLeft = pFrames,
+        };
+        return true;
+    }
+
+    /// <summary>
+    /// A copy of a picture at another position, keeping every other field.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A copy and not a field write.</strong> A picture's fields are
+    /// <c>init</c>, so moving one means building a new value — and building it
+    /// by hand would mean listing fifteen fields and forgetting the one that
+    /// changed, which is the position itself. A reader that forgot the size would
+    /// have a moving picture that also changed shape.
+    /// </remarks>
+    private static PictureState CloneAt(PictureState pPicture, int pX, int pY)
+    {
+        return new PictureState
+        {
+            Id = pPicture.Id,
+            Name = pPicture.Name,
+            X = pX,
+            Y = pY,
+            Width = pPicture.Width,
+            Height = pPicture.Height,
+            FixedToMap = pPicture.FixedToMap,
+            Magnify = pPicture.Magnify,
+            TopTransparency = pPicture.TopTransparency,
+            UseTransparentColor = pPicture.UseTransparentColor,
+            Red = pPicture.Red,
+            Green = pPicture.Green,
+            Blue = pPicture.Blue,
+            Saturation = pPicture.Saturation,
+            EffectMode = pPicture.EffectMode,
+            EffectPower = pPicture.EffectPower,
+            BottomTransparency = pPicture.BottomTransparency,
+        };
+    }
+
     public bool IsFlashActive { get; private set; }
     public int FlashRed { get; private set; }
     public int FlashGreen { get; private set; }
@@ -289,6 +429,66 @@ public sealed class PresentationState
 
     public int WeatherType { get; private set; }
     public int WeatherStrength { get; private set; }
+
+    /// <summary>
+    /// Advances every moving picture by the frames that passed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The position is interpolated, and not stepped once at the
+    /// start.</strong> The reference's picture move travels from where it is to
+    /// where it goes over the frames it was given, and a reader that set the
+    /// target at the first tick would have a picture that jumps and then sits
+    /// there for the rest of the movement's time.
+    /// </para>
+    /// <para>
+    /// <strong>Integer division and not rounding, and the last frame lands
+    /// exactly on the target</strong> — because the step is computed from the
+    /// frames already spent over the frames in total, and at the last frame
+    /// that fraction is one. A reader that rounded would have a picture that
+    /// stopped one pixel short and then jumped.
+    /// </para>
+    /// <para>
+    /// <strong>A picture that is erased mid-movement stops being moved.</strong>
+    /// The entry is dropped, so an erase during a slide does not leave a
+    /// movement that walks towards a position for a picture that is not there.
+    /// </para>
+    /// </remarks>
+    private void TickPictureMoves(int pFrames)
+    {
+        if (_movingPictures.Count == 0 || pFrames == 0)
+        {
+            return;
+        }
+        // **A copy of the keys, because a movement can end and would then
+        // change the dictionary while it is being walked.** Every other
+        // collection in this class is walked the same way for the same reason.
+        var ids = new List<int>(_movingPictures.Keys);
+        foreach (var id in ids)
+        {
+            var move = _movingPictures[id];
+            move.FramesLeft -= pFrames;
+            if (move.FramesLeft <= 0)
+            {
+                if (Pictures.ContainsKey(id))
+                {
+                    Pictures[id] = CloneAt(Pictures[id], move.TargetX, move.TargetY);
+                }
+                _movingPictures.Remove(id);
+                continue;
+            }
+            if (!Pictures.ContainsKey(id))
+            {
+                _movingPictures.Remove(id);
+                continue;
+            }
+            var spent = move.TotalFrames - move.FramesLeft;
+            Pictures[id] = CloneAt(
+                Pictures[id],
+                move.StartX + (move.TargetX - move.StartX) * spent / move.TotalFrames,
+                move.StartY + (move.TargetY - move.StartY) * spent / move.TotalFrames);
+        }
+    }
 
     public void Reset()
     {
@@ -311,6 +511,11 @@ public sealed class PresentationState
         PendingKeyInputIsTimed = false;
         PendingKeyInputTenths = 0;
         Pictures.Clear();
+        // **The movements go with the pictures.** A new game that kept a
+        // movement would have the first tick walk a picture towards a position
+        // for an image that no longer exists, and the entry would sit in the
+        // dictionary for ever because nothing else removes it.
+        _movingPictures.Clear();
         IsTintActive = false;
         TintRed = 0; TintGreen = 0; TintBlue = 0; TintSaturation = 0;
         TintFramesRemaining = 0;
@@ -331,6 +536,12 @@ public sealed class PresentationState
     public void Tick(int pFrames)
     {
         if (pFrames < 0) throw new ArgumentOutOfRangeException(nameof(pFrames));
+        // **The pictures move on the same tick as the screen effects**, and for
+        // the same reason: a movement that ran on a different clock would end
+        // at a different moment than the flash that was told to end with it,
+        // and a game that moves a picture while the screen flashes would have
+        // the picture still sliding after the flash is gone.
+        TickPictureMoves(pFrames);
         if (IsFlashActive)
         {
             FlashFramesRemaining -= pFrames;
@@ -896,6 +1107,22 @@ public sealed class PresentationAdapter
         _state.ErasePicture(pId, out _)
             ? PresentationResult.Succeeded()
             : PresentationResult.Failed("Picture ID is out of bounds.");
+
+    /// <summary>
+    /// The adapter's move, for command 11120.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The failure names the reason</strong> — a picture that is not on
+    /// the screen and a picture that cannot move are two different mistakes in
+    /// a game's file, and one message for both would have a person looking in
+    /// the wrong place.
+    /// </remarks>
+    public PresentationResult MovePicture(
+        int pId, int pTargetX, int pTargetY, int pFrames) =>
+        _state.MovePicture(pId, pTargetX, pTargetY, pFrames)
+            ? PresentationResult.Succeeded()
+            : PresentationResult.Failed(
+                $"Picture {pId} is not on the screen, so it cannot be moved.");
 }
 
 public sealed class PresentationStatePlaceholder { }

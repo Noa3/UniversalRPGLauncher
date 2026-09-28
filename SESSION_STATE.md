@@ -3795,3 +3795,45 @@ ausgefuehrt wird und ob JavaScript ueberhaupt ausgefuehrt wird. **Die vorhandene
 Ruby-Arbeit ist ein Lexer, ein Parser und ein Werterlayer; die MZ-Arbeit liest zwei echte
 Spiele und fuehrt deren Kommandozeilen aus. Beides ist keine Laufzeit, und beides gibt nicht
 vor, eine zu sein.**
+
+## `11120` Move Picture — DONE
+
+**`ShowPicture` und `ErasePicture` liefen. `MovePicture` stand in der Konstantenliste mit
+
+einer Beschreibung und ohne `case`** — dieselbe Form wie K-094, als die beiden anderen
+
+implementiert, getestet und unerreichbar waren.
+
+
+
+**Also fiel ein Spiel, das eine Titeltafel ueber den Bildschirm schob, in den Default-Arm** und
+
+wurde als nicht unterstuetzter Befehl gemeldet.
+
+
+
+### Die Regel, die die Suche ueberhaupt ausgeloest hat
+
+
+
+**Ein Leser, der seine eigene Konstantenliste auf eine Luecke prueft, findet diese Luecke
+
+nie.** Die Konstante ist da, die Beschreibung ist da, der Build ist sauber — und der Befehl
+
+flaellt trotzdem durch. **Nur der Dispatch ist kurz, und der Dispatch ist das, was ein Befehl
+
+erreichen muss.**
+
+
+
+**Und die Neumessung hat die Zahl der Karte widerlegt: 89 ist nicht 43, und es sind auch
+
+nicht 89 verdrahtete Befehle, sondern 89 von 94 Konstanten, von denen vier Grenzwerte sind**
+
+und **eine ein echter Befehl.** Genau diese eine war die Luecke.
+
+
+
+**Test evidence** `test_rm2k_move_picture.cs` (7). **1360/1360**, Validator gruen.
+
+**Mutations** 10 Regeln, **10 von 10 gefangen**.

@@ -1082,3 +1082,20 @@ routing, so a common event that assigned to its own \cself[0] wrote into a band 
 read it back as zero. A map event has no frame of its own: its self variables are the caller's.
 
 **1353/1353, eleven effective mutation rules, eleven caught.**
+
+**And `MovePicture` (11120) sat in the interpreter's constant list with a summary and no
+`case`**, while `ShowPicture` and `ErasePicture` both ran — the same shape K-094 was written
+for. A game that slid a title card across the screen fell into the default arm and was reported
+as an unsupported command.
+
+**A reader that checks its own constant list for a gap will never find this one.** The
+constant is there, the summary is there, the build is clean, and the command falls through
+anyway: only the dispatch is short, and the dispatch is what a command has to reach.
+
+**The movement is a state and not a position**, so the picture travels over the frames it was
+given and arrives exactly on its last one. **Zero frames is a placement and not a refusal** —
+an editor field the author never touched reads as zero, and refusing it would have lost a
+game's title card. **Moving a picture that was never shown is refused and named**, because a
+reader that created one would put an image on screen that no command asked for.
+
+**1360/1360, ten effective mutation rules, ten caught.**
