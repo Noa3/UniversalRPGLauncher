@@ -2590,6 +2590,7 @@ look for the next island of that shape.**
 | vehicles | ~~`10650` `10850`~~ | **~~vehicle graphic and location — DONE, see below~~** |
 | map | ~~`11710` `11720` `11740` `11750`~~ | **~~tileset, panorama, encounter steps, tile substitution — DONE, see below~~** |
 | choice | ~~`20140` `20141`~~ | **~~choice option and choice end — DONE, see below~~** |
+| damage | ~~`10500`~~ | **~~simulated attack — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2602,6 +2603,57 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `10500 Simulated Attack` is done — and it is not a battle
+
+**No turn order, no troop, no target selection.** The command picks heroes by
+the usual actor parameters, computes one number from their defence and
+spirit, and subtracts it from their hit points. A game uses it for a trap that
+bites, a poison that hurts, a script that stings — *damage without a battle*.
+**This slice did not have to build a combat system first, and that is worth
+knowing before the next one does.**
+
+**Defence is divided by 400 and spirit by 800**, so 800 points of spirit block
+exactly as much as 400 points of defence. **A reader that used one divisor for
+both would make spirit twice as strong as the game meant it** — by a factor of
+two, on the axis a game tunes.
+
+**The result is floored at zero twice and the order matters.** The reference
+clamps after the two subtractions, adjusts the variance and clamps again,
+because a variance draw can push a small result below zero. **A reader that
+clamped once, at the end, would let a variance hand out negative damage** — and
+negative damage *heals* the hero the command was aimed at.
+
+**The spread is at least one.** `max(1, var * base / 10)` — without the one, a
+small base with a large variance rounds to zero and **a game that asked for
+ten percent variance would get none**, the exact opposite of what it asked
+for. And the spread is symmetric: half is subtracted, not all of it.
+
+**The result variable holds the last actor damage and not the sum**, because
+the reference writes it inside the loop. **A reader that summed would make a
+game that shows "you took N" show a number the game never produced** — and
+consistently, because it is the same wrong number every time.
+
+**The variance is drawn from its own generator and not MZ's**, because the
+two engines do not share a stream. It is the same shape as `MzRandom` and is
+deliberately not a claim about the engine numbers — those are not repeatable.
+What it gives is a run a save file and a test can both replay.
+
+**The test had to use a rate of 1 and not 100**, twice. At a hundred percent
+every value blocks the whole attack, all the cases come out as zero, and a
+test that cannot tell the divisors apart proves nothing about them. Both times
+the first draft passed at a rate that hid the thing it was testing.
+
+**Test evidence** `test_rm2k_simulated_attack.cs`, 8 tests.
+**1193/1193**, `TestRm2kSimulatedAttack: 8/8`.
+**Mutations** Ten rules, **10 of 10 caught** in the first run — including the
+two divisors swapped, the second clamp removed, the damage added instead of
+subtracted, and the result variable accumulating.
+
+**What is left** `1008 ChangeClass` and the five liblcf codes the reference
+does not dispatch. `ChangeClass` needs a class model, and it is a real one:
+the command carries a class id, a level reset flag, a skill mode and a
+parameter mode, and none of them have anywhere to land yet.
 
 ## `20140` and `20141` are done — and this slice found a field the parser was throwing away
 

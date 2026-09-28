@@ -2754,3 +2754,51 @@ Indent im Konstruktor wieder verworfen.
 **Was bleibt** `1008 ChangeClass` und `10500 SimulatedAttack` plus die fünf
 liblcf-Codes, die die Referenz nicht dispatcht. `ChangeClass` braucht zuerst
 ein Klassenmodell.
+
+## K-136 `10500` — DONE, und es ist kein Kampf
+
+**Keine Reihenfolge, keine Truppe, keine Zielauswahl.** Der Befehl wählt Helden
+über die üblichen Actor-Parameter, rechnet eine Zahl aus Verteidigung und Geist
+und zieht sie von den HP ab. Ein Spiel benutzt ihn für eine Falle, ein Gift, ein
+Skript — **Schaden ohne Kampf**. **Dieser Schnitt musste kein Kampfsystem bauen,
+und das ist es wert zu wissen, bevor der nächste eines baut.**
+
+**Verteidigung wird durch 400 geteilt, Geist durch 800**, also blockieren 800
+Geistpunkte genau so viel wie 400 Verteidigungspunkte. **Wer einen gemeinsamen
+Teiler nähme, machte Geist doppelt so stark wie beabsichtigt** — um den Faktor
+zwei, auf der Achse, an der ein Spiel justiert.
+
+**Das Ergebnis wird zweimal auf null geklemmt, und die Reihenfolge zählt.** Die
+Referenz klemmt nach den zwei Subtraktionen, justiert die Varianz und klemmt
+noch einmal. **Wer einmal am Ende klemmte, ließe eine Varianz negativen Schaden
+ausgeben** — und negativer Schaden *heilt* den Helden.
+
+**Die Spreizung ist mindestens eins.** `max(1, var * base / 10)` — ohne die Eins
+rundet eine kleine Basis bei großer Varianz auf null, und **ein Spiel, das zehn
+Prozent Varianz asked, bekäme keine.** Und die Spreizung ist symmetrisch: die
+Hälfte wird abgezogen, nicht die ganze.
+
+**Die Resultatvariable hält den Schaden des letzten Helden, nicht die Summe**,
+weil die Referenz sie in der Schleife schreibt. **Wer summierte, ließe ein Spiel,
+das „du hast N verloren" zeigt, eine Zahl zeigen, die das Spiel nie produziert
+hat** — und konsequent, weil es jedes Mal dieselbe falsche ist.
+
+**Die Varianz kommt aus einem eigenen Generator, nicht aus dem von MZ**, weil
+die beiden Engines keinen Strom teilen. Gleiche Form wie `MzRandom`, ausdrücklich
+kein Anspruch auf die Engine-Zahlen — die sind nicht wiederholbar. Was es gibt,
+ist ein Lauf, den Save und Test wiederholen können.
+
+**Der Test musste zweimal Rate 1 statt 100 nehmen.** Bei hundert Prozent blockiert
+jeder Wert den ganzen Angriff, alle Fälle kommen als null heraus, und ein Test,
+der die Teiler nicht unterscheiden kann, beweist nichts über sie. Beide Male
+bestand der erste Entwurf mit einer Rate, die die Sache verdeckte.
+
+**Test evidence** `test_rm2k_simulated_attack.cs` (8). **1193/1193**.
+**Mutations** 10 Regeln, **10 von 10 gefangen** im ersten Lauf — darunter die
+beiden Teiler vertauscht, die zweite Klemme entfernt, der Schaden addiert statt
+abgezogen und die Resultatvariable akkumuliert.
+
+**Was bleibt** `1008 ChangeClass` und die fünf liblcf-Codes ohne Referenz.
+`ChangeClass` braucht ein Klassenmodell: der Befehl trägt Klassen-ID,
+Stufen-Reset-Flag, Skill-Modus und Parameter-Modus, und keiner davon hat bisher
+ein Ziel.

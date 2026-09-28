@@ -187,6 +187,9 @@ public sealed class EventInterpreter
 	public const int TileSubstitution = 11750;
 
 	/// <summary>10620, Change Hero Title, <c>CmdSetup</c> width 4.</summary>
+	/// <summary>10500, Simulated Attack, <c>CmdSetup</c> width 8.</summary>
+	public const int SimulatedAttack = 10500;
+
 	public const int ChangeHeroTitle = 10620;
 
 	/// <summary>10630, Change Sprite Association, <c>CmdSetup</c> width 5.</summary>
@@ -413,6 +416,16 @@ public sealed class EventInterpreter
 	private readonly Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>,
 		bool, bool, bool>? _moveRouteStarter;
 	private readonly PresentationState? _presentation;
+
+	/// <summary>
+	/// The generator <c>10500</c> draws its variance from.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Its own and not MZ's</strong>, because the two engines do not
+	/// share a stream: a game that uses both should not have one command's
+	/// draws move the other's.
+	/// </remarks>
+	private readonly Rm2kDamageRandom _damageRandom = new();
 	private int _commandIndex;
 
 	/// <summary>
@@ -664,6 +677,10 @@ public sealed class EventInterpreter
 
 			case TileSubstitution:
 				ExecuteTileSubstitution(cmd);
+				return Advance();
+
+			case SimulatedAttack:
+				ExecuteSimulatedAttack(cmd);
 				return Advance();
 
 			case ChangeHeroTitle:
@@ -3276,6 +3293,94 @@ public sealed class EventInterpreter
 			$"[Event {_eventId}] Choice branch list has no {ChoiceEnd} after the"
 			+ $" skipped commands, so the branch ran to the end of the list");
 		return _commandIndex - start;
+	}
+
+	/// <summary>
+	/// 10500, Simulated Attack, from EasyRPG's <c>CommandSimulatedAttack</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>It is not a battle.</strong> There is no turn order, no troop and
+	/// no target selection: the command picks heroes by the usual actor
+	/// parameters, computes one number from their defence and spirit, and
+	/// subtracts it from their hit points. A game uses it for a trap that bites,
+	/// a poison that hurts, a script that stings — <em>damage without a
+	/// battle</em>, which is why this slice did not have to build a combat
+	/// system first.
+	/// </para>
+	/// <para>
+	/// <strong>Defence is divided by 400 and spirit by 800.</strong> So 800
+	/// points of spirit block twice as much as 400 points of defence. A reader
+	/// that used one divisor for both would make spirit twice as strong as the
+	/// game meant it.
+	/// </para>
+	/// <para>
+	/// <strong>Parameters 6 and 7 are an optional result variable.</strong> A
+	/// non-zero sixth stores the damage that was dealt into the seventh
+	/// parameter's variable, and a game that shows "you took 12" reads it from
+	/// there. The reference does it per actor, so a command against a whole
+	/// party leaves the last actor's damage in the variable — <em>which is what
+	/// the reference does and not what a reader would guess</em>.
+	/// </para>
+	/// </remarks>
+	private void ExecuteSimulatedAttack(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 8.
+		if (pCmd.Parameters.Count < 8)
+		{
+			Malformed("Simulated attack");
+			return;
+		}
+		var actors = ResolveActors(
+			pCmd.Parameters[0], pCmd.Parameters[1], "Simulated attack");
+		if (actors == null)
+		{
+			return;
+		}
+		var storeResult = pCmd.Parameters[6] != 0;
+		var resultVariable = pCmd.Parameters[7];
+		if (storeResult && (resultVariable < 1
+			|| resultVariable > GameSimulationState.MaxVariables))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Simulated attack: the result goes into"
+				+ $" variable {resultVariable}, which is outside 1 to"
+				+ $" {GameSimulationState.MaxVariables}, and nothing was changed");
+			return;
+		}
+		var lastDamage = 0;
+		foreach (var actorId in actors)
+		{
+			var values = _state.GetOrCreateActorValues(actorId);
+			var damage = Rm2kSimulatedAttack.Compute(
+				pCmd.Parameters[2],
+				values.BaseDefense, pCmd.Parameters[3],
+				values.BaseSpirit, pCmd.Parameters[4],
+				pCmd.Parameters[5], _damageRandom);
+			// **The damage is a loss, and the current hit points are the
+			// reference's own field** — a command that added it would heal the
+			// hero it was aimed at.
+			var vorher = _state.GetActorCurrentHp(actorId);
+			var nachher = Rm2kActorValues.ChangeHp(
+				vorher, -damage, values.BaseMaxHp, pLethal: true);
+			_state.CurrentHp[actorId] = nachher;
+			lastDamage = damage;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Simulated attack on hero {actorId}:"
+				+ $" {vorher} -> {nachher} by {damage}");
+		}
+		// **The last actor's damage, and not the total.** The reference writes
+		// the variable inside the loop, so a command against a party leaves the
+		// last one in it — and a reader that summed would make a game that shows
+		// "you took N" show a number the game never produced.
+		if (storeResult)
+		{
+			_state.Variables[resultVariable - 1] = lastDamage;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Simulated attack stored {lastDamage} in"
+				+ $" variable {resultVariable}, and that is the last actor's"
+				+ " damage and not the sum");
+		}
 	}
 
 	private void ExecuteChangeHeroTitle(Rm2kMap.EventCommand pCmd)
