@@ -69,7 +69,7 @@
 | K-087 | 2 | DONE | Add verified RM2K autotile animation ticking (counter values blocked: no verified data source) | K-015 |
 | K-088 | 2 | DONE | Apply verified RM2K tile substitution tables (source: liblcf SaveMapInfo, not LMT) | K-086 |
 | K-089 | 2 | DONE | Decode RM2K per-map terrain tags via verified `Game_Map::GetChipId` substitution | K-015 |
-| K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
+| K-090 | 4 | IN PROGRESS | MV/MZ: script files read as data, no JavaScript executed | RM2K playable milestone |
 | K-091 | 2 | DONE | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
 | K-092 | 2 | DONE | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
 | K-093 | 3 | DONE | Route the Godot host input through the verified turn order instead of ad-hoc triggers | K-092 |
@@ -4394,10 +4394,46 @@ one skipped diagnostic at a time.
 
 **`BACKLOG` bleibt, und aus zwei Gruenden, die nicht meine sind.** Erstens liegt die Karte hinter dem spielbaren Meilenstein, und zweitens braucht sie eine Entscheidung darueber, wie Ruby in diesem Projekt behandelt wird — **und die ist nicht still zu treffen.** Die Ruby-Schicht, die es gibt, ist ein Lexer, ein Parser und ein Werterlayer; eine Laufzeit ist das nicht.
 
-### K-090 MV/MZ JavaScript runtime architecture spike
-`BACKLOG` — board, P4
+### K-090 MV/MZ: script files as data, no JavaScript executed
+`IN PROGRESS` — board, P4
 
-**`BACKLOG` bleibt, weil eine JavaScript-Laufzeit eine Grenzentscheidung ist und keine Detailfrage.** Die Karten K-120 bis K-133 lesen echte MZ-Spiele, benennen jedes Kommando und fuehren Kommandozeilen aus — **ohne eine Zeile JavaScript auszufuehren.** Ein Plugin-Aufruf wird heute mit Namen abgelehnt, und das ist ehrlicher als eine Halb-Laufzeit, die so aussieht als wuerde sie laufen.
+**The boundary decision was put to the user on 2026-09-28 and the answer was:
+script files are read as data, command names are extracted, and no JavaScript
+is executed.** That is the first of the offered options and the one this
+project's own policy already implies, so the card moves out of `BACKLOG` and
+the decision is on the record rather than in the agent's head.
+
+**Why the policy implies it, in one sentence:** a game's `rmmz_managers.js` is
+**83 KB of the author's own code**, and executing it would be executing the
+game — which this project does not do for an imported title. A JavaScript
+engine with a game file as the payload is a remote-code-execution path, and no
+quality of implementation changes that.
+
+**What `MzScriptCommandReader` does, and what it does not.** It reads the file
+as text and picks out two bounded shapes: `PluginManager.registerCommand("P",
+"C", fn)` — the way every plugin command is written — and `X.prototype.y =`
+assignments, which is how the built-in commands and the event hooks are
+written. **No engine, no interpreter, no `eval`, anywhere in that path.**
+
+**And the test that matters is the one that proves nothing runs.** A source
+containing `throw new Error(...)` and `while (true)` is read on a thread with
+a five second limit: the reader returns, throws nothing, and still finds the
+command name beside the code. **"Does not execute" is asserted, not
+claimed.**
+
+**A file whose shape the reader does not know says so** — an empty result and
+a failure to read are different answers, and without the diagnostic a file the
+reader failed to understand would look like a file with no commands.
+
+**What remains, and is not decided:** a game's own event-command bodies are
+plain MZ data and are already read by K-120 through K-133, so the gap this
+card leaves is the author's *logic* in the scripts — which is exactly the part
+that would need an engine.
+
+**Test evidence** `test_mz_script_commands.cs`, 8 tests.
+**1541/1541**, `TestMzScriptCommands: 8/8`. Mutations: six rules, five caught
+in the run and the sixth caught when measured on its own — a stale DLL, the
+signature documented in `SESSION_STATE.md`.
 
 ### K-136 The eighty-nine commands liblcf names and this interpreter does not dispatch
 `READY` — runtime, P0

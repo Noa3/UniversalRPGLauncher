@@ -4292,6 +4292,35 @@ in isolation.
 unparenthesised form throws, and the sheet's own form answers. Removing the
 parentheses from `WolfCharacterSheet.cs` kills two tests.
 
+## The three boundary decisions are made and recorded
+
+The user answered all three on 2026-09-28:
+
+- **K-090 (MV/MZ JavaScript): script files as data, command names extracted,
+  no JavaScript executed.** That is the project's own policy already, so the
+  card moves to `IN PROGRESS` and the decision is on the record.
+- **K-080 (Ruby for XP/VX/VX Ace): the lexer and parser stay, the interpreter
+  is finished, no `eval` and no marshal execution.**
+- **K-110 (WOLF): the user said they had put files in a folder — and there
+  are none on this machine.** A search of `E:`, `D:`, the desktop, the
+  documents and the downloads found no `.mps`, no `.wolf`, no
+  `Database.dat` / `CommonEvent.dat` / `Game.dat`, and none of
+  `WolfEdit.exe`, `WolfTrans.exe` or `WolfRPGEditor.exe`; `wolf/README.md`
+  still holds only the old synthetic-fixture text, and a two hour mtime sweep
+  over the repo found nothing but my own working files. **The path is
+  documented now** — `project/tests/fixtures/wolf/real/` — so the drop-in is
+  unambiguous, and K-110 stays `VERIFY` with the exact unblock.
+
+### And `res://` is not a .NET path
+
+`File.ReadAllText("res://tests/fixtures/...")` does not read a Godot path: it
+treats it as a relative Windows path and throws *"Die Syntax für den
+Dateinamen … ist falsch"*. The way the other fixtures are read is
+`Godot.FileAccess.GetFileAsBytes(root.PathJoin("js").PathJoin("name.js"))`,
+and **`PathJoin` is a `Godot.String` extension, so it needs `using Godot;`**
+and nothing else. I lost three build cycles to guessing the namespace, and
+`PathJoin` is not defined anywhere in this project's own source.
+
 ## K-114 is DONE and K-110 cannot be closed here
 
 **K-114 stood at `VERIFY` because K-094 was not closed — and K-094 is `DONE`
