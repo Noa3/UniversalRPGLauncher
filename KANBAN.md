@@ -2662,8 +2662,8 @@ look for the next island of that shape.**
 | wolf | ~~common events~~ | **~~a call that comes back, the depth limit, and the wait that makes a route visible — DONE, see below~~** |
 | wolf | ~~map event calls~~ | **~~two kinds of call by one number, self variables per call, and a missing event ignored — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
-| saves | `11910` `11930` | open save menu, change save access |
-| menues | `11950` `11960` `12010`-family | open main menu, change access |
+| saves | ~~`11910` `11930`~~ | **~~open save menu, change save access — DONE, see below~~** |
+| menues | ~~`11950` `11960`~~ | **~~open main menu, change access — DONE, see below~~** |
 | flow | `12420` `12510` | game over, return to title |
 | labels | ~~`12110` `12120`~~ | **~~label and jump-to-label — DONE, see below~~** |
 | vehicles | `10840` `10850` `10650` | enter/exit vehicle, set vehicle location, change vehicle graphic |
@@ -4426,6 +4426,115 @@ nicht aufgeloeste Ziel, die Bewegung, die sofort ans Ziel springt, null Bilder a
 Platzierung, das erzeugte fehlende Bild, das nicht tickende Brett und der Reset, der die
 
 Bewegung stehen laesst.
+
+
+## `11910` and `11950` are done — the card listed four, and two of them were already there
+
+**The board listed `11910`, `11930`, `11950` and `11960` as one open family. Measured, it
+
+is two.** `ChangeSaveAccess` (11930) and `ChangeMainMenuAccess` (11960) were already
+
+dispatched through the one-line access handler together with the teleport and escape
+
+commands — **and the card had been written before that.** What was missing was the pair that
+
+*opens* a menu, and they are not the same shape as the pair that says whether the player may.
+
+
+
+### Die vier Regeln, die die zwei trennen
+
+
+
+**Breite 0, und das ist die ganze Form beider Befehle.** Die Dispatch-Zeilen der Referenz geben
+
+Speichern und Hauptmenü eine Breite von null — **ein Leser, der einen Parameter verlangt hätte,
+
+wäre jeden Menübefehl eines Spiels abgelehnt haben, und einer, der `parameters[0]` las, läse
+
+hinter das Ende einer Liste, die es nicht gibt.**
+
+
+
+**Eine Anforderung und kein offenes Menü.** Dieser Leser baut keine Menüszene, also sagt das
+
+Feld, was ein Befehl verlangt hat — dieselbe Form wie der Game-Over-Bildschirm, und wer das
+
+Menü daraus zeichnet, ist Sache des Lauftzeugs und nicht der Simulation.
+
+
+
+**Zwei Flags und nicht eines.** Ein Leser, der "ein Menü" in einem Feld speicherte, hätte den
+
+Auftrag des Hauptmenüs gelöscht, sobald der Speicherbefehl käme — **und ein Spiel, das das
+
+Hauptmenü öffnet und dann speichert, hätte keines der beiden offen.**
+
+
+
+**Eine offene Nachricht zuerst, und das Menü wartet darauf** — dieselbe Regel wie der
+
+Game-Over-Bildschirm und die Titelbildschirm-Anforderung. Die ersten zwei Zeilen der Referenz
+
+sind `if (Game_Message::IsMessageActive()) return false;` — **ein Held, der "nimm diesen Laden"
+
+sagt und vom Menü verdeckt wird, ist ein Spiel, das eine Zeile verdeckt hat, die der Autor
+
+für genau diesen Moment geschrieben hat.**
+
+
+
+### Und was die gehaltene Seite kostet
+
+
+
+**Die Seite hält, also läuft derselbe Befehl in jedem Frame erneut.** Ein Programm, das das
+
+Hauptmenü öffnet und danach das Speichermenü, bekommt das Hauptmenü — **so lange der Spieler
+
+darin ist, und das zweite nie.** Das ist der Preis einer gehaltenen Seite, **und die Referenz
+
+zahlt ihn genauso**: ein Spiel, das beide Menüs will, öffnet eines, schließt es und erreicht das
+
+nächste.
+
+
+
+**Das ist am Test aufgefallen, nicht am Code.** Ich hatte einen Test geschrieben, der behauptete,
+
+die beiden Flags kollidierten nicht, und er blieb rot — bis die Messung zeigte, dass der zweite
+
+Befehl nie läuft. **Ein Test, der das Gegenteil behauptet hätte, hätte ein Verhalten geprüft,
+
+das das Format nicht hat.**
+
+
+
+**Und die Mindestbreite von `11120` war falsch: 8 statt 16.** Die Dispatch-Zeile der Referenz sagt
+
+`CmdSetup<&CommandMovePicture, 16>`, **und ich hatte acht geschrieben — aus den fünf, die der
+
+Befehl liest, plus einer Vermutung.** Ein Leser mit acht hätte jeden echten Move-Picture-Befehl
+
+als abgeschnittene Datei abgelehnt. **Und die Test-Fixture paddete ebenfalls auf acht, was beide
+
+Fehler in dieselbe Richtung gehen ließ und die Suite grün hielt.**
+
+
+
+**Test evidence** `test_rm2k_open_menu.cs` (6) und `test_rm2k_move_picture.cs` (7), die zweite
+
+Suite nach der Breitenkorrektur neu gemessen.
+
+**1366/1366**, Validator grün.
+
+**Mutations** 9 Regeln über vier Läufe, **9 von 9 gefangen** — darunter beide Befehle, die den
+
+Dispatch nicht erreichen, die Seite, die nicht hält, die ignorierte offene Nachricht, beide
+
+Menüs im selben Feld, die wieder auf acht gesetzte Mindestbreite, der falsche Parameter für die
+
+Dauer, das nicht unterscheidbare Wartegrund und das Menü, das sich nicht merkt, dass es offen war.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

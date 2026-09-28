@@ -67,16 +67,22 @@ public partial class TestRm2kMovePicture : TestBase
     }
 
     /// <summary>
-    /// A move command: id, mode, X, Y, frames — the first five of the eight
-    /// <c>CmdSetup</c> demands.
+    /// A move command: id, mode, X, Y, frames, then padding to the reference's
+    /// minimum of sixteen.
     /// </summary>
+    /// <remarks>
+    /// <strong>Sixteen, from the reference's own dispatch line</strong> and not
+    /// from the five this slice reads. A first draft padded to eight, which is
+    /// the number I first wrote in the interpreter too — **and a fixture that
+    /// agreed with the wrong number would have kept both wrong.**
+    /// </remarks>
     private static Rm2kMap.EventCommand Move(
-        int pId, int pX, int pY, int pFrames, int pPad = 0)
+        int pId, int pX, int pY, int pFrames, int pWidth = 16)
     {
         var parameters = new List<int> { pId, 0, pX, pY, pFrames };
-        while (parameters.Count < 8)
+        while (parameters.Count < pWidth)
         {
-            parameters.Add(pPad);
+            parameters.Add(0);
         }
         return new Rm2kMap.EventCommand
         {
@@ -258,13 +264,21 @@ public partial class TestRm2kMovePicture : TestBase
     }
 
     /// <summary>
-    /// A move with fewer than eight parameters is a truncated file.
+    /// A move of fifteen parameters is a truncated file, and one of sixteen is
+    /// not.
     /// </summary>
     /// <remarks>
-    /// <strong>Eight, from the reference's own <c>CmdSetup</c>.</strong> A first
-    /// draft read four — the id, the mode, X and Y — and a game that left the
-    /// frame field empty by using the short form would have had its move
-    /// rejected as a truncated file, which no RM2K/2003 game writes.
+    /// <para>
+    /// <strong>Sixteen, from the reference's own dispatch line</strong> and not
+    /// from the five the method reads.
+    /// </para>
+    /// <para>
+    /// <strong>And this test is the one that found my number wrong.</strong> I
+    /// wrote eight in the method, then wrote a fixture that padded to eight, and
+    /// the two being wrong in the same direction made every test pass. A
+    /// fixture that had padded to the reference's sixteen would have refused
+    /// the command the moment the method was corrected.
+    /// </para>
     /// </remarks>
     public void Test_AShortMoveIsATruncatedFile()
     {
@@ -274,15 +288,28 @@ public partial class TestRm2kMovePicture : TestBase
             {
                 Code = EventInterpreter.MovePicture,
                 Text = "",
-                Parameters = [1, 0, 100, 100],
+                Parameters = [1, 0, 100, 100, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             });
         interpreter.ExecuteFrame();
         interpreter.ExecuteFrame();
 
         AssertEq(
             presentation.IsPictureMoving(1), false,
-            "**and the picture did not move**, because a command of four"
-            + $" parameters is a truncated file; it is {presentation.IsPictureMoving(1)}");
+            "**and the picture did not move**, because a command of fifteen is"
+            + " one short of the reference's sixteen and so is a truncated file;"
+            + $" it is {presentation.IsPictureMoving(1)}");
+
+        // **And sixteen is enough**, which is the half that would have caught
+        // the wrong number: a fixture that stopped at eight never asked.
+        var (b, breitePresentation, _) = Run(
+            Show(1, 0, 0),
+            Move(1, 100, 100, 10, pWidth: 16));
+        b.ExecuteFrame();
+        b.ExecuteFrame();
+        AssertEq(
+            breitePresentation.IsPictureMoving(1), true,
+            "**and a command of exactly sixteen runs**, which is the reference's"
+            + $" own minimum; it is {breitePresentation.IsPictureMoving(1)}");
         AssertEq(
             state.Diagnostics.Count > 0, true,
             "**and the file was named as malformed**, which is the diagnostic a"

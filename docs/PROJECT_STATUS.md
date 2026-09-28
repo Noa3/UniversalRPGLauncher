@@ -1099,3 +1099,27 @@ game's title card. **Moving a picture that was never shown is refused and named*
 reader that created one would put an image on screen that no command asked for.
 
 **1360/1360, ten effective mutation rules, ten caught.**
+
+**And the card listed four menu commands as one open family; measured, it is two.**
+`ChangeSaveAccess` (11930) and `ChangeMainMenuAccess` (11960) were already dispatched through the
+one-line access handler with the teleport and escape commands, and the card predated that. What
+was missing was the pair that *opens* a menu — and they are not the same shape as the pair that
+says whether the player may.
+
+**Both openers have width zero** in the reference's dispatch, so a reader that required a
+parameter would have refused every game's menu. **Two flags and not one**, because a reader that
+stored "a menu" in a single field would have the save command clear the main menu's request. **An
+open message first**, the same rule as the game over screen.
+
+**And the page holds, which costs something worth knowing:** the same command runs again every
+frame, so a program that opens the main menu and then the save menu gets the main menu, and the
+second is never reached. The reference pays the same price. **A test I wrote asserted the flags
+do not collide and stayed red until the measurement showed the second command never runs** — a
+test that had claimed otherwise would have been testing a behaviour the format does not have.
+
+**And `MovePicture`'s minimum width was eight where the reference says sixteen.** I wrote it from
+the five the command reads plus a guess, **and the test fixture padded to eight as well, which
+kept both wrong in the same direction**: a fixture that agrees with the number in the code does
+not check it.
+
+**1366/1366, nine effective mutation rules, nine caught.**

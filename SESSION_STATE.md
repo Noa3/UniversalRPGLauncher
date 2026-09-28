@@ -3837,3 +3837,75 @@ und **eine ein echter Befehl.** Genau diese eine war die Luecke.
 **Test evidence** `test_rm2k_move_picture.cs` (7). **1360/1360**, Validator gruen.
 
 **Mutations** 10 Regeln, **10 von 10 gefangen**.
+
+## `11910`/`11950` Menues — DONE
+
+**Die Karte nannte vier Befehle als eine offene Familie. Gemessen sind es zwei** — `11930`
+
+und `11960` liefen schon lange ueber den Einzeiler-Handler mit Teleport und Flucht. **Und die
+
+Karte war geschrieben worden, bevor das so war.**
+
+
+
+**Breite 0 fuer beide.** Die Referenz gibt Speichern und Hauptmenue eine Breite von null — **ein
+
+Leser, der einen Parameter verlangt haette, waere jeden Menuebefehl eines Spiels abgelehnt
+
+haben.**
+
+
+
+**Zwei Flags und nicht eines, und eine offene Nachricht zuerst** — dieselbe Regel wie der
+
+Game-Over-Bildschirm.
+
+
+
+### Der Fund am Test, nicht am Code
+
+
+
+**Ich hatte einen Test geschrieben, der behauptete, die beiden Flags kollidierten nicht, und er
+
+blieb rot** — bis die Messung zeigte, dass der zweite Befehl nie laeuft. **Die Seite haelt, also
+
+laeuft derselbe Befehl in jedem Frame erneut**, und ein Programm, das Hauptmenue und dann
+
+Speichern oeffnet, bekommt nur das Hauptmenue. Das ist der Preis einer gehaltenen Seite, **und
+
+die Referenz zahlt ihn genauso.**
+
+
+
+### Und eine Zahl, die falsch war
+
+
+
+**Die Mindestbreite von `11120` war 8 statt 16.** Die Dispatch-Zeile der Referenz sagt
+
+`CmdSetup<&CommandMovePicture, 16>`, und ich hatte acht geschrieben — aus den fuenf, die der
+
+Befehl liest, plus einer Vermutung. **Und die Test-Fixture paddete ebenfalls auf acht, was beide
+
+Fehler in dieselbe Richtung gehen liess und die Suite gruen hielt.** Das ist die Lehre: **eine
+
+Fixture, die der Zahl des Codes beipflichtet, prueft die Zahl nicht.**
+
+
+
+**Und ich habe beim Einfuegen einer Methode 2166 Zeilen statt 130 geschrieben** — ein
+
+Ersetzungsmuster hat einen grossen Block dupliziert, und der naechste Rettungsversuch hat es
+
+verdreifacht. **Der Weg zurueck war `git checkout --` auf diese eine Datei, und danach vier
+
+Ersetzungen einzeln mit je einem Build dazwischen.** Das ist der Unterschied zwischen einer
+
+Aenderung und einem Rettungsversuch.
+
+
+
+**Test evidence** `test_rm2k_open_menu.cs` (6), `test_rm2k_move_picture.cs` (7).
+
+**1366/1366**, Validator gruen. **Mutations** 9 Regeln, **9 von 9 gefangen**.

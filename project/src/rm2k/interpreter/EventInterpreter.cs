@@ -86,6 +86,26 @@ public sealed class EventInterpreter
 	/// <summary>11120, Move Picture.</summary>
 	public const int MovePicture = 11120;
 
+	/// <summary>
+	/// 11910, Open Save Menu, from liblcf <c>Code::OpenSaveMenu</c> and
+	/// EasyRPG's <c>CommandOpenSaveMenu</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, from the reference's own dispatch line</strong> — the
+	/// command takes no parameters, and a reader that required one would refuse
+	/// every game's save menu.
+	/// </remarks>
+	public const int OpenSaveMenu = 11910;
+
+	/// <summary>
+	/// 11950, Open Main Menu, from liblcf <c>Code::OpenMainMenu</c> and
+	/// EasyRPG's <c>CommandOpenMainMenu</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, from the same line</strong> and for the same reason.
+	/// </remarks>
+	public const int OpenMainMenu = 11950;
+
 	/// <summary>11510, Play Background Music, from liblcf <c>Code::PlayBGM</c>.</summary>
 	public const int PlayBGM = 11510;
 
@@ -750,6 +770,23 @@ public sealed class EventInterpreter
 			case ChangeMainMenuAccess:
 				ExecuteAccessChange(cmd, pWhich: AccessFlag.Menu);
 				return Advance();
+
+			case OpenSaveMenu:
+				// **The menu openers are not access changes.** `11930` says
+				// whether the player *may* save and takes a parameter; `11910`
+				// opens the menu and takes none. A reader that treated the
+				// second as the first would have a game whose save menu opened
+				// every time a cutscene unlocked saving.
+				ExecuteOpenMenu(cmd, pIsSave: true);
+				// **A held page, and this dispatcher's spelling of a wait is
+				// `true` with the index left alone** -- the same as the game
+				// over screen, so the next frame runs this case again until
+				// the menu is gone.
+				return _state.WaitingFor != GameSimulationState.WaitReason.None;
+
+			case OpenMainMenu:
+				ExecuteOpenMenu(cmd, pIsSave: false);
+				return _state.WaitingFor != GameSimulationState.WaitReason.None;
 
 			case MemorizeLocation:
 				ExecuteMemorizeLocation(cmd);
@@ -2229,11 +2266,13 @@ public sealed class EventInterpreter
 	/// </summary>
 	/// <remarks>
 	/// <para>
-	/// <strong>Eight parameters, and the width is a minimum and not a
-	/// count.</strong> EasyRPG's <c>CmdSetup</c> gives the command a minimum
-	/// width of 8; anything past that is the Maniac patch's own packing and is
-	/// not read here, and saying so beats guessing what a ninth parameter
-	/// means in a game this reader has not seen.
+	/// <strong>Sixteen parameters, and the width is a minimum and not a
+	/// count.</strong> The reference's dispatch line is
+	/// <c>case Cmd::MovePicture: return CmdSetup&lt;&amp;Game_Interpreter::CommandMovePicture, 16&gt;(com);</c>
+	/// — **and I first wrote eight, from the five this reads plus a guess.** A
+	/// reader with eight would have rejected every real game's move picture as
+	/// a truncated file. The rest is the editor's own packing and is not read
+	/// here.
 	/// </para>
 	/// <para>
 	/// <strong>The id is resolved through the mode and the target is
@@ -2257,9 +2296,9 @@ public sealed class EventInterpreter
 			Malformed("Move picture");
 			return;
 		}
-		// CmdSetup minimum width 8. A command that is shorter is a truncated
-		// file and not a move with defaults.
-		if (pCmd.Parameters.Count < 8)
+		// **The reference's own minimum, 16** -- and not the five this method
+		// reads. A command that is shorter is a truncated file.
+		if (pCmd.Parameters.Count < 16)
 		{
 			Malformed("Move picture");
 			return;
@@ -2670,6 +2709,67 @@ public sealed class EventInterpreter
 	/// top of the text would bury the line the game wrote for that moment.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// Runs 11910 and 11950, the two commands that open a menu.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 0, and that is the whole shape of both.</strong> The
+	/// reference's dispatch lines give the save and the main menu a width of
+	/// zero, so a reader that required a parameter would have refused every
+	/// game's menu and one that read <c>parameters[0]</c> would be reading past
+	/// the end of a list that is not there.
+	/// </para>
+	/// <para>
+	/// <strong>A request and not an open menu.</strong> This reader builds no
+	/// menu scene, so the flag says what a command asked for — the same shape as
+	/// the game over screen, and a caller that draws the menu from it is the
+	/// runtime's business rather than the simulation's.
+	/// </para>
+	/// <para>
+	/// <strong>Two flags and not one.</strong> A reader that stored "a menu" in
+	/// a single field would have the save command clear the main menu's
+	/// request, and a game that opened the main menu and then saved would find
+	/// neither of them up.
+	/// </para>
+	/// <para>
+	/// <strong>An open message first, and the menu waits for it</strong> — the
+	/// same rule as the game over screen and the title request. A hero who says
+	/// "here, take this menu" and has the menu cover the line is a game that hid
+	/// a line the author wrote for that moment.
+	/// </para>
+	/// </remarks>
+	private void ExecuteOpenMenu(Rm2kMap.EventCommand pCmd, bool pIsSave)
+	{
+		// **The command is not read, and that is the point.** Width zero means
+		// there is nothing in it; the parameter exists so that one method can
+		// serve both commands, and a reader that invented a use for it would be
+		// inventing a semantic the format does not have.
+		_ = pCmd;
+		if (_presentation != null && _presentation.MessageVisible)
+		{
+			_state.WaitingFor = GameSimulationState.WaitReason.MessageOpen;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] {(pIsSave ? "Save" : "Main")} menu waits: a"
+				+ " message is open, because the reference shows the menu after"
+				+ " the line is read");
+			return;
+		}
+		if (pIsSave)
+		{
+			_state.IsSaveMenuActive = true;
+			_state.WaitingFor = GameSimulationState.WaitReason.SaveMenuOpen;
+		}
+		else
+		{
+			_state.IsMainMenuActive = true;
+			_state.WaitingFor = GameSimulationState.WaitReason.MainMenuOpen;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] {(pIsSave ? "Save" : "Main")} menu is requested,"
+			+ " and the page holds until it is closed");
+	}
+
 	private void ExecuteGameOver()
 	{
 		if (_presentation != null && _presentation.MessageVisible)

@@ -548,6 +548,12 @@ public sealed class GameSimulationState
 
 		/// <summary>The title screen was requested.</summary>
 		TitleRequested,
+
+		/// <summary>The save menu is up, from <c>11910</c>.</summary>
+		SaveMenuOpen,
+
+		/// <summary>The main menu is up, from <c>11950</c>.</summary>
+		MainMenuOpen,
     }
 
     /// <summary>What the interpreter is waiting for, from <c>12420</c> and <c>12510</c>.</summary>
@@ -558,6 +564,24 @@ public sealed class GameSimulationState
 
 	/// <summary>Whether the title screen was requested, from <c>12510</c>.</summary>
 	public bool IsTitleRequested { get; set; }
+
+	/// <summary>Whether the save menu is up, from <c>11910</c>.</summary>
+	/// <remarks>
+	/// <strong>A request and not an open menu.</strong> This reader builds no
+	/// menu scene, so the flag says what a command asked for — the same shape
+	/// as <see cref="IsGameOverActive"/>, and a caller that draws the menu from
+	/// it is the runtime's business, not the simulation's.
+	/// </remarks>
+	public bool IsSaveMenuActive { get; set; }
+
+	/// <summary>Whether the main menu is up, from <c>11950</c>.</summary>
+	/// <remarks>
+	/// <strong>Its own flag and not a second value of the save one.</strong> A
+	/// reader that stored "a menu" in one field would have the save command
+	/// clear the main menu's request, and a game that opened the main menu and
+	/// then saved would find neither.
+	/// </remarks>
+	public bool IsMainMenuActive { get; set; }
 
     public bool AllowEscape { get; private set; } = true;
 
