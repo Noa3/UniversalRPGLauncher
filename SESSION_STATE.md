@@ -2581,3 +2581,43 @@ der, der das Flag benannt hatte. Exakt der Fehler, den `SetTimer` und
 zuerst den Build zum Scheitern, weil `SetAccess` keine Defaults mehr hat, und
 wurden mit kompilierendem Code nachgemessen — ein Compilefehler ist keine
 gefangene Regel.
+
+## K-136 `10660`/`10670`/`10680`/`10690` — DONE, der zweite Block, der nie auf dem Board war
+
+**Keiner dieser vier stand auf K-136.** Sie kamen aus der zweiten frischen
+Messung der Quelle gegen den Interpreter. Das ist jetzt das zweite Mal, dass die
+Kartenliste zu kurz war, und einmal war sie aktiv falsch.
+
+**Die Audiofamilien haben verschiedene Breiten: sieben Musik, zwölf Klänge.**
+Musik: Schlacht, Sieg, Gasthaus, Boot, Schiff, Luftschiff, Game Over. Klänge:
+die vier fürs Menü, einer für den Kampfbeginn und einer pro Kampfereignis —
+Feindangriff, Feindschaden, Heldenschaden, Ausweichen, Feindtod, Item. **Wer nur
+die Menüklänge anbietet, lässt ein Spiel im stillen Kampf laufen.**
+
+**Musik hat einen Einblendwert und Klänge nicht** — ein Soundeffekt mit Einblendung
+ist ein Soundeffekt, auf den der Spieler gewartet hat. Deshalb liest `10660`
+`parameters[1]` als Fade und `10670` nicht.
+
+**Die Kontexte sind null-basiert, und das ist eine Falle.** `BGM_Battle` ist 0,
+`SFX_Cursor` ist 0, also ist die Grenze 0..6 und 0..11. **Eine Grenze ab 1 hätte
+die Schlachtmusik abgelehnt** — genau die, die ein Spiel am häufigsten wechselt.
+
+**Ohne Maniac-Patch ist der Parameter der Wert.** Die Referenz liest
+`ValueOrVariableBitfield(com, 5, 1, 1)`, und dieser Helfer gibt ohne Patch direkt
+`parameters[val_idx]` zurück — Modusindex und Wertindex sind dieselbe Zahl.
+**Wer `parameters[5]` als Wert las, hätte jede Spur verstummt.** Genau das hat
+der erste Lauf dieses Schnitts getan. Der Patch-Pfad braucht einen
+Game-String-Spiegel, den diese Runtime nicht hat: plain value plus Diagnose.
+
+**Sechs Übergänge, und der sechste ist der, den ein Spiel bemerkt.** Teleport
+ein und aus, Kampfbeginn ein und aus, Kampfende ein und aus. `Transition_Count`
+ist eine **Anzahl und kein letzter Index** — wer 5 als letzten Index las, hätte
+den Übergang verweigert, der den Spieler aus dem Kampf zurückholt.
+
+**Die Referenz `assert`s bei unbekanntem Übergang** — Absturz im Debug-Build,
+Schreiben ins Leere sonst. Dieser Leser nennt die sechs erlaubten Werte.
+
+**Test evidence** `test_rm2k_system_settings.cs` (12). **1153/1153**.
+**Mutations** 12 Regeln über zwei Läufe, **12 von 12 gefangen** — darunter die
+Kontextgrenze ab 1, die SFX-Breite auf die Menüvier gekürzt und die
+Maniac-Warnung abgeschaltet.

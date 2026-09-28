@@ -2585,6 +2585,7 @@ look for the next island of that shape.**
 | memory | `10920` | **Store Event ID — DONE; the note that it had no method was wrong, see below** |
 | teleport | ~~`11810` `11820` `11830`~~ | **~~teleport targets, teleport access, escape target — DONE, see below~~** |
 | outcome | ~~`12420` `12510`~~ | **~~game over, return to title — DONE~~** |
+| system | ~~`10660` `10670` `10680` `10690`~~ | **~~system BGM, SFX, graphics, transitions — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2597,6 +2598,56 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `10660`, `10670`, `10680` and `10690` are done — the second block that was never on the board
+
+**None of these four was on K-136.** They came out of the second fresh
+measurement of the reference against the interpreter. That is now twice that
+the card list was short, and once it was actively wrong.
+
+**The audio families have different widths: seven music and twelve sounds.**
+Music is battle, victory, inn, boat, ship, airship, game over. Sounds are the
+four for the menu, one for the battle, and one per battle event — enemy attack,
+enemy damage, ally damage, evasion, enemy death, item use. **A reader that
+offered one music slot would let a game replace its battle theme and its inn
+theme at once, and one that offered only the menu sounds would leave a game
+with a silent battle.**
+
+**Music has a fade-in and sounds do not** — a sound effect with a fade is a
+sound effect the player waited for. That is why `10660` reads `parameters[1]`
+as the fade and `10670` does not.
+
+**The contexts are zero based, and that is a trap.** `BGM_Battle` is 0 and
+`SFX_Cursor` is 0, so the guard is 0 to 6 and 0 to 11. **A guard that started
+at one would refuse the battle theme**, which is the one a game changes most.
+
+**Without the Maniac patch the parameter is the value.** The reference reads
+`ValueOrVariableBitfield(com, 5, 1, 1)` and that helper returns
+`parameters[val_idx]` directly when the game is not a Maniac one — so the
+value index and the mode index are the same number. **A reader that read
+`parameters[5]` as the value would silence every track**, which is what the
+first run of this slice did. The patched path needs a game-string mirror this
+runtime does not have, so it uses the plain value and says so.
+
+**Six transitions, and the sixth is the one a game notices.** Teleport in and
+out, battle start in and out, battle end in and out. `Transition_Count` is a
+**count and not a last index**, so a guard that read a last index of five would
+refuse the transition that brings the player back from a battle.
+
+**The reference asserts on an unknown transition** — a crash in a debug build
+and a write to nothing otherwise. This reader says which six are allowed.
+
+**The system graphic casts two numbers without checking them.** A value past
+the enum produces an out-of-range value, so they are clamped, and an empty
+name is a request to go back to the database rather than a file that does not
+exist — the reference has a `ResetSystemGraphic` and this is the command that
+reaches it.
+
+**Test evidence** `test_rm2k_system_settings.cs`, 12 tests.
+**1153/1153**, `TestRm2kSystemSettings: 12/12`.
+**Mutations** Twelve rules over two runs, **12 of 12 caught** — including the
+context guard started at one, the SFX width cut to the menu four, and the
+Maniac warning silenced.
 
 ## `11820` and `11830` are done — and one of them was never on the board
 

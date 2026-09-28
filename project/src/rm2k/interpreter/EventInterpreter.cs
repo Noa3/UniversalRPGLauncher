@@ -164,6 +164,18 @@ public sealed class EventInterpreter
 	/// </summary>
 	public const int GameOver = 12420;
 	public const int ReturnToTitleScreen = 12510;
+	/// <summary>10660, Change System BGM, <c>CmdSetup</c> width 7.</summary>
+	public const int ChangeSystemBGM = 10660;
+
+	/// <summary>10670, Change System SFX, <c>CmdSetup</c> width 6.</summary>
+	public const int ChangeSystemSFX = 10670;
+
+	/// <summary>10680, Change System Graphics, <c>CmdSetup</c> width 4.</summary>
+	public const int ChangeSystemGraphics = 10680;
+
+	/// <summary>10690, Change Screen Transitions, <c>CmdSetup</c> width 2.</summary>
+	public const int ChangeScreenTransitions = 10690;
+
 	/// <summary>11820 and 11830, Change Teleport Access and Escape Target.</summary>
 	/// <remarks>
 	/// <c>11820</c> is the fourth of the four one-line access commands and was
@@ -556,6 +568,22 @@ public sealed class EventInterpreter
 				// the index does not move, so the next frame runs this case
 				// again until the screen is gone.
 				return false;
+
+			case ChangeSystemBGM:
+				ExecuteChangeSystemBgm(cmd);
+				return Advance();
+
+			case ChangeSystemSFX:
+				ExecuteChangeSystemSfx(cmd);
+				return Advance();
+
+			case ChangeSystemGraphics:
+				ExecuteChangeSystemGraphics(cmd);
+				return Advance();
+
+			case ChangeScreenTransitions:
+				ExecuteChangeScreenTransitions(cmd);
+				return Advance();
 
 			case ChangeTeleportAccess:
 				ExecuteAccessChange(cmd, pWhich: AccessFlag.Teleport);
@@ -2547,6 +2575,264 @@ public sealed class EventInterpreter
 				: " and it is unconditional"));
 	}
 
+	/// <summary>
+	/// 10660, Change System BGM, from EasyRPG's <c>CommandChangeSystemBGM</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Parameter 0 is a context, and there are seven of them</strong>:
+	/// battle, victory, inn, boat, ship, airship, game over. A reader that
+	/// offered one slot would let a game replace its battle theme and its inn
+	/// theme at the same time, and a reader that offered twelve would offer
+	/// five music slots that do not exist.
+	/// </para>
+	/// <para>
+	/// <strong>Music has a fade-in and sounds do not</strong>, because a sound
+	/// effect with a fade is a sound effect the player waited for. That is why
+	/// this reads <c>parameters[1]</c> and <c>10670</c> does not.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeSystemBgm(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 7.
+		if (pCmd.Parameters.Count < 7)
+		{
+			Malformed("Change system BGM");
+			return;
+		}
+		var context = pCmd.Parameters[0];
+		// **The enum is zero based — BGM_Battle is 0 — so the guard is 0 to 6, and
+		// a reader that started at one would refuse the battle theme**, which is
+		// the one a game changes most.
+		if (context < 0 || context >= GameSimulationState.MaxSystemBgmContext)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change system BGM: context {context} is outside"
+				+ $" 0 to {GameSimulationState.MaxSystemBgmContext - 1}, and the"
+				+ " reference changes nothing for an unknown one");
+			return;
+		}
+		var name = CommandStringOrVariable(pCmd, 5, 0, 6);
+		var slot = new GameSimulationState.SystemBgm
+		{
+			Name = name ?? "",
+			FadeIn = SystemBitfield(pCmd, 1),
+			Volume = ClampPercent(SystemBitfield(pCmd, 2)),
+			Tempo = ClampPercent(SystemBitfield(pCmd, 3)),
+			Balance = ClampPercent(SystemBitfield(pCmd, 4)),
+		};
+		_state.SystemBgmSlots[context] = slot;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] System BGM slot {context} is now"
+			+ $" \"{slot.Name}\", fade in {slot.FadeIn} ms, volume {slot.Volume},"
+			+ $" tempo {slot.Tempo}, balance {slot.Balance}");
+	}
+
+	/// <summary>
+	/// 10670, Change System SFX, from EasyRPG's <c>CommandChangeSystemSFX</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Twelve contexts and not seven:</strong> the cursor, the decision,
+	/// the cancel, the buzzer, the battle, the escape, and then one per battle
+	/// event — enemy attack, enemy damage, ally damage, evasion, enemy death,
+	/// item use. A reader that offered only the menu four would leave a game
+	/// with a silent battle, and the six battle ones are the ones a game
+	/// notices.
+	/// </remarks>
+	private void ExecuteChangeSystemSfx(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 6.
+		if (pCmd.Parameters.Count < 6)
+		{
+			Malformed("Change system SFX");
+			return;
+		}
+		var context = pCmd.Parameters[0];
+		// **Zero based as well, and SFX_Cursor is 0.**
+		if (context < 0 || context >= GameSimulationState.MaxSystemSfxContext)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change system SFX: context {context} is outside"
+				+ $" 0 to {GameSimulationState.MaxSystemSfxContext - 1}, and the"
+				+ " reference changes nothing for an unknown one");
+			return;
+		}
+		var name = CommandStringOrVariable(pCmd, 4, 0, 5);
+		var slot = new GameSimulationState.SystemSfx
+		{
+			Name = name ?? "",
+			Volume = ClampPercent(SystemBitfield(pCmd, 1)),
+			Tempo = ClampPercent(SystemBitfield(pCmd, 2)),
+			Balance = ClampPercent(SystemBitfield(pCmd, 3)),
+		};
+		_state.SystemSfxSlots[context] = slot;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] System SFX slot {context} is now"
+			+ $" \"{slot.Name}\", volume {slot.Volume}, tempo {slot.Tempo},"
+			+ $" balance {slot.Balance}");
+	}
+
+	/// <summary>
+	/// 10680, Change System Graphics, from EasyRPG's
+	/// <c>CommandChangeSystemGraphics</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The name comes from the string field, <c>parameters[0]</c> is a stretch
+	/// mode and <c>parameters[1]</c> a font. <strong>The reference casts both
+	/// straight from the command without checking</strong> — the last line of its
+	/// method is a bare <c>static_cast</c> pair — so this reader clamps them,
+	/// because a cast that produces an out-of-range enum is a crash and not a
+	/// diagnostic.
+	/// </para>
+	/// <para>
+	/// <strong>An empty name is a request to go back to the database</strong>,
+	/// not a file that does not exist: the reference has a
+	/// <c>ResetSystemGraphic</c> and this is the command that reaches it.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeSystemGraphics(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Change system graphics");
+			return;
+		}
+		var name = CommandStringOrVariable(pCmd, 2, 0, 3) ?? "";
+		_state.SystemGraphicName = name;
+		_state.SystemGraphicStretch = Math.Clamp(pCmd.Parameters[0], 0, MaxSystemStretch);
+		_state.SystemGraphicFont = Math.Clamp(pCmd.Parameters[1], 0, MaxSystemFont);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] System graphic is now"
+			+ $" {(name.Length == 0 ? "the database default" : $"\"{name}\"")},"
+			+ $" stretch {_state.SystemGraphicStretch},"
+			+ $" font {_state.SystemGraphicFont}");
+	}
+
+	/// <summary>
+	/// 10690, Change Screen Transitions, from EasyRPG's
+	/// <c>CommandChangeScreenTransitions</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Setting a transition to the value the database already holds stores
+	/// -1, and that is the whole command.</strong> The reference writes
+	/// <c>return t != db ? t : -1;</c>: a game that sets a transition to the
+	/// value it already has is asking to <em>stop overriding it</em>.
+	/// </para>
+	/// <para>
+	/// <strong>A reader that stored the value would pin the transition
+	/// forever</strong>, and a game that later changed its database row would be
+	/// overridden by a command that meant "let go".
+	/// </para>
+	/// <para>
+	/// <strong>Six transitions in three pairs</strong> — teleport in and out,
+	/// battle start in and out, battle end in and out. A reader that offered one
+	/// "transition" would make a game that fades out on teleport also fade out
+	/// on entering a battle, and those are separate choices.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeScreenTransitions(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 2.
+		if (pCmd.Parameters.Count < 2)
+		{
+			Malformed("Change screen transitions");
+			return;
+		}
+		var which = pCmd.Parameters[0];
+		if (which < 0 || which >= GameSimulationState.MaxTransition)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change screen transitions: {which} is not one"
+				+ " of the six, and the reference asserts on it");
+			return;
+		}
+		_state.SystemTransitions[which] = pCmd.Parameters[1];
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Transition {which} is now {pCmd.Parameters[1]},"
+			+ " and -1 is the one that means the database default again");
+	}
+
+	/// <summary>
+	/// The name a system audio or graphic command carries.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>The string field, and that is the whole thing without the Maniac
+	/// patch.</strong> The reference reads
+	/// <c>CommandStringOrVariableBitfield(com, 5, 0, 6)</c> and its first two
+	/// lines are <c>if (!Player::IsPatchManiac()) return com.string;</c>. The
+	/// patched path reads a game-string mirror this runtime does not have, and
+	/// a game without the patch never reaches it.
+	/// </para>
+	/// <para>
+	/// <strong>A game that does use the patch gets the plain name and a
+	/// diagnostic</strong>, rather than a silently wrong one.
+	/// </para>
+	/// </remarks>
+	private string CommandStringOrVariable(
+		Rm2kMap.EventCommand pCmd, int pModeIndex, int pShift, int pValueIndex)
+	{
+		if (_state.SupportsManiacPatch)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Command {pCmd.Code} carries a Maniac string"
+				+ $" reference in parameters[{pModeIndex}]; this runtime has no"
+				+ " game-string mirror, so the plain name from the string field was used");
+		}
+		return pCmd.Text;
+	}
+	/// Clamps a volume, tempo or balance to 0..100, from the liblcf bounds.
+	/// </summary>
+	/// <remarks>
+	/// **The reference does not clamp these and the format does**, so a command
+	/// that asked for 400 would write a number no player could hear. Clamping is
+	/// the difference between "too loud" and "no sound at all".
+	/// </remarks>
+	private static int ClampPercent(int pValue)
+	{
+		return Math.Clamp(pValue, 0, 100);
+	}
+
+	/// <summary>The highest stretch mode the reference's enum has.</summary>
+	private const int MaxSystemStretch = 1;
+
+	/// <summary>The highest font the reference's enum has.</summary>
+	private const int MaxSystemFont = 3;
+
+	/// <summary>
+	/// One audio or system number from a command, honouring the Maniac bitfield only
+	/// when the game uses the patch.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Without the patch the parameter is the value.</strong> The
+	/// reference reads <c>ValueOrVariableBitfield(com, 5, 1, 1)</c> and that
+	/// helper returns <c>parameters[val_idx]</c> directly when the game is not
+	/// a Maniac one — so the value index equals the mode index and the two are
+	/// the same number.
+	/// </para>
+	/// <para>
+	/// <strong>With the patch the mode index carries a bitfield</strong> and the
+	/// value index is a different number. This reader does not implement the
+	/// game-string mirror that mode needs, so it says so and uses the plain
+	/// value rather than reading a packed bitfield out of a mode that means
+	/// something else here.
+	/// </para>
+	/// </remarks>
+	private int SystemBitfield(Rm2kMap.EventCommand pCmd, int pIndex)
+	{
+		if (_state.SupportsManiacPatch)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Command {pCmd.Code} parameter {pIndex} is a"
+				+ " Maniac bitfield in a game that uses the patch; this runtime has no"
+				+ $" game-string mirror, so the plain value {pCmd.Parameters[pIndex]} was used");
+		}
+		return pCmd.Parameters[pIndex];
+	}
 	private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 	{
 	if (pCmd.Parameters.Count < 1)

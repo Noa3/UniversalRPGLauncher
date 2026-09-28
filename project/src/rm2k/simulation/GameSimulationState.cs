@@ -278,6 +278,142 @@ public sealed class GameSimulationState
     public TeleportTarget? EscapeTarget { get; set; }
 
     /// <summary>
+    /// One system sound effect, from <c>10670 Change System SFX</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>There are twelve of these and not four.</strong> The cursor, the
+    /// decision, the cancel, the buzzer, the battle, the escape, and then one
+    /// per battle event: enemy attack, enemy damage, ally damage, evasion,
+    /// enemy death, item use. A reader that offered only the menu four would
+    /// leave a game with a silent battle, and a reader that offered twelve for
+    /// the music would offer seven sounds that do not exist.
+    /// </remarks>
+    public sealed class SystemSfx
+    {
+		/// <summary>The file name, empty when the slot is the database default.</summary>
+		public string Name { get; set; } = "";
+
+		/// <summary>Volume in percent, 0 to 100.</summary>
+		public int Volume { get; set; } = 100;
+
+		/// <summary>Tempo in percent, 50 to 200.</summary>
+		public int Tempo { get; set; } = 100;
+
+		/// <summary>Stereo balance, 50 is centred.</summary>
+		public int Balance { get; set; } = 50;
+
+		/// <summary>Milliseconds to fade in, 0 for none.</summary>
+		public int FadeIn { get; set; }
+    }
+
+    /// <summary>
+    /// One system music track, from <c>10660 Change System BGM</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Seven of these</strong>: battle, victory, inn, boat, ship,
+    /// airship, game over. Music has a fade-in and sounds do not, because a
+    /// sound effect with a fade is a sound effect the player waited for.
+    /// </remarks>
+    public sealed class SystemBgm
+    {
+		/// <summary>The file name, empty when the slot is the database default.</summary>
+		public string Name { get; set; } = "";
+
+		/// <summary>Milliseconds to fade in, 0 for none.</summary>
+		public int FadeIn { get; set; }
+
+		public int Volume { get; set; } = 100;
+		public int Tempo { get; set; } = 100;
+
+		/// <summary>Stereo balance, 50 is centred.</summary>
+		public int Balance { get; set; } = 50;
+    }
+
+    /// <summary>The twelve system sound slots, by context number.</summary>
+    public System.Collections.Generic.Dictionary<int, SystemSfx> SystemSfxSlots { get; init; } = new();
+
+    /// <summary>The seven system music slots, by context number.</summary>
+    public System.Collections.Generic.Dictionary<int, SystemBgm> SystemBgmSlots { get; init; } = new();
+
+    /// <summary>The highest system sound context the reference knows.</summary>
+    public const int MaxSystemSfxContext = 12;
+
+    /// <summary>The highest system music context the reference knows.</summary>
+    public const int MaxSystemBgmContext = 7;
+
+    /// <summary>
+    /// The system graphic, from <c>10680 Change System Graphics</c>.
+    /// </summary>
+    /// <remarks>
+    /// The name is empty when the game has never changed it, which is the
+    /// state a fresh database is in. The two numbers are a stretch mode and a
+    /// font, both of which the reference casts straight from the command
+    /// without checking, so this reader clamps them instead of asserting.
+    /// </remarks>
+    public string SystemGraphicName { get; set; } = "";
+
+    /// <summary>How the message window stretches, 0 for none.</summary>
+    public int SystemGraphicStretch { get; set; }
+
+    /// <summary>Which font the message window uses.</summary>
+    public int SystemGraphicFont { get; set; }
+
+    /// <summary>
+    /// The six screen transitions, from <c>10690 Change Screen Transitions</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>-1 means "back to whatever the database says", and that is the
+    /// whole reason this is a dictionary and not six numbers.</strong> The
+    /// reference writes `return t != db ? t : -1;` — a value equal to the
+    /// database one is stored as -1, because a game that sets a transition to
+    /// the value it already has is asking to stop overriding it. A reader that
+    /// stored the value would pin the transition forever, and a game that later
+    /// changed its database row would be overridden by a command that meant
+    /// "let go".
+    /// </para>
+    /// <para>
+    /// <strong>Six, and they come in three pairs:</strong> teleport in and out,
+    /// battle start in and out, battle end in and out. A reader that offered
+    /// one "transition" would make a game that fades out on teleport also fade
+    /// out on entering a battle, and those are separate choices.
+    /// </para>
+    /// </remarks>
+    public System.Collections.Generic.Dictionary<int, int> SystemTransitions { get; init; } = new();
+
+    /// <summary>
+    /// The value that means "use the database transition".
+    /// </summary>
+    public const int TransitionFromDatabase = -1;
+
+    /// <summary>Teleport, leaving the old map.</summary>
+    public const int TransitionTeleportErase = 0;
+
+    /// <summary>Teleport, arriving on the new map.</summary>
+    public const int TransitionTeleportShow = 1;
+
+    /// <summary>Battle start, leaving the map.</summary>
+    public const int TransitionBeginBattleErase = 2;
+
+    /// <summary>Battle start, entering the battle.</summary>
+    public const int TransitionBeginBattleShow = 3;
+
+    /// <summary>Battle end, leaving the battle.</summary>
+    public const int TransitionEndBattleErase = 4;
+
+    /// <summary>Battle end, returning to the map.</summary>
+    public const int TransitionEndBattleShow = 5;
+
+    /// <summary>How many transitions there are, from <c>Transition_Count</c>.</summary>
+    /// <remarks>
+    /// **A count and not a last index.</strong> The reference enum ends with
+    /// <c>Transition_Count</c>, so the guard is <c>which &lt; Count</c> and a
+    /// reader that read a last index of five would refuse the sixth transition
+    /// — the one that brings the player back from a battle.
+    /// </remarks>
+    public const int MaxTransition = 6;
+
+    /// <summary>
     /// Whether the player may use the teleport command, from
     /// <c>11820 Change Teleport Access</c>.
     /// </summary>
@@ -1051,6 +1187,11 @@ public sealed class GameSimulationState
         // left a cutscene's restrictions in place would lock the next game.
         SetAccess(pEscape: true, pSave: true, pMenu: true, pTeleport: true);
         EscapeTarget = null;
+        // **The system slots go back to the database with everything else.**
+        // A new game that inherited the last game battle music would start in
+        // silence with somebody else playing.
+        SystemSfxSlots.Clear(); SystemBgmSlots.Clear(); SystemTransitions.Clear();
+        SystemGraphicName = ""; SystemGraphicStretch = 0; SystemGraphicFont = 0;
         // **The outcome belongs to the game, not to the next one.** A new game
         // that started with the last game over screen still up would look like
         // a crash, and one that started with a title request pending would
