@@ -986,3 +986,22 @@ literal passes, and calling the same expression twice does not separate it. Rena
 the suite moved the name in the report and nothing else, and deleting obj, bin and
 .godot/mono does not change it. The card is **VERIFY** rather than DONE, the test
 stays as a failure, and no mutation run was made over a red suite.
+**And the bug the file was innocent of.** IdleCell threw DivideByZeroException on
+every call, and pIndex % 4 cannot divide by zero. Sixteen measurements cleared the
+source: no division in the file, the constant reads 3, a test touching only the
+constant passes, a call with a literal passes, WalkPattern — same shape, with
+parentheses — has always been correct, and renaming the suite moved only the name in
+the report.
+
+**The only measurement that found it was compiling the method on its own and watching
+it throw**, in a separate project outside Godot. **The parentheses around the modulo are
+not decoration**: with them the same file returns 1, 2, 1, 0; without them it throws
+on every argument. The parentheses are a rule in the mutation list, so they are proven
+rather than believed.
+
+**The lesson is in the sequence.** Every one of the sixteen measurements asked the
+source whether the source was wrong, and a file that cannot answer a question about
+itself is not cleared by reading it either. The seventeenth changed the question — not
+"is the source wrong" but "does it work outside the thing that reported it".
+
+**1313/1313, sixteen effective mutation rules, sixteen caught.**

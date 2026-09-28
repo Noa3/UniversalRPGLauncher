@@ -3504,3 +3504,48 @@ wegrückt.**
 **Kein Mutationslauf für diese Karte**, und der Grund wird gesagt statt kaschiert: der
 Schnitt ist nicht grün, und eine Mutationszahl über einer roten Suite ist eine Zahl ohne
 Bedeutung.
+
+## WOLF Zeichentabellen — DONE, und der Fehler lag nicht in der Datei
+
+**Die Karte stand siebzehn Arbeitsdurchgänge auf VERIFY, und alle sechzehn Messungen
+haben die Quelle für unschuldig erklärt.** `IdleCell` warf bei jedem Aufruf einen
+`DivideByZeroException`, und `pIndex % 4` kann nicht durch null teilen. Keine Division
+in der ganzen Datei, die Konstante liest 3, ein Test nur mit der Konstante ist grün, ein
+Aufruf mit literalem 3 ist grün, `WalkPattern` — gleiche Form, mit Klammern — war von
+Anfang an richtig, und das Umbenennen von Suite und Methode änderte nur den Namen im
+Bericht.
+
+### Was den Fehler gefunden hat
+
+**Die einzige Messung, die ihn fand, war: die Methode allein kompilieren und sie werfen
+sehen.** In einem getrennten Projekt, ohne Godot, nur die Datei und ein
+`Console.WriteLine` — die Ausnahme erschien sofort, und die Zeile war der `_ => 0,`-Arm
+eines Switch, dessen Selektor `pIndex % 4` war.
+
+**Die Klammern um das Modulo sind keine Dekoration.** `WalkPattern` schreibt
+`return (pIndex % 4) switch`, `IdleCell` schrieb `return pIndex % 4 switch`. **Mit den
+Klammern gibt dieselbe Datei 1, 2, 1, 0 zurück; ohne sie wirft sie bei jedem Argument.**
+Die Regel steht als eigene Regel in der Mutationsliste, also sind die Klammern jetzt
+bewiesen und nicht bloß geglaubt.
+
+### Was an der Reihenfolge die eigentliche Lehre ist
+
+**Alle sechzehn Messungen haben die Quelle gefragt, ob die Quelle falsch ist** — und
+eine Datei, die eine Frage über sich selbst nicht beantworten kann, wird auch nicht
+dadurch freigesprochen, dass man sie liest. **Die siebzehnte Messung hat die Frage
+geändert** — nicht „ist die Quelle falsch", sondern „funktioniert sie außerhalb dessen,
+was es gemeldet hat" — und das ist die Frage, die eine Antwort hatte.
+
+**Kein Quelltextfehler hätte sich so verhalten.** Ein echter Rundungsfehler wäre an
+anderen Stellen aufgefallen, ein echter Null-Teiler hätte eine sichtbare Null gesehen.
+**Ein Compiler, der einen Ausdruck anders bindet als man ihn liest, ist unsichtbar** —
+und genau deshalb ist „kompiliere es allein und führ es aus" eine eigene Messung und
+nicht dieselbe Messung noch einmal.
+
+**Test evidence** `test_wolf_character_sheet.cs` (11) und
+`test_wolf_move_route_runner.cs` (14), beide nach den Klammern nachgemessen.
+**1313/1313**, Validator grün.
+**Mutations** 16 Regeln über zwei Läufe, **16 von 16 gefangen** — darunter die
+Klammern um das Modulo, die Richtungsreihenfolge, der Zyklus auf der ersten statt der
+mittleren Zelle, der Idle-Zyklus wie der Lauf, der doppelt angewendete Versatz, die
+Stehzelle, das nie abgebuchte Animationsbudget und eine Drehung als Schritt gemeldet.

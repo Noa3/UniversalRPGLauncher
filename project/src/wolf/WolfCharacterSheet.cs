@@ -221,7 +221,16 @@ public static class WolfCharacterSheet
 		// **The idle order is 2, 3, 2, 1, 2, 3, … and the walk is 1, 0, 1, 2,
 		// 1, 0, …** — the same shape run the other way, which is what the
 		// specification's arrow shows.
-		return pIndex % 4 switch
+		//
+		// **The parentheses around the modulo are not decoration.** Without
+		// them this method throws `DivideByZeroException` on every call, and
+		// `WalkPattern` — which has them — has always been correct. The
+		// compiler binds `pIndex % 4 switch` so that the switch selects over
+		// something other than the remainder, and the division that survives
+		// is not the one written here. **Sixteen measurements found the file
+		// innocent, because the file was innocent**: the only way to see it
+		// was to compile the method on its own and watch it throw.
+		return (pIndex % 4) switch
 		{
 			0 => pIdleCount > 2 ? 1 : 0,
 			1 => 2,

@@ -2601,7 +2601,7 @@ look for the next island of that shape.**
 | wolf | ~~chip passability~~ | **~~six states, two layers, and walls a figure cannot walk through — DONE, see below~~** |
 | wolf | ~~character collision~~ | **~~half-tile hitboxes, pass-through, and a hero who is not a wall — DONE, see below~~** |
 | wolf | ~~target numbers and approach~~ | **~~-1 to -7, five companions, and two approach steps finally run — DONE, see below~~** |
-| wolf | ~~character sheets and animation~~ | **~~the direction order, the walk cycle, and the animation clock — VERIFY, one test throws, see below~~** |
+| wolf | ~~character sheets and animation~~ | **~~the direction order, the walk cycle, and the animation clock — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2643,8 +2643,6 @@ speed is slow to fast. A reader that divided by the frequency, or that used the
 speed, would make a figure whose feet blur also cross the map in a blur. **Zero is
 every frame and not never**, because the help puts 0 at the fast end.
 
-## Three real fixes and one test I could not explain
-
 **Three of the eleven tests found real defects.** A facing step reported `Stepped`,
 the same answer as a movement — so a guard that turned in place was drawn with the
 walk cycle for as long as its route ran, which is a pose the artist never drew.
@@ -2657,24 +2655,42 @@ expected the walking cell at column 1, which is A — step 0 of the cycle is B, 
 B after the idle is column 2. One expected a diagonal on a four direction sheet to
 be clamped to the nearest cardinal, which is the failure this whole card avoids.
 
-**`Test_TheIdleCycleRunsTheOtherWay` throws "Attempted to divide by zero" and I did
-not find it in sixteen measurements.** `IdleCell` divides by nothing — it is
-`pIndex % 4` — neither does `WalkPattern`, the whole file has none, the constant
-reads 3, a test that touches only the constant passes, the call takes three
-literal arguments, `Setup` and `Teardown` are
-empty, and renaming the suite and the method changed the name in the report and
-nothing else. It survives deleting `obj`, `bin` and `.godot/mono` entirely. **A test
-that throws an exception whose cause I cannot name is an open finding and not a
-detail to paper over**, so the test stays as a failure and this card is **VERIFY**
-rather than DONE. The rule it measures is written down and implemented; what I
-cannot do is explain the run.
+## Sixteen measurements found the file innocent, because the file was innocent
 
-**Test evidence** `test_wolf_character_sheet.cs` (11, one failing), with
-`test_wolf_move_route_runner.cs` (14) re-measured after the `Turned` change.
-**1302 of 1303 pass.**
-**No mutation run for this card**, and the reason is stated rather than papered
-over: the slice does not pass, and a mutation count over a red suite is a number
-with no meaning.
+**`IdleCell` threw `DivideByZeroException` on every call, and `pIndex % 4` cannot
+divide by zero.** The test failed for seventeen turns of work and every measurement
+cleared the source: no division anywhere in the file, the constant reads 3, a test
+that touches only the constant passes, a call with a literal 3 passes, `WalkPattern`
+— which has the same shape and parentheses — has always been correct, renaming the
+suite and the method moved the name in the report and nothing else, and deleting
+`obj`, `bin` and `.godot/mono` changed nothing.
+
+**The only thing that found it was compiling the method on its own and watching it
+throw.** In a separate project, outside Godot, with nothing but the file and a
+`Console.WriteLine`, the exception appeared immediately — and the line it pointed at
+was the `_ => 0,` arm of a switch whose selector was `pIndex % 4`.
+
+**The parentheses around the modulo are not decoration.** `WalkPattern` writes
+`return (pIndex % 4) switch`; `IdleCell` wrote `return pIndex % 4 switch`. **With the
+parentheses the same file returns 1, 2, 1, 0; without them it throws on every
+argument.** It is in the mutation list as a rule of its own, so the parentheses are
+now proven to matter rather than believed to.
+
+**The lesson is in the sequence, and it is the part worth keeping:** every one of the
+sixteen measurements asked the source whether the source was wrong, and a file that
+cannot answer a question about itself cannot be cleared by reading it either. **The
+seventeenth measurement changed what was being asked** — not "is the source wrong"
+but "does it work outside the thing that reported it" — and that is the question
+that had an answer.
+
+**Test evidence** `test_wolf_character_sheet.cs` (11) and
+`test_wolf_move_route_runner.cs` (14), both re-measured after the parentheses.
+**1313/1313**, validator passed.
+**Mutations** Sixteen rules over two runs, **16 of 16 caught** — including the
+parentheses around the modulo, the direction order, the cycle starting on the first
+cell instead of the middle, the idle cycle run the same way as the walk, the offset
+applied twice, the standing cell, the animation countdown never charging, and a
+turn reported as a step.
 
 ## The help's target numbers, and two steps refused for two cards
 
