@@ -14,6 +14,32 @@ namespace UniversalRPG.Rm2k.Interpreter;
 /// liblcf table (src/generated/lcf/rpg/eventcommand.h) and EasyRPG Player's
 /// interpreter implementation (game_interpreter.cpp, game_interpreter_map.cpp).
 /// </summary>
+/// <summary>
+/// Flashes a named character, for command 11320.
+/// </summary>
+/// <param name="pEventId">The character the command named.</param>
+/// <param name="pRed">The red channel, 0 to 31.</param>
+/// <param name="pGreen">The green channel, 0 to 31.</param>
+/// <param name="pBlue">The blue channel, 0 to 31.</param>
+/// <param name="pStrength">The strength, 0 to 31.</param>
+/// <param name="pFrames">How long the flash runs, already in frames.</param>
+/// <param name="pWait">Whether the page is held by it.</param>
+/// <returns>Whether a character carried that id.</returns>
+/// <remarks>
+/// <strong>Seven parameters is one too many for <see cref="Func{T, TResult}"/>,
+/// and the reference's own <c>Flash</c> takes them all</strong> — so this is a
+/// named delegate rather than a squeezed tuple. **A tuple would have made the
+/// call site unreadable and the mistake at the hook hard to see.**
+/// </remarks>
+public delegate bool Rm2kSpriteFlash(
+	int pEventId,
+	int pRed,
+	int pGreen,
+	int pBlue,
+	int pStrength,
+	int pFrames,
+	bool pWait);
+
 public sealed class EventInterpreter
 {
 	public const int MaxScriptRecursion = 256;
@@ -570,6 +596,30 @@ public sealed class EventInterpreter
 	/// so a reader that expected parameters to read would be reading past the
 	/// end of a list that is not there.
 	/// </remarks>
+	/// <summary>
+	/// 11320, Flash Sprite, from liblcf's <c>Code::FlashSprite</c> and EasyRPG's
+	/// <c>Game_Interpreter_Map::CommandFlashSprite</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 7, and the seventh parameter is a mode byte, not a
+	/// value.</strong> The reference reads every channel through
+	/// <c>ValueOrVariableBitfield(com, 7, shift, val_idx)</c> — <strong>and
+	/// without the Maniac patch that helper returns
+	/// <c>com.parameters[val_idx]</c> and nothing else.</strong> A reader that
+	/// always applied the bitfield would have shifted a game's red channel by
+	/// one for a colour the file wrote plainly.
+	/// </para>
+	/// <para>
+	/// <strong>And the duration is in tenths, with a zero that waits one
+	/// frame.</strong> The reference's own <c>SetupWait</c> writes
+	/// <c>duration * DEFAULT_FPS / 10</c> and has a separate arm for zero that
+	/// waits a single frame — so a game's "flash for no time" still holds its
+	/// page for a frame.
+	/// </para>
+	/// </remarks>
+	public const int FlashSprite = 11320;
+
 	public const int ProceedWithMovement = 11340;
 
 	/// <summary>
@@ -819,6 +869,21 @@ public sealed class EventInterpreter
 		bool, bool, bool>? _moveRouteStarter;
 
 	/// <summary>
+	/// Flashes a character, for command 11320.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The character id, the four colour channels, the strength, the frames,
+	/// and whether the page is held by it. <strong>A null means the character
+	/// this interpreter cannot name</strong> — the same distinction
+	/// <c>11330</c> makes, and the reason this is a hook and not a field: the
+	/// interpreter names a figure, and whoever owns the figures decides
+	/// whether that name resolves.
+	/// </para>
+	/// </remarks>
+	private readonly Rm2kSpriteFlash? _spriteFlasher;
+
+	/// <summary>
 	/// Boards or leaves the vehicle under the player, for command 10840.
 	/// </summary>
 	/// <remarks>
@@ -911,7 +976,8 @@ public sealed class EventInterpreter
 		Func<int, int, int>? eventIdAtTile = null,
 		Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>, bool, bool, bool>?
 			moveRouteStarter = null,
-		Func<bool>? vehicleBoardToggle = null)
+		Func<bool>? vehicleBoardToggle = null,
+		Rm2kSpriteFlash? spriteFlasher = null)
 			{
 		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
@@ -923,6 +989,7 @@ public sealed class EventInterpreter
 		_eventIdAtTile = eventIdAtTile;
 		_moveRouteStarter = moveRouteStarter;
 		_vehicleBoardToggle = vehicleBoardToggle;
+		_spriteFlasher = spriteFlasher;
 		_commandIndex = 0;
 	}
 
@@ -1208,6 +1275,9 @@ public sealed class EventInterpreter
 			case ShowHiddenMonster:
 				ExecuteShowHiddenMonster(cmd);
 				return Advance();
+
+			case FlashSprite:
+				return ExecuteFlashSprite(cmd);
 
 			case TerminateBattle:
 				// **Der vierte Ausgang, und der Befehl haelt den Frame
@@ -4669,6 +4739,90 @@ public sealed class EventInterpreter
 			6 => GameSimulationState.EquipmentSlot.All,
 			_ => GameSimulationState.EquipmentSlot.All,
 		};
+	}
+
+	/// <summary>
+	/// Runs 11320, Flash Sprite, from liblcf's <c>Code::FlashSprite</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandFlashSprite</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Seven parameters, and the seventh is a mode byte and not a
+	/// value.</strong> The reference reads every channel through
+	/// <c>ValueOrVariableBitfield(com, 7, shift, val_idx)</c> — <strong>and
+	/// without the Maniac patch that helper returns
+	/// <c>parameters[val_idx]</c> and nothing else.</strong> <strong>A reader
+	/// that always applied the bitfield would have shifted a game's red
+	/// channel by one for a colour the file wrote plainly</strong>, and
+	/// RPG_Maker 2000 games have no mode byte at all.
+	/// </para>
+	/// <para>
+	/// <strong>And a duration of zero still waits one frame.</strong> The
+	/// reference's own <c>SetupWait</c> has a separate arm for zero — so a
+	/// game's "flash for no time" holds its page for a frame, and a reader
+	/// that passed zero to the frame budget would have advanced immediately.
+	/// </para>
+	/// <para>
+	/// <strong>And a character that does not resolve is a warning, not a
+	/// refusal.</strong> The reference's <c>GetCharacter</c> returns null, the
+	/// whole flash is skipped, and the command still returns true — so the
+	/// page moves on.
+	/// </para>
+	/// </remarks>
+	private bool ExecuteFlashSprite(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 7.
+		if (pCmd.Parameters.Count < 7)
+		{
+			Malformed("Flash sprite");
+			return Advance();
+		}
+
+		// **Ohne den Maniac-Patch liest die Referenz den ersten Parameter
+		// direkt** -- ihr `ValueOrVariableBitfield` gibt in diesem Fall
+		// `com.parameters[val_idx]` zurueck und sonst nichts. **Eine Maskierung
+		/// waere hier eine Erfindung**, und eine Figur 99 waere als 3
+		// angekommen.
+		var eventId = pCmd.Parameters[0];
+		var r = pCmd.Parameters[1];
+		var g = pCmd.Parameters[2];
+		var b = pCmd.Parameters[3];
+		var staerke = pCmd.Parameters[4];
+		var zehntel = pCmd.Parameters[5];
+		var warten = pCmd.Parameters[6] > 0;
+
+		if (_spriteFlasher == null)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Flash sprite: this interpreter cannot reach"
+				+ $" a character, so nothing flashed on {eventId}");
+			return Advance();
+		}
+
+		// **Die Dauer wird selbst umgerechnet, und der Hook bekommt Frames.**
+		var frames = TenthsToFrames(zehntel);
+		if (!_spriteFlasher(eventId, r, g, b, staerke, frames, false))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Flash sprite: no character carries the id "
+				+ $"{eventId}, and the reference skips the whole flash and "
+				+ "still returns true");
+			return Advance();
+		}
+
+		if (warten)
+		{
+			// **Und eine Dauer von null wartet ein Frame** -- die
+			// SetupWait-Regel des Referenzcodes, nicht die Frame-Budget-
+			// Klammer, denn die wuerde hier eine abweichende Zahl geben.
+			WaitForFrames(frames == 0 ? 1 : frames);
+		}
+
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Flash sprite on {eventId}: rgba({r}, {g}, "
+			+ $"{b}, {staerke}) for {frames} frames"
+			+ (warten ? ", and the page waits" : ""));
+		return Advance();
 	}
 
 	/// <summary>

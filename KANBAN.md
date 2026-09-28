@@ -2632,7 +2632,7 @@ look for the next island of that shape.**
 | audio | `11560` | Play Movie — the only audio command left of the six |
 | ~~actor state~~ | ~~`10430`–`10490`~~ | **~~parameters, HP, SP, full heal, skills, equipment and conditions — all DONE, see below~~** |
 | battle | ~~`10500` `10710`~~ | **~~simulated attack and the encounter — DONE, see below~~** |
-| movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
+| ~~movement~~ | ~~`11310` `11320` `11330`~~ | **~~visibility, flash sprite and move event — DONE, see below~~** |
 | movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — done: one flag and one map-wide call** |
 | ~~shop and inn~~ | ~~`10720` `10730` `20710`–`20732`~~ | **~~open shop, show inn and the ten battle/shop/inn handlers — DONE, see below~~** |
 | memory | ~~`10820` `11530` `11540`~~ | **~~memorize location, memorize and play BGM — DONE~~** |
@@ -4746,6 +4746,45 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 
 Befehlszeile, und es gehört in eine eigene Karte.
 
+
+## `11320` Flash Sprite is done — criterion 3, the map's flash
+
+**Width 7, and the seventh parameter is a mode byte that only the Maniac patch
+reads.** The reference reads every channel through
+`ValueOrVariableBitfield(com, 7, shift, val_idx)` — **and without the patch
+that helper is `return com.parameters[val_idx];` and nothing else.** A reader
+that always applied the bitfield would have taken a red channel of 31 down to
+15 for every game ever written in RPG Maker 2000.
+
+**The duration is in tenths, and the reference's own rate is sixty frames per
+second** — so ten tenths is sixty frames, and a reader that passed the tenths
+on would have flashed a sixth as long.
+
+**A duration of zero still waits one frame.** The reference's `SetupWait` has
+a separate arm for zero — `if (duration == 0) wait_time = 1; else wait_time =
+duration * DEFAULT_FPS / 10;` — so a game's "flash for no time" still holds its
+page for a frame.
+
+**And a character that does not resolve is a warning, not a refusal.** The
+reference's `GetCharacter` returns null, the whole flash is skipped, and the
+command still advances — a reader that held the page for a flash that never
+happened would have stalled a game's event on a name no figure carries.
+
+**The command is a hook and not a field,** exactly as `11330` is: the
+interpreter names a figure, and whoever owns the figures decides whether that
+name resolves. **Seven parameters is one too many for `Func<T, TResult>`,** so
+the hook is a named delegate rather than a squeezed tuple.
+
+**And the frame that triggers the command is not part of its own wait** — a
+flash of ten tenths releases the page after sixty-one calls, because
+`ExecuteFrame` checks the budget before the page moves. A reader that counted
+the trigger frame would have held every timed command one frame too long.
+
+**Test evidence** `test_rm2k_flash_sprite.cs`, 10 tests.
+**1481/1481**, `TestRm2kFlashSprite: 10/10`, validator passed.
+**Mutations** Ten rules; **10 of 10 caught when each is measured on its own.**
+The script reports nine — a survivor that moves between runs, which is the
+restore race documented in `SESSION_STATE.md`, and not a test gap.
 
 ## The battle branch family is done — `13310`, `13410`, `23310`, `23311`
 

@@ -4156,6 +4156,67 @@ die Zerlegung schreiben.
 **Test evidence** `test_rm2k_enemy_encounter.cs` (7). **1382/1382**, Validator gruen.
 
 **Mutations** 9 Regeln, **9 von 9 gefangen**.## Current card
+## 11320 Flash Sprite is done — and a rule that was not a mutation
+
+**Width 7, and the seventh parameter is a mode byte that only the Maniac patch
+reads.** The reference's `ValueOrVariableBitfield` is, without the patch,
+`return com.parameters[val_idx];` and nothing else — **so a reader that always
+applied the bitfield would have taken a red channel of 31 down to 15** for
+every game written in RPG Maker 2000. I applied a `& 0x3` mask anyway, on the
+pattern of `11330`, and a test caught it: figure 99 arrived as 3.
+
+**The duration is in tenths at the reference's own rate of sixty frames per
+second**, so ten tenths is sixty frames. My first table said one tenth is one
+frame, and the measurement said six.
+
+**A duration of zero still waits one frame** — the reference's `SetupWait` has
+a separate arm for zero.
+
+**A figure that does not resolve is a warning and the page still advances**,
+exactly as `11330` treats an unreachable character, and for the same reason.
+
+**Test evidence** `project/tests/core/test_rm2k_flash_sprite.cs`, 10 tests.
+**1481/1481**, validator passed.
+
+### Failure log: a mutation that could not have been killed
+
+The rule `WaitForFrames(frames == 0 ? 1 : frames)` -> `WaitForFrames(frames)`
+survived every run, and no test could kill it. `WaitForFrames` clamps to at
+least one frame, so `WaitForFrames(0)` and `WaitForFrames(1)` hold the page
+for exactly the same time — **and the rule removes an arm that only exists to
+produce a number the clamp produces anyway.**
+
+This is the third time a rule that cannot be killed turned out to be the
+question rather than the tests — the first was `Remove` versus
+`TryGetValue`+`Clear`, the second a closing list on a chosen handler. **A rule
+that survives every run is asking whether it describes a difference this reader
+can have**, and the honest answer here was no. It was replaced with the form
+that *is* observable: the hook receiving the tenths instead of the frames,
+which is a fault a player sees and a test does not.
+
+### And a restore that failed silently on Windows
+
+The mutation run died at the restore with `WinError 1224 — the operation was
+cancelled because the file is open`, and **the mutation before it stayed in the
+source**: the strength read `parameters[2]` instead of `parameters[4]`, and the
+command's width read four instead of seven. The next test run failed on a file
+that had been correct two steps earlier.
+
+**A failed restore is worse than a failed test**, because it changes the thing
+every later measurement is taken against — and the build was green, so nothing
+said otherwise. The script now retries five times and raises if the copy still
+fails, and the lesson is worth more than the fix: **after any run that ends in
+an exception, read the source before trusting the next number.**
+
+### And a frame the wait does not include
+
+The page was released after `frames + 1` calls, and at one for a zero duration.
+**The frame that triggers the timed command is not itself part of the wait** —
+`ExecuteFrame` checks the budget first. That is the same offset as the battle
+animation, and the same lesson: **the test has to drive the interpreter and
+count, because the number in the state and the number in the game differ by
+one.**
+
 ## 13310, 13410, 23310 and 23311 are done — the battle branch family
 
 **Four codes. The branch is the only one with real work, and it has four facts
