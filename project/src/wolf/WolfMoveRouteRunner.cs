@@ -32,6 +32,17 @@ public enum WolfMoveRouteOutcome
 	/// <summary>The step ran and changed a character's settings.</summary>
 	Configured,
 
+	/// <summary>The step turned a character without moving it.</summary>
+	/// <remarks>
+	/// <strong>Its own answer, and that is the whole of it.</strong> The facing
+	/// steps used to report <see cref="Stepped"/>, and the board reads that to
+	/// decide whether a figure is walking — so a guard that turned in place was
+	/// drawn with the walk cycle for as long as its route ran. The two are the
+	/// same kind of success and different in exactly the one thing the renderer
+	/// asks about.
+	/// </remarks>
+	Turned,
+
 	/// <summary>The step ran and changed a variable.</summary>
 	Stored,
 
@@ -164,7 +175,7 @@ public sealed class WolfMoveRouteRunner
 				// as facing, and a reader that moved the character on them would
 				// walk a stationary guard off its tile.
 				pCharacter.Facing = DirectionOf(pStep.Type);
-				return WolfMoveRouteOutcome.Stepped;
+				return WolfMoveRouteOutcome.Turned;
 
 			// ---- Warten
 			case WolfMoveRouteType.WaitXFrames:

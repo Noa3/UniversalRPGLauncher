@@ -2601,6 +2601,7 @@ look for the next island of that shape.**
 | wolf | ~~chip passability~~ | **~~six states, two layers, and walls a figure cannot walk through — DONE, see below~~** |
 | wolf | ~~character collision~~ | **~~half-tile hitboxes, pass-through, and a hero who is not a wall — DONE, see below~~** |
 | wolf | ~~target numbers and approach~~ | **~~-1 to -7, five companions, and two approach steps finally run — DONE, see below~~** |
+| wolf | ~~character sheets and animation~~ | **~~the direction order, the walk cycle, and the animation clock — VERIFY, one test throws, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2613,6 +2614,67 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The character sheets, the walk cycle, and one test I could not explain
+
+**WOLF had no presentation at all** — twenty five files and not one of them drew
+anything. The material specification gives what a character sheet has to be.
+
+**The four directions are down, left, right, up, top to bottom, and that is not the
+compass order.** The material guide gives it twice, and a reader that used up,
+right, down, left would show every character turned ninety degrees — the kind of
+bug a player sees in the first second and never reports.
+
+**The walk cycle is B → A → B → C → B, and the middle cell appears twice.** The
+guide names the cells A, B and C from the left, so B is column 1. A reader that
+played them in order would show a figure stepping forward three times and then
+snapping back, and a walk cycle that does not return to its middle pose looks
+like a hiccup.
+
+**The idle cycle runs the other way — 2, 3, 2, 1 — and the T and TX forms add the
+idle cells to the left**, so a standing figure sits at a smaller column than a
+walking one. A reader that added the offset the other way would put the standing
+pose in the middle of the walk: a figure that never stops walking and never
+appears to stand.
+
+**The animation frequency is frames per step, and the order is the opposite of the
+speed.** The help writes アニメ頻度[早0-6遅] — often to rarely — while the move
+speed is slow to fast. A reader that divided by the frequency, or that used the
+speed, would make a figure whose feet blur also cross the map in a blur. **Zero is
+every frame and not never**, because the help puts 0 at the fast end.
+
+## Three real fixes and one test I could not explain
+
+**Three of the eleven tests found real defects.** A facing step reported `Stepped`,
+the same answer as a movement — so a guard that turned in place was drawn with the
+walk cycle for as long as its route ran, which is a pose the artist never drew.
+`Turned` is now its own outcome. **The idle offset was applied twice**, putting a
+walking figure one column too far right. **And `IsWalking` was set on every step**
+rather than on a movement.
+
+**Two of the tests were wrong about the rules**, and both are recorded here: one
+expected the walking cell at column 1, which is A — step 0 of the cycle is B, and
+B after the idle is column 2. One expected a diagonal on a four direction sheet to
+be clamped to the nearest cardinal, which is the failure this whole card avoids.
+
+**`Test_TheIdleCycleRunsTheOtherWay` throws "Attempted to divide by zero" and I did
+not find it in sixteen measurements.** `IdleCell` divides by nothing — it is
+`pIndex % 4` — neither does `WalkPattern`, the whole file has none, the constant
+reads 3, a test that touches only the constant passes, the call takes three
+literal arguments, `Setup` and `Teardown` are
+empty, and renaming the suite and the method changed the name in the report and
+nothing else. It survives deleting `obj`, `bin` and `.godot/mono` entirely. **A test
+that throws an exception whose cause I cannot name is an open finding and not a
+detail to paper over**, so the test stays as a failure and this card is **VERIFY**
+rather than DONE. The rule it measures is written down and implemented; what I
+cannot do is explain the run.
+
+**Test evidence** `test_wolf_character_sheet.cs` (11, one failing), with
+`test_wolf_move_route_runner.cs` (14) re-measured after the `Turned` change.
+**1302 of 1303 pass.**
+**No mutation run for this card**, and the reason is stated rather than papered
+over: the slice does not pass, and a mutation count over a red suite is a number
+with no meaning.
 
 ## The help's target numbers, and two steps refused for two cards
 

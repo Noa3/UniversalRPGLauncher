@@ -3423,3 +3423,84 @@ beiden Karten nachgemessen. **1302/1302**.
 die Ablehnung gefaltet, die größere Lücke umgekehrt, der Gleichstand auf Y, der
 blockierte Schritt als Ankunft gelesen, die Zielkoordinate nicht durch die Bänder
 aufgelöst und die Figur im Weg nicht erkannt.
+
+## WOLF Zeichentabellen — VERIFY, nicht DONE: ein Test wirft und ich weiß nicht warum
+
+**WOLF hatte überhaupt keine Präsentation** — fünfundzwanzig Dateien und keine malt
+etwas. Die Material-Hilfe sagt, was eine Zeichentabelle sein muss.
+
+**Die vier Richtungen sind unten, links, rechts, oben von oben nach unten, und das
+ist nicht die Kompassrichtung.** Die Material-Hilfe gibt diese Reihenfolge zweimal, und
+wer oben, rechts, unten, links nähme, zeigte jede Figur um neunzig Grad gedreht — die
+Art Fehler, die ein Spieler in der ersten Sekunde sieht und nie meldet.
+
+**Der Laufzyklus ist B → A → B → C → B, und die mittlere Zelle kommt zweimal.** Die
+Hilfe benennt die Zellen A, B und C von links, also ist B die Spalte 1. Wer sie in
+Reihenfolge abspielte, ließe eine Figur dreimal vorwärts treten und dann zurückschnappen.
+
+**Der Stillstehzyklus läuft anders herum — 2, 3, 2, 1 — und die T- und TX-Form legen die
+Stillstehframes nach links**, also sitzt eine stehende Figur auf einer kleineren Spalte
+als eine gehende. Wer den Versatz andersherum addierte, legte die Stehpose in die Mitte
+des Gangs: eine Figur, die nie stehen bleibt und nie zu stehen scheint.
+
+**Die Animationsfrequenz ist Bilder pro Schritt, und die Reihenfolge ist die
+umgekehrte der Geschwindigkeit.** Die Hilfe schreibt アニメ頻度[早0-6遅] — oft nach
+selten —, während die Bewegungsgeschwindigkeit langsam nach schnell läuft. Wer durch die
+Frequenz teilt oder die Geschwindigkeit nähme, ließe eine Figur mit verschwommenen Füßen
+auch die Karte im verschwommenen Tempo überqueren. **Null ist jedes Bild und nicht nie**,
+weil die Hilfe die 0 ans schnelle Ende setzt.
+
+## Drei echte Fehler, und zwölf Messungen ohne Antwort
+
+**Drei der elf Tests fanden echte Fehler.** Ein Blickrichtungs-Schritt meldete `Stepped`,
+dieselbe Antwort wie eine Bewegung — also wurde ein Wächter, der sich nur drehte, für die
+ganze Dauer seiner Route im Laufzyklus gezeichnet, und das ist eine Pose, die der Künstler
+nie gezeichnet hat. `Turned` ist jetzt ein eigener Ausgang. **Der Idle-Versatz wurde
+zweimal angewendet** und legte eine gehende Figur eine Spalte zu weit rechts. **Und
+`IsWalking` wurde bei jedem Schritt gesetzt** statt bei einer Bewegung.
+
+**Zwei der Tests waren falsch über die Regeln**: einer erwartete die gehende Zelle auf
+Spalte 1, und das ist A — Schritt 0 des Zyklus ist B, und B nach dem Idle ist Spalte 2.
+Einer erwartete, eine Diagonale auf einem Vierer-Blatt werde auf die nächste
+Kardinalrichtung geklemmt, und genau das verhindert diese Karte.
+
+### Der Befund, der offen bleibt
+
+**`Test_TheIdleCycleRunsTheOtherWay` wirft „Attempted to divide by zero", und ich habe
+ihn in sechzehn Messungen nicht gefunden.** `IdleCell` teilt durch nichts — es ist
+`pIndex % 4` —, `WalkPattern` auch nicht, die ganze Datei nicht, die Konstante liest 3,
+ein Test, der nur die Konstante anfasst, ist grün, der Aufruf nimmt drei literale
+Argumente, `Setup` und `Teardown` sind
+leer, und das Umbenennen von Suite und Methode änderte den Namen im Bericht und nichts
+sonst. Er überlebt das vollständige Löschen von `obj`, `bin` und `.godot/mono`, und zweimal
+dieselbe Formel in einer Methode trennt ihn auch nicht.
+
+**Was ich versucht habe, damit die nächste Sitzung es nicht wiederholt:** die vier Aufrufe
+ausgeschrieben statt in einer Schleife; ein Wegwerf-Test mit genau einem Aufruf; die Suite
+umbenannt, um zu prüfen, ob die Meldung wirklich diesem Test gilt (sie tat); `obj`, `bin`
+und `.godot/mono` gelöscht und aus `project/` gebaut statt aus dem Wurzelverzeichnis;
+die DLL-Zeitstempel geprüft; `Setup` und `Teardown` der Basis gelesen; alle
+`Assert*`-Signaturen geprüft (nur `AssertEq<T>(T, T, string)` und zwei Vergleiche);
+den Quelltext byteweise gelesen (kein BOM, keine Null-Bytes, UTF-8 sauber).
+
+**Erledigt seitdem:** ein Test, der nur die Konstante prüft und `IdleCell` nicht aufruft —
+**grün**, also sitzt der Fehler im Aufruf und nicht in der Datei als ganzer; ein Aufruf
+mit literalem `3` statt der Konstante — **grün**, also ist die Konstante nicht schuld; ein
+Aufruf von `WalkPattern` — **grün**, also auch nicht; und zweimal derselbe Aufruf hintereinander
+— **rot ab dem zweiten**, was die naheliegendste Erklärung (ein zustandsbehafteter Aufruf) widerlegt.
+
+**Offen bleibt damit nur das, was keine dieser Messungen abdeckt:** ein Lauf direkt über
+Godot ohne den Validator, um den `.godot`-Import-Pfad zu umgehen, und ein Blick in die
+übersetzte IL der Methode, statt in den C#-Quelltext.
+
+**Die Karte steht auf VERIFY, nicht auf DONE.** Die Regel ist gemessen und implementiert;
+was ich nicht kann, ist den Lauf erklären. **Ein Test, der eine Ausnahme wirft, deren
+Ursache ich nicht benennen kann, ist ein offener Befund und keine Kleinigkeit, die man
+wegrückt.**
+
+**Test evidence** `test_wolf_character_sheet.cs` (11, einer fällt), mit
+`test_wolf_move_route_runner.cs` (14) nach der `Turned`-Änderung nachgemessen.
+**1302 von 1303 bestehen.**
+**Kein Mutationslauf für diese Karte**, und der Grund wird gesagt statt kaschiert: der
+Schnitt ist nicht grün, und eine Mutationszahl über einer roten Suite ist eine Zahl ohne
+Bedeutung.

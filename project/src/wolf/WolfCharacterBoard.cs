@@ -331,6 +331,107 @@ public sealed class WolfCharacterBoard
 	public WolfParty Party { get; } = new();
 
 	/// <summary>
+	/// How many walking patterns the game's settings use: three or five.
+	/// </summary>
+	/// <remarks>
+	/// **A setting and not a constant, because it decides the sheet's shape.**
+	/// The material specification says the character's layout changes with the
+	/// game's animation pattern setting, and a reader that assumed three would
+	/// cut a five pattern sheet in half and show every character mid-stride.
+	/// </remarks>
+	public int CharacterPatternCount { get; set; } = WolfCharacterSheet.Patterns3;
+
+	/// <summary>
+	/// Whether the sheet has eight directions or four.
+	/// </summary>
+	/// <remarks>
+	/// **The setting, because four and eight cannot be mixed in one game** —
+	/// the setting guide says so twice. A reader that guessed would show half
+	/// the characters from the wrong column of an eight direction sheet.
+	/// </remarks>
+	public bool EightDirectionCharacters { get; set; }
+
+	/// <summary>
+	/// How many idle frames a row carries: none, one, or three.
+	/// </summary>
+	/// <remarks>
+	/// **None for a plain sheet, one for T.png, three for TX.png.** The
+	/// material specification gives both special forms, and the sheet's
+	/// column count depends on it — a reader that used the pattern count would
+	/// cut the idle frames off every row.
+	/// </remarks>
+	public int CharacterIdleFrames { get; set; }
+
+	/// <summary>
+	/// The sheet cell a figure should be showing right now.
+	/// </summary>
+	/// <param name="pCharacter">The figure to place on a sheet.</param>
+	/// <param name="pRow">The row, counted from the top.</param>
+	/// <param name="pColumn">The column, counted from the left.</param>
+	/// <returns>
+	/// False when the figure's direction has no cell on this sheet — a
+	/// diagonal on a four direction sheet.
+	/// </returns>
+	/// <remarks>
+	/// <para>
+	/// <strong>Walking and standing are two different cells,</strong> and the
+	/// standing one is the idle column when the sheet has one. A figure that is
+	/// not walking shows its idle cell and does not advance, which is what makes
+	/// the TX form's standing animation work at all.
+	/// </para>
+	/// <para>
+	/// <strong>The row is found from the facing and the column from the
+	/// animation state,</strong> and they come from two different places on
+	/// purpose: a figure's facing is a direction bit, and its animation is a
+	/// counter, and neither one can produce the other.
+	/// </para>
+	/// </remarks>
+	public bool CellOf(WolfCharacter pCharacter, out int pRow, out int pColumn)
+	{
+		if (!WolfCharacterSheet.Locate(
+			pCharacter.Facing, EightDirectionCharacters, out pRow, out pColumn))
+		{
+			// **No cell, and the caller is told.** A diagonal on a four
+			// direction sheet has no picture, and a reader that clamped it to
+			// the nearest cardinal would draw a figure facing down while it
+			// walks down-left.
+			pRow = 0;
+			pColumn = 0;
+			return false;
+		}
+		var patterns = CharacterPatternCount >= WolfCharacterSheet.Patterns5
+			? WolfCharacterSheet.Patterns5
+			: WolfCharacterSheet.Patterns3;
+		// **The idle frame is column 0 when the sheet has one, and the walk
+		// starts after it.** The material specification says the T form adds one
+		// idle cell to the left of each direction's walk, and a reader that
+		// added the offset the other way would put the standing pose in the
+		// middle of the walk — which is a figure that never stops walking and
+		// never appears to stand.
+		// **The offset is applied once, to the walk, and the idle is not
+		// offset at all.** The idle cells sit to the left of the walk, so their
+		// own index is already right; the walk cells have to be pushed right by
+		// the number of idle cells in front of them. An earlier version added
+		// the offset to both, which put a walking figure one column too far
+		// right and made it show a pose the artist never drew.
+		if (!pCharacter.IsWalking)
+		{
+			// **A plain sheet has no idle cell, so a standing figure shows the
+			// first walk cell.** That is the three pattern case the guide
+			// describes, and it is why a sheet without an idle frame has no
+			// standing pose at all.
+			pColumn = CharacterIdleFrames <= 0
+				? 0
+				: WolfCharacterSheet.IdleCell(
+					pCharacter.AnimationStep, patterns, CharacterIdleFrames);
+			return true;
+		}
+		pColumn = WolfCharacterSheet.WalkPattern(pCharacter.AnimationStep, patterns)
+			+ Math.Max(0, CharacterIdleFrames);
+		return true;
+	}
+
+	/// <summary>
 	/// Finds the figure a target number names.
 	/// </summary>
 	/// <param name="pTarget">A target number, in the help's numbering.</param>
@@ -422,10 +523,80 @@ public sealed class WolfCharacterBoard
 			var character = Find(pair.Key);
 			if (character == null || pair.Value.IsFinished)
 			{
+				// **A finished route stands still,** and the animation has to
+				// stop with it. A reader that left IsWalking set would show a
+				// guard that has arrived walking in place for ever.
+				if (character != null)
+				{
+					character.IsWalking = false;
+				}
 				continue;
 			}
 			TickOne(character, pair.Value);
 		}
+	}
+
+	/// <summary>
+	/// Advances one frame's animation for every figure.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>The frequency is 0 to 6 and it is frames per step, and the order
+	/// is the opposite of the speed.</strong> The help writes
+	/// <c>アニメ頻度[早0-6遅]</c> — often to rarely — while the move speed is
+	/// slow to fast. **A reader that divided by the frequency, or that used the
+	/// speed, would make a figure whose feet blur also cross the map in a blur.**
+	/// </para>
+	/// <para>
+	/// <strong>Zero is every frame and not never.</strong> The help's scale puts
+	/// 0 at the fast end, and a figure set to it animates on every frame; a
+	/// reader that divided by zero would freeze the animation entirely.
+	/// </para>
+	/// </remarks>
+	public void TickAnimation()
+	{
+		foreach (var character in _occupants)
+		{
+			// **A standing figure does not advance,** and a sheet with idle
+			// frames animates those instead. A reader that advanced both would
+			// have the walk continue under a figure that is not walking.
+			if (!character.IsWalking || character.IsErased)
+			{
+				continue;
+			}
+			// **The counter carries its own budget, and that is where the
+			// frequency lives.** Advancing every frame would make the frequency a
+			// number nothing read — a figure's feet would blur and its settings
+			// would do nothing, which is the same failure the move speed had
+			// before the board got a clock.
+			character.AnimationCountdown =
+				(character.AnimationCountdown <= 0
+					? AnimationFrames(character.AnimationFrequency) - 1
+					: character.AnimationCountdown - 1);
+			if (character.AnimationCountdown <= 0)
+			{
+				character.AnimationStep += 1;
+			}
+		}
+	}
+
+	/// <summary>
+	/// How many frames one animation step takes, from a frequency of 0 to 6.
+	/// </summary>
+	/// <remarks>
+	/// <strong>One frame at the fastest and eight at the slowest.</strong> The
+	/// help gives the scale and not the numbers, so the ratio is this reader's
+	/// choice — **the only thing that depends on it is how fast a figure's feet
+	/// move, and a game that disagrees with this is a game whose feet look
+	/// wrong rather than whose logic is wrong.**
+	/// </remarks>
+	public static int AnimationFrames(int pFrequency)
+	{
+		var frequency = WolfCharacter.ClampRate(pFrequency);
+		// **One at the fast end and never zero,** because a zero would mean the
+		// animation never advances and a figure with the fastest setting would
+		// stand frozen.
+		return 1 + frequency;
 	}
 
 	/// <summary>
@@ -479,6 +650,16 @@ public sealed class WolfCharacterBoard
 			var step = pRoute.Steps[pRoute.Index];
 			var outcome = _runner.Run(step, pCharacter);
 			pRoute.Index += 1;
+			// **Only a step that moved somebody sets the flag.** A facing step
+			// or a settings step runs and changes something, and a reader that
+			// set the flag on every step would have a figure that turns in place
+			// walking — and the walk cycle is the wrong pose for a figure that
+			// is not moving, which is the sort of thing a player notices and
+			// does not report.
+			// **Only a movement, and not a turn.** A figure that turned in place
+			// is standing, and drawing it with the walk cycle is a pose the
+			// artist never drew for it. A wait is not a movement either.
+			pCharacter.IsWalking = outcome == WolfMoveRouteOutcome.Stepped;
 
 			// **The two refusals are decided before the timing, and that order
 			// is the whole of the fix.** An earlier version asked the timing

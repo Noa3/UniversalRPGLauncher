@@ -199,9 +199,12 @@ public partial class TestWolfMoveRouteRunner : TestBase
 
 		AssertEq(
 			runner.Run(Step(WolfMoveRouteType.FacingUp), character),
-			WolfMoveRouteOutcome.Stepped,
-			"**and a facing step reports the same outcome**, because it ran and"
-			+ " changed a state, and the caller learns which from the facing");
+			WolfMoveRouteOutcome.Turned,
+			"**and a facing step reports turned, not stepped** — it is a success"
+			+ " of the same kind, but the board reads the two differently and"
+			+ " needs to know which: a figure that turned in place is standing,"
+			+ " and drawing it with the walk cycle is a pose the artist never"
+			+ " drew for it");
 		AssertEq(
 			character.Y, 3,
 			"**and the character has not moved**, because a facing step is not a"

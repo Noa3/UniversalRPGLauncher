@@ -92,6 +92,46 @@ public sealed class WolfCharacter
 	/// <summary>How often the walking animation changes, from 0 to 6.</summary>
 	public int AnimationFrequency { get; set; } = 6;
 
+	/// <summary>
+	/// How far the walk animation has advanced, in steps.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>A counter and not a cell index.</strong> The sheet's order is
+	/// B → A → B → C → B, so a cell cannot be advanced by one — a figure that
+	/// shows cell 1 and moves on shows cell 0, which is the wrong frame. The
+	/// counter is what makes the order observable.
+	/// </para>
+	/// <para>
+	/// <strong>Only advanced while the figure is moving.</strong> A standing
+	/// figure shows its idle cell, and a reader that kept advancing would make a
+	/// guard waiting beside the player walk in place.
+	/// </para>
+	/// </remarks>
+	public int AnimationStep { get; set; }
+
+	/// <summary>
+	/// The frames left before the walk animation advances.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The frequency has to live somewhere, and this is it.</strong> A
+	/// reader that advanced the animation every frame would leave the frequency
+	/// a number nothing reads — a figure's feet blur and the setting does
+	/// nothing, which is exactly the failure the move speed had before the
+	/// board got a clock.
+	/// </remarks>
+	public int AnimationCountdown { get; set; }
+
+	/// <summary>
+	/// Whether the figure is walking right now, which the cell depends on.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Set by the board, because only it knows.</strong> The board
+	/// moves figures one tile at a time and knows how many frames the step
+	/// takes; a figure asked on its own would have to guess.
+	/// </remarks>
+	public bool IsWalking { get; set; }
+
 	/// <summary>Which directions the character may be moved in.</summary>
 	public int Passability { get; set; } = PassAll;
 
@@ -156,6 +196,9 @@ public sealed class WolfCharacter
 			MoveSpeed = MoveSpeed,
 			MoveFrequency = MoveFrequency,
 			AnimationFrequency = AnimationFrequency,
+			AnimationStep = AnimationStep,
+			AnimationCountdown = AnimationCountdown,
+			IsWalking = IsWalking,
 			Passability = Passability,
 			Height = Height,
 			Opacity = Opacity,
