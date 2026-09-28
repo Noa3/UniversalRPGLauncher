@@ -3613,3 +3613,39 @@ aussieht.
 **Test evidence** `test_wolf_audio.cs` (11). **1324/1324**, Validator grün.
 
 **Mutations** 11 Regeln über zwei Läufe, **11 von 11 gefangen**.
+
+## WOLF Laufbahnen aus einer Datei — DONE
+
+**Die VM hatte `MoveRoute` und `WaitUntilRouteDone` im Dispatch und in der Enum, und
+
+`ParseOpcode` hatte fuer keinen der beiden einen Namen.** Eine Kartendatei mit
+
+`"op": "move_route"` kam als `Unknown` an, und `Unknown` lehnt die VM ab — **also stand eine
+
+im Editor geschriebene Patrouille still, und nirgends stand, warum.**
+
+
+
+**Kein Test haette es gefunden, weil jeder andere Test seinen Befehl von Hand gebaut hat.**
+
+Ein handgebauter Befehl hat Figur und Laufbahn schon gefuellt; nur der Dateipfad muss sie
+
+fuellen. Das ist die Art Luecke, die nur ein Test schliesst, der eine echte Datei auf der
+
+Platte schreibt statt ein Objekt zu bauen.
+
+
+
+**Ein unbekannter Schrittname ist 0xFF und nicht 0** — 0x00 ist ein Schritt nach unten, also
+
+haette ein Tippfehler eine Figur eine Kachel nach sueden geschickt und das Spiel haette
+
+richtig ausgesehen, bis zum Tag, an dem es das nicht mehr tut. **Ein unbekannter Modus ist
+
+`Custom` und nicht 0**, denn 0 heisst *sich nicht bewegen*.
+
+
+
+**Test evidence** `test_wolf_route_from_file.cs` (9), gegen eine echte Kartendatei.
+
+**1333/1333**, Validator gruen. **Mutations** 12 Regeln, **12 von 12 gefangen**.

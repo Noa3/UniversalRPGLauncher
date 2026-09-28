@@ -1029,3 +1029,18 @@ all go; the sound did not. A new game that kept the last one's music would open 
 screen with the previous game's theme, and nothing else on the board would have caught it.
 
 **1324/1324, eleven effective mutation rules, eleven caught.**
+
+**And two opcodes the VM ran that the map reader never produced.** MoveRoute and
+WaitUntilRouteDone were in the VM dispatch and in the opcode enum, and ParseOpcode had no
+name for either — so a map file that wrote "move_route" arrived as Unknown, which the VM
+refuses. A patrol written in the editor stood still and nothing said why. Every other test
+built its command by hand, which is why it went unnoticed.
+
+**A command with no character and no steps is the worst version of that bug**: the route
+finishes at once and reports itself done, so the event runs, the route is complete, and the
+guard does not move. The reader now takes the figure, the steps, their arguments, the mode and
+the wait flag from the file, and an unknown step name is 0xFF rather than 0 — because 0x00 is a
+step down, and a typo in a step name would send a figure one tile south and look right until
+the day it did not.
+
+**1333/1333, twelve effective mutation rules, twelve caught.**

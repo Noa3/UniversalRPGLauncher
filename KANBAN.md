@@ -2603,6 +2603,7 @@ look for the next island of that shape.**
 | wolf | ~~target numbers and approach~~ | **~~-1 to -7, five companions, and two approach steps finally run — DONE, see below~~** |
 | wolf | ~~character sheets and animation~~ | **~~the direction order, the walk cycle, and the animation clock — DONE, see below~~** |
 | wolf | ~~audio~~ | **~~three channels, the zero volume rule, and the delay that is not a fade — DONE, see below~~** |
+| wolf | ~~move routes from a file~~ | **~~the two opcodes the VM ran and the reader never produced — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -8011,3 +8012,77 @@ im selben Kanal, die Verzoegerung als Einblendung, SE bekommt die Einblendung de
 leerer Name als Klanger, ein abgeschalteter Kanal, der sammelt, und der Tonschritt, der die
 
 Laufbahn beendet.
+
+## WOLF Laufbahnen aus einer Datei: zwei Befehle, die die VM kannte und der Leser nicht
+
+**Die VM hatte `MoveRoute` und `WaitUntilRouteDone` im Dispatch und in der Enum, und
+
+`ParseOpcode` hatte fuer keinen der beiden einen Namen.** Eine Kartendatei, die
+
+`"op": "move_route"` schrieb, kam als `Unknown` an — und `Unknown` lehnt die VM ab.
+
+
+
+**Also stand eine im Editor geschriebene Patrouille still, und nirgends stand, warum.**
+
+Das ist der Fehler, den kein Test gefunden haette, **weil jeder andere Test seinen Befehl von
+
+Hand gebaut hat** — ein handgebauter Befehl hat Figur und Laufbahn schon gefuellt, und nur
+
+der Dateipfad muss sie fuellen.
+
+
+
+### Die drei Regeln, die der Leser jetzt beachtet
+
+
+
+**Die Figur und die Schritte sind der Unterschied zwischen einer Patrouille, die geht, und
+
+einer, die nicht geht.** Ein Leser, der die Figur nicht fuellt, erreicht die VM mit der
+
+Anweisung, eine Laufbahn ohne Figur zu starten — und die ist sofort fertig und meldet sich
+
+fertig. Das Event laeuft, die Laufbahn ist fertig, und der Waechter bewegt sich nicht.
+
+
+
+**Die Schrittnamen sind die der Tabelle und nicht eigene.** Eine Blickrichtung ist `FacingUp`
+
+und nicht `TurnUp`, und ein Schritt, der eine Variable setzt, ist `AssignToVariable` und nicht
+
+`SetVariable`. Ein Leser, der sie umbenannt haette, wuerde auf ein `facing_up` der Datei mit
+
+einem unbekannten Schritt antworten.
+
+
+
+**Ein unbekannter Name ist 0xFF und nicht 0.** Die verifizierten Schritttypen laufen von 0x00
+
+bis 0x3A, und 0x00 ist ein Schritt nach unten — also wuerde ein Tippfehler im Schrittnamen
+
+eine Figur eine Kachel nach sueden schicken, und das Spiel wuerde richtig aussehen, bis zum
+
+Tag, an dem es das nicht mehr tut. Ebenso ist ein unbekannter Modus `Custom` und nicht 0,
+
+denn 0 heisst *sich nicht bewegen* — ein Leser, der dorthin zurueckfaellt, stellt eine
+
+Patrouille still, ohne Fehler und ohne Bewegung.
+
+
+
+**Test evidence** `test_wolf_route_from_file.cs` (9), gegen eine echte Kartendatei auf der
+
+Platte und nicht gegen ein gebautes Objekt.
+
+**1333/1333**, Validator gruen.
+
+**Mutations** 12 Regeln ueber zwei Laeufe, **12 von 12 gefangen** — darunter die beiden
+
+Opcode-Namen, die fehlten, die nicht gelesene Figur, die nicht gelesene Laufbahn, die
+
+Schrittnamen der Tabelle gegen geratene, der unbekannte Name als Schritt unten, der
+
+unbekannte Modus als Stehen, das nicht gelesene Wartezeichen, die Flagge als jede Zahl und
+
+die ganz verwerfenen Argumente eines Schritts.
