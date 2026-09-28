@@ -1,0 +1,11 @@
+[
+null,
+{"id":1,"battlerName":"","characterIndex":0,"characterName":"MC_Sprite_sheet","classId":7,"equips":[2,0,0,3,0],"faceIndex":0,"faceName":"SlimeActors","traits":[],"initialLevel":21,"maxLevel":21,"name":"Camellia","nickname":"","note":"","profile":""},
+{"id":2,"battlerName":"","characterIndex":5,"characterName":"MC_Sprite_sheet","classId":8,"equips":[0,0,0,0,0],"faceIndex":3,"faceName":"SlimeActors","traits":[],"initialLevel":3,"maxLevel":10,"name":"First Child","nickname":"","note":"","profile":""},
+{"id":3,"battlerName":"","characterIndex":5,"characterName":"MC_Sprite_sheet","classId":8,"equips":[0,0,0,0,0],"faceIndex":3,"faceName":"SlimeActors","traits":[],"initialLevel":3,"maxLevel":10,"name":"Second Child","nickname":"","note":"","profile":""},
+{"id":4,"battlerName":"","characterIndex":4,"characterName":"MC_Sprite_sheet","classId":8,"equips":[0,0,0,0,0],"faceIndex":4,"faceName":"SlimeActors","traits":[],"initialLevel":7,"maxLevel":7,"name":"First Child","nickname":"","note":"","profile":""},
+{"id":5,"battlerName":"","characterIndex":4,"characterName":"MC_Sprite_sheet","classId":8,"equips":[0,0,0,0,0],"faceIndex":4,"faceName":"SlimeActors","traits":[],"initialLevel":7,"maxLevel":10,"name":"Second Child","nickname":"","note":"","profile":""},
+{"id":6,"battlerName":"","characterIndex":4,"characterName":"MC_Sprite_sheet","classId":8,"equips":[0,0,0,0,0],"faceIndex":4,"faceName":"SlimeActors","traits":[],"initialLevel":7,"maxLevel":10,"name":"Third Child","nickname":"","note":"","profile":""},
+{"id":7,"battlerName":"","characterIndex":4,"characterName":"MC_Sprite_sheet","classId":8,"equips":[0,0,0,0,0],"faceIndex":4,"faceName":"SlimeActors","traits":[],"initialLevel":7,"maxLevel":10,"name":"Fifth Child","nickname":"","note":"","profile":""},
+{"id":8,"battlerName":"","characterIndex":4,"characterName":"MC_Sprite_sheet","classId":8,"equips":[0,0,0,0,0],"faceIndex":4,"faceName":"SlimeActors","traits":[],"initialLevel":7,"maxLevel":10,"name":"Sixth Child","nickname":"","note":"","profile":""}
+]

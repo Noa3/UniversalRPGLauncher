@@ -1530,3 +1530,57 @@ failed three named tests, one for each plugin this map calls.
 codes are now all either modelled or refused. The next thing worth doing is a
 **second MZ fixture** — a game with no plugins — so the reader can be checked
 against MZ event code without a plugin's JavaScript in the picture at all.
+
+## K-129 A second MZ fixture, from a game with no plugins — DONE
+
+The first fixture is a game with 52 enabled plugins and 9 plugin commands.
+A reader checked against it is mostly checked on its refusals. That needs a
+second game.
+
+`CamelliaCoronation-Win`, in `E:/RPGMakerGames` — a free MZ game the user put
+there to work with. **Engine 1.9.1, measured:** both games' `rmmz_objects.js`
+carry the same 114 `commandNNN` methods, none only in one or only in the other.
+
+**One plugin, in no command. No 355 and no 357 on any of the 19 maps.** That
+negative claim is the reason the fixture exists.
+
+**Alles gemessen, nichts behauptet:**
+
+- 2 432 Befehle, **1 772 laufen, 660 nicht** — und alle 660 sind echte
+  MZ-Befehle, keine Pluginaufrufe.
+- Häufigster: **401 (Textzeile, 938×)**, dann **101 (Dialogblock, 414×)**,
+  dann **505 (Wegliste, 348×)**. Ein Entwurf nannte die Wegliste am
+  häufigsten — „ein Spiel besteht hauptsächlich daraus" — und lag zwei Plätze
+  daneben. Und ein zweiter Entwurf nahm die größte Zahl in *irgendeinem*
+  Parameter und bekam 720, eine Pixelposition statt einer Variablen.
+- **15 Variablen, 0 bis 15, keine darüber. 8 Items.** Eine Klasse, eine
+  Animation, **keine Switches, keine Common-Event-Aufrufe, keine
+  Actor-Referenzen.**
+- **`CommonEvents.json` ist 376 Byte und vorhanden.** Bei der ersten Fixture
+  fehlte sie (Original 4,5 MB), und der Runner musste ein 117 verweigern. Eine
+  Regel, die nur gegen eine Lücke getestet wurde, ist eine ungetestete Regel.
+- 0, 401, 404, 405, 412, 505 sind **echte MZ-Sonderbefehle ohne Methode** und
+  keine Plugins. Die Engine liest sie nach Position, nicht per Dispatch.
+  „MZ kennt diese Zahl" ist nicht dasselbe wie „MZ führt sie aus".
+
+**537 KB, 30 Dateien**, kein `js/`, keine EXE, kein Bild, kein Audio, kein
+`Tilesets.json`. **`Skills.json` ist die eine abweichende Datei**: 104 525 auf
+1 181 Byte, weil **kein Befehl der 19 Karten eine Skill referenziert und der
+Leser keine liest.** Alles andere byteweise identisch, SHA-256 im Manifest.
+
+**945/945**, `TestMzPlainFixture: 6/6`, validator passed, build 0 errors.
+**Zehn Mutationsregeln, zehn gefangen, erster Lauf, keine entkommen** — und an
+den **Fixture-Dateien** statt am Leser, weil die Behauptungen über Daten sind:
+ein 505 als Zweig, ein 401 als Wahl, ein 101 als etwas anderes, ein 357 in eine
+Karte eingefügt, ein 355 in eine Karte eingefügt, die Common-Event-Liste
+geleert, die Datei gelöscht, und drei gegen die Testarithmetik.
+
+**Das ist die erste Karte seit vier, auf der nichts entkommen ist**, und der
+Grund ist derselbe wie bei den drei davor: dort entkam eine Regel, die kein
+Test von der Seite gefragt hatte, auf der sie falsch ist. Eine Behauptung über
+eine Zahl ist nur so gut wie der Test, der merkt, wenn sich die Zahl ändert —
+und die Behauptung einer Fixture ist eine Behauptung über eine Zahl.
+
+**Next: die 660.** 505 Weglisten (348), 205 Movement-Skripte (96), 123
+(42), 213 (36), 405 Choices (36). Und `123` ist Change Gold — dieselbe
+Clamp-Familie wie `126`, aber mit `maxGold` statt `maxItems`.

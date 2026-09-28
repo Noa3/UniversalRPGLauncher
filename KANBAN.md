@@ -2649,3 +2649,79 @@ was crafted. **UniversalRPG will run this game's MZ event code and none of
 its plugin code**, and no bounded slice can change that. What a card can do is
 say so where a caller will see it, once, with the numbers, instead of leaving
 a reader to discover it by playing.
+
+
+### K-129 A second MZ fixture, from a game with no plugins
+`DONE` — fixture, P1, depends on K-121
+
+**Why a second fixture was needed.** The first, `mz/` (*Stranded with You*),
+carries **52 enabled plugins** and **nine plugin commands** on its one map. A
+reader checked against it is mostly checked on its refusals, and barely at all
+on the event code. That is not a fault in the reader — it is what that game
+is. It needs a second game to be a statement about MZ.
+
+**The game.** `CamelliaCoronation-Win`, in `E:/RPGMakerGames`, a free MZ game
+put there by the user to work with. Engine **RPG Maker MZ 1.9.1**, measured and
+not assumed: both games' `rmmz_objects.js` carry **the same 114
+`commandNNN` methods**, with none only in one or only in the other.
+
+**One plugin, and it is in no command.** `extra_party_member`, enabled, with an
+empty parameter list. **No `355` and no `357` on any of the nineteen maps** —
+counted over the files, and that negative claim is the reason the fixture
+exists. A reader that refused nothing would run this game completely, and
+there would be nothing to hide.
+
+**What it measures, all of it counted rather than quoted:**
+
+- **2 432 Befehle** over nineteen maps, **1 772 of them run today** and **660
+  not**. Every one of the 660 is a real MZ command, not a plugin call.
+- The most-used is **401, the line of text, at 938**. Then **101, the dialogue
+  block, at 414**, then **505, the move route, at 348**. A first draft called
+  the move route the most-used, on the grounds that a game is "mostly made of"
+  it, and was wrong by two places.
+- **Fifteen variables, numbered 0 to 15, and none above.** **Eight items.**
+  One class, one animation, **no switches, no common-event calls, no actor
+  references.** A reader that has read this fixture has read everything this
+  game refers to — and the first fixture says the opposite, so between them
+  they say how far a bounded slice can honestly go.
+- **`CommonEvents.json` is 376 bytes and present.** The first fixture had none
+  because the original was 4,5 MB, and the runner had to refuse a 117 by
+  naming a common event it could not read. That was honest for a gap. **Here
+  there is no gap**, and a rule only ever tested against a gap is a rule never
+  tested.
+
+**And the codes that are MZ's own and not a plugin call.** 0, 401, 404, 405,
+412 and 505 have no `commandNNN` method and are not plugins: the block end, the
+line of text, the end of processing, the choice, the end of a branch, the move
+route. The engine reads them by position, not by dispatch, and this reader
+models them for the same reason. **"It is a number MZ knows" is not the same as
+"MZ does it"**, and a 357 shows up in a list of known numbers only because MZ
+reserves a slot for plugins.
+
+**The fixture is 537 KB over thirty files**, with no `js/`, no executable, no
+image, no audio and no `Tilesets.json` — the reader loads no texture, so a
+texture in a fixture is a claim about something nothing reads. **`Skills.json`
+is the one file that is not the original**: 104 525 bytes become 1 181, because
+**no command on any of the nineteen maps references a skill and the reader
+reads none.** Everything else is bytewise identical and the SHA-256 values are
+in `project/tests/fixtures/mz_plain/MZ_PLAIN_FIXTURES.md`.
+
+**Test evidence** 6 tests in `project/tests/core/test_mz_plain_fixture.cs`.
+**Total 945/945**, validator passed, build 0 errors.
+
+**Mutations** Ten rules, **ten caught, first run, none escaped** — and the way
+they were written is the point. **These are claims about data, so the data was
+mutated and not the reader**: a 505 turned into a branch, a 401 into a choice, a
+101 into something else, a 357 appended to a map, a 355 appended to a map, the
+common event list emptied, the common event file deleted, and three rules
+against the test's own arithmetic. Every one fell.
+
+**That is the first card in four where nothing escaped**, and the reason is
+that the previous three escaped a rule no test had asked from the side it
+fails on. A claim about a number is only as good as the test that notices when
+the number changes, and a fixture's claim is a claim about a number.
+
+**What this card is for, in one line.** The first fixture says what a reader
+must not do; this one says what it can. **1772 of 2432 already run**, and the
+660 that do not are the map of the work that is left — led by 505 at 348, 205
+at 96, 123 at 42, 213 at 36 and 405 at 36.
