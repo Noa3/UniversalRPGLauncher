@@ -1317,6 +1317,72 @@ public sealed class GameSimulationState
     public int PendingX { get; set; } = 0;
     public int PendingY { get; set; } = 0;
 
+    /// <summary>
+    /// The facing a pending transfer will use, and -1 means "keep the hero's".
+    /// </summary>
+    /// <remarks>
+    /// <strong>-1 is the reference's own "unchanged", and it is not a
+    /// direction.</strong> <c>10810</c> writes a direction and defaults to the
+    /// one the player has; <c>10830</c> writes -1 because a recall has no
+    /// reason to turn the hero. <strong>A reader that copied 10810's default
+    /// would have turned a game's hero on every recall</strong>, and a reader
+    /// that refused the -1 would have refused half of all 2K maps' recalls.
+    /// </remarks>
+    public int PendingFacing { get; set; } = -1;
+
+    /// <summary>
+    /// The terrain id of a tile, from 10910 Store Terrain ID.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Two arrays and not one.</strong> The reference's
+    /// <c>Game_Map::GetTerrainTag(x, y)</c> reads the map's lower layer, takes
+    /// the chip index, and looks it up in the chipset's terrain table — so a
+    /// reader that answered from the table alone would have returned the same
+    /// number for every tile on the map, and a game's "am I on grass" branch
+    /// would have taken the same arm everywhere. The chip id lives in
+    /// <see cref="LowerLayer"/>, **not** in the derived
+    /// <see cref="PassableTiles"/> — that one holds a bool per tile and would
+    /// have given every tile on the map the same chip.
+    /// </para>
+    /// <para>
+    /// <strong>And a tile outside the map is -1, not zero.</strong> The
+    /// reference's own bounds check returns -1 for a chip index it cannot
+    /// look up, and -1 is also the value a game's "no terrain here" test
+    /// writes.
+    /// </para>
+    /// </remarks>
+    public int TerrainTagAt(int pX, int pY)
+    {
+        // **Ohne Karte gibt es keine Kachel** -- und das ist -1 und nicht 0.
+        if (MapWidth <= 0 || MapHeight <= 0
+            || pX < 0 || pY < 0 || pX >= MapWidth || pY >= MapHeight)
+        {
+            return -1;
+        }
+
+        // **Die Chip-Id steht in der unteren Ebene, und nicht in
+        // `PassableTiles`.** Die Passierbarkeit ist eine Nebenrechnung aus
+        // derselben Ebene -- **ein Leser, der die Chip-Id aus ihr holen
+        // wuerde, wuerde bei jedem Kachelpaar dieselbe Nummer sehen**, und
+        // der Chipset-Eintrag waere nur noch eine Ziffer, die man raten
+        // muss.
+        var index = pX + pY * MapWidth;
+        if (LowerLayer == null || index < 0 || index >= LowerLayer.Length)
+        {
+            return -1;
+        }
+
+        var chip = LowerLayer[index];
+        if (chip < 0 || chip >= TerrainData.Length)
+        {
+            return -1;
+        }
+
+        return TerrainData[chip];
+    }
+
+
     public int MapWidth { get; private set; }
     public int MapHeight { get; private set; }
     public Godot.Collections.Array<bool> PassableTiles { get; init; } = new();

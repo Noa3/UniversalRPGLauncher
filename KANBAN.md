@@ -4747,6 +4747,92 @@ Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zusta
 Befehlszeile, und es gehört in eine eigene Karte.
 
 
+## `10830`, `10870` and `10910` are done — and the stale comment
+
+**Three commands, and each one has a fact a reader would guess wrong.**
+
+**`10830` Recall to Location takes three variable ids and not three
+coordinates.** The reference reads all three through `game_variables->Get()`
+and teleports to what they hold. **A reader that read them as coordinates would
+have sent a game to the map whose number the editor happened to write** — and a
+2K game's "recall" would have gone to map 1, tile 1, which is a real place on
+every map.
+
+**And it writes a facing of minus one, which is the reference's own
+"unchanged".** `10810` writes a direction and defaults to the one the player
+has; `10830` writes -1 because a recall has no reason to turn the hero. **A
+reader that copied 10810's default would have turned a game's hero on every
+recall.**
+
+**`10870` Trade Event Locations swaps three coordinates, and reads all six
+before it writes any.** A reader that moved one onto the other would have
+collapsed two events onto one tile, and **one that moved the first figure
+before it found the second missing would have collapsed two guards onto one
+tile** — the reference's whole exchange is behind a single `if`.
+
+**`10910` Store Terrain ID gives the first parameter to both coordinates.** The
+reference writes `ValueOrVariable(parameters[0], parameters[1])` for x and
+`ValueOrVariable(parameters[0], parameters[2])` for y — **the same mode byte
+governs both** — and the fourth is the variable to write. A reader that gave
+each coordinate its own mode would have read a game's row from a constant while
+its column came from a variable.
+
+**And the reference's own comment says `code 10820`.** The dispatch line and
+liblcf both say `10910`, so the comment is stale — **and a reader that believed
+it would have implemented 10820**, which is a different command with different
+parameters. A stale comment in the reference is a fact about the reference, and
+the number in the file is the one that counts.
+
+**A tile outside the map is -1 and not zero**, and -1 is also the value a game's
+"no terrain here" test writes.
+
+**And the chip id lives in the lower layer and not in the passability.**
+`PassableTiles` holds one bool per tile and is a side calculation from the same
+layer — **a reader that took the chip id from it would have seen the same
+number on every tile pair**, and the chipset entry would have been a digit to
+guess. The reference's `Game_Map::GetTerrainTag` reads the lower layer, takes
+the chip, and looks the chip up in the chipset's terrain table.
+
+**Test evidence** `test_rm2k_map_recall_and_terrain.cs`, 19 tests.
+**1500/1500**, `TestRm2kMapRecallAndTerrain: 19/19`, validator passed.
+**Mutations** Sixteen rules; **13 caught on the first run, and three of the
+four survivors were my own tests rather than the implementation** — see
+`SESSION_STATE.md` for the full chain. The last two survivors were two of the
+sixteen rules whose **anchor occurred twice in its file** and which had
+therefore mutated a different command: `if (varId < 1 || ...)` sits in both
+`ExecuteStoreEventId` and `ExecuteStoreTerrainId`, and
+`var index = pX + pY * MapWidth;` sits in both `TerrainTagAt` and
+`IsPassableInDirection`. **`replace(..., 1)` takes the earliest match, so an
+anchor that occurs twice is not an anchor.** The harness now requires
+`count(anchor) == 1` before it mutates anything.
+
+**And one of the restores left a mutation in the source while the tests stayed
+green** — the recall read the column as a value instead of out of a variable,
+and the test passed because the value at that index was the one it expected.
+**A test that asserts a number the broken code also produces is a description
+of the current state, not an expectation.**
+
+### And a terrain test that could not tell two failures apart
+
+The first four terrain tests asked a map that was empty, and every one of them
+passed — **for the wrong reason.** The -1 came from "there is no map" and not
+from "the tile is out of bounds", so a test that cannot tell those apart is a
+test of the bounds check and not of the terrain. **The first run of the
+mutations found it: four rules survived, and three of them were mine.**
+
+The map is now built the way the loader builds it — `ConfigureMap` for the
+dimensions and the tiles, and the two fields the LMAP read hands over — and two
+of those rules are the ones that were blind:
+
+- a reader that returned the same number for two different chips on one map
+  would have made a game's terrain branch a constant
+- a reader that clamped an unknown chip to zero would have called it "normal",
+  and **zero is a real terrain number**
+
+**And the mode byte is only measurable if the two answers are on tiles with
+different terrain** — my first version put both on tiles that happened to
+answer the same, **and the wrong reader would have passed it.**
+
 ## `11320` Flash Sprite is done — criterion 3, the map's flash
 
 **Width 7, and the seventh parameter is a mode byte that only the Maniac patch

@@ -618,6 +618,76 @@ public sealed class EventInterpreter
 	/// page for a frame.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 10830, Recall to Location, from liblcf's <c>Code::RecallToLocation</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandRecallToLocation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 3, and all three are variable ids and not values.</strong>
+	/// The reference reads
+	/// <c>Get(parameters[0])</c>, <c>Get(parameters[1])</c> and
+	/// <c>Get(parameters[2])</c> and then teleports there. <strong>A reader that
+	/// read them as coordinates would have sent a game to the map whose number
+	/// the editor happened to write</strong> — and a 2K game's "recall" would
+	/// have gone to map 1, tile 1, which is a real place on every map.
+	/// </para>
+	/// <para>
+	/// <strong>And the facing is minus one, not the player's.</strong> The
+	/// reference's <c>ReserveTeleport(map_id, x, y, -1, tt)</c> writes a
+	/// facing of -1, which is its own "keep the direction the hero had" — and
+	/// a reader that copied <c>10810</c>'s default of the current facing would
+	/// have made a game's recall turn the hero.
+	/// </para>
+	/// </remarks>
+	public const int RecallToLocation = 10830;
+
+	/// <summary>
+	/// 10870, Trade Event Locations, from liblcf's
+	/// <c>Code::TradeEventLocations</c> and EasyRPG's
+	/// <c>Game_Interpreter::CommandTradeEventLocations</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 2, and the two parameters are the two figures.</strong> The
+	/// reference reads both through the same patch-guarded helper
+	/// <c>11320</c> uses, and then <em>swaps</em> their three coordinates.
+	/// <strong>A reader that moved one onto the other would have collapsed two
+	/// events onto one tile</strong>, and a game whose "the guard takes your
+	/// place" cutscene would have had both guards stand still.
+	/// </para>
+	/// <para>
+	/// <strong>And a figure that does not resolve swaps nothing</strong> — the
+	/// reference's <c>if (event1 != nullptr &amp;&amp; event2 != nullptr)</c>
+	/// guards the whole exchange.
+	/// </para>
+	/// </remarks>
+	public const int TradeEventLocations = 10870;
+
+	/// <summary>
+	/// 10910, Store Terrain ID, from liblcf's <c>Code::StoreTerrainID</c> and
+	/// EasyRPG's <c>Game_Interpreter::CommandStoreTerrainID</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 4, and the first parameter is the mode for the first two
+	/// coordinates and not for the third.</strong> The reference writes
+	/// <c>ValueOrVariable(parameters[0], parameters[1])</c> for x and
+	/// <c>ValueOrVariable(parameters[0], parameters[2])</c> for y — <strong>so
+	/// the same mode byte governs both</strong> — and the fourth is the
+	/// variable to write. A reader that gave each coordinate its own mode would
+	/// have read a game's y from a constant while its x came from a variable.
+	/// </para>
+	/// <para>
+	/// <strong>And the reference's own comment says <c>code 10820</c>.</strong>
+	/// The dispatch line and liblcf both say <c>10910</c>, so the comment is
+	/// stale and the number in the file is the one that counts — <strong>a
+	/// reader that believed the comment would have implemented 10820</strong>,
+	/// which is a different command with different parameters.
+	/// </para>
+	/// </remarks>
+	public const int StoreTerrainId = 10910;
+
 	public const int FlashSprite = 11320;
 
 	public const int ProceedWithMovement = 11340;
@@ -884,6 +954,35 @@ public sealed class EventInterpreter
 	private readonly Rm2kSpriteFlash? _spriteFlasher;
 
 	/// <summary>
+	/// Reads a figure's place, for command 10870.
+	/// </summary>
+	/// <param name="pEventId">The figure the command named.</param>
+	/// <param name="pMapId">Its map.</param>
+	/// <param name="pX">Its tile column.</param>
+	/// <param name="pY">Its tile row.</param>
+	/// <returns>Whether a figure carried that id.</returns>
+	/// <remarks>
+	/// <strong>Read and move are two delegates and not one.</strong> The
+	/// reference's trade takes all six coordinates before it writes any, and a
+	/// single "swap" hook would have let a half-finished swap stand — <strong>
+	/// a reader that moved the first figure onto the second's place and then
+	/// found the second unreachable would have collapsed two guards onto one
+	/// tile.</strong>
+	/// </remarks>
+	public delegate bool Rm2kEventPlaceReader(
+		int pEventId,
+		out int pMapId,
+		out int pX,
+		out int pY);
+
+	/// <summary>Moves a figure to a map and a tile, for command 10870.</summary>
+	public delegate void Rm2kEventPlaceMover(int pEventId, int pMapId, int pX, int pY);
+
+	private readonly Rm2kEventPlaceReader? _eventPlaceReader;
+
+	private readonly Rm2kEventPlaceMover? _eventPlaceMover;
+
+	/// <summary>
 	/// Boards or leaves the vehicle under the player, for command 10840.
 	/// </summary>
 	/// <remarks>
@@ -977,7 +1076,9 @@ public sealed class EventInterpreter
 		Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>, bool, bool, bool>?
 			moveRouteStarter = null,
 		Func<bool>? vehicleBoardToggle = null,
-		Rm2kSpriteFlash? spriteFlasher = null)
+		Rm2kSpriteFlash? spriteFlasher = null,
+		Rm2kEventPlaceReader? eventPlaceReader = null,
+		Rm2kEventPlaceMover? eventPlaceMover = null)
 			{
 		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
@@ -990,6 +1091,8 @@ public sealed class EventInterpreter
 		_moveRouteStarter = moveRouteStarter;
 		_vehicleBoardToggle = vehicleBoardToggle;
 		_spriteFlasher = spriteFlasher;
+		_eventPlaceReader = eventPlaceReader;
+		_eventPlaceMover = eventPlaceMover;
 		_commandIndex = 0;
 	}
 
@@ -1274,6 +1377,18 @@ public sealed class EventInterpreter
 
 			case ShowHiddenMonster:
 				ExecuteShowHiddenMonster(cmd);
+				return Advance();
+
+			case TradeEventLocations:
+				ExecuteTradeEventLocations(cmd);
+				return Advance();
+
+			case RecallToLocation:
+				ExecuteRecallToLocation(cmd);
+				return Advance();
+
+			case StoreTerrainId:
+				ExecuteStoreTerrainId(cmd);
 				return Advance();
 
 			case FlashSprite:
@@ -4739,6 +4854,184 @@ public sealed class EventInterpreter
 			6 => GameSimulationState.EquipmentSlot.All,
 			_ => GameSimulationState.EquipmentSlot.All,
 		};
+	}
+
+	/// <summary>
+	/// Runs 10870, Trade Event Locations, from liblcf's
+	/// <c>Code::TradeEventLocations</c> and EasyRPG's
+	/// <c>Game_Interpreter::CommandTradeEventLocations</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 2, and the two parameters are the two figures.</strong> The
+	/// reference reads both through the same patch-guarded helper
+	/// <c>11320</c> uses, and then <em>swaps</em> their three coordinates.
+	/// <strong>A reader that moved one onto the other would have collapsed two
+	/// events onto one tile</strong>, and a game whose "the guard takes your
+	/// place" cutscene would have had both guards stand still.
+	/// </para>
+	/// <para>
+	/// <strong>And all six coordinates are read before any is written.</strong>
+	/// The reference copies m1, x1, y1 and then m2, x2, y2, and only then
+	/// calls the two <c>MoveTo</c> — <strong>so a figure that does not resolve
+	/// leaves the other where it stood</strong>, because the whole exchange is
+	/// behind one <c>if</c>.
+	/// </para>
+	/// </remarks>
+	private void ExecuteTradeEventLocations(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 2.
+		if (pCmd.Parameters.Count < 2)
+		{
+			Malformed("Trade event locations");
+			return;
+		}
+
+		if (_eventPlaceReader == null || _eventPlaceMover == null)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Trade event locations: this interpreter "
+				+ "cannot reach a figure, so nothing was traded");
+			return;
+		}
+
+		// **Ohne den Patch sind die beiden Parameter die Figuren selbst.**
+		var id1 = pCmd.Parameters[0];
+		var id2 = pCmd.Parameters[1];
+
+		// **Erst lesen, dann schreiben** -- alle vier Koordinaten, bevor
+		// irgendetwas bewegt wird.
+		if (!_eventPlaceReader(id1, out var m1, out var x1, out var y1))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Trade event locations: no figure carries "
+				+ $"the id {id1}, and the reference swaps nothing");
+			return;
+		}
+
+		if (!_eventPlaceReader(id2, out var m2, out var x2, out var y2))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Trade event locations: no figure carries "
+				+ $"the id {id2}, and the reference swaps nothing — not even "
+				+ "the first figure's half of the trade");
+			return;
+		}
+
+		_eventPlaceMover(id1, m2, x2, y2);
+		_eventPlaceMover(id2, m1, x1, y1);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Trade event locations: {id1} -> map {m2} at "
+			+ $"({x2}, {y2}) and {id2} -> map {m1} at ({x1}, {y1})");
+	}
+
+	/// <summary>
+	/// Runs 10830, Recall to Location, from liblcf's
+	/// <c>Code::RecallToLocation</c> and EasyRPG's
+	/// <c>Game_Interpreter_Map::CommandRecallToLocation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Three parameters, and all three are variable ids and not
+	/// values.</strong> The reference reads all three through
+	/// <c>game_variables-&gt;Get()</c> and teleports to what they hold. <strong>A
+	/// reader that read them as coordinates would have sent a game to the map
+	/// whose number the editor happened to write</strong> — and a 2K game's
+	/// "recall" would have gone to map 1, tile 1, which is a real place on
+	/// every map.
+	/// </para>
+	/// <para>
+	/// <strong>And the facing is minus one.</strong> The reference writes
+	/// <c>ReserveTeleport(map_id, x, y, -1, tt)</c>, and that -1 is its own
+	/// "keep the direction the hero had" — <strong>a reader that copied
+	/// <c>10810</c>'s default of the current facing would have made a game's
+	/// recall turn the hero</strong>, and 10810's default is the facing the
+	/// player has, which the recall has no reason to know.
+	/// </para>
+	/// </remarks>
+	private void ExecuteRecallToLocation(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Recall to location");
+			return;
+		}
+
+		// **Alle drei sind Variablen-Referenzen.**
+		var mapId = GetVariable(pCmd.Parameters[0]);
+		var x = GetVariable(pCmd.Parameters[1]);
+		var y = GetVariable(pCmd.Parameters[2]);
+
+		if (mapId < 1 || mapId > GameSimulationState.MaxMapId || x < 0 || y < 0)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Recall to location: the variables hold "
+				+ $"({mapId}, {x}, {y}), and that is not a place");
+			return;
+		}
+
+		// **Die Blickrichtung bleibt, weil die Referenz -1 schreibt.**
+		_state.PendingMapId = mapId;
+		_state.PendingX = x;
+		_state.PendingY = y;
+		_state.PendingFacing = -1;
+		_state.IsTransferPending = true;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Recall pending -> map {mapId} at ({x}, "
+			+ $"{y}) from the variables {pCmd.Parameters[0]}, "
+			+ $"{pCmd.Parameters[1]} and {pCmd.Parameters[2]}");
+	}
+
+	/// <summary>
+	/// Runs 10910, Store Terrain ID, from liblcf's
+	/// <c>Code::StoreTerrainID</c> and EasyRPG's
+	/// <c>Game_Interpreter::CommandStoreTerrainID</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Width 4, and the first parameter is the mode for the first two
+	/// coordinates and not for the third.</strong> The reference writes
+	/// <c>ValueOrVariable(parameters[0], parameters[1])</c> for x and
+	/// <c>ValueOrVariable(parameters[0], parameters[2])</c> for y — <strong>so
+	/// the same mode byte governs both</strong> — and the fourth is the
+	/// variable to write into. A reader that gave each coordinate its own mode
+	/// would have read a game's y from a constant while its x came from a
+	/// variable.
+	/// </para>
+	/// <para>
+	/// <strong>And the reference's own comment says <c>code 10820</c>.</strong>
+	/// The dispatch line and liblcf both say <c>10910</c> — <strong>a reader
+	/// that believed the comment would have implemented 10820</strong>, which is
+	/// a different command with different parameters.
+	/// </para>
+	/// </remarks>
+	private void ExecuteStoreTerrainId(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Store terrain ID");
+			return;
+		}
+
+		// **Derselbe Modus fuer beide Koordinaten.**
+		var x = ValueOrVariable(pCmd.Parameters[0], pCmd.Parameters[1]);
+		var y = ValueOrVariable(pCmd.Parameters[0], pCmd.Parameters[2]);
+		var varId = pCmd.Parameters[3];
+
+		if (varId < 1 || varId > GameSimulationState.MaxVariables)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Store terrain ID: variable {varId} is "
+				+ "out of range, and the reference writes nothing");
+			return;
+		}
+
+		_state.Variables[varId - 1] = _state.TerrainTagAt(x, y);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Store terrain ID: tile ({x}, {y}) has terrain "
+			+ $"{_state.Variables[varId - 1]} and it is now in variable {varId}");
 	}
 
 	/// <summary>

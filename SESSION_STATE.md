@@ -4156,6 +4156,51 @@ die Zerlegung schreiben.
 **Test evidence** `test_rm2k_enemy_encounter.cs` (7). **1382/1382**, Validator gruen.
 
 **Mutations** 9 Regeln, **9 von 9 gefangen**.## Current card
+## 10830, 10870 and 10910 are done — and my own terrain tests were blind
+
+**Three commands, each with one fact a reader would guess wrong.**
+
+- `10830` reads **three variable ids**, not three coordinates — a reader that
+  read them as values would have sent a game to the map whose number the
+  editor happened to write, and a 2K game's recall would have gone to map 1,
+  tile 1, which is a real place on every map. It also writes a facing of **-1**,
+  the reference's own "unchanged"; a reader that copied `10810`'s default would
+  have turned a game's hero on every recall.
+- `10870` swaps **three** coordinates and reads **all six before it writes
+  any** — a reader that moved the first figure before finding the second
+  missing would have collapsed two guards onto one tile.
+- `10910` gives the first parameter to **both** coordinates, and a tile
+  outside the map is **-1**, not zero.
+
+**And the reference's own comment on `10910` says `code 10820`.** The dispatch
+line and liblcf both say `10910`. A stale comment in the reference is a fact
+about the reference, and the number in the file is the one that counts.
+
+### The four surviving mutations were three of my own bad tests
+
+The first run was 8 of 12. Three of the four survivors were my tests, and the
+fourth was the implementation:
+
+- **`TerrainTagAt` read the chip id from `PassableTiles`.** That array holds one
+  bool per tile and is a side calculation from the lower layer — a reader
+  taking the chip id from it sees the same number on every tile pair. The
+  reference's `Game_Map::GetTerrainTag` reads the lower layer, takes the chip,
+  and looks the chip up in the chipset's terrain table.
+- **Every first terrain test asked an empty map**, so every -1 came from "there
+  is no map" and not from "the tile is out of bounds" — **a test that cannot
+  tell those apart tests the bounds check and not the terrain.** The map is now
+  built the way `Rm2kEngineRuntime` builds it: `ConfigureMap` for the dimensions
+  and the two fields the LMAP read hands over.
+- **The mode-byte test put both coordinates on tiles with the same terrain**,
+  so a reader that read the row as a constant would have passed it. The two
+  answers are on tiles with different terrain now.
+
+**The lesson is the same one the flash sprite taught, one level down:** the
+first mutation run is a test of the tests, and a survivor is a question about
+what the reader can actually have. The fourth survivor was real — a short lower
+layer is read past instead of refused — and the fix was a test that builds a
+map two by two with a layer of one entry.
+
 ## 11320 Flash Sprite is done — and a rule that was not a mutation
 
 **Width 7, and the seventh parameter is a mode byte that only the Maniac patch
@@ -4177,6 +4222,41 @@ exactly as `11330` treats an unreachable character, and for the same reason.
 
 **Test evidence** `project/tests/core/test_rm2k_flash_sprite.cs`, 10 tests.
 **1481/1481**, validator passed.
+
+### The restore failed three times, and each time it left a different mutation
+
+This is now the third run in a row where the harness died at the restore with
+`WinError 1224 — the file is open` and the mutation before it stayed in the
+source. **Three different ones:**
+
+1. `var staerke = pCmd.Parameters[2]` instead of `[4]`, and the width four
+   instead of seven — the flash sprite ran green on a file that had been
+   correct two steps earlier.
+2. `var x = pCmd.Parameters[1]` instead of `GetVariable(pCmd.Parameters[1])` —
+   **the recall read the column as a value**, and the test still passed because
+   the value at that index happened to be the one the test expected.
+3. `if (false)` in place of `TerrainTagAt`'s bounds check.
+
+**The second one is the dangerous case and the reason this is written down
+twice.** The build was green, the tests were green, and the source was wrong —
+because *the tests were written against the wrong code*. A test that asserts a
+number the broken code also produces is not a test; **it is a description of
+the current state that happens to be phrased as an expectation.**
+
+**The rule that follows from it: after any run that ends in an exception, read
+the source before trusting the next number — and a mutation that "survives"
+while a rule elsewhere in the same run failed to restore has not been measured
+at all.** The anchor check now runs before the mutations (`doc.count(a) == 1`,
+not `in`), because **two of the sixteen anchors occurred twice in their file**:
+`if (varId < 1 || ...)` sits in both `ExecuteStoreEventId` and
+`ExecuteStoreTerrainId`, and `var index = pX + pY * MapWidth;` sits in both
+`TerrainTagAt` and `IsPassableInDirection`. `replace(..., 1)` takes the
+earliest match, so both rules were mutating a *different command* and reporting
+on it. **An anchor that occurs twice is not an anchor.**
+
+**And this is why a rule's own name has to say which behaviour it breaks.** A
+rule that survives because it never touched the code under test looks exactly
+like a coverage gap, and the difference is one line of `count()`.
 
 ### Failure log: a mutation that could not have been killed
 
