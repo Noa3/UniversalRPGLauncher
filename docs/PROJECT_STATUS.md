@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, renderer/system coverage, event counters, and walk animation beyond the bounded native event path, the working chipset passability, and the verified autotile animation steps.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `1292/1292` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `1302/1302` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
 
 Real LMU event pages now decode: the pinned RM2000/RM2003 fixtures yield 22 and 38 event pages with verified liblcf field ids (`condition 0x02`, `move_frequency 0x20`, `trigger 0x21`, `layer 0x22`, `move_route 0x29`, `event_commands_size 0x33`, `event_commands 0x34`). A command vector that cannot be decoded is contained per page with a diagnostic and its raw payload size instead of making the whole map unloadable, and such pages are skipped by the runtime instead of running empty. Page trigger ids follow liblcf `EventPage::Trigger` (`action=0`, `touched=1`, `collision=2`, `auto_start=3`, `parallel=4`). `ControlSwitches` and `Control Variables` follow the verified EasyRPG parameter layout (`[targetMode, start, end, …]`), which real games use, and a regression test executes a real fixture action page end to end through the RM2K runtime.
 
@@ -937,3 +937,30 @@ could not step at all, and a game with an event on it would have opened with a p
 stuck.
 
 **1292/1292, sixteen effective mutation rules, sixteen caught.**
+**And two approach steps refused for two cards.** The honest reason was that
+approaching an event needs a second figure and approaching a position needs the map,
+and the board had neither. The last two cards gave it both, so the refusal was no
+longer true — a reader that kept it would have a game whose guards never approach
+anything.
+
+**The target numbers are the help's and are not event ids:** 0 and above is the event
+with that id, -1 is this event, -2 is the hero, and -3 to -7 are the five companions.
+Zero is a real event id, so a reader that used it for the hero would answer a command
+about event 0 with the player and about the player with event 0 — and both exist in a
+real map.
+
+**Arrival and refusal cannot share one bool**, and an earlier version did: false meant
+both "already arrived" and "no such target", so a guard that had reached its target was
+recorded as chasing somebody who is not there. Four answers, because each pair differs.
+
+**The collision rule and the approach rule meet in one place.** A guard one tile short,
+blocked by its target, has arrived — reading it as blocked would have a guard give up
+the moment it caught the player.
+
+**Two bugs the compiler said nothing about:** the companion range was written "at least
+-3 and at most -7", which is empty, and an always-false range is valid C#. It appeared
+twice, and the compiler flagged the first as an unreachable arm and said nothing about
+the second. **Three of the ten new tests were wrong too, two of them about the rules
+rather than the code.**
+
+**1302/1302, fifteen effective mutation rules, fifteen caught.**

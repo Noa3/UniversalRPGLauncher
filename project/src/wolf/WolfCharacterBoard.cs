@@ -4,6 +4,31 @@ using System.Collections.Generic;
 namespace UniversalRPG.Wolf;
 
 /// <summary>
+/// What one approach step did.
+/// </summary>
+/// <remarks>
+/// <strong>Four answers, and a bool could not carry them.</strong> "Moved" and
+/// "already there" are both successes with different timing, and "no such
+/// target" and "blocked" are both failures with the same handling. A reader
+/// that answered with a bool would have had to pick one of each pair to
+/// discard, and the one it discarded is where a guard's route would end.
+/// </remarks>
+public enum WolfApproachResult
+{
+	/// <summary>The figure moved one tile toward the target.</summary>
+	Stepped,
+
+	/// <summary>The figure is already beside the target.</summary>
+	Arrived,
+
+	/// <summary>The target names nobody on this board.</summary>
+	NoTarget,
+
+	/// <summary>The step was refused: a wall, or another figure in the way.</summary>
+	Blocked,
+}
+
+/// <summary>
 /// The characters on the map, and the routes they are running.
 /// </summary>
 /// <remarks>
@@ -103,6 +128,18 @@ public sealed class WolfCharacterBoard
 		/// <summary>Whether the route repeats when it runs out.</summary>
 		public bool RepeatActions { get; init; }
 
+		/// <summary>
+		/// The event this route belongs to, for the target number -1.
+		/// </summary>
+		/// <remarks>
+		/// <strong>Remembered and not looked up.</strong> The help's target list
+		/// says <c>-1＝このイベント</c> — this event — and "this" means the
+		/// program the route is running in. The runner has no such context, and
+		/// the board is what knows which event started a route, so the number
+		/// travels with the route.
+		/// </remarks>
+		public int OwnerId { get; init; }
+
 		/// <summary>The step the route is on.</summary>
 		public int Index { get; set; }
 
@@ -138,10 +175,23 @@ public sealed class WolfCharacterBoard
 	/// <summary>The runner that applies the steps.</summary>
 	private readonly WolfMoveRouteRunner _runner;
 
+	/// <summary>
+	/// The bands, so an approach step can read a coordinate out of a variable.
+	/// </summary>
+	/// <remarks>
+	/// **The same bands the runner writes to, and not a second set.</strong> The
+	/// help allows a variable wherever a number is entered, and a coordinate of
+	/// 2,000,000 is normal variable 0 — a reader with its own bands would
+	/// resolve it against a store the event does not read, and the guard would
+	/// walk to a coordinate nobody set.
+	/// </remarks>
+	private readonly WolfVariableBands _variables;
+
 	/// <summary>Creates a board over the given variable bands.</summary>
 	public WolfCharacterBoard(WolfVariableBands pVariables)
 	{
 		_runner = new WolfMoveRouteRunner(pVariables);
+		_variables = pVariables;
 		// **The hero is in the cast before anything else happens.** The
 		// occupant list starts empty, and the first call a game makes is
 		// usually LoadMap — which hands the grid to whoever is on the list. An
@@ -257,6 +307,7 @@ public sealed class WolfCharacterBoard
 		_routes[pId] = new RunningRoute
 		{
 			Steps = pRoute.Steps,
+			OwnerId = pId,
 			Mode = pRoute.Mode,
 			WaitUntilDone = pRoute.WaitUntilDone,
 			SkipImpossibleMoves = pRoute.SkipImpossibleMoves,
@@ -265,6 +316,60 @@ public sealed class WolfCharacterBoard
 			FramesLeft = 0,
 			IsStepRunning = false,
 		};
+	}
+
+	/// <summary>
+	/// The party, so a companion target has something to name.
+	/// </summary>
+	/// <remarks>
+	/// **The board's own, and not a party's the caller keeps.</strong> The
+	/// help's target list reaches a route step — a guard approaching the third
+	/// companion is a route step, and a route runs on the board. A party
+	/// elsewhere would have to be handed in at every step, and a caller that
+	/// forgot would make every companion target resolve to nothing.
+	/// </remarks>
+	public WolfParty Party { get; } = new();
+
+	/// <summary>
+	/// Finds the figure a target number names.
+	/// </summary>
+	/// <param name="pTarget">A target number, in the help's numbering.</param>
+	/// <param name="pThisEvent">The event the running route belongs to.</param>
+	/// <returns>The figure, or null where the number names nobody here.</returns>
+	/// <remarks>
+	/// <para>
+	/// <strong>Roles first, then event ids, and the negative numbers are never
+	/// ids.</strong> The help is explicit: 0 and above is the event with that id,
+	/// -1 is this event, -2 is the hero, and -3 to -7 are the companions. A reader
+	/// that looked up minus two as an id would find nothing and answer "nowhere",
+	/// and a guard walking to the hero would walk to the wall instead.
+	/// </para>
+	/// <para>
+	/// <strong>A number the help does not offer is nothing, and says so.</strong>
+	/// -8 is not the sixth companion, because the list stops at -7; answering it
+	/// with a sixth member would put a figure on the map the editor cannot name.
+	/// </para>
+	/// </remarks>
+	public WolfCharacter? FindTarget(int pTarget, int pThisEvent)
+	{
+		switch (WolfCharacterTarget.Classify(pTarget))
+		{
+			case WolfCharacterTarget.Kind.ThisEvent:
+				return Find(pThisEvent);
+			case WolfCharacterTarget.Kind.Hero:
+				// **The party, and not the board's hero.** A companion who is
+				// also on the map is the board's hero when it is the player, and
+				// a reader that answered from the board would ignore a party
+				// that names a different figure as the player — which is what a
+				/// game does when the player character changes.
+				return Party.Hero;
+			case WolfCharacterTarget.Kind.Companion:
+				return Party.Companion(WolfCharacterTarget.CompanionNumber(pTarget));
+			case WolfCharacterTarget.Kind.EventId:
+				return Find(pTarget);
+			default:
+				return null;
+		}
 	}
 
 	/// <summary>Whether a character is running a route.</summary>
@@ -383,6 +488,49 @@ public sealed class WolfCharacterBoard
 			// standing at a wall and then a stop nobody asked for. Asking the
 			// timing of a step that did not run is also a question with no
 			// answer: there is nothing to time.
+			// **The two approach steps are answered here and not by the runner.**
+			// They need the board — a second figure, or a tile — and the runner
+			// holds one figure, so it refused them outright. That refusal was
+			// correct while the board had neither; now it has both, and a reader
+			// that kept the refusal would have a game whose guards never approach
+			// anything.
+			if (step.Type == WolfMoveRouteType.MoveApproachEvent
+				|| step.Type == WolfMoveRouteType.MoveApproachPosition)
+			{
+				// **The three answers, and each one ends the step differently.**
+				// Arrived and Stepped both let the route carry on, but arrived
+				// takes no time and stepped does; NoTarget and Blocked both stop
+				// it unless the route says to skip. An earlier version folded
+				// arrived into NoTarget, and a guard that had reached its target
+				// was recorded as having chased somebody who is not there.
+				switch (ApproachOne(pCharacter, pRoute, step))
+				{
+					case WolfApproachResult.Arrived:
+						// **No time, and the next step runs now.** A guard that
+						// is already beside its target has arrived; spending a
+						// tile's worth of frames standing still would freeze it
+						// for sixteen frames before it did anything else.
+						pRoute.FramesLeft = 0;
+						pRoute.IsStepRunning = false;
+						continue;
+					case WolfApproachResult.Stepped:
+						var approachFrames = WolfMoveRouteRunner.FramesPerTile(
+							pCharacter.MoveSpeed);
+						if (approachFrames > 0)
+						{
+							pRoute.FramesLeft = approachFrames - 1;
+							pRoute.IsStepRunning = true;
+						}
+						return;
+					default:
+						if (!pRoute.SkipImpossibleMoves)
+						{
+							pRoute.IsFinished = true;
+							return;
+						}
+						continue;
+				}
+			}
 			if (outcome == WolfMoveRouteOutcome.UnknownType)
 			{
 				// **An unknown type ends the route** rather than being skipped.
@@ -424,6 +572,131 @@ public sealed class WolfCharacterBoard
 				return;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Runs one approach step: take one tile toward a target, or say there is
+	/// nowhere to go.
+	/// </summary>
+	/// <param name="pCharacter">The figure the route belongs to.</param>
+	/// <param name="pRoute">The route, which knows its own event.</param>
+	/// <param name="pStep">The approach step.</param>
+	/// <param name="pResult">
+	/// What happened: the figure moved, it is already there, or the step cannot
+	/// be answered.
+	/// </param>
+	/// <remarks>
+	/// <strong>Three answers and not two, and that is the whole fix.</strong> An
+	/// earlier version returned a bool where false meant both "already arrived"
+	/// and "no such target", and the caller could not tell them apart — so a
+	/// guard that had arrived was treated as having chased a target that does
+	/// not exist, and its route ended in a refusal rather than an arrival. The
+	/// two are different events and they need different handling.
+	/// </remarks>
+	/// <remarks>
+	/// <para>
+	/// <strong>One tile per step, and the target is re-read every step.</strong> A
+	/// guard that approaches a moving hero has to keep closing the distance, and
+	/// a reader that computed the whole path once would walk to where the hero
+	/// was — which is a guard that misses by however far the hero moved.
+	/// </para>
+	/// <para>
+	/// <strong>The axis with the larger gap goes first.</strong> That is the
+	/// standard order for a chase and it is what makes a diagonal move
+	/// diagonal: a guard five to the right and one down closes the five and
+	/// then closes the one, instead of alternating and arriving in half the time.
+	/// **The help does not name the order, so it is stated here as a choice**
+	/// — a reader that closed both axes at once would produce a diagonal step
+	/// the format has no type for.
+	/// </para>
+	/// </remarks>
+	private WolfApproachResult ApproachOne(
+		WolfCharacter pCharacter,
+		RunningRoute pRoute,
+		WolfMoveRouteStep pStep)
+	{
+		int targetX;
+		int targetY;
+		if (pStep.Type == WolfMoveRouteType.MoveApproachEvent)
+		{
+			var target = FindTarget(StepArgument(pStep, 0), pRoute.OwnerId);
+			// **A target that names nobody is a step that cannot be answered.**
+			// The help's -1 means this event, -2 the hero, -3 to -7 the
+			// companions, and 0 and up an event id — so a party with no third
+			// companion makes -5 name nobody, and a reader that treated it as
+			// coordinates would walk the guard to minus five.
+			if (target == null)
+			{
+				return WolfApproachResult.NoTarget;
+			}
+			targetX = target.X;
+			targetY = target.Y;
+		}
+		else
+		{
+			// **The coordinates come from the step and may be a variable,** which
+			// the help allows wherever a number is entered. They are resolved
+			// through the bands for the same reason every other number is: a
+			// value at or above a million is a reference.
+			targetX = _variables.Resolve(StepArgument(pStep, 0));
+			targetY = _variables.Resolve(StepArgument(pStep, 1));
+			if (Passability is not { } grid
+				|| !grid.IsInRange(targetX, targetY))
+			{
+				return WolfApproachResult.NoTarget;
+			}
+		}
+
+		var gapX = targetX - pCharacter.X;
+		var gapY = targetY - pCharacter.Y;
+		// **Arrived when the X gap is gone, whatever the Y gap is.** A half
+		// height hitbox means standing beside the target counts as being on it,
+		// so a guard that has closed the horizontal gap is close enough. A
+		// reader that demanded both gaps be zero would have guards shuffling
+		// up and down one tile forever.
+		if (gapX == 0)
+		{
+			return WolfApproachResult.Arrived;
+		}
+		// **The larger gap goes first, and a tie closes X.** A tie is the
+		// diagonal case, and a reader that closed Y on a tie would step
+		// vertically out of a diagonal and arrive one frame later — which is
+		// invisible and wrong.
+		var closerX = Math.Abs(gapX) >= Math.Abs(gapY);
+		var gap = closerX ? gapX : gapY;
+		var direction = gap > 0
+			? (closerX ? WolfCharacter.PassRight : WolfCharacter.PassDown)
+			: (closerX ? WolfCharacter.PassLeft : WolfCharacter.PassUp);
+		if (pCharacter.Step(direction))
+		{
+			return WolfApproachResult.Stepped;
+		}
+		// **Blocked by a figure is arrived, and blocked by a wall is not.**
+		// This is the one place the collision rule and the approach rule meet,
+		// and getting it wrong in either direction breaks a chase: read it as
+		// blocked and a guard gives up the moment the hero stands next to it —
+		// which is what a guard does when it catches the player, so the game
+		// would lose the confrontation. Read it as arrived always and a guard
+		// pressed against a wall would stop one tile short of its target and
+		// call it done.
+		//
+		// **The difference is what refused the step, and the board can ask.**
+		// The target's own tile is occupied by the target — that is the whole
+		// point — so standing beside it is what arriving looks like.
+		return WolfCharacterCollision.IsBlockedByAFigure(
+			pCharacter, direction)
+			? WolfApproachResult.Arrived
+			: WolfApproachResult.Blocked;
+	}
+
+	/// <summary>
+	/// One four byte argument of a step, or zero when it has none.
+	/// </summary>
+	private static int StepArgument(WolfMoveRouteStep pStep, int pIndex)
+	{
+		return pIndex >= 0 && pIndex < pStep.Arguments.Count
+			? pStep.Arguments[pIndex]
+			: 0;
 	}
 
 	/// <summary>
@@ -502,6 +775,9 @@ public sealed class WolfCharacterBoard
 		Passability = null;
 		ScrollX = 0;
 		ScrollY = 0;
+		// **The party goes with them.** A new game that kept the last game's
+		// companions would send a guard walking to a figure that is not there.
+		Party.Clear();
 		// **The list goes last and not first**, because clearing it while a
 		// figure still points at it would leave the hero asking a list that no
 		// longer contains it — and asking is how it is told the world is empty.

@@ -3350,3 +3350,76 @@ die halbe Kachel als volle gelesen, die Quadratoption ignoriert, die Y-Achse hal
 gemacht, die X-Achse geschlossen, die Löschprüfung nur auf einer Seite, der Durchlass
 symmetrisch gemacht, die Selbstkollision nicht übersprungen, der Kandidat ohne
 Trefferfläche, der Held nicht auf dem Brett und die nicht neu gebaute Liste.
+
+## WOLF Zielnummern und Annäherung — DONE: -1 bis -7 und zwei laufende Schritte
+
+**Die beiden Annäherungsschritte waren zwei Karten lang abgelehnt**, aus dem ehrlichen
+Grund: Ein Event annähern braucht eine zweite Figur und eine Position annähern
+braucht die Karte, und das Brett hatte beides nicht. Die letzten zwei Karten haben es
+beides gegeben, und die Ablehnung war nicht mehr wahr — **wer sie behalten hätte, hätte
+ein Spiel, dessen Wächter sich nie etwas nähern.**
+
+**Die Zielnummern sind die der Hilfe und keine Event-IDs.** Die Liste lautet:
+`0以上の場合 ＝ その値のIDを持つイベント`, `-1＝このイベント`, `-2＝主人公(隊列先頭)` und
+`-3` bis `-7` für die fünf Begleiter. **Null ist eine Event-ID und der Held ist minus
+zwei** — wer null für den Held nähme, beantwortete einen Befehl über Event 0 mit dem
+Spieler und einen Befehl über den Spieler mit Event 0, und beides gibt es auf einer
+echten Karte.
+
+**„Dieses Event" ist das eigene Event der Route, und die Zahl reist mit der Route.**
+Der Runner hat keine Vorstellung davon, in welchem Programm er läuft, und das Brett weiß
+es, also gehört der Besitzer zum Routenzustand.
+
+**Die Partei hat fünf Plätze, und ein leerer ist niemand.** Die Liste hört bei -7 auf,
+also hätte ein Leser mit wachsender Liste -8 mit einem sechsten Begleiter beantwortet,
+den der Editor nicht benennen kann. Ein leerer Platz ist null und keine neue Figur.
+
+## Ankunft und Ablehnung sind in einem Bool dasselbe, und dürfen es nicht sein
+
+**`ApproachOne` gab zuerst einen Bool zurück, in dem false sowohl „ist angekommen"
+als auch „kein solches Ziel" bedeutete**, und der Aufrufer konnte es nicht unterscheiden.
+Ein Wächter, der sein Ziel erreicht hatte, wurde als einer verbucht, der jemandem folgt,
+den es nicht gibt. **Vier Antworten, weil sich jedes Paar unterscheidet**: Ein Schritt
+nimmt Zeit, eine Ankunft nicht, kein Ziel und blockiert halten die Route an, sofern sie
+nicht das Überspringen sagt.
+
+**Und Kollisionsregel und Annäherungsregel treffen sich an einer Stelle.** Ein Wächter
+eine Kachel vor seinem Ziel, vom Ziel selbst blockiert, **ist angekommen** — als
+blockiert gelesen hieße, ein Wächter gäbe auf, sobald er den Spieler einholt, also genau
+in dem Moment, um den es im Spiel geht. immer als Ankunft gelesen hieße, ein Wächter an
+einer Wand bliebe eine Kachel stehen und nennte es fertig. **Der Unterschied ist, was den
+Schritt abgelehnt hat**, und das Brett fragt nach.
+
+**Ein Schritt pro Schritt, und das Ziel wird jeden Schritt neu gelesen.** Ein Wächter,
+der einem laufenden Helden folgt, muss den Abstand immer wieder schließen, und wer den
+ganzen Weg einmal berechnet, ginge dorthin, wo der Held war.
+
+**Die größere Lücke geht zuerst, und der Gleichstand schließt X.** Das macht, dass eine
+Diagonale als Diagonale liest. **Die Hilfe nennt die Reihenfolge nicht, also steht sie
+hier als Wahl** — wer beide Achsen zugleich schließe, erzeugte einen Schritt, für den
+das Format keinen Typ hat.
+
+## Zwei Fehler, die der Compiler nicht gemeldet hat, und zwei falsche Tests
+
+**Der Begleiterbereich war „mindestens -3 und höchstens -7" geschrieben, und das ist
+leer.** Die Hilfe zählt abwärts, also müssen die Schranken umgekehrt gelesen werden, und
+ein immer falscher Bereich ist perfectly gültiges C#. Er kam zweimal vor — in
+`Classify` und in `CompanionNumber` — und **der Compiler meldete den ersten als
+unerreichbaren Arm und zu dem zweiten nichts.**
+
+**Drei der zehn neuen Tests waren falsch, und zwei davon falsch über die Regeln und
+nicht über den Code.** Einer verglich „drei" mit „vier minus eins", um zu entscheiden,
+welche Achse zuerst schließt; die Lücken sind vier auf Y und drei auf X, und der größere
+Betrag ist das, was die Regel ansieht. Einer setzte den Helden in die Partei, aber nicht
+aufs Brett, und maß einen Wächter, der *durch* den Spieler ging — Partei und Brett sind
+getrennte Dinge, und ein Test muss beide setzen. Einer erwartete, dass die Route endet,
+wenn der Wächter ankommt, und hatte die Ankunft als Ende des Weges gelesen; ist sie
+nicht, denn die Wiederholungsflagge startet den Schritt neu.
+
+**Test evidence** `test_wolf_approach.cs` (10), mit den vier WOLF-Dateien der letzten
+beiden Karten nachgemessen. **1302/1302**.
+**Mutations** 15 wirksame Regeln über zwei Läufe, **15 von 15 gefangen** — darunter
+-1 und -2 vertauscht, der Begleiterbereich in der falschen Reihenfolge, die Ankunft in
+die Ablehnung gefaltet, die größere Lücke umgekehrt, der Gleichstand auf Y, der
+blockierte Schritt als Ankunft gelesen, die Zielkoordinate nicht durch die Bänder
+aufgelöst und die Figur im Weg nicht erkannt.

@@ -112,6 +112,58 @@ public static class WolfCharacterCollision
 	/// would make every half-height figure collide with the figure on the tile
 	/// above, and a crowd in a corridor would lock solid.
 	/// </remarks>
+	/// <summary>
+	/// Whether the step was refused by another figure rather than by a wall.
+	/// </summary>
+	/// <param name="pMover">The figure that wants to move.</param>
+	/// <param name="pDirection">The direction bit it wants to go.</param>
+	/// <returns>
+	/// True when somebody is standing where the step wanted to go.
+	/// </returns>
+	/// <remarks>
+	/// <para>
+	/// <strong>The question the approach step needs and the walk does not.</strong>
+	/// A walk treats both refusals the same — the step did not happen. A chase
+	/// does not: a guard that is one tile short of its target because the target
+	/// is in the way has arrived, and one blocked by a wall has not.
+	/// </para>
+	/// <para>
+	/// <strong>Asked about the target tile, not about the whole path.</strong> Only
+	/// the figure that can be in the way of the last step of a chase is the
+	/// target, and a reader that asked "is anybody anywhere near" would call a
+	/// guard standing two tiles from a crowd arrived.
+	/// </para>
+	/// </remarks>
+	public static bool IsBlockedByAFigure(
+		WolfCharacter pMover,
+		int pDirection)
+	{
+		if (pMover.Occupants?.Invoke() is not { } occupants
+			|| pMover.PassThrough)
+		{
+			return false;
+		}
+		var candidate = pMover.At(
+			pMover.X + WolfDirection.DeltaX(pDirection),
+			pMover.Y + WolfDirection.DeltaY(pDirection));
+		foreach (var other in occupants)
+		{
+			// **The mover is skipped, and a ghost is not a figure.** Overlaps
+			// already answers false when either side passes through, so a ghost
+			// in the way does not count — and a reader that checked only the
+			// mover would call a ghost a wall.
+			if (ReferenceEquals(other, pMover))
+			{
+				continue;
+			}
+			if (Overlaps(candidate, other))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public static float HitboxHeight(WolfCharacter pCharacter)
 	{
 		return pCharacter.SquareHitbox ? TileSize : DefaultHitboxHeight;

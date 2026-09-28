@@ -2600,6 +2600,7 @@ look for the next island of that shape.**
 | wolf | ~~character board and VM routing~~ | **~~a board that moves in time, and two opcodes — DONE, see below~~** |
 | wolf | ~~chip passability~~ | **~~six states, two layers, and walls a figure cannot walk through — DONE, see below~~** |
 | wolf | ~~character collision~~ | **~~half-tile hitboxes, pass-through, and a hero who is not a wall — DONE, see below~~** |
+| wolf | ~~target numbers and approach~~ | **~~-1 to -7, five companions, and two approach steps finally run — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2612,6 +2613,80 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The help's target numbers, and two steps refused for two cards
+
+**The two approach steps were refused for two cards**, with the honest reason:
+approaching an event needs a second figure and approaching a position needs the
+map, and the board had neither. The last two cards gave it both, and the refusal
+was no longer true — **a reader that kept it would have a game whose guards never
+approach anything.**
+
+**The target numbers are the help's, and they are not event ids.** The list reads:
+`0以上の場合 ＝ その値のIDを持つイベント`, `-1＝このイベント`, `-2＝主人公(隊列先頭)`, and
+`-3` to `-7` for the five companions. **Zero is an event id and the hero is minus
+two** — a reader that used zero for the hero would answer a command about event 0
+with the player, and a command about the player with event 0, and both of those
+exist in a real map.
+
+**"This event" means the route's own event, and the number travels with the route.**
+The runner has no notion of which program it runs in, and the board is what knows
+which event started a route, so the owner is part of the route's state.
+
+**The party has five slots, and an empty one is nobody.** The list stops at -7, so
+a reader that grew a list would answer -8 with a sixth companion the editor cannot
+name. An empty slot is null and not a fresh figure — a guard that approached an
+invented companion would walk to nobody.
+
+## The arrival and the refusal are the same thing in a bool, and must not be
+
+**`ApproachOne` first returned a bool where false meant both "already arrived"
+and "no such target",** and the caller could not tell them apart. A guard that had
+reached its target was recorded as having chased somebody who is not there, and its
+route ended in a refusal rather than an arrival. **Four answers, because each pair
+differs**: stepped takes time, arrived takes none, no target and blocked both stop
+the route unless it says to skip.
+
+**And the collision rule and the approach rule meet in one place.** A guard one
+tile short of its target, blocked by the target itself, **has arrived** — reading
+it as blocked would have a guard give up the moment it caught the player, which is
+the moment the game is about. Reading it as arrived always would have a guard
+pressed against a wall stop one tile short and call it done. **The difference is
+what refused the step**, and the board asks.
+
+**One tile per step, and the target is re-read every step.** A guard approaching a
+moving hero has to keep closing the distance, and a reader that computed the whole
+path once would walk to where the hero was.
+
+**The larger gap goes first, and a tie closes X.** That is what makes a diagonal
+read as a diagonal. **The help does not name the order, so it is stated as a
+choice** — a reader that closed both axes at once would produce a step the format
+has no type for.
+
+## Two bugs the compiler said nothing about, and two tests that were wrong
+
+**The companion range was written "at least -3 and at most -7", which is empty.**
+The help counts down, so the bounds have to be read the other way round, and a
+range that is always false is perfectly valid C#. It appeared twice — in
+`Classify` and in `CompanionNumber` — and **the compiler flagged the first as an
+unreachable arm and said nothing about the second.**
+
+**Three of the ten new tests were wrong, and two of them were wrong about the
+rules rather than about the code.** One compared "three" with "four minus one" to
+decide which axis closes first; the gaps are four on Y and three on X and the
+larger absolute value is what the rule looks at. One put the hero in the party
+but not on the board, and measured a guard walking *through* the player — the
+party and the board are separate things and a test has to set both. One expected
+the route to finish when the guard arrived, having read the arrival as the end of
+the walk; it is not, because the repeat flag restarts the step.
+
+**Test evidence** `test_wolf_approach.cs` (10), with the four WOLF files from the
+last two cards re-measured. **1302/1302**.
+**Mutations** Fifteen effective rules over two runs, **15 of 15 caught** —
+including -1 and -2 swapped, the companion range in the wrong order, the arrival
+folded into the refusal, the larger gap reversed, the tie going to Y, the blocked
+step read as arrived, the target coordinate not resolved through the bands, and
+the figure in the way not detected.
 
 ## A figure walked through every guard, and one rule was read backwards
 
