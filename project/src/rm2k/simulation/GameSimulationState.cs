@@ -348,6 +348,26 @@ public sealed class GameSimulationState
     // Actors (mutable battle stats)
     public Godot.Collections.Dictionary<int, Godot.Collections.Dictionary> ActorState { get; init; } = new();
 
+    /// <summary>Whether the player sprite is hidden, from 11310.</summary>
+    /// <remarks>
+    /// <strong>The command inverts its parameter</strong>: a first draft
+    /// mapped a non-zero to visible, which gets a hide command right and
+    /// a show command wrong — and a game whose only use is to hide a
+    /// sprite works until the first time it shows one.
+    /// </remarks>
+    public bool PlayerIsHidden { get; set; }
+
+    /// <summary>
+    /// Whether the player is standing through a wall, which 11310 clears.
+    /// </summary>
+    /// <remarks>
+    /// The reference calls <c>ResetThrough</c> right after hiding the
+    /// player, with its own comment "RPG_RT does this here" — so a
+    /// player who walked through a wall and is then hidden does not stay
+    /// standing in the wall.
+    /// </remarks>
+    public bool PlayerIsThrough { get; set; }
+
     // Troop (active battle)
     public int ActiveTroopId { get; set; } = -1;
     public Godot.Collections.Array<Godot.Collections.Dictionary> TroopMembers { get; init; } = new();
@@ -720,6 +740,7 @@ public sealed class GameSimulationState
         TerrainData = []; TileSubstitution = null; LowerLayer = null;
         UpperLayer = null; UpperPassability = null;
         Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); BattleCommands.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
+        PlayerIsHidden = false; PlayerIsThrough = false;
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;
         // **The stack starts empty, not with an invented "Menu" scene.** A

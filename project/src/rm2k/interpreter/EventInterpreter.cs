@@ -108,6 +108,16 @@ public sealed class EventInterpreter
 	/// <c>CommandTintScreen</c>, whose <c>CmdSetup</c> gives it a
 	/// minimum width of 6.
 	/// </summary>
+	/// <summary>11310, Player Visibility, from <c>Code::PlayerVisibility</c>.</summary>
+	public const int PlayerVisibility = 11310;
+
+	/// <summary>
+	/// 11330, Move Event, from <c>Code::MoveEvent</c> and EasyRPG's
+	/// <c>CommandMoveEvent</c>, whose <c>CmdSetup</c> gives it a
+	/// minimum width of 4.
+	/// </summary>
+	public const int MoveEvent = 11330;
+
 	public const int TintScreen = 11030;
 
 	public const int FlashScreen = 11040;
@@ -268,6 +278,17 @@ public sealed class EventInterpreter
 	private readonly Func<int, int, IReadOnlyList<Rm2kMap.EventCommand>?>? _eventCommandResolver;
 	private readonly Func<int, int, int, int, bool>? _eventLocationSetter;
 	private readonly Func<int, bool>? _eventDeactivator;
+	/// <summary>
+	/// Starts a move route on a character, for command 11330.
+	/// </summary>
+	/// <remarks>
+	/// The event id, the move frequency, the commands, whether the
+	/// route repeats and whether the page is held by it. **A null
+	/// means the character this interpreter cannot name**, which is
+	/// not the same as a character that refused the route.
+	/// </remarks>
+	private readonly Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>,
+		bool, bool, bool>? _moveRouteStarter;
 	private readonly PresentationState? _presentation;
 	private int _commandIndex;
 	private int _waitFramesRemaining;
@@ -291,8 +312,10 @@ public sealed class EventInterpreter
 		IReadOnlyList<Rm2kMap.EventCommand> commands, PresentationState? presentation = null,
 		Func<int, int, IReadOnlyList<Rm2kMap.EventCommand>?>? eventCommandResolver = null,
 		Func<int, int, int, int, bool>? eventLocationSetter = null,
-		Func<int, bool>? eventDeactivator = null)
-	{
+		Func<int, bool>? eventDeactivator = null,
+		Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>, bool, bool, bool>?
+			moveRouteStarter = null)
+			{
 		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
 		_commands = commands ?? throw new ArgumentNullException(nameof(commands));
@@ -300,6 +323,7 @@ public sealed class EventInterpreter
 		_eventCommandResolver = eventCommandResolver;
 		_eventLocationSetter = eventLocationSetter;
 		_eventDeactivator = eventDeactivator;
+		_moveRouteStarter = moveRouteStarter;
 		_commandIndex = 0;
 	}
 
@@ -404,6 +428,14 @@ public sealed class EventInterpreter
 
 			case ErasePicture:
 				ExecuteErasePicture(cmd);
+				return Advance();
+
+			case PlayerVisibility:
+				ExecutePlayerVisibility(cmd);
+				return Advance();
+
+			case MoveEvent:
+				ExecuteMoveEvent(cmd);
 				return Advance();
 
 			case TintScreen:
@@ -788,7 +820,7 @@ public sealed class EventInterpreter
 		// Consume continuation lines (ShowMessage_2 / Comment_2).
 		while (_commandIndex + 1 < _commands.Count
 			&& (_commands[_commandIndex + 1].Code == (pCmd.Code == ShowMessage ? ShowMessage2 : Comment2)))
-		{
+			{
 			_commandIndex++;
 			text += "\n" + _commands[_commandIndex].Text;
 		}
@@ -887,7 +919,7 @@ public sealed class EventInterpreter
 		}
 		if (_presentation.PendingKeyInputVariableId == request.VariableId
 			&& _presentation.PendingKeyInputKeys.Count > 0)
-		{
+			{
 			// Still open, and no key has arrived. The variable is zeroed every
 			// frame the reference waits, so a game reading it sees 0 rather
 			// than whatever it last held.
@@ -933,7 +965,7 @@ public sealed class EventInterpreter
 		}
 		if (!_presentation.TryConsumeKeyInput(
 			out var variableId, out _, out _, out _))
-		{
+			{
 			return;
 		}
 		WriteVariable(variableId, value);
@@ -1017,12 +1049,12 @@ public sealed class EventInterpreter
 		// command that always carried it.
 		var minWidth = istBgm ? 4 : 3;
 		if (pCmd.Parameters.Count < minWidth)
-	{
+		{
 			Malformed(label);
 			return;
 		}
 		if (string.IsNullOrEmpty(pCmd.Text))
-	{
+		{
 			_state.AddDiagnostic(
 				$"[Event {_eventId}] {label}: no file name, and the string"
 				+ " field is where the name lives; nothing was played");
@@ -1080,7 +1112,7 @@ public sealed class EventInterpreter
 			var track = istBgm ? _state.Audio.Bgm : _state.Audio.SoundEffect;
 			if (track == null
 				|| !string.Equals(track.Name, pCmd.Text, StringComparison.Ordinal))
-			{
+				{
 				_state.AddDiagnostic(
 					$"[Event {_eventId}] {label}: refused \"{Truncate(pCmd.Text)}\" because"
 					+ " one of the numbers was out of range");
@@ -1108,13 +1140,13 @@ public sealed class EventInterpreter
 	private void ExecuteFadeOutBGM(Rm2kMap.EventCommand pCmd)
 	{
 		if (pCmd.Parameters.Count < 1)
-	{
+		{
 			Malformed("Fade out BGM");
 			return;
 		}
 		var tenths = ValueOrVariable(EventInterpreter.VarOperandConstant, pCmd.Parameters[0]);
 		if (!_state.Audio.FadeOut(Rm2kChannel.BackgroundMusic, tenths))
-	{
+		{
 			_state.AddDiagnostic(
 				$"[Event {_eventId}] Fade out BGM: nothing to fade, and the"
 				+ " reference hands the number to a channel that has no track; the"
@@ -1145,7 +1177,7 @@ public sealed class EventInterpreter
 			}
 			if (_commands[idx].Parameters.Count == 0
 				|| _commands[idx].Parameters[0] != labelId)
-			{
+				{
 				continue;
 			}
 			found = idx;
@@ -1513,7 +1545,7 @@ public sealed class EventInterpreter
 	/// twice look broken, so this one says which of the two happened.
 	/// </remarks>
 		private void ExecuteErasePicture(Rm2kMap.EventCommand pCmd)
-	{
+		{
 		if (_presentation == null)
 		{
 			Malformed("Erase picture");
@@ -1654,22 +1686,134 @@ public sealed class EventInterpreter
 	/// is non-zero, which holds the page for as long as the tint runs.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 11310, Player Visibility, from EasyRPG's
+	/// <c>CommandPlayerVisibility</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// **The parameter is inverted, and that is the whole command:**
+	/// <c>parameters[0] == 0</c> means <em>hidden</em>. A reader that
+	/// mapped a non-zero to visible got the right answer for a command that
+	/// hides and the wrong one for a command that shows — and a game whose
+	/// only use of this command is to hide a sprite would work until the
+	/// first time it showed one again.
+	/// </para>
+	/// <para>
+	/// <strong>It also resets the through-position</strong>, which the
+	/// reference does with its own comment "RPG_RT does this here" — so
+	/// a player who has walked through a wall and is then hidden does not
+	/// stay standing in the wall.
+	/// </para>
+	/// </remarks>
+	private void ExecutePlayerVisibility(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Player visibility");
+			return;
+}
+		var hidden = pCmd.Parameters[0] == 0;
+		_state.PlayerIsHidden = hidden;
+		if (hidden)
+		{
+			// The reference calls ResetThrough here as well, and a hidden
+			// player who has walked through a wall must not stay in it.
+			_state.PlayerIsThrough = false;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Player is now"
+			+ $" {(hidden ? "hidden" : "visible")}, because parameters[0] == 0"
+			+ " is the hide case");
+}
+
+	/// <summary>
+	/// 11330, Move Event, from EasyRPG's <c>CommandMoveEvent</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// Parameters are <c>[eventId, moveFreq, idBitfield, skippable,
+	/// route...]</c>, and <strong>the route is the rest of the list</strong>
+	/// — the reference walks it from index four to the end. A reader that
+	/// read a fixed count would silently drop a long route, and the game
+	/// would run a shortened version of what the author wrote.
+	/// </para>
+	/// <para>
+	/// <strong>A move frequency outside 1 to 8 becomes 6</strong>, and that
+	/// is the reference own default rather than a refusal: <c>if (move_freq
+	/// &lt;= 0 || move_freq &gt; 8) move_freq = 6;</c>. A reader that
+	/// refused would stop a route RPG_RT happily runs.
+	/// </para>
+	/// <para>
+	/// <strong>The id mode and the repeat flag share one word.</strong> The
+	/// mode is the low two bits of the third parameter and the repeat is
+	/// its low bit, so a reader that took the whole number as the mode
+	/// would read mode 3 where a game meant mode 1 and a repeat.
+	/// </para>
+	/// </remarks>
+	private void ExecuteMoveEvent(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Move event");
+			return;
+		}
+		if (_moveRouteStarter == null)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Move event: this interpreter cannot reach a"
+				+ " character, so no route was started; the steps are still in the"
+				+ " file");
+			return;
+}
+		var idBitfield = pCmd.Parameters[2];
+		var eventId = ValueOrVariable(idBitfield & 0x3, pCmd.Parameters[0]);
+		var repeat = (idBitfield & 0x1) != 0;
+		var moveFreq = pCmd.Parameters[1];
+		if (moveFreq <= 0 || moveFreq > 8)
+		{
+			// The reference own fallback, not a refusal.
+			moveFreq = 6;
+}
+		var skippable = pCmd.Parameters[3] != 0;
+		var route = new List<Rm2kMap.MoveCommand>();
+		for (var i = 4; i < pCmd.Parameters.Count; i++)
+		{
+			route.Add(new Rm2kMap.MoveCommand(pCmd.Parameters[i]));
+}
+		var started = _moveRouteStarter(
+			eventId, moveFreq, route, repeat, skippable);
+		if (!started)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Move event {eventId}: no character carries"
+				+ " that id, and the reference logs a warning and touches nobody;"
+				+ $" the route had {route.Count} steps");
+			return;
+}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Move event {eventId}: {route.Count} steps"
+			+ $" at frequency {moveFreq}, repeating is {repeat},"
+			+ $" skippable is {skippable}");
+}
+
 	private void ExecuteTintScreen(Rm2kMap.EventCommand pCmd)
-{
+	{
 		if (_presentation == null)
-{
+		{
 			Malformed("Tint screen");
 			return;
 }
 		// CmdSetup minimum width 6.
 		if (pCmd.Parameters.Count < 6)
-{
+		{
 			Malformed("Tint screen");
 			return;
 }
 		var tenths = pCmd.Parameters[4];
 		if (tenths < 0 || tenths > EventInterpreterMaxTenths)
-{
+		{
 			_state.AddDiagnostic(
 				$"[Event {_eventId}] Tint screen: {tenths} tenths is outside"
 				+ " the format's 0 to 100; nothing was tinted");
@@ -1681,7 +1825,7 @@ public sealed class EventInterpreter
 		var frames = tenths * 60 / 10;
 		if (!_presentation.TintScreen(
 			Param(pCmd, 0), Param(pCmd, 1), Param(pCmd, 2), Param(pCmd, 3), frames))
-{
+			{
 			_state.AddDiagnostic(
 				$"[Event {_eventId}] Tint screen refused: a channel was outside"
 				+ " 0 to 255 or the saturation outside 0 to 100");
@@ -1693,7 +1837,7 @@ public sealed class EventInterpreter
 			+ $" saturation {Param(pCmd, 3)} over {tenths} tenths"
 			+ $", which is {frames} frames");
 		if (Param(pCmd, 5) != 0)
-{
+		{
 			_waitFramesRemaining = tenths * 6;
 }
 }
@@ -1720,21 +1864,21 @@ public sealed class EventInterpreter
 	/// </para>
 	/// </remarks>
 	private void ExecuteScreenTransition(Rm2kMap.EventCommand pCmd)
-{
+	{
 		var istShow = pCmd.Code == ShowScreen;
 		var label = istShow ? "Show screen" : "Erase screen";
 		if (_presentation == null)
-{
+		{
 			Malformed(label);
 			return;
 }
 		if (pCmd.Parameters.Count < 1)
-{
+		{
 			Malformed(label);
 			return;
 }
 		if (_presentation.MessageVisible)
-{
+		{
 			_state.AddDiagnostic(
 				$"[Event {_eventId}] {label}: a message is open, and the"
 				+ " reference holds the transition until it is not; nothing happened");
@@ -1746,10 +1890,10 @@ public sealed class EventInterpreter
 			: Rm2kTransitionDirection.Erase;
 		var ergebnis = Rm2kTransitionKind.FromParameter(pCmd.Parameters[0], richtung);
 		switch (ergebnis.Kind)
-{
+		{
 			case Rm2kTransitionRequestResultKind.Named:
 				if (!_presentation.RequestTransition(richtung, ergebnis.Transition))
-{
+				{
 					_state.AddDiagnostic(
 						$"[Event {_eventId}] {label}: refused a transition this"
 						+ " presentation does not define");

@@ -2577,7 +2577,8 @@ look for the next island of that shape.**
 | audio | `11560` | Play Movie — the only audio command left of the six |
 | actor state | `10430`–`10490` `10620` `10630` | parameters, skills, equipment, HP, SP, conditions, full heal |
 | battle | `10500` `10710` `13110`–`13410` | simulated attack, encounter, monster HP/MP/conditions, battle BG, terminate |
-| movement | `11310` `11330` `11340` `11350` | visibility, move event, proceed, halt all |
+| movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
+| movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — liblcf names them and EasyRPG dispatches them nowhere** |
 | shop and inn | `10720` `10730` `20720`–`20732` | a shop scene, an inn scene, and the four transaction states |
 | memory | `10820` `10830` `10910` `10920` `11530` `11540` | memorize and recall — **the state exists for the audio, and nothing writes it** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
@@ -2590,7 +2591,54 @@ look for the next island of that shape.**
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10230` `10920` `11010` | common event, flee, combo, class, timer |
 
-## `11010`, `11020` and `11030` are done — and `11060` is a liblcf code with no engine
+## `11310` and `11330` are done — and they close a K-131 island
+
+**`Rm2kMoveRouteState` had no caller anywhere in the project.** K-131 built the
+decoder and the state machine, mutation checked them and tested both as
+free-standing objects — and **no event could put one on a character.** Same island
+shape as the pictures in `PresentationState`, and the same way of finding it:
+comparing what a class is *for* against what the reference's commands do.
+
+**`11310` inverts its parameter, and that is the whole command.**
+`bool hidden = (com.parameters[0] == 0);` — a reader that mapped a non-zero to
+visible gets a hide right and a show wrong, and a game whose only use of this
+command is to hide a sprite **works until the first time it shows one again.**
+It also clears the through-position, with the reference's own comment "RPG_RT
+does this here" — so a player who walked through a wall and is then hidden does
+not stay standing in the wall. Showing does *not* clear it, because the reset
+sits in the hide branch and not beside it.
+
+**`11330` reads the route as the rest of the list**, from index four to the
+end, the way the reference walks it. A reader that read a fixed count would
+silently drop a long route, and the game would run a shortened version of what
+the author wrote.
+
+**The id mode and the repeat flag share one word.** The reference reads
+`ValueOrVariableBitfield(com.parameters[2], 2, com.parameters[0])` and
+`ManiacBitmask(com.parameters[2], 0x1)` — the mode is the low two bits and the
+repeat is the low bit, so a reader that took the whole number as the mode would
+read mode 3 where a game meant mode 1 and a repeat.
+
+**A move frequency outside 1 to 8 becomes 6, and that is the engine's own
+default rather than a refusal**: `if (move_freq <= 0 || move_freq > 8)
+move_freq = 6;`. A reader that refused would stop a route RPG_RT happily runs,
+and a game that wrote a zero because the editor left the field empty would lose
+its movement. There is a test for all four bad values.
+
+**`11340` and `11350` are in liblcf's enumeration and appear nowhere in
+EasyRPG's interpreter** — no `case`, no method. So this repository does not
+implement them, for the same reason as `11060`: there is nothing to read the
+parameters from.
+
+**The route reaches a character through a hook**, `moveRouteStarter`, which the
+interpreter refuses visibly when it is absent — because a reader that said
+nothing would look like a game that asked for no movement at all.
+
+**Test evidence** `test_rm2k_move_event.cs`, 10 tests.
+**1079/1079**, `TestRm2kMoveEvent: 10/10`.
+**Mutations** Eight rules over three runs, **8 of 8 caught**.
+
+## `11010`, `11020` and `11030` are done## `11010`, `11020` and `11030` are done — and `11060` is a liblcf code with no engine
 
 **The transition tables are the sharpest thing in this slice, because the
 pairing is not regular.** Show and erase are the same twenty kinds read from

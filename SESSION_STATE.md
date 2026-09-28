@@ -2322,3 +2322,47 @@ als benannte Lücke auf der Liste und nicht als Vermutung.**
 
 **Test evidence** `test_rm2k_screen.cs` (14), inklusive aller zwanzig Parameter
 beider Tabellen einzeln geprüft. **1069/1069**. **Mutations** 9 von 9 gefangen.
+
+## K-136 `11310` und `11330` — DONE, und sie schließen eine K-131-Insel
+
+**`Rm2kMoveRouteState` hatte keinen Aufrufer im ganzen Projekt.** K-131 hat den
+Decoder und die Zustandsmaschine gebaut, mutation geprüft und **beide als
+freistehende Objekte getestet** — und **kein Befehl konnte eine auf einen
+Helden legen.** Dieselbe Inselform wie die Bilder in `PresentationState`, und
+dieselbe Art, sie zu finden: vergleichen, wofür eine Klasse da ist, mit dem, was
+die Befehle der Referenz tun.
+
+**`11310` invertiert seinen Parameter, und das ist der ganze Befehl.**
+`bool hidden = (com.parameters[0] == 0);` — wer ein Ungleich-Null auf „sichtbar"
+abbildet, hat ein Verstecken richtig und ein Zeigen falsch, **und ein Spiel, das
+diesen Befehl nur zum Verstecken benutzt, funktioniert, bis es das erste Mal
+eines zeigt.** Es räumt außerdem die Durch-Position ab, mit dem Kommentar der
+Referenz „RPG_RT does this here" — **wer durch eine Wand ging und dann versteckt
+wird, bleibt nicht in der Wand stehen.** Zeigen räumt sie *nicht* ab, weil das
+Zurücksetzen im Versteck-Zweig steht und nicht daneben.
+
+**`11330` liest die Route als den Rest der Liste**, ab Index vier bis zum Ende.
+Wer eine feste Zahl liest, wirft eine lange Route stillschweigend weg.
+
+**ID-Modus und Repeat-Flag teilen sich ein Wort.** Der Modus sind die niedrigen
+zwei Bits, Repeat ist das niedrige Bit.
+
+**Eine Bewegungsfrequenz außerhalb 1–8 wird 6, und das ist die Vorgabe der
+Engine und keine Ablehnung.** Wer verweigert, stoppt eine Route, die RPG_RT
+fröhlich laufen lässt.
+
+**`11340` und `11350` stehen in liblcf und kommen in EasyRPGs Interpreter
+nirgendwo vor** — kein `case`, keine Methode. Also nicht implementiert, aus
+demselben Grund wie `11060`.
+
+**Test evidence** `test_rm2k_move_event.cs` (10). **1079/1079**.
+**Mutations** 8 von 8 gefangen (drei Läufe; zwei Regeln des ersten Laufs waren
+Ankerfehler und zählen nicht).
+
+### Ein Werkzeugfehler, der die ganze Datei umformatiert hat
+
+Mein Einrück-Skript hat 237 öffnende Klammern „korrigiert" — die meisten waren
+bereits richtig. Der Diff blieb bei 168 Zeilen, also war der Schaden
+kosmetisch, **aber ein Skript, das 237-mal zugreift und 1-mal recht hat, ist
+kein Werkzeug, sondern ein Glücksspiel.** Künftig: eine Stelle gezielt patchen,
+nicht die Datei durchgehen.
