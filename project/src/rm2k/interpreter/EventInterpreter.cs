@@ -51,6 +51,19 @@ public sealed class EventInterpreter
 	public const int BreakLoop = 12220;
 	public const int Comment = 12410;
 	public const int ChangeHeroName = 10610;
+	/// <summary>
+	/// 11110, Show Picture, from liblcf <c>Code::ShowPicture</c> and EasyRPG's
+	/// <c>CommandShowPicture</c>, whose <c>CmdSetup</c> gives it a minimum
+	/// width of 14.
+	/// </summary>
+	public const int ShowPicture = 11110;
+
+	/// <summary>11130, Erase Picture, from the same pair.</summary>
+	public const int ErasePicture = 11130;
+
+	/// <summary>11120, Move Picture.</summary>
+	public const int MovePicture = 11120;
+
 	public const int FlashScreen = 11040;
 	public const int ShakeScreen = 11050;
 	public const int WeatherEffects = 11070;
@@ -337,6 +350,14 @@ public sealed class EventInterpreter
 
 			case ChangeHeroName:
 				ExecuteChangeHeroName(cmd);
+				return Advance();
+
+			case ShowPicture:
+				ExecuteShowPicture(cmd);
+				return Advance();
+
+			case ErasePicture:
+				ExecuteErasePicture(cmd);
 				return Advance();
 
 			case FlashScreen:
@@ -1064,6 +1085,214 @@ public sealed class EventInterpreter
 		}
 		_state.AddDiagnostic($"[Event {_eventId}] Erase event: event {_eventId} deactivated");
 		return FinishFrame();
+	}
+
+	/// <summary>
+	/// 11110, Show Picture, from EasyRPG's <c>CommandShowPicture</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The parameters are
+	/// <c>[id, positionMode, x, y, fixedToMap, magnify, topTransparency,
+	/// useTransparent, red, green, blue, saturation, effectMode, effectPower,
+	/// bottomTransparency]</c>, and the last one is **optional**: the reference
+	/// only reads it when the command carries more than 14 parameters.
+	/// </para>
+	/// <para>
+	/// <strong>Position and the picture number can both be variables</strong>,
+	/// and <c>parameters[1]</c> is not a mode number in the usual sense: it is
+	/// the value's mode <em>and</em> the Maniac patch packs the X and Y origin
+	/// into its upper bits, which the reference masks off with
+	/// <c>ManiacBitmask(com.parameters[1], 0xFF)</c>. A reader that treated the
+	/// whole number as a mode would read mode 257 where a game meant mode 1.
+	/// </para>
+	/// <para>
+	/// <strong>The magnitude is one value, not two.</strong> The reference sets
+	/// <c>magnify_height = magnify_width</c>, so the picture is square in the
+	/// magnification and <c>parameters[6]</c> is the top colour, not a height.
+	/// </para>
+	/// </remarks>
+	private void ExecuteShowPicture(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null)
+		{
+			Malformed("Show picture");
+			return;
+		}
+		// CmdSetup minimum width 14. A command that is shorter is a truncated
+		// file and not a picture with defaults.
+		if (pCmd.Parameters.Count < 14)
+		{
+			Malformed("Show picture");
+			return;
+		}
+		var pictureId = ValueOrVariable(Param(pCmd, 1), pCmd.Parameters[0]);
+		// The mode lives in the low byte; the Maniac patch packs the origin
+		// into the rest.
+		var positionMode = pCmd.Parameters[1] & 0xFF;
+		var x = ValueOrVariable(positionMode, pCmd.Parameters[2]);
+		var y = ValueOrVariable(positionMode, pCmd.Parameters[3]);
+		//
+		// **The Maniac bitmask applies to the bottom transparency, and only to
+		// the bottom one.** The reference masks parameters[14] with 0xFF because
+		// the patch puts flags above the value, and it does *not* mask
+		// parameters[6] — the top transparency is read whole. A first draft
+		// masked both, which turned a top transparency of 100 into 100 and a
+		// bottom of 100 into 100 by luck and any value above 255 into garbage.
+		var topTransparency = Param(pCmd, 6);
+		int? bottom = pCmd.Parameters.Count > 14
+			? (pCmd.Parameters[14] & 0xFF)
+			: null;
+
+		var ok = _presentation.ShowPicture(
+			pictureId, pCmd.Text, x, y,
+			Param(pCmd, 4) > 0,
+			Param(pCmd, 5),
+			topTransparency,
+			Param(pCmd, 7) > 0,
+			Param(pCmd, 8), Param(pCmd, 9), Param(pCmd, 10),
+			Param(pCmd, 11), Param(pCmd, 12), Param(pCmd, 13),
+			bottom);
+		if (!ok)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Show picture {pictureId} \"{Truncate(pCmd.Text)}\""
+				+ " refused: a bound was out of range");
+			return;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Show picture {pictureId} \"{Truncate(pCmd.Text)}\""
+			+ $" at {x},{y}");
+	}
+
+	/// <summary>
+	/// 11130, Erase Picture, from EasyRPG's <c>CommandErasePicture</c>.
+	/// </summary>
+	/// <remarks>
+	/// The id can be a variable, and <strong>erasing a picture that is not there
+	/// is not an error</strong> — the reference returns true regardless. A
+	/// reader that reported a refusal would make a game that legitimately erases
+	/// twice look broken, so this one says which of the two happened.
+	/// </remarks>
+		private void ExecuteErasePicture(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null)
+		{
+			Malformed("Erase picture");
+			return;
+		}
+		// CmdSetup minimum width 1 -- a bare id, with no mode at all, is the
+		// old form and the common one.
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Erase picture");
+			return;
+		}
+		// **The id comes first and the mode second.** A first draft read
+		// parameters[0] as the mode and parameters[1] as the id, which is the
+		// order the *show* command uses for its position mode and not the
+		// order this one does -- so a one parameter command, the form the
+		// editor writes most, erased the picture numbered by nothing at all.
+		var mode = pCmd.Parameters.Count > 1 ? pCmd.Parameters[1] : 0;
+		var first = pCmd.Parameters[0];
+		int last;
+		switch (mode)
+		{
+			case 0:
+			case 1:
+				last = ValueOrVariable(mode, first);
+				break;
+			case 2:
+			case 3:
+				// A range, and the end is parameters[2].
+				last = pCmd.Parameters.Count > 2
+					? ValueOrVariable(mode, pCmd.Parameters[2])
+					: first;
+				break;
+			default:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Erase picture: unsupported mode {mode},"
+					+ $" erasing only {first}");
+				last = ValueOrVariable(0, first);
+				break;
+		}
+		// A range's start is always a plain number -- the reference reads
+		// parameters[0] straight out -- and only the end goes through the
+		// mode. Modes 2 and 3 therefore resolve both ends as constants, and a
+		// reader that ran the start through the mode would look up a variable
+		// the game never named.
+		var start = mode is 2 or 3 ? first : ValueOrVariable(mode, first);
+		var low = Math.Min(start, last);
+		var high = Math.Max(start, last);
+		var erased = 0;
+		var missing = 0;
+		for (var id = low; id <= high; id++)
+		{
+			if (_presentation.ErasePicture(id, out var hatte))
+			{
+				erased++;
+				if (!hatte)
+				{
+					missing++;
+				}
+			}
+		}
+		if (erased == 0)
+		{
+			// **Nothing was in range at all, which is not the same as the id
+			// being out of bounds.** `ErasePicture` returns false for an id of
+			// zero or past the limit, and true for an id in range that holds no
+			// picture -- so a run of ids that were all in range and all empty
+			// is a success with nothing in it. A first draft reported both as
+			// a refusal, which told a game author their command was out of
+			// bounds when the truth was that they had already erased it.
+			var ausserhalb = low < 1 || high > PresentationState.MaxPictures;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Erase picture {low}"
+				+ (low == high ? string.Empty : $"..{high}")
+				+ (ausserhalb
+					? " refused: the id is out of bounds"
+					: ": there was none, and the reference treats that as success"));
+			return;
+		}
+		// **Erasing a picture that is not there is success.** The reference
+		// returns true regardless, and a reader that reported a refusal would
+		// make a game that legitimately erases twice look broken -- and games
+		// do erase twice, because a page runs and then runs again.
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Erase picture {low}"
+			+ (low == high ? string.Empty : $"..{high}")
+			+ $": {erased} removed"
+			+ (missing > 0
+				? $", {missing} of them were not there, and the reference"
+					+ " treats that as success"
+				: string.Empty));
+	}
+
+	/// <summary>
+	/// Reads a parameter that is a constant or a variable, from
+	/// <c>ValueOrVariable</c> and this project's own <c>TargetEval</c> modes.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The mode is the same three the branch command uses</strong>:
+	/// constant, variable, and — in the branch command — the indirect forms. The
+	/// picture command reads a variable directly, not an expression, so a mode
+	/// it does not know is a diagnostic rather than a guess.
+	/// </remarks>
+	private int ValueOrVariable(int pMode, int pValue)
+	{
+		switch (pMode)
+		{
+			case TargetEvalSingle:
+				return pValue;
+			case VarOperandVariable:
+				return GetVariable(pValue);
+			default:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Picture: unsupported value mode {pMode},"
+					+ $" using the constant {pValue}");
+				return pValue;
+		}
 	}
 
 	private void ExecuteFlashScreen(Rm2kMap.EventCommand pCmd)

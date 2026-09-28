@@ -2553,6 +2553,66 @@ name work that was done:
 Because the next agent will read the table. **A board note explaining that
 the table is incomplete is a warning; a table that is complete is a fix.**
 
+
+### K-136 The eighty-nine commands liblcf names and this interpreter does not dispatch
+`READY` — runtime, P0
+
+**Measured by comparing liblcf's `Code` enumeration against the interpreter's
+own constant list, value by value — 164 codes, 43 dispatched, 121 without.**
+After the Maniac and EasyRPG patch codes are set aside, **89 real RPG commands
+have no case in this reader.** They are not refused one by one; they fall into
+the default branch and are reported as "Unsupported RM2K command NNNN skipped".
+
+**And that default is the same fault K-094 was written for.** `ShowPicture` and
+`ErasePicture` were *implemented in `PresentationState`, bounded, and tested* —
+and no command could reach either, so a game's picture command did nothing and
+the suite was green. The two commands this card has just wired, `11110` and
+`11130`, were the clearest instance of the class. **The list below is where to
+look for the next island of that shape.**
+
+| area | codes | what it needs |
+|---|---:|---|
+| screen effects | `11010` `11020` `11030` `11060` | erase/show/tint/pan — `PresentationState` has flash, shake and weather and none of these |
+| audio | `11510`–`11560` | BGM, fade, memorize, sound, movie — **`GameSimulationState` has four position doubles and nothing that plays** |
+| actor state | `10430`–`10490` `10620` `10630` | parameters, skills, equipment, HP, SP, conditions, full heal |
+| battle | `10500` `10710` `13110`–`13410` | simulated attack, encounter, monster HP/MP/conditions, battle BG, terminate |
+| movement | `11310` `11330` `11340` `11350` | visibility, move event, proceed, halt all |
+| shop and inn | `10720` `10730` `20720`–`20732` | a shop scene, an inn scene, and the four transaction states |
+| memory | `10820` `10830` `10910` `10920` `11530` `11540` | memorize and recall — **the state exists for the audio, and nothing writes it** |
+| teleport access | `11810`–`11840` | targets and the two access flags |
+| saves | `11910` `11930` | open save menu, change save access |
+| menues | `11950` `11960` `12010`-family | open main menu, change access |
+| flow | `12110` `12120` `12420` `12510` | **label and jump-to-label, game over, return to title** |
+| vehicles | `10840` `10850` `10650` | enter/exit vehicle, set vehicle location, change vehicle graphic |
+| face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
+| battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
+| misc | `1005`–`1008` `10230` `10920` `11010` | common event, flee, combo, class, timer |
+
+**`12110` Label and `12120` Jump to Label are the sharpest of these.** They are
+the only two that change *where* the page goes rather than what it does, and a
+reader without them runs a jump as a no-op and lands at the end of the page —
+which looks like a game that quietly skipped half its script.
+
+**Acceptance criteria for each command taken from this list**
+
+- The parameters come from the reference's `CmdSetup` minimum width and its
+  reads, never from a hand-written table.
+- A command that is decoded but not executed says so, and a command that is
+  executed does what the source does — including where the source does nothing
+  and this reader refuses visibly.
+- Each command's own test derives its expectation from the reference or from a
+  real fixture.
+- Each is mutation checked, and a rule that survives is fixed or named as a
+  harness fault.
+
+**Why the whole list and not one command**
+
+Because two of the entries on it — `11110` and `11130` — were *already
+implemented* and had been for longer than most of the list. **A reader that
+looks at its own feature list will not find these; only the reference's list
+will.** That is the argument for writing the gap down once instead of finding it
+one skipped diagnostic at a time.
+
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
 - At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.

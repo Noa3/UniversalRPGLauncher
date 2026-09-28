@@ -2131,3 +2131,63 @@ zurückzunehmen — `5a9ca22`, der `1009` für eine Nachrichtenzeile hielt.
 behandelt. Danach die Fahrzeug-Move-Routes aus K-114. Kein Nutzerentscheid
 nötig.
 
+## K-136 angelegt, und `11110`/`11130` verdrahtet — 1035/1035
+
+**Der Fund, der die Karte ausgelöst hat:** `ShowPicture` und `ErasePicture`
+waren in `PresentationState` **implementiert, begrenzt und getestet** — und von
+keinem Befehl erreichbar. `ShowPicture` nahm sechs Skalare und **warf die
+anderen acht Parameter weg**. Das ist dieselbe Fehlerform wie K-094s Fahrzeuge:
+der Zustand war da, die Verdrahtung nicht, und die Suite war grün.
+
+**K-136 ist die Liste, die diese Form findet.** liblcf hat 164 Codes, dieser
+Interpreter dispatcht 43 — **89 echte RPG-Befehle haben keinen Fall** und
+landen in `default`. Zwei davon waren bereits implementiert.
+
+### Drei echte Produktfehler, die die Realdaten fanden
+
+**1. Die Transparenz ist ein *Prozent*, keine Farbe.** Die Referenz klemmt sie
+mit `std::min(top_trans, 100)`. Ich hatte sie als Farbkanal gegen `MaxColorChannel`
+geprüft — **jedes echte Bild eines Spiels (0, 50, 100) wäre zufällig durchgegangen**
+und jedes Spiel mit der Farbe, die ich im Kopf hatte, hätte einen Refusal bekommen.
+
+**2. Die Maniac-Bitmaske gilt nur für die *untere* Transparenz.** Die Referenz
+maskt `parameters[14]` mit `0xFF` und liest `parameters[6]` **roh**. Ich hatte
+beide maskiert.
+
+**3. `11130` liest die ID zuerst und den Modus danach.** Ich hatte es umgekehrt —
+so wie der *Show*-Befehl seinen Positionsmodus legt. Folge: **der einparametrige
+Befehl, den der Editor am häufigsten schreibt, löschte das Bild mit der Nummer
+„nichts".**
+
+Und die Trennung, die ich verwechselt hatte: **„nichts da" ist Erfolg, „ID außerhalb
+der Grenzen" ist Refusal.** Beide als Refusal zu melden erzählte einem Spieler,
+sein Befehl sei außerhalb der Grenzen, wenn die Wahrheit war, dass er schon
+gelöscht hatte.
+
+**Test evidence** `test_rm2k_pictures.cs` (10), `test_presentation_state.cs`
+umgestellt. **1035/1035**, `TestRm2kPictures: 10/10`, `TestPresentationState: 5/5`.
+**Mutations** 8 von 8 gefangen.
+
+### K-136, die Karte
+
+**89 Befehle ohne Fall, nach Bereich sortiert.** Der schärfste ist
+**`12110` Label und `12120` Jump to Label** — die einzigen zwei, die *wohin* die
+Seite geht statt *was* sie tut. Ein Leser ohne sie führt den Sprung als No-Op aus
+und landet am Seitenende, **was sich wie ein Spiel anfühlt, das stillschweigend
+die halbe Scriptzeile übersprungen hat.**
+
+**Warum die ganze Liste und nicht ein Befehl:** zwei ihrer Einträge waren bereits
+lange implementiert. **Ein Leser, der seine eigene Feature-Liste ansieht, findet
+sie nicht — nur die Liste der Referenz.** Das ist das Argument, die Lücke einmal
+aufzuschreiben statt Befehl für Befehl an der Diagnose zu entdecken.
+
+### Ein Werkzeugfehler, der mich Zeit gekostet hat
+
+Beim Anfügen der Karte meldete mein Zählskript 175 Detailabschnitte statt 88.
+Ursache: es zählte `### K-…` **ohne** zu prüfen, ob die Karte unter dem
+richtigen `## Card details`-Block steht — es gibt historisch zwei
+`## Agent maintenance rules`-Überschriften, und ein naives `s.find` nimmt den
+ersten. **Eine Zählung, die die Struktur nicht prüft, zählt Dokumente statt
+Karten.** Gegen `git show HEAD` verifiziert: +1 Karte, +1 Zeile, Struktur
+unverändert.
+

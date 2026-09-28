@@ -26,12 +26,38 @@ public partial class TestPresentationState : TestBase
     public void Test_PicturesAreBoundedAndReplaceById()
     {
         var presentation = new PresentationState();
-        AssertTrue(presentation.ShowPicture(3, "Picture01", 10, 20, 100, 80));
-        AssertTrue(presentation.ShowPicture(3, "Picture02", 11, 21, 90, 70));
+        // The natural size, which the magnification scales. A first draft
+        // passed the two numbers as the picture's own width and height, and
+        // the signature grew a magnification and eight more parameters to say
+        // so.
+        AssertTrue(presentation.ShowPicture(
+            3, "Picture01", 10, 20,
+            pFixedToMap: false, pMagnify: 100,
+            pTopTransparency: 0, pUseTransparentColor: false,
+            pRed: 255, pGreen: 255, pBlue: 255,
+            pSaturation: 100, pEffectMode: 0, pEffectPower: 100,
+            pNaturalWidth: 100, pNaturalHeight: 80));
+        AssertTrue(presentation.ShowPicture(
+            3, "Picture02", 11, 21,
+            pFixedToMap: false, pMagnify: 100,
+            pTopTransparency: 0, pUseTransparentColor: false,
+            pRed: 255, pGreen: 255, pBlue: 255,
+            pSaturation: 100, pEffectMode: 0, pEffectPower: 100,
+            pNaturalWidth: 90, pNaturalHeight: 70));
         AssertEq(presentation.Pictures.Count, 1);
         AssertEq(presentation.Pictures[3].Name, "Picture02");
-        AssertFalse(presentation.ShowPicture(0, "Invalid", 0, 0, 1, 1));
-        AssertTrue(presentation.ErasePicture(3));
+        AssertFalse(presentation.ShowPicture(
+            0, "Invalid", 0, 0,
+            pFixedToMap: false, pMagnify: 100,
+            pTopTransparency: 0, pUseTransparentColor: false,
+            pRed: 255, pGreen: 255, pBlue: 255,
+            pSaturation: 100, pEffectMode: 0, pEffectPower: 100,
+            pNaturalWidth: 1, pNaturalHeight: 1));
+        AssertTrue(presentation.ErasePicture(3, out var hatte));
+        AssertTrue(
+            hatte,
+            "and the erase reports that there was a picture, because a reader"
+            + $" cannot tell an erase of nothing from a refusal otherwise; it was {hatte}");
         AssertEq(presentation.Pictures.Count, 0);
     }
 
@@ -52,7 +78,13 @@ public partial class TestPresentationState : TestBase
         AssertTrue(presentation.ShowChoices(new[] { "Yes", "No" }));
         AssertTrue(presentation.BeginInput(4));
         AssertTrue(presentation.SetInputValue(12));
-        AssertTrue(presentation.ShowPicture(1, "Picture", 0, 0, 16, 16));
+        AssertTrue(presentation.ShowPicture(
+            1, "Picture", 0, 0,
+            pFixedToMap: false, pMagnify: 100,
+            pTopTransparency: 0, pUseTransparentColor: false,
+            pRed: 255, pGreen: 255, pBlue: 255,
+            pSaturation: 100, pEffectMode: 0, pEffectPower: 100,
+            pNaturalWidth: 16, pNaturalHeight: 16));
 
         presentation.Reset();
 
