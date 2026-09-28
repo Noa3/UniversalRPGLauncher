@@ -2090,3 +2090,44 @@ weil eine ID falsch war.**
 `11610` verdrahten (Key-Input-Prompt braucht ein Fenster, das es noch nicht
 gibt) oder `12310`/`12320`, die als Konstanten deklariert sind. Kein
 Nutzerentscheid nötig.
+
+## K-135 `11610` verdrahtet — DONE, Karte schliessbar
+
+`Rm2kKeyInput` hatte die ganze Tabelle und nichts, um sie zu halten. Jetzt gibt
+es einen Prompt in `PresentationState` und einen Befehl im Interpreter, und
+**die Seite hält, solange er offen ist** — das macht ihn erst zum Prompt.
+
+**Es ist ein zweiter Prompt, kein zweiter Modus des ersten.** 10150 fragt eine
+Zahl und speichert sie; 11610 fragt eine Menge Tasten und speichert einen
+*Code*. Eine Ziffer ist 11 bis 20, ein Operator 21 bis 25, die Bestätigungstaste
+ist 5. **Nichts in der Datei sagt, welches der beiden gefragt hat** — deshalb
+zwei Prompts statt eines Parameters.
+
+**Während des Wartens ist die Variable null — jeden Frame.** Der Kommentar der
+Referenz sagt das wörtlich. Ein Leser, der erst bei der Antwort schrieb, ließe
+stehen, was das Spiel vorher hineingelegt hatte.
+
+**Eine nicht erlaubte Taste beendet nichts.** Die Fixture erlaubt Ziffern und
+Operatoren, nicht Bestätigen und nicht Shift. Ein Leser, der jede Taste als
+Antwort nähme, beendete den Prompt mit der ersten Taste, mit der ein Spieler ihn
+schließen will — so schließt ein Rechner-Dialog, bevor eine Ziffer getippt ist.
+
+**Ein Tastendruck kommt auf einem Eingabe-Frame, und der ist nicht der Schritt
+des Interpreters.** Deshalb ist `PressKeys` ein eigener Einstieg und nicht Teil
+von `ExecuteFrame`. Ein Leser, der das Warten in den Dispatch gelegt hätte,
+öffnete den Prompt in jedem Frame neu, in dem er offen blieb.
+
+**Test evidence** `test_rm2k_key_input_wiring.cs` (9).
+**1025/1025**, `TestRm2kKeyInputWiring: 9/9`, `TestRm2kKeyInput: 10/10`.
+**Mutations** 9 von 9 gefangen.
+
+**Damit ist K-135 geschlossen.** Sieben Codes, alle identifiziert, alle
+ausgeführt. Und das Schließen bedeutete, einen bereits gepushten Fix
+zurückzunehmen — `5a9ca22`, der `1009` für eine Nachrichtenzeile hielt.
+
+### Nächster Schritt
+
+`12310` und `12320` sind als Konstanten deklariert und werden im Dispatch nicht
+behandelt. Danach die Fahrzeug-Move-Routes aus K-114. Kein Nutzerentscheid
+nötig.
+

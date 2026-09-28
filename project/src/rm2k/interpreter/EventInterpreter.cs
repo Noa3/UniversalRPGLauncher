@@ -91,6 +91,18 @@ public sealed class EventInterpreter
 	/// not evidence for either.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 11610, Key Input Proc, from liblcf <c>Code::KeyInputProc</c> and EasyRPG
+	/// <c>Game_Interpreter::CommandKeyInputProc</c>.
+	/// </summary>
+	/// <remarks>
+	/// It waits for a key and writes a <em>code</em> into a variable, not the
+	/// key's own value — a digit answers 11 to 20, an operator 21 to 25, the
+	/// confirm key is 5. It is not the number input command with a different
+	/// name, and <c>Rm2kKeyInput</c> holds the whole table.
+	/// </remarks>
+	public const int KeyInputProc = 11610;
+
 	public const int ChangeBattleCommands = 1009;
 
 	/// <summary>5001, from liblcf <c>Code::OpenLoadMenu</c>.</summary>
@@ -376,6 +388,10 @@ public sealed class EventInterpreter
 			case EndLoop:
 				ExecuteEndLoop();
 				return true; // index points at the matching Loop command
+
+			case KeyInputProc:
+				ExecuteKeyInputProc(cmd);
+				return true;
 
 			case ChangeBattleCommands:
 				ExecuteChangeBattleCommands(cmd);
@@ -693,6 +709,110 @@ public sealed class EventInterpreter
 	/// id was wrong.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 11610, Key Input Proc, from EasyRPG's
+	/// <c>CommandKeyInputProc</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The reference resets the key state and returns <c>false</c>, so the page
+	/// holds until a key arrives. <strong>And while waiting it sets the variable
+	/// to zero every frame</strong> — the reference's own comment says so, and
+	/// a reader that only wrote on arrival would leave whatever the game had put
+	/// there a moment ago.
+	/// </para>
+	/// <para>
+	/// <strong>The engine version is a parameter of the read, not an
+	/// assumption.</strong> Parameters 5 to 9 mean shift/down/left/right/up on
+	/// RM2K and numbers/operators/time-variable/timed on RM2K3, and reading the
+	/// wrong column produces a command that waits for the wrong keys rather than
+	/// an error.
+	/// </para>
+	/// </remarks>
+	private void ExecuteKeyInputProc(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation == null)
+		{
+			Malformed("Key input proc");
+			return;
+		}
+		// The version is read from the save data, and a game that has not said
+		// which it is is treated as 2K, which is the reading the command's own
+		// legacy branch expects.
+		var request = Rm2kKeyInput.Read(
+			pCmd.Parameters,
+			pIsRpg2k3: _state.SupportsRpg2k3ECommands,
+			pIsMajorUpdated: _state.SupportsRpg2k3ECommands);
+		if (request == null)
+		{
+			Malformed("Key input proc");
+			return;
+		}
+		if (_presentation.PendingKeyInputVariableId == request.VariableId
+			&& _presentation.PendingKeyInputKeys.Count > 0)
+		{
+			// Still open, and no key has arrived. The variable is zeroed every
+			// frame the reference waits, so a game reading it sees 0 rather
+			// than whatever it last held.
+			if (request.Wait && request.VariableId <= GameSimulationState.MaxVariables)
+			{
+				WriteVariable(request.VariableId, 0);
+			}
+			return;
+		}
+		if (!_presentation.BeginKeyInput(request))
+		{
+			Malformed("Key input proc");
+			return;
+		}
+		if (request.Wait && request.VariableId <= GameSimulationState.MaxVariables)
+		{
+			WriteVariable(request.VariableId, 0);
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Key input proc: waiting for one of"
+			+ $" {request.AllowedKeys.Count} keys -> variable {request.VariableId}");
+	}
+
+	/// <summary>
+	/// Delivers a key press to an open 11610 prompt and writes the answer.
+	/// </summary>
+	/// <remarks>
+	/// This is the frame-step side of the command, and it is separate from the
+	/// dispatch on purpose: <c>ExecuteFrame</c> is one interpreter step, and a
+	/// key arrives on an input frame, which is not the same thing. A reader that
+	/// put the wait inside the dispatch would re-arm the prompt on every frame
+	/// it stayed open, and the reference resets its key state on every call.
+	/// </remarks>
+	public void PressKeys(IReadOnlyList<string> pPressed)
+	{
+		if (_presentation == null)
+		{
+			return;
+		}
+		if (!_presentation.TryConsumeKeyInput(pPressed, out var value))
+		{
+			return;
+		}
+		if (!_presentation.TryConsumeKeyInput(
+			out var variableId, out _, out _, out _))
+		{
+			return;
+		}
+		WriteVariable(variableId, value);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Key input proc: value {value} -> variable {variableId}");
+	}
+
+	private void WriteVariable(int pVariableId, int pValue)
+	{
+		while (_state.Variables.Count < pVariableId)
+		{
+			_state.Variables.Add(0);
+		}
+		_state.Variables[pVariableId - 1] = pValue;
+	}
+
 	private void ExecuteChangeBattleCommands(Rm2kMap.EventCommand pCmd)
 	{
 		// EasyRPG: CmdSetup minimum width 4.

@@ -46,6 +46,38 @@ public sealed class PresentationState
     public ChoiceState? ActiveChoice { get; private set; }
     public int? PendingInputVariableId { get; private set; }
     public int? InputValue { get; private set; }
+
+    // Command 11610, Key Input Proc. It is a second, different prompt: the
+    // number command asks for a number with the number pad, and this one asks
+    // for whatever set of keys the game listed, and writes a code that is not
+    // the key's own value.
+    public int? PendingKeyInputVariableId { get; private set; }
+
+    /// <summary>
+    /// The keys the pending 11610 accepts, in the order the reference tests
+    /// them, as <c>(value, name)</c> pairs.
+    /// </summary>
+    public IReadOnlyList<(int Value, string Key)> PendingKeyInputKeys
+    {
+        get; private set;
+    } = [];
+
+    /// <summary>
+    /// The variable the elapsed tenths go into while a timed 11610 waits, or 0.
+    /// </summary>
+    public int PendingKeyInputTimeVariableId { get; private set; }
+
+    /// <summary>
+    /// Whether the pending 11610 reports the elapsed time, from
+    /// <c>parameters[8]</c>.
+    /// </summary>
+    public bool PendingKeyInputIsTimed { get; private set; }
+
+    /// <summary>
+    /// Tenths a timed 11610 has waited, which the reference counts in frames
+    /// and divides by six.
+    /// </summary>
+    public int PendingKeyInputTenths { get; private set; }
     public Dictionary<int, PictureState> Pictures { get; } = new();
 
     // Screen effects (liblcf FlashScreen 11040, ShakeScreen 11050, WeatherEffects 11070).
@@ -71,6 +103,11 @@ public sealed class PresentationState
         ActiveChoice = null;
         PendingInputVariableId = null;
         InputValue = null;
+        PendingKeyInputVariableId = null;
+        PendingKeyInputKeys = [];
+        PendingKeyInputTimeVariableId = 0;
+        PendingKeyInputIsTimed = false;
+        PendingKeyInputTenths = 0;
         Pictures.Clear();
         IsFlashActive = false;
         FlashRed = FlashGreen = FlashBlue = FlashAlpha = 0;
@@ -166,6 +203,118 @@ public sealed class PresentationState
     public bool SetInputValue(int pValue)
     {
         if (PendingInputVariableId == null) return false;
+        InputValue = pValue;
+        return true;
+    }
+
+    /// <summary>
+    /// Opens the 11610 prompt, from the request
+    /// <see cref="Interpreter.Rm2kKeyInput.Request"/> decoded from its
+    /// parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A second prompt, not a second mode of the first.</strong> 10150
+    /// asks for a number and stores it; 11610 asks for a set of keys and
+    /// stores a <em>code</em> — a digit is 11 to 20, an operator 21 to 25, the
+    /// confirm key is 5. Reusing the number prompt would write a key code into
+    /// a variable a game expected to hold a digit, and nothing in the file says
+    /// which of the two asked.
+    /// </para>
+    /// <para>
+    /// <strong>Reopening the same request is refused.</strong> The reference
+    /// resets the key state on every call, so a second 11610 on the same page
+    /// would drop a keypress that arrived between the two. Holding on is what
+    /// makes the prompt a prompt.
+    /// </para>
+    /// </remarks>
+    public bool BeginKeyInput(Interpreter.Rm2kKeyInput.Request pRequest)
+    {
+        if (pRequest == null || pRequest.VariableId <= 0)
+        {
+            return false;
+        }
+        if (PendingKeyInputVariableId == pRequest.VariableId
+            && PendingKeyInputKeys.Count > 0)
+        {
+            return false;
+        }
+        PendingKeyInputVariableId = pRequest.VariableId;
+        PendingKeyInputKeys = pRequest.AllowedKeys;
+        PendingKeyInputTimeVariableId = pRequest.TimeVariableId;
+        PendingKeyInputIsTimed = pRequest.Timed;
+        PendingKeyInputTenths = 0;
+        return true;
+    }
+
+    /// <summary>
+    /// The value one key press produces, or 0 when nothing this prompt allows
+    /// was pressed.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Zero is a real answer and also "nothing pressed".</strong> The
+    /// reference returns 0 from <c>CheckInput</c> when no key matched, and the
+    /// caller treats that as "still waiting". This returns false in that case
+    /// so the page holds, and the two are not the same thing: a key that is not
+    /// on the list must not end the prompt.
+    /// </remarks>
+    public bool TryConsumeKeyInput(IReadOnlyList<string> pPressed, out int pValue)
+    {
+        pValue = 0;
+        if (PendingKeyInputVariableId == null)
+        {
+            return false;
+        }
+        pValue = Interpreter.Rm2kKeyInput.ValueFor(
+            new Interpreter.Rm2kKeyInput.Request
+            {
+                VariableId = PendingKeyInputVariableId.Value,
+                AllowedKeys = PendingKeyInputKeys,
+            },
+            pPressed);
+        if (pValue == Interpreter.Rm2kKeyInput.ValueNone)
+        {
+            pValue = 0;
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Closes the 11610 prompt and reports what it was waiting for.
+    /// </summary>
+    public bool TryConsumeKeyInput(
+        out int pVariableId, out int pValue, out int pTimeVariableId, out int pTenths)
+    {
+        pVariableId = 0;
+        pValue = 0;
+        pTimeVariableId = 0;
+        pTenths = 0;
+        if (PendingKeyInputVariableId is not int variableId)
+        {
+            return false;
+        }
+        pVariableId = variableId;
+        pValue = InputValue ?? 0;
+        pTimeVariableId = PendingKeyInputIsTimed ? PendingKeyInputTimeVariableId : 0;
+        pTenths = PendingKeyInputTenths;
+        PendingKeyInputVariableId = null;
+        PendingKeyInputKeys = [];
+        PendingKeyInputTimeVariableId = 0;
+        PendingKeyInputIsTimed = false;
+        PendingKeyInputTenths = 0;
+        return true;
+    }
+
+    /// <summary>
+    /// Records a key press against the open 11610 prompt.
+    /// </summary>
+    public bool SetKeyInputValue(int pValue)
+    {
+        if (PendingKeyInputVariableId == null)
+        {
+            return false;
+        }
         InputValue = pValue;
         return true;
     }

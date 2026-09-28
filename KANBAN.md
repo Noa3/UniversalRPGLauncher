@@ -3191,7 +3191,7 @@ three rewritten in K-124's and K-132's files.
 either a broken rule or a test that could not reach the thing it mutated; two
 of them found real product faults — the 102 read from the wrong command, and
 a 103/104 read as a list of options.### K-135 The seven command codes these two real games actually use and this reader skips
-`VERIFY` — runtime, P0. All seven are now identified; five are not executed.
+`DONE` — runtime, P0. All seven are identified, all seven are executed.
 
 **Measured, not estimated.** Every event command in all four pinned RM2K maps
 of `rm2k-dragon-destiny` and `easyrpg-testgame`, walked out of the parser's own
@@ -3249,12 +3249,6 @@ one fixture occurrence is `[1,1,0,0,0,1,1,2,1,0,0,0,0,0]`: a 2K3 game asking
 for digits and operators, timed, writing the answer into variable 1 and the
 elapsed time into variable 2. **`parameters[7]` is an int naming a variable,
 not a bool**, and the source says so in a comment.
-
-## What is still not done, and why the card stays `VERIFY`
-
-- **`11610` is read, not wired.** `Rm2kKeyInput.Read` produces the set of keys
-  a command accepts and the value each produces. Nothing prompts yet, because
-  there is no window to prompt in.
 
 ## The five menu commands now run — DONE
 
@@ -3324,6 +3318,50 @@ game that stops halfway through a cutscene.
 empty array throws. And **one frame is one step**: a test that calls
 `ExecuteFrame` three times on a one-command page does not run that command three
 times.
+
+## `11610` is wired — DONE
+
+`Rm2kKeyInput` had the whole table and nothing to hold it. It now has a prompt
+in `PresentationState` and a command in the interpreter, and **the page holds
+while it is open** — which is what makes it a prompt rather than a read.
+
+**It is a second prompt, not a second mode of the first.** 10150 asks for a
+number and stores it; 11610 asks for a set of keys and stores a *code*. A digit
+is 11 to 20, an operator 21 to 25, the confirm key is 5. Reusing the number
+prompt would write a key code into a variable a game expected to hold a digit,
+and **nothing in the file says which of the two asked.**
+
+**While it waits, the variable is zero — every frame.** The reference's own
+comment says the variable is reset to zero each frame while waiting, and a
+reader that only wrote on arrival would leave whatever the game had put there a
+moment ago, so a game reading the variable to show "press a key" would show the
+old value instead.
+
+**A key the prompt does not allow ends nothing.** The fixture allows digits and
+operators and neither the confirm key nor shift, so pressing confirm leaves the
+prompt open. A reader that treated any key as an answer would end a prompt on
+the first key a player pressed to dismiss it — which is how a calculator
+dialog closes before you have typed a digit.
+
+**Reopening the same request is refused.** The reference resets its key state
+on every call, so a second 11610 on the same page would drop a keypress that
+arrived between the two. Holding on is what makes the prompt a prompt.
+
+**The engine version is read, not assumed**, so the same fourteen integers are
+a different command on 2K than on 2K3. A reader that picked one column would
+wait for a shift key where the game asked for a digit, and the player would be
+stuck.
+
+**Test evidence** `test_rm2k_key_input_wiring.cs`, 9 tests through
+`ExecuteFrame` and `PressKeys`. **1025/1025**,
+`TestRm2kKeyInputWiring: 9/9`, `TestRm2kKeyInput: 10/10`.
+**Mutations** Nine effective rules over two runs, **9 of 9 caught**.
+
+**The key press arrives on an input frame, which is not the interpreter's
+step**, so `PressKeys` is a separate entry point and not part of
+`ExecuteFrame`. A reader that put the wait inside the dispatch would re-arm the
+prompt on every frame it stayed open, and the reference resets its key state on
+every call.
 
 **A first draft asserted on prose it had invented****A first draft asserted on prose it had invented** — on the phrase "did not
 declare", when the diagnostic said "does not declare" — and the failure was the
