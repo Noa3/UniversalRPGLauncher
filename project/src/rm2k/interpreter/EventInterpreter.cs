@@ -164,6 +164,18 @@ public sealed class EventInterpreter
 	/// </summary>
 	public const int GameOver = 12420;
 	public const int ReturnToTitleScreen = 12510;
+	/// <summary>11710, Change Map Tileset, <c>CmdSetup</c> width 2.</summary>
+	public const int ChangeMapTileset = 11710;
+
+	/// <summary>11720, Change PBG, <c>CmdSetup</c> width 8.</summary>
+	public const int ChangePBG = 11720;
+
+	/// <summary>11740, Change Encounter Steps, <c>CmdSetup</c> width 1.</summary>
+	public const int ChangeEncounterSteps = 11740;
+
+	/// <summary>11750, Tile Substitution, <c>CmdSetup</c> width 3.</summary>
+	public const int TileSubstitution = 11750;
+
 	/// <summary>10620, Change Hero Title, <c>CmdSetup</c> width 4.</summary>
 	public const int ChangeHeroTitle = 10620;
 
@@ -583,6 +595,22 @@ public sealed class EventInterpreter
 				// the index does not move, so the next frame runs this case
 				// again until the screen is gone.
 				return false;
+
+			case ChangeMapTileset:
+				ExecuteChangeMapTileset(cmd);
+				return Advance();
+
+			case ChangePBG:
+				ExecuteChangePbg(cmd);
+				return Advance();
+
+			case ChangeEncounterSteps:
+				ExecuteChangeEncounterSteps(cmd);
+				return Advance();
+
+			case TileSubstitution:
+				ExecuteTileSubstitution(cmd);
+				return Advance();
 
 			case ChangeHeroTitle:
 				ExecuteChangeHeroTitle(cmd);
@@ -2886,6 +2914,198 @@ public sealed class EventInterpreter
 	/// vehicle 0 is the party and not a vehicle.
 	/// </remarks>
 	private const int FirstVehicleIdOffset = 1;
+	/// <summary>
+	/// 11710, Change Map Tileset, from EasyRPG's
+	/// <c>CommandChangeMapTileset</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Chipset 0 is a real chipset and not "none".</strong> The
+	/// reference compares against <c>Game_Map::GetChipset()</c> and returns
+	/// early when they match, so a game that sets the chipset it already has
+	/// pays nothing. A reader that treated zero as unset would redraw every
+	/// time a game ran the command, and would refuse the first chipset in the
+	/// database.
+	/// </para>
+	/// <para>
+	/// The redraw itself has no equivalent here, so it is a diagnostic:
+	/// <strong>a chipset that changed and nothing redrew looks exactly like a
+	/// chipset that did not change</strong>, and the diagnostic is the only
+	/// thing that tells them apart.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeMapTileset(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 2.
+		if (pCmd.Parameters.Count < 2)
+		{
+			Malformed("Change map tileset");
+			return;
+		}
+		var chipsetId = SystemBitfield(pCmd, 0);
+		if (chipsetId == _state.ChipsetId)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Chipset {chipsetId} is already the one this"
+				+ " map uses, and the reference returns before touching anything");
+			return;
+		}
+		if (!_state.SetChipset(chipsetId))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Chipset {chipsetId} is outside 0 to"
+				+ $" {GameSimulationState.MaxChipsetId}, and nothing was changed");
+			return;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Chipset is now {chipsetId}, and the map has to"
+			+ " be redrawn — nothing redrew it here, which is not the same as it"
+			+ " having stayed the same");
+	}
+
+	/// <summary>
+	/// 11720, Change PBG, from EasyRPG's <c>CommandChangePBG</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Six flags and two speeds, and they come from different
+	/// parameters.</strong> The flags are 0, 1, 2 and 4; the horizontal speed is
+	/// 3 and the vertical is 5. <em>A reader that read them in order would take
+	/// the speed out of a flag</em> — and the fourth flag and the horizontal
+	/// speed are adjacent, so the mistake is easy to make and hard to see.
+	/// </para>
+	/// <para>
+	/// <strong>An empty name means the database panorama</strong> and not a file
+	/// that does not exist: that is what the reference does with
+	/// <c>if (!params.name.empty())</c> before it asks for the file.
+	/// </para>
+	/// <para>
+	/// The reference also makes the interpreter <strong>wait</strong> for the
+	/// panorama file, through an async yield. This reader has no file system
+	/// here, so the wait is a diagnostic and the parameters are stored — a
+	/// reader that waited forever would hang a game whose panorama is simply
+	/// missing.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangePbg(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 8.
+		if (pCmd.Parameters.Count < 8)
+		{
+			Malformed("Change PBG");
+			return;
+		}
+		var name = CommandStringOrVariable(pCmd, 6, 0, 7);
+		var parallax = new GameSimulationState.Parallax
+		{
+			Name = name,
+			ScrollHorizontally = pCmd.Parameters[0] != 0,
+			ScrollVertically = pCmd.Parameters[1] != 0,
+			ScrollHorizontallyAutomatic = pCmd.Parameters[2] != 0,
+			// **Parameter 3 and not parameter 4.** The reference writes
+			// scroll_horz_speed from ValueOrVariableBitfield(com, 6, 4, 3):
+			// shift 4 in the mode, index 3 for the value.
+			HorizontalSpeed = SystemBitfield(pCmd, 3),
+			ScrollVerticallyAutomatic = pCmd.Parameters[4] != 0,
+			// And parameter 5, with the same shape.
+			VerticalSpeed = SystemBitfield(pCmd, 5),
+		};
+		_state.SetParallax(parallax);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Panorama is now"
+			+ $" {(name.Length == 0 ? "the database one" : $"\"{name}\"")},"
+			+ $" scroll is {parallax.ScrollHorizontally} /"
+			+ $" {parallax.ScrollVertically}, automatic is"
+			+ $" {parallax.ScrollHorizontallyAutomatic} at"
+			+ $" {parallax.HorizontalSpeed} and"
+			+ $" {parallax.ScrollVerticallyAutomatic} at"
+			+ $" {parallax.VerticalSpeed}");
+		if (name.Length > 0)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] The reference waits for the panorama file"
+				+ " before it continues; this reader has no file system here, so"
+				+ " the parameters are stored and the wait is not taken");
+		}
+	}
+
+	/// <summary>
+	/// 11740, Change Encounter Steps, from EasyRPG's
+	/// <c>CommandChangeEncounterSteps</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Zero is a real value and it is the one that turns random
+	/// encounters off.</strong> A reader that treated zero as unset could never
+	/// turn them off, and a game that does so would keep fighting every few
+	/// steps for the rest of the map. The reference writes the value straight
+	/// through with no check, so the bound is this reader's and the diagnostic
+	/// says which values are allowed.
+	/// </remarks>
+	private void ExecuteChangeEncounterSteps(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 1.
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Change encounter steps");
+			return;
+		}
+		var steps = pCmd.Parameters[0];
+		if (!_state.SetEncounterSteps(steps))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Encounter steps {steps} is outside 0 to"
+				+ $" {GameSimulationState.MaxEncounterSteps}, and nothing was"
+				+ " changed");
+			return;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] An encounter now comes every {steps} steps,"
+			+ (steps == 0
+				? " and zero means never — the reference writes it through"
+				: " and a game set this to zero to stop fighting"));
+	}
+
+	/// <summary>
+	/// 11750, Tile Substitution, from EasyRPG's <c>CommandTileSubstitution</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Parameter 0 is a boolean and not a layer number.</strong> The
+	/// reference calls <c>SubstituteUp</c> or <c>SubstituteDown</c> on it, and a
+	/// reader that read it as "0 means lower, 1 means upper" would be right by
+	/// accident for two values and wrong for every other.
+	/// </para>
+	/// <para>
+	/// <strong>This is the command the class was missing a writer for.</strong>
+	/// The two 144-entry tables and their two readers existed, so the command
+	/// could be parsed and never run.
+	/// </para>
+	/// </remarks>
+	private void ExecuteTileSubstitution(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Tile substitution");
+			return;
+		}
+		var upper = pCmd.Parameters[0] != 0;
+		var oldId = pCmd.Parameters[1];
+		var newId = pCmd.Parameters[2];
+		_state.TileSubstitution ??= new Rm2kTileSubstitution(null, null);
+		if (!_state.TileSubstitution.SubstituteTile(upper, oldId, newId))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Tile substitution: index {oldId} is outside"
+				+ $" the table of {Rm2kChipset.NumUpperTiles}, and nothing was"
+				+ " changed");
+			return;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Tile {(upper ? "upper" : "lower")} {oldId}"
+			+ $" now draws chip {newId}");
+	}
+
 	private void ExecuteChangeHeroTitle(Rm2kMap.EventCommand pCmd)
 	{
 		// CmdSetup minimum width 4.

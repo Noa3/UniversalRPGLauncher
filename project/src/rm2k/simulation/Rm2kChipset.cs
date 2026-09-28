@@ -411,6 +411,44 @@ public sealed class Rm2kTileSubstitution
     private readonly int[] _lower;
     private readonly int[] _upper;
 
+    /// <summary>
+    /// Replaces one tile in the lower or the upper table, from <c>11750</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is the writer the class was missing.</strong> It had two
+    /// 144-entry tables and two readers, and <c>11750</c> is the command that
+    /// changes them — so without a setter there was a command that could be
+    /// parsed and never run.
+    /// </para>
+    /// <para>
+    /// <strong>Parameter 0 is a boolean and not a layer number.</strong> The
+    /// reference calls <c>SubstituteUp</c> or <c>SubstituteDown</c> on it, and
+    /// a reader that read it as "0 means lower, 1 means upper" would be right
+    /// by accident for two values and wrong for every other.
+    /// </para>
+    /// </remarks>
+    /// <returns>False when the index is outside the table.</returns>
+    public bool SubstituteTile(bool pUpper, int pOldId, int pNewId)
+    {
+        var table = pUpper ? _upper : _lower;
+        if (pOldId < 0 || pOldId >= table.Length)
+        {
+            return false;
+        }
+        // **The stored value is the raw one and the reader adds BlockEIndex.**
+        // SubstituteLower returns `_lower[index] + BlockEIndex`, so a writer that
+        // stored the number a command asked for would read back an index that
+        // is BlockEIndex too high — every lower tile drawn one row off.
+        //
+        // The command's value is a chip id, not a table entry, so it goes in
+        // raw and the reader does the arithmetic. This reader has no chip
+        // table, so there is nothing to look the id up in and the raw store is
+        // the honest end of it.
+        table[pOldId] = pNewId;
+        return true;
+    }
+
     public Rm2kTileSubstitution(int[]? pLower, int[]? pUpper)
     {
         _lower = Validate(pLower, Rm2kChipset.NumUpperTiles);

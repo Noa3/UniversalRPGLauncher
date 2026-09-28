@@ -110,6 +110,113 @@ public sealed class GameSimulationState
     public Rm2kTileSubstitution? TileSubstitution { get; set; }
 
     /// <summary>
+    /// Which chipset the map is drawn with, from <c>11710</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Zero is a real chipset and not "none".</strong> The reference
+    /// compares against <c>Game_Map::GetChipset()</c> and skips the redraw when
+    /// they match, so a game that sets the chipset it already has pays nothing.
+    /// A reader that treated zero as unset would redraw a game every time it
+    /// ran the command, and would refuse the first chipset in the database.
+    /// </remarks>
+    public int ChipsetId { get; private set; }
+
+    /// <summary>How many steps of walking trigger an encounter.</summary>
+    /// <remarks>
+    /// <strong>Zero is a real value</strong> and it is the one that turns random
+    /// encounters off. A reader that treated zero as unset could never turn
+    /// them off, and a game that does so would keep fighting every few steps
+    /// for the rest of the map.
+    /// </remarks>
+    public int EncounterSteps { get; private set; } = 50;
+
+    /// <summary>The parallax background, from <c>11720</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>An empty name means the database panorama and not a file that
+    /// does not exist.</strong> That is what the reference does with
+    /// <c>if (!params.name.empty())</c> before it asks for the file.
+    /// </para>
+    /// <para>
+    /// <strong>Six flags and two speeds, and they come from different
+    /// parameters.</strong> The flags are 0, 1, 2 and 4; the horizontal speed is
+    /// 3 and the vertical is 5. A reader that read them in order would take
+    /// the speed out of a flag.
+    /// </para>
+    /// </remarks>
+    public sealed class Parallax
+    {
+		/// <summary>The file name, empty for the database panorama.</summary>
+		public string Name { get; set; } = "";
+
+		/// <summary>Whether the panorama scrolls with the player sideways.</summary>
+		public bool ScrollHorizontally { get; set; }
+
+		/// <summary>Whether it scrolls up and down.</summary>
+		public bool ScrollVertically { get; set; }
+
+		/// <summary>Whether it scrolls on its own sideways.</summary>
+		public bool ScrollHorizontallyAutomatic { get; set; }
+
+		/// <summary>How fast it scrolls on its own, in pixels per frame.</summary>
+		public int HorizontalSpeed { get; set; }
+
+		/// <summary>Whether it scrolls upwards on its own.</summary>
+		public bool ScrollVerticallyAutomatic { get; set; }
+
+		/// <summary>How fast it scrolls upwards, in pixels per frame.</summary>
+		public int VerticalSpeed { get; set; }
+    }
+
+    /// <summary>The panorama, or the defaults when the game set none.</summary>
+    public Parallax MapParallax { get; private set; } = new Parallax();
+
+    /// <summary>Replaces the panorama, from <c>11720</c>.</summary>
+    public void SetParallax(Parallax pParallax)
+    {
+		MapParallax = pParallax;
+    }
+
+    /// <summary>
+    /// Changes the chipset, from <c>11710</c>.
+    /// </summary>
+    /// <remarks>
+    /// The sprite set is told to redraw by the reference through a call this
+    /// reader has no equivalent for, so the redraw is a diagnostic — **a
+    /// chipset that changed and nothing redrew looks exactly like a chipset that
+    /// did not change.**
+    /// </remarks>
+    /// <returns>False when the id is outside the database bound.</returns>
+    public bool SetChipset(int pChipsetId)
+    {
+		if (pChipsetId < 0 || pChipsetId > MaxChipsetId)
+		{
+			return false;
+		}
+		ChipsetId = pChipsetId;
+		return true;
+	}
+
+    /// <summary>The highest chipset the database can name.</summary>
+    public const int MaxChipsetId = 99;
+
+    /// <summary>Sets how many steps trigger an encounter.</summary>
+    /// <returns>False when the value is outside the bound.</returns>
+    public bool SetEncounterSteps(int pSteps)
+    {
+		// **The bound is liblcf's own field width for the saved value.**
+		if (pSteps < 0 || pSteps > MaxEncounterSteps)
+		{
+			return false;
+		}
+		EncounterSteps = pSteps;
+		return true;
+	}
+
+    /// <summary>The highest encounter step count the save format holds.</summary>
+    public const int MaxEncounterSteps = 9999;
+
+    /// <summary>
     /// Terrain tag of a map tile, following verified
     /// <c>Game_Map::GetTerrainTag</c>: the lower layer decides. Coordinates
     /// outside the map use the terrain of the first lower tile, as RPG_RT does.
@@ -1185,6 +1292,13 @@ public sealed class GameSimulationState
         // **The access flags go back to allowed with everything else.** A new
         // game is a game the player may save and escape from, and a reset that
         // left a cutscene's restrictions in place would lock the next game.
+        // **The map settings go back to the database with everything else.**
+        // A new game that inherited another game s tiles, panorama or
+        // encounter rate would look like a bug — and an encounter rate of zero
+        // would make it unwinnable, with no fights and no experience.
+        ChipsetId = 0;
+        MapParallax = new Parallax();
+        SetEncounterSteps(50);
         SetAccess(pEscape: true, pSave: true, pMenu: true, pTeleport: true);
         EscapeTarget = null;
         // **The system slots go back to the database with everything else.**

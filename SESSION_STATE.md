@@ -2666,3 +2666,51 @@ Cutscene auf einen Helden warten, den die Datenbank nie hatte.**
 **Mutations** 11 Regeln, **11 von 11 gefangen** im ersten Lauf — darunter die
 nicht verschobene Fahrzeug-ID, das nicht gesetzte ursprüngliche Sprite und das
 nullable Booting dereferenziert.
+
+## K-136 `11710`/`11720`/`11740`/`11750` — DONE, und einer hatte gar keinen Schreiber
+
+**`11750 Tile Substitution` hatte zwei 144er-Tabellen, zwei Leser und keinen
+Schreiber.** Der Befehl konnte also geparst und nie ausgeführt werden — und
+ein Test der Leser wäre die ganze Zeit grün gewesen. `SubstituteTile` schließt
+die Lücke.
+
+**`SubstituteLower` addiert `BlockEIndex` beim Lesen**, gespeichert wird also
+der Rohwert. Wer die vom Befehl geforderte Zahl speicherte, bekäme einen
+Index `BlockEIndex` zu hoch — **jede untere Kachel eine Zeile versetzt**. Der
+Test prüft den Offset, denn ein Test mit der Rohzahl hätte einen korrekten
+Schreiber „failen" lassen.
+
+**`11720` hat sechs Flags und zwei Geschwindigkeiten, und die Geschwindigkeiten
+kommen aus anderen Parametern als die Flags.** Flags sind 0, 1, 2 und 4; die
+horizontale Geschwindigkeit ist 3, die vertikale 5. **Das vierte Flag und die
+horizontale Geschwindigkeit stehen nebeneinander** — genau das macht den
+Fehler leicht: wer die Parameter der Reihe nach liest, nimmt ein Flag als
+Geschwindigkeit.
+
+**Ein leerer Panorama-Name ist das Datenbank-Panorama und keine fehlende
+Datei** — das macht die Referenz mit `if (!params.name.empty())`, bevor sie
+die Datei anfragt. Wer einen leeren Namen als Fehler behandelte, verweigerte
+genau das, wozu der Befehl da ist: zurück zur Datenbank.
+
+**Die Referenz lässt den Interpreter auf die Panorama-Datei warten.** Diese
+Runtime hat hier kein Dateisystem, also ist das Warten eine Diagnose — **wer
+ewig wartete, hängte ein Spiel mit fehlendem Panorama**, und ein fehlendes
+Panorama ist ein Fehler im Spiel, kein Grund anzuhalten.
+
+**Null Encounterschritte sind ein realer Wert und genau der, der Zufallskämpfe
+abschaltet.** Wer null als „nicht gesetzt" behandelte, könnte sie nie
+abschalten. **Und ein neues Spiel, das null geerbt hätte, wäre nicht gewinnbar:**
+keine Kämpfe, keine Erfahrung.
+
+**Chipset 0 ist ein echtes Chipset.** Die Referenz vergleicht mit dem
+aktuellen und kehrt früh zurück, wenn sie gleich sind. Wer null als „nicht
+gesetzt" las, verweigerte das erste Chipset der Datenbank — und das ist oft
+das meistbenutzte.
+
+**`ChipsetId`, `MapParallax` und `EncounterSteps` standen nicht im Reset**, und
+die Tests haben es gefunden.
+
+**Test evidence** `test_rm2k_map_changes.cs` (12). **1179/1179**.
+**Mutations** 10 Regeln, **10 von 10 gefangen** im ersten Lauf — darunter die
+obere Tabelle in die untere geschrieben, die beiden Geschwindigkeiten
+vertauscht und die Karteneinstellungen über den Reset gerettet.

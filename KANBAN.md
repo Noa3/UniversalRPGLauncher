@@ -2588,6 +2588,7 @@ look for the next island of that shape.**
 | system | ~~`10660` `10670` `10680` `10690`~~ | **~~system BGM, SFX, graphics, transitions — DONE, see below~~** |
 | heroes | ~~`10620` `10630` `10640`~~ | **~~hero title, sprite, face — DONE~~** |
 | vehicles | ~~`10650` `10850`~~ | **~~vehicle graphic and location — DONE, see below~~** |
+| map | ~~`11710` `11720` `11740` `11750`~~ | **~~tileset, panorama, encounter steps, tile substitution — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2600,6 +2601,57 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `11710`, `11720`, `11740` and `11750` are done — and one of them had no writer at all
+
+**`11750 Tile Substitution` had two 144-entry tables, two readers and no
+writer.** So the command could be parsed and never run, and a test of the
+readers would have been green the whole time. `SubstituteTile` is the method
+that closes it.
+
+**`SubstituteLower` adds `BlockEIndex` on the way out, so the stored value is
+the raw one.** A writer that stored the number a command asked for would read
+back an index that is `BlockEIndex` too high — every lower tile drawn one row
+off. The test asserts the offset, because a test that expected the raw number
+would have "failed" a correct writer.
+
+**`11720` has six flags and two speeds, and the speeds come from different
+parameters than the flags.** The flags are 0, 1, 2 and 4; the horizontal speed
+is 3 and the vertical is 5. **The fourth flag and the horizontal speed are
+adjacent in the list**, which is what makes the mistake easy: a reader that
+read the parameters in order would take a flag as a speed.
+
+**An empty panorama name is the database panorama and not a missing file** —
+that is what the reference does with `if (!params.name.empty())` before it
+asks for the file. A reader that treated an empty name as an error would
+refuse the one thing the command is for: going back to what the database says.
+
+**The reference makes the interpreter wait for the panorama file.** This reader
+has no file system here, so the wait is a diagnostic — **a reader that waited
+forever would hang a game whose panorama is simply missing**, and a missing
+panorama is a bug in a game, not a reason to stop the interpreter.
+
+**Zero encounter steps is a real value and it is the one that turns random
+encounters off.** A reader that treated zero as unset could never turn them
+off, and a game that does so — a town, a puzzle room, the last map — would
+keep fighting every few steps for the rest of it. **And a new game that
+inherited zero would be unwinnable**: no fights, no experience.
+
+**Chipset 0 is a real chipset.** The reference compares against the current
+one and returns early when they match, so a game that sets the chipset it
+already has pays nothing. A reader that treated zero as unset would refuse the
+first chipset in the database — and that is often the most used one.
+
+**`ChipsetId`, `MapParallax` and `EncounterSteps` were not in the reset**, and
+the tests found it. A new game that opened in another game tiles would look
+like a bug, and one that inherited another panorama would open on a sky that
+is not its own.
+
+**Test evidence** `test_rm2k_map_changes.cs`, 12 tests.
+**1179/1179**, `TestRm2kMapChanges: 12/12`.
+**Mutations** Ten rules, **10 of 10 caught** in the first run — including the
+upper table written into the lower one, the two speeds swapped, and the map
+settings surviving a reset.
 
 ## `10620`, `10630`, `10640`, `10650` and `10850` are done — and `10850` has a value that is not a vehicle
 
