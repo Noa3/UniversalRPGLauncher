@@ -2237,3 +2237,48 @@ Eine Marke ohne Parameter matcht nichts.
 Die fehlende End-ID verschob jedes Feld, der Befehl wurde abgelehnt, und **nichts
 wurde je markiert** — der Test „der Rücksprung schleift" prüfte damit eine Seite,
 in der nie etwas lief.
+
+## K-136 Die fünf Audio-Befehle — DONE
+
+**`GameSimulationState` hatte vier Positionsdoubles, die niemand las und niemand
+schrieb** — `BgmPosition`, `BgsPosition`, `MePosition`, `SePosition`. Der Rest
+eines Plans für Wiedergabe, die dieses Repository nicht gebaut hat. **Ein Double,
+das kein Befehl bewegt, ist eine Behauptung über Zeit, die nichts wahrt hält.**
+Ersetzt durch das, was das Format hält: den aktuellen Track pro Kanal, den
+Fade-Zustand und **einen** gemerkten BGM.
+
+**Es sind Daten, kein Klang.** Kein Player dahinter, kein Test behauptet, dass
+ein Track zu hören ist. Die Diagnosen sagen, **was verlangt wurde**.
+
+**Vier Kanäle, und sie sind nicht austauschbar.** BGM schleift und fadet, SE
+spielt einmal darüber, ME folgt den BGM-Regeln, BGS schleift darunter. Wer alle
+vier in einer Liste hält, lässt einen Fußschritt die Dorfmusik überschreiben.
+
+**Die Parameterlisten der zwei Befehle passen nicht aufeinander.** Musik:
+`[fade, volume, tempo, balance]`. Effekt: `[volume, tempo, balance]` — **ein
+Effekt hat gar keinen Fade**, also setzt gleiches Lesen die Lautstärke an die
+Stelle der Balance. `CmdSetup` gibt Breiten 4 und 3; ich schrieb 5 und 4 im
+Produktcode **und in jedem Test**, also fielen alle zwölf Tests an einem Befehl,
+den dieses Repository nie angenommen hatte.
+
+**Balance ist 0–100 mit 50 in der Mitte**, nicht −100 bis 100.
+
+### Und eine Verweigerung, die ich als Vorsicht verkleidet habe
+
+Ich las `parameters[1]` als Modus für die anderen drei Werte und **lehnte dann
+jeden Befehl ab, dessen Werte ungleich null waren** — also **jeden
+Musikbefehl, den ein echtes Spiel schreibt**. Der Grund, den ich angab, war
+„dieser Leser dekodiert noch kein Bitfeld". Das klingt nach Sorgfalt und war
+eine Quelle, die ich **nicht zu Ende gelesen** hatte:
+
+```cpp
+if (!Player::IsPatchManiac()) { return com.parameters[val_idx]; }
+```
+
+Ohne Patch ist jeder Wert einfach sein eigener Parameter, und der fünfte
+Parameter trägt gar nichts. **Laut verweigern ist kein Ersatz dafür, zu wissen.**
+Ein Spiel, das den Patch *doch* trägt, wird weiterhin abgelehnt — und diese
+Verweigerung nennt den Patch.
+
+**Test evidence** `test_rm2k_audio.cs` (12). **1055/1055**.
+**Mutations** 9 von 9 gefangen.

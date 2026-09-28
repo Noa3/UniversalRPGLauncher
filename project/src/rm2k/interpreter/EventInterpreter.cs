@@ -64,6 +64,21 @@ public sealed class EventInterpreter
 	/// <summary>11120, Move Picture.</summary>
 	public const int MovePicture = 11120;
 
+	/// <summary>11510, Play Background Music, from liblcf <c>Code::PlayBGM</c>.</summary>
+	public const int PlayBGM = 11510;
+
+	/// <summary>11520, Fade Out Background Music, from <c>Code::FadeOutBGM</c>.</summary>
+	public const int FadeOutBGM = 11520;
+
+	/// <summary>11530, Memorize Background Music.</summary>
+	public const int MemorizeBGM = 11530;
+
+	/// <summary>11540, Play Memorized Background Music.</summary>
+	public const int PlayMemorizedBGM = 11540;
+
+	/// <summary>11550, Play Sound Effect, from liblcf <c>Code::PlaySound</c>.</summary>
+	public const int PlaySound = 11550;
+
 	/// <summary>
 	/// 12110, Label, from liblcf <c>Code::Label</c>.
 	/// </summary>
@@ -414,6 +429,31 @@ public sealed class EventInterpreter
 
 			case EndBranch:
 				ExecuteEndBranch();
+				return Advance();
+
+			case PlayBGM:
+			case PlaySound:
+				ExecutePlayTrack(cmd);
+				return Advance();
+
+			case FadeOutBGM:
+				ExecuteFadeOutBGM(cmd);
+				return Advance();
+
+			case MemorizeBGM:
+				_state.AddDiagnostic(
+					_state.Audio.MemorizeBgm()
+						? $"[Event {_eventId}] Memorized the current BGM"
+						: $"[Event {_eventId}] Memorize BGM: there was none, and"
+							+ " the reference copies the pointer and leaves it empty");
+				return Advance();
+
+			case PlayMemorizedBGM:
+				_state.AddDiagnostic(
+					_state.Audio.PlayMemorizedBgm()
+						? $"[Event {_eventId}] Played the memorised BGM"
+						: $"[Event {_eventId}] Play memorised BGM: nothing was"
+							+ " memorised");
 				return Advance();
 
 			case Label:
@@ -911,6 +951,153 @@ public sealed class EventInterpreter
 	/// error — so this one says so and carries on.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 11510 and 11550, from EasyRPG's <c>CommandPlayBGM</c> and
+	/// <c>CommandPlaySound</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The parameters are <c>[fadeIn, volume, tempo, balance]</c> and the
+	/// file name is in the command's string field, and <strong>the first
+	/// parameter is the fade, not the name</strong> — the name arrives through
+	/// the Maniac branch of <c>CommandStringOrVariableBitfield</c>, which reads
+	/// the string field first and only falls back to a variable when the patch
+	/// is active.
+	/// </para>
+	/// <para>
+	/// <strong>Balance is 0 to 100 with 50 in the middle</strong>, and not
+	/// -100 to 100: the editor writes 0 to 100 and the engine stores it as
+	/// written, so a reader that treated the middle as 0 would call every
+	/// centred track hard left.
+	/// </para>
+	/// <para>
+	/// <strong>This is data and not sound.</strong> Nothing here has a player
+	/// behind it, and a reader that reported a track as playing would be
+	/// claiming a sound nobody can hear. The diagnostic says what was asked for
+	/// and not that it was heard.
+	/// </para>
+	/// </remarks>
+	private void ExecutePlayTrack(Rm2kMap.EventCommand pCmd)
+	{
+		var istBgm = pCmd.Code == PlayBGM;
+		var label = istBgm ? "Play BGM" : "Play sound";
+		// **CmdSetup gives the music a width of 4 and the effect a width of 3**,
+		// and a first draft wrote 5 and 4. The counts are not the same as the
+		// number of values: the music's four are fade, volume, tempo and
+		// balance, and the effect's three are volume, tempo and balance. The
+		// mode slot only appears when the Maniac patch is active, and the
+		// function's own `assert(mode_idx != val_idx)` would not tolerate a
+		// command that always carried it.
+		var minWidth = istBgm ? 4 : 3;
+		if (pCmd.Parameters.Count < minWidth)
+	{
+			Malformed(label);
+			return;
+		}
+		if (string.IsNullOrEmpty(pCmd.Text))
+	{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] {label}: no file name, and the string"
+				+ " field is where the name lives; nothing was played");
+			return;
+		}
+		var channel = istBgm
+			? Rm2kChannel.BackgroundMusic
+			: Rm2kChannel.SoundEffect;
+		//
+		// **The four numbers are `parameters[0..3]` and nothing else.** The
+		// reference reads them through
+		// `ValueOrVariableBitfield(com, 4, 0..3, 1..4)` and that function's
+		// first line is `if (!IsPatchManiac()) return com.parameters[val_idx]`
+		// — so *without the Maniac patch each value is simply its own
+		// parameter*, and the fifth parameter exists only to hold four
+		// two-bit mode fields when the patch is active.
+		//
+		// **A first draft read `parameters[1]` as the mode for the other three
+		// and then refused every command whose values were non-zero** — which is
+		// every music command a real game writes. Worse, the refusal was
+		// dressed as caution: "this reader does not decode a bitfield yet" reads
+		// as care, and it was actually a wrong reading of the source that had
+		// not been read to the end. **Refusing loudly is not a substitute for
+		// knowing.**
+		//
+		// A game that *does* carry the patch is refused here, and the reason
+		// names the patch rather than the format — because the patch's values
+		// are the same numbers read through four two-bit mode fields, and
+		// reading them as plain numbers would produce a plausible volume that
+		// is not the volume.
+		if (_state.SupportsManiacPatch)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] {label}: this game carries the Maniac patch,"
+				+ " which packs the four values into mode fields this reader does"
+				+ " not decode; nothing was played");
+			return;
+		}
+		//
+		// **The fade is parameters[0] on the music and there is none on the
+		// effect**, so the two commands' lists do not line up: the music is
+		// [fade, volume, tempo, balance] and the effect is [volume, tempo,
+		// balance]. A first draft read both from the same offsets, which put
+		// the effect's volume where its balance belongs.
+		var fadeInTenths = istBgm ? Param(pCmd, 0) : 0;
+		var volume = Param(pCmd, istBgm ? 1 : 0);
+		var tempo = Param(pCmd, istBgm ? 2 : 1);
+		var balance = Param(pCmd, istBgm ? 3 : 2);
+		var cancelledFade = _state.Audio.Play(
+			channel, pCmd.Text, volume, tempo, balance, fadeInTenths);
+			// `Play` returns whether it *cancelled a fade*, so the track is read
+			// back rather than assumed. **Reading the channel back is what tells a
+			// refusal from a success** — the name is unique per play, so a channel
+			// that does not hold this name is a channel nothing was written to.
+			var track = istBgm ? _state.Audio.Bgm : _state.Audio.SoundEffect;
+			if (track == null
+				|| !string.Equals(track.Name, pCmd.Text, StringComparison.Ordinal))
+			{
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] {label}: refused \"{Truncate(pCmd.Text)}\" because"
+					+ " one of the numbers was out of range");
+				return;
+			}
+			_state.AddDiagnostic(
+			$"[Event {_eventId}] {label}: {track}"
+			+ (cancelledFade
+				? ", and it cancelled a fade that was still running"
+				: string.Empty));
+	}
+
+	/// <summary>
+	/// 11520, Fade Out Background Music, from EasyRPG's
+	/// <c>CommandFadeOutBGM</c>.
+	/// </summary>
+	/// <remarks>
+	/// One parameter, the fade in tenths of a second, and it is passed straight
+	/// to the audio system. <strong>Fading a channel that is silent is a
+	/// no-op, not an error and not an empty track</strong> — the reference hands
+	/// the number over and the audio system has nothing to fade, and a reader
+	/// that invented a track to fade would be claiming a sound that was never
+	/// asked for.
+	/// </remarks>
+	private void ExecuteFadeOutBGM(Rm2kMap.EventCommand pCmd)
+	{
+		if (pCmd.Parameters.Count < 1)
+	{
+			Malformed("Fade out BGM");
+			return;
+		}
+		var tenths = ValueOrVariable(EventInterpreter.VarOperandConstant, pCmd.Parameters[0]);
+		if (!_state.Audio.FadeOut(Rm2kChannel.BackgroundMusic, tenths))
+	{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Fade out BGM: nothing to fade, and the"
+				+ " reference hands the number to a channel that has no track; the"
+				+ $" fade of {tenths} was not started");
+			return;
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Fade out BGM over {tenths} tenths");
+	}
+
 	private void ExecuteJumpToLabel(Rm2kMap.EventCommand pCmd)
 	{
 		// CmdSetup minimum width 1.

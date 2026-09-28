@@ -364,6 +364,23 @@ public sealed class GameSimulationState
     public string CurrentScene { get; set; } = "";
 
     /// <summary>
+    /// Whether the game carries the Maniac patch, from
+    /// <c>Player::IsPatchManiac</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is the switch that decides whether a value is a plain
+    /// number or a packed mode field.</strong> EasyRPG's
+    /// <c>ValueOrVariableBitfield</c> opens with
+    /// <c>if (!IsPatchManiac()) return com.parameters[val_idx];</c> — without
+    /// the patch every value is simply its own parameter, and the extra
+    /// parameter a patched command carries holds four two-bit mode fields
+    /// instead. <em>Reading a patched command without this flag does not give
+    /// the wrong answer; it gives the parameters as written and calls them the
+    /// volume.</em>
+    /// </remarks>
+    public bool SupportsManiacPatch { get; set; }
+
+    /// <summary>
     /// Whether the game declares the RPG2K3 E commands, which is the gate on
     /// all five menu commands.
     /// </summary>
@@ -397,10 +414,24 @@ public sealed class GameSimulationState
     public bool FullscreenRequested { get; set; }
 
     // Audio positions
-    public double BgmPosition { get; set; }
-    public double BgsPosition { get; set; }
-    public double MePosition { get; set; }
-    public double SePosition { get; set; }
+    /// <summary>
+    /// The audio the commands ask for.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This replaces four position doubles that nothing read and
+    /// nothing wrote.</strong> They were the residue of a plan for playback this
+    /// repository has not built, and a double no command moves is a claim about
+    /// time that nothing keeps.
+    /// </para>
+    /// <para>
+    /// What is here instead is what the format holds: the current track per
+    /// channel, the fade state, and the one memorised BGM that <c>11530</c> and
+    /// <c>11540</c> are about. <strong>It is data, not sound</strong> — there
+    /// is no player behind it, and nothing here claims a track can be heard.
+    /// </para>
+    /// </remarks>
+    public Rm2kAudioState Audio { get; } = new();
 
     // Save state
     public long SaveTimestamp { get; set; }
@@ -697,8 +728,11 @@ public sealed class GameSimulationState
         // fiction. An empty stack says what is true: nothing is open.
         SceneStack.Clear(); CurrentScene = "";
         SupportsRpg2k3ECommands = false; ExitRequested = false;
+        SupportsManiacPatch = false;
         AtbWaitMode = true; FullscreenRequested = false;
-        BgmPosition = 0; BgsPosition = 0; MePosition = 0; SePosition = 0;
+        // The audio goes with the rest: a new game must not inherit the last
+        // one's music, and least of all the track it memorised.
+        Audio.Reset();
         SaveTimestamp = 0; SaveComment = "";
         ClearDiagnostics();
     }

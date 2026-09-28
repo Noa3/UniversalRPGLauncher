@@ -2573,7 +2573,7 @@ look for the next island of that shape.**
 | area | codes | what it needs |
 |---|---:|---|
 | screen effects | `11010` `11020` `11030` `11060` | erase/show/tint/pan — `PresentationState` has flash, shake and weather and none of these |
-| audio | `11510`–`11560` | BGM, fade, memorize, sound, movie — **`GameSimulationState` has four position doubles and nothing that plays** |
+| audio | `11560` | Play Movie — the only audio command left of the six |
 | actor state | `10430`–`10490` `10620` `10630` | parameters, skills, equipment, HP, SP, conditions, full heal |
 | battle | `10500` `10710` `13110`–`13410` | simulated attack, encounter, monster HP/MP/conditions, battle BG, terminate |
 | movement | `11310` `11330` `11340` `11350` | visibility, move event, proceed, halt all |
@@ -2589,7 +2589,52 @@ look for the next island of that shape.**
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10230` `10920` `11010` | common event, flee, combo, class, timer |
 
-**`12110` Label and `12120` Jump to Label are the sharpest of these.** They are
+## The five audio commands are done — `11510`, `11520`, `11530`, `11540`, `11550`
+
+**`GameSimulationState` had four position doubles that nothing read and nothing
+wrote** — `BgmPosition`, `BgsPosition`, `MePosition`, `SePosition`. They were
+the residue of a plan for playback this repository has not built, and **a double
+no command moves is a claim about time that nothing keeps**. They are replaced
+by what the format actually holds: the current track per channel, the fade
+state, and the one memorised BGM.
+
+**It is data, not sound.** There is no player behind any of it, and no test
+claims a track can be heard. The diagnostics say what was asked for.
+
+**Four channels, and they are not interchangeable.** BGM loops and fades, SE
+plays once over it, ME follows the BGM's rules, BGS loops underneath. A reader
+that kept one list for all four would let a footstep overwrite the town theme.
+
+**The two commands' parameter lists do not line up.** The music is
+`[fade, volume, tempo, balance]` and the effect is `[volume, tempo, balance]` —
+**there is no fade on an effect**, so reading both from the same offsets puts the
+effect's volume where its balance belongs. `CmdSetup` gives widths of four and
+three; a first draft wrote five and four in both the product code and every
+test, so all twelve tests failed on a command this repository had never
+accepted.
+
+**Balance is 0 to 100 with 50 in the middle**, and not -100 to 100. A reader
+that treated the middle as 0 would call every centred track hard left.
+
+**And one refusal I dressed up as caution.** A draft read `parameters[1]` as the
+mode for the other three values and then **refused every command whose values
+were non-zero** — which is every music command a real game writes. The reason it
+gave was "this reader does not decode a bitfield yet", which reads as care. It
+was a source I had not read to the end: `ValueOrVariableBitfield` opens with
+`if (!IsPatchManiac()) return com.parameters[val_idx]`, so without the patch each
+value is simply its own parameter and the fifth parameter holds nothing at all.
+**Refusing loudly is not a substitute for knowing.** A game that *does* carry the
+patch is still refused, and that refusal names the patch.
+
+**The memorised track is one slot and it is the BGM.** `MemorizeBGM` and
+`PlayMemorizedBGM` take no parameters and touch only that channel, and there is
+no second memorised track anywhere in the format.
+
+**Test evidence** `test_rm2k_audio.cs`, 12 tests through `ExecuteFrame`.
+**1055/1055**, `TestRm2kAudio: 12/12`.
+**Mutations** Nine rules over one run, **9 of 9 caught**.
+
+**`12110` Label and `12120` Jump to Label are the sharpest of these.****`12110` Label and `12120` Jump to Label are the sharpest of these.** They are
 the only two that change *where* the page goes rather than what it does, and a
 reader without them runs a jump as a no-op and lands at the end of the page —
 which looks like a game that quietly skipped half its script.
