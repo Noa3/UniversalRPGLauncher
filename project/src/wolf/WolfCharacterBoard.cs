@@ -25,6 +25,18 @@ public sealed class WolfCharacterBoard
 {
 	private readonly Dictionary<int, WolfCharacter> _characters = new();
 
+	/// <summary>
+	/// The characters, as a list the collision test can walk.
+	/// </summary>
+	/// <remarks>
+	/// <strong>A field and not a fresh list per question.</strong> The collision
+	/// test asks once per step, and a step can be refused, and a fresh list each
+	/// time would allocate on every step of every figure in the game. More
+	/// importantly it has to be the *same* list for every figure, or two
+	/// figures asked at the same moment would see different worlds.
+	/// </remarks>
+	private List<WolfCharacter> _occupants = [];
+
 	/// <summary>The hero, whose event id is zero.</summary>
 	public WolfCharacter Hero { get; private set; } = new() { Id = 0 };
 
@@ -130,6 +142,14 @@ public sealed class WolfCharacterBoard
 	public WolfCharacterBoard(WolfVariableBands pVariables)
 	{
 		_runner = new WolfMoveRouteRunner(pVariables);
+		// **The hero is in the cast before anything else happens.** The
+		// occupant list starts empty, and the first call a game makes is
+		// usually LoadMap — which hands the grid to whoever is on the list. An
+		// empty list meant the hero never got the map, so the hero could not
+		// step at all and a game with an event on it opened with a player who
+		// was stuck. **The hero is placed here rather than by Add**, because a
+		// caller who never places the hero still needs one.
+		RefreshOccupants();
 	}
 
 	/// <summary>
@@ -151,9 +171,11 @@ public sealed class WolfCharacterBoard
 		if (pCharacter.Id == 0)
 		{
 			Hero = pCharacter;
+			RefreshOccupants();
 			return Hero;
 		}
 		_characters[pCharacter.Id] = pCharacter;
+		RefreshOccupants();
 		return pCharacter;
 	}
 
@@ -174,6 +196,7 @@ public sealed class WolfCharacterBoard
 		{
 			character.PassabilityGrid = pGrid;
 		}
+		RefreshOccupants();
 	}
 
 	/// <summary>Reads a character by event id.</summary>
@@ -185,13 +208,34 @@ public sealed class WolfCharacterBoard
 	}
 
 	/// <summary>Every character on the map, the hero first.</summary>
-	public IReadOnlyList<WolfCharacter> All
+	public IReadOnlyList<WolfCharacter> All => _occupants;
+
+	/// <summary>
+	/// Rebuilds the occupant list and hands it to every figure.
+	/// </summary>
+	/// <remarks>
+	/// <strong>After every change to the cast, and not lazily.</strong> A figure
+	/// added in the middle of a frame would otherwise be invisible to the
+	/// collision test until something asked, and a guard who walked into a
+	/// newly placed event would stand inside it.
+	/// </remarks>
+	private void RefreshOccupants()
 	{
-		get
+		_occupants = [Hero];
+		_occupants.AddRange(_characters.Values);
+		foreach (var character in _occupants)
 		{
-			var list = new List<WolfCharacter> { Hero };
-			list.AddRange(_characters.Values);
-			return list;
+			character.Occupants = () => _occupants;
+			// **The map is (re)given to every figure here, and not only where
+			// it is placed.** A figure placed before the map was loaded has the
+			// same question as one placed after, and handing the grid at
+			// placement time alone would leave the earlier figures walking
+			// through walls — which is why the hero needed this: the board
+			// exists before its first Add.
+			if (Passability is { } grid)
+			{
+				character.PassabilityGrid = grid;
+			}
 		}
 	}
 
@@ -458,5 +502,9 @@ public sealed class WolfCharacterBoard
 		Passability = null;
 		ScrollX = 0;
 		ScrollY = 0;
+		// **The list goes last and not first**, because clearing it while a
+		// figure still points at it would leave the hero asking a list that no
+		// longer contains it — and asking is how it is told the world is empty.
+		RefreshOccupants();
 	}
 }

@@ -3280,3 +3280,73 @@ der Pfeil, der die untere Ebene nicht fragt, eine fehlende untere Ebene, die abg
 wird, jedes von ▲, ★ und □ als unpassierbar gelesen, der unbekannte Zustand als
 begehbar, das Gitter, das aus der unteren statt der oberen Ebene antwortet, die
 entfernte Kartenprüfung und das Brett, das die Karte nur dem Helden gibt.
+
+## WOLF Figuren-Kollision — DONE: halbe Kachel, Durchlass, und ein Held, der keine Wand ist
+
+**Die letzte Karte gab Figuren Wände und sonst nichts**, also lief ein Held durch
+jeden Wächter, jeden Händler und jedes Schild. Die einzige Spur wäre ein Held
+innerhalb eines Ladens gewesen, und ein Gang durch einen Wächter ist ein Gang.
+
+**Die Trefferfläche ist eine Kachel breit und eine halbe hoch**, und die Hilfe nennt
+die Zahl: `当ﾀﾘ判定■(正方形)` aus ist `横1マス×縦0.5マス` — die Füße einer Figur und
+nicht ihr ganzer Körper — und die Quadratoption macht eine ganze Kachel daraus. **Wer
+für beides eine Kachel nähme, ließe jede halbhohe Figur mit der Figur auf der Kachel
+davor kollidieren, und eine Menschenmenge in einem Gang würde feststecken.** Das ist
+ein Spiel, das nicht zu Ende zu spielen ist, und es sieht aus wie ein Fehler im
+Pfadfinden und nicht in der Trefferfläche.
+
+**X ist halb offen und Y geschlossen, und diese Asymmetrie ist eine Entscheidung und
+kein Tippfehler.** X halb offen hält einen Gang begehbar: Eine Figur auf Kachel 2
+reicht von 2 bis 3, eine auf 3 von 3 bis 4, und eine geschlossene Compare hätte sie
+auf der Grenze überlappen lassen und jedes Zwei-Kachel-Zimmer blockiert. Y geschlossen
+ist die andere Hälfte — **eine quadratische Figur auf Kachel 5 belegt 5 bis 6 und
+berührt die Figur auf Kachel 6, und ein fester Gegenstand, in dem eine andere Figur
+stehen darf, ist nicht fest.** Es ist auch das, was die Quadratoption überhaupt
+bedeutet: Mit halb offenem Y reichte eine quadratische Figur genauso weit wie eine
+halbhohe, und die Option wäre ein Name für nichts. **Die Hilfe schreibt den Vergleich
+nicht aus, also steht das hier als Wahl mit ihren Gründen.**
+
+**Ein Geist wird durchquert, und die Beziehung ist einseitig.** Die Option
+`イベントをすり抜けられるようにします` macht ein Event durchquerbar, und die Hilfe
+fügt hinzu, dass ein solches Event nur ausgelöst wird, wenn der Spieler darauf steht —
+also ist ein transparentes Schild zugleich eine Wand, durch die man geht, und eine
+Sache, die man nur betreten kann. **Das Flagge gehört zum Geist und antwortet, bevor
+irgendjemand gefragt wird**, also geht ein Geist durch eine feste Figur und eine feste
+Figur durch einen Geist. Wer die Beziehung symmetrisch machte, hieße jeden unsichtbaren
+Auslöser im Spiel zusperren.
+
+## Ein Test las diese Regel rückwärts, und der Code hatte recht
+
+**Einer der neuen Tests behauptete eine *Verweigerung*, als der Held auf einen Geist
+trat** — er las die Regel, als stoppte der Geist jeden, der in ihn hineinlief. Der Code
+tat das Gegenteil und hatte recht: Wer dem Test glaubte, hätte eine transparente
+Dekoration zur Wand gemacht, also das Gegenteil dessen, wozu die Option da ist.
+
+**Das steht hier, weil der Test beim ersten Lauf der Form bestand und erst umfiel, als
+der Test darüber anfing zu arbeiten.** Vier der elf Tests maßen die falsche Sache aus
+einem Grund, der nichts mit Kollision zu tun hatte, und das Symptom war in allen vieren
+dasselbe Wort: `False`.
+
+## Der Held war bis zu dieser Karte gar nicht auf dem Brett
+
+**Die Besetzungsliste fing leer an, und der erste Aufruf eines Spiels ist LoadMap** —
+das das Gitter an alle auf der Liste abgibt. Eine leere Liste hieß, dass der Held das
+Gitter nie bekam, **also konnte der Held gar keinen Schritt machen**, und ein Spiel mit
+einem Event darauf wäre mit einem feststeckenden Spieler aufgegangen. Der Held wird im
+Konstruktor platziert, und das Gitter wird in `RefreshOccupants` abgeben und nicht nur
+beim Setzen einer Figur, weil eine vorher gesetzte Figur dieselbe Frage hat wie eine
+spätere.
+
+**Der Kandidat trägt jedes Feld, über `At()`.** Einen Wegwerf-Charakter von Hand zu
+bauen hieße fünfzehn Felder kopieren und beim nächsten Feld eines zu vergessen — und das
+Feld, auf das es am meisten ankommt, die Trefferfläche, wäre genau das, was eine von Hand
+gebaute Kopie vergisst.
+
+**Test evidence** `test_wolf_character_collision.cs` (11), mit
+`test_wolf_passability.cs` (10), `test_wolf_character_board.cs` (14) und
+`test_wolf_move_route_runner.cs` (14) nach dem Umstieg nachgemessen. **1292/1292**.
+**Mutations** 16 wirksame Regeln über zwei Läufe, **16 von 16 gefangen** — darunter
+die halbe Kachel als volle gelesen, die Quadratoption ignoriert, die Y-Achse halb offen
+gemacht, die X-Achse geschlossen, die Löschprüfung nur auf einer Seite, der Durchlass
+symmetrisch gemacht, die Selbstkollision nicht übersprungen, der Kandidat ohne
+Trefferfläche, der Held nicht auf dem Brett und die nicht neu gebaute Liste.

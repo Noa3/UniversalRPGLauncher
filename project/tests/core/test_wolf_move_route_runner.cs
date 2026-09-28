@@ -180,8 +180,13 @@ public partial class TestWolfMoveRouteRunner : TestBase
 		// from "the tile is passable" — so a test that measures a moving step
 		// has to give the figure a map, and a test that means to be refused
 		// leaves it out.
-		var character = new WolfCharacter { X = 3, Y = 3 };
-		character.PassabilityGrid = new WolfPassabilityGrid(20, 20);
+		// **Alone, and not a bare character.** A step asks the map and the cast,
+		// and "nobody is there" is a different answer from "nobody could be
+		// asked" — so a figure outside a board is put on an empty one here
+		// rather than left with two questions it cannot answer.
+		var character = WolfCharacter.Alone(1, new WolfPassabilityGrid(20, 20));
+		character.X = 3;
+		character.Y = 3;
 
 		AssertEq(
 			runner.Run(Step(WolfMoveRouteType.MoveLeft), character),

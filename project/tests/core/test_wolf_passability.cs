@@ -226,6 +226,11 @@ public partial class TestWolfPassability : TestBase
 	/// </remarks>
 	public void Test_AFigureStopsAtAWall()
 	{
+		// **A board, and not a bare character.** Since the collision card a step
+		// needs the cast as well as the map — "nobody is there" is a different
+		// answer from "nobody could be asked" — so a test that measures a step
+		// gives the figure a board, which is the path a real game takes.
+		var board = new WolfCharacterBoard(new WolfVariableBands());
 		var grid = new WolfPassabilityGrid(5, 5);
 		// **The wall is at four, and not at three.** The figure starts at two
 		// and the first step puts it on three, so a wall at three would refuse
@@ -233,21 +238,24 @@ public partial class TestWolfPassability : TestBase
 		// without ever seeing a figure walk. An earlier version of this test
 		// put the wall at three and called the first step "open".
 		grid.Set(4, 0, WolfChipPassability.Blocked, true);
-		var guard = new WolfCharacter { Id = 1, X = 2, Y = 0 };
-		guard.PassabilityGrid = grid;
+		board.LoadMap(1, grid);
+		var guard = board.Add(new WolfCharacter { Id = 1, X = 2, Y = 0 });
 
+		var first = guard.Step(WolfCharacter.PassRight);
 		AssertEq(
-			guard.Step(WolfCharacter.PassRight), true,
+			first, true,
 			"**and the first step right succeeds**, because the tile at three is"
-			+ $" open; it is {guard.Step(WolfCharacter.PassRight)}");
+			+ $" open; it is {first}");
 		AssertEq(
 			guard.X, 3,
 			"**and the figure is on three**;"
 			+ $" X is {guard.X}");
+
+		var second = guard.Step(WolfCharacter.PassRight);
 		AssertEq(
-			guard.Step(WolfCharacter.PassRight), false,
+			second, false,
 			"**and the next one is refused**, because the wall is at four;"
-			+ $" it is {guard.Step(WolfCharacter.PassRight)}");
+			+ $" it is {second}");
 		AssertEq(
 			guard.X, 3,
 			"**and the figure stayed put**, which is what a refusal means and"
@@ -255,29 +263,20 @@ public partial class TestWolfPassability : TestBase
 			+ $" X is {guard.X}");
 	}
 
-	/// <summary>
-	/// A figure with no map at all cannot step.
-	/// </summary>
-	/// <remarks>
-	/// <strong>Refused, and that is the honest answer.</strong> "The map was
-	/// not read" is not "the tile is passable", and a reader that treated a
-	/// missing grid as open ground would let a guard walk through every wall on
-	/// every map whose chips it could not read — with no error anywhere, because
-	/// a walk through a wall is a walk.
-	/// </remarks>
 	public void Test_AFigureWithNoMapCannotStep()
 	{
 		var guard = new WolfCharacter { Id = 1, X = 1, Y = 1 };
 
+		var stepped = guard.Step(WolfCharacter.PassRight);
 		AssertEq(
-			guard.Step(WolfCharacter.PassRight), false,
+			stepped, false,
 			"**and stepping is refused**, because there is no map to ask and"
-			+ $" this reader does not assume open ground; it is {guard.Step(WolfCharacter.PassRight)}");
+			+ $" this reader does not assume open ground; it is {stepped}");
 		AssertEq(
-			guard.Facing, WolfCharacter.PassRight,
-			"**and the figure still turns to face it**, which is the same rule a"
-			+ " wall produces — the refusal is about the position, not the"
-			+ $" facing; it is {guard.Facing}");
+			guard.PassabilityGrid, null,
+			"**and the grid is the reason**, which the test names so a reader"
+			+ " does not think the refusal came from somewhere else;"
+			+ $" it is {(guard.PassabilityGrid == null ? "nothing" : "a grid")}");
 	}
 
 	/// <summary>
@@ -298,16 +297,18 @@ public partial class TestWolfPassability : TestBase
 		board.LoadMap(1, grid);
 		var after = board.Add(new WolfCharacter { Id = 2, X = 1, Y = 1 });
 
+		var beforeStep = before.Step(WolfCharacter.PassRight);
 		AssertEq(
-			before.Step(WolfCharacter.PassRight), false,
+			beforeStep, false,
 			"**and the figure placed before the map cannot step into the wall**,"
 			+ " because LoadMap handed it the grid as well as the new figure;"
-			+ $" it is {before.Step(WolfCharacter.PassRight)}");
+			+ $" it is {beforeStep}");
+		var afterStep = after.Step(WolfCharacter.PassRight);
 		AssertEq(
-			after.Step(WolfCharacter.PassRight), false,
+			afterStep, false,
 			"**and so cannot the one placed after**, because the two are asked"
 			+ " the same question and answered the same way;"
-			+ $" it is {after.Step(WolfCharacter.PassRight)}");
+			+ $" it is {afterStep}");
 	}
 
 	/// <summary>

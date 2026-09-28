@@ -2599,6 +2599,7 @@ look for the next island of that shape.**
 | wolf | ~~move route execution~~ | **~~24 verified route types, finally run — DONE, see below~~** |
 | wolf | ~~character board and VM routing~~ | **~~a board that moves in time, and two opcodes — DONE, see below~~** |
 | wolf | ~~chip passability~~ | **~~six states, two layers, and walls a figure cannot walk through — DONE, see below~~** |
+| wolf | ~~character collision~~ | **~~half-tile hitboxes, pass-through, and a hero who is not a wall — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2611,6 +2612,76 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## A figure walked through every guard, and one rule was read backwards
+
+**The last card gave figures walls and nothing else,** so a hero walked through
+every guard, every shopkeeper and every sign in the game. The only trace would
+have been a hero standing inside a shop, and a walk through a guard is a walk.
+
+**The hitbox is a tile wide and half a tile high,** and the help gives the number:
+<c>当ﾀﾘ判定■(正方形)</c> off is <c>横1マス×縦0.5マス</c> — a figure's feet and not
+its whole body — and the square option makes it a full tile. **A reader that used
+one tile for both would make every half-height figure collide with the figure on
+the tile above, and a crowd in a corridor would lock solid.** That is a game
+that cannot be finished, and it looks like a bug in the pathfinding rather than
+in the hitbox.
+
+**X is half open and Y is closed, and that asymmetry is a decision, not a typo.**
+X half open is what keeps a corridor walkable: a figure on tile 2 reaches from 2
+to 3 and one on tile 3 from 3 to 4, and a closed comparison would have them
+overlap on the boundary and block every two-tile room. Y closed is the other
+half — **a square figure on tile 5 occupies 5 to 6 and touches the figure on
+tile 6, and a solid object another figure may stand inside is not solid.** It is
+also what makes the square option mean anything: with a half open Y a square
+figure would reach exactly as far as a half-height one and the option would be a
+name for nothing. **The help does not spell the comparison out, so this is stated
+here as a choice with its reasons.**
+
+**A ghost is walked through, and the relationship is one sided.** The option
+<c>イベントをすり抜けられるようにします</c> makes an event walk-through, and the
+help adds that such an event cannot start unless the player is standing on it —
+so a transparent sign is both a wall you walk through and a thing you can only
+reach by stepping on it. **The flag belongs to the ghost and answers before
+anybody is asked**, so a ghost walks through a solid figure and a solid figure
+walks through a ghost. A reader that made it symmetric would wall off every
+invisible trigger in the game.
+
+## A test read that rule backwards, and the code was right
+
+**One of the new tests asserted a *refusal* when the hero stepped onto a ghost**
+— it read the rule as though the ghost stopped whoever walked into it. The code
+did the opposite and was correct: a reader that believed the test would have made
+a transparent decoration a wall, which is the opposite of what the option is for.
+
+**It is recorded because the test passed on the first run of the shape and failed
+only when the test above it started working.** Four of the eleven tests were
+measuring the wrong thing for a reason that had nothing to do with collision, and
+the symptom in every one of them was the same word: `False`.
+
+## The hero was not on the board until this card
+
+**The occupant list started empty and the first call a game makes is LoadMap** —
+which hands the grid to whoever is on the list. An empty list meant the hero never
+got the map, **so the hero could not step at all**, and a game with an event on it
+would have opened with a player who is stuck. The hero is placed in the
+constructor and the grid is handed in `RefreshOccupants`, not only where a figure
+is added, because a figure placed before the map was loaded has the same question
+as one placed after.
+
+**The candidate carries every field, through `At()`.** Building a throwaway
+character by hand would mean copying fifteen fields and missing one the next time
+a field is added, and the field that matters most — the hitbox — is exactly the one
+a hand-built copy would forget.
+
+**Test evidence** `test_wolf_character_collision.cs` (11), with
+`test_wolf_passability.cs` (10), `test_wolf_character_board.cs` (14) and
+`test_wolf_move_route_runner.cs` (14) re-measured after the change. **1292/1292**.
+**Mutations** Sixteen effective rules over two runs, **16 of 16 caught** —
+including the half tile read as a full one, the square option ignored, the Y axis
+made half open, the X axis made closed, the erased check on one side only, the
+pass-through made symmetric, the self-collision not skipped, the candidate losing
+the hitbox, the hero absent from the board, and the list not rebuilt.
 
 ## Six chip states, two layers, and a figure that stops at a wall
 

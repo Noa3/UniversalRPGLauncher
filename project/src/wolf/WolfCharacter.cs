@@ -108,6 +108,66 @@ public sealed class WolfCharacter
 	public bool IsErased { get; set; }
 
 	/// <summary>
+	/// Whether other characters may walk through this one.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The option's name is すり抜け and it is one sided.</strong> The
+	/// event window help says an event with it on can be walked through, and
+	/// that such an event cannot start unless the player is standing on it — so
+	/// a transparent sign is both a wall you walk through and a thing you can
+	/// only reach by stepping on it. **The flag belongs to the ghost, and it does
+	/// not make the ghost unable to walk through others**: a reader that made
+	/// the relationship symmetric would let a decoration stop the hero.
+	/// </remarks>
+	public bool PassThrough { get; set; }
+
+	/// <summary>
+	/// Whether the hitbox is a full square or a tile wide and half high.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The help's 当ﾀﾘ判定■ option, and it is not only about hitting.</strong>
+	/// The same paragraph says the hitbox also changes the contact range, and
+	/// the contact rules depend on the shape: a square event triggers from the
+	/// tile above it, a half-height one from beside it.
+	/// </remarks>
+	public bool SquareHitbox { get; set; }
+
+	/// <summary>
+	/// The same character, standing somewhere else.
+	/// </summary>
+	/// <remarks>
+	/// <strong>A copy and not a mutation, and that is the point.</strong> To ask
+	/// whether a character could stand on a tile, the collision test needs the
+	/// character as it would be — every field, including the hitbox and the
+	/// pass-through flag. Building a candidate by hand would mean copying
+	/// eleven fields and missing one the next time a field is added, and the
+	/// field that matters most is exactly the one a hand-built copy would
+	/// forget.
+	/// </remarks>
+	public WolfCharacter At(int pX, int pY)
+	{
+		return new WolfCharacter
+		{
+			Id = Id,
+			MapId = MapId,
+			X = pX,
+			Y = pY,
+			Facing = Facing,
+			MoveSpeed = MoveSpeed,
+			MoveFrequency = MoveFrequency,
+			AnimationFrequency = AnimationFrequency,
+			Passability = Passability,
+			Height = Height,
+			Opacity = Opacity,
+			Graphic = Graphic,
+			IsErased = IsErased,
+			PassThrough = PassThrough,
+			SquareHitbox = SquareHitbox,
+			PassabilityGrid = PassabilityGrid,
+		};
+	}
+
+	/// <summary>
 	/// Whether the character may be moved one step in the given direction.
 	/// </summary>
 	/// <remarks>
@@ -123,6 +183,41 @@ public sealed class WolfCharacter
 			return false;
 		}
 		return (Passability & pDirection) == pDirection;
+	}
+
+	/// <summary>
+	/// Everyone else on the map, for the character-to-character check.
+	/// </summary>
+	/// <remarks>
+	/// <strong>A set by the board and not a lookup.</strong> The collision test
+	/// has to see every figure — a character that only knew about itself would
+	/// walk through every ghost and every guard, and the only trace would be a
+	/// hero standing inside a shopkeeper. The board owns the list because it
+	/// owns the map, and a figure placed on it is given the same set as
+	/// everybody else.
+	/// </remarks>
+	public Func<IReadOnlyList<WolfCharacter>>? Occupants { get; set; }
+
+	/// <summary>
+	/// Puts a lone character on an empty map, with nobody else to ask about.
+	/// </summary>
+	/// <remarks>
+	/// <strong>A named method and not a hand-built list in every test.</strong> A
+	/// character outside a board — a unit test, a tool, a preplaced figure —
+	/// still needs the cast to be asked, and building the closure by hand in
+	/// each place is three lines that three places would get three different
+	/// ways. <strong>The list contains this character and nobody else</strong>,
+	/// so it collides with nothing, which is what an empty board means.
+	/// </remarks>
+	public static WolfCharacter Alone(int pId, WolfPassabilityGrid pGrid)
+	{
+		var alone = new WolfCharacter { Id = pId, PassabilityGrid = pGrid };
+		// **The list names the character, so the self-skip has something to
+		// skip.** A list that did not contain it would make every step a
+		// refusal against nobody, and the reason for the refusal would not be
+		// the thing the caller could see.
+		alone.Occupants = () => [alone];
+		return alone;
 	}
 
 	/// <summary>
@@ -178,6 +273,23 @@ public sealed class WolfCharacter
 		var nextX = X + WolfDirection.DeltaX(pDirection);
 		var nextY = Y + WolfDirection.DeltaY(pDirection);
 		if (!grid.AllowsStanding(nextX, nextY))
+		{
+			return false;
+		}
+		// **The other figures are asked last, and a refusal from either is the
+		// same refusal.** A figure that is stopped by a wall and a figure that
+		// is stopped by a guard are one thing to the route: the step did not
+		// happen. A reader that reported them differently would give the
+		// board's skip flag two rules where the format has one.
+		//
+		// **The occupant list is required, and its absence is a refusal** — the
+		// same reasoning as the missing map. A character that could not see
+		// the others would walk through all of them.
+		if (Occupants?.Invoke() is not { } occupants)
+		{
+			return false;
+		}
+		if (!WolfCharacterCollision.CanOccupy(this, nextX, nextY, occupants))
 		{
 			return false;
 		}
