@@ -2591,6 +2591,7 @@ look for the next island of that shape.**
 | map | ~~`11710` `11720` `11740` `11750`~~ | **~~tileset, panorama, encounter steps, tile substitution — DONE, see below~~** |
 | choice | ~~`20140` `20141`~~ | **~~choice option and choice end — DONE, see below~~** |
 | damage | ~~`10500`~~ | **~~simulated attack — DONE, see below~~** |
+| class data | ~~`0x1F` chunk~~ | **~~class parameters by level — DONE, the prerequisite for `1008`~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2603,6 +2604,58 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The class parameter chunk is decoded — `1008` is no longer missing data, only code
+
+**`1008 ChangeClass` was not waiting for a dispatcher, it was waiting for data.**
+The command carries a class id, a level reset flag, a skill mode and a
+**parameter mode** — and the parameter mode is meaningless without the class
+table, because the reference reads a *level* out of it. The LDB class
+parameter chunk was being read into `unknown_fields` and staying there.
+
+**Nothing was lost, and that is worth saying.** The reader contract held: the
+raw chunk is still in `unknown_fields` alongside the decode. What was missing
+was a way in, and this adds one without replacing anything.
+
+**Six `int16` vectors and not six scalars.** liblcf `rpg::Parameters` holds
+`maxhp`, `maxsp`, `attack`, `defense`, `spirit` and `agility` as
+`vector<int16>` with one entry per level, and its `WriteLcf` stores them in that
+order with no lengths in front. **A reader that assumed six scalars would read
+the first value of each vector and call it the class maximum — a level 99 class
+would give its heroes level 1 stats**, and every number would be in range, so
+nothing would look wrong.
+
+**The order is liblcf s and not alphabetical.** A reader that sorted the names
+would give a class its agility as its hit points, with all six values in range.
+
+**Little endian, signed, both halves.** A reader that read one byte would cap
+every stat at 255, and a class with a max hit point above 255 would have its
+heroes quietly weakened.
+
+**The chunk is a multiple of twelve or it is a different structure.** A reader
+that decoded it anyway would read six values out of a chunk that holds
+something else — and the stat numbers would be plausible, which is worse than
+a refusal.
+
+**Levels are one based in a game and zero based in the array.** The reference
+reads `parameters[level]` after decrementing; a reader that skipped that would
+hand a level 1 hero the level 0 row, and on a class whose first level is
+deliberately weak that is the difference between a tutorial and a hero who
+starts the game under-strengthed.
+
+**A class with no parameters says so and returns false.** A zero hit point
+maximum would read like a design choice — a hero the game made unplayable
+rather than a file that did not parse.
+
+**Test evidence** `test_rm2k_class_parameters.cs`, 7 tests.
+**1200/1200**, `TestRm2kClassParameters: 7/7`.
+**Mutations** Nine rules, **9 of 9 caught** in the first run — including the
+vectors rotated by one, the high byte dropped, and the level left one based
+instead of zero.
+
+**What `1008` still needs** the class skill list and the four modes it carries.
+The parameters are the part without which the command could not be written at
+all; the rest is a switch.
 
 ## `10500 Simulated Attack` is done — and it is not a battle
 

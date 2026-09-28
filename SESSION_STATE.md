@@ -2802,3 +2802,53 @@ abgezogen und die Resultatvariable akkumuliert.
 `ChangeClass` braucht ein Klassenmodell: der Befehl trägt Klassen-ID,
 Stufen-Reset-Flag, Skill-Modus und Parameter-Modus, und keiner davon hat bisher
 ein Ziel.
+
+## K-136 Klassen-Parameter-Chunk `0x1F` — DONE: `1008` wartete auf Daten, nicht auf Code
+
+**`1008 ChangeClass` wartete nicht auf einen Dispatcher, sondern auf Daten.**
+Der Befehl trägt Klassen-ID, Stufen-Reset-Flag, Skill-Modus und
+**Parameter-Modus** — und der Parameter-Modus ist ohne Klassentabelle
+bedeutungslos, weil die Referenz daraus eine *Stufe* liest. Der LDB-Parameter-
+Chunk der Klassen wurde nach `unknown_fields` gelesen und blieb dort.
+
+**Nichts ging verloren, und das ist es wert zu sagen.** Der Leser-Vertrag hielt:
+Der rohe Chunk liegt weiterhin in `unknown_fields`, neben dem Decode. Es fehlte
+ein Weg hinein, und dieser fügt einen hinzu, ohne etwas zu ersetzen.
+
+**Sechs `int16`-Vektoren und keine sechs skalaren.** liblcf `rpg::Parameters`
+hält `maxhp`, `maxsp`, `attack`, `defense`, `spirit`, `agility` als
+`vector<int16>` mit einem Eintrag pro Stufe, und `WriteLcf` schreibt sie in genau
+dieser Reihenfolge ohne Längen davor. **Wer sechs Skalare annähme, läse den
+ersten Wert jedes Vektors und nannte es das Klassenmaximum — eine Stufe-99-
+Klasse gäbe ihren Helden Stufe-1-Werte**, und alle Zahlen lägen im Bereich, also
+sähe nichts falsch aus.
+
+**Die Reihenfolge ist liblcf s und nicht alphabetisch.** Wer die Namen sortierte,
+gäbe einer Klasse ihre Initiative als Trefferpunkte — mit allen sechs Werten im
+Bereich.
+
+**Little endian, signiert, beide Bytes.** Wer eines las, deckte jeden Wert auf
+255 — und eine Klasse mit mehr als 255 TP hätte ihre Helden leise geschwächt.
+
+**Der Chunk ist ein Vielfaches von zwölf oder etwas anderes.** Wer ihn trotzdem
+dekodierte, läse sechs Werte aus einem Chunk mit anderem Inhalt — und die
+Werte wären plausibel, was schlimmer ist als eine Ablehnung.
+
+**Stufen sind im Spiel eins-basiert und im Array null-basiert.** Die Referenz
+liest `parameters[level]` nach dem Dekrementieren; wer das übersprang, gäbe einem
+Stufe-1-Helden die Zeile 0 — und bei einer Klasse, deren erste Stufe absichtlich
+schwach ist, ist das der Unterschied zwischen einem Tutorial und einem Helden,
+der zu schwach ins Spiel startet.
+
+**Eine Klasse ohne Parameter sagt es und gibt false zurück.** Eine maximale
+Trefferpunktzahl von null sähe wie eine Designentscheidung aus — ein Held, den
+das Spiel unspielbar machte, statt einer Datei, die nicht gelesen wurde.
+
+**Test evidence** `test_rm2k_class_parameters.cs` (7). **1200/1200**.
+**Mutations** 9 Regeln, **9 von 9 gefangen** im ersten Lauf — darunter die um
+eins gedrehten Vektoren, das weggefallene hohe Byte und die eins- statt
+null-basierte Stufe.
+
+**Was `1008` noch braucht** die Klassen-Skill-Liste und die vier Modi, die der
+Befehl trägt. Die Parameter sind der Teil, ohne den der Befehl nicht zu schreiben
+war; der Rest ist ein Schalter.

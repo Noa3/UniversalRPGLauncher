@@ -202,15 +202,88 @@ public class Rm2kDatabaseModel
 		public int Id;
 		public string Name = "";
 
+		/// <summary>
+		/// The six stat vectors, one entry per level, from the LDB <c>0x1F</c>
+		/// chunk.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// <strong>Six vectors and not six numbers.</strong> liblcf
+		/// <c>rpg::Parameters</c> holds one <c>vector&lt;int16&gt;</c> per stat
+		/// with one entry per level, which is why a class gives a different value
+		/// at every level. <em>A reader that kept six scalars would give a level 99
+		/// class its level 1 stats.</em>
+		/// </para>
+		/// <para>
+		/// An empty list is a class whose chunk was absent or unreadable, and
+		/// <see cref="ValueAt"/> says so rather than returning a zero that would
+		/// read as a class with no stats at all.
+		/// </para>
+		/// </remarks>
+		public Dictionary<string, List<int>> Parameters { get; } = new();
+
+		/// <summary>
+		/// The value of one stat at one level, and whether there is one.
+		/// </summary>
+		/// <param name="pStat">One of the six liblcf names.</param>
+		/// <param name="pLevel">One based, because a game writes levels that way.</param>
+		/// <param name="pValue">The value, or 0 when there is none.</param>
+		/// <returns>False when the class carries no such stat or level.</returns>
+		public bool TryValueAt(string pStat, int pLevel, out int pValue)
+		{
+			pValue = 0;
+			if (!Parameters.TryGetValue(pStat, out var values) || values.Count == 0)
+			{
+				return false;
+			}
+			// **Levels are one based in a game and zero based in the array.**
+			// The reference reads `parameters[level]` after decrementing, and a
+			// reader that skipped that would hand a level 1 hero the level 0 row.
+			var index = pLevel - 1;
+			if (index < 0 || index >= values.Count)
+			{
+				return false;
+			}
+			pValue = values[index];
+			return true;
+		}
+
 		public Dictionary<string, object> ToDict()
 		{
-			return new Dictionary<string, object> { { "id", Id }, { "name", Name } };
+			return new Dictionary<string, object>
+			{
+				{ "id", Id },
+				{ "name", Name },
+				{ "parameters", Parameters },
+			};
 		}
 
 		public void FromDict(Dictionary<string, object> pDict)
 		{
 			Id = Rm2kMap.GetInt(pDict, "id");
 			Name = Rm2kMap.GetString(pDict, "name");
+			Parameters.Clear();
+			if (!pDict.TryGetValue("parameters", out var raw))
+			{
+				return;
+			}
+			// **A Godot dictionary and not a plain one**, because that is what
+			// the parser produces and a plain Dictionary<string, object> is
+			// not a Variant. A value that is not a list of numbers is a
+			// parameter the reader did not expect, and it is skipped rather
+			// than guessed at.
+			if (raw is not Godot.Collections.Dictionary table)
+			{
+				return;
+			}
+			foreach (var pair in table)
+			{
+				if (pair.Value.VariantType == Godot.Variant.Type.PackedInt32Array)
+				{
+					Parameters[pair.Key.ToString()] = new List<int>(
+						pair.Value.AsInt32Array());
+				}
+			}
 		}
 	}
 

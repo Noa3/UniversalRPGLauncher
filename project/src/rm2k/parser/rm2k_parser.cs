@@ -113,6 +113,49 @@ public partial class Rm2kParser : RefCounted
 		{ 0x01, "name" },
 	};
 
+	/// <summary>
+	/// The LDB class parameter chunk, from <c>rpg::Class::parameters</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Six <c>int16</c> vectors and not six scalars.</strong> One vector
+	/// per stat, one entry per level, which is why a class gives a different
+	/// value at every level and why <c>1008 ChangeClass</c> can say "take the
+	/// level 1 values" or "halve" instead of setting a number.
+	/// </para>
+	/// <para>
+	/// The chunk is <c>0x1F</c> and it is read into
+	/// <c>unknown_fields</c> like every unrecognised chunk — so nothing is lost,
+	/// but a reader had no way to reach the values. It is decoded here and kept
+	/// in <c>unknown_fields</c> as well.
+	/// </para>
+	/// </remarks>
+	public const int LdbClassParametersChunk = 0x1F;
+
+	/// <summary>The class skills chunk, from <c>rpg::Class::skills</c>.</summary>
+	public const int LdbClassSkillsChunk = 0x3F;
+
+	/// <summary>How many <c>int16</c> vectors a class parameter chunk holds.</summary>
+	public const int LdbClassParameterVectorCount = 6;
+
+	/// <summary>The names of the six vectors, in the order the chunk stores them.</summary>
+	/// <remarks>
+	/// The order is liblcf <c>s WriteLcf</c> and not alphabetical: maxhp,
+	/// maxsp, attack, defense, spirit, agility.
+	/// </remarks>
+	public static readonly string[] LdbClassParameterNames =
+	{
+		"maxhp", "maxsp", "attack", "defense", "spirit", "agility",
+	};
+
+	/// <summary>The highest level a class parameter vector may hold.</summary>
+	/// <remarks>
+	/// <c>Parameters::Setup</c> sizes the vectors to the final level, and
+	/// RPG Maker 2003 tops out at 99. A vector longer than that is a malformed
+	/// chunk and is kept whole rather than truncated, so a reader can see it.
+	/// </remarks>
+	public const int MaxClassParameterLevels = 99;
+
 	// Scalar fields verified against EasyRPG liblcf's generated LDB contract.
 	// Nested arrays/structures are intentionally left in unknown_fields until a
 	// dedicated bounded decoder exists for their element type.
@@ -1023,6 +1066,42 @@ public partial class Rm2kParser : RefCounted
 			foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)pObject["fields"])
 			{
 				var fieldId = (int)field["id"];
+				// **The class parameter chunk is decoded here and not thrown
+				// into unknown_fields, because `1008 ChangeClass` needs it and
+				// there is no other way in.** The raw chunk is *also* added to
+				// unknown_fields, so the bytes a game shipped stay reachable —
+				// this adds a reading of them and replaces nothing.
+				if (fieldId == LdbClassParametersChunk)
+				{
+					unknownFields.Add(field);
+					if (Rm2kClassParameterDecoder.TryDecode(
+						(byte[])field["data"], out var classParameters, out var classError))
+					{
+						// **A Godot dictionary, and not a plain one**, because
+						// the entry it goes into is a Godot dictionary and a
+						// plain Dictionary<string, object> is not a Variant.
+						var into = new Godot.Collections.Dictionary();
+						foreach (var pair in classParameters)
+						{
+							var list = new Godot.Collections.Array<int>();
+							foreach (var value in (List<int>)pair.Value)
+							{
+								list.Add(value);
+							}
+							into[pair.Key] = list;
+						}
+						entry["parameters"] = into;
+					}
+					else
+					{
+						// **A refused chunk is said, and not silently skipped.**
+						// A class whose parameters do not decode is a class whose
+						// heroes would get a zero stat, and a zero reads like a
+						// design choice rather than a file that did not parse.
+						entry["parameters_error"] = classError;
+					}
+					continue;
+				}
 				if (!LdbNamedEntryFieldNames.TryGetValue(fieldId, out var fieldName))
 				{
 					unknownFields.Add(field);
