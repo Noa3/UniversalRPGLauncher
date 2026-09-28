@@ -1934,3 +1934,43 @@ Runner verwendete `$TMPDIR/m_<pfad>` als Backup, was mit `/` im Namen scheiterte
 — die Mutationen liefen **ohne Restore**, und die folgenden Regeln testeten eine
 kumulativ kaputte Datei. `git checkout --` hat daraufhin den **ungestagten**
 Slice verworfen; er wurde neu gebaut und sofort gestaged.
+
+## K-135 Die Befehlsverteilung beider echten RM2K-Fixtures — READY angelegt
+
+**Gemessen, nicht geschätzt.** Jeder Event-Befehl aus allen vier gepinnten
+RM2K-Karten (`rm2k-dragon-destiny` und `easyrpg-testgame`), aus dem
+Wertebaum des Parsers herausgewalkt, gegen die Konstantenliste des
+Interpreters.
+
+**32 von 778 Befehlen werden übersprungen.** Sieben Codes:
+
+| Code | Anzahl | Was |
+|---|---:|---|
+| `1009` | **20** | **die Folgezeile einer Nachricht, ohne eigenen Befehl** |
+| `11610` | **2** | **nicht identifiziert** |
+| `5001`–`5005` | **2 je** | **Move-Route-Schritte, in einer Seite getragen** |
+
+**`1009` ist die größte Gruppe und ist kein Befehl.** `10110` trägt seine erste
+Zeile inline, und jede Folgezeile ist ein nacktes `1009` mit einem String —
+**genau wie MZ's `401` auf ein `101` folgt.** Ein Leser, der `10110`
+dispatcht und `1009` verwirft, **verliert jede zweite Zeile jeder Nachricht in
+beiden Spielen** — und 20 davon stehen auf einer einzigen Seite, also verliert
+eine Dialogseite zwanzig Zeilen.
+
+**`5001`–`5005` sind Move-Route-Schritte, keine Event-Befehle** — dieselbe
+Falle wie MZ's `505`, wo K-131 348 davon verschachtelt in `205` fand und keinen
+als eigenen Befehl. Hier je zwei. **Deshalb ist eine rekursive Zählung
+„Codes in diesem Spiel" keine Zählung nicht implementierter Befehle.**
+
+**Und `11610` ist nicht identifiziert.** Zwei Vorkommen. Dieses Repository
+rät keinen Befehl, den es nicht aus der Referenzimplementierung gelesen hat,
+also sagt die Karte „nicht identifiziert" und nicht, was er vermutlich ist.
+
+**Die gepinnte Dragon-Destiny-Fixture hat zwei Karten mit je ~1,2 KB und
+beide ohne Events** (`event_count=0`). Das ist kein Fehler, sondern eine
+Eigenschaft: es ist eine Startkarte. Die Verteilung stammt aus allen vier
+Karten beider Fixtures.
+
+**Nächster Schritt:** `1009` als Folgezeile von `10110` lesen, mit derselben
+Zwei-Phasen-Lesung und derselben Index-Buchführung, die K-133 für MZ gemessen
+hat. Verlust bei null.

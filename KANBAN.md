@@ -114,6 +114,7 @@
 | K-132 | — | DONE | Read a line of text, and every code in it | — |
 | K-133 | — | DONE | A 101, and everything it swallows | — |
 | K-134 | 1 | READY | The twenty-five table rows that have no card behind them | — |
+| K-135 | 0 | VERIFY | The seven command codes these two real games use and this reader skips | — |
 
 ## Card details
 
@@ -2553,9 +2554,64 @@ name work that was done:
 Because the next agent will read the table. **A board note explaining that
 the table is incomplete is a warning; a table that is complete is a fix.**
 
-## Agent maintenance rules
-- Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
-- At the end of a work session update this board and `SESSION_STATE.md` with exactly what is next.
+### K-135 The seven command codes these two real games actually use and this reader skips
+`VERIFY` — runtime, P0. The `1009` half is done; five codes are not.
+
+**Measured, not estimated.** Every event command in all four pinned RM2K maps
+of `rm2k-dragon-destiny` and `easyrpg-testgame`, walked out of the parser's own
+value tree, against the interpreter's own constant list:
+
+| code | count | what it is |
+|---|---:|---|
+| `10110` | 286 | Show Message — implemented |
+| `20110` | 276 | message continuation line — implemented |
+| `10810` | 30 | Place Hero — implemented |
+| `10` | 28 | End — implemented |
+| `1009` | **20** | **the other continuation line — fixed by this card** |
+| `11410` | 18 | Wait — implemented |
+| `11070` | 14 | Weather Effects — implemented |
+| `12010` | 14 | Conditional Branch — implemented |
+| `22010` / `22011` | 14 / 14 | Else / End Branch — implemented |
+| `10420` / `10610` | 12 / 12 | Change Level / Hero Name — implemented |
+| `10220` | 8 | Control Variables — implemented |
+| `10210` | 6 | Control Switches — implemented |
+| `11040` / `11050` | 4 / 4 | Flash / Shake — implemented |
+| `10330` | 4 | Change Party Members — implemented |
+| `12330` | 2 | Call Event — implemented |
+| `5001`–`5005` | **2 each** | **move route steps, carried inside a page — not done** |
+| `11610` | **2** | **unidentified — not done** |
+
+**`1009` was the largest single group, and it is not a command of its own.**
+`10110` carries its first line inline and every following line is a bare `1009`
+or `20110` with a string — **exactly as MZ's `401` follows a `101`**. The
+mechanism to read continuation lines was already there; it looked for `20110`
+only, so **ten messages in these four maps lost half their text and no test
+knew**.
+
+**The fix is one predicate and one constant**, because the format uses two
+numbers and a reader that guesses which one a game uses drops half its dialogue
+on the other game. `IsMessageLine` accepts both.
+
+**The two numbers mean different things, and a test that conflates them reports
+the wrong size of the bug.** There are 20 `1009` commands and **ten** messages
+that carry them, so the lines lost were ten and not twenty. A first draft
+asserted a difference of 20, failed, and the failure was worth having: it is the
+difference between "twenty lines of dialogue" and "ten messages lost half their
+text", and only the second is true. **291 lines against 281, measured.**
+
+**What is not done, and why the card stays `VERIFY`**
+- `5001`–`5005` are move route steps, not event commands — the same trap as MZ's
+  `505`, where K-131 found 348 of them nested inside `205` and not one as a
+  command. They are decoded on the pages that carry them only in part.
+- `11610` is **unidentified**. Two occurrences. This repository does not guess a
+  command it has not read from the reference implementation, so the card says
+  "unidentified" and not what it probably is.
+
+**Test evidence** `project/tests/core/test_rm2k_message_lines.cs`, one test
+that counts the lines both readers reach and asserts the difference.
+**981/981**.
+**Mutations** Two rules, **2 of 2 caught** — the predicate losing `1009`, and
+the constant carrying the wrong number.
 
 
 ### K-127 Put a picture on the screen and move it off again

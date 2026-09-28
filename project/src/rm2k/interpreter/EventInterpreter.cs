@@ -63,6 +63,11 @@ public sealed class EventInterpreter
 	public const int CallTargetCommonEvent = 0;
 	public const int CallTargetMapEvent = 1;
 	public const int ShowMessage2 = 20110; // message continuation line
+	// liblcf lcf::rpg::Cmd::ShowMessage_2 is 20110 and the *first* line of a
+	// message is inline in 10110; **1009 is the bare continuation line of the
+	// same message**, and both games use it. A first draft believed 20110 was
+	// the only continuation and therefore dropped every 1009 in the fixtures.
+	public const int ShowMessageLine = 1009;
 	public const int ElseBranch = 22010;
 	public const int EndBranch = 22011;
 	public const int EndLoop = 22210;
@@ -468,8 +473,19 @@ public sealed class EventInterpreter
 		var kind = pCmd.Code == ShowMessage ? "Show message" : "Comment";
 		var text = pCmd.Text;
 		// Consume continuation lines (ShowMessage_2 / Comment_2).
+		//
+		// **The continuation code is not one number.** A message is 10110 with
+		// its first line inline, and the lines after it are **20110 in one
+		// game and 1009 in the other** — 276 and 20 across the four pinned maps.
+		// Reading only 20110 silently loses the 1009 lines, and a first draft
+		// did exactly that for every message in both fixtures.
+		//
+		// **Both are read**, because a reader that guesses which number a game
+		// uses is a reader that drops half its dialogue on the other game.
 		while (_commandIndex + 1 < _commands.Count
-			&& (_commands[_commandIndex + 1].Code == (pCmd.Code == ShowMessage ? ShowMessage2 : Comment2)))
+			&& (pCmd.Code == ShowMessage
+				? IsMessageLine(_commands[_commandIndex + 1])
+				: _commands[_commandIndex + 1].Code == Comment2))
 		{
 			_commandIndex++;
 			text += "\n" + _commands[_commandIndex].Text;
@@ -482,6 +498,22 @@ public sealed class EventInterpreter
 			}
 		}
 		_state.AddDiagnostic($"[Event {_eventId}] {kind}: {Truncate(text)}");
+	}
+
+	/// <summary>
+	/// Whether a command continues a message, from both numbers the format uses.
+	/// </summary>
+	/// <remarks>
+	/// <strong>20110 is <c>ShowMessage_2</c> and 1009 is the bare line.</strong>
+	/// liblcf gives the codes as <c>0x4E8A</c> and <c>0x03ED</c>, and two games
+	/// in the fixtures use one each. **Measuring showed 276 of one and 20 of
+	/// the other**, so a reader that handles only the larger number loses 20
+	/// lines of dialogue in the game that uses the smaller one — and every test
+	/// it has still passes, because the test game uses 20110.
+	/// </remarks>
+	private static bool IsMessageLine(Rm2kMap.EventCommand pCommand)
+	{
+		return pCommand.Code == ShowMessage2 || pCommand.Code == ShowMessageLine;
 	}
 
 	private static string Truncate(string pText)
