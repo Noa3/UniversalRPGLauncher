@@ -2520,3 +2520,36 @@ Kollabierung zweier Operationen hat einmal eine Save-Datei gekostet.
 **Mutations** 8 Regeln, **8 von 8 gefangen** — darunter jede der drei Befehle,
 die die anderen zwei Flags aus Defaults statt aus dem aktuellen Stand schreibt,
 also genau der Fehler, den diese Familie teilt.
+
+## K-136 `10920` / `11810` / `12420` / `12510` — DONE, und das Board lag bei einem falsch
+
+**`10920 Store Event ID` stand als „hat keine Methode in diesem EasyRPG-Build" auf
+dem Board.** Er hat eine: `CommandStoreEventID`. Board-Notiz korrigiert.
+Der Rumpf macht drei Dinge, die ein Leser richtig treffen muss: Beide
+Koordinaten laufen durch `ValueOrVariable` mit **demselben** Modus in
+`parameters[0]`; ein leeres Feld speichert **0 und hält die Seite nicht**
+(`ev ? ev->GetId() : 0`); und ein Feld außerhalb der Karte wird **abgelehnt
+statt mit einer Null beantwortet**, weil eine Null genau wie „kein Event hier"
+aussieht.
+
+`10920` braucht die Karte, und **der Interpreter hat keine** — er hat vier
+`Func`-Resolver. Der fünfte kommt dazu, `Func<int, int, int>?`, aus demselben
+Grund: Der Interpreter darf nicht wissen, wie eine Karte gehalten wird, sonst
+kann ein Test sie nicht steuern.
+
+**`11810` Parameter 4 heißt „der Schalter muss AN sein", nicht „es gibt einen".**
+Wer es als „benutze einen Schalter" liest, macht jeden bedingten Sprung
+unbedingt und öffnet einen geheimen Zugang zu Beginn des Spiels. Parameter 0
+ist ein **Modus und keine Ziel-ID** — ungleich null entfernt alle Punkte der
+Karte. Ein Punkt ersetzt einen zweiten auf derselben Kachel, weil die Referenz
+anhängt und ein Spiel sonst zwei Sprünge auf einer Kachel hätte.
+
+**`12420` und `12510` nehmen überhaupt keine Parameter**, weshalb die Referenz
+den Befehl als `const& com` schreibt und nie liest. Beide **warten zuerst auf
+eine offene Message** — ein Held, der seine letzte Zeile sagt und dann stirbt,
+soll danach sterben. Beide halten die Seite. `WaitingFor` sagt welches, denn ein
+Warten ohne Grund sieht wie ein Hänger aus.
+
+**Test evidence** `test_rm2k_teleport_and_outcome.cs` (13). **1132/1132**.
+**Mutations** 10 Regeln, **10 von 10 gefangen** — darunter das Sprung-Flag als
+„es gibt einen Schalter" und das leere Feld mit einer erfundenen ID beantwortet.

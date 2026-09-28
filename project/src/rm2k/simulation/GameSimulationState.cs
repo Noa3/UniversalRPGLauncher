@@ -208,7 +208,93 @@ public sealed class GameSimulationState
     /// defaulted to forbidden would make every untouched game unplayable the
     /// moment the player pressed Escape.
     /// </remarks>
+    /// <summary>
+    /// One teleport target, from <c>11810 Teleport Targets</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Targets belong to the game and not to the map.</strong> They
+    /// survive a map change, which is the whole reason a game can have a warp
+    /// point on a map the player is not on. A target list per map would be a
+    /// different command.
+    /// </remarks>
+    public sealed class TeleportTarget
+    {
+		/// <summary>The map this point is on.</summary>
+		public int MapId { get; set; }
+
+		/// <summary>The column, in tiles.</summary>
+		public int X { get; set; }
+
+		/// <summary>The row, in tiles.</summary>
+		public int Y { get; set; }
+
+		/// <summary>
+		/// Whether <see cref="SwitchId"/> has to be <em>on</em> for this point to
+		/// count, from the command flag.
+		/// </summary>
+		/// <remarks>
+		/// <strong>The flag is not "use a switch" but "the switch must be on".</strong>
+		/// A reader that read it as the first would make every conditional warp
+		/// unconditional, and a secret entrance would open at the start of the
+		/// game.
+		/// </remarks>
+		public bool RequiresSwitchOn { get; set; }
+
+		/// <summary>The switch this point depends on, when it has one.</summary>
+		public int SwitchId { get; set; }
+
+		/// <summary>
+		/// Whether this point is one the player can stand on at all.
+		/// </summary>
+		/// <remarks>
+		/// <strong>A point outside the map is not a point.</strong> The reference
+		/// stores it unchecked, and a warp to a tile outside the map is a warp
+		/// into nothing — so this reader refuses it and says which coordinate is
+		/// wrong.
+		/// </remarks>
+		public bool IsUsable { get; set; } = true;
+    }
+
+    /// <summary>Every warp point the game has declared, keyed by map id.</summary>
+    /// <remarks>
+    /// A map id of zero is the map the player is on, which the reference uses
+    /// for a point on the current map and this reader keeps as written.
+    /// </remarks>
+    /// <remarks>
+    /// **A plain dictionary and not a Godot one**, because
+    /// <c>Godot.Collections.Dictionary</c> is a Variant container and a class
+    /// is not a Variant — the same GD0301 the actor values ran into.
+    /// </remarks>
+    public System.Collections.Generic.Dictionary<int, List<TeleportTarget>> TeleportTargets { get; init; } = new();
+
+    /// <summary>Why the interpreter is waiting, when it is.</summary>
+    public enum WaitReason
+    {
+		/// <summary>Nothing is blocking the event.</summary>
+		None,
+
+		/// <summary>A message window is open, so the outcome is not shown yet.</summary>
+		MessageOpen,
+
+		/// <summary>The game over screen is up.</summary>
+		GameOver,
+
+		/// <summary>The title screen was requested.</summary>
+		TitleRequested,
+    }
+
+    /// <summary>What the interpreter is waiting for, from <c>12420</c> and <c>12510</c>.</summary>
+    public WaitReason WaitingFor { get; set; } = WaitReason.None;
+
+	/// <summary>Whether the game over screen is up, from <c>12420</c>.</summary>
+	public bool IsGameOverActive { get; set; }
+
+	/// <summary>Whether the title screen was requested, from <c>12510</c>.</summary>
+	public bool IsTitleRequested { get; set; }
+
     public bool AllowEscape { get; private set; } = true;
+
+
 
     /// <summary>Whether the player may save, from <c>11930</c>.</summary>
     public bool AllowSave { get; private set; } = true;
@@ -939,6 +1025,12 @@ public sealed class GameSimulationState
         // game is a game the player may save and escape from, and a reset that
         // left a cutscene's restrictions in place would lock the next game.
         SetAccess(pEscape: true, pSave: true, pMenu: true);
+        // **The outcome belongs to the game, not to the next one.** A new game
+        // that started with the last game over screen still up would look like
+        // a crash, and one that started with a title request pending would
+        // go straight back to the title.
+        TeleportTargets.Clear();
+        WaitingFor = WaitReason.None; IsGameOverActive = false; IsTitleRequested = false;
         PlayerIsHidden = false; PlayerIsThrough = false;
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;

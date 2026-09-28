@@ -151,6 +151,19 @@ public sealed class EventInterpreter
 	/// The reference has three one-line methods with the same shape, so one
 	/// handler and three constants is the honest reading and not a saving.
 	/// </remarks>
+	/// <summary>10920, Store Event ID, from <c>CommandStoreEventID</c>, width 4.</summary>
+	public const int StoreEventID = 10920;
+
+	/// <summary>11810, Teleport Targets, from <c>CommandTeleportTargets</c>, width 6.</summary>
+	public const int TeleportTargets = 11810;
+
+	/// <summary>
+	/// 12420 and 12510, Game Over and Return to Title Screen. Both take no
+	/// parameters, which is why the reference can ignore the command
+	/// entirely.
+	/// </summary>
+	public const int GameOver = 12420;
+	public const int ReturnToTitleScreen = 12510;
 	public const int ChangeEscapeAccess = 11840;
 	public const int ChangeSaveAccess = 11930;
 	public const int ChangeMainMenuAccess = 11960;
@@ -318,6 +331,17 @@ public sealed class EventInterpreter
 	private readonly Func<int, int, IReadOnlyList<Rm2kMap.EventCommand>?>? _eventCommandResolver;
 	private readonly Func<int, int, int, int, bool>? _eventLocationSetter;
 	private readonly Func<int, bool>? _eventDeactivator;
+
+	/// <summary>
+	/// The id of the event standing at a tile, for <c>10920</c>.
+	/// </summary>
+	/// <remarks>
+	/// **A resolver and not a map reference, and for the same reason the other
+	/// three are resolvers**: the interpreter must not know how a map is held,
+	/// or a test could not drive it. 0 means nothing is there, which is what the
+	/// reference stores when the tile is empty.
+	/// </remarks>
+	private readonly Func<int, int, int>? _eventIdAtTile;
 	/// <summary>
 	/// Starts a move route on a character, for command 11330.
 	/// </summary>
@@ -353,6 +377,7 @@ public sealed class EventInterpreter
 		Func<int, int, IReadOnlyList<Rm2kMap.EventCommand>?>? eventCommandResolver = null,
 		Func<int, int, int, int, bool>? eventLocationSetter = null,
 		Func<int, bool>? eventDeactivator = null,
+		Func<int, int, int>? eventIdAtTile = null,
 		Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>, bool, bool, bool>?
 			moveRouteStarter = null)
 			{
@@ -363,6 +388,7 @@ public sealed class EventInterpreter
 		_eventCommandResolver = eventCommandResolver;
 		_eventLocationSetter = eventLocationSetter;
 		_eventDeactivator = eventDeactivator;
+		_eventIdAtTile = eventIdAtTile;
 		_moveRouteStarter = moveRouteStarter;
 		_commandIndex = 0;
 	}
@@ -493,6 +519,33 @@ public sealed class EventInterpreter
 			case ErasePicture:
 				ExecuteErasePicture(cmd);
 				return Advance();
+
+			case StoreEventID:
+				ExecuteStoreEventId(cmd);
+				return Advance();
+
+			case TeleportTargets:
+				ExecuteTeleportTargets(cmd);
+				return Advance();
+
+			case GameOver:
+				ExecuteGameOver();
+				// **The reference returns false, so the page waits and the game over
+				// screen is the only way past it.** Advancing would run the rest of the
+				// event behind a screen the player is still looking at.
+				// **A held page, and the way this dispatcher spells a wait:**
+				// the index does not move, so the next frame runs this case
+				// again until the screen is gone.
+				return false;
+
+			case ReturnToTitleScreen:
+				ExecuteReturnToTitle();
+				// **Also a wait, and also for a different reason**: the reference makes
+				// this an async operation, so the page holds until the title is up.
+				// **A held page, and the way this dispatcher spells a wait:**
+				// the index does not move, so the next frame runs this case
+				// again until the screen is gone.
+				return false;
 
 			case ChangeEscapeAccess:
 				ExecuteAccessChange(cmd, pWhich: AccessFlag.Escape);
@@ -2169,33 +2222,243 @@ public sealed class EventInterpreter
 	/// rather than implementing a half from imagination.
 	/// </para>
 	/// </remarks>
-/// <summary>Which of the three player access rights a command addresses.</summary>
-private enum AccessFlag
-{
-	Escape,
-	Save,
-	Menu,
-}
+	/// <summary>Which of the three player access rights a command addresses.</summary>
+	private enum AccessFlag
+	{
+		Escape,
+		Save,
+		Menu,
+	}
 
-/// <summary>
-/// 11840, 11930 and 11960, from EasyRPG's <c>CommandChangeEscapeAccess</c>,
-/// <c>CommandChangeSaveAccess</c> and <c>CommandChangeMainMenuAccess</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// All three are one line in the reference —
-/// <c>SetAllowEscape(com.parameters[0] != 0)</c> and its two siblings — and
-/// <strong>that is the whole command</strong>. A zero is therefore not "no
-/// change" but a removal: a cutscene that locks the menu and a cutscene that
-/// unlocks it again write the same field, and **a reader that only ever set
-/// it to true could never give a player their menu back.**
-/// </para>
-/// <para>
-/// One parameter is the width, and the commands carry no more.
-/// </para>
-/// </remarks>
-private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
-{
+	/// <summary>
+	/// 11840, 11930 and 11960, from EasyRPG's <c>CommandChangeEscapeAccess</c>,
+	/// <c>CommandChangeSaveAccess</c> and <c>CommandChangeMainMenuAccess</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// All three are one line in the reference —
+	/// <c>SetAllowEscape(com.parameters[0] != 0)</c> and its two siblings — and
+	/// <strong>that is the whole command</strong>. A zero is therefore not "no
+	/// change" but a removal: a cutscene that locks the menu and a cutscene that
+	/// unlocks it again write the same field, and **a reader that only ever set
+	/// it to true could never give a player their menu back.**
+	/// </para>
+	/// <para>
+	/// One parameter is the width, and the commands carry no more.
+	/// </para>
+	/// </remarks>
+	/// <summary>
+	/// 10920, Store Event ID, from EasyRPG's <c>CommandStoreEventID</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Both coordinates go through <c>ValueOrVariable</c></strong> with
+	/// the same mode in <c>parameters[0]</c>, so a game can look up the tile it
+	/// last walked over. A reader that read them as constants could only ever
+	/// ask about one tile, and a game that follows a variable would store the
+	/// wrong event or none.
+	/// </para>
+	/// <para>
+	/// <strong>An empty tile stores 0 and does not hold the page</strong>,
+	/// because that is the reference: <c>ev ? ev->GetId() : 0</c>. A game that
+	/// asks about a tile with nothing on it gets a zero it can test, and a
+	/// reader that held the page would leave the variable holding whatever it
+	/// held before.
+	/// </para>
+	/// </remarks>
+	private void ExecuteStoreEventId(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Store event id");
+			return;
+		}
+		if (_eventIdAtTile == null)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Store event id: no event lookup is wired, so"
+				+ " the tile cannot be asked; nothing was stored");
+			return;
+		}
+		var x = ValueOrVariable(Param(pCmd, 0), Param(pCmd, 1));
+		var y = ValueOrVariable(Param(pCmd, 0), Param(pCmd, 2));
+		var varId = pCmd.Parameters[3];
+		if (varId < 1 || varId > GameSimulationState.MaxVariables)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Store event id: variable {varId} is outside"
+				+ $" 1 to {GameSimulationState.MaxVariables}, and nothing was stored");
+			return;
+		}
+		// **A tile outside the map is not a tile.** The reference would look it
+		// up and get nothing back, so this stores nothing and says which
+		// coordinate was wrong, rather than a zero that reads like "no event".
+		if (x < 0 || y < 0 || x >= _state.MapWidth || y >= _state.MapHeight)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Store event id: tile {x},{y} is outside the"
+				+ $" map of {_state.MapWidth} by {_state.MapHeight}, and nothing"
+				+ " was stored");
+			return;
+		}
+		var eventId = _eventIdAtTile(x, y);
+		_state.Variables[varId - 1] = eventId;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Store event id: tile {x},{y} holds event"
+			+ $" {eventId}, stored in variable {varId}");
+	}
+
+	/// <summary>
+	/// 11810, Teleport Targets, from EasyRPG's
+	/// <c>CommandTeleportTargets</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Parameters[0] is a mode and not a target id</strong>: a non-zero
+	/// <em>removes</em> every target on that map and stops there. A reader that
+	/// read it as the first target's index would add a point where the game
+	/// meant to clear them.
+	/// </para>
+	/// <para>
+	/// <strong>Parameters[4] says the switch must be on, not that there is
+	/// one.</strong> A reader that read it as "use a switch" would make every
+	/// conditional warp unconditional, and a secret entrance would open at the
+	/// start of the game.
+	/// </para>
+	/// </remarks>
+	private void ExecuteTeleportTargets(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 6.
+		if (pCmd.Parameters.Count < 6)
+		{
+			Malformed("Teleport targets");
+			return;
+		}
+		var mapId = pCmd.Parameters[1];
+		if (pCmd.Parameters[0] != 0)
+		{
+			// **The removal takes every point on the map, not one.** A second
+			// call on a map with nothing on it is not an error: the end state is
+			// the one the game asked for either way.
+			_state.TeleportTargets.Remove(mapId);
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Teleport targets: every target on map"
+				+ $" {mapId} was removed, because the mode is not zero");
+			return;
+		}
+		var x = pCmd.Parameters[2];
+		var y = pCmd.Parameters[3];
+		var requiresSwitchOn = pCmd.Parameters[4] != 0;
+		var switchId = pCmd.Parameters[5];
+		if (requiresSwitchOn && (switchId < 1
+			|| switchId > GameSimulationState.MaxSwitches))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Teleport targets: the point needs switch"
+				+ $" {switchId}, which is outside 1 to"
+				+ $" {GameSimulationState.MaxSwitches}, and the point was refused");
+			return;
+		}
+		// **A point outside the map is refused, and the reference stores it
+		// unchecked.** A warp to a tile that is not there is a warp into
+		// nothing, and a game that declares one has a bug this reader can name.
+		var usable = x >= 0 && y >= 0
+			&& (mapId != _state.MapId
+				|| (x < _state.MapWidth && y < _state.MapHeight));
+		if (!usable)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Teleport targets: tile {x},{y} on map"
+				+ $" {mapId} is outside the map, and the point was refused");
+			return;
+		}
+		if (!_state.TeleportTargets.TryGetValue(mapId, out var list))
+		{
+			list = [];
+			_state.TeleportTargets[mapId] = list;
+		}
+		// **A second point on the same tile replaces the first.** The reference
+		// appends, and a game that re-declares a point would otherwise have
+		// two warps on one tile with no way to say which one is meant.
+		list.RemoveAll(p => p.X == x && p.Y == y);
+		list.Add(new GameSimulationState.TeleportTarget
+		{
+			MapId = mapId,
+			X = x,
+			Y = y,
+			RequiresSwitchOn = requiresSwitchOn,
+			SwitchId = requiresSwitchOn ? switchId : 0,
+			IsUsable = true,
+		});
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Teleport targets: {x},{y} on map {mapId} added,"
+			+ (requiresSwitchOn
+				? $" and it needs switch {switchId} on"
+				: " and it is unconditional"));
+	}
+
+	/// <summary>
+	/// 12420, Game Over, from EasyRPG's <c>CommandGameOver</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The reference takes <strong>no parameters at all</strong> — the command
+	/// is written <c>const&amp; com</c> and never read — so this one does not
+	/// check a width.
+	/// </para>
+	/// <para>
+	/// <strong>It waits for a message to close first.</strong> That is the
+	/// reference's first two lines: <c>if (Game_Message::IsMessageActive())
+	/// return false;</c>. A hero who says their last line and dies should die
+	/// after the line is read, and a reader that showed the game over screen on
+	/// top of the text would bury the line the game wrote for that moment.
+	/// </para>
+	/// </remarks>
+	private void ExecuteGameOver()
+	{
+		if (_presentation != null && _presentation.MessageVisible)
+		{
+			_state.WaitingFor = GameSimulationState.WaitReason.MessageOpen;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Game over waits: a message is open, because the"
+				+ " reference shows the screen after the line is read");
+			return;
+		}
+		_state.WaitingFor = GameSimulationState.WaitReason.GameOver;
+		_state.IsGameOverActive = true;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Game over is up, and the page holds here");
+	}
+
+	/// <summary>
+	/// 12510, Return to Title Screen, from EasyRPG's
+	/// <c>CommandReturnToTitleScreen</c>.
+	/// </summary>
+	/// <remarks>
+	/// The reference makes this an <strong>asynchronous operation</strong>, so
+	/// the page holds until the title screen is actually up. It also takes no
+	/// parameters, and it waits for a message for the same reason
+	/// <c>12420</c> does.
+	/// </remarks>
+	private void ExecuteReturnToTitle()
+	{
+		if (_presentation != null && _presentation.MessageVisible)
+		{
+			_state.WaitingFor = GameSimulationState.WaitReason.MessageOpen;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Return to title waits: a message is open");
+			return;
+		}
+		_state.WaitingFor = GameSimulationState.WaitReason.TitleRequested;
+		_state.IsTitleRequested = true;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Return to the title screen is requested, and the"
+			+ " page holds until it is up");
+	}
+
+	private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
+	{
 	if (pCmd.Parameters.Count < 1)
 	{
 		Malformed("Change access");
@@ -2225,7 +2488,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 	_state.AddDiagnostic(
 		$"[Event {_eventId}] Change access: {pWhich} is now {allowed}, from a"
 		+ $" {pCmd.Parameters[0]}");
-}
+	}
 
 	private void ExecuteMemorizeLocation(Rm2kMap.EventCommand pCmd)
 	{
@@ -2266,7 +2529,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 		{
 			Malformed("Player visibility");
 			return;
-}
+	}
 		var hidden = pCmd.Parameters[0] == 0;
 		_state.PlayerIsHidden = hidden;
 		if (hidden)
@@ -2279,7 +2542,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 			$"[Event {_eventId}] Player is now"
 			+ $" {(hidden ? "hidden" : "visible")}, because parameters[0] == 0"
 			+ " is the hide case");
-}
+	}
 
 	/// <summary>
 	/// 11330, Move Event, from EasyRPG's <c>CommandMoveEvent</c>.
@@ -2320,7 +2583,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 				+ " character, so no route was started; the steps are still in the"
 				+ " file");
 			return;
-}
+	}
 		var idBitfield = pCmd.Parameters[2];
 		var eventId = ValueOrVariable(idBitfield & 0x3, pCmd.Parameters[0]);
 		var repeat = (idBitfield & 0x1) != 0;
@@ -2329,13 +2592,13 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 		{
 			// The reference own fallback, not a refusal.
 			moveFreq = 6;
-}
+	}
 		var skippable = pCmd.Parameters[3] != 0;
 		var route = new List<Rm2kMap.MoveCommand>();
 		for (var i = 4; i < pCmd.Parameters.Count; i++)
 		{
 			route.Add(new Rm2kMap.MoveCommand(pCmd.Parameters[i]));
-}
+	}
 		var started = _moveRouteStarter(
 			eventId, moveFreq, route, repeat, skippable);
 		if (!started)
@@ -2345,12 +2608,12 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 				+ " that id, and the reference logs a warning and touches nobody;"
 				+ $" the route had {route.Count} steps");
 			return;
-}
+	}
 		_state.AddDiagnostic(
 			$"[Event {_eventId}] Move event {eventId}: {route.Count} steps"
 			+ $" at frequency {moveFreq}, repeating is {repeat},"
 			+ $" skippable is {skippable}");
-}
+	}
 
 	private void ExecuteTintScreen(Rm2kMap.EventCommand pCmd)
 	{
@@ -2358,13 +2621,13 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 		{
 			Malformed("Tint screen");
 			return;
-}
+	}
 		// CmdSetup minimum width 6.
 		if (pCmd.Parameters.Count < 6)
 		{
 			Malformed("Tint screen");
 			return;
-}
+	}
 		var tenths = pCmd.Parameters[4];
 		if (tenths < 0 || tenths > EventInterpreterMaxTenths)
 		{
@@ -2372,7 +2635,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 				$"[Event {_eventId}] Tint screen: {tenths} tenths is outside"
 				+ " the format's 0 to 100; nothing was tinted");
 			return;
-}
+	}
 		// The reference's own conversion. **The multiplier is the frame rate
 		// and not a literal**, and a reader that hardcoded one would disagree
 		// with a game that declared another.
@@ -2384,7 +2647,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 				$"[Event {_eventId}] Tint screen refused: a channel was outside"
 				+ " 0 to 255 or the saturation outside 0 to 100");
 			return;
-}
+	}
 		_state.AddDiagnostic(
 			$"[Event {_eventId}] Tint screen r{Param(pCmd, 0)}"
 			+ $" g{Param(pCmd, 1)} b{Param(pCmd, 2)}"
@@ -2393,8 +2656,8 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 		if (Param(pCmd, 5) != 0)
 		{
 			_waitFramesRemaining = tenths * 6;
-}
-}
+	}
+	}
 
 	/// <summary>
 	/// 11010 and 11020, Erase and Show Screen, from EasyRPG's
@@ -2425,12 +2688,12 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 		{
 			Malformed(label);
 			return;
-}
+	}
 		if (pCmd.Parameters.Count < 1)
 		{
 			Malformed(label);
 			return;
-}
+	}
 		if (_presentation.MessageVisible)
 		{
 			_state.AddDiagnostic(
@@ -2438,7 +2701,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 				+ " reference holds the transition until it is not; nothing happened");
 			_waitFramesRemaining = 1;
 			return;
-}
+	}
 		var richtung = istShow
 			? Rm2kTransitionDirection.Show
 			: Rm2kTransitionDirection.Erase;
@@ -2452,7 +2715,7 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 						$"[Event {_eventId}] {label}: refused a transition this"
 						+ " presentation does not define");
 					return;
-}
+	}
 				_state.AddDiagnostic(
 					$"[Event {_eventId}] {label}: {ergebnis.Transition}");
 				return;
@@ -2468,8 +2731,8 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 					+ " names no transition in either table, and the reference falls"
 					+ " through to none without saying so; none was chosen");
 				return;
-}
-}
+	}
+	}
 
 	private void ExecuteFlashScreen(Rm2kMap.EventCommand pCmd)
 	{
@@ -3099,4 +3362,4 @@ private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 	{
 		_state.AddDiagnostic($"[Event {_eventId}] {pCommand}: malformed parameters skipped");
 	}
-}
+	}

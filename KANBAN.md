@@ -2581,7 +2581,10 @@ look for the next island of that shape.**
 | movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — liblcf names them and EasyRPG dispatches them nowhere** |
 | shop and inn | `10720` `10730` `20720`–`20732` | a shop scene, an inn scene, and the four transaction states |
 | memory | ~~`10820` `11530` `11540`~~ | **~~memorize location, memorize and play BGM — DONE~~** |
-| memory | `10830` `10910` `10920` | **Recall To Location is in liblcf and has no method in this EasyRPG build; Store Terrain ID and Store Event ID likewise** |
+| memory | `10830` `10910` | **Recall To Location is in liblcf and has no method in this EasyRPG build; Store Terrain ID likewise** |
+| memory | `10920` | **Store Event ID — DONE; the note that it had no method was wrong, see below** |
+| teleport | ~~`11810`~~ | **~~teleport targets — DONE~~** |
+| outcome | ~~`12420` `12510`~~ | **~~game over, return to title — DONE~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2594,6 +2597,48 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `10920`, `11810`, `12420` and `12510` are done — and the board was wrong about one of them
+
+**`10920 Store Event ID` was listed as having no method in this EasyRPG build.**
+It has one: `CommandStoreEventID`, with a body that does three things a reader
+has to get right. Both coordinates go through `ValueOrVariable` with the
+**same** mode in `parameters[0]`, so a game can look up the tile it last
+walked over — a reader that read them as constants could only ever ask about
+one tile. An empty tile stores **0 and does not hold the page**, because that
+is the reference: `ev ? ev->GetId() : 0`, and a reader that held the page would
+leave the variable holding whatever it held before.
+
+**A tile outside the map is refused rather than answered with a zero**, because
+a zero reads exactly like "no event here" and the difference between a bug in a
+game and a bug in the reader is the diagnostic.
+
+`10920` needs the map, and **the interpreter does not have a map** — it has
+four `Func` resolvers. This adds the fifth, `Func<int, int, int>?`, for the
+same reason the other four exist: the interpreter must not know how a map is
+held, or a test could not drive it.
+
+**`11810` parameter 4 says the switch must be ON, not that there is one.** A
+reader that read it as "use a switch" would make every conditional warp
+unconditional, and a secret entrance would open at the start of the game.
+Parameter 0 is a **mode and not a target id**: a non-zero removes every point
+on that map. A point outside the map is refused, and a second point on the
+same tile replaces the first — the reference appends, and a game that re-
+declares a point would otherwise have two warps on one tile.
+
+**`12420` and `12510` take no parameters at all**, which is why the reference
+writes the command as `const& com` and never reads it. Both **wait for an open
+message first** — a hero who says their last line and then dies should die
+after the line is read, and a reader that showed the screen on top of the
+text would bury the line the game wrote for that moment. Both hold the page:
+the game over screen with `return false`, the title screen as an async
+operation. `WaitingFor` says which, because a wait with no reason looks like a
+hang.
+
+**Test evidence** `test_rm2k_teleport_and_outcome.cs`, 13 tests.
+**1132/1132**, `TestRm2kTeleportAndOutcome: 13/13`.
+**Mutations** Ten rules, **10 of 10 caught** — including the warp flag read as
+"there is a switch" and the empty tile answered with a made-up id.
 
 ## `11840`, `11930` and `11960` are done — three one-liners and a default that matters
 
