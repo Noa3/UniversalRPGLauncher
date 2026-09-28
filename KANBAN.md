@@ -2591,7 +2591,46 @@ look for the next island of that shape.**
 | face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10920` | common event, flee, combo, class |
+| ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `10430`, `10460` and `10470` are done — and the save codec had no idea actors existed
+
+**Base and current are two different things, and the reference has two calls
+for them.** `10430` calls `SetBaseMaxHp`; a buff calls `SetMaxHp`. The base
+**survives a level change and a save** and a buff does not, so this reader keeps
+the base in `Rm2kActorValues` and deliberately has **no field for the current
+maximum**. A reader that stored the current value would let a saved game keep a
+buff that ended three maps ago.
+
+**HP and SP clamp differently and that is not an accident.** HP has a lethal
+flag and a floor of one when it is not set, because a game can protect a hero
+from a hit. `CommandChangeSP` has neither — the reference writes
+`if (sp < 0) sp = 0;` and nothing else. **A reader that gave SP the same floor
+as HP would leave a hero unable to cast anything.**
+
+**The ceiling is the current maximum, not the base.** A hero with a base of 40
+and equipment worth 10 cannot be healed past 50.
+
+**`parameters[2]` is a remove flag and not a sign** — the reference negates the
+amount when it is set — and `10460` has six parameters while `10470` has five,
+because the sixth is the lethal flag and SP has none.
+
+**And the save codec had no actor data at all.** Every base value and every
+current count was lost at the next save: a hero who was nearly dead reloaded at
+full health, and a `10430` a game did was gone. Bases and current counts now
+travel together, because **a save that kept the counts and dropped the bases
+would reload a hero clamped to a maximum he no longer has.** Only actors with
+something are written, in id order, so two saves of the same game are byte for
+byte the same. An out-of-bounds row is rejected **whole**, and the test checks
+that nothing was applied.
+
+**Test evidence** `test_rm2k_actor_battle_values.cs`, 14 tests.
+**1114/1114**, `TestRm2kActorBattleValues: 14/14`.
+**Mutations** Nineteen rules over three runs, **19 of 19 caught** — ten in the
+commands and the value class, nine in the save codec, including the codec
+writing no actors at all and the codec writing every actor whether it was
+touched or not.
 
 ## `10120`, `10130` and `10230` are done — and one of them fixed a fault in the save codec
 

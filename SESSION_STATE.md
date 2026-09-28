@@ -2446,3 +2446,40 @@ desselben Befehls.
 **Test evidence** `test_rm2k_message_options.cs` (15). **1100/1100**.
 **Mutations** 10 von 10 gefangen, **einschließlich des Codes, der die Sekunden
 unbedingt wiederherstellte** — das ist die Save-Datei-Hälfte desselben Fehlers.
+
+## K-136 `10430` / `10460` / `10470` — DONE, und der Save-Codec kannte keine Helden
+
+**Basis und aktuell sind zwei Dinge, und die Referenz hat zwei Aufrufe dafür.**
+`10430` ruft `SetBaseMaxHp`, ein Buff ruft `SetMaxHp`. **Die Basis überlebt
+einen Stufenwechsel und ein Speichern**, ein Buff nicht — deshalb liegt die
+Basis in `Rm2kActorValues` und dieses Feld **hat bewusst keinen Platz für den
+aktuellen Maximalwert**. Wer den aktuellen Wert speicherte, ließe ein gespeichertes
+Spiel einen Buff behalten, der drei Karten zurück vorbei war.
+
+**HP und SP klemmen verschieden, und das ist kein Zufall.** HP hat ein
+Todes-Flag und eine Untergrenze von eins, wenn es nicht gesetzt ist, weil ein
+Spiel einen Helden schützen kann. `CommandChangeSP` hat beides nicht — die
+Referenz schreibt `if (sp < 0) sp = 0;` und sonst nichts. **Wer SP dieselbe
+Untergrenze gäbe wie HP, ließe einen Helden nichts zaubern.**
+
+**Die Obergrenze ist der aktuelle Maximalwert, nicht die Basis.** Ein Held mit
+Basis 40 und Ausrüstung im Wert von 10 wird nicht über 50 geheilt.
+
+**`parameters[2]` ist ein Remove-Flag und kein Vorzeichen** — die Referenz
+negiert den Betrag, wenn es gesetzt ist — und `10460` hat sechs Parameter,
+`10470` fünf, denn das sechste ist das Todes-Flag und SP hat keines.
+
+**Und der Save-Codec kannte überhaupt keine Helden.** Jeder Basiswert und jeder
+aktuelle Stand ging beim nächsten Speichern verloren: Ein Held, der fast tot war,
+lud voll gesund, und ein `10430` war weg. Basis und aktueller Stand reisen jetzt
+zusammen, denn **ein Save, das die Stände behält und die Basen verliert, würde
+einen Helden an einem Maximum klemmen, das er nicht mehr hat.** Es kommen nur
+berührte Helden hinein, nach ID sortiert, damit zwei Saves desselben Spiels
+byteweise gleich sind. Eine Zeile außerhalb der Grenzen wird **ganz**
+abgelehnt, und der Test prüft, dass nichts angewandt wurde.
+
+**Test evidence** `test_rm2k_actor_battle_values.cs` (14). **1114/1114**.
+**Mutations** 19 Regeln über drei Läufe, **19 von 19 gefangen** — zehn in den
+Befehlen und der Werteklasse, neun im Save-Codec, darunter „der Codec schreibt
+überhaupt keine Helden" und „der Codec schreibt jeden Helden, ob berührt oder
+nicht".

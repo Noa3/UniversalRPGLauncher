@@ -26,6 +26,37 @@ public static class Rm2kSimulationSaveCodec
         public bool Timer2Active { get; set; }
         public int Timer1Seconds { get; set; }
         public int Timer2Seconds { get; set; }
+        /// <summary>
+        /// One actor saved: the six base values, then the current HP and SP.
+        /// </summary>
+        /// <remarks>
+        /// **The bases and the current values travel together**, because a
+        /// save that kept the current hit points and dropped the base would
+        /// reload a hero clamped to a maximum it no longer has, and one that
+        /// kept the base and dropped the current count would reload a hero at
+        /// full health after he was nearly dead. A first draft had neither,
+        /// and every <c>10430</c> a game did was lost at the next save.
+        /// </remarks>
+        public sealed class SavedActor
+        {
+            public int Id { get; set; }
+            public int BaseMaxHp { get; set; }
+            public int BaseMaxSp { get; set; }
+            public int BaseAttack { get; set; }
+            public int BaseDefense { get; set; }
+            public int BaseSpirit { get; set; }
+            public int BaseAgility { get; set; }
+
+            /// <summary>-1 when the actor was never hurt or healed.</summary>
+            public int CurrentHp { get; set; } = -1;
+
+            /// <summary>-1 when the actor never spent or gained skill points.</summary>
+            public int CurrentSp { get; set; } = -1;
+        }
+
+        /// <summary>Every actor that has a base value or a current count.</summary>
+        public List<SavedActor> Actors { get; set; } = new();
+
         public int MapWidth { get; set; }
         public int MapHeight { get; set; }
         public List<bool> PassableTiles { get; set; } = new();
@@ -38,6 +69,79 @@ public static class Rm2kSimulationSaveCodec
         public List<string> SceneStack { get; set; } = new();
         public long SaveTimestamp { get; set; }
         public string SaveComment { get; set; } = "";
+    }
+
+
+    /// <summary>
+    /// Every actor that has a base value or a current count, in id order.
+    /// </summary>
+    /// <remarks>
+    /// **Only the actors that have something are written.** An entry for an
+    /// actor nobody touched would be four base values the format minimums
+    /// already imply, and a save full of them is a save nobody can read.
+    /// </remarks>
+    private static List<SaveData.SavedActor> WriteActors(GameSimulationState pState)
+    {
+        var list = new List<SaveData.SavedActor>();
+        // A sorted walk, so two saves of the same game are byte for byte the
+        // same and a diff of two saves says something.
+        var ids = new List<int>(pState.ActorValues.Keys);
+        foreach (var id in pState.CurrentHp.Keys)
+        {
+            if (!ids.Contains(id)) ids.Add(id);
+        }
+        foreach (var id in pState.CurrentSp.Keys)
+        {
+            if (!ids.Contains(id)) ids.Add(id);
+        }
+        ids.Sort();
+        foreach (var id in ids)
+        {
+            var values = pState.GetOrCreateActorValues(id);
+            list.Add(new SaveData.SavedActor
+            {
+                Id = id,
+                BaseMaxHp = values.BaseMaxHp,
+                BaseMaxSp = values.BaseMaxSp,
+                BaseAttack = values.BaseAttack,
+                BaseDefense = values.BaseDefense,
+                BaseSpirit = values.BaseSpirit,
+                BaseAgility = values.BaseAgility,
+                CurrentHp = pState.CurrentHp.TryGetValue(id, out var hp) ? hp : -1,
+                CurrentSp = pState.CurrentSp.TryGetValue(id, out var sp) ? sp : -1,
+            });
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Applies the saved actors, after the whole save was validated.
+    /// </summary>
+    private static void ReadActors(SaveData pData, GameSimulationState pState)
+    {
+        foreach (var actor in pData.Actors)
+        {
+            var values = new Rm2kActorValues();
+            // **The setters clamp, and the clamp is what a save between these
+            // bounds deserves.** A save written by a build with a higher bound
+            // lands on the highest value this one holds, which is a slightly
+            // weaker hero and not a broken one.
+            values.AddToParameter(Rm2kActorValues.ParameterMaxHp,
+                actor.BaseMaxHp - values.BaseMaxHp);
+            values.AddToParameter(Rm2kActorValues.ParameterMaxSp,
+                actor.BaseMaxSp - values.BaseMaxSp);
+            values.AddToParameter(Rm2kActorValues.ParameterAttack,
+                actor.BaseAttack - values.BaseAttack);
+            values.AddToParameter(Rm2kActorValues.ParameterDefense,
+                actor.BaseDefense - values.BaseDefense);
+            values.AddToParameter(Rm2kActorValues.ParameterSpirit,
+                actor.BaseSpirit - values.BaseSpirit);
+            values.AddToParameter(Rm2kActorValues.ParameterAgility,
+                actor.BaseAgility - values.BaseAgility);
+            pState.ActorValues[actor.Id] = values;
+            if (actor.CurrentHp >= 0) pState.CurrentHp[actor.Id] = actor.CurrentHp;
+            if (actor.CurrentSp >= 0) pState.CurrentSp[actor.Id] = actor.CurrentSp;
+        }
     }
 
     public static string Serialize(GameSimulationState pState)
@@ -228,6 +332,7 @@ public static class Rm2kSimulationSaveCodec
             Timer1Active = pState.Timer1Active, Timer2Active = pState.Timer2Active,
             Timer1Seconds = pState.Timer1Seconds, Timer2Seconds = pState.Timer2Seconds,
             MapWidth = pState.MapWidth, MapHeight = pState.MapHeight,
+            Actors = WriteActors(pState),
             ActiveActorIndex = pState.ActiveActorIndex, CurrentScene = pState.CurrentScene,
             SaveTimestamp = pState.SaveTimestamp, SaveComment = pState.SaveComment,
         };
@@ -250,6 +355,26 @@ public static class Rm2kSimulationSaveCodec
             throw new ArgumentException("Save switch or variable data exceeds bounds.");
         if (pData.Timer1Seconds < 0 || pData.Timer1Seconds > 86400 || pData.Timer2Seconds < 0 || pData.Timer2Seconds > 86400)
             throw new ArgumentException("Save timer data is outside bounds.");
+        // **Every actor entry is validated before any of them is applied**, so
+        // a save with one bad row is rejected whole instead of half-restored.
+        if (pData.Actors.Count > GameSimulationState.MaxActorId)
+            throw new ArgumentException("Save actor data exceeds bounds.");
+        foreach (var actor in pData.Actors)
+        {
+            if (actor.Id < 1 || actor.Id > GameSimulationState.MaxActorId)
+                throw new ArgumentException("Save actor id is outside bounds.");
+            if (actor.BaseMaxHp < 1 || actor.BaseMaxHp > Rm2kActorValues.MaxHitPoints
+                || actor.BaseMaxSp < 0 || actor.BaseMaxSp > Rm2kActorValues.MaxHitPoints
+                || actor.BaseAttack < 1 || actor.BaseAttack > Rm2kActorValues.MaxStat
+                || actor.BaseDefense < 1 || actor.BaseDefense > Rm2kActorValues.MaxStat
+                || actor.BaseSpirit < 1 || actor.BaseSpirit > Rm2kActorValues.MaxStat
+                || actor.BaseAgility < 1 || actor.BaseAgility > Rm2kActorValues.MaxStat)
+                throw new ArgumentException("Save actor base values are outside bounds.");
+            // -1 is the marker for "never set", and anything below it is not.
+            if (actor.CurrentHp < -1 || actor.CurrentHp > Rm2kActorValues.MaxHitPoints
+                || actor.CurrentSp < -1 || actor.CurrentSp > Rm2kActorValues.MaxHitPoints)
+                throw new ArgumentException("Save actor current values are outside bounds.");
+        }
         if (pData.PartyMemberIds.Count > GameSimulationState.MaxPartyMembers || pData.SceneStack.Count > 64)
             throw new ArgumentException("Save party or scene data exceeds bounds.");
         if (pData.MapX < 0 || pData.MapX >= pData.MapWidth || pData.MapY < 0 || pData.MapY >= pData.MapHeight)
@@ -285,5 +410,7 @@ public static class Rm2kSimulationSaveCodec
         {
             pState.StartTimer(2, pState.Timer2Visible, pState.Timer2InBattle);
         }
+
+        ReadActors(pData, pState);
     }
 }

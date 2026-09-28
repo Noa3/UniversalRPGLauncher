@@ -54,6 +54,15 @@ public sealed class EventInterpreter
 	public const int ChangeItems = 10320;
 	public const int ChangePartyMembers = 10330;
 	public const int ChangeExp = 10410;
+	/// <summary>10430, Change Parameters, <c>CmdSetup</c> width 6.</summary>
+	public const int ChangeParameters = 10430;
+
+	/// <summary>10460, Change HP, from <c>CommandChangeHP</c>, width 6.</summary>
+	public const int ChangeHP = 10460;
+
+	/// <summary>10470, Change SP, from <c>CommandChangeSP</c>, width 5.</summary>
+	public const int ChangeSP = 10470;
+
 	public const int ChangeLevel = 10420;
 	public const int ControlSwitches = 10210;
 	public const int ControlVars = 10220;
@@ -440,6 +449,18 @@ public sealed class EventInterpreter
 
 			case ControlVars:
 				ExecuteControlVars(cmd);
+				return Advance();
+
+			case ChangeParameters:
+				ExecuteChangeParameters(cmd);
+				return Advance();
+
+			case ChangeHP:
+				ExecuteChangeHpOrSp(cmd, pIsHp: true);
+				return Advance();
+
+			case ChangeSP:
+				ExecuteChangeHpOrSp(cmd, pIsHp: false);
 				return Advance();
 
 			case ChangeLevel:
@@ -1468,6 +1489,177 @@ public sealed class EventInterpreter
 			_state.AddDiagnostic(
 				$"[Event {_eventId}] Change battle commands: actor {actorId}"
 				+ $" {(add ? "gained" : "lost")} command {commandId}");
+		}
+	}
+
+	/// <summary>
+	/// 10430, Change Parameters, from EasyRPG's
+	/// <c>CommandChangeParameters</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>It changes the <em>base</em>, not the current value</strong> —
+	/// <c>SetBaseMaxHp</c> and <c>SetMaxHp</c> are different calls in the
+	/// reference and this command is the first. <em>That is the whole
+	/// difference</em>: the base survives a level change and a save, a buff
+	/// does not, and a reader that wrote the current value would let a
+	/// saved game keep a buff that ended three maps ago.
+	/// </para>
+	/// <para>
+	/// The value goes through <c>OperateValue</c>, so the operation is in
+	/// <c>parameters[2]</c>, the operand mode in <c>parameters[4]</c> and
+	/// the operand itself in <c>parameters[5]</c>.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeParameters(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 6.
+		if (pCmd.Parameters.Count < 6)
+		{
+			Malformed("Change parameters");
+			return;
+		}
+		var actors = ResolveActors(pCmd.Parameters[0], pCmd.Parameters[1], "Change parameters");
+		if (actors == null)
+		{
+			return;
+		}
+		var operation = pCmd.Parameters[2];
+		if (operation != VarOpSet && operation != VarOpAdd && operation != VarOpSub)
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change parameters: operation {operation}"
+				+ " is not set, add or subtract, and the reference treats it as add");
+			operation = VarOpAdd;
+		}
+		int operand;
+		switch (pCmd.Parameters[4])
+		{
+			case VarOperandConstant:
+				operand = pCmd.Parameters[5];
+				break;
+			case VarOperandVariable:
+				operand = GetVariable(pCmd.Parameters[5]);
+				break;
+			case VarOperandVariableIndirect:
+				if (pCmd.Parameters[5] < 1 || pCmd.Parameters[5] > GameSimulationState.MaxVariables)
+			{
+					_state.AddDiagnostic(
+						$"[Event {_eventId}] Change parameters: invalid indirect variable"
+						+ $" {pCmd.Parameters[5]} skipped");
+					return;
+			}
+				operand = GetVariable(GetVariable(pCmd.Parameters[5]));
+				break;
+			default:
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Change parameters: operand mode"
+					+ $" {pCmd.Parameters[4]} is not one of the three, and the constant"
+					+ $" {pCmd.Parameters[5]} was used");
+				operand = pCmd.Parameters[5];
+				break;
+		}
+		// **OperateValue negates for the subtract operation**, and that is the
+		// reference own helper and not a reader side switch.
+		if (operation == VarOpSub)
+		{
+			operand = -operand;
+		}
+		var parameter = pCmd.Parameters[3];
+		foreach (var actorId in actors)
+		{
+			var values = _state.GetOrCreateActorValues(actorId);
+			var vorher = values.GetParameter(parameter);
+			if (!values.AddToParameter(parameter, operand))
+			{
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Change parameters: {parameter} is not one"
+					+ " of the six, and nothing was changed");
+				continue;
+			}
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change parameters: actor {actorId}"
+				+ $" parameter {parameter} {vorher} -> {values.GetParameter(parameter)}"
+				+ (vorher + operand != values.GetParameter(parameter)
+					? ", and the difference is a clamp"
+					: string.Empty));
+		}
+	}
+
+	/// <summary>
+	/// 10460 and 10470, Change HP and Change SP, from
+	/// EasyRPG's <c>CommandChangeHP</c> and <c>CommandChangeSP</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Parameters[2] is a "remove" flag and not an operation</strong>,
+	/// and the reference negates the amount when it is set. A reader that
+	/// read it as a sign would subtract when the game meant to add.
+	/// </para>
+	/// <para>
+	/// <strong>HP and SP clamp differently and that is not an accident.</strong>
+	/// HP has a lethal flag and a floor of one when it is not set, because
+	/// a game can protect a hero from a hit. <c>SP</c> has neither: the
+	/// reference writes <c>if (sp &lt; 0) sp = 0;</c> and nothing else, and a
+	/// reader that gave SP the same floor as HP would leave a hero unable to
+	/// cast anything.
+	/// </para>
+	/// <para>
+	/// <strong>The ceiling is the current maximum, not the base</strong>, and
+	/// that is the reason the base lives in its own place: a hero with a base
+	/// of 40 and equipment worth 10 cannot be healed past 50.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeHpOrSp(Rm2kMap.EventCommand pCmd, bool pIsHp)
+	{
+		var label = pIsHp ? "Change HP" : "Change SP";
+		// **HP needs six parameters and SP five**: the sixth is the lethal flag
+		// and SP has none, so the two commands do not line up.
+		var minWidth = pIsHp ? 6 : 5;
+		if (pCmd.Parameters.Count < minWidth)
+		{
+			Malformed(label);
+			return;
+		}
+		var actors = ResolveActors(pCmd.Parameters[0], pCmd.Parameters[1], label);
+		if (actors == null)
+		{
+			return;
+		}
+		// **A remove flag and not a sign.** The reference writes
+		// `bool remove = com.parameters[2] != 0; if (remove) amount = -amount;`.
+		var remove = pCmd.Parameters[2] != 0;
+		var amount = ValueOrVariable(Param(pCmd, 3), Param(pCmd, 4));
+		if (remove)
+		{
+			amount = -amount;
+		}
+		var lethal = pIsHp && pCmd.Parameters[5] != 0;
+		foreach (var actorId in actors)
+		{
+			if (pIsHp)
+			{
+				var vorher = _state.GetActorCurrentHp(actorId);
+				var nachher = Rm2kActorValues.ChangeHp(
+					vorher, amount, _state.GetOrCreateActorValues(actorId).BaseMaxHp, lethal);
+				_state.CurrentHp[actorId] = nachher;
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] {label}: actor {actorId}"
+					+ $" {vorher} -> {nachher} by {amount},"
+					+ (nachher == 1 && !lethal && vorher + amount < 1
+						? ", and it stopped at one because the change was not lethal"
+						: string.Empty));
+			}
+			else
+			{
+				var vorher = _state.GetActorCurrentSp(actorId);
+				var nachher = Rm2kActorValues.ChangeSp(
+					vorher, amount, _state.GetOrCreateActorValues(actorId).BaseMaxSp);
+				_state.CurrentSp[actorId] = nachher;
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] {label}: actor {actorId}"
+					+ $" {vorher} -> {nachher} by {amount}");
+			}
 		}
 	}
 

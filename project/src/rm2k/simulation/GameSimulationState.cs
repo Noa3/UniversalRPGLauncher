@@ -362,6 +362,82 @@ public sealed class GameSimulationState
     // Actors (mutable battle stats)
     public Godot.Collections.Dictionary<int, Godot.Collections.Dictionary> ActorState { get; init; } = new();
 
+    /// <summary>
+    /// The base battle values each actor has, from <c>10430</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Base and current are separate, and this is the base.</strong>
+    /// The reference has <c>SetBaseMaxHp</c> and <c>SetMaxHp</c> as
+    /// different calls, because <c>10430</c> changes the base — which
+    /// survives a level change and a save — while a buff changes the current
+    /// value and must not. <em>A reader that stored the current value would
+    /// let a saved game keep a buff that ended three maps ago.</em>
+    /// </remarks>
+    /// <remarks>
+    /// **This is a plain dictionary and not a Godot one**, because
+    /// <c>Godot.Collections.Dictionary</c> is a Variant container and a
+    /// class is not a Variant. A first draft used the Godot type and the
+    /// compiler refused it with GD0301.
+    /// </remarks>
+    public System.Collections.Generic.Dictionary<int, Rm2kActorValues> ActorValues { get; init; } = new();
+
+    /// <summary>The current hit points of each actor, from <c>10460</c>.</summary>
+    /// <remarks>
+    /// <strong>Keyed separately from the base</strong> for the reason above,
+    /// and absent means the actor is at its maximum — which is what the
+    /// reference does, because a database row has no current HP and the
+    /// engine fills it from the base on first read.
+    /// </remarks>
+    public Godot.Collections.Dictionary<int, int> CurrentHp { get; init; } = new();
+
+    /// <summary>The current skill points of each actor, from <c>10470</c>.</summary>
+    public Godot.Collections.Dictionary<int, int> CurrentSp { get; init; } = new();
+
+    /// <summary>
+    /// The base values of an actor, creating the entry on first use.
+    /// </summary>
+    public Rm2kActorValues GetOrCreateActorValues(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(pActorId), "Actor id is outside RM2K bounds.");
+        }
+        if (!ActorValues.TryGetValue(pActorId, out var values))
+        {
+            values = new Rm2kActorValues();
+            ActorValues[pActorId] = values;
+        }
+        return values;
+    }
+
+    /// <summary>
+    /// An actor's current hit points, or the base when nothing was set.
+    /// </summary>
+    /// <remarks>
+    /// The fallback is the base maximum and not a number of its own, because
+    /// that is what the engine does: an actor nobody has hurt is at its
+    /// maximum, and a reader that stored a separate full value would need to
+    /// keep the two in step forever.
+    /// </remarks>
+    public int GetActorCurrentHp(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId) return 0;
+        return CurrentHp.TryGetValue(pActorId, out var hp)
+            ? hp
+            : GetOrCreateActorValues(pActorId).BaseMaxHp;
+    }
+
+    /// <summary>An actor's current skill points, or the base when nothing was set.</summary>
+    public int GetActorCurrentSp(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId) return 0;
+        return CurrentSp.TryGetValue(pActorId, out var sp)
+            ? sp
+            : GetOrCreateActorValues(pActorId).BaseMaxSp;
+    }
+
+
     /// <summary>Whether the player sprite is hidden, from 11310.</summary>
     /// <remarks>
     /// <strong>The command inverts its parameter</strong>: a first draft
@@ -818,7 +894,8 @@ public sealed class GameSimulationState
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear(); PassabilityMasks.Clear();
         TerrainData = []; TileSubstitution = null; LowerLayer = null;
         UpperLayer = null; UpperPassability = null;
-        Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); BattleCommands.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
+        Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); BattleCommands.Clear();
+        ActorValues.Clear(); CurrentHp.Clear(); CurrentSp.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
         PlayerIsHidden = false; PlayerIsThrough = false;
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;
