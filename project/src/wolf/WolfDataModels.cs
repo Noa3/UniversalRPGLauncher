@@ -114,6 +114,7 @@ public enum WolfEventOpcode
     MoveRoute,
     WaitUntilRouteDone,
     CallCommonEvent,
+    CallEvent,
     Choice,
     Transfer,
     End,
@@ -252,6 +253,25 @@ public sealed class WolfEventCommand
     public int Y { get; init; }
     public int JumpIndex { get; init; } = -1;
     public IReadOnlyList<string> Choices { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// A call's own input values, in order, not counting the event id.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Input 1 is self 0, input 2 is self 1, and the strings start at
+    /// self 5.</strong> The help's page-call note says exactly that: a value
+    /// passed in becomes the called event's own self variable, and a string
+    /// becomes its self 5, 6 and onward.
+    /// </para>
+    /// <para>
+    /// <strong>Not in the four byte fields, and that is the reason this list
+    /// exists.</strong> A command already has `Operand`, `Value` and `Right2`,
+    /// and a call can pass five inputs — so a reader that put them in the
+    /// existing fields would run out after three and silently drop the rest.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<int> CallInputs { get; init; } = Array.Empty<int>();
 }
 
 public sealed class WolfEventMessage

@@ -55,6 +55,56 @@ public sealed class WolfEventVm
         Array.Empty<WolfEventProgram>();
 
     /// <summary>
+    /// The map events a call can reach, by event id.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>0 and above is a map event, 500,000 and above is a common
+    /// event.</strong> The help's page-call note says exactly that, and it is
+    /// the same split the switch numbers use — so one call command can name
+    /// either, and the reader has to know which from the number alone.
+    /// </para>
+    /// <para>
+    /// <strong>Set once, before the first start</strong>, and for the same
+    /// reason as the common event table: a table that could change mid-run
+    /// would have a call that resolved differently from the same call a frame
+    /// later.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<WolfEventProgram> MapEvents { get; set; } =
+        Array.Empty<WolfEventProgram>();
+
+    /// <summary>
+    /// The self variables a call makes, so a nested call does not overwrite the
+    /// caller's.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Self variables are per call and not one set for the game.</strong>
+    /// The help says input 1 goes to the common event's self 0, input 2 to its
+    /// self 1, and so on — and a call that wrote into the caller's own self
+    /// variables would have a shop's helper clobber the value the caller was
+    /// using, which is the difference between a shop that works and one that
+    /// sells the wrong potion.
+    /// </para>
+    /// <para>
+    /// <strong>The frames are pushed and popped, and a return puts the
+    /// caller's own back.</strong> A reader that kept one frame for the game
+    /// would have the second call of the same event see the first call's
+    /// arguments.
+    /// </para>
+    /// </remarks>
+    private readonly Stack<WolfSelfFrame> _selfStack = new();
+
+    /// <summary>One call's own self variables.</summary>
+    private sealed class WolfSelfFrame
+    {
+        public Dictionary<int, int> Numbers { get; init; } = new();
+
+        public Dictionary<int, string> Strings { get; init; } = new();
+    }
+
+    /// <summary>
     /// The return value of the last common event that finished, if it had one.
     /// </summary>
     /// <remarks>
@@ -371,6 +421,108 @@ public sealed class WolfEventVm
         return PluginOperationResult.Succeeded();
     }
 
+    /// <summary>
+    /// Resolves a number for a command, routing the self bands to the running
+    /// call's own variables.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The self bands are per call.</strong> The help's page-call note
+    /// gives map self at 1,100,000 and common self at 1,600,000, and the band
+    /// table already has both — but a variable command that reached the game's
+    /// own band store would have a common event read the caller's self 0
+    /// instead of its own, and every common event that took an argument would
+    /// see the wrong number.
+    /// </para>
+    /// <para>
+    /// <strong>Map self is the caller's own band, and common self is the
+    /// call's.</strong> A map event called by an event has no call of its own,
+    /// so its self variables are the ones of the event that called it — which
+    /// is what the help means by a self variable being that event's.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// The self variables of the event that is not itself inside a call.
+    /// </summary>
+    /// <remarks>
+    /// <strong>One set for the whole game, and that is the difference between a
+    /// map event and a common event.</strong> A map event has no frame of its
+    /// own — it is the event the game started with — so its self variables are
+    /// the game's own, stored here. A common event called by an event gets a
+    /// frame per call, because a shop's helper must not see the caller's
+    /// numbers.
+    /// </remarks>
+    private readonly WolfSelfFrame _gameSelf = new();
+
+    private int ResolveNumber(int pNumber)
+    {
+        if (!WolfVariable.IsReference(pNumber))
+        {
+            return pNumber;
+        }
+        var band = WolfVariable.BandOf(pNumber);
+        if (band == WolfVariable.BandMapSelf)
+        {
+            // **The caller's own frame, and the running call's above it.**
+            // A map event called by an event shares the caller's self
+            // variables, so the frame the caller pushed is the one to read.
+            var index = pNumber - WolfVariable.BaseMapSelf;
+            // **The game's own set, and then the call frames above it.** A map
+            // event is the event the game started, so its self variables are
+            // the game's; a map event called from inside a common event reads
+            // the frame of the call it is inside, because that is the "self"
+            // its author meant.
+            if (_gameSelf.Numbers.TryGetValue(index, out var own))
+            {
+                return own;
+            }
+            foreach (var frame in _selfStack)
+            {
+                if (frame.Numbers.TryGetValue(index, out var value))
+                {
+                    return value;
+                }
+            }
+            return 0;
+        }
+        if (band == WolfVariable.BandCommonSelf)
+        {
+            if (_selfStack.Count > 0
+                && _selfStack.Peek().Numbers.TryGetValue(
+                    pNumber - WolfVariable.BaseCommonSelf, out var own))
+            {
+                return own;
+            }
+            return 0;
+        }
+        return _variables.Resolve(pNumber);
+    }
+
+    /// <summary>Writes a number for a command, routing the self bands.</summary>
+    private bool SetNumber(int pNumber, int pValue)
+    {
+        if (!WolfVariable.IsReference(pNumber))
+        {
+            return false;
+        }
+        var band = WolfVariable.BandOf(pNumber);
+        if (band == WolfVariable.BandMapSelf)
+        {
+            _gameSelf.Numbers[pNumber - WolfVariable.BaseMapSelf] = pValue;
+            return true;
+        }
+        if (band == WolfVariable.BandCommonSelf)
+        {
+            if (_selfStack.Count == 0)
+            {
+                return false;
+            }
+            _selfStack.Peek().Numbers[pNumber - WolfVariable.BaseCommonSelf] = pValue;
+            return true;
+        }
+        return _variables.Set(band, WolfVariable.IndexInBand(pNumber), pValue);
+    }
+
     /// <summary>Writes the normal band, for a caller that means one.</summary>
     public void SetVariable(int pId, int pValue)
         => _variables.Set(WolfVariable.BandNormal, pId, pValue);
@@ -404,12 +556,12 @@ public sealed class WolfEventVm
         WolfEventCommand pCommand,
         int pOperator)
     {
-        var current = _variables.Resolve(pCommand.Operand);
-        var right = _variables.Resolve(pCommand.Value);
+        var current = ResolveNumber(pCommand.Operand);
+        var right = ResolveNumber(pCommand.Value);
         // **A second number is only read when the file gave one.** The arc
         // tangent takes two vectors and a file that gives one of them is not a
         // file that gives a zero.
-        var right2 = pCommand.HasRight2 ? _variables.Resolve(pCommand.Right2) : 0;
+        var right2 = pCommand.HasRight2 ? ResolveNumber(pCommand.Right2) : 0;
         // **The arc tangent is the one operator that reads two right hand
         // sides and not the current value.** The help says the right hand
         // side's two variables are the X and the Y vector; the current value
@@ -420,7 +572,12 @@ public sealed class WolfEventVm
             ? WolfVariableOperator.ArcTangentOf(
                 pCommand.HasRight2 ? right : current, right2)
             : WolfVariableOperator.Apply(pOperator, current, right);
-        return _variables.SetByReference(pCommand.Operand, result);
+        // **Through the routing and not straight into the bands.** The self
+        // bands live in the call frames and not in the game's store, so a
+        // write that went straight there would write the call's self variable
+        // into a band of its own and then read it back as zero — which is what
+        // a common event that assigns to its own \cself[0] would see.
+        return SetNumber(pCommand.Operand, result);
     }
 
     /// <summary>Writes a switch by its own number, map or common.</summary>
@@ -452,6 +609,8 @@ public sealed class WolfEventVm
         // that points at a program from the old one, and the new game's event
         // would resume inside the last game's.
         _callStack.Clear();
+        _selfStack.Clear();
+        _gameSelf.Numbers.Clear();
         LastCommonEventResult = null;
         _program = null;
         _instructionIndex = 0;
@@ -543,8 +702,8 @@ public sealed class WolfEventVm
                 // the *number* two million instead of against what it holds.
                 if (!WolfComparisonEvaluator.TryEvaluate(
                     pCommand.Comparison,
-                    _variables.Resolve(pCommand.Operand),
-                    _variables.Resolve(pCommand.Value),
+                    ResolveNumber(pCommand.Operand),
+                    ResolveNumber(pCommand.Value),
                     out var variableCondition))
                 {
                     return Fail(
@@ -647,6 +806,8 @@ public sealed class WolfEventVm
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.CallCommonEvent:
                 return CallCommon(pCommand);
+            case WolfEventOpcode.CallEvent:
+                return CallEvent(pCommand);
             case WolfEventOpcode.End:
                 return EndProgram();
             case WolfEventOpcode.Unknown:
@@ -721,6 +882,19 @@ public sealed class WolfEventVm
             LastCommonEventResult = null;
             return PluginOperationResult.Succeeded();
         }
+        // **A common event's own self variables, as a map event gets.** The
+        // help says the same thing about both: the called event has a self
+        // variable set of its own, and a reader that gave a common call none
+        // would have its \cself[0] read as zero whatever the caller passed.
+        _selfStack.Push(new WolfSelfFrame());
+        // **The same shape as a map event's call**, because the help describes
+        // one call form and its inputs, and a reader that gave the common call
+        // no inputs would have its \cself[0] read as zero whatever was passed.
+        for (var input = 0; input < pCommand.CallInputs.Count; input++)
+        {
+            _selfStack.Peek().Numbers[input] =
+                ResolveNumber(pCommand.CallInputs[input]);
+        }
         _callStack.Push(new WolfCallFrame
         {
             Program = _program!,
@@ -730,6 +904,103 @@ public sealed class WolfEventVm
         _program = target;
         _instructionIndex = 0;
         _trace.Add($"event:{target.Id}:call");
+        return PluginOperationResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Calls a map event or a common event, whichever the number names.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>0 and above is a map event, 500,000 and above is a common
+    /// event, and one command names both.</strong> The help's page-call note
+    /// says exactly that, and it is the same split the switch numbers use.
+    /// </para>
+    /// <para>
+    /// <strong>An event that does not exist is ignored and not an error.</strong>
+    /// The help says so in one line — イベントが存在しない場合は無視されます — and the
+    /// reason is that a game deletes an event and leaves a call behind all the
+    /// time. A reader that failed the whole event there would have a game that
+    /// stopped dead at a call to a treasure chest the author removed, with a
+    /// message no player could act on. **This is the one place in this VM
+    /// where a missing thing is deliberately not a fault, and the reason is
+    /// written down here because the instinct is to refuse.**
+    /// </para>
+    /// <para>
+    /// <strong>The arguments go into the call's own self variables.</strong>
+    /// Input 1 is self 0, input 2 is self 1, and the help gives the string
+    /// inputs the same shape from self 5 up. A reader that wrote them into the
+    /// caller's own self variables would have a shop's helper clobber the value
+    /// the caller was using.
+    /// </para>
+    /// </remarks>
+    private PluginOperationResult CallEvent(WolfEventCommand pCommand)
+    {
+        if (pCommand.Operand < 0)
+        {
+            return Fail(
+                $"A WOLF event call names {pCommand.Operand}, which is below the"
+                + " first event id; the hero is 0 and there is nothing below it.",
+                "call");
+        }
+        if (_callStack.Count >= MaxCallDepth)
+        {
+            return Fail(
+                $"A WOLF event call is {MaxCallDepth} deep, which is the limit;"
+                + " an event that calls itself would otherwise run until the"
+                + " process ends.",
+                "call");
+        }
+        var isCommon = pCommand.Operand >= CommonSwitchBase;
+        var table = isCommon ? CommonEvents : MapEvents;
+        var wanted = isCommon ? pCommand.Operand - CommonSwitchBase : pCommand.Operand;
+        WolfEventProgram? target = null;
+        foreach (var candidate in table)
+        {
+            if (candidate.Id == wanted)
+            {
+                target = candidate;
+                break;
+            }
+        }
+        if (target == null)
+        {
+            // **Ignored, and the reason is the help's.** A game that deleted an
+            // event leaves the call behind, and failing the event there would
+            // have a game stop dead at a call to something the author removed.
+            _trace.Add($"call:{pCommand.Operand}:missing");
+            _instructionIndex += 1;
+            LastCommonEventResult = null;
+            return PluginOperationResult.Succeeded();
+        }
+        if (target.Commands.Count == 0)
+        {
+            _instructionIndex += 1;
+            LastCommonEventResult = null;
+            return PluginOperationResult.Succeeded();
+        }
+        _selfStack.Push(new WolfSelfFrame());
+        // **Input 1 is self 0 and input 2 is self 1**, per the help. The
+        // numbers are the command's own arguments after the id, because the
+        // binary format puts the id first and the call's values after it.
+        for (var input = 0; input < pCommand.CallInputs.Count; input++)
+        {
+            _selfStack.Peek().Numbers[input] =
+                ResolveNumber(pCommand.CallInputs[input]);
+        }
+        for (var index = 0; index < pCommand.Choices.Count; index++)
+        {
+            _selfStack.Peek().Strings[5 + index] = pCommand.Choices[index];
+        }
+        _callStack.Push(new WolfCallFrame
+        {
+            Program = _program!,
+            ResumeIndex = _instructionIndex + 1,
+            Waits = true,
+        });
+        _program = target;
+        _instructionIndex = 0;
+        _trace.Add($"event:{target.Id}:call-event");
         return PluginOperationResult.Succeeded();
     }
 
@@ -760,6 +1031,14 @@ public sealed class WolfEventVm
             return PluginOperationResult.Succeeded();
         }
         var frame = _callStack.Pop();
+        // **The call's own self variables go with it.** A reader that left them
+        // on the stack would have the caller's second call read the first
+        // call's arguments, and a shop that adds two products would price the
+        // second one from the first one's numbers.
+        if (_selfStack.Count > 0)
+        {
+            _selfStack.Pop();
+        }
         _program = frame.Program;
         _instructionIndex = frame.ResumeIndex;
         _trace.Add($"event:{CurrentEventId}:return");

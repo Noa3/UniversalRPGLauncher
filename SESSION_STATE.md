@@ -3709,3 +3709,45 @@ neu geschrieben.
 **Test evidence** `test_wolf_common_event_call.cs` (10). **1343/1343**, Validator gruen.
 
 **Mutations** 10 Regeln, **10 von 10 gefangen**.
+
+## WOLF Map-Event-Aufrufe — DONE
+
+**Unter 500.000 ist es ein Map-Event, ab 500.000 ein Common Event, und nur dann traegt der
+
+Aufruf Argumente.** Die Enum hatte fuer Typ 210 keinen Wert.
+
+
+
+**Ein Event, das es nicht gibt, wird ignoriert — und nicht als Fehler gemeldet.** Die Hilfe sagt
+
+das in einem Satz, **und der Grund ist, dass ein Spiel ein Event loescht und den Aufruf stehen
+
+laesst.** Ein Leser, der dort scheiterte, haette ein Spiel, das an einem Aufruf zu einem
+
+entfernten Schatzkasten tot stehen bleibt. **Das ist die einzige Stelle in dieser VM, wo ein
+
+Fehlendes absichtlich kein Fehler ist.**
+
+
+
+### Der Fund
+
+
+
+**`ApplyOperator` schrieb direkt in die Baender, waehrend das Lesen ueber den neuen Durchlass
+
+lief.** Also schrieb ein Common Event, das sein eigenes \cself[0] zuwies, in ein Band fuer sich
+
+und las es als null zurueck. **Der Test hat es gefunden, weil er eine Regel prueft, die ich am
+
+wenigsten belegt hatte** — der Self-Variablen-Zusammenarbeit zwischen Lesen und Schreiben.
+
+
+
+**Und Map-Self hat keinen eigenen Rahmen: seine Self-Variablen sind die des aufrufenden Events.**
+
+
+
+**Test evidence** `test_wolf_event_call.cs` (10). **1353/1353**, Validator gruen.
+
+**Mutations** 11 Regeln, **11 von 11 gefangen**.

@@ -1064,3 +1064,21 @@ running, or start it from a parallel event that never ends; a test expecting the
 been testing a shape no game uses.
 
 **1343/1343, ten effective mutation rules, ten caught.**
+
+**And type 210 — a call to an event — was decoded by the binary reader, which told the two kinds
+apart by the id's range: below 500,000 a map event, from 500,000 a common one, and only then does
+the call carry arguments.** The opcode enum had no value for it, so a map event that calls another
+map event could not run the call.
+
+**An event that does not exist is ignored, and not an error.** The help says so in one line, and
+the reason is that a game deletes an event and leaves a call behind all the time. A reader that
+failed there would have a game that stopped dead at a call to a treasure chest the author
+removed, with a message no player could act on. **This is the one place in this VM where a missing
+thing is deliberately not a fault.**
+
+**Input 1 is self 0, input 2 is self 1, and the strings start at self 5** — and the test found
+that ApplyOperator was writing straight into the bands while the reads went through the new
+routing, so a common event that assigned to its own \cself[0] wrote into a band of its own and
+read it back as zero. A map event has no frame of its own: its self variables are the caller's.
+
+**1353/1353, eleven effective mutation rules, eleven caught.**

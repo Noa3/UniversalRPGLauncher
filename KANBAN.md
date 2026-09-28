@@ -2605,6 +2605,7 @@ look for the next island of that shape.**
 | wolf | ~~audio~~ | **~~three channels, the zero volume rule, and the delay that is not a fade — DONE, see below~~** |
 | wolf | ~~move routes from a file~~ | **~~the two opcodes the VM ran and the reader never produced — DONE, see below~~** |
 | wolf | ~~common events~~ | **~~a call that comes back, the depth limit, and the wait that makes a route visible — DONE, see below~~** |
+| wolf | ~~map event calls~~ | **~~two kinds of call by one number, self variables per call, and a missing event ignored — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -8187,3 +8188,79 @@ Aufruf anfaengt statt danach, die ungepruefte Tiefe, die gesuchte Null, die Meld
 Nummer, das leere Event, das suspendiert, der Stapel beim Neustart und der Aufrufbefehl, der
 
 aus der Datei nicht ankommt.
+
+## WOLF Map-Event-Aufrufe: eine Zahl, zwei Arten, und ein bewusstes Schweigen
+
+**Der Binaerleser dekodierte Typ 210** und unterschied die beiden Arten an der Nummer: unter
+
+500.000 ist es ein Map-Event, ab 500.000 ein Common Event, **und nur dann traegt der Aufruf
+
+Argumente.** Die Enum hatte dafuer keinen Wert — also konnte ein Map-Event, das ein anderes
+
+aufruft, den Aufruf gar nicht ausfuehren.
+
+
+
+### Die Regel, die man nicht vermutet
+
+
+
+**Ein Event, das es nicht gibt, wird ignoriert — und nicht als Fehler gemeldet.** Die Hilfe
+
+sagt das in einem Satz: イベントが存在しない場合は無視されます, **und der Grund ist, dass ein Spiel
+
+ein Event loescht und den Aufruf stehen laesst.** Ein Leser, der dort scheiterte, haette ein
+
+Spiel, das an einem Aufruf zu einem vom Autor entfernten Schatzkasten tot stehen bleibt, mit
+
+einer Meldung, mit der niemand etwas anfangen kann. **Das ist die einzige Stelle in dieser VM,
+
+wo ein Fehlendes absichtlich kein Fehler ist — und der Grund steht hier, weil der Reflex
+
+ablehnen ist.**
+
+
+
+### Die Self-Variablen, und der Fehler, den der Test fand
+
+
+
+**Eingabe 1 ist Self 0, Eingabe 2 ist Self 1, und Text-Eingaben beginnen bei Self 5.** Map-Self
+
+liegt bei 1.100.000, Common-Self bei 1.600.000 — **beide Bander existierten bereits im Modell
+
+und die VM benutzte keines von beiden.**
+
+
+
+**Und dann der Fund:** `ApplyOperator` schrieb mit `_variables.SetByReference` direkt in die
+
+Bander, **waehrend das Lesen ueber den neuen Durchlass lief.** Also schrieb ein Common Event,
+
+das sein eigenes \cself[0] zuwies, in ein Band fuer sich — **und las es als null zurueck.**
+
+Der Test hat es gefunden, weil er eine Regel prueft, die ich am wenigsten belegt hatte.
+
+
+
+**Ein Map-Event hat keinen eigenen Rahmen: seine Self-Variablen sind die des aufrufenden
+
+Events.** Ein Leser, der ihm einen eigenen gab, wuerde einer Kette von Map-Events die Werte
+
+verlieren, die das erste bekommen hat.
+
+
+
+**Test evidence** `test_wolf_event_call.cs` (10).
+
+**1353/1353**, Validator gruen.
+
+**Mutations** 11 Regeln ueber zwei Laeufe, **11 von 11 gefangen** — darunter der nicht
+
+abgezogene Versatz, die beiden Tabellen als eine, die nicht landenden Eingaben, ein Rahmen pro
+
+Spiel statt pro Aufruf, das fehlende Spiel-Self, das fehlende Event, das scheitert, der
+
+nach der Rueckkehr stehen bleibende Rahmen, die negative Id als gesuchte, der Schreibweg, der
+
+die Self-Baender umgeht, und der Befehl, der aus der Datei nicht ankommt.

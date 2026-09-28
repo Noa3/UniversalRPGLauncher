@@ -443,11 +443,16 @@ public sealed class WolfMapReader
             // the opcode, the character the route belongs to and the route.
             "move_route" => WolfEventOpcode.MoveRoute,
             "move_route_wait" => WolfEventOpcode.WaitUntilRouteDone,
-            // **A common event is called by its database id**, and the editor
-            // writes the id in the same operand field a variable command uses —
-            // so the operand is the id and not a variable number.
+            // **A call names an event by its id, and the number says which
+            // kind.** The editor writes the id in the same operand field a
+            // variable command uses, and the help's page-call note gives the
+            // split: 0 and above is a map event, 500,000 and above is a common
+            // one. So a common event's id in this field carries the offset.
             "call_common" => WolfEventOpcode.CallCommonEvent,
-            "call_event" => WolfEventOpcode.CallCommonEvent,
+            // **The two calls are two commands**, and the file has to say which
+            // — a reader that mapped both names to one command would have lost
+            // the distinction the format keeps.
+            "call_event" => WolfEventOpcode.CallEvent,
             "end" => WolfEventOpcode.End,
             _ => WolfEventOpcode.Unknown,
         };
