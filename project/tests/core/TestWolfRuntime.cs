@@ -95,7 +95,9 @@ public partial class TestWolfRuntime : TestBase
 
         AssertTrue(runtime.StartEvent(1).Success);
         AssertTrue(host.Update(1.0 / 60.0).Success);
-        AssertEq(runtime.EventVm.GetVariable(1), 5);
+        // **Index 0 and not 1**, because the accessor addresses normal
+        // variable 0 and that is where 2,000,000 points.
+        AssertEq(runtime.EventVm.GetVariable(0), 5);
         AssertTrue(runtime.EventVm.GetSwitch(7));
         AssertEq(runtime.EventVm.Messages.Count, 1);
         AssertEq(runtime.EventVm.State, WolfVmState.Waiting);
@@ -178,7 +180,14 @@ public partial class TestWolfRuntime : TestBase
 
     private static string Map()
     {
-        return "{\"format\":\"urpg-wolf-plain-json\",\"version\":1,\"kind\":\"map\",\"id\":1,\"name\":\"Start\",\"width\":2,\"height\":2,\"tiles\":[1,2,3,4],\"events\":[{\"id\":1,\"x\":0,\"y\":0,\"commands\":[{\"op\":\"set_variable\",\"operand\":1,\"value\":2},{\"op\":\"add_variable\",\"operand\":1,\"value\":3},{\"op\":\"set_switch\",\"operand\":7,\"value\":1},{\"op\":\"message\",\"text\":\"Hello\"},{\"op\":\"wait\",\"frames\":2},{\"op\":\"message\",\"text\":\"After\"},{\"op\":\"transfer\",\"map_id\":2,\"x\":1,\"y\":1},{\"op\":\"end\"}]}]}";
+        // **The variable operand is 2,000,000 and not 1, and that is the
+        // addressing scheme and not a magic number.** WOLF writes a
+        // variable as a reference at or above a million, one million
+        // block per band, and 2,000,000 is normal variable 0. A fixture
+        // that used a bare 1 was writing the *value* one, and a reader
+        // that treated the operand as an index would have stored it in a
+        // variable the game never addressed.
+        return "{\"format\":\"urpg-wolf-plain-json\",\"version\":1,\"kind\":\"map\",\"id\":1,\"name\":\"Start\",\"width\":2,\"height\":2,\"tiles\":[1,2,3,4],\"events\":[{\"id\":1,\"x\":0,\"y\":0,\"commands\":[{\"op\":\"set_variable\",\"operand\":2000000,\"value\":2},{\"op\":\"add_variable\",\"operand\":2000000,\"value\":3},{\"op\":\"set_switch\",\"operand\":7,\"value\":1},{\"op\":\"message\",\"text\":\"Hello\"},{\"op\":\"wait\",\"frames\":2},{\"op\":\"message\",\"text\":\"After\"},{\"op\":\"transfer\",\"map_id\":2,\"x\":1,\"y\":1},{\"op\":\"end\"}]}]}";
     }
 
     private static void WriteJson(string pRelativePath, string pText)

@@ -53,7 +53,14 @@ public partial class TestRm2kWolfComparisons : TestBase
 				new WolfEventCommand
 				{
 					Opcode = WolfEventOpcode.IfVariable,
-					Operand = 0,
+					// **A reference, and not a bare zero.** The operand is
+					// resolved through the bands, and 0 is a value — it would
+					// compare the number zero against the limit and every
+					// comparison would run against nothing.
+					Operand = WolfVariable.BandOffset(WolfVariable.BandNormal),
+					// **The right side may be a value or a reference too**, and
+					// the help says a number at or above a million is called.
+					// A comparison value like 3 stays a 3.
 					Value = pRight,
 					Comparison = pComparison,
 					TrueJumpIndex = 1,
@@ -62,7 +69,11 @@ public partial class TestRm2kWolfComparisons : TestBase
 				new WolfEventCommand
 				{
 					Opcode = WolfEventOpcode.SetVariable,
-					Operand = 9,
+					// **A reference, because SetVariable now writes through
+					// one.** A bare 9 is a value and not a place, and the
+					// command would refuse it — which is the correct refusal
+					// and not what this test wants to measure.
+					Operand = WolfVariable.BandOffset(WolfVariable.BandNormal) + 9,
 					Value = 111,
 					// **Over the false arm.** Without this the true arm writes
 					// its value and then the false arm overwrites it, and both
@@ -73,7 +84,7 @@ public partial class TestRm2kWolfComparisons : TestBase
 				new WolfEventCommand
 				{
 					Opcode = WolfEventOpcode.SetVariable,
-					Operand = 9,
+					Operand = WolfVariable.BandOffset(WolfVariable.BandNormal) + 9,
 					Value = 222,
 					NextIndex = 3,
 				},
@@ -96,13 +107,21 @@ public partial class TestRm2kWolfComparisons : TestBase
 		// branch on zero — and a reader that wrote the same order would pass
 		// every comparison test while testing nothing.
 		pVm.ResetState();
-		pVm.SetVariable(0, pLeft);
+		// **The normal band, named.** The accessors address normal variable 0,
+		// and the branch resolves its operand through the bands — so this is
+		// 2,000,000, not 0. A test that wrote a bare 0 would put a value into
+		// a variable the branch does not read, and every comparison would
+		// silently run against zero.
+		pVm.VariableBands.Set(
+			WolfVariable.BandNormal, 0, pLeft);
 		pVm.Start(Program(pComparison, pLeft, pRight));
 		for (var tick = 0; tick < 10 && pVm.State == WolfVmState.Running; tick++)
 		{
 			pVm.StepTick();
 		}
-		return pVm.GetVariable(9);
+		// **The marker is read from the normal band too**, because
+		// GetVariable addresses normal and a raw 9 would read nothing.
+		return pVm.VariableBands.Get(WolfVariable.BandNormal, 9);
 	}
 
 

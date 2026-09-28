@@ -2593,6 +2593,7 @@ look for the next island of that shape.**
 | damage | ~~`10500`~~ | **~~simulated attack — DONE, see below~~** |
 | class data | ~~`0x1F` chunk~~ | **~~class parameters by level — DONE, the prerequisite for `1008`~~** |
 | wolf | ~~variable branch~~ | **~~seven comparisons and two arms — DONE, see below~~** |
+| wolf | ~~variable bands~~ | **~~self, normal, system, database — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2605,6 +2606,61 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The WOLF variable bands are done — a flat dictionary could not hold them
+
+**The editor lists four: `Self / Var / Sys / 可変DB`** — self, normal and
+reserve, system, and the variable database. The VM had one
+`Dictionary<int, int>`, so **a self variable and a system variable with the
+same index collided** — and the collision is silent, because both reads answer
+with a number and only the wrong one.
+
+**The million boundary is the addressing scheme itself.** A number at or above
+1,000,000 is not a value, it is a *reference*: 2,000,005 means normal variable 5.
+A reader that treated the number as a value would store two million in a field
+meant to point at variable five, and the game would read a number it never
+wrote.
+
+**The boundary is inclusive.** The help says 1,000,000 *or more* is called, so
+a reader that tested `>` would treat exactly 1,000,000 as a value and never
+resolve self variable 0 — the one variable every WOLF event uses.
+
+**The block is one based and the band is zero based**, so 1,000,000 is block 1
+and self band 0. A reader that used the block directly would be off by one
+for every band, and the first band would address one that does not exist.
+
+**The database band is smaller than the other three** (999 rows against 99,999).
+One bound for all four would let a game address database row 50,000 — a row
+the editor cannot hold and a save file cannot carry.
+
+**A plain value resolves to itself and is not a place to write to.** That is
+what the help's "do not call the data" checkbox means: a field may hold either,
+and the number itself says which. A reader that let a value be a write target
+would store a number under a key that is not a variable at all.
+
+**The comparison resolves both sides**, because the help says the compared
+value may be a variable too — 2,000,000 there means normal variable 0. A
+reader that resolved only the left side would compare a normal variable
+against the *number* two million instead of against what it holds.
+
+**The VM's convenience accessors address the normal band**, because a caller
+that reaches for "a variable" without saying which one is asking the question
+WOLF answers with four, and the accessors have to answer something. They are
+on the VM and the bands are reachable directly through `VariableBands`.
+
+**The runtime fixture changed and that is the point.** Its variable operand was
+a bare `1`, which is the *value* one — so it was writing a value, not a
+variable, and a reader that treated the operand as an index would have stored
+it somewhere the game never addressed. It is `2,000,000` now, with a comment
+saying why, and `Test_WolfPluginRuntimeLoadsDataAndAdvancesDeterministicEventVm`
+**failed when the model changed** — which is what a runtime test is for.
+
+**Test evidence** `test_wolf_variable_bands.cs`, 10 tests, plus the seven
+comparison tests and the six runtime tests, all re-measured.
+**1218/1218**.
+**Mutations** Ten rules over two runs, **10 of 10 caught** — including the
+million boundary made exclusive, the block left zero based, the two bands
+writing into the same dictionary, and the comparison resolving only one side.
 
 ## The WOLF variable branch is done — and it had one comparison and no test
 

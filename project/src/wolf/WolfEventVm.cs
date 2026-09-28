@@ -22,7 +22,19 @@ public sealed class WolfEventVm
 {
     public const int MaxCommandsPerTick = 256;
 
-    private readonly Dictionary<int, int> _variables = new();
+    /// <summary>
+    /// The four variable bands, kept apart.
+    /// </summary>
+    /// <remarks>
+    /// **Four dictionaries and not one flat map.** A reader that kept every
+    /// band in one dictionary would have a self variable and a system
+    /// variable with the same index collide, and the collision is silent —
+    /// both reads answer with a number, and the wrong one.
+    /// </remarks>
+    private readonly WolfVariableBands _variables = new();
+
+    /// <summary>The bands, for a caller that wants to address one directly.</summary>
+    public WolfVariableBands VariableBands => _variables;
     private readonly Dictionary<int, bool> _switches = new();
     private readonly List<WolfEventMessage> _messages = new();
     private readonly List<string> _trace = new();
@@ -36,7 +48,15 @@ public sealed class WolfEventVm
     public int CurrentEventId => _program?.Id ?? 0;
     public int InstructionIndex => _instructionIndex;
     public int WaitRemainingFrames => _waitRemaining;
-    public IReadOnlyDictionary<int, int> Variables => _variables;
+    /// <summary>
+    /// The normal band, for a caller that only ever means a normal variable.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A band and not the old flat map</strong>, because a caller that
+    /// reached for "a variable" without saying which one is asking the
+    /// question WOLF answers with four.
+    /// </remarks>
+    public WolfVariableBands Variables => _variables;
     public IReadOnlyDictionary<int, bool> Switches => _switches;
     public IReadOnlyList<WolfEventMessage> Messages => _messages;
     public IReadOnlyList<string> Trace => _trace;
@@ -154,9 +174,13 @@ public sealed class WolfEventVm
         return PluginOperationResult.Succeeded();
     }
 
-    public void SetVariable(int pId, int pValue) => _variables[pId] = pValue;
+    /// <summary>Writes the normal band, for a caller that means one.</summary>
+    public void SetVariable(int pId, int pValue)
+        => _variables.Set(WolfVariable.BandNormal, pId, pValue);
 
-    public int GetVariable(int pId) => _variables.TryGetValue(pId, out var value) ? value : 0;
+    /// <summary>Reads the normal band.</summary>
+    public int GetVariable(int pId)
+        => _variables.Get(WolfVariable.BandNormal, pId);
 
     public void SetSwitch(int pId, bool pValue) => _switches[pId] = pValue;
 
@@ -195,11 +219,13 @@ public sealed class WolfEventVm
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.SetVariable:
-                _variables[pCommand.Operand] = pCommand.Value;
+                _variables.SetByReference(pCommand.Operand, pCommand.Value);
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.AddVariable:
-                _variables[pCommand.Operand] = GetVariable(pCommand.Operand) + pCommand.Value;
+                _variables.SetByReference(
+            pCommand.Operand,
+            _variables.Resolve(pCommand.Operand) + pCommand.Value);
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.SetSwitch:
@@ -212,9 +238,17 @@ public sealed class WolfEventVm
                 // **Seven comparisons, and not one.** A reader that kept the
                 // old equality test would take one branch in seven, and a chest
                 // guarded by "V0 is at least 1" would never open.
+                // **Both sides go through the bands.** The left one is the
+                // operand and it may name any band; the right one is the
+                // compared value and the help says it may be a variable too
+                // (2000000 means normal variable 0). A reader that resolved
+                // only the left side would compare a normal variable against
+                // the *number* two million instead of against what it holds.
                 if (!WolfComparisonEvaluator.TryEvaluate(
-                    pCommand.Comparison, GetVariable(pCommand.Operand),
-                    pCommand.Value, out var variableCondition))
+                    pCommand.Comparison,
+                    _variables.Resolve(pCommand.Operand),
+                    _variables.Resolve(pCommand.Value),
+                    out var variableCondition))
                 {
                     return Fail(
                         $"A WOLF variable branch uses comparison"                        + $" {pCommand.Comparison}, which is not one of the seven"

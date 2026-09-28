@@ -2906,3 +2906,49 @@ Vergleichsnummern sind gegen die Editor-Hilfe gepinnt, nicht gegen eine Datei.
 Das Variablenmodell ist außerdem noch ein flaches `int`, wo WOLF Selbst-,
 Normal-, System- und Datenbank-Bänder hat — **das ist die nächste WOLF-Karte
 und sie ist größer als diese.**
+
+## WOLF Variablenbänder — DONE: ein flaches Wörterbuch konnte sie nicht halten
+
+**Der Editor listet vier: `Self / Var / Sys / 可変DB`** — Selbst, Normal+Reserve,
+System, Variable-DB. Die VM hatte ein `Dictionary<int, int>`, also **kollidierten
+Selbst- und Systemvariable mit demselben Index** — und die Kollision ist still,
+weil beide Lesen mit einer Zahl antworten und nur mit der falschen.
+
+**Die Millionenschranke ist das Adressierschema selbst.** Eine Zahl ab 1.000.000
+ist kein Wert, sondern eine *Referenz*: 2.000.005 heißt Normalvariable 5. Wer
+die Zahl als Wert behandelte, speicherte zwei Millionen in ein Feld, das auf
+Variable fünf zeigen soll, und das Spiel läse eine Zahl, die es nie geschrieben
+hat.
+
+**Die Schranke ist inklusiv.** Die Hilfe sagt „1.000.000 *oder mehr*", also hätte
+ein Leser mit `>` genau 1.000.000 als Wert behandelt und nie Selbstvariable 0
+aufgelöst — die eine Variable, die jedes WOLF-Event benutzt.
+
+**Der Block ist eins-basiert und das Band null-basiert**, also ist 1.000.000 Block 1
+und Selbstband 0. Wer den Block direkt nähme, wäre für jedes Band um eins daneben
+und das erste Band spräche eines an, das es nicht gibt.
+
+**Das Datenbank-Band ist kleiner als die anderen drei** (999 Zeilen gegen 99.999).
+Eine gemeinsame Grenze ließe ein Spiel Datenbankzeile 50.000 adressieren — eine
+Zeile, die der Editor nicht hält und eine Save-Datei nicht trägt.
+
+**Ein einfacher Wert löst sich selbst auf und ist kein Schreibziel.** Das ist
+das Kästchen „Daten nicht aufrufen" der Hilfe: Ein Feld darf beides halten, und
+die Zahl selbst sagt welches.
+
+**Der Vergleich löst beide Seiten auf**, weil die Hilfe sagt, der Vergleichswert
+könne auch eine Variable sein — 2.000.000 dort heißt Normalvariable 0. Wer nur
+die linke Seite auflöste, vergliche eine Normalvariable mit der *Zahl* zwei
+Millionen statt mit dem, was sie hält.
+
+**Die Fixture des Laufs hat sich geändert, und das ist der Punkt.** Ihr
+Variablenoperand war eine nackte `1` — also der *Wert* eins, womit sie eine Zahl
+schrieb statt einer Variablen. Sie ist jetzt `2.000.000`, mit einem Kommentar
+warum, und `Test_WolfPluginRuntimeLoadsDataAndAdvancesDeterministicEventVm`
+**ist fehlgeschlagen, als sich das Modell änderte** — wofür ein Laufzeittest da ist.
+
+**Test evidence** `test_wolf_variable_bands.cs` (10), plus die sieben
+Vergleichstests und die sechs Laufzeittests, alle nachgemessen. **1218/1218**.
+**Mutations** 10 Regeln über zwei Läufe, **10 von 10 gefangen** — darunter die
+exklusive Millionenschranke, der null-basierte Block, zwei Bänder im selben
+Wörterbuch und der Vergleich, der nur eine Seite auflöst.
