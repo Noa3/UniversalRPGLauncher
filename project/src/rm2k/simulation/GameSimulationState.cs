@@ -212,6 +212,39 @@ public sealed class GameSimulationState
     public int MapHeight { get; private set; }
     public Godot.Collections.Array<bool> PassableTiles { get; init; } = new();
 
+    /// <summary>
+    /// The three vehicles on the current map, from <c>Game_Vehicle</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>These were not in the simulation state until K-094, and that is
+    /// the fault the card was written for.</strong> <c>Rm2kDecisionTurn</c>,
+    /// <c>Rm2kVehicleBoarding</c> and <c>Rm2kVehicleState</c> were implemented
+    /// and mutation checked, and the runtime kept its own <c>_vehicles</c> list
+    /// in the plugin instead — so the boarding rules had nowhere to read from
+    /// and the decision key never called them.
+    /// </para>
+    /// <para>
+    /// The list holds three entries in the order boat, ship, airship once a map
+    /// is loaded, so a caller can index by <c>Rm2kVehicle</c> type. It is empty
+    /// before that, which is not an error: a game that has not loaded a map has
+    /// no vehicles, and <c>GetOnOffVehicle</c> returns false there.
+    /// </para>
+    /// </remarks>
+    public List<Rm2kVehicleState> Vehicles { get; } = new();
+
+    /// <summary>
+    /// The player's vehicle boarding state, or null before a map is loaded.
+    /// </summary>
+    /// <remarks>
+    /// Null means "not aboard anything", which is the same as
+    /// <c>aboard = 0</c> in the save data. It is not lazily created by a
+    /// reader: the player turn creates one when a map is loaded and a decision
+    /// key is pressed, so a game that never touches a vehicle never allocates
+    /// one.
+    /// </remarks>
+    public Rm2kVehicleBoarding? Boarding { get; set; }
+
     /// <summary>Per-tile direction masks (Rm2kChipset.Pass* bits); authoritative for movement.</summary>
     public Godot.Collections.Array<byte> PassabilityMasks { get; init; } = new();
 
@@ -523,6 +556,12 @@ public sealed class GameSimulationState
         // A half finished step must not survive into a new game, or the hero
         // would start walking on a tile it is not standing on.
         RemainingStep = 0;
+        // A half finished boarding must not survive into a new game, or the
+        // player would start halfway into a boat they never boarded. The
+        // vehicles go with it: they belong to a map's start node, so the last
+        // game's boat is not this game's boat.
+        Vehicles.Clear();
+        Boarding = null;
         CharacterFrame = Rm2kCharacterAnimation.FrameMiddle;
         CharacterAnimCount = 0;
         HeroMoveSpeed = 3;

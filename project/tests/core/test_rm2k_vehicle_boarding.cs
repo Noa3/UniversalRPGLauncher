@@ -28,15 +28,39 @@ public partial class TestRm2kVehicleBoarding : TestBase
 		};
 	}
 
+	/// <summary>
+	/// The tile in front, on the facing order the player actually speaks.
+	/// </summary>
+	/// <remarks>
+	/// <strong>This test used the event order — up 0, right 1, down 2,
+	/// left 3 — and it was wrong.</strong> <c>Game_Player::FacingDirection</c>
+	/// is the RPG Maker byte: <strong>2 down, 4 left, 6 right, 8 up</strong>.
+	/// Handing that byte to a function written for the event order asked for the
+	/// delta of the number 8, which is <c>(0, 0)</c> — the player's own tile.
+	/// <para>
+	/// **So the assertion passed and the function was broken**: every one of
+	/// these five lines agreed with itself, because the test and the code shared
+	/// the same misreading. A player facing up was handed a disembark onto the
+	/// water they were already standing in, and no test in this file could see
+	/// it. The bridge between the two orders already existed as
+	/// <c>LiblcfFromFacingDirection</c>, whose own comment warns that mixing the
+	/// two silently turns a right step into a left one.
+	/// </para>
+	/// </remarks>
 	public void Test_TheTileInFrontIsTheStepThePlayerWouldTake()
 	{
-		// XwithDirection and YwithDirection, on the liblcf order up 0, right 1,
-		// down 2, left 3.
+		// XwithDirection and YwithDirection, on the facing order: 2 down,
+		// 4 left, 6 right, 8 up.
 		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 2).X, 10, "facing down keeps x");
 		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 2).Y, 11, "and moves y down");
-		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 1).X, 11, "facing right moves x");
-		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 0).Y, 9, "facing up moves y up");
-		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 3).X, 9, "facing left moves x back");
+		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 6).X, 11, "facing right moves x");
+		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 8).Y, 9, "facing up moves y up");
+		AssertEq(Rm2kVehicleBoarding.TileInFront(10, 10, 4).X, 9, "facing left moves x back");
+		AssertEq(
+			Rm2kVehicleBoarding.TileInFront(10, 10, 8),
+			(10, 9),
+			"and every cardinal is one tile and never zero, because the whole"
+			+ " fault was that 8 used to answer with the player's own tile");
 	}
 
 	public void Test_AShipIsPreferredOverABoatOnTheSameTile()

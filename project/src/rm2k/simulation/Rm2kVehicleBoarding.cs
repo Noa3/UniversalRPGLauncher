@@ -77,9 +77,27 @@ public sealed class Rm2kVehicleBoarding
 	/// <c>YwithDirection</c>. This is where a boat or a ship has to be, because
 	/// the player steps onto it rather than standing on it.
 	/// </summary>
+	/// <remarks>
+	/// <strong>The direction is the facing byte — 2 down, 4 left, 6 right,
+	/// 8 up — and not the event order.</strong>
+	/// <c>Rm2kMoveRoute.DirectionDelta</c> speaks the event order (0 up, 1
+	/// right, 2 down, 3 left), so a first draft that passed a facing byte
+	/// straight through asked for the delta of the number 8, which is
+	/// <c>(0, 0)</c> — the character's own tile. Every test that boarded a boat
+	/// then "succeeded" without moving, and a player facing up was handed a
+	/// disembark onto the water they were already standing in.
+	/// <para>
+	/// The conversion is done through <c>LiblcfFromFacingDirection</c>, which
+	/// already exists for exactly this and whose own comment says mixing the two
+	/// silently turns a right step into a left one.
+	/// </para>
+	/// </remarks>
 	public static (int X, int Y) TileInFront(int pX, int pY, int pDirection)
 	{
-		var (dx, dy) = Rm2kMoveRoute.DirectionDelta(pDirection);
+		var eventDirection = pDirection is >= 2 and <= 8
+			? Rm2kMoveRoute.LiblcfFromFacingDirection((byte)pDirection)
+			: pDirection;
+		var (dx, dy) = Rm2kMoveRoute.DirectionDelta(eventDirection);
 		return (pX + dx, pY + dy);
 	}
 

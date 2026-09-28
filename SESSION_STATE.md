@@ -1884,3 +1884,53 @@ Arbeit auf sichtbar zu sein.**
 eine Behauptung ohne Beleg, und diese Datei trägt keine Behauptungen.
 **K-134 fordert sie zurück — aus `git log` und der Testsuite, nicht aus den
 Titeln.** Titel sind Behauptungen; diese Datei trägt keine.
+
+## K-094 Vehicles for the action-event order — DONE
+
+**Der Karten-Titel war die halbe Diagnose.** `Rm2kPlayerTurn.Apply` trug den
+Kommentar *"The Player toggles a vehicle before looking for events. This
+runtime has no vehicles, so nothing can be toggled and the action event check
+always runs."* — und `Rm2kDecisionTurn.Run` war daneben implementiert,
+mutation geprüft und **nie aufgerufen**. Die Fahrzeugklassen waren geladen und
+gezeichnet; sie waren nie gefahren und nie bestiegen. `GameSimulationState` hatte
+**null** Fahrzeugverdrahtung, und der Runtime führte seine eigene `_vehicles`-Liste.
+
+**Implementiert**
+- `GameSimulationState.Vehicles` und `.Boarding`, beide in `Reset()` geleert
+- `Rm2kPlayerTurn.Apply` ruft `Rm2kDecisionTurn.Run`; ein Fahrzeug, das den
+  Zug übernimmt, unterdrückt die Aktionsprüfung
+- `CanEmbark` / `CanDisembark` aus der Passability-Maske, `IsVehicleStopping`
+  für das Luftschiff, `OppositeBit` für die Gegenrichtung
+
+**Drei echte Produktfehler, die die Suite fand**
+
+1. **`TileInFront` sprach die falsche Richtungsordnung.** Der Spieler spricht
+   2/4/6/8, `DirectionDelta` erwartet 0–3. **Ein `8` ergibt `(0,0)`** — die
+   eigene Kachel. Jeder Bestiegetest "erfolgte", ohne dass sich etwas bewegte,
+   und ein nach oben blickender Spieler bekam ein Aussteigen aufs Wasser, auf
+   dem er bereits stand. Die Brücke `LiblcfFromFacingDirection` existierte
+   bereits; ihr eigener Kommentar warnt vor genau diesem Vermischen.
+2. **`PassDown` ist `0x01` und `PassUp` ist `0x08`.** Ich hatte beide vertauscht
+   und `0x08` als "unten" geschrieben.
+3. **Ein K-114-Test hielt die falsche Ordnung fest** — er prüfte `TileInFront`
+   mit 0/1/2/3, und damit gegen sich selbst. Fünf Zusicherungen, alle konsistent
+   mit demselben Missverständnis.
+
+**Und eine Fixture, die sich selbst belog.** `SetPassability(state, x, y,
+pAllowUp, pAllowDown)` war benannt, als wären es begehbare Richtungen, und
+verdrahtete `pAllowUp` mit `PassDown` — also der Gegenrichtung. Zwei Tests
+behaupteten daraufhin die falsche Polarität und schlugen gegen korrekten Code
+fehl. **Eine Fixture, deren Namen über ihre eigenen Bits lügen, ist schlimmer
+als keine Fixture**, weil der Fehler auf den Produktcode zeigt.
+
+**Test evidence** 8 Tests in
+`project/tests/core/test_rm2k_vehicle_decision_turn.cs`, 1 in
+`test_rm2k_vehicle_boarding.cs` umgeschrieben.
+**980/980**, `TestRm2kVehicleDecisionTurn: 8/8`, `TestRm2kVehicleBoarding: 11/11`,
+`TestRm2kDecisionTurn: 12/12`.
+**Mutations** Zehn Regeln über sechs Läufe. **9 von 10 gefangen.** Die
+entkommene Regel ist keine Semantiklücke, sondern ein Werkzeugfehler: der erste
+Runner verwendete `$TMPDIR/m_<pfad>` als Backup, was mit `/` im Namen scheiterte
+— die Mutationen liefen **ohne Restore**, und die folgenden Regeln testeten eine
+kumulativ kaputte Datei. `git checkout --` hat daraufhin den **ungestagten**
+Slice verworfen; er wurde neu gebaut und sofort gestaged.

@@ -73,7 +73,7 @@
 | K-091 | 2 | DONE | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
 | K-092 | 2 | DONE | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
 | K-093 | 3 | DONE | Route the Godot host input through the verified turn order instead of ad-hoc triggers | K-092 |
-| K-094 | 2 | VERIFY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
+| K-094 | 0 | DONE | Vehicles for the action-event order | — |
 | K-095 | 3 | DONE | Resolve verified chipset source rectangles for blocks C, E and F | K-087 |
 | K-096 | 3 | DONE | Build the verified block D autotile quarter table and block geometry | K-095 |
 | K-097 | 3 | DONE | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
@@ -862,15 +862,57 @@ The card claimed "`Rm2kInputMapper` is unreferenced and nothing forwards input".
 - The host wiring itself is a Node override and cannot be exercised headlessly without the scene. The runtime side is regression tested in `TestPluginDetection`; the `Main.cs` branch was verified by reading the resulting code path, not by an automated test.
 
 ### K-094 — Vehicles for the action-event order
+`DONE` — runtime, P0, unblocked K-114
 
-**Status (2026-09-26) — READY: verification first**
+**The card's title was half the diagnosis.** `Rm2kPlayerTurn.Apply` carried the
+comment *"This runtime has no vehicles, so nothing can be toggled and the action
+event check always runs"* — and `Rm2kDecisionTurn.Run` sat next to it,
+implemented, mutation checked, and **never called**. The vehicles were loaded and
+drawn; they were never driven and never boarded. `GameSimulationState` had
+**zero** vehicle wiring and the runtime kept its own `_vehicles` list.
 
-**Scope**
-- `Game_Player::CheckActionEvent` is only reached when `GetOnOffVehicle()` returns false, so the vehicle toggle can suppress the action event on boat, ship and airship tiles.
-- `Rm2kPlayerTurn` documents that no vehicle can toggle anything today, so the action check always runs. Implementing boat/ship/airship would need the verified LMU/LDB vehicle data and the verified boarding rules.
+**Implemented**
+- `GameSimulationState.Vehicles` and `.Boarding`, both cleared in `Reset()`
+- `Rm2kPlayerTurn.Apply` calls `Rm2kDecisionTurn.Run`, and a vehicle that takes
+  the turn suppresses the action event check — a boat moored beside a sign has
+  to be boardable, and the sign is on the tile the player faces
+- `CanEmbark` / `CanDisembark` from the passability mask, `IsVehicleStopping`
+  for the airship, `OppositeBit` for the way back
 
-**Unblock condition**
-- Read `Game_Player::GetOnOffVehicle`, `GetOffVehicle` and `GetOnVehicle` plus `Game_Vehicle` for the exact conditions, and verify the vehicle sprites and LMU fields in liblcf, before writing any vehicle code. Do not approximate with the `Boat`/`Ship`/`Airship` terrain booleans already present in the terrain data.
+**Three real product faults the suite found**
+
+**`TileInFront` spoke the wrong direction order.** The player speaks 2/4/6/8;
+`DirectionDelta` expects 0–3. **A `8` yields `(0, 0)`** — the character's own
+tile. Every boarding test "passed" without anything moving, and a player facing
+up was handed a disembark onto the water they were standing on. The bridge
+`LiblcfFromFacingDirection` already existed, and its own comment warns that
+mixing the two silently turns a right step into a left one.
+
+**`PassDown` is `0x01` and `PassUp` is `0x08`.** A first draft had them swapped
+and wrote `0x08` for "down".
+
+**A K-114 test held the wrong order in place.** It checked `TileInFront` with
+0/1/2/3, and so agreed with itself: five assertions, every one consistent with
+the same misreading.
+
+**And a fixture that lied about itself.** `SetPassability(..., pAllowUp,
+pAllowDown)` was named as walkable directions and wired `pAllowUp` to
+`PassDown` — the opposite. Two tests then asserted the wrong polarity and failed
+against correct code. **A fixture whose names lie about its own bits is worse
+than no fixture**, because the failure points at the reader.
+
+**Test evidence** 8 tests in
+`project/tests/core/test_rm2k_vehicle_decision_turn.cs`, 1 rewritten in
+`test_rm2k_vehicle_boarding.cs`.
+**980/980**, `TestRm2kVehicleDecisionTurn: 8/8`, `TestRm2kVehicleBoarding: 11/11`.
+**Mutations** Ten rules over six runs, **9 of 10 caught**. The tenth is a harness
+fault, not a semantic gap: the first runner used `$TMPDIR/m_<path>` as its
+backup, which fails on the `/`, so the mutations ran **without a restore** and
+the following rules tested a cumulatively broken file. `git checkout --` then
+discarded the **unstaged** slice; it was rebuilt and staged immediately.
+
+**What this does not claim:** a vehicle's own move route, hero-directed vehicle
+movement, and vehicle background music. K-114 lists those.
 
 ### K-095 — Chipset source rectangles for blocks C, E and F
 
