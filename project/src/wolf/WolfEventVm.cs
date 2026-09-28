@@ -182,6 +182,50 @@ public sealed class WolfEventVm
     public int GetVariable(int pId)
         => _variables.Get(WolfVariable.BandNormal, pId);
 
+    /// <summary>
+    /// Applies a variable command's operator to the destination and stores it.
+    /// </summary>
+    /// <returns>
+    /// False when the destination refused the write, which happens only when
+    /// the destination is not a reference at all.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>One path for every operator</strong>, because the destination is
+    /// resolved through the bands once and the operator decides what happens to
+    /// it. A switch per operator would resolve the destination thirteen times
+    /// and would need a thirteenth case the moment the editor adds one.
+    /// </para>
+    /// <para>
+    /// <strong>The current value is read before the write,</strong> and that is
+    /// the whole reason the resolve happens first: a right hand side that names
+    /// the same variable as the destination has to see the old value, the way
+    /// the editor evaluates it, or a doubling command would read the new one.
+    /// </para>
+    /// </remarks>
+    private bool ApplyOperator(
+        WolfEventCommand pCommand,
+        int pOperator)
+    {
+        var current = _variables.Resolve(pCommand.Operand);
+        var right = _variables.Resolve(pCommand.Value);
+        // **A second number is only read when the file gave one.** The arc
+        // tangent takes two vectors and a file that gives one of them is not a
+        // file that gives a zero.
+        var right2 = pCommand.HasRight2 ? _variables.Resolve(pCommand.Right2) : 0;
+        // **The arc tangent is the one operator that reads two right hand
+        // sides and not the current value.** The help says the right hand
+        // side's two variables are the X and the Y vector; the current value
+        // is the destination and has no part in the slope. Sending the
+        // current value as X would make the angle of a slope depend on what
+        // the destination already held, which no game means.
+        var result = pOperator == WolfVariableOperator.ArcTangent
+            ? WolfVariableOperator.ArcTangentOf(
+                pCommand.HasRight2 ? right : current, right2)
+            : WolfVariableOperator.Apply(pOperator, current, right);
+        return _variables.SetByReference(pCommand.Operand, result);
+    }
+
     public void SetSwitch(int pId, bool pValue) => _switches[pId] = pValue;
 
     public bool GetSwitch(int pId) => _switches.TryGetValue(pId, out var value) && value;
@@ -219,13 +263,23 @@ public sealed class WolfEventVm
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.SetVariable:
-                _variables.SetByReference(pCommand.Operand, pCommand.Value);
+                if (!ApplyOperator(pCommand, pCommand.Operator))
+                {
+                    return PluginOperationResult.Succeeded();
+                }
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.AddVariable:
-                _variables.SetByReference(
-            pCommand.Operand,
-            _variables.Resolve(pCommand.Operand) + pCommand.Value);
+                // **The two operators are two opcodes over one path.** The
+                // editor writes addition as its own entry in the operator
+                // list, so a program that had a switch per opcode would need a
+                // thirteenth case for every operator the editor adds, and the
+                // two lists would drift apart.
+                if (!ApplyOperator(
+                        pCommand, WolfVariableOperator.Add))
+                {
+                    return PluginOperationResult.Succeeded();
+                }
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
             case WolfEventOpcode.SetSwitch:

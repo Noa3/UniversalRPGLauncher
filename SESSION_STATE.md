@@ -2952,3 +2952,64 @@ Vergleichstests und die sechs Laufzeittests, alle nachgemessen. **1218/1218**.
 **Mutations** 10 Regeln über zwei Läufe, **10 von 10 gefangen** — darunter die
 exklusive Millionenschranke, der null-basierte Block, zwei Bänder im selben
 Wörterbuch und der Vergleich, der nur eine Seite auflöst.
+
+## WOLF Zuweisungsoperatoren — DONE: die VM kannte zwei von vierzehn
+
+**Die Hilfe listet vierzehn: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, 引上げ, 引下げ,
+絶対値, arctan, sin, cos, Wurzel.** Die VM kannte zwei, und die zweite —
+Addition — war fest in ihr eigenes Opcode verdrahtet, also gab es keinen Ort
+für die anderen zwölf. **Ein Leser mit zwei kann keine Trefferquote, keine
+Schadensformel und keinen Winkel berechnen, und keines der drei ist ein
+exotisches Spiel.**
+
+**Ein Weg für jeden Operator, und der Operator ist ein Feld und kein Opcode.**
+Der Editor wählt ihn in einer Liste neben dem Ziel, also bräuchte ein Leser,
+der aufs Opcode schaltet, einen dreizehnten Fall, sobald der Editor einen
+hinzufügt — und die beiden Listen liefen auseinander. `AddVariable` ist jetzt
+der Additionsoperator über denselben Weg, und genau deshalb können sie nicht
+auseinanderlaufen.
+
+**Der aktuelle Wert wird vor dem Schreiben gelesen**, und diese Reihenfolge ist
+der Grund, warum zuerst aufgelöst wird: eine rechte Seite, die dieselbe Variable
+nennt wie das Ziel, muss den alten Wert sehen, sonst läse ein Verdopplungsbefehl
+den neuen.
+
+**Division durch null lässt die Variable unverändert und ist kein Fehler.** Die
+Hilfe sagt, ein Teiler 0 verhält sich wie Teilen durch eins. Ein Leser, der null
+zurückgäbe, eine Ausnahme werfe oder einen Sentinel schriebe, wäre für eine Zeile
+Hilfe auf drei Arten falsch.
+
+**Trigonometrie ist skaliert, und die Skalierung ist der Operator.** Der Winkel
+ist Zehntelgrad, das Ergebnis Tausendstel, also sind die Beispiele der Hilfe 600 →
+866 für sin und 600 → 500 für cos. Ein Leser in Grad und Fließkomma gäbe 0,866
+zurück und **das sähe nicht falsch aus** — es sähe wie eine kleine Zahl aus.
+
+**Der Arkustangens liest zwei rechte Seiten und nicht den aktuellen Wert**, denn
+eine Steigung ist eine Richtung, und eine Richtung braucht zwei Achsen. Die
+Reihenfolge ist Y, X, weil die Hilfe X rechts-positiv und Y unten-positiv sagt —
+also ist gerade unten +90 und nicht −90. Ein nackter Arkustangens reicht nur bis
+±90°, also deckt `Atan2` den Kreis ab und eine Steigung nach links ist 1800.
+
+**Die ganze Rechnung ist breit, und der Test hat bewiesen, dass sie es sein muss.**
+Eine rechte Seite von drei Milliarden passt nicht in ein `int`; ein als `int`
+geschriebener Test hätte nicht übersetzt, einer mit `unchecked` hätte eine andere
+Zahl transportiert. **Sowohl Multiplikation als auch Subtraktion verlassen den
+Bereich, bevor die Klemme sie sehen kann** — eine `int` zu klemmen klemmt den
+Wert nach dem Überlauf, also die falsche Zahl. `Switch` gibt darum ein `long`
+zurück, und der Parametertyp folgt der Grenze ±2 Milliarden der Hilfe.
+
+**Ein Test, der sich selbst widerlegt hat.** Der Rundungstest behauptete erst, die
+Beispiele der Hilfe trennten Rundung von Abschneiden — sie tun es nicht: fünf gibt
+2236 so wie so, und zwei und drei ebenso. **Gemessen ist der trennende Eingabe
+sieben** — Wurzel sieben mal tausend ist 2645,75, also rundet es auf 2646 und
+schneidet auf 2645 ab. Und kein Eingabe hat eine exakte Halbe, also lassen sich
+half-away-from-zero und half-to-even an diesem Testsatz nicht unterscheiden; der
+Code sagt away from zero, und das Board sagt das, statt mehr zu behaupten. Ein
+zweiter Test behauptete `sin(1800) == 1000`, das ist neunzig Grad mit dem
+Kommentar eines Halbkreises; gemessen sind 1800 hundertachtzig Grad und geben 0.
+
+**Test evidence** `test_wolf_variable_operator.cs` (15), darunter vier, die den
+Operator durch die VM laufen lassen. **1233/1233**.
+**Mutations** 12 Regeln in einem Lauf, **12 von 12 gefangen** — darunter die
+Division-durch-null-Absicherung, die Zehntelgrad-Skala, Abschneiden statt Rundung,
+der nackte Arkustangens und `AddVariable`, das still zu Zuweisung wurde.

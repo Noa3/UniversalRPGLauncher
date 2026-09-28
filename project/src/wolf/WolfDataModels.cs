@@ -137,6 +137,38 @@ public sealed class WolfEventCommand
     public int Comparison { get; init; }
 
     /// <summary>
+    /// Which of the fourteen assignment operators a variable command uses.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Its own field and not folded into the opcode or the value.</strong>
+    /// The editor picks the operator in its own dropdown next to the
+    /// destination, so a program that only knows <c>=</c> and <c>+=</c> cannot
+    /// express a hit rate, a damage formula, or an angle.
+    /// </para>
+    /// <para>
+    /// <strong>Defaults to assignment</strong>, because a file that predates the
+    /// operator, or a program that never set one, assigns.
+    /// </para>
+    /// </remarks>
+    public int Operator { get; init; }
+
+    /// <summary>
+    /// The second number, for the operators that take two.
+    /// </summary>
+    /// <remarks>
+    /// **Separate from <see cref="Value"/>, and empty is not zero.** The
+    /// arc tangent reads two vectors and a file that gives one of them is not
+    /// the same file as a file that gives a zero, so a reader that treated a
+    /// missing second number as zero would compute an angle of zero for every
+    /// slope whose Y vector was left out.
+    /// </remarks>
+    public int Right2 { get; init; }
+
+    /// <summary>Whether a second number was given at all.</summary>
+    public bool HasRight2 { get; init; }
+
+    /// <summary>
     /// Where the true arm of a branch starts.
     /// </summary>
     /// <remarks>

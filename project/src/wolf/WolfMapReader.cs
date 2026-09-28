@@ -188,6 +188,17 @@ public sealed class WolfMapReader
                 Text = text,
                 Operand = WolfDataReader.ReadOptionalInt(element, "operand", 0),
                 Value = WolfDataReader.ReadOptionalInt(element, "value", 0),
+                Operator = Math.Clamp(
+                    WolfDataReader.ReadOptionalInt(element, "operator", 0),
+                    0,
+                    WolfVariableOperator.MaxOperator),
+                // **Read by name, and not "is it non-zero".** A file that
+                // writes `"right2": 0` is a file that gives a second number of
+                // zero, and a file that does not mention it gives no second
+                // number at all. The arc tangent reads two vectors, and the
+                // difference is a slope of zero against a slope that uses both.
+                Right2 = WolfDataReader.ReadOptionalInt(element, "right2", 0),
+                HasRight2 = element.TryGetProperty("right2", out _),
                 Frames = Math.Clamp(WolfDataReader.ReadOptionalInt(element, "frames", 0), 0, 1_000_000),
                 MapId = WolfDataReader.ReadOptionalInt(element, "mapId", WolfDataReader.ReadOptionalInt(element, "map_id", 0)),
                 X = WolfDataReader.ReadOptionalInt(element, "x", 0),

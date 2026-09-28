@@ -2594,6 +2594,7 @@ look for the next island of that shape.**
 | class data | ~~`0x1F` chunk~~ | **~~class parameters by level — DONE, the prerequisite for `1008`~~** |
 | wolf | ~~variable branch~~ | **~~seven comparisons and two arms — DONE, see below~~** |
 | wolf | ~~variable bands~~ | **~~self, normal, system, database — DONE, see below~~** |
+| wolf | ~~variable operators~~ | **~~fourteen assignment operators — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2606,6 +2607,77 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The WOLF variable operators are done — the VM knew two of fourteen
+
+**The help tabulates fourteen: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, pull up, pull
+down, absolute value, arc tangent, sine, cosine, and square root.** The VM knew
+two, and the second — addition — was hard coded into its own opcode, so there was
+no place to put the other twelve. **A reader with two cannot compute a hit rate,
+a damage formula, and an angle, and none of the three is an exotic game.**
+
+**One path for every operator, and the operator is a field and not an opcode.**
+The editor picks it in a dropdown next to the destination, so a program that
+switched on the opcode would need a thirteenth case the moment the editor adds
+one, and the two lists would drift apart. `AddVariable` is now the addition
+operator over the same path, which is why the two lists cannot drift.
+
+**The current value is read before the write,** and that ordering is the reason
+the resolve happens first: a right hand side that names the same variable as the
+destination has to see the old value, or a doubling command would read the new
+one.
+
+**Division by zero leaves the variable alone and is not an error.** The help says
+a zero divisor behaves as divide by one. A reader that returned zero, threw, or
+wrote a sentinel would be wrong three different ways for one line of the help.
+
+**Trigonometry is scaled and the scale is the operator.** The angle is tenths of
+a degree and the result is thousandths, so the help's own examples are 600 → 866
+for sine and 600 → 500 for cosine. A reader in degrees and floating point would
+return 0.866 and it **would not look wrong** — it would look like a small number.
+
+**The arc tangent reads two right hand sides and not the current value,** because
+a slope is a direction and a direction needs two axes. A reader that sent the
+destination value as the X vector would make the angle depend on what the
+destination already held, which no game means. The order is Y, X, because the
+help says X is right positive and Y is down positive, so straight down is +90 and
+not −90.
+
+**A bare arc tangent reaches only ±90 degrees,** so `Atan2` covers the circle and a
+slope pointing left is 1800, a half turn. A reader with the bare one would clamp
+it to 900 and point the slope the wrong way.
+
+**The whole computation is wide, and the test proved it had to be.** A right hand
+side of three billion does not fit an `int`, so a test written as an `int` would
+not have compiled and a test written with `unchecked` would have carried a
+different number. Both the multiply and the subtract leave the range before the
+clamp can see them, so **clamping an `int` clamps the value after the wrap** —
+and the clamp is applied to the wrong number. `Switch` returns a `long` for that
+reason, and the parameter type follows the help's own ±2 billion bound.
+
+**The square root of a negative is 0, not NaN.** The help does not name the case,
+but a NaN compares false against both clamp bounds and would be stored as an
+arbitrary number.
+
+**An operator this reader does not have changes nothing.** Falling back to
+assignment would silently rewrite the variable with the right hand side, and a
+game written in a newer editor would lose values instead of being refused.
+
+**A test that proved itself wrong.** The rounding test first claimed that the
+help's examples separate rounding from truncation, and they do not: five gives
+2236 either way, and so do two and three. **Measured, the separating input is
+seven** — the root of seven times a thousand is 2645.75, so rounding gives 2646 and
+truncation 2645. And no input has an exact half, so half-away-from-zero and
+half-to-even cannot be told apart from this input set; the code says away from
+zero and the board says so rather than claiming more. A second test asserted
+`sin(1800) == 1000`, which is ninety degrees wearing a half turn's comment;
+measured, 1800 is 180 degrees and gives 0.
+
+**Test evidence** `test_wolf_variable_operator.cs`, 15 tests, including four that
+run the operator through the VM. **1233/1233**.
+**Mutations** Twelve rules in one run, **12 of 12 caught** — including the
+division-by-zero guard, the tenths-of-a-degree scale, truncation in place of
+rounding, the bare arc tangent, and `AddVariable` quietly turned into assignment.
 
 ## The WOLF variable bands are done — a flat dictionary could not hold them
 
