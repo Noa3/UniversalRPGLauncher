@@ -116,6 +116,13 @@ public sealed class EventInterpreter
 	/// <c>CommandMoveEvent</c>, whose <c>CmdSetup</c> gives it a
 	/// minimum width of 4.
 	/// </summary>
+	/// <summary>
+	/// 10820, Memorize Location, from <c>Code::MemorizeLocation</c> and
+	/// EasyRPG's <c>CommandMemorizeLocation</c>, whose <c>CmdSetup</c>
+	/// gives it a minimum width of 3.
+	/// </summary>
+	public const int MemorizeLocation = 10820;
+
 	public const int MoveEvent = 11330;
 
 	public const int TintScreen = 11030;
@@ -428,6 +435,10 @@ public sealed class EventInterpreter
 
 			case ErasePicture:
 				ExecuteErasePicture(cmd);
+				return Advance();
+
+			case MemorizeLocation:
+				ExecuteMemorizeLocation(cmd);
 				return Advance();
 
 			case PlayerVisibility:
@@ -1706,6 +1717,58 @@ public sealed class EventInterpreter
 	/// stay standing in the wall.
 	/// </para>
 	/// </remarks>
+	/// <summary>
+	/// 10820, Memorize Location, from EasyRPG's <c>CommandMemorizeLocation</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The three parameters are <strong>the variables to write into</strong>,
+	/// not the values: <c>parameters[0]</c> gets the map id,
+	/// <c>parameters[1]</c> the player x and <c>parameters[2]</c> the y. A
+	/// reader that read them as the position to store would write the
+	/// player's tile into three variables and store nothing at all.
+	/// </para>
+	/// <para>
+	/// <strong>There is no matching recall here.</strong> <c>10830</c> is in
+	/// liblcf and EasyRPG has no method for it in this build, so a game that
+	/// memorizes and then recalls would have the first half and not the
+	/// second. That asymmetry is the reference's, and it is worth recording
+	/// rather than implementing a half from imagination.
+	/// </para>
+	/// </remarks>
+	private void ExecuteMemorizeLocation(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 3.
+		if (pCmd.Parameters.Count < 3)
+		{
+			Malformed("Memorize location");
+			return;
+		}
+		var varMap = pCmd.Parameters[0];
+		var varX = pCmd.Parameters[1];
+		var varY = pCmd.Parameters[2];
+		// **All three must be writable**, and a variable id of 0 is not one —
+		// a first draft would have written to index -1 and thrown, and a
+		// game whose editor left a field empty would have stopped its event.
+		foreach (var id in new int[] { varMap, varX, varY })
+		{
+			if (id < 1 || id > GameSimulationState.MaxVariables)
+			{
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Memorize location: variable {id} is"
+					+ " outside 1 to 50000, and nothing was stored");
+				return;
+			}
+		}
+		WriteVariable(varMap, _state.MapId);
+		WriteVariable(varX, _state.MapX);
+		WriteVariable(varY, _state.MapY);
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Memorized map {_state.MapId}"
+			+ $" at {_state.MapX},{_state.MapY} into variables"
+			+ $" {varMap}, {varX} and {varY}");
+	}
+
 	private void ExecutePlayerVisibility(Rm2kMap.EventCommand pCmd)
 	{
 		if (pCmd.Parameters.Count < 1)

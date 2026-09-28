@@ -2580,7 +2580,8 @@ look for the next island of that shape.**
 | movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
 | movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — liblcf names them and EasyRPG dispatches them nowhere** |
 | shop and inn | `10720` `10730` `20720`–`20732` | a shop scene, an inn scene, and the four transaction states |
-| memory | `10820` `10830` `10910` `10920` `11530` `11540` | memorize and recall — **the state exists for the audio, and nothing writes it** |
+| memory | ~~`10820` `11530` `11540`~~ | **~~memorize location, memorize and play BGM — DONE~~** |
+| memory | `10830` `10910` `10920` | **Recall To Location is in liblcf and has no method in this EasyRPG build; Store Terrain ID and Store Event ID likewise** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2591,7 +2592,37 @@ look for the next island of that shape.**
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10230` `10920` `11010` | common event, flee, combo, class, timer |
 
-## `11310` and `11330` are done — and they close a K-131 island
+## `10820` is done — and its counterpart is a liblcf code with no engine
+
+**The three parameters are the variables to write into, not the position to
+store.** `parameters[0]` gets the map id, `parameters[1]` the player's x and
+`parameters[2]` the y. A reader that read them as a position **would write the
+player's tile into three variables and store nothing at all** — which is exactly
+the failure a three-integer command invites when the parameters are all the same
+kind. There is a test that asserts the parameter numbers do not appear as
+values, because the two failures look different in a log and the same in a test
+file.
+
+**All three variable ids are checked before any of them is written.** A reader
+that wrote as it went would have stored the map and then hit the zero, leaving a
+game half-memorized — and a half-memorized location recalls the player to a tile
+the game never meant.
+
+**`10830 Recall To Location` is in liblcf's enumeration and has no method in
+this build of EasyRPG.** So this repository does not implement it. The asymmetry
+is the reference's, and it is recorded rather than filled in from imagination:
+a game that memorizes and then recalls would have the first half and not the
+second, and **a reader that guessed the second half would teleport players to
+tiles the file never described.** `10910` Store Terrain ID and `10920` Store
+Event ID are the same shape.
+
+**Test evidence** `test_rm2k_memorize_location.cs`, 6 tests.
+**1085/1085**, `TestRm2kMemorizeLocation: 6/6`.
+**Mutations** Six rules over one run, **6 of 6 caught** — the parameters as
+values, the order of the three writes, checking all three ids up front, the
+minimum width, the zero id, and the reset.
+
+## `11310` and `11330` are done## `11310` and `11330` are done — and they close a K-131 island
 
 **`Rm2kMoveRouteState` had no caller anywhere in the project.** K-131 built the
 decoder and the state machine, mutation checked them and tested both as

@@ -2366,3 +2366,43 @@ bereits richtig. Der Diff blieb bei 168 Zeilen, also war der Schaden
 kosmetisch, **aber ein Skript, das 237-mal zugreift und 1-mal recht hat, ist
 kein Werkzeug, sondern ein Glücksspiel.** Künftig: eine Stelle gezielt patchen,
 nicht die Datei durchgehen.
+
+## K-136 `10820` Memorize Location — DONE
+
+**Die drei Parameter sind die Variablen, in die geschrieben wird — nicht die
+Position, die gespeichert wird.** `parameters[0]` bekommt die Karten-ID,
+`parameters[1]` das X des Spielers, `parameters[2]` das Y. Wer sie als Position
+liest, **schreibt die Kachel des Spielers in drei Variablen und speichert
+gar nichts** — genau der Fehler, den ein Dreier-Befehl aus allerlei einlädt,
+wenn alle Parameter dieselbe Art haben. Ein Test prüft, dass die
+Parameternummern **nicht als Werte** auftauchen, weil die zwei Fehler im Log
+verschieden aussehen und in der Testdatei gleich.
+
+**Alle drei Variablen-IDs werden geprüft, bevor irgendeine geschrieben wird.**
+Wer schrieb, während er ging, hätte die Karte gespeichert und dann auf die Null
+ gestoßen: **ein halb gemerkter Ort holt den Spieler auf eine Kachel zurück,
+die das Spiel nie gemeint hat.**
+
+**`10830 Recall To Location` steht in liblcf und hat in diesem Build von
+EasyRPG keine Methode.** Also nicht implementiert. **Die Asymmetrie gehört der
+Referenz**, und sie wird festgehalten statt aus der Vorstellungskraft gefüllt:
+Ein Spiel, das merkt und dann zurückruft, hätte die erste Hälfte und nicht die
+zweite — und wer die zweite rät, **teleportiert Spieler auf Kacheln, die die
+Datei nie beschrieben hat.** `10910` und `10920` haben dieselbe Form.
+
+**Test evidence** `test_rm2k_memorize_location.cs` (6). **1085/1085**.
+**Mutations** 6 von 6 gefangen.
+
+### Zwei eigene Werkzeugfehler, beide im selben Slice
+
+1. **Fünf Anläufe an einer Zeile.** Der f-String in meinem Einfügeskript hat
+   die schließende Klammer verschluckt, und ich habe die Symptome behandelt
+   (Array-Syntax, Cast, Typannotation), statt **den ganzen Block zu lesen**.
+   **Drei Fehlversuche an derselben Stelle sind kein Messproblem, sondern ein
+   Leseproblem.**
+2. Ein Test las `Variables[pId - 1]` direkt und warf, statt die Abwesenheit als
+   `-1` zu melden. **Ein Test, der auf dem Produktfehler abstürzt, beweist
+   nichts über den Produktfehler.**
+
+Beides steht jetzt hier, weil beide dieselbe Form haben: **Werkzeug und Zeile
+ansehen, bevor man sie beurteilt.**
