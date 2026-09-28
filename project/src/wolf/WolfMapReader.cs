@@ -443,6 +443,11 @@ public sealed class WolfMapReader
             // the opcode, the character the route belongs to and the route.
             "move_route" => WolfEventOpcode.MoveRoute,
             "move_route_wait" => WolfEventOpcode.WaitUntilRouteDone,
+            // **A common event is called by its database id**, and the editor
+            // writes the id in the same operand field a variable command uses —
+            // so the operand is the id and not a variable number.
+            "call_common" => WolfEventOpcode.CallCommonEvent,
+            "call_event" => WolfEventOpcode.CallCommonEvent,
             "end" => WolfEventOpcode.End,
             _ => WolfEventOpcode.Unknown,
         };

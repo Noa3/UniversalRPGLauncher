@@ -113,6 +113,7 @@ public enum WolfEventOpcode
     Wait,
     MoveRoute,
     WaitUntilRouteDone,
+    CallCommonEvent,
     Choice,
     Transfer,
     End,

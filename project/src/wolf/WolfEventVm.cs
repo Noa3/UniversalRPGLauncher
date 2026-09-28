@@ -23,6 +23,74 @@ public sealed class WolfEventVm
     public const int MaxCommandsPerTick = 256;
 
     /// <summary>
+    /// How deep a call may nest.
+    /// </summary>
+    /// <remarks>
+    /// <strong>64 and not "as deep as the file says".</strong> A common event that
+    /// calls itself — directly or through a ring of two others — would run until
+    /// the process ended, and the limit is what turns that into a failure with a
+    /// name in it. WOLF's own nesting is far shallower than this; the number is
+    /// a bound and not a claim about the editor.
+    /// </remarks>
+    public const int MaxCallDepth = 64;
+
+    /// <summary>
+    /// The common events a call can reach, by database id.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A call needs somewhere to call to, and the table is that
+    /// place.</strong> The project data carries the common events as programs,
+    /// the same shape as a map event, and a reader that had no table could only
+    /// report that the call was unsupported.
+    /// </para>
+    /// <para>
+    /// <strong>Set once, before the first start.</strong> A table that could be
+    /// replaced mid-run would have a call that resolved differently from the
+    /// same call a frame later, and a game that changed its own event library
+    /// while an event ran would be a thing no test could pin down.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<WolfEventProgram> CommonEvents { get; set; } =
+        Array.Empty<WolfEventProgram>();
+
+    /// <summary>
+    /// The return value of the last common event that finished, if it had one.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Set by a call and cleared by the next one.</strong> A call whose
+    /// event returns nothing leaves this alone rather than writing zero, because
+    /// a reader that wrote zero would make a call that returns nothing
+    /// indistinguishable from a call that returns zero — and a common event
+    /// used as a function would then read a zero the game never produced.
+    /// </remarks>
+    public int? LastCommonEventResult { get; private set; }
+
+    /// <summary>
+    /// One frame of an unfinished call, so a call can come back.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The program and the index, and nothing else.</strong> The state
+    /// the VM has — the variables, the board, the choices — belongs to the
+    /// caller and is shared, which is the point of a call: a common event that
+    /// sets a variable changes the game, not a copy of it. So a frame is only
+    /// the place to come back to.
+    /// </remarks>
+    private readonly Stack<WolfCallFrame> _callStack = new();
+
+    /// <summary>One suspended caller.</summary>
+    private sealed class WolfCallFrame
+    {
+        public required WolfEventProgram Program { get; init; }
+
+        /// <summary>Where to carry on, not including the call itself.</summary>
+        public required int ResumeIndex { get; init; }
+
+        /// <summary>Whether this caller waits for the call to finish.</summary>
+        public required bool Waits { get; init; }
+    }
+
+    /// <summary>
     /// The four variable bands, kept apart.
     /// </summary>
     /// <remarks>
@@ -379,6 +447,12 @@ public sealed class WolfEventVm
 
     public void ResetState()
     {
+        // **The call stack goes with everything else.** A stack left over from
+        // the last game would have the first End of the new one pop a frame
+        // that points at a program from the old one, and the new game's event
+        // would resume inside the last game's.
+        _callStack.Clear();
+        LastCommonEventResult = null;
         _program = null;
         _instructionIndex = 0;
         _waitRemaining = 0;
@@ -571,15 +645,125 @@ public sealed class WolfEventVm
                 _trace.Add($"event:{CurrentEventId}:transfer:{pCommand.MapId}:{pCommand.X}:{pCommand.Y}");
                 _instructionIndex += 1;
                 return PluginOperationResult.Succeeded();
+            case WolfEventOpcode.CallCommonEvent:
+                return CallCommon(pCommand);
             case WolfEventOpcode.End:
-                _instructionIndex = _program?.Commands.Count ?? 0;
-                State = WolfVmState.Completed;
-                _trace.Add($"event:{CurrentEventId}:end");
-                return PluginOperationResult.Succeeded();
+                return EndProgram();
             case WolfEventOpcode.Unknown:
             default:
                 return Fail($"Unsupported WOLF event operation '{pCommand.RawOperation}'.", "command");
         }
+    }
+
+    /// <summary>
+    /// Starts a common event, or reports the three ways that cannot work.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A call shares the state and not a copy of it.</strong> A common
+    /// event that sets a variable changes the game, and that is the point of
+    /// the call — so the board, the variables and the switches stay where they
+    /// are and only the place to carry on is put on the stack. A reader that
+    /// copied the state would have a common event that gave an item the party
+    /// never received.
+    /// </para>
+    /// <para>
+    /// <strong>The three refusals each name something.</strong> An id the table
+    /// does not have, a call with nothing to call, and a call deeper than the
+    /// limit are three different mistakes in a game's files, and a single
+    /// "call failed" would have a person looking in the wrong place.
+    /// </para>
+    /// <para>
+    /// <strong>The depth limit is the guard against a common event that calls
+    /// itself.</strong> Without it the VM would run until the process ended, and
+    /// the event would be a game that hangs on one tile.
+    /// </para>
+    /// </remarks>
+    private PluginOperationResult CallCommon(WolfEventCommand pCommand)
+    {
+        if (_callStack.Count >= MaxCallDepth)
+        {
+            return Fail(
+                $"A WOLF common event call is {MaxCallDepth} deep, which is the"
+                + " limit; a common event that calls itself would otherwise run"
+                + " until the process ends.",
+                "call");
+        }
+        if (pCommand.Operand <= 0)
+        {
+            return Fail(
+                "A WOLF common event call names no event. The database id 0 is"
+                + " the hero and not a common event.",
+                "call");
+        }
+        WolfEventProgram? target = null;
+        foreach (var candidate in CommonEvents)
+        {
+            if (candidate.Id == pCommand.Operand)
+            {
+                target = candidate;
+                break;
+            }
+        }
+        if (target == null)
+        {
+            return Fail(
+                $"A WOLF common event call names event {pCommand.Operand}, which"
+                + $" is not in the table of {CommonEvents.Count}.",
+                "call");
+        }
+        if (target.Commands.Count == 0)
+        {
+            // **An event with no commands is already finished.** A reader that
+            // pushed a frame and ran nothing would leave the caller suspended
+            // for a call that has nothing to wait for.
+            _instructionIndex += 1;
+            LastCommonEventResult = null;
+            return PluginOperationResult.Succeeded();
+        }
+        _callStack.Push(new WolfCallFrame
+        {
+            Program = _program!,
+            ResumeIndex = _instructionIndex + 1,
+            Waits = true,
+        });
+        _program = target;
+        _instructionIndex = 0;
+        _trace.Add($"event:{target.Id}:call");
+        return PluginOperationResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Ends the running program, or comes back to whoever called it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Coming back is the whole point, and it is not an End of the
+    /// game.</strong> The end of a common event resumes the caller; only the
+    /// end of the outermost program completes the VM. A reader that treated
+    /// both as the end would have a game's first common event call stop the
+    /// game dead.
+    /// </para>
+    /// <para>
+    /// <strong>The index is the caller's, already advanced past the call.</strong>
+    /// The frame is pushed with the caller's own next index, so resuming needs
+    /// no arithmetic and no knowledge of how long the call instruction is.
+    /// </para>
+    /// </remarks>
+    private PluginOperationResult EndProgram()
+    {
+        if (_callStack.Count == 0)
+        {
+            _instructionIndex = _program?.Commands.Count ?? 0;
+            State = WolfVmState.Completed;
+            _trace.Add($"event:{CurrentEventId}:end");
+            return PluginOperationResult.Succeeded();
+        }
+        var frame = _callStack.Pop();
+        _program = frame.Program;
+        _instructionIndex = frame.ResumeIndex;
+        _trace.Add($"event:{CurrentEventId}:return");
+        return PluginOperationResult.Succeeded();
     }
 
         private PluginOperationResult Branch(bool pCondition, WolfEventCommand pCommand)

@@ -1044,3 +1044,23 @@ step down, and a typo in a step name would send a figure one tile south and look
 the day it did not.
 
 **1333/1333, twelve effective mutation rules, twelve caught.**
+
+**And the binary reader decoded type 300 — a call to a common event by name — while the
+opcode enum had no value for it.** A game whose events call a common event could not run the
+call at all, and every WOLF shop is built from common events: initialise, add a product, run
+the shop.
+
+**A call shares the state and does not copy it, the end of a common event resumes its caller,
+and only the end of the outermost program completes the VM.** The depth limit is the guard
+against a common event that calls itself — without it the VM runs until the process ends, which
+a player sees as a game that froze on one tile. And zero is the hero, not an event.
+
+**The finding that found no code defects is the one worth keeping.** I wanted a figure to walk
+a common event route and it stood still. The board alone walked it; the VM did not, with no
+call involved at all. The route started, the VM reached the end in the same tick, and a
+Completed VM does not tick the board. **So a move route in an event that ends at once does not
+walk — and that is right.** WOLF's own common events follow a route with a wait, or keep
+running, or start it from a parallel event that never ends; a test expecting the walk would have
+been testing a shape no game uses.
+
+**1343/1343, ten effective mutation rules, ten caught.**

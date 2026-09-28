@@ -2604,6 +2604,7 @@ look for the next island of that shape.**
 | wolf | ~~character sheets and animation~~ | **~~the direction order, the walk cycle, and the animation clock — DONE, see below~~** |
 | wolf | ~~audio~~ | **~~three channels, the zero volume rule, and the delay that is not a fade — DONE, see below~~** |
 | wolf | ~~move routes from a file~~ | **~~the two opcodes the VM ran and the reader never produced — DONE, see below~~** |
+| wolf | ~~common events~~ | **~~a call that comes back, the depth limit, and the wait that makes a route visible — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -8086,3 +8087,103 @@ Schrittnamen der Tabelle gegen geratene, der unbekannte Name als Schritt unten, 
 unbekannte Modus als Stehen, das nicht gelesene Wartezeichen, die Flagge als jede Zahl und
 
 die ganz verwerfenen Argumente eines Schritts.
+
+## WOLF Common Events: ein Aufruf, der zurueckkommt
+
+**Der Binaerleser dekodierte Typ 300 vollstaendig** — inklusive Argumentblock und dem
+
+Flag fuer den Rueckgabewert — **und die Opcode-Enum hatte keinen Wert dafuer.** Also
+
+konnte ein Spiel, dessen Events ein Common Event aufrufen, den Aufruf gar nicht
+
+ausfuehren — **und jeder WOLF-Shop ist aus Common Events gebaut**: initialisieren, Ware
+
+hinzufuegen, Laden ausfuehren.
+
+
+
+### Die vier Regeln, die die Karte tragen
+
+
+
+**Ein Aufruf teilt den Zustand und kopiert ihn nicht.** Ein Common Event, das eine Variable
+
+setzt, aendert das Spiel — das ist der Zweck des Aufrufs —, also bleiben Brett, Variablen
+
+und Schalter, wo sie sind, und nur die Fortsetzungsstelle kommt auf den Stapel. Ein Leser,
+
+der den Zustand kopiert haette, haette ein Common Event, das der Held ein Item gibt, das
+
+die Mannschaft nie bekommen hat.
+
+
+
+**Das Ende eines Common Events setzt den Aufrufer fort, und nur das Ende des aeussersten
+
+Programms beendet die VM.** Ein Leser, der beides als Ende behandelte, haette den ersten
+
+Aufruf eines Spiels das Spiel sofort totstoppen lassen.
+
+
+
+**Die Tiefengrenze ist die Wacht gegen ein Common Event, das sich selbst aufruft.** Ohne sie
+
+laeuft die VM, bis der Prozess endet — **und das sieht ein Spieler als Spiel an, das auf
+
+einer Kachel einfriert und das niemand sinnvoll melden kann.**
+
+
+
+**Null ist der Held und kein Event.** WOLF zaehlt die Datenbank-Ids ab null, also ist ein
+
+Aufruf der 0 ein Aufruf des Spielers — und ein Leser, der das als "kein Event angegeben"
+
+behandelte, wuerde aus dem richtigen Grund ablehnen.
+
+
+
+### Der Befund, den die Fehlersuche ergab
+
+
+
+**Ich habe zehn Minuten an einem Test gefeilt, der keine Codefehler fand, weil es keine gab.**
+
+Ich wollte eine Figur gehen sehen, die eine Common-Event-Laufbahn ging, und sie stand still.
+
+
+
+**Das Brett allein ging, die VM nicht — und ohne jeden Aufruf.** Die Route startete, und die
+
+VM erreichte das Ende des Events im selben Tick; ab dem naechsten Tick ist die VM
+
+`Completed`, **und ein `Completed` tickt das Brett nicht.**
+
+
+
+**Also gilt: eine Laufbahn in einem Event, das sofort endet, geht nicht** — **und das ist
+
+richtig.** WOLFs eigene Common Events sind nicht so geschrieben: eine Laufbahn, auf die es
+
+ankommt, wird gefolgt von einem Warten, oder das Event laeuft weiter, oder die Laufbahn
+
+startet ein Parallelereignis, das nie endet. **Ein Test, der hier das Gehen erwartet haette,
+
+haette eine Form gemessen, die kein Spiel benutzt.** Der Test wartet jetzt auf die Laufbahn —
+
+**und das Warten ist das, was einen Schritt sichtbar macht.**
+
+
+
+**Test evidence** `test_wolf_commonEvent_call.cs` (10).
+
+**1343/1343**, Validator gruen.
+
+**Mutations** 10 Regeln ueber zwei Laeufe, **10 von 10 gefangen** — darunter das Ende, das
+
+auch den Aufrufer beendet, die Rueckkehr, die kein Programm setzt, die Fortsetzung, die beim
+
+Aufruf anfaengt statt danach, die ungepruefte Tiefe, die gesuchte Null, die Meldung ohne
+
+Nummer, das leere Event, das suspendiert, der Stapel beim Neustart und der Aufrufbefehl, der
+
+aus der Datei nicht ankommt.

@@ -3649,3 +3649,63 @@ richtig ausgesehen, bis zum Tag, an dem es das nicht mehr tut. **Ein unbekannter
 **Test evidence** `test_wolf_route_from_file.cs` (9), gegen eine echte Kartendatei.
 
 **1333/1333**, Validator gruen. **Mutations** 12 Regeln, **12 von 12 gefangen**.
+
+## WOLF Common Events — DONE
+
+**Der Binaerleser dekodierte Typ 300 und die Enum hatte keinen Wert dafuer** — also konnte
+
+ein Spiel mit einem Aufruf den Aufruf nicht ausfuehren, **und jeder WOLF-Shop ist aus
+
+Common Events gebaut.**
+
+
+
+**Ein Aufruf teilt den Zustand, statt ihn zu kopieren; das Ende eines Common Events setzt den
+
+Aufrufer fort; die Tiefengrenze ist die Wacht gegen ein Event, das sich selbst aufruft; und
+
+Null ist der Held und kein Event.**
+
+
+
+### Der Befund, der keine Codefehler fand
+
+
+
+**Ich habe zehn Minuten an einem Test gefeilt, der keine fand, weil es keine gab.** Eine Figur
+
+sollte eine Common-Event-Laufbahn gehen und stand still.
+
+
+
+**Das Brett allein ging, die VM nicht — ohne jeden Aufruf.** Die Route startete, die VM erreichte
+
+das Ende im selben Tick, und **ein `Completed` tickt das Brett nicht mehr.**
+
+
+
+**Also gilt: eine Laufbahn in einem Event, das sofort endet, geht nicht — und das ist richtig.**
+
+WOLFs eigene Common Events folgen einer Laufbahn mit einem Warten, oder das Event laeuft
+
+weiter, oder die Laufbahn startet ein Parallelereignis. **Ein Test, der hier das Gehen erwartet
+
+haette, haette eine Form gemessen, die kein Spiel benutzt.**
+
+
+
+**Was ich daraus mitnehme:** nach vier gescheiterten Deutungsmessungen habe ich nicht weiter
+
+geraten, sondern den Test zur Sonde gemacht, die eine Frage stellt — Brett allein, dann VM ohne
+
+Aufruf. **Die Sonde gruen und die VM rot ist ein Befund; viermal dasselbe Raten ist keiner.**
+
+Und als der Test sich zum Wirrwarr entwickelt hat, habe ich ihn nicht weiter geflickt, sondern
+
+neu geschrieben.
+
+
+
+**Test evidence** `test_wolf_common_event_call.cs` (10). **1343/1343**, Validator gruen.
+
+**Mutations** 10 Regeln, **10 von 10 gefangen**.
