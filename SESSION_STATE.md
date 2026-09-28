@@ -3077,3 +3077,69 @@ Schalter aus — was ein Spiel vor dem Setzen ohnehin erwartet.
 **Mutations** 13 Regeln in einem Lauf, **13 von 13 gefangen** — darunter jeder der
 drei Offsets, die Lücke mit dem falschen Code, die Datenbank nur nach Spalte
 geschlüsselt und die zwei Schalterkarten wieder zu einer gefaltet.
+
+## WOLF Bewegungsrouten — DONE: 24 verifizierte Typen und kein Executor
+
+**`WolfMoveRoute` hatte eine Typentabelle mit vierundzwanzig verifizierten Typen,
+einen binären Leser mit elf Tests — und nichts führte einen einzigen Schritt aus.**
+Ein Spiel mit einer Patrouillenroute hätte geladen und stünde still, und die Suite
+blieb grün, weil sie Schritte nur las, nie ausführte. **Ein Leser, der getestet
+und nicht ausgeführt wird, ist ein Parser.**
+
+**Die Passierbarkeitsbits sind die der Hilfe: `1上+2左+4右+8下+16左上+32右上+64左下+128右下`.**
+**Eine Diagonale ist ihr eigenes Bit und nicht oben plus links** — oben ist 1 und
+links ist 2, ihre Summe ist 3, und Bit 3 gibt es nicht. Wer sie kombinierte,
+erzeugte eine Richtung, für die das Format kein Bit hat, und eine Figur mit Bit 3
+würde auf gar keine Richtung passen.
+
+**Ein verweigerter Schritt dreht die Figur trotzdem in die Richtung.** Die erste
+Fassung von `Step` kehrte bei der Verweigerung zurück und ließ die Blickrichtung
+allein, während der Kommentar darüber das Gegenteil versprach — **und der Test hat
+den Widerspruch gefunden.** Ein Wächter, der gegen eine geschlossene Tür läuft,
+dreht sich zu ihr, und ein Spiel, das den Wächter durch den Spalt auf den Helden
+blicken lässt, hängt daran.
+
+**Geschwindigkeit und Frequenz sind 0 bis 6 und nicht dasselbe.** Die Hilfe
+schreibt `移動速度[遅0-6速]` und `移動頻度[早0-6遅]` — einmal langsam nach schnell,
+einmal oft nach selten — und wer eines auf das andere legte, ließe eine schnelle
+Figur selten laufen. Eine Rate außerhalb wird geklemmt und nicht abgelehnt: Eine
+geklemmte Figur läuft noch, und eine Ablehnung stoppte das Event.
+
+**Tempo 0 ist ein Bild pro Kachel und keine unendliche Wartezeit.** Durch die
+Geschwindigkeit zu teilen ergäbe eine unendliche Bildzahl und eine Route, die nie
+zu Ende liefe. Die Bilder pro Kachel fallen mit der Geschwindigkeit: 1 bei 0, 16
+bei 1, 8 bei 2, 4 bei 4, 2 bei 6.
+
+**Der Add-Schritt liest den alten Wert**, dieselbe Regel wie die Variableoperation:
+eine rechte Seite, die dieselbe Variable nennt wie das Ziel, muss den Wert vor dem
+Schreiben sehen. **Ein Variablenschritt auf eine nackte Zahl wird abgelehnt und
+nicht gespeichert**, denn unter dem Rohschlüssel zu schreiben hieße etwas zu
+schreiben, das kein Lesen findet — der Schritt schiene zu funktionieren und
+verlöre danach seinen Wert.
+
+## Fünf Schritte werden abgelehnt, und das ist die ehrliche Antwort
+
+**Ein Event annähern braucht eine zweite Figur, eine Position annähern braucht die
+Karte, ein Sprung braucht seine eigene Route, ein Ton braucht Audio, und eine
+Grafik ist ein Dateiname, für den dieser Runner keinen Lader hat.** Die
+Annäherungsschritte mit einer Richtung zu beantworten hieße die Figur dorthin
+laufen, wo das Event nicht ist; Ton und Grafik mit Erfolg zu beantworten wäre eine
+Lüge, die der Aufrufer nicht bemerken kann. **Ein verweigertes Ergebnis ist die
+einzige Antwort, auf die ein Aufrufer reagieren kann**, und es hält diesen Schnitt
+ehrlich darüber, was er nicht kann.
+
+**Die Zehnertasten-Tabelle ist absichtlich nicht implementiert.** Die Hilfe sagt,
+eine Blickrichtung sei 1 bis 9 und entspreche dem Zehnerblock, und verweist für die
+Zuordnung auf „Abbildung A" — eine Grafik, die nicht im Text steht. Ein früherer
+Entwurf dieser Karte riet die Tabelle, und sie hatte doppelte Werte, was
+unmöglich ist. **Die geratenen Band-Offsets haben eine Karte gekostet, und das ist
+derselbe Fehler in derselben Sitzung.** Die Funktion liefert „keine Richtung" und
+sagt warum.
+
+**Test evidence** `test_wolf_move_route_runner.cs` (13), mit dem bestehenden
+`test_wolf_move_route.cs` (11) nachgemessen. **1256/1256**.
+**Mutations** 17 wirksame Regeln über drei Läufe, **17 von 17 gefangen** —
+darunter rechts als Bit 3, eine Diagonale als oben-plus-links, die entfernte
+Passierbarkeitsprüfung, die Blickrichtung, die einer Verweigerung nicht folgt,
+Tempo 6 mit sechzehn Bildern und der Add-Schritt ohne vorheriges Lesen. Eine Regel
+war eine Umbenennung, die nicht übersetzt, und zählt nicht.

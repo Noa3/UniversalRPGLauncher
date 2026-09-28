@@ -2596,6 +2596,7 @@ look for the next island of that shape.**
 | wolf | ~~variable bands~~ | **~~self, normal, system, database — DONE, see below~~** |
 | wolf | ~~variable operators~~ | **~~fourteen assignment operators — DONE, see below~~** |
 | wolf | ~~band offsets and switches~~ | **~~the real offsets, the database, map and common switches — DONE, see below~~** |
+| wolf | ~~move route execution~~ | **~~24 verified route types, finally run — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2608,6 +2609,66 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## The move route was read, tested and never run — 24 verified types and no executor
+
+**`WolfMoveRoute` had a type table of twenty four verified types, a binary reader
+with eleven tests, and nothing executed a single step.** A game with a patrol route
+would load and stand still, and the suite stayed green because it only ever read
+steps, never ran one. **A reader that is tested and not executed is a parser.**
+
+**The passability bits are the help's own: `1上+2左+4右+8下+16左上+32右上+64左下+128右下`.**
+**A diagonal is its own bit and not up plus left** — up is 1 and left is 2, so their
+sum is 3, and there is no bit 3. A reader that combined them would produce a
+direction the format has no bit for, and a character holding bit 3 would match
+no direction at all.
+
+**A refused step still turns the character to face the direction.** The first
+version of `Step` returned on the refusal and left the facing alone, while the
+comment above it promised the opposite — **and the test is what caught the two
+disagreeing.** A guard that walks into a closed door faces it, and a game that
+shows the guard watching the hero through the gap depends on that.
+
+**Speed and frequency are 0 to 6 and they are not the same thing.** The help writes
+`移動速度[遅0-6速]` and `移動頻度[早0-6遅]` — one slow to fast, the other often to
+rarely — and a reader that mapped one onto the other would make a fast character
+move once in a while. A rate outside the range is clamped and not refused: a
+character at a clamped rate still moves, and refusing would stop the event.
+
+**Speed 0 is one frame per tile and not an infinite wait.** Dividing by the speed
+would produce an infinite frame count and a route would never finish. The frames
+per tile fall with the speed: 1 at speed 0, 16 at speed 1, 8 at 2, 4 at 4, 2 at 6.
+
+**The add step reads the old value,** the same rule the variable operation follows:
+a right hand side that names the same variable as the destination has to see the
+value before the write. **A variable step to a plain number is refused, not
+stored**, because storing under the raw key would write something no read would
+find — the step would appear to work and then lose its value.
+
+## Five steps are refused, and that is the honest answer
+
+**Approaching an event needs a second character, approaching a position needs the
+map, a jump needs its own route, a sound needs audio, and a graphic is a file
+name this runner has no loader for.** Answering the approach steps with a
+direction would walk the character somewhere the event is not; answering the
+sound and graphic steps with success would be a lie the caller cannot detect.
+**A refused outcome is the one answer a caller can act on**, and it is what keeps
+this slice honest about what it does not do.
+
+**The ten key facing table is deliberately not implemented.** The help says a
+facing is 1 to 9 and corresponds to the ten key, and points at "figure A" for the
+correspondence — a diagram that is not in the text. An earlier draft of this card
+guessed the table and it had duplicate values, which is impossible; **guessing the
+band offsets cost a card, and this is the same mistake in the same session.** The
+function returns "no direction" and says why.
+
+**Test evidence** `test_wolf_move_route_runner.cs` (13), with the existing
+`test_wolf_move_route.cs` (11) re-measured. **1256/1256**.
+**Mutations** Seventeen effective rules over three runs, **17 of 17 caught** —
+including right as bit 3, a diagonal as up-plus-left, the passability check
+removed, the facing not following a refused step, a speed of 6 giving sixteen
+frames, and the add step not reading first. One rule was a rename that does not
+compile and is not counted.
 
 ## The band offsets were guessed and the help says otherwise — this card fixes both, and the switches
 

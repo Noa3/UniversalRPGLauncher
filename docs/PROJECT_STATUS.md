@@ -7,7 +7,7 @@
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing, renderer/system coverage, event counters, and walk animation beyond the bounded native event path, the working chipset passability, and the verified autotile animation steps.
 
-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `1243/1243` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
+The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The latest headless runner passed `1256/1256` tests. `project/tests/fixtures/` also holds data three real games wrote: sixteen XP `.rxdata` files from two independent installations, a real RM2K database, map tree and two maps from a 743 map game, and one `Game.ini` from a KiriKiri game that is not a WOLF game. Sizes and SHA-256 are in `project/tests/fixtures/RGSS_FIXTURES.md`. No executable, DLL, save, image, audio or script is imported. An RPG Maker MZ game is read in `project/src/mz/`: its database, its map list and its maps come back as values, with the file own text kept so a caller can hash what was read. Eleven real data files are in `project/tests/fixtures/mz` with their sizes and SHA-256 in `project/tests/fixtures/MZ_FIXTURES.md`. **No JavaScript of a game is read or run, so an MZ game does not play.** Every one of its 114 commands is named the way the engine names it, with the number and the name read out of the engine source of a real game; a conditional branch is decided from the facts a caller has; and an interpreter holds an index into an event list and walks it the way the engine moves that index — branches, else, loops, break, repeat above, labels and jumps — under a step limit that is the engine's own `checkFreeze`. A script line is held as the text the author wrote and is never run, and a branch or an operand that would need `eval` is refused and named. **Eleven of the 114 commands have an effect**; the rest are read as text, and there is still no renderer, no save path, no input and no audio.
 
 Real LMU event pages now decode: the pinned RM2000/RM2003 fixtures yield 22 and 38 event pages with verified liblcf field ids (`condition 0x02`, `move_frequency 0x20`, `trigger 0x21`, `layer 0x22`, `move_route 0x29`, `event_commands_size 0x33`, `event_commands 0x34`). A command vector that cannot be decoded is contained per page with a diagnostic and its raw payload size instead of making the whole map unloadable, and such pages are skipped by the runtime instead of running empty. Page trigger ids follow liblcf `EventPage::Trigger` (`action=0`, `touched=1`, `collision=2`, `auto_start=3`, `parallel=4`). `ControlSwitches` and `Control Variables` follow the verified EasyRPG parameter layout (`[targetMode, start, end, …]`), which real games use, and a regression test executes a real fixture action page end to end through the RM2K runtime.
 
@@ -824,3 +824,33 @@ and a switch number outside both ranges changes nothing, because a reader that g
 a dictionary would store a switch the next load would not carry.
 
 **1243/1243, thirteen effective mutation rules, thirteen caught.**
+**And a move route that was read, tested, and never run.** The type table had
+twenty four verified types and a binary reader with eleven tests, and nothing
+executed a single step. A game with a patrol route would load and stand still,
+and the suite stayed green because it only ever read steps. A reader that is
+tested and not executed is a parser.
+
+The passability bits are the help's own — 1 up, 2 left, 4 right, 8 down, 16 up-left,
+32 up-right, 64 down-left, 128 down-right — and a diagonal is its own bit, not up
+plus left, because their sum is 3 and there is no bit 3.
+
+**A refused step still turns the character to face the direction.** The first
+version returned on the refusal and left the facing alone while the comment above
+it promised the opposite, and the test is what caught the two disagreeing.
+
+Speed and frequency are 0 to 6 and are not the same thing — the help writes one
+slow to fast and the other often to rarely. Speed 0 is one frame per tile and not
+an infinite wait, because dividing by the speed would mean a route that never
+finishes.
+
+**Five steps are refused, and that is the honest answer.** Approaching an event
+needs a second character, approaching a position needs the map, a jump needs its
+own route, a sound needs audio, and a graphic is a file name this runner has no
+loader for. A refused outcome is the one answer a caller can act on.
+
+**The ten key facing table is deliberately not implemented** — the help points at a
+figure that is not in the text, and an earlier draft guessed the table and produced
+duplicate values, which is impossible. Guessing the band offsets cost a card, and
+this is the same mistake in the same session.
+
+**1256/1256, seventeen effective mutation rules, seventeen caught.**
