@@ -2631,7 +2631,7 @@ look for the next island of that shape.**
 | screen effects | `11060` | **Pan Screen — liblcf names it and EasyRPG dispatches it nowhere** |
 | audio | `11560` | Play Movie — the only audio command left of the six |
 | actor state | ~~`10430`–`10490`~~ | **~~parameters, HP, SP and full heal — DONE, see below; skills, equipment and conditions have no state at all~~** |
-| battle | `10500` `10710` `13110`–`13410` | simulated attack, encounter, monster HP/MP/conditions, battle BG, terminate |
+| battle | ~~`10500` `10710`~~ | **~~simulated attack and the encounter — DONE, see below~~** |
 | movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
 | movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — liblcf names them and EasyRPG dispatches them nowhere** |
 | shop and inn | `10720` `10730` `20720`–`20732` | a shop scene, an inn scene, and the four transaction states |
@@ -4713,6 +4713,117 @@ die auf sechs gesetzte Mindestbreite und der ignorierte Auswahlmodus.
 Bedingungen haben **im Zustand überhaupt keine Felder** — das ist neues Zustandsdesign und keine
 
 Befehlszeile, und es gehört in eine eigene Karte.
+
+
+## `10710` Enemy Encounter ist fertig — fünf Zustandsfelder, die kein Befehl erreichte
+
+**`IsBattleActive`, `ActiveTroopId`, `BattleTurn`, `BattlePhase` und `TroopMembers` waren im
+
+Simulationszustand. Kein Befehl erreichte eines davon** — also fiel der Kampfbeginn eines Spiels in
+
+den Default-Arm, es kämpfte nie, **und der Zustand führte eine Kampfphase von sich aus mit.**
+
+
+
+**Dieselbe Inselform wie die Bilder, die Laufbahnen und das Fahrzeug-Bording:** Zustand, der
+
+vollständig ist, und unerreichbar.
+
+
+
+### Die sechs Regeln, die der Rumpf der Referenz ergibt
+
+
+
+**Sechs Parameter, oder zehn, und die Zahl hängt an der Form.** Die Referenz hat für diesen
+
+einen Befehl zwei Dispatch-Zeilen — eine mit Breite 6 und eine mit 10 für die RPG2K3-Form. **Ein
+
+Leser, der zehn verlangte, hätte jeden 2K-Kampf abgelehnt.**
+
+
+
+**Die Flucht sind drei Werte und kein Boolean.** Die Referenz schreibt
+
+`escape_mode = com.parameters[3]` mit 0 für „gar nicht", 1 für „Event-Verarbeitung beenden" und 2
+
+für den eigenen Handler des Spiels — **und der mittlere setzt `abort_on_escape`, was das Event
+
+beendet.** Ein Leser, der es als Boolean las, hätte ein Spiel, dessen Flucht zur nächsten Zeile
+
+zurückkehrt, wo die Referenz das Event tot beendet.
+
+
+
+**Drei Terrain-Modi, und der vierte wird abgelehnt.** Der Switch der Referenz hat die Fälle 0, 1
+
+und 2 und ein `default: return false` — **also startet ein Modus von 3 überhaupt keinen Kampf.**
+
+Ein Leser, der auf den ersten zurückfiel, hätte einen Kampf geführt, den die Datei nicht verlangt
+
+hat, und ein Spiel, das einen Testkampf mit verschobenem Modus geschrieben hat, hätte einen
+
+echten gehabt.
+
+
+
+**Eine Niederlage ist Game Over, sofern der Befehl nichts anderes sagt** — und die Referenz
+
+schiebt den Game-Over-Bildschirm selbst.
+
+
+
+**Kein Ausgang und -1, und die Phase ist 1.** Die Referenz schreibt 0 für Sieg, 1 für Flucht und 2
+
+für Niederlage in den Subcommand-Index des Befehls. **Ein Leser, der 0 schrieb, hätte den
+
+Siegarm laufen lassen, bevor gekämpft wurde** — und 0 ist der Siegwert, der Fehler wäre also in
+
+einem Test, der nur die Zahl prüft, unsichtbar.
+
+
+
+**Und eine offene Nachricht zuerst, mit derselben Regel wie Game Over und die Menüs.**
+
+
+
+### Und die sechzehn Messungen, die kein Befund waren
+
+
+
+**Ein Test ließ sich nicht kompilieren, und ich habe ihn sechzehn Mal gemessen.** Die Datei war
+
+korrekt — kein verborgenes Zeichen, keine falsche Einrückung, keine doppelte Deklaration, und
+
+`sed`, `od` und `read_file` zeigten dieselben Bytes. **Der Compiler hatte recht: die
+
+Tuple-Zerlegung `var (a, _, b)` in diesem einen Test war der Fehler**, und die anderen sechs
+
+Tests derselben Datei mit derselben Zerlegung liefen.
+
+
+
+**Das ist derselbe Fehlertyp wie bei `IdleCell` — und die Lehre ist diesmal klarer: sechzehn
+
+Messungen an korrektem Quelltext sind kein Befund, sondern eine Schleife.** Der Ausweg war
+
+derselbe: aufhören zu messen und die eine Sache tun, die ich nie getan hatte — den Test ohne
+
+die Zerlegung schreiben.
+
+
+
+**Test evidence** `test_rm2k_enemy_encounter.cs` (7).
+
+**1382/1382**, Validator grün.
+
+**Mutations** 9 Regeln über zwei Läufe, **9 von 9 gefangen** — darunter der Befehl, der den
+
+Dispatch nicht erreicht, der nicht aufgelöste Trupp, der unbekannte Terrain-Modus, der die
+
+Flucht zum Boolean gemachte Escape-Modus, die initiale Phase, der sofortige Ausgang, die immer
+
+erzwungene Niederlage, die nicht haltende Seite und die ignorierte offene Nachricht.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

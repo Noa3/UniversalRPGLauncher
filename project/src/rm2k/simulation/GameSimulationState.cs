@@ -554,6 +554,9 @@ public sealed class GameSimulationState
 
 		/// <summary>The main menu is up, from <c>11950</c>.</summary>
 		MainMenuOpen,
+
+		/// <summary>A battle is running, from <c>10710</c>.</summary>
+		BattleRunning,
     }
 
     /// <summary>What the interpreter is waiting for, from <c>12420</c> and <c>12510</c>.</summary>
@@ -881,6 +884,87 @@ public sealed class GameSimulationState
     public bool IsBattleActive { get; set; }
     public int BattleTurn { get; set; }
     public int BattlePhase { get; set; } // 0=initial, 1=player, 2=enemy, 3=reward, 4=escape, -1=none
+
+    /// <summary>What a battle may be escaped from, from <c>10710</c>'s fourth parameter.</summary>
+    /// <remarks>
+    /// <strong>Three modes, and the middle one ends the event.</strong> The
+    /// reference's <c>escape_mode</c> is 0 for "not at all", 1 for "end the
+    /// event processing" and 2 for "the game's own handler" — **and 1 is not
+    /// merely "yes", it changes what happens after the battle ends.** A reader
+    /// that treated the parameter as a boolean would have a game whose escape
+    /// returned to the event's next line where the reference ends the event
+    /// dead.
+    /// </remarks>
+    public enum BattleEscapeMode
+    {
+        /// <summary>The battle cannot be escaped.</summary>
+        Disallow,
+
+        /// <summary>Escaping ends the event processing.</summary>
+        EndEvent,
+
+        /// <summary>The game's own event handlers decide.</summary>
+        CustomHandler,
+    }
+
+    /// <summary>What a defeat does, from <c>10710</c>'s fifth parameter.</summary>
+    public enum BattleDefeatMode
+    {
+        /// <summary>A defeat is a game over.</summary>
+        GameOver,
+
+        /// <summary>The game's own event handlers decide.</summary>
+        CustomHandler,
+    }
+
+    /// <summary>How the battle's terrain is decided, from <c>10710</c>'s third.</summary>
+    /// <remarks>
+    /// <strong>Three values, and a fourth is refused.</strong> The reference's
+    /// switch has cases 0, 1 and 2 and a <c>default</c> that returns false — so
+    /// a command with a mode of 3 does not start a battle at all, and a reader
+    /// that defaulted to the first would have fought a battle the file did not
+    /// ask for.
+    /// </remarks>
+    public enum BattleTerrainMode
+    {
+        /// <summary>The system's own terrain setting.</summary>
+        System,
+
+        /// <summary>A background the command's string names.</summary>
+        Background,
+
+        /// <summary>A terrain id from the command's eighth parameter.</summary>
+        TerrainId,
+    }
+
+    /// <summary>Whether the party may escape, from <c>10710</c>.</summary>
+    public BattleEscapeMode BattleEscape { get; set; } = BattleEscapeMode.Disallow;
+
+    /// <summary>How the battle's terrain is decided, from <c>10710</c>'s third.</summary>
+    /// <remarks>
+    /// <strong>The mode, and not the terrain id itself.</strong> A reader that
+    /// stored the id would lose the difference between "the system's own
+    /// setting" and "this id" — and the first is what a game that never
+    /// touches the terrain uses.
+    /// </remarks>
+    public BattleTerrainMode BattleTerrain { get; set; } = BattleTerrainMode.System;
+
+    /// <summary>What a defeat does, from <c>10710</c>.</summary>
+    public BattleDefeatMode BattleDefeat { get; set; } = BattleDefeatMode.GameOver;
+
+    /// <summary>The party strikes first, from <c>10710</c>'s sixth parameter.</summary>
+    public bool BattleFirstStrike { get; set; }
+
+    /// <summary>Which subcommand the battle's outcome selected, or -1.</summary>
+    /// <remarks>
+    /// <strong>-1 is "no battle yet" and not "no outcome".</strong> The
+    /// reference's continuation writes 0 for a victory, 1 for an escape and 2
+    /// for a defeat into the command's own subcommand index — and the arms
+    /// after the battle command read that index. **A reader that stored the
+    /// outcome as an enum would need a fourth value for "the battle is still
+    /// running", and that value is the one a game reads most.**
+    /// </remarks>
+    public int BattleSubcommand { get; set; } = -1;
 
     // Common events (parallel execution)
     public Godot.Collections.Array<int> CommonEventIds { get; init; } = new();

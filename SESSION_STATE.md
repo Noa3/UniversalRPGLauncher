@@ -4007,3 +4007,53 @@ gehoert in eine eigene Karte.**
 **Test evidence** `test_rm2k_full_heal.cs` (5). **1375/1375**, Validator gruen.
 
 **Mutations** 6 Regeln, **6 von 6 gefangen**.
+
+## `10710` Enemy Encounter — DONE
+
+**Fuenf Zustandsfelder — `IsBattleActive`, `ActiveTroopId`, `BattleTurn`, `BattlePhase` und
+
+`TroopMembers` — und kein Befehl erreichte eines davon.** Also fiel der Kampfbeginn in den
+
+Default-Arm und es kämpfte nie. **Dieselbe Inselform wie die Bilder, die Laufbahnen und das
+
+Fahrzeug-Bording.**
+
+
+
+**Sechs oder zehn Parameter, je nach Form. Die Flucht sind drei Werte und kein Boolean — und der
+
+mittlere beendet das Event. Drei Terrain-Modi, und der vierte startet keinen Kampf. Kein Ausgang
+
+und -1, denn 0 ist der Siegwert.**
+
+
+
+### Und die sechzehn Messungen, die kein Befund waren
+
+
+
+**Ein Test liess sich nicht kompilieren, und ich habe ihn sechzehn Mal gemessen.** Die Datei war
+
+korrekt — kein verborgenes Zeichen, keine falsche Einrueckung, keine doppelte Deklaration, und
+
+`sed`, `od` und `read_file` zeigten dieselben Bytes. **Der Compiler hatte recht: die
+
+Tuple-Zerlegung `var (a, _, b)` in diesem einen Test war der Fehler** — und die anderen sechs
+
+Tests derselben Datei mit derselben Zerlegung liefen.
+
+
+
+**Das ist derselbe Fehlertyp wie bei `IdleCell`, und die Lehre ist diesmal klarer: sechzehn
+
+Messungen an korrektem Quelltext sind kein Befund, sondern eine Schleife.** Der Ausweg war
+
+derselbe — aufhoeren zu messen und die eine Sache tun, die ich nie getan hatte: den Test ohne
+
+die Zerlegung schreiben.
+
+
+
+**Test evidence** `test_rm2k_enemy_encounter.cs` (7). **1382/1382**, Validator gruen.
+
+**Mutations** 9 Regeln, **9 von 9 gefangen**.

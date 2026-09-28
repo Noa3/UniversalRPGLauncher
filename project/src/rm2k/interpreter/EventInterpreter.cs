@@ -210,6 +210,19 @@ public sealed class EventInterpreter
 	/// <summary>10500, Simulated Attack, <c>CmdSetup</c> width 8.</summary>
 	public const int SimulatedAttack = 10500;
 
+	/// <summary>
+	/// 10710, Enemy Encounter, from liblcf's <c>Code::EnemyEncounter</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandEnemyEncounter</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Six parameters, or ten, and the count depends on the mode.</strong>
+	/// The reference's dispatch has two lines: one with a width of 6 for the
+	/// plain form and one with 10 for the RPG2K3 form. **A reader that required
+	/// ten would refuse every 2K game's encounter, and one that required six
+	/// would refuse a 2003 game's background form.**
+	/// </remarks>
+	public const int EnemyEncounter = 10710;
+
 	public const int ChangeHeroTitle = 10620;
 
 	/// <summary>10630, Change Sprite Association, <c>CmdSetup</c> width 5.</summary>
@@ -768,6 +781,19 @@ public sealed class EventInterpreter
 			case SimulatedAttack:
 				ExecuteSimulatedAttack(cmd);
 				return Advance();
+
+			case EnemyEncounter:
+				// **The battle commands were five fields in the state and no
+				// command that set them.** `IsBattleActive`, `ActiveTroopId`,
+				// `BattleTurn`, `BattlePhase` and `TroopMembers` existed and
+				// nothing reached them — so a game's encounter command fell
+				// into the default arm and no battle ever started, while the
+				// state carried a battle phase of its own.
+				ExecuteEnemyEncounter(cmd);
+				// **And the page holds**, because the reference makes the
+				// battle an asynchronous operation: the arms after this
+				// command run when the battle ends, and not before.
+				return _state.WaitingFor != GameSimulationState.WaitReason.None;
 
 			case ChangeHeroTitle:
 				ExecuteChangeHeroTitle(cmd);
@@ -3603,6 +3629,147 @@ public sealed class EventInterpreter
 			$"[Event {_eventId}] Choice branch list has no {ChoiceEnd} after the"
 			+ $" skipped commands, so the branch ran to the end of the list");
 		return _commandIndex - start;
+	}
+
+	/// <summary>
+	/// Runs 10710, Enemy Encounter, from liblcf's <c>Code::EnemyEncounter</c>
+	/// and EasyRPG's <c>Game_Interpreter_Map::CommandEnemyEncounter</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Six parameters, or ten, and the count is the mode's own.</strong>
+	/// The reference's dispatch has two lines for this one command — one with a
+	/// width of 6 and one with 10 for the RPG2K3 form. <strong>A reader that
+	/// required ten would refuse every 2K game's encounter, and one that
+	/// required six would refuse a 2003 game's background form.</strong> This
+	/// takes six, and reads the tenth only in the one mode that has it.
+	/// </para>
+	/// <para>
+	/// <strong>An open message first, and the battle waits for it</strong> — the
+	/// reference's first two lines are
+	/// <c>if (Game_Message::IsMessageActive()) return false;</c>, the same as
+	/// the game over screen, the title request and the two menu openers.
+	/// </para>
+	/// <para>
+	/// <strong>The troop is resolved through the mode and the value, like every
+	/// other number a command takes</strong> — the reference writes
+	/// <c>ValueOrVariable(com.parameters[0], com.parameters[1])</c>, so a game can
+	/// pick the encounter group by variable.
+	/// </para>
+	/// <para>
+	/// <strong>Three terrain modes and a fourth that is refused.</strong> The
+	/// reference's switch has cases 0, 1 and 2 and a <c>default: return false</c>
+	/// — so a mode of 3 does not start a battle at all. <strong>A reader that
+	/// defaulted to the first would have fought a battle the file did not ask
+	/// for</strong>, and a game's test battle with a mistyped mode would have
+	/// been a real one.
+	/// </para>
+	/// <para>
+	/// <strong>The escape mode is three values and not a boolean.</strong> The
+	/// reference reads <c>escape_mode = com.parameters[3]</c> with 0 for "not
+	/// at all", 1 for "end the event processing" and 2 for the game's own
+	/// handler — and the middle one sets <c>abort_on_escape</c>, which
+	/// <em>ends the event</em> when the party escapes. <strong>A reader that
+	/// read it as a boolean would have a game whose escape returned to the
+	/// event's next line where the reference ends the event dead.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>Defeat is a game over unless the command says otherwise, and the
+	/// reference pushes the game over screen itself</strong> — so a defeat mode
+	/// of 1 is a game that has written its own defeat handling.
+	/// </para>
+	/// </remarks>
+	private void ExecuteEnemyEncounter(Rm2kMap.EventCommand pCmd)
+	{
+		if (_presentation != null && _presentation.MessageVisible)
+		{
+			_state.WaitingFor = GameSimulationState.WaitReason.MessageOpen;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Encounter waits: a message is open, because"
+				+ " the reference starts the battle after the line is read");
+			return;
+		}
+		// **Six, and the tenth is read only in the one mode that has it.**
+		if (pCmd.Parameters.Count < 6)
+		{
+			Malformed("Enemy encounter");
+			return;
+		}
+		// **The troop through the mode and the value**, the reference's own
+		// ValueOrVariable call.
+		var troopId = ValueOrVariable(pCmd.Parameters[0], pCmd.Parameters[1]);
+
+		GameSimulationState.BattleTerrainMode terrainMode;
+		switch (pCmd.Parameters[2])
+		{
+			case 0:
+				terrainMode = GameSimulationState.BattleTerrainMode.System;
+				break;
+			case 1:
+				terrainMode = GameSimulationState.BattleTerrainMode.Background;
+				break;
+			case 2:
+				terrainMode = GameSimulationState.BattleTerrainMode.TerrainId;
+				break;
+			default:
+				// **A fourth mode is refused and not defaulted.** The
+				// reference's `default: return false` starts no battle, and a
+				// reader that fell through to the first case would have fought
+				// one the file did not ask for.
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Encounter: terrain mode"
+					+ $" {pCmd.Parameters[2]} is not 0, 1 or 2, and the reference"
+					+ " starts no battle for it");
+				return;
+		}
+
+		GameSimulationState.BattleEscapeMode escape;
+		switch (pCmd.Parameters[3])
+		{
+			case 0:
+				escape = GameSimulationState.BattleEscapeMode.Disallow;
+				break;
+			case 1:
+				escape = GameSimulationState.BattleEscapeMode.EndEvent;
+				break;
+			case 2:
+				escape = GameSimulationState.BattleEscapeMode.CustomHandler;
+				break;
+			default:
+				// **The reference does not switch on this one at all** — it
+				// writes `allow_escape = (escape_mode != 0)`. So a fourth
+				// value is "escapable, and the custom handler runs", and
+				// saying so is better than refusing a number the reference
+				// accepts.
+				escape = GameSimulationState.BattleEscapeMode.CustomHandler;
+				break;
+		}
+		// **Defeat is a boolean in the reference, and a game over unless it
+		// says otherwise.**
+		var defeat = pCmd.Parameters[4] == 0
+			? GameSimulationState.BattleDefeatMode.GameOver
+			: GameSimulationState.BattleDefeatMode.CustomHandler;
+
+		_state.ActiveTroopId = troopId;
+		_state.IsBattleActive = true;
+		_state.BattleTurn = 0;
+		// **The first turn is the player's, and that is phase 1 in this
+		// reader's own scale** — 0 is initial, 1 player, 2 enemy. The battle
+		// has started, so the initial phase is behind it.
+		_state.BattlePhase = 1;
+		_state.BattleEscape = escape;
+		_state.BattleDefeat = defeat;
+		_state.BattleFirstStrike = pCmd.Parameters[5] != 0;
+		_state.BattleTerrain = terrainMode;
+		// **No outcome yet, and -1 says so** — a reader that wrote 0 would
+		// have a game whose victory arm ran before the battle was fought.
+		_state.BattleSubcommand = -1;
+		_state.WaitingFor = GameSimulationState.WaitReason.BattleRunning;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Encounter: troop {troopId}, terrain"
+			+ $" {terrainMode}, escape {escape}, defeat {defeat}"
+			+ (_state.BattleFirstStrike ? ", the party strikes first" : string.Empty)
+			+ ", and the page holds until the battle ends");
 	}
 
 	/// <summary>

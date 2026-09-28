@@ -1158,3 +1158,21 @@ fields in the state at all — that is new state design and not a command line, 
 its own card.
 
 **1375/1375, six effective mutation rules, six caught.**
+
+**And five state fields — IsBattleActive, ActiveTroopId, BattleTurn, BattlePhase and TroopMembers —
+had no command that reached them.** A game's encounter command fell into the default arm and
+no battle ever started, while the state carried a battle phase of its own. Same island shape as the
+pictures, the move routes and the vehicle boarding.
+
+**Six parameters or ten, and the count depends on the form. The escape is three values and not a
+boolean, and the middle one ends the event. Three terrain modes, and the fourth starts no battle
+at all. No outcome yet, and -1, because 0 is the reference's victory value.**
+
+**And sixteen measurements that were not a finding.** One test would not compile and I measured it
+sixteen times. The file was correct — no hidden character, no wrong indentation, no duplicate
+declaration, and sed, od and read_file all showed the same bytes. **The compiler was right: the
+tuple deconstruction `var (a, _, b)` in that one test was the defect**, and the other six tests in
+the same file with the same deconstruction worked. Sixteen measurements of correct source are a
+loop, not a finding.
+
+**1382/1382, nine effective mutation rules, nine caught.**
