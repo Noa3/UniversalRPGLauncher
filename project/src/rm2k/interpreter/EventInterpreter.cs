@@ -224,6 +224,18 @@ public sealed class EventInterpreter
 	/// <summary>10850, Set Vehicle Location, <c>CmdSetup</c> width 5.</summary>
 	public const int SetVehicleLocation = 10850;
 
+	/// <summary>
+	/// 10840, Get On/Off Vehicle, from liblcf's <c>Code::GetOnOffVehicle</c> and
+	/// EasyRPG's <c>Game_Player::GetOnOffVehicle</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, and that is the shape of the command.</strong> The
+	/// vehicle is not a parameter — it is whatever is under the player or in
+	/// front of it, in the order the reference checks them, and a reader that
+	/// expected a parameter number would be reading a list that is not there.
+	/// </remarks>
+	public const int GetOnOffVehicle = 10840;
+
 	/// <summary>10660, Change System BGM, <c>CmdSetup</c> width 7.</summary>
 	public const int ChangeSystemBGM = 10660;
 
@@ -435,6 +447,27 @@ public sealed class EventInterpreter
 	/// </remarks>
 	private readonly Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>,
 		bool, bool, bool>? _moveRouteStarter;
+
+	/// <summary>
+	/// Boards or leaves the vehicle under the player, for command 10840.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Whether it happened, and not whether it could.</strong> The
+	/// reference's <c>GetOnOffVehicle</c> does nothing at all when there is
+	/// nothing to board onto or nothing to step off onto — **and the
+	/// difference between "did it" and "could it" is the whole of the command's
+	/// observable behaviour.** A hook that returned the ability would have a
+	/// game whose cutscene ran a "you cannot board here" line the reference
+	/// never shows.
+	/// </para>
+	/// <para>
+	/// <strong>The fifteen boarding rules stay on their own class.</strong>
+	/// <c>Rm2kVehicleBoarding</c> already has them, tested, and the interpreter
+	/// must not learn what a boat is — the same reason the route hook exists.
+	/// </para>
+	/// </remarks>
+	private readonly Func<bool>? _vehicleBoardToggle;
 	private readonly PresentationState? _presentation;
 
 	/// <summary>
@@ -507,7 +540,8 @@ public sealed class EventInterpreter
 		Func<int, bool>? eventDeactivator = null,
 		Func<int, int, int>? eventIdAtTile = null,
 		Func<int, int, IReadOnlyList<Rm2kMap.MoveCommand>, bool, bool, bool>?
-			moveRouteStarter = null)
+			moveRouteStarter = null,
+		Func<bool>? vehicleBoardToggle = null)
 			{
 		_state = state ?? throw new ArgumentNullException(nameof(state));
 		_eventId = eventId;
@@ -518,6 +552,7 @@ public sealed class EventInterpreter
 		_eventDeactivator = eventDeactivator;
 		_eventIdAtTile = eventIdAtTile;
 		_moveRouteStarter = moveRouteStarter;
+		_vehicleBoardToggle = vehicleBoardToggle;
 		_commandIndex = 0;
 	}
 
@@ -733,6 +768,15 @@ public sealed class EventInterpreter
 
 			case SetVehicleLocation:
 				ExecuteSetVehicleLocation(cmd);
+				return Advance();
+
+			case GetOnOffVehicle:
+				// **The third vehicle command and the only one with no
+				// parameters.** `10650` sets a graphic, `10850` sets a
+				// position, and this one reads neither: the vehicle is whatever
+				// is under the player or in front of it, in the order the
+				// reference checks them.
+				ExecuteGetOnOffVehicle();
 				return Advance();
 
 			case ChangeSystemBGM:
@@ -3705,6 +3749,47 @@ public sealed class EventInterpreter
 		_state.AddDiagnostic(
 			$"[Event {_eventId}] Vehicle {pCmd.Parameters[0]} is now \"{pCmd.Text}\""
 			+ $" index {pCmd.Parameters[1]}, and that is also what it returns to");
+	}
+
+	/// <summary>
+	/// Runs 10840, Get On/Off Vehicle.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Whether it happened, and not whether it could.</strong> The
+	/// reference's <c>GetOnOffVehicle</c> does nothing at all when there is
+	/// nothing to board onto and nothing to step off onto — and the difference
+	/// is the whole of the command's observable behaviour. A hook that returned
+	/// the ability instead of the act would have a game run a "you cannot board
+	/// here" branch the reference never takes.
+	/// </para>
+	/// <para>
+	/// <strong>A missing hook is a refusal with a name, and not a silent
+	/// skip.</strong> The fifteen boarding rules live on
+	/// <c>Rm2kVehicleBoarding</c> and are called by whoever holds the world; a
+	/// caller that gave the interpreter no hook has not said "no vehicle here",
+	/// it has said "this reader cannot board", and those are different.
+	/// </para>
+	/// <para>
+	/// <strong>The command does not wait, and that is the reference's
+	/// behaviour.</strong> EasyRPG's issue thread on this command records that
+	/// RPG_RT's own <c>GetOnOffVehicle</c> does not wait for the boarding
+	/// animation, and this reader follows the reference rather than the bug
+	/// report's observations of both.
+	/// </para>
+	/// </remarks>
+	private void ExecuteGetOnOffVehicle()
+	{
+		if (_vehicleBoardToggle == null)
+		{
+			Malformed("Get on/off vehicle");
+			return;
+		}
+		var boarded = _vehicleBoardToggle();
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Get on/off vehicle: "
+			+ (boarded ? "boarded or left a vehicle" : "nothing to board or leave")
+			+ ", which is the reference's silence and not a failure");
 	}
 
 	/// <summary>

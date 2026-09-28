@@ -2666,7 +2666,7 @@ look for the next island of that shape.**
 | menues | ~~`11950` `11960`~~ | **~~open main menu, change access — DONE, see below~~** |
 | flow | `12420` `12510` | game over, return to title |
 | labels | ~~`12110` `12120`~~ | **~~label and jump-to-label — DONE, see below~~** |
-| vehicles | `10840` `10850` `10650` | enter/exit vehicle, set vehicle location, change vehicle graphic |
+| vehicles | ~~`10840` `10850` `10650`~~ | **~~enter/exit vehicle, set vehicle location, change vehicle graphic — DONE, see below~~** |
 | face and title | `10130` `10120` `10620` `10640` | message options, face graphic, hero title, actor face |
 | battle branches | `13310` `23310` `23311` | the battle-only branch and else/end |
 | misc | `1005`–`1008` `10920` | common event, flee, combo, class |
@@ -4535,6 +4535,91 @@ Dispatch nicht erreichen, die Seite, die nicht hält, die ignorierte offene Nach
 Menüs im selben Feld, die wieder auf acht gesetzte Mindestbreite, der falsche Parameter für die
 
 Dauer, das nicht unterscheidbare Wartegrund und das Menü, das sich nicht merkt, dass es offen war.
+
+
+## `10840` Get On/Off Vehicle is done — und `Rm2kVehicleBoarding` war eine Insel mit fünfzehn Methoden
+
+**`10650` und `10850` liefen. `10840` lief nicht — und `Rm2kVehicleBoarding` hatte fünfzehn
+
+Boarding-Methoden, getestet, die kein Befehl erreichen konnte.**
+
+
+
+**Dieselbe Inselform wie die Bilder in `PresentationState` und wie `Rm2kMoveRouteState` zuvor:**
+
+eine Klasse, die vollständig ist, getestet ist und unerreichbar ist. **Und man findet sie nur,
+
+indem man fragt, wozu die Klasse da ist, und das mit dem vergleicht, was die Befehle der
+
+Referenz tun** — nicht indem man die Konstantenliste liest, in der die Zahl längst steht.
+
+
+
+### Die vier Regeln
+
+
+
+**Breite 0, und das ist die Form des Befehls.** Das Fahrzeug ist kein Parameter — es ist, was
+
+unter dem Helden liegt oder vor ihm steht, in der Reihenfolge, in der die Referenz prüft. **Ein
+
+Leser, der einen Parameter erwartet hätte, läse eine Liste, die es nicht gibt.**
+
+
+
+**Ob es passiert ist und nicht, ob es könnte.** Das `GetOnOffVehicle` der Referenz tut gar
+
+nichts, wenn es nichts gibt, worauf einzusteigen wäre und nichts, wovon abzusteigen wäre — **und
+
+der Unterschied zwischen „hat es getan" und „hätte es tun können" ist das ganze beobachtbare
+
+Verhalten des Befehls.** Ein Hook, der die Fähigkeit zurückgäbe, hätte ein Spiel einen Zweig
+
+„hier kannst du nicht einsteigen" laufen lassen, den die Referenz nie nimmt.
+
+
+
+**Ein fehlender Hook ist eine Ablehnung mit Namen und kein stilles Überspringen.** Der Aufrufer,
+
+der keinen Hook gab, hat nicht „kein Fahrzeug hier" gesagt, sondern „dieser Leser kann nicht
+
+einsteigen" — **und das sind zwei verschiedene Dinge.**
+
+
+
+**Und der Befehl wartet nicht, und das ist das Verhalten der Referenz.** Der Issue-Thread von
+
+EasyRPG zu genau diesem Befehl hält fest, dass auch `RPG_RT` auf die Einsteige-Animation wartet
+
+**nicht** — dieser Leser folgt der Referenz und nicht den Beobachtungen des Threads.
+
+
+
+**Der Hook ist ein Konstruktorargument und kein später gefülltes Feld**, aus demselben Grund
+
+wie der Routenstarter: ein Test muss sehen können, was der Interpreter bekommen hat, **und ein
+
+null-Hook ist selbst ein Fall, der es wert ist, getestet zu werden.**
+
+
+
+**Vier Tests, und drei von ihnen sind über die Fixture gestolpert.** `Rm2kVehicleState` hat einen
+
+Konstruktor statt eines Objektinitialisierers, und der Typ kommt aus `Rm2kVehicle.Boat` und nicht
+
+aus einer selbst geschriebenen 1.
+
+
+
+**Test evidence** `test_rm2k_get_on_off_vehicle.cs` (4).
+
+**1370/1370**, Validator grün.
+
+**Mutations** 5 Regeln über einen Lauf, **5 von 5 gefangen** — darunter der Befehl, der den
+
+Dispatch nicht erreicht, der nicht aufgerufene Hook, der fehlende Hook als Erfolg, die gehaltene
+
+Seite und der Hook, der die Fähigkeit statt der Tat bekommt.
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

@@ -3909,3 +3909,47 @@ Aenderung und einem Rettungsversuch.
 **Test evidence** `test_rm2k_open_menu.cs` (6), `test_rm2k_move_picture.cs` (7).
 
 **1366/1366**, Validator gruen. **Mutations** 9 Regeln, **9 von 9 gefangen**.
+
+## `10840` Get On/Off Vehicle — DONE
+
+**`10650` und `10850` liefen. `10840` lief nicht — und `Rm2kVehicleBoarding` hatte fuenfzehn
+
+Boarding-Methoden, getestet, die kein Befehl erreichen konnte.**
+
+
+
+**Dieselbe Inselform wie die Bilder und wie `Rm2kMoveRouteState`:** eine Klasse, die
+
+vollstaendig ist, getestet ist und unerreichbar ist. **Und man findet sie nur, indem man fragt,
+
+wozu die Klasse da ist, und das mit dem vergleicht, was die Befehle der Referenz tun** — nicht
+
+indem man die Konstantenliste liest, in der die Zahl laengst steht.
+
+
+
+**Breite 0: das Fahrzeug ist kein Parameter, es ist, was unter dem Helden liegt oder vor ihm
+
+steht. Ob es passiert ist und nicht, ob es koennte — und ein fehlender Hook ist eine Ablehnung
+
+mit Namen, weil „kein Fahrzeug hier" und „dieser Leser kann nicht einsteigen" zwei
+
+verschiedene Dinge sind.**
+
+
+
+**Und der Hook ist ein Konstruktorargument und kein spaeter gefuelltes Feld**, aus demselben
+
+Grund wie der Routenstarter: ein Test muss sehen koennen, was der Interpreter bekommen hat.
+
+
+
+**Und diesmal 62 Zeilen statt 2166.** Vier Ersetzungen einzeln, je ein Build dazwischen — **die
+
+Lehre aus dem letzten Mal hat gehalten.**
+
+
+
+**Test evidence** `test_rm2k_get_on_off_vehicle.cs` (4). **1370/1370**, Validator gruen.
+
+**Mutations** 5 Regeln, **5 von 5 gefangen**.

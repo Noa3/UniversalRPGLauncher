@@ -1123,3 +1123,18 @@ kept both wrong in the same direction**: a fixture that agrees with the number i
 not check it.
 
 **1366/1366, nine effective mutation rules, nine caught.**
+
+**And `Rm2kVehicleBoarding` had fifteen boarding methods, tested, that no command could reach.**
+`ChangeVehicleGraphic` (10650) and `SetVehicleLocation` (10850) were dispatched; `GetOnOffVehicle`
+(10840) was not. Same island shape as the pictures in `PresentationState` and as
+`Rm2kMoveRouteState` before it — **a class that is complete, tested, and unreachable.** The only
+way to find these is to ask what a class is for and compare it against what the reference's
+commands do, not to read the constant list, where the number is already there.
+
+**Width zero: the vehicle is not a parameter, it is whatever is under the player or in front of
+it.** **Whether it happened and not whether it could** — the reference does nothing at all when
+there is nothing to board or leave, and that difference is the whole of the command's observable
+behaviour. **A missing hook is a refusal with a name**, because "there is no vehicle here" and
+"this reader cannot board" are two different things.
+
+**1370/1370, five effective mutation rules, five caught.**
