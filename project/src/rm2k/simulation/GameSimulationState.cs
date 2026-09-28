@@ -213,6 +213,90 @@ public sealed class GameSimulationState
     public Godot.Collections.Array<bool> PassableTiles { get; init; } = new();
 
     /// <summary>
+    /// The battle commands an actor has, keyed by actor id, from
+    /// <c>Game_Actor::ChangeBattleCommands</c> and command 1009.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A list, not a set of flags, because the command removes as well as adds:
+    /// <c>parameters[3] != 0</c> is the add flag, and the fixture carries
+    /// <c>[1,4,10,0]</c> — a removal.
+    /// </para>
+    /// <para>
+    /// <strong>An actor with no entry has every command the database gives
+    /// them</strong>, which is the RM2K default and the reason an empty list
+    /// here does not mean "the actor can do nothing". A reader that stored an
+    /// empty list as the actor's commands would take every ability away the
+    /// moment command 1009 ran. <em>Absent is not empty.</em>
+    /// </para>
+    /// </remarks>
+    public Godot.Collections.Dictionary<int, Godot.Collections.Array<int>>
+        BattleCommands { get; init; } = new();
+
+    /// <summary>
+    /// The battle commands an actor has, or null when they still have the
+    /// database's set.
+    /// </summary>
+    /// <remarks>
+    /// The null is the answer, and it is not a bug: <c>GetActor</c> in the
+    /// reference hands back a list that is null until something changes it, and
+    /// the battle code checks for exactly that. Returning an empty list instead
+    /// would be a claim about the actor that nothing measured.
+    /// </remarks>
+    public Godot.Collections.Array<int>? GetActorBattleCommands(int pActorId)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId)
+        {
+            return null;
+        }
+        return BattleCommands.TryGetValue(pActorId, out var list) ? list : null;
+    }
+
+    /// <summary>
+    /// Adds or removes one battle command for one actor, from
+    /// <c>Game_Actor::ChangeBattleCommands(bool add, int command_id)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Adding a command that is already there changes nothing, and
+    /// removing one that is not there changes nothing.</strong> A reader that
+    /// appended unconditionally would grow the list every time a game asked for
+    /// a command the actor already had, and a reader that removed a missing one
+    /// without complaint would have nothing to say about a typo in the editor.
+    /// Both outcomes are reported here rather than being silent.
+    /// </remarks>
+    /// <returns>True when the actor's list changed.</returns>
+    public bool ChangeActorBattleCommand(int pActorId, int pCommandId, bool pAdd)
+    {
+        if (pActorId < 1 || pActorId > MaxActorId)
+        {
+            return false;
+        }
+        if (!BattleCommands.TryGetValue(pActorId, out var list) || list == null)
+        {
+            list = new Godot.Collections.Array<int>();
+            BattleCommands[pActorId] = list;
+        }
+        var vorhanden = list.Contains(pCommandId);
+        if (pAdd && vorhanden)
+        {
+            return false;
+        }
+        if (!pAdd && !vorhanden)
+        {
+            return false;
+        }
+        if (pAdd)
+        {
+            list.Add(pCommandId);
+        }
+        else
+        {
+            list.Remove(pCommandId);
+        }
+        return true;
+    }
+
+    /// <summary>
     /// The three vehicles on the current map, from <c>Game_Vehicle</c>.
     /// </summary>
     /// <remarks>
@@ -604,7 +688,7 @@ public sealed class GameSimulationState
         MapWidth = 0; MapHeight = 0; PassableTiles.Clear(); PassabilityMasks.Clear();
         TerrainData = []; TileSubstitution = null; LowerLayer = null;
         UpperLayer = null; UpperPassability = null;
-        Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
+        Switches.Clear(); Variables.Clear(); ItemCounts.Clear(); PartyMemberIds.Clear(); ActorState.Clear(); BattleCommands.Clear(); TroopMembers.Clear(); CommonEventIds.Clear();
         ActiveTroopId = -1; IsBattleActive = false; BattleTurn = 0; BattlePhase = -1;
         CommonEventCounter = 0;
         // **The stack starts empty, not with an invented "Menu" scene.** A

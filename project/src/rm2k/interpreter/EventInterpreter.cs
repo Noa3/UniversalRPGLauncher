@@ -377,6 +377,10 @@ public sealed class EventInterpreter
 				ExecuteEndLoop();
 				return true; // index points at the matching Loop command
 
+			case ChangeBattleCommands:
+				ExecuteChangeBattleCommands(cmd);
+				return Advance();
+
 			case OpenLoadMenu:
 			case ExitGame:
 			case ToggleAtbMode:
@@ -666,6 +670,65 @@ public sealed class EventInterpreter
 	private void WaitForFrames(int pFrames)
 	{
 		_waitFramesRemaining = Math.Clamp(pFrames, 1, MaxWaitFrames);
+	}
+
+	/// <summary>
+	/// 1009, Change Battle Commands, from EasyRPG's
+	/// <c>CommandChangeBattleCommands</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// Parameters: <c>[actorMode, actorId, commandId, add]</c>, which is what
+	/// <c>CmdSetup&lt;..., 4&gt;</c> says — a minimum width of four. The
+	/// reference reads <c>parameters[0..1]</c> through <c>GetActors</c>,
+	/// <c>parameters[2]</c> as the command id and <c>parameters[3] != 0</c> as
+	/// "add".
+	/// </para>
+	/// <para>
+	/// <strong>Three actor modes, and they are not the same set of people.</strong>
+	/// Mode 0 is the party, 1 is one hero by id, 2 is the hero named by a
+	/// variable. An invalid hero id is <em>a warning and an empty list</em>, not
+	/// an error — the command runs and touches nobody, and a reader that
+	/// refused the whole page would drop the rest of an event because one hero
+	/// id was wrong.
+	/// </para>
+	/// </remarks>
+	private void ExecuteChangeBattleCommands(Rm2kMap.EventCommand pCmd)
+	{
+		// EasyRPG: CmdSetup minimum width 4.
+		if (pCmd.Parameters.Count < 4)
+		{
+			Malformed("Change battle commands");
+			return;
+		}
+		var actors = ResolveActors(
+			pCmd.Parameters[0], pCmd.Parameters[1], "Change battle commands");
+		if (actors == null)
+		{
+			return;
+		}
+		var commandId = pCmd.Parameters[2];
+		var add = pCmd.Parameters[3] != 0;
+		foreach (var actorId in actors)
+		{
+			if (!_state.ChangeActorBattleCommand(actorId, commandId, add))
+			{
+				// **Nothing changed, and this reader says so.** The reference is
+				// silent here, but a command that was asked to do something and
+				// did not is exactly the case a diagnostic exists for — and the
+				// two directions mean opposite things: "add what it already
+				// has" is a game author's habit, "remove what it does not have"
+				// is usually a mistake worth naming.
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Change battle commands: actor {actorId}"
+					+ $" already {(add ? "has" : "lacks")} command {commandId},"
+					+ $" so nothing changed");
+				continue;
+			}
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Change battle commands: actor {actorId}"
+				+ $" {(add ? "gained" : "lost")} command {commandId}");
+		}
 	}
 
 	private void ExecuteChangeLevelOrExp(Rm2kMap.EventCommand pCmd, bool pIsLevel)

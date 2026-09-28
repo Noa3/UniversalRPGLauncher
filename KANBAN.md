@@ -3252,8 +3252,6 @@ not a bool**, and the source says so in a comment.
 
 ## What is still not done, and why the card stays `VERIFY`
 
-- **`1009` is decoded, not executed.** The battle command list is not a thing
-  this reader changes yet.
 - **`11610` is read, not wired.** `Rm2kKeyInput.Read` produces the set of keys
   a command accepts and the value each produces. Nothing prompts yet, because
   there is no window to prompt in.
@@ -3289,7 +3287,45 @@ the screen state would be a claim this reader cannot keep.
 **1005/1005**, `TestRm2kMenuExecution: 9/9`, `TestGameSimulationState: 20/20`.
 **Mutations** Eight effective rules over two runs, **8 of 8 caught**.
 
-**A first draft asserted on prose it had invented** — on the phrase "did not
+## `1009` now runs — DONE
+
+Three actor modes, from EasyRPG's `GetActors`: **0 is the party, 1 is one hero
+by id, 2 is the hero named by a variable.** The reference reads
+`parameters[0..1]` through it, `parameters[2]` as the command id and
+`parameters[3] != 0` as "add" — `CmdSetup` gives the command a minimum width of
+four.
+
+**Absent is not empty, and that is the whole state model here.** An actor with
+no entry has *the database's commands*, which is the RM2K default.
+`GetActorBattleCommands` returns **null** for that case, because the reference's
+`GetActor` hands back a null until something changes it and the battle code
+checks for exactly that. A reader that stored an empty list would take every
+ability away from every actor the moment command 1009 ran.
+
+**Both no-change directions are reported, because they mean opposite things.**
+"Add what it already has" is an author's habit; "remove what it does not have"
+is usually a mistake worth naming. Adding an existing command and removing a
+missing one both change nothing, and both say which happened.
+
+**An actor id of 0 touches nobody and the page carries on.** Hero ids run from
+1, so 0 is the one value a game can actually reach that names no actor — a
+variable that was never set. The reference logs a warning and returns an empty
+actor list. **A reader that refused the whole page would drop the rest of an
+event because one id was wrong**, which is how a typo in the editor becomes a
+game that stops halfway through a cutscene.
+
+**Test evidence** `test_rm2k_battle_commands.cs`, 11 tests through
+`ExecuteFrame`. **1016/1016**, `TestRm2kBattleCommands: 11/11`.
+**Mutations** Eight rules over one run, **8 of 8 caught**.
+
+**Two API facts this repo does not make obvious, and both cost a red run.**
+`Variables` is **1-based in the event and 0-based in the array**, because
+`GetVariable` reads `Variables[pId - 1]` — so writing `Variables[1] = 2` on an
+empty array throws. And **one frame is one step**: a test that calls
+`ExecuteFrame` three times on a one-command page does not run that command three
+times.
+
+**A first draft asserted on prose it had invented****A first draft asserted on prose it had invented** — on the phrase "did not
 declare", when the diagnostic said "does not declare" — and the failure was the
 test's. **Asserting on prose a test made up makes the test the thing that has
 to be right, and it was the wrong one.** The assertions are now on the words

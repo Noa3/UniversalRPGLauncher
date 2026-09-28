@@ -2046,3 +2046,47 @@ die Bedeutung tragen.
 
 `1009` anwenden (Battle-Command-Liste ändern) und `11610` verdrahten. Beides
 braucht keine Entscheidung vom Nutzer.
+
+## K-135 `1009` läuft jetzt — DONE
+
+Drei Akteur-Modi aus EasyRPGs `GetActors`: **0 = Partei, 1 = ein Held nach ID,
+2 = der Held, den eine Variable benennt.** Die Quelle liest `parameters[0..1]`
+darüber, `parameters[2]` als Command-ID und `parameters[3] != 0` als „hinzufügen"
+— `CmdSetup` gibt dem Befehl eine Mindestbreite von vier.
+
+**Abwesend ist nicht leer, und das ist hier das ganze Zustandsmodell.** Ein Held
+ohne Eintrag hat **die Befehle der Datenbank**, was der RM2K-Standard ist.
+`GetActorBattleCommands` gibt dafür **`null`** zurück, weil die Referenz dort
+`null` zurückgibt, bis etwas sie ändert, und der Schlachtcode genau darauf prüft.
+Ein Leser, der eine leere Liste speicherte, würde jedem Helden **jede Fähigkeit
+nehmen**, sobald 1009 läuft.
+
+**Beide Richtungen ohne Änderung werden gemeldet, weil sie Gegensätze
+bedeuten.** „Füge hinzu, was er schon hat" ist eine Autorengewohnheit; „entferne,
+was er nicht hat" ist meist ein Fehler, den man benennen sollte.
+
+**Eine Helden-ID 0 fasst niemanden an, und die Seite läuft weiter.** Helden-IDs
+laufen ab 1, also ist 0 der eine Wert, den ein Spiel wirklich erreichen kann und
+der keinen Helden benennt — eine Variable, die nie gesetzt wurde. Die Quelle
+protokolliert eine Warnung und gibt eine leere Aktorenliste zurück. **Ein Leser,
+der die ganze Seite verweigern würde, würde den Rest eines Events verlieren,
+weil eine ID falsch war.**
+
+**Test evidence** `test_rm2k_battle_commands.cs`, 11 Tests über `ExecuteFrame`.
+**1016/1016**. **Mutations** 8 von 8 gefangen.
+
+### Zwei API-Fakten, die dieses Repository nicht offensichtlich macht
+
+1. **`Variables` ist im Event 1-basiert und im Array 0-basiert**, weil
+   `GetVariable` `Variables[pId - 1]` liest. `Variables[1] = 2` auf einem leeren
+   Array wirft. Das ist ein Index-Range-Fehler, der aussieht wie ein 1-basierter
+   Leser.
+2. **Ein Frame ist ein Schritt.** `ExecuteFrame` dreimal auf einer
+   Ein-Befehl-Seite führt den Befehl **nicht** dreimal aus — im Menü-Slice
+   gegessen, hier wieder bestätigt.
+
+### Nächster Schritt
+
+`11610` verdrahten (Key-Input-Prompt braucht ein Fenster, das es noch nicht
+gibt) oder `12310`/`12320`, die als Konstanten deklariert sind. Kein
+Nutzerentscheid nötig.
