@@ -3215,3 +3215,68 @@ Bildern geprüfte Index, der Wrap ohne Flag-Löschung, der nicht vorrückende In
 Routen-Warten, das nicht tickende Brett während eines Bild-Wartens und eine als
 `Stepped` gemeldete verweigerte Bewegung. Eine Regel war eine Umbenennung, die nicht
 übersetzt, und zählt nicht.
+
+## WOLF Kachel-Passierbarkeit — DONE: sechs Zustände, zwei Ebenen, Wände
+
+**Die letzte Karte ließ Figuren laufen, und sie liefen durch Wände** — weil das
+Brett eine Karten-ID und eine Breite hatte und sonst nichts. Passierbarkeit gab es
+im WOLF-Leser nirgends: die Kartendaten trugen Kacheln, und Kacheln sind Bilder.
+
+**Sechs Zustände und nicht zwei.** Das Kachel-Fenster des Editors wechselt sie im
+Zyklus `○ → × → ▲ → ★ → □ → ○`, und die Kachel-Hilfe nennt die Bedeutung:
+begehbar, nicht begehbar, begehbar mit dahinter versteckter Figur, begehbar und immer
+über der Figur gezeichnet, begehbar mit halbtransparenten Füßen — und der sechste:
+
+**↓ nimmt die Antwort der Ebene darunter und ist begehbar, wo keine Ebene da ist.**
+Die Hilfe sagt: 「下のレイヤーに合わせます。下のレイヤーがない場合は通行可能です」.
+**Wer die Kachel stattdessen ablehnte, fröre den Helden auf dem Boden fest** — eine
+Bodenkachel ohne etwas darunter ist die gewöhnlichste Kachel einer Karte. Und wer nur
+einen Boolean hat, verliert ▲, ★, □ und ↓, von denen nur × blockiert: die anderen drei
+fügen eine Zeichenregel hinzu und kein Hindernis, und „hinterher versteckt" als
+unbegehbar zu lesen hieße einen Wächter vor einem Treppengeländer einz sperren.
+
+**Zwei Ebenen, weil ↓ eine davon fragt.** Die obere Ebene antwortet, und die untere nur
+wo die obere fragt: Eine ★-Kachel über Wasser ist begehbar, weil ★ begehbar sagt. Wer
+die untere Ebene alles entscheiden ließe, machte ein Schild über einer Wand unbenutzbar.
+
+**Ein siebter Zustand wird abgelehnt** und nicht als begehbar behandelt. Wer auf
+„nicht ×, also begehbar" durchfiele, ließe eine Figur auf eine Kachel, die das Spiel
+noch nie gesehen hat — und das Symptom wäre ein Held durch eine Wand, die niemand
+gezeichnet hat.
+
+## Eine Figur ganz ohne Karte kann nicht gehen, und genau darum
+
+**„Die Karte wurde nicht gelesen" ist nicht „die Kachel ist begehbar."** Eine Figur
+ohne Gitter verweigert jeden Schritt, und wer eine fehlende Karte als offenes Feld
+behandelte, ließe einen Wächter durch jede Wand auf jeder Karte gehen, deren Kacheln er
+nicht lesen konnte — ohne Fehler irgendwo, denn ein Gang durch eine Wand ist ein Gang.
+
+**Die Blickrichtung dreht trotzdem, denn die Verweigerung gilt der Position und nicht
+der Blickrichtung.** Dieselbe Regel wie bei einer Wand — dieselbe Regel, gegen die der
+Test der letzten Karte den Code ertappt hat.
+
+**Das Brett gibt die Karte beim Laden an jede Figur** und nicht nur an die danach
+gesetzten. Eine vorher gesetzte Figur hat dieselbe Frage wie eine spätere, und wer das
+Gitter beim Setzen übergäbe, ließe die früheren durch Wände laufen.
+
+**Die Kartengröße ist die des Gitters und nicht ein Feld daneben.** Ein Brett mit der
+Breite 20 und einem Gitter von 10 ließe eine Figur zu Kachel 15 laufen und eine Zeile
+lesen, die es nicht gibt.
+
+**Neun der bestehenden Routentests sind beim Umstieg fehlgeschlagen, und das ist die
+Änderung, die wirkt:** Seit die Karte eine Verweigerung und nicht ein Fehlen ist,
+musste jeder Test, der einen bewegenden Schritt misst, seiner Figur eine Karte geben.
+Drei davon maßen die Verweigerung und nannten sie eine Route.
+
+**Einer der neuen Tests hatte die Wand an der falschen Stelle** — er setzte sie auf drei
+und nannte den ersten Schritt auf drei „offen". **Ein Test, der zweimal die Verweigerung
+misst und nie eine Figur laufen sieht, beweist nichts über das Laufen.**
+
+**Test evidence** `test_wolf_passability.cs` (10), mit
+`test_wolf_character_board.cs` (14) und `test_wolf_move_route_runner.cs` (14) nach dem
+Umstieg nachgemessen. **1281/1281**.
+**Mutations** 16 wirksame Regeln über drei Läufe, **16 von 16 gefangen** — darunter
+der Pfeil, der die untere Ebene nicht fragt, eine fehlende untere Ebene, die abgelehnt
+wird, jedes von ▲, ★ und □ als unpassierbar gelesen, der unbekannte Zustand als
+begehbar, das Gitter, das aus der unteren statt der oberen Ebene antwortet, die
+entfernte Kartenprüfung und das Brett, das die Karte nur dem Helden gibt.

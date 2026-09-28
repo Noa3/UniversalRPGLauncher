@@ -31,11 +31,24 @@ public sealed class WolfCharacterBoard
 	/// <summary>The map the board is on.</summary>
 	public int MapId { get; set; }
 
-	/// <summary>How wide the map is, in tiles.</summary>
-	public int Width { get; set; }
+	/// <summary>
+	/// The map's passability, in two layers.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The grid is the map, and the width and height come from it.</strong>
+	/// A board with a width of 20 and a grid of 10 would let a figure walk to
+	/// tile 15 and read passability from a row that does not exist — and a
+	/// reader that answered "passable" out there would put a guard in the void.
+	/// The width and height are therefore the grid's, and setting them alone
+	/// does nothing.
+	/// </remarks>
+	public WolfPassabilityGrid? Passability { get; private set; }
 
-	/// <summary>How tall the map is, in tiles.</summary>
-	public int Height { get; set; }
+	/// <summary>How wide the map is, in tiles, from the grid.</summary>
+	public int Width => Passability?.Width ?? 0;
+
+	/// <summary>How tall the map is, in tiles, from the grid.</summary>
+	public int Height => Passability?.Height ?? 0;
 
 	/// <summary>How far the hero is in, in pixels.</summary>
 	public int ScrollX { get; set; }
@@ -130,6 +143,11 @@ public sealed class WolfCharacterBoard
 	/// </remarks>
 	public WolfCharacter Add(WolfCharacter pCharacter)
 	{
+		// **The map is handed to the figure as it is placed, and not looked up
+		// at step time.** A figure placed before the map was loaded would have
+		// to be revisited, and a reader that forgot one figure would leave a
+		// guard walking through walls while the hero did not.
+		pCharacter.PassabilityGrid = Passability;
 		if (pCharacter.Id == 0)
 		{
 			Hero = pCharacter;
@@ -137,6 +155,25 @@ public sealed class WolfCharacterBoard
 		}
 		_characters[pCharacter.Id] = pCharacter;
 		return pCharacter;
+	}
+
+	/// <summary>
+	/// Loads a map's passability, and hands it to every figure on the board.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Every figure, and not only the ones that move.</strong> A figure
+	/// placed before the map was loaded has the same question as one placed
+	/// after, and handing the grid to the board's figures at once is the only
+	/// way the two can be answered the same way.
+	/// </remarks>
+	public void LoadMap(int pMapId, WolfPassabilityGrid pGrid)
+	{
+		MapId = pMapId;
+		Passability = pGrid;
+		foreach (var character in All)
+		{
+			character.PassabilityGrid = pGrid;
+		}
 	}
 
 	/// <summary>Reads a character by event id.</summary>
@@ -414,8 +451,11 @@ public sealed class WolfCharacterBoard
 		_routes.Clear();
 		Hero = new WolfCharacter { Id = 0 };
 		MapId = 0;
-		Width = 0;
-		Height = 0;
+		// **The grid goes with them.** A board that cleared its figures and
+		// kept its passability would let the next game's figures walk on the
+		// last game's walls, and the new game would start with a hero who
+		// cannot leave the starting tile.
+		Passability = null;
 		ScrollX = 0;
 		ScrollY = 0;
 	}

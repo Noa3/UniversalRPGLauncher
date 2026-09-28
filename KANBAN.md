@@ -2598,6 +2598,7 @@ look for the next island of that shape.**
 | wolf | ~~band offsets and switches~~ | **~~the real offsets, the database, map and common switches — DONE, see below~~** |
 | wolf | ~~move route execution~~ | **~~24 verified route types, finally run — DONE, see below~~** |
 | wolf | ~~character board and VM routing~~ | **~~a board that moves in time, and two opcodes — DONE, see below~~** |
+| wolf | ~~chip passability~~ | **~~six states, two layers, and walls a figure cannot walk through — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2610,6 +2611,73 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## Six chip states, two layers, and a figure that stops at a wall
+
+**The last card made figures move, and they moved through walls** — because the
+board had a map id and a width and nothing else. There was no passability anywhere
+in the WOLF reader: the map data carried tiles, and tiles are pictures.
+
+**Six states and not two.** The editor's tileset window cycles them
+`○ → × → ▲ → ★ → □ → ○`, and the tileset help gives the meaning of each: passable,
+not passable, passable with the figure hidden behind, passable and always drawn over,
+passable with half transparent feet, and the sixth:
+
+**↓ takes the layer below's answer, and is passable where there is no layer.**
+The help says <c>下のレイヤーに合わせます。下のレイヤーがない場合は通行可能です</c>.
+**A reader that refused the tile instead would freeze the hero on the floor** — a
+floor tile with nothing under it is the most ordinary tile in a map. And a reader
+with a boolean loses ▲, ★, □ and ↓, of which only × blocks: the other three add a
+drawing rule and not an obstacle, and reading "hidden behind" as impassable would
+put a guard outside a staircase railing.
+
+**Two layers, because ↓ asks one of them.** The upper layer answers, and the lower
+only where the upper asks: a ★ chip over water is passable, because ★ says passable.
+A reader that let the lower layer decide everything would make a signpost over a
+wall unusable.
+
+**A seventh state is refused,** and not treated as passable. A reader that fell
+through to "not ×, therefore passable" would walk a figure onto a chip the game had
+never heard of, and the symptom would be a hero through a wall nobody had drawn.
+
+## A figure with no map at all cannot step, and that is the point
+
+**"The map was not read" is not "the tile is passable."** A character with no grid
+refuses every step, and a reader that treated a missing map as open ground would let
+a guard walk through every wall on every map whose chips it could not read — with no
+error anywhere, because a walk through a wall is a walk.
+
+**The facing still turns, because the refusal is about the position and not the
+facing.** The same rule a wall produces, and the same rule the last card found the
+test contradicting.
+
+**The board hands the map to every figure when it is loaded,** and not only to the
+ones placed after it. A figure placed before the map was loaded has the same question
+as one placed after, and a reader that handed the grid at placement time would leave
+the earlier figures walking through walls.
+
+**The map's size is the grid's and not a field beside it.** A board with a width of
+20 and a grid of 10 would let a figure walk to tile 15 and read a row that does not
+exist, and a reader that answered "passable" out there would put a guard in the void.
+
+**Nine of the existing route tests failed when this landed,** and that is the change
+working: since the map became a refusal rather than an absence, every test that
+measured a moving step had to give its figure a map. Three of them were measuring
+the refusal and called it a route.
+
+**One of the new tests was wrong about where the wall was,** and it is recorded here
+because it is the same mistake as the timing card: it put the wall at three and called
+the first step onto three "open". **A test that measures a refusal twice without ever
+seeing a figure walk proves nothing about walking.**
+
+**Test evidence** `test_wolf_passability.cs` (10), with `test_wolf_character_board.cs`
+(14) and `test_wolf_move_route_runner.cs` (14) re-measured after the change.
+**1281/1281**.
+**Mutations** Sixteen effective rules over three runs, **16 of 16 caught** —
+including the arrow chip not asking the lower layer, no lower layer being refused,
+each of ▲, ★ and □ read as impassable, the unknown state treated as passable, the
+grid answering from the lower layer instead of the upper, the map check removed,
+and the board handing the grid to the hero only.
 
 ## The board, the timing, and a bug that ran every step in every second frame
 

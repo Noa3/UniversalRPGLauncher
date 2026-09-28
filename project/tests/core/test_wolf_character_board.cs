@@ -68,6 +68,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	{
 		var bands = new WolfVariableBands();
 		var board = new WolfCharacterBoard(bands);
+		board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		board.Add(new WolfCharacter { Id = 3, X = 1, Y = 1 });
 		board.Add(new WolfCharacter { Id = 3, X = 9, Y = 9 });
 
@@ -93,6 +94,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	public void Test_TheHeroIsEventIdZero()
 	{
 		var board = new WolfCharacterBoard(new WolfVariableBands());
+		board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		var hero = board.Add(new WolfCharacter { Id = 0, X = 4, Y = 5 });
 
 		AssertEq(
@@ -129,6 +131,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	public void Test_AMovingStepTakesItsFrames()
 	{
 		var board = new WolfCharacterBoard(new WolfVariableBands());
+		board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		var guard = board.Add(new WolfCharacter { Id = 1, X = 0, Y = 0, MoveSpeed = 4 });
 		board.StartRoute(1, Route([Step(WolfMoveRouteType.MoveRight)]));
 
@@ -171,6 +174,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	public void Test_AFacingStepTakesNoTime()
 	{
 		var board = new WolfCharacterBoard(new WolfVariableBands());
+		board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		var guard = board.Add(new WolfCharacter { Id = 1, X = 0, Y = 0 });
 		board.StartRoute(1, Route(
 		[
@@ -204,6 +208,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	public void Test_AWaitStepTakesItsFrames()
 	{
 		var board = new WolfCharacterBoard(new WolfVariableBands());
+		board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		board.Add(new WolfCharacter { Id = 1, X = 0, Y = 0 });
 		board.StartRoute(1, Route([Step(WolfMoveRouteType.WaitXFrames, 3)]));
 
@@ -240,6 +245,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	{
 		var bands = new WolfVariableBands();
 		var board = new WolfCharacterBoard(bands);
+		board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		var guard = board.Add(new WolfCharacter { Id = 1, X = 0, Y = 0, MoveSpeed = 1 });
 		board.StartRoute(1, Route(
 			[Step(WolfMoveRouteType.MoveRight)],
@@ -295,6 +301,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	public void Test_TheSkipFlagDecidesWhatARefusalDoes()
 	{
 		var plain = new WolfCharacterBoard(new WolfVariableBands());
+		plain.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		var plainGuard = plain.Add(new WolfCharacter
 		{
 			Id = 1,
@@ -324,6 +331,7 @@ public partial class TestWolfCharacterBoard : TestBase
 			+ $" it is {plainGuard.Facing}");
 
 		var skipping = new WolfCharacterBoard(new WolfVariableBands());
+		skipping.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		var skipGuard = skipping.Add(new WolfCharacter
 		{
 			Id = 1,
@@ -361,6 +369,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	public void Test_ANewRouteReplacesTheOldOne()
 	{
 		var board = new WolfCharacterBoard(new WolfVariableBands());
+		board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		var guard = board.Add(new WolfCharacter { Id = 1, X = 0, Y = 0, MoveSpeed = 1 });
 		board.StartRoute(1, Route([Step(WolfMoveRouteType.MoveRight), Step(WolfMoveRouteType.MoveRight)]));
 
@@ -540,6 +549,11 @@ public partial class TestWolfCharacterBoard : TestBase
 	public void Test_TheBoardMovesWhileTheEventWaitsOnFrames()
 	{
 		var vm = new WolfEventVm();
+		// **A map, because a step needs one.** "The map was not read" is a
+		// different answer from "the tile is passable", and this test is about
+		// the clock rather than about walls — so it gives the figure open ground
+		// and lets the tick be what it measures.
+		vm.Board.LoadMap(1, new WolfPassabilityGrid(50, 50));
 		vm.Board.Add(new WolfCharacter { Id = 1, X = 0, Y = 0, MoveSpeed = 1 });
 		vm.Board.StartRoute(1, Route([Step(WolfMoveRouteType.MoveRight)]));
 		vm.Start(new WolfEventProgram
@@ -581,8 +595,7 @@ public partial class TestWolfCharacterBoard : TestBase
 	{
 		var vm = new WolfEventVm();
 		vm.Board.Add(new WolfCharacter { Id = 1, X = 5, Y = 5 });
-		vm.Board.MapId = 7;
-		vm.Board.Width = 20;
+		vm.Board.LoadMap(7, new WolfPassabilityGrid(20, 20));
 		vm.Board.StartRoute(1, Route([Step(WolfMoveRouteType.MoveRight)]));
 
 		vm.ResetState();
@@ -598,9 +611,18 @@ public partial class TestWolfCharacterBoard : TestBase
 			+ $" game's map would scroll to a map that is not loaded;"
 			+ $" it is {vm.Board.MapId}");
 		AssertEq(
+			vm.Board.Passability, null,
+			"**and the passability grid is gone**, which is the field the reset"
+			+ " really has to clear: a board that emptied its figures and kept"
+			+ " its walls would let the next game's hero walk on the last game's"
+			+ " map, and a new game would start with a hero who cannot leave the"
+			+ $" starting tile. It is {(vm.Board.Passability == null ? "gone" : "still there")}");
+		AssertEq(
 			vm.Board.Width, 0,
-			"**and so is the map width**, which is the third of the four board"
-			+ $" fields the reset has to clear; it is {vm.Board.Width}");
+			"**and so the width is zero**, because the width comes from the grid"
+			+ " and not from a field of its own — a board that had both could"
+			+ " disagree with itself about how large the map is;"
+			+ $" it is {vm.Board.Width}");
 	}
 
 	/// <summary>

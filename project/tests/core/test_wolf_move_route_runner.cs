@@ -175,7 +175,13 @@ public partial class TestWolfMoveRouteRunner : TestBase
 	public void Test_AMoveStepMovesAndAFacingStepDoesNot()
 	{
 		var runner = Runner(out _);
+		// **A character with a map, and not one without.** Since the last card a
+		// step needs the grid — "the map was not read" is a different answer
+		// from "the tile is passable" — so a test that measures a moving step
+		// has to give the figure a map, and a test that means to be refused
+		// leaves it out.
 		var character = new WolfCharacter { X = 3, Y = 3 };
+		character.PassabilityGrid = new WolfPassabilityGrid(20, 20);
 
 		AssertEq(
 			runner.Run(Step(WolfMoveRouteType.MoveLeft), character),

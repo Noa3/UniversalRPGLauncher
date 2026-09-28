@@ -126,24 +126,63 @@ public sealed class WolfCharacter
 	}
 
 	/// <summary>
-	/// Moves one tile, if the direction is allowed and the map has room.
+	/// The map the character walks on, or null when there is none.
+	/// </summary>
+	/// <remarks>
+	/// <strong>An optional grid and not a required one, and that is
+	/// deliberate.</strong> A character with no grid is a figure on a map this
+	/// reader has not loaded, and the only honest answer there is that nothing
+	/// is known about the tile — which is not the same as a tile that is
+	/// passable. A reader that treated "no map" as "no obstacles" would let a
+	/// guard walk through a wall on every map whose chips it could not read.
+	/// </remarks>
+	public WolfPassabilityGrid? PassabilityGrid { get; set; }
+
+	/// <summary>
+	/// Moves one tile, if the direction is allowed and the tile is.
 	/// </summary>
 	/// <returns>False when the step was refused, leaving the character put.</returns>
+	/// <remarks>
+	/// <para>
+	/// <strong>The facing is set before the refusal is decided, and not
+	/// after.</strong> A character that walks into a wall turns to face it, and
+	/// a game that shows a guard watching the hero through the gap depends on
+	/// that. The first version of this method returned on the refusal and left
+	/// the facing alone — while the comment above it promised the opposite —
+	/// and the test is what caught the two disagreeing.
+	/// </para>
+	/// <para>
+	/// <strong>The passability check and the map check are both refusals, and
+	/// they are the same refusal to the caller.</strong> A direction the
+	/// character may not take and a tile it may not stand on are one thing to
+	/// the route: the step did not happen. A reader that reported them
+	/// differently would give the board's skip flag two rules where the format
+	/// has one.
+	/// </para>
+	/// </remarks>
 	public bool Step(int pDirection)
 	{
-		// **The facing is set before the refusal is decided, and not after.**
-		// A character that walks into a wall turns to face it, and a game that
-		// shows a guard watching the hero through the gap depends on that. The
-		// first version of this method returned on the refusal and left the
-		// facing alone — while the comment above it promised the opposite — and
-		// the test is what caught the two disagreeing.
 		Facing = pDirection;
 		if (!CanStep(pDirection))
 		{
 			return false;
 		}
-		X += WolfDirection.DeltaX(pDirection);
-		Y += WolfDirection.DeltaY(pDirection);
+		// **The map is asked before the position moves, and its answer is a
+		// refusal like any other.** Without a grid there is nothing to ask, and
+		// a character with no grid is on a map this reader has not read — so
+		// the step is refused rather than assumed possible.
+		if (PassabilityGrid is not { } grid)
+		{
+			return false;
+		}
+		var nextX = X + WolfDirection.DeltaX(pDirection);
+		var nextY = Y + WolfDirection.DeltaY(pDirection);
+		if (!grid.AllowsStanding(nextX, nextY))
+		{
+			return false;
+		}
+		X = nextX;
+		Y = nextY;
 		return true;
 	}
 
