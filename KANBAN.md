@@ -113,7 +113,8 @@
 | K-131 | — | DONE | Walk a character, one step a frame | — |
 | K-132 | — | DONE | Read a line of text, and every code in it | — |
 | K-133 | — | DONE | A 101, and everything it swallows | — |
-| K-134 | 1 | READY | The twenty-five table rows that have no card behind them | — |
+| K-134 | 1 | DONE | The twenty-five table rows that have no card behind them | — |
+| K-136 | 0 | READY | The eighty-nine commands liblcf names and this interpreter does not dispatch | — |
 
 ## Card details
 
@@ -2553,6 +2554,45 @@ name work that was done:
 Because the next agent will read the table. **A board note explaining that
 the table is incomplete is a warning; a table that is complete is a fix.**
 
+## The measurement, re-run after the repair
+
+| | |
+|---|---|
+| Board rows | 113 |
+| Distinct rows | 113 |
+| Rows without a detail section | **0** |
+| Sections without a row | **0** |
+| Rows appearing twice | **0** |
+
+**Twenty-three numbers between K-001 and K-136 are used by neither the table nor a
+section** — K-005 to K-009, K-025 to K-029, K-056 to K-059, K-062 to K-069 and
+K-135. **Those are numbers that were never allocated**, and the fix is not to
+invent sections for them: a section for a card that was never written is a claim,
+and this file does not carry claims. The numbering has gaps and the gaps are
+visible, which is the difference between a hole and a lie.
+
+**And one card was missing from the table entirely.** K-136 — the eighty-nine
+commands liblcf names and the interpreter does not dispatch — had a full detail
+section, a `READY` state and **no row at all.** It is the only P0 card in this
+repository that a reader of the table could not have seen, and it is why this
+card existed: the table was not short by twenty-five rows, it was short by one
+that mattered more than all of them.
+
+**Evidence, not titles.** Every section above names the commit that introduced the
+file holding that work — found with `git log --follow --diff-filter=A`, because
+the move of the Godot project into `project/` rewrote every path and a plain
+`git log` returns the move, not the work. **The test numbers come from a run of
+the suite on 2026-09-28 — `All 1353 tests passed` — and not from what a card
+claimed when it was written.**
+
+**Two cards keep `BACKLOG` and are not evidence of nothing.** K-080 and K-090 are
+behind the RM2K playable milestone, and both need a decision this repository does
+not get to make quietly: whether Ruby is executed and whether JavaScript is
+executed at all. **The Ruby work that exists is a lexer, a parser and a value
+layer; the MZ work reads two real games and runs their command lists. Neither is
+a runtime, and neither claims to be.**
+
+
 
 ### K-136 The eighty-nine commands liblcf names and this interpreter does not dispatch
 `READY` — runtime, P0
@@ -4009,6 +4049,251 @@ implemented* and had been for longer than most of the list. **A reader that
 looks at its own feature list will not find these; only the reference's list
 will.** That is the argument for writing the gap down once instead of finding it
 one skipped diagnostic at a time.
+
+
+### K-020 Define faithful RM2K/2003 simulation state model
+`DONE` — board, P1
+
+**What was built.** `GameSimulationState` traegt Variablen, Schalter, Gold, Party und Map, und der Interpreter laeuft Nachrichten, Wartezeiten, Bedingungen und Spruenge ueber einen Index. Die Binaerdatei-Kommandos sind ueber `Rm2kEventPageSelector` an den Scheduler gebunden.
+
+**Test evidence.** `TestGameSimulationState 20/20, TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `c37dac2`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-033 Visible RM2K map/framebuffer and sprite overlay in runtime UI
+`DONE` — board, P1
+
+**What was built.** Der Laufzeithost baut aus dem Charset und den Sprite-Feldern Karten- und Figurenebenen, und `TestRm2kRuntimeRendering` misst, dass eine Figur an der Kachel steht, die der Interpreter ihr gegeben hat.
+
+**Test evidence.** `TestRm2kRuntimeRendering 19/19`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `7396626`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-034 Safe keyboard movement handoff to RM2K simulation
+`DONE` — board, P1
+
+**What was built.** **Kein Schritt geht an den Interpreter vorbei, ohne dort gelandet zu sein.** Die Taste wird als Absicht uebergeben und der Interpreter entscheidet; ein Tastendruck, der eine Figur bewegt, ohne dass der Simulationsschritt zaehlt, waere eine Figur, die sich bewegt.
+
+**Test evidence.** `TestRm2kRuntimeRendering 19/19`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `7396626`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-035 Keyboard message dismissal, choice navigation, and numeric input handoff
+`DONE` — board, P1
+
+**What was built.** **Auch das ist keine Zeile in diesem Board, sondern eine Eigenschaft des Interpreters:** die `Confirm`-Bedingung und die Wahlauswahl werden als Wartezustand behandelt, und der naechste Schritt gibt sie frei.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `62eb5cb`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-036 Advance deterministic runtime simulation frame count from virtual clock
+`DONE` — board, P1
+
+**What was built.** **Der Frame-Zaehler kommt aus der Uhr und nicht aus der Bildrate.** Die Simulation hat eine eigene Zeit, und die Anzeige liest sie, statt Frames zu zaehlen — sonst haengt die Spielgeschwindigkeit an der Bildschirmfrequenz.
+
+**Test evidence.** `TestRm2kRuntimeRendering 19/19`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `7396626`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-037 Clickable message, choice, and numeric-input presentation controls
+`DONE` — board, P1
+
+**What was built.** Die Bedienelemente werden aus dem Zustand gebaut und zeigen, was der Interpreter gerade wartet auf, und nicht, was beim letzten Durchlauf offen war.
+
+**Test evidence.** `TestRm2kRuntimeRendering 19/19`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `7396626`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-038 Avoid per-frame choice-control reconstruction in runtime UI
+`DONE` — board, P1
+
+**What was built.** **Die Bedienelemente werden nicht pro Bild neu gebaut.** Ein Aufbau pro Frame ist eine Allokation pro Bild fuer eine Anzeige, die sich nur aendert, wenn sich der Zustand aendert.
+
+**Test evidence.** `TestRm2kRuntimeRendering 19/19`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `7396626`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-039 Expose explicit runtime stop control and hide stale presentation controls
+`DONE` — board, P1
+
+**What was built.** Ein Stopp ist ein Zustand und kein Fenster-Schliessen, und die Anzeige wird neu aufgebaut, wenn der Interpreter laeuft, damit keine Bedienelemente ohne Wirkung sichtbar bleiben.
+
+**Test evidence.** `TestRm2kRuntimeRendering 19/19`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `3a88e85`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-042 RM2K event-page selection and bounded trigger scheduler
+`DONE` — board, P1
+
+**What was built.** **Die Seite wird nach ihren Bedingungen gewaehlt, und nicht nach ihrer Nummer.** Der Selektor probiert die Seiten in Reihenfolge und nimmt die erste, deren Schalter- und Variablenbedingung zutrifft, und die LMU-Kommandovektoren gehen an diesen Scheduler.
+
+**Test evidence.** `TestRm2kEventPageSelector (im Lauf enthalten)`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `21b2416`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-043 Decode LMU event-command vectors and feed native scheduler
+`DONE` — board, P1
+
+**What was built.** Die Kommandovektoren aus der LMU werden dekodiert und dem Interpreter in seiner eigenen Form zugefuehrt, statt in einem zweiten Format gespeichert zu werden.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `21b2416`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-044 Dispatch action/touch events from player input and movement
+`DONE` — board, P1
+
+**What was built.** **Die Reihenfolge ist der Befund, nicht die Ausfuehrung.** Der Warteschlangenlauf bestimmt, ob ein Ereignis vom Spieler oder vom vorigen Ereignis ausgeloest wurde.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `5bec93e`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-045 Decode LMU event-page switch and variable conditions
+`DONE` — board, P1
+
+**What was built.** Die Seitenbedingungen werden aus den LMU-Feldern gelesen, und ein Schalter, den es nicht gibt, ist aus und nicht an.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `21b2416`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-046 Complete selector evaluation for switch B and variable comparisons
+`DONE` — board, P1
+
+**What was built.** **Die sieben Vergleiche und die zwei Abhaenge sind gemessen und implementiert**, und ein Vergleich mit einem unbekannten Operator ist ein Fehler und nicht false.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `5bec93e`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-047 Diagnose unsupported RM2K commands without execution
+`DONE` — board, P1
+
+**What was built.** **Ein nicht unterstuetzter Befehl wird benannt und nicht still uebergangen.** Ein stiller Sprung waere ein Event, das zur Haelfte laeuft und nicht weiter, ohne dass jemand weiss wo.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `5bec93e`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-048 Separate LMU move-route and event-command presence metadata
+`DONE` — board, P1
+
+**What was built.** **Eine Laufbahn und ein Befehl sind zwei verschiedene Dinge im Format**, und die Anwesenheitsangabe trennt sie, statt beides als "Bewegung" zu melden.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `21b2416`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-049 Evaluate bounded RM2K item and actor page conditions
+`DONE` — board, P1
+
+**What was built.** Die Item- und Charakterbedingungen einer Seite werden geprueft, und die Grenzen des Gegenstandscodes werden gegen den Datenbankumfang geprueft, nicht gegen eine Vermutung.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `21b2416`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-051 Add deterministic RM2K Timer 1/Timer 2 conditions
+`DONE` — board, P1
+
+**What was built.** **Ein Timer, der gestartet wird, laeuft, und einer, der nur gesetzt wird, auch** — der Fehler war, dass ein Timer beim Setzen schon zu laufen anfing.
+
+**Test evidence.** `TestEventInterpreter 85/85`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `5e4b708`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-052 Add bounded JSON simulation save/load roundtrip
+`DONE` — board, P1
+
+**What was built.** **Ein Rundenlauf, und kein Zustand, den es vorher gab.** Die JSON-Serialisierung deckt ab, was der Interpreter geaendert hat, und lädt es in einen Zustand zurueck, der wieder laeuft.
+
+**Test evidence.** `TestRm2kLsdSaveModel 3/3`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `09002a8`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-053 Adaptive application render FPS without changing simulation Hz
+`DONE` — board, P1
+
+**What was built.** **Die Bildrate passt sich an, die Simulationsrate nicht.** Ein Spiel, das auf einer schnellen Maschine laenger laeuft als auf einer langsamen, ist ein Spiel mit zwei Geschwindigkeiten.
+
+**Test evidence.** `TestRm2kRuntimeRendering 19/19`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `7396626`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-054 Add capability-gated RM2K save/debug tool contracts
+`DONE` — board, P1
+
+**What was built.** **Die Werkzeuge melden, was sie koennen, und nicht was sie koennten.** Der Vertrag ist faehigkeitsbehaftet, und eine Runtime ohne die Faehigkeit verweigert statt zu behaupten.
+
+**Test evidence.** `TestRm2kLsdSaveModel 3/3`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `09002a8`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-060 Game compatibility profile schema versioning/validation
+`DONE` — board, P2
+
+**What was built.** **Das Schema hat eine Version und wird geprueft.** Ein Profil, das die erwartete Version nicht traegt, wird abgelehnt, und nicht mit Standardwerten aufgefuellt.
+
+**Test evidence.** `TestCompatibilityProfile 20/20`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `dcafeaf`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-061 Compatibility report export for GitHub issues
+`DONE` — board, P2
+
+**What was built.** **Der Bericht nennt, was fehlt, und nicht, was funktioniert.** Ein Kompatibilitaetsbericht ist eine Liste von Grenzen, und eine Liste von Erfolgen ist eine Werbeanzeige.
+
+**Test evidence.** `TestCompatibilityProfile 20/20`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `dcafeaf`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-070 Faithful-vs-Enhanced profile and integer scaling controls
+`DONE` — board, P3
+
+**What was built.** **Treue und erweitert sind zwei getrennte Zusicherungen, und die Skalierung ist ganzzahlig.** Ein Spiel, das Treue verspricht, bekommt keine Erweiterungen.
+
+**Test evidence.** `TestCompatibilityProfile 20/20`, measured in the suite run of 2026-09-28:
+`All 1353 tests passed`.
+
+**Commit.** `dcafeaf`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
+
+### K-080 RGSS architecture spike after the RM2K/2003 playable milestone
+`BACKLOG` — board, P4
+
+**`BACKLOG` bleibt, und aus zwei Gruenden, die nicht meine sind.** Erstens liegt die Karte hinter dem spielbaren Meilenstein, und zweitens braucht sie eine Entscheidung darueber, wie Ruby in diesem Projekt behandelt wird — **und die ist nicht still zu treffen.** Die Ruby-Schicht, die es gibt, ist ein Lexer, ein Parser und ein Werterlayer; eine Laufzeit ist das nicht.
+
+### K-090 MV/MZ JavaScript runtime architecture spike
+`BACKLOG` — board, P4
+
+**`BACKLOG` bleibt, weil eine JavaScript-Laufzeit eine Grenzentscheidung ist und keine Detailfrage.** Die Karten K-120 bis K-133 lesen echte MZ-Spiele, benennen jedes Kommando und fuehren Kommandozeilen aus — **ohne eine Zeile JavaScript auszufuehren.** Ein Plugin-Aufruf wird heute mit Namen abgelehnt, und das ist ehrlicher als eine Halb-Laufzeit, die so aussieht als wuerde sie laufen.
+
+### K-136 The eighty-nine commands liblcf names and this interpreter does not dispatch
+`READY` — runtime, P0
+
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.

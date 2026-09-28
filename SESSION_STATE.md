@@ -3751,3 +3751,47 @@ wenigsten belegt hatte** — der Self-Variablen-Zusammenarbeit zwischen Lesen un
 **Test evidence** `test_wolf_event_call.cs` (10). **1353/1353**, Validator gruen.
 
 **Mutations** 11 Regeln, **11 von 11 gefangen**.
+
+## K-134 Bordtafel — DONE
+
+**Die Bordtafel war zu kurz, und die Lücke, auf die es ankam, war nicht eine von
+den fünfundzwanzig.**
+
+### Was die Karte verlangt hat und was sie gefunden hat
+
+**Jeder der fünfundzwanzig DONE-Abschnitte braucht Was gebaut wurde, Testbeleg und
+Commit — kein Abschnitt aus dem Titel.** Die Commit-Nachrichten tragen keine Kartennummern,
+also habe ich über die Dateien gebunden: `git log --follow --diff-filter=A` auf die Datei,
+die die Karte behauptet. **`--follow` ist der entscheidende Schalter, weil der Umzug des
+Godot-Projekts nach `project/` jeden Pfad umgeschrieben hat und ein einfaches `git log`
+den Umzug zurückgibt und nicht die Arbeit.**
+
+**Und dann kam der Fund: K-136 hatte einen vollständigen Detailabschnitt, einen `READY`-Status
+und überhaupt keine Zeile in der Tabelle.** Es ist die einzige P0-Karte dieses Projekts, die
+ein Leser der Tabelle nicht haette sehen koennen — **und sie ist der Grund, warum es diese
+Karte gibt: die Tabelle fehlten nicht fünfundzwanzig Zeilen, ihr fehlte eine, die wichtiger
+war als alle zusammen.**
+
+### Die Messung nach der Reparatur
+
+| | |
+|---|---|
+| Board-Zeilen | 113 |
+| eindeutige Zeilen | 113 |
+| Zeilen ohne Abschnitt | **0** |
+| Abschnitte ohne Zeile | **0** |
+| doppelte Zeilen | **0** |
+
+**Dreiundzwanzig Nummern zwischen K-001 und K-136 werden von weder Tabelle noch Abschnitt
+benutzt** — K-005 bis K-009, K-025 bis K-029, K-056 bis K-059, K-062 bis K-069 und K-135.
+**Das sind Nummern, die nie vergeben wurden**, und die Reparatur ist nicht, Abschnitte fuer sie
+zu erfinden: ein Abschnitt fuer eine nie geschriebene Karte ist eine Behauptung. Die
+Nummerierung hat Luecken und die Luecken sind sichtbar — **das ist der Unterschied zwischen
+einem Loch und einer Luege.**
+
+**K-080 und K-090 bleiben BACKLOG**, weil sie hinter dem spielbaren Meilenstein liegen und
+beide eine Entscheidung brauchen, die dieses Repository nicht still treffen darf: ob Ruby
+ausgefuehrt wird und ob JavaScript ueberhaupt ausgefuehrt wird. **Die vorhandene
+Ruby-Arbeit ist ein Lexer, ein Parser und ein Werterlayer; die MZ-Arbeit liest zwei echte
+Spiele und fuehrt deren Kommandozeilen aus. Beides ist keine Laufzeit, und beides gibt nicht
+vor, eine zu sein.**
