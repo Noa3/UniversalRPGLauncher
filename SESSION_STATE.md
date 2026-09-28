@@ -1850,3 +1850,37 @@ Leser glaubt und niemand belegen kann.**
 entweder eine kaputte Regel oder ein Test, der das Mutierte nicht erreichte;
 **zwei fanden echte Produktfehler** — den 102 aus dem falschen Befehl und
 103/104 als Optionsliste gelesen.
+
+## K-134 Das Board hat Karten verloren — TEILWEISE REPARIERT
+
+**Befund.** `KANBAN.md` ist laut `AGENTS.md` das einzige maßgebliche
+Board, und seine Tabelle und seine Details widersprachen sich.
+
+| | vorher |
+|---|---:|
+| Karten in der Tabelle | 83 |
+| Karten mit Detailabschnitt | 86 |
+| **In den Details, nicht in der Tabelle** | **30** |
+| **In der Tabelle, nicht in den Details** | **25** |
+| Doppelte Tabellenzeilen | 2 |
+
+**Alle Karten von K-112 bis K-133 — zweiundzwanzig Karten: RGSS-Archiv,
+Marshal-Leser, Ruby-Lexer, Parser, Wertebene, zwei MZ-Fixtures und die ganze
+Befehls-Ausführungslinie — waren in den Details und nicht in der Tabelle.**
+Ein Agent, der nur die Tabelle liest, hätte gesehen, dass die Arbeit bei
+K-111 aufhört, und keine Möglichkeit gehabt, die anderen zweiundzwanzig zu
+erkennen.
+
+**Ursache.** Die Tabelle wird von Hand geführt, und jede Karte seit K-112
+wurde nur als Detailabschnitt angelegt. **Die Details sind der Ort mit den
+Belegen** — Testzahlen, Mutationen, Korrekturen — und die Tabelle ist das,
+was ein Agent zuerst liest. **Wenn eines von beiden falsch ist, hört die
+Arbeit auf sichtbar zu sein.**
+
+**Repariert:** die Tabelle ist aus den Detailabschnitten neu gebaut. Jetzt
+**112 Zeilen, keine Duplikate, und jede Detailkarte hat eine Zeile.**
+
+**Nicht repariert:** die 25 Zeilen ohne Detailabschnitt. Sie zu erfinden wäre
+eine Behauptung ohne Beleg, und diese Datei trägt keine Behauptungen.
+**K-134 fordert sie zurück — aus `git log` und der Testsuite, nicht aus den
+Titeln.** Titel sind Behauptungen; diese Datei trägt keine.

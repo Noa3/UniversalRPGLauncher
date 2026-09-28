@@ -1,15 +1,3 @@
-# UniversalRPG Autonomous Kanban
-
-> Updated: 2026-08-24
-> Owner: autonomous agent/Hermes
-> Ordering: lowest priority number first, then card ID.
-
-## Workflow states
-
-`BACKLOG` → `READY` → `IN PROGRESS` → `VERIFY` → `DONE`
-
-Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most one implementation card `IN PROGRESS` at a time.
-
 ## Active board
 
 | ID | P | State | Card | Depends on |
@@ -30,9 +18,9 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-019 | 1 | DONE | ConditionalBranch condition evaluation (switch/variable comparisons) | K-023 |
 | K-020 | 1 | DONE | Define faithful RM2K/2003 simulation state model | K-011,K-012,K-013 |
 | K-021 | 1 | DONE | Implement first event-interpreter slice: message/switch/variable/branch/wait/transfer | K-020 |
+| K-022 | 1 | DONE | Implement map/player movement and passability simulation | K-020 |
 | K-023 | 2 | DONE | Replace placeholder interpreter opcodes with verified RM2K/2003 command codes | K-021 |
 | K-024 | 2 | DONE | Move Godot project into `project/` and keep runtime/tooling at repo root | — |
-| K-022 | 1 | DONE | Implement map/player movement and passability simulation | K-020 |
 | K-030 | 1 | DONE | Godot renderer adapter: virtual framebuffer + lower/upper tile layers | K-020 |
 | K-031 | 1 | DONE | Character/event sprite renderer and camera | K-030 |
 | K-032 | 1 | DONE | Message/window/picture/choice/input presentation and runtime/UI handoff | K-030,K-021 |
@@ -53,16 +41,25 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-047 | 1 | DONE | Diagnose unsupported RM2K commands without execution | K-043 |
 | K-048 | 1 | DONE | Separate LMU move-route and event-command presence metadata | K-045 |
 | K-049 | 1 | DONE | Evaluate bounded RM2K item and actor page conditions | K-045 |
+| K-050 | 2 | DONE | Original-format read-only LSD save model and safe save directory integration | K-020 |
 | K-051 | 1 | DONE | Add deterministic RM2K Timer 1/Timer 2 conditions | K-045 |
-| K-053 | 1 | DONE | Adaptive application render FPS without changing simulation Hz | K-036 |
 | K-052 | 1 | DONE | Add bounded JSON simulation save/load roundtrip | K-020 |
+| K-053 | 1 | DONE | Adaptive application render FPS without changing simulation Hz | K-036 |
 | K-054 | 1 | DONE | Add capability-gated RM2K save/debug tool contracts | K-052 |
 | K-055 | 1 | DONE | Add bounded runtime-owned RM2K JSON save-directory slots | K-052 |
-| K-050 | 2 | DONE | Original-format read-only LSD save model and safe save directory integration | K-020 |
 | K-060 | 2 | DONE | Game compatibility profile schema versioning/validation | K-002 |
 | K-061 | 2 | DONE | Compatibility report export for GitHub issues | K-060 |
 | K-070 | 3 | DONE | Faithful-vs-Enhanced profile and integer scaling controls | K-030 |
 | K-071 | 3 | DONE | Controller/touch remapping layer | K-020 |
+| K-072 | — | DONE | Reusable RM2K host lifecycle | — |
+| K-073 | — | DONE | Synchronize runtime sprite descriptors after movement | — |
+| K-074 | — | DONE | Fail-closed pending transfer parameters | — |
+| K-075 | — | DONE | Transfer facing direction validation | — |
+| K-076 | — | DONE | Clear confirmed choice presentation state | — |
+| K-077 | — | DONE | Preserve pending InputNumber state across variable conflicts | — |
+| K-078 | — | DONE | Implement bounded RM2K ChangeItems command | — |
+| K-079 | — | DONE | Implement bounded RM2K ChangePartyMembers command | — |
+| K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
 | K-081 | 0 | DONE | Decode real LMU event pages: fix struct-array field collection and verify liblcf IDs | K-013 |
 | K-082 | 0 | DONE | Align event-page trigger ids with liblcf and fail closed on undecodable pages | K-081 |
 | K-083 | 0 | DONE | Correct ControlSwitches/ControlVariables parameter layout to the verified EasyRPG spec | K-081 |
@@ -72,6 +69,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-087 | 2 | DONE | Add verified RM2K autotile animation ticking (counter values blocked: no verified data source) | K-015 |
 | K-088 | 2 | DONE | Apply verified RM2K tile substitution tables (source: liblcf SaveMapInfo, not LMT) | K-086 |
 | K-089 | 2 | DONE | Decode RM2K per-map terrain tags via verified `Game_Map::GetChipId` substitution | K-015 |
+| K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
 | K-091 | 2 | DONE | Apply verified `Game_Map::IsCounter` action-trigger propagation across up to 3 counter tiles | K-015 |
 | K-092 | 2 | DONE | Drive movement and event triggers from player input in the RM2K runtime | K-015 |
 | K-093 | 3 | DONE | Route the Godot host input through the verified turn order instead of ad-hoc triggers | K-092 |
@@ -81,7 +79,7 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-097 | 3 | DONE | Build the verified block A/B autotile composition from `BlockA_Subtiles_IDS` | K-096 |
 | K-098 | 3 | DONE | Decode the indexed RM2K chipset bitmap and blit the resolved rectangles | K-097 |
 | K-099 | 3 | DONE | Compose a full map frame from chipset tiles, map layers and the z-order rule | K-098 |
-| K-100 | 3 | DONE | Render the real map in the runtime and show chipset pixels in the host preview | K-099 |
+| K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
 | K-101 | 3 | DONE | Decode the RM2K charset geometry and draw character frames | K-100 |
 | K-102 | 3 | DONE | Decode event sprite fields and place characters per draw stage | K-101 |
 | K-103 | 2 | DONE | Resolve the hero charset and draw the hero and events in the runtime frame | K-102 |
@@ -93,10 +91,29 @@ Use `BLOCKED` only with evidence and a concrete unblock condition. Keep at most 
 | K-109 | 3 | DONE | WOLF event command list, decoded from the verified signature table | K-108 |
 | K-110 | 3 | VERIFY | WOLF transfer, move route, database and common event binary formats | K-109 |
 | K-111 | 2 | DONE | RM2K move route, so events walk at the verified per frame rate | K-107 |
-| K-094 | 2 | VERIFY | Verify and implement RM2K vehicle get on/off for the action-event order | K-092 |
-| K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
-| K-090 | 4 | BACKLOG | MV/MZ JavaScript runtime architecture spike | RM2K playable milestone |
-| K-100 | 5 | BACKLOG | PE/DLL inspector research and safe metadata-only parser | Stable primary runtimes |
+| K-112 | — | DONE | RGSS archive format, shared by XP, VX and VX Ace | — |
+| K-113 | — | DONE | Ruby Marshal reader for the RPG Maker data files | — |
+| K-114 | — | VERIFY | RM2K vehicles: state, boarding, sprites and the airship shadow | — |
+| K-115 | — | DONE | Ruby lexer for the RGSS engines | — |
+| K-116 | — | DONE | Ruby parser for the RGSS engines | — |
+| K-117 | — | DONE | The value layer between a game's data and its language | — |
+| K-118 | — | DONE | Name what every child of a tree is for | — |
+| K-119 | — | DONE | Read a whole number wider than this machine holds | — |
+| K-120 | — | DONE | Read the data three real games actually wrote | — |
+| K-121 | — | DONE | Read the data an RPG Maker MZ game wrote | — |
+| K-122 | — | DONE | Name every command an RPG Maker MZ game stores | — |
+| K-123 | — | DONE | Decide a conditional branch the way the engine does | — |
+| K-124 | — | DONE | Walk an event list with an index the way the engine moves it | — |
+| K-125 | — | DONE | Run the list a command calls, and stop at a wait | — |
+| K-126 | — | DONE | Change what the party is carrying | — |
+| K-127 | — | DONE | Put a picture on the screen and move it off again | — |
+| K-128 | — | DONE | Measure what this game actually needs from MZ before modelling more of it | — |
+| K-129 | — | DONE | A second MZ fixture, from a game with no plugins | — |
+| K-130 | — | DONE | Send the player somewhere, and hold the page until they arrive | — |
+| K-131 | — | DONE | Walk a character, one step a frame | — |
+| K-132 | — | DONE | Read a line of text, and every code in it | — |
+| K-133 | — | DONE | A 101, and everything it swallows | — |
+| K-134 | 1 | READY | The twenty-five table rows that have no card behind them | — |
 
 ## Card details
 
@@ -2426,6 +2443,73 @@ than one of them being quietly assumed.
 **Still not true of MZ** Twelve of a hundred and fourteen commands have an
 effect. 231, 232, 235, 351 and 357 are still read as text. No renderer, no
 save path, no input, no audio.
+
+### K-134 The twenty-five table rows that have no card behind them
+`READY` — board, P1
+
+**This board was lying, and the way it lied was measurable.**
+
+Twenty-five rows in the table have no detail section, and forty-seven numbers
+between K-001 and K-133 were never used. Thirty detail sections had no row.
+Two rows appeared twice. **An agent reading only the table — which is what
+`AGENTS.md` points at first — would have seen the work stop at K-111 and had
+no way to know that the RGSS archive, the Marshal reader, the Ruby lexer, the
+parser, the value layer, two MZ fixtures and the whole command-execution line
+existed.**
+
+**The table is now rebuilt from the details**, so every card that has a detail
+section has a row. That is the half that can be repaired from evidence.
+
+**This card is the other half.** The twenty-five rows without a detail section
+name work that was done:
+
+| | |
+|---|---|
+| K-020 | Faithful RM2K/2003 simulation state model |
+| K-033 | Visible RM2K map and sprite overlay in the runtime UI |
+| K-034 | Safe keyboard movement handoff to RM2K simulation |
+| K-035 | Keyboard message dismissal, choice navigation, numeric input |
+| K-036 | Deterministic runtime simulation frame count from the virtual clock |
+| K-037 | Clickable message, choice and numeric-input presentation controls |
+| K-038 | Avoid per-frame choice-control reconstruction in the runtime UI |
+| K-039 | Explicit runtime stop control, hide stale presentation controls |
+| K-042 | RM2K event-page selection and bounded trigger scheduler |
+| K-043 | LMU event-command vectors feeding the native scheduler |
+| K-044 | Dispatch action and touch events from player input and movement |
+| K-045 | LMU event-page switch and variable conditions |
+| K-046 | Selector evaluation for switch B and variable comparisons |
+| K-047 | Diagnose unsupported RM2K commands without execution |
+| K-048 | Separate LMU move-route and event-command presence metadata |
+| K-049 | Bounded RM2K item and actor page conditions |
+| K-051 | Deterministic RM2K Timer 1 / Timer 2 conditions |
+| K-052 | Bounded JSON simulation save and load roundtrip |
+| K-053 | Adaptive application render FPS without changing simulation Hz |
+| K-054 | Capability-gated RM2K save and debug tool contracts |
+| K-060 | Game compatibility profile schema versioning and validation |
+| K-061 | Compatibility report export for GitHub issues |
+| K-070 | Faithful-vs-Enhanced profile and integer scaling controls |
+| K-080 | RGSS architecture spike after the RM2K/2003 playable milestone |
+| K-090 | MV/MZ JavaScript runtime architecture spike |
+
+**Acceptance criteria**
+
+- Each of the twenty-four `DONE` cards gets a detail section carrying **what
+  was built, the test evidence, and the commit**. **No section is written
+  from the title alone** — a title is a claim and this file does not carry
+  claims.
+- A card whose work cannot be evidenced from `git log` and the test suite is
+  moved to `VERIFY`, not `DONE`, and says what is missing.
+- K-080 and K-090 keep `BACKLOG`: both are behind the RM2K playable
+  milestone, and both need a decision about JavaScript that is not this
+  repository's to make quietly.
+- The table and the details are checked against each other by the same
+  measurement that found this: **every row has a section, every section has a
+  row, and no row is duplicated.**
+
+**Why this card exists rather than a paragraph in the board note**
+
+Because the next agent will read the table. **A board note explaining that
+the table is incomplete is a warning; a table that is complete is a fix.**
 
 ## Agent maintenance rules
 - Do not create hundreds of speculative cards for distant phases. Expand the next 1–2 milestones in detail and keep later phases coarse.
