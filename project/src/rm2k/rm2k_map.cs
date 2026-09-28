@@ -56,11 +56,32 @@ public class Rm2kMap
 		public List<int> Parameters = new();
 		public string Text = "";
 
-		public EventCommand(int pCode = 0, List<int>? pParams = null, string pText = "")
+		/// <summary>
+		/// The block this command sits in, from the LCF <c>0x0D</c> chunk.
+		/// </summary>
+		/// <remarks>
+		/// <para>
+		/// <strong>This is the field that makes 20140 and 20141 possible, and
+		/// losing it is not a detail.</strong> The two commands are a
+		/// sub-command pair: a game writes one "show choice option" per branch,
+		/// and the engine uses this number to tell which branches belong
+		/// together and which to skip.
+		/// </para>
+		/// <para>
+		/// A decoder that reads the chunk and then drops the number produces
+		/// events that parse completely and behave wrongly — and every test of
+		/// the codes, the parameters and the strings stays green.
+		/// </para>
+		/// </remarks>
+		public int Indent;
+
+		public EventCommand(
+			int pCode = 0, List<int>? pParams = null, string pText = "", int pIndent = 0)
 		{
 			Code = pCode;
 			Parameters = pParams ?? new List<int>();
 			Text = pText;
+			Indent = pIndent;
 		}
 
 		public Dictionary<string, object> ToDict()

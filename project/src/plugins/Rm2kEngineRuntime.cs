@@ -1214,7 +1214,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                                 {
                                     foreach (var parameter in rawParameters.AsInt32Array()) parameters.Add(parameter);
                                 }
-                                page.Commands.Add(new Rm2kMap.EventCommand(code, parameters, text));
+                                page.Commands.Add(new Rm2kMap.EventCommand(code, parameters, text,
+									TryReadInt(command, "indent", out var indent) ? indent : 0));
                             }
                         }
                         mapEvent.Pages.Add(page);

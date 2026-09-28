@@ -165,6 +165,16 @@ public sealed class EventInterpreter
 	public const int GameOver = 12420;
 	public const int ReturnToTitleScreen = 12510;
 	/// <summary>11710, Change Map Tileset, <c>CmdSetup</c> width 2.</summary>
+	/// <summary>
+	/// 20140 and 20141, the two halves of an RM2K3 choice branch list.
+	/// </summary>
+	/// <remarks>
+	/// **Not a second choice window.** A game writes one 20140 per branch and
+	/// ends the list with 20141, and the engine uses the indent to tell which
+	/// branches belong together.
+	/// </remarks>
+	public const int ShowChoiceOption = 20140;
+	public const int ChoiceEnd = 20141;
 	public const int ChangeMapTileset = 11710;
 
 	/// <summary>11720, Change PBG, <c>CmdSetup</c> width 8.</summary>
@@ -404,6 +414,42 @@ public sealed class EventInterpreter
 		bool, bool, bool>? _moveRouteStarter;
 	private readonly PresentationState? _presentation;
 	private int _commandIndex;
+
+	/// <summary>
+	/// The branch number of the option list being run, from the LCF indent.
+	/// </summary>
+	/// <remarks>
+	/// <strong>This is the <c>20140</c>/<c>20141</c> state</strong> and it
+	/// lives on the interpreter rather than in the simulation, because it
+	/// belongs to one event and not to the game.
+	/// </remarks>
+	private int _subIndex;
+
+
+	/// <summary>
+	/// The branch number currently live, for a test that has to choose one.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Readable and settable on purpose.</strong> The number comes from
+	/// the LCF indent, so a test cannot invent it any other way, and a reader
+	/// that only ever cleared it could not be tested at all.
+	/// </remarks>
+	public int SubIndex
+	{
+		get => _subIndex;
+		set => _subIndex = value;
+	}
+
+	/// <summary>
+	/// The value that means "no branch is live any more".
+	/// </summary>
+	/// <remarks>
+	/// <strong>A branch number and not a flag.</strong> The reference sets the
+	/// sub command index to a sentinel value once a branch has run, and a
+	/// reader that used a boolean would have to decide what to do with a
+	/// second option list on the same page.
+	/// </remarks>
+	private const int SubCommandSentinel = -1;
 	private int _waitFramesRemaining;
 
 	/// <summary>Suspended caller state for a bounded nested CallEvent.</summary>
@@ -595,6 +641,14 @@ public sealed class EventInterpreter
 				// the index does not move, so the next frame runs this case
 				// again until the screen is gone.
 				return false;
+
+			case ShowChoiceOption:
+				ExecuteShowChoiceOption(cmd);
+				return Advance();
+
+			case ChoiceEnd:
+				ExecuteShowChoiceEnd();
+				return Advance();
 
 			case ChangeMapTileset:
 				ExecuteChangeMapTileset(cmd);
@@ -3104,6 +3158,124 @@ public sealed class EventInterpreter
 		_state.AddDiagnostic(
 			$"[Event {_eventId}] Tile {(upper ? "upper" : "lower")} {oldId}"
 			+ $" now draws chip {newId}");
+	}
+
+	/// <summary>
+	/// 20140, Show Choice Option, from EasyRPG's
+	/// <c>CommandShowChoiceOption</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// This is the RM2K3 form of a choice branch, and it is <strong>not a
+	/// second choice window</strong> — it is one branch of a list that the
+	/// player already answered. The reference passes it to
+	/// <c>CommandOptionGeneric</c>, which does two things:
+	/// </para>
+	/// <list type="bullet">
+	/// <item>If this command's <see cref="_subIndex"/> matches the branch
+	/// number in <c>parameters[0]</c>, it clears the sub index so the other
+	/// branches are skipped.</item>
+	/// <item>Otherwise it <strong>skips to the next conditional</strong> — which
+	/// is <c>20141 Show Choice End</c> — and runs nothing of this branch.</item>
+	/// </list>
+	/// <para>
+	/// <strong>Both halves matter and a reader with only one gets a game that
+	/// runs every branch</strong> — a hero who asks a question would walk away,
+	/// fight the guard, buy the sword and leave, all in one frame.
+	/// </para>
+	/// <para>
+	/// <strong>This is also why <see cref="Rm2kMap.EventCommand.Indent"/> exists.</strong>
+	/// The sub index comes from the LCF indent chunk, and a decoder that read
+	/// that chunk and then dropped the number produced events that parse
+	/// completely and behave wrongly.
+	/// </para>
+	/// </remarks>
+	private void ExecuteShowChoiceOption(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 1.
+		if (pCmd.Parameters.Count < 1)
+		{
+			Malformed("Show choice option");
+			return;
+		}
+		var branch = pCmd.Parameters[0];
+		if (_subIndex == branch)
+		{
+			// **The chosen branch clears the sub index**, so the interpreter
+			// stops treating the following 20140s as live branches.
+			_subIndex = SubCommandSentinel;
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Choice branch {branch} runs, and the"
+				+ " following branches are skipped");
+			return;
+		}
+		// **Every other branch jumps to the next 20141 and runs nothing of
+		// this one.** That is the whole difference between a branch list and a
+		// plain sequence of commands.
+		var skipped = SkipToNextChoiceEnd();
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Choice branch {branch} is not the chosen one,"
+			+ $" so {skipped} commands were skipped");
+	}
+
+	/// <summary>
+	/// 20141, Show Choice End, from EasyRPG's <c>CommandShowChoiceEnd</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>It does nothing, and that is the whole command.</strong> The
+	/// reference writes <c>return true;</c> and never reads the command. It
+	/// exists so that a branch list has an end, and a reader that treated it
+	/// as "the end of the choice" would close a window the player is still
+	/// looking at.
+	/// </remarks>
+	private void ExecuteShowChoiceEnd()
+	{
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Choice branch list ends here, and the command"
+			+ " itself does nothing — that is what the reference does with it");
+	}
+
+	/// <summary>
+	/// Jumps to the next <c>20141</c> and returns how many commands were
+	/// skipped.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>A branch with no end stops at the end of the list</strong>, and
+	/// says so. The reference's <c>SkipToNextConditional</c> walks to the next
+	/// command from its set; a branch list whose last option has no end is a
+	/// game bug, and a reader that ran off the end of the command array would
+	/// read past the list.
+	/// </para>
+	/// <para>
+	/// Only <c>20141</c> is in the set here, because the reference passes
+	/// <c>{Cmd::ShowChoiceOption, Cmd::ShowChoiceEnd}</c> and a nested option
+	/// list ends at its own end.
+	/// </para>
+	/// </remarks>
+	private int SkipToNextChoiceEnd()
+	{
+		var start = _commandIndex;
+		// **The bound is checked before the read, and not after the step.** A
+		// branch list whose last option has no end is a game bug, and a reader
+		// that stepped first and checked after would read one past the array
+		// and throw — so the check is the first thing in the loop.
+		while (_commandIndex + 1 < _commands.Count)
+		{
+			_commandIndex++;
+			if (_commands[_commandIndex].Code != ChoiceEnd)
+			{
+				continue;
+			}
+			return _commandIndex - start;
+		}
+		// The index is left on the last command, so the page finishes instead
+		// of walking past the list.
+		_commandIndex = _commands.Count - 1;
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Choice branch list has no {ChoiceEnd} after the"
+			+ $" skipped commands, so the branch ran to the end of the list");
+		return _commandIndex - start;
 	}
 
 	private void ExecuteChangeHeroTitle(Rm2kMap.EventCommand pCmd)

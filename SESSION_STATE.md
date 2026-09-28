@@ -2714,3 +2714,43 @@ die Tests haben es gefunden.
 **Mutations** 10 Regeln, **10 von 10 gefangen** im ersten Lauf — darunter die
 obere Tabelle in die untere geschrieben, die beiden Geschwindigkeiten
 vertauscht und die Karteneinstellungen über den Reset gerettet.
+
+## K-136 `20140` / `20141` — DONE, und dieser Schnitt fand ein Feld, das der Parser wegwarf
+
+**Der Decoder las den LCF-Chunk `0x0D`, schrieb ihn in sein Wörterbuch, und
+`EventCommand` hatte kein Feld dafür.** Jedes Event wurde also vollständig
+geparst und kein Zweig konnte je identifiziert werden. `EventCommand.Indent`
+existiert jetzt, und `Rm2kEngineRuntime` reicht es durch.
+
+**Ein Test der Codes, der Parameter und der Strings wäre die ganze Zeit grün
+gewesen** — die Information ging zwischen zwei richtigen Lesern verloren, und
+nur das Verhalten von `20140` hätte es zeigen können.
+
+**`20140` ist kein zweites Choice-Fenster.** Es ist ein Zweig einer Liste, die
+der Spieler schon beantwortet hat, und die Referenz reicht es an
+`CommandOptionGeneric`: entweder wird der Sub-Index gelöscht — weil das der
+gewählte Zweig ist — oder zum nächsten bedingten Befehl gesprungen. **Wer nur
+eine Hälfte hätte, bekäme einen Helden, der eine Frage stellt, weggeht, den
+Wächter angreift, das Schwert kauft und geht — alles in einem Frame.**
+
+**Jeder Zweig endet mit seinem eigenen `20141`.** Der Sprung läuft zum nächsten
+Befehl aus `{ShowChoiceOption, ShowChoiceEnd}`, also würde ein Zweig ohne eigenes
+Ende jeden Zweig danach mit verschlucken. Der erste Testentwurf baute die
+andere Form und schlug „aus dem richtigen Grund" fehl.
+
+**Der gewählte Zweig setzt den Sub-Index auf einen Sentinel, nicht auf ein
+Flag.** Ohne das würde eine zweite Liste auf derselben Seite gegen eine
+veraltete Zahl vergleichen.
+
+**Der Sprung prüft die Grenze vor dem Lesen, nicht nach dem Schritt.** Ein
+Zweig ohne Ende ist ein Fehler im Spiel; wer erst springt, liest einen Index
+zu viel und wirft. Genau das tat dieser Leser; der Test fand es.
+
+**Test evidence** `test_rm2k_choice_branches.cs` (6). **1185/1185**.
+**Mutations** 7 Regeln über zwei Läufe, **7 von 7 gefangen** — darunter der
+gewählte Zweig übersprungen statt ausgeführt, der Sprung ohne Ziel und der
+Indent im Konstruktor wieder verworfen.
+
+**Was bleibt** `1008 ChangeClass` und `10500 SimulatedAttack` plus die fünf
+liblcf-Codes, die die Referenz nicht dispatcht. `ChangeClass` braucht zuerst
+ein Klassenmodell.

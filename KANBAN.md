@@ -2589,6 +2589,7 @@ look for the next island of that shape.**
 | heroes | ~~`10620` `10630` `10640`~~ | **~~hero title, sprite, face — DONE~~** |
 | vehicles | ~~`10650` `10850`~~ | **~~vehicle graphic and location — DONE, see below~~** |
 | map | ~~`11710` `11720` `11740` `11750`~~ | **~~tileset, panorama, encounter steps, tile substitution — DONE, see below~~** |
+| choice | ~~`20140` `20141`~~ | **~~choice option and choice end — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -2601,6 +2602,51 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `20140` and `20141` are done — and this slice found a field the parser was throwing away
+
+**The decoder read the LCF `0x0D` indent chunk, wrote it into its dictionary,
+and `EventCommand` had no field for it.** So every event parsed completely and
+no branch could ever be identified. `EventCommand.Indent` exists now and
+`Rm2kEngineRuntime` passes it through.
+
+**A test of the codes, the parameters and the strings would have been green the
+whole time** — the information was lost between two correct readers, and only
+the behaviour of `20140` could have shown it.
+
+**`20140` is not a second choice window.** It is one branch of a list the player
+already answered, and the reference hands it to `CommandOptionGeneric`, which
+either clears the sub index — because this is the chosen branch — or skips to
+the next conditional. **A reader with only one half would have a hero who asks
+a question, walks away, fights the guard, buys the sword and leaves, all in one
+frame.**
+
+**Each branch ends with its own `20141`.** The skip walks to the next command
+from `{ShowChoiceOption, ShowChoiceEnd}`, so a branch without an end of its own
+would swallow every branch after it. A list written as one block with a single
+end is therefore a different list, and a reader that treated it as the same one
+would skip the rest of the page on the first unchosen branch. The test builds
+the reference shape — `20140(n), marker, 20141` three times — and the first
+draft built the other one and "failed" for the right reason.
+
+**The chosen branch clears the sub index to a sentinel, not a flag.** Without
+that, a second list on the same page would compare against a stale number and
+the player second answer would pick the branch the first answer cleared.
+
+**The skip checks its bound before the read, not after the step.** A branch
+list whose last option has no end is a game bug, and a reader that stepped
+first would read one past the array and throw. This one did; the test caught
+it and the loop now checks first.
+
+**Test evidence** `test_rm2k_choice_branches.cs`, 6 tests.
+**1185/1185**, `TestRm2kChoiceBranches: 6/6`.
+**Mutations** Seven rules over two runs, **7 of 7 caught** — including the
+chosen branch skipped instead of run, the skip stopping at nothing, and the
+indent dropped again in the constructor.
+
+**What is left** `1008 ChangeClass` and `10500 SimulatedAttack`, plus the five
+liblcf codes the reference does not dispatch. Those are the last two real
+commands, and `ChangeClass` is the one that needs a class model first.
 
 ## `11710`, `11720`, `11740` and `11750` are done — and one of them had no writer at all
 
