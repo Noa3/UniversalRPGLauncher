@@ -222,14 +222,30 @@ public static class WolfCharacterSheet
 		// 1, 0, …** — the same shape run the other way, which is what the
 		// specification's arrow shows.
 		//
-		// **The parentheses around the modulo are not decoration.** Without
-		// them this method throws `DivideByZeroException` on every call, and
-		// `WalkPattern` — which has them — has always been correct. The
-		// compiler binds `pIndex % 4 switch` so that the switch selects over
-		// something other than the remainder, and the division that survives
-		// is not the one written here. **Sixteen measurements found the file
-		// innocent, because the file was innocent**: the only way to see it
-		// was to compile the method on its own and watch it throw.
+		// **The parentheses around the modulo are not decoration, and this is
+		// the whole of the "Attempted to divide by zero" this file was blamed
+		// for.** C# binds `switch` tighter than `%`, so `pIndex % 4 switch { … }`
+		// is `pIndex % (4 switch { … })` — and that switch expression is
+		// `0` for every value the written cases do not name, because this
+		// method's default arm is `_ => 0`. **So the method divides by zero on
+		// every call**, and the exception says `DivideByZeroException` and not
+		// anything that names a missing parenthes.
+		//
+		// **Sixteen measurements found the file innocent because the file was
+		// innocent: there is no division written in it anywhere.** What was
+		// needed was a probe that compiles the expression on its own:
+		//
+		// ```
+		// static int A(int i, int n) => i % 4 switch { 0 => …, 1 => 2, 2 => 1, _ => 0 };
+		// // DivideByZeroException - Attempted to divide by zero.
+		// static int B(int i, int n) => (i % 4) switch { 0 => …, 1 => 2, 2 => 1, _ => 0 };
+		// // 1, 2, 1, 0
+		// ```
+		//
+		// **The lesson is about the method of looking, not about C#:** reading
+		// a file for a division cannot find a division the compiler invents,
+		// and a test that only renames and rebuilds re-asks the same question
+		// the same way.
 		return (pIndex % 4) switch
 		{
 			0 => pIdleCount > 2 ? 1 : 0,

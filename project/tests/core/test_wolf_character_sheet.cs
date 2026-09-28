@@ -412,16 +412,20 @@ public partial class TestWolfCharacterSheet : TestBase
 		// have a figure's idle step forward while its walk steps back, which is
 		// the kind of wrong a player sees and does not report.
 		//
-		// **These four calls throw "Attempted to divide by zero" in the run and
-		// I could not find the cause in sixteen measurements.** `IdleCell` has
-		// no division at all — it is `pIndex % 4` — `WalkPattern` has none
-		// either, the whole file has none, the constant reads 3, a test that
-		// touches only the constant passes, and renaming the suite and the
-		// method moved the name in the report and nothing else. Deleting
-		// `obj`, `bin` and `.godot/mono` does not change it.
+		// **This test used to fail with "Attempted to divide by zero", and the
+		// cause was in the method's own text.** C# binds `switch` tighter than
+		// `%`, so `pIndex % 4 switch { … }` reads as `pIndex % (4 switch { … })`
+		// — and that inner switch is `0` for everything the written cases do
+		// not name, because the default arm is `_ => 0`. **The method divided
+		// by zero on every call while containing no division to find.**
 		//
-		// **The rule is measured and implemented; the run is not understood.**
-		// That is the state this card is in, and the card is VERIFY for it.
+		// **Sixteen measurements missed it because they were all the same
+		// measurement**: reading the file for a division, and a file with no
+		// division in it looks innocent however often it is read. A probe that
+		// compiles the expression on its own shows it in one step:
+		// `i % 4 switch { …, _ => 0 }` throws, `(i % 4) switch { …, _ => 0 }`
+		// returns 1, 2, 1, 0. **A failure whose cause is in the parse cannot be
+		// found by reading the parsed-away program.**
 		AssertEq(
 			WolfCharacterSheet.IdleCell(0, WolfCharacterSheet.Patterns3, 3), 1,
 			"**and the first idle is the second frame**, which is 停止2 in the"
@@ -438,4 +442,81 @@ public partial class TestWolfCharacterSheet : TestBase
 			+ " the walk's order");
 	}
 
+
+	/// <summary>
+	/// The modulo in the sheet's two switches needs its parentheses, and a
+	/// test that only reads the file cannot tell whether it has them.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>C# binds <c>switch</c> tighter than <c>%</c>.</strong> Written
+	/// without the parentheses, <c>pIndex % 4 switch { … }</c> is
+	/// <c>pIndex % (4 switch { … })</c> — and this sheet's default arm is
+	/// <c>_ =&gt; 0</c>, so the inner switch is zero for every value the
+	/// written cases do not name, <strong>and the method divides by zero on
+	/// every call while containing no division to find.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>The probe below is the same expression the sheet uses, without
+	/// the parentheses, evaluated for real.</strong> It is the cheapest
+	/// possible regression: it fails by throwing, it needs no build of this
+	/// project, and <strong>it is the measurement that sixteen attempts to
+	/// read the file could not produce</strong> — because the division is not
+	/// in the text.
+	/// </para>
+	/// </remarks>
+	public void Test_TheSwitchWithoutParenthesesDividesByZero()
+	{
+		static int OhneKlammern(int pIndex, int pIdleCount)
+		{
+			// **Absichtlich ohne Klammern** -- das ist der Fehler, nicht der
+			// Fehler ist in diesem Test, sondern was passiert, wenn er in die
+			// Quelle wandert.
+			return pIndex % 4 switch
+			{
+				0 => pIdleCount > 2 ? 1 : 0,
+				1 => 2,
+				2 => 1,
+				_ => 0,
+			};
+		}
+
+		var geworfen = false;
+		try
+		{
+			for (var index = 0; index < 4; index++)
+			{
+				OhneKlammern(index, 3);
+			}
+		}
+		catch (DivideByZeroException)
+		{
+			geworfen = true;
+		}
+
+		AssertTrue(geworfen,
+			"**`pIndex % 4 switch` throws DivideByZeroException** — the switch "
+				+ "binds tighter than the modulo, so this is "
+				+ "`pIndex % (4 switch { … })` and the sheet's default arm is "
+				+ "`_ => 0`. **This is the failure the idle cycle was blamed for "
+				+ "and could not be found in sixteen measurements**, because a "
+				+ "file with no division in it reads innocent however often it "
+				+ "is read.");
+
+		// **Und die Fassung des Blattes wirft nicht** -- derselbe Ausdruck mit
+		// Klammern, und das ist der Vertrag, den `IdleCell` einloest. Die
+		// Folge ist 1, 2, 1, 0: der Leerzyklus laeuft 2, 3, 2, 1, und der
+		// Gangzyklus 1, 0, 1, 2.
+		var erwartet = new[] { 1, 2, 1, 0 };
+		for (var index = 0; index < 4; index++)
+		{
+			AssertEq(
+				WolfCharacterSheet.IdleCell(index, WolfCharacterSheet.Patterns3, 3),
+				erwartet[index],
+				"**and the sheet's own version answers instead of throwing** — "
+					+ "the parentheses are the whole difference between a number "
+					+ "and an exception, and the idle cycle at index " + index
+					+ " is " + erwartet[index]);
+		}
+	}
 }

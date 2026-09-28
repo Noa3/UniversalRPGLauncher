@@ -4265,6 +4265,33 @@ wrong — measured on its own, that rule is caught in two tests. The whole run
 was invalid because a line it needed had been moved back by the harness
 itself.
 
+## The WOLF divide-by-zero is explained: `switch` binds tighter than `%`
+
+**C# binds `switch` tighter than `%`.** Written without parentheses,
+`pIndex % 4 switch { … }` is `pIndex % (4 switch { … })` — and this sheet's
+default arm is `_ => 0`, so the inner switch is `0` for every value the
+written cases do not name. **The method divided by zero on every call while
+containing no division to find.**
+
+Measured, not inferred — a probe that compiles the expression on its own:
+
+```
+i % 4 switch  { 0 => …, 1 => 2, 2 => 1, _ => 0 }   // DivideByZeroException
+(i % 4) switch { 0 => …, 1 => 2, 2 => 1, _ => 0 }   // 1, 2, 1, 0
+```
+
+**Sixteen measurements missed it because they were all the same measurement**:
+reading the file for a division. A file with no division in it reads innocent
+however often it is read, and renaming the suite, renaming the method and
+deleting `obj`, `bin` and `.godot/mono` all re-ask that question the same way.
+**A failure whose cause is in the parse cannot be found by reading the
+parsed-away program** — the only move that works is to evaluate the expression
+in isolation.
+
+`Test_TheSwitchWithoutParenthesesDividesByZero` now holds both halves: the
+unparenthesised form throws, and the sheet's own form answers. Removing the
+parentheses from `WolfCharacterSheet.cs` kills two tests.
+
 ### A harness that edits itself is worse than no harness
 
 `mut_map.py` stopped parsing. My own patching had cut the file in the wrong

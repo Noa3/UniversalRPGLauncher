@@ -2725,10 +2725,26 @@ that touches only the constant passes, a call with a literal 3 passes, `WalkPatt
 suite and the method moved the name in the report and nothing else, and deleting
 `obj`, `bin` and `.godot/mono` changed nothing.
 
-**The only thing that found it was compiling the method on its own and watching it
-throw.** In a separate project, outside Godot, with nothing but the file and a
-`Console.WriteLine`, the exception appeared immediately — and the line it pointed at
-was the `_ => 0,` arm of a switch whose selector was `pIndex % 4`.
+**The only thing that found it was compiling the expression on its own and watching
+it throw.** A probe outside Godot, with nothing but the expression and a
+`Console.WriteLine`, shows both halves in one run:
+
+```
+i % 4 switch  { 0 => n > 2 ? 1 : 0, 1 => 2, 2 => 1, _ => 0 }
+//   DivideByZeroException - Attempted to divide by zero.
+(i % 4) switch { 0 => n > 2 ? 1 : 0, 1 => 2, 2 => 1, _ => 0 }
+//   1, 2, 1, 0
+```
+
+**C# binds `switch` tighter than `%`, so the first line is `i % (4 switch { … })`
+— and this sheet's default arm is `_ => 0`, so the inner switch is zero for
+every value the written cases do not name. The method divided by zero on every
+call while containing no division to find.** Renaming the suite, renaming the
+method and deleting `obj`, `bin` and `.godot/mono` all re-ask the question
+"is there a division in this file", and the answer is always no.
+
+`Test_TheSwitchWithoutParenthesesDividesByZero` now holds both halves, and
+removing the parentheses from `WolfCharacterSheet.cs` kills two tests.
 
 **The parentheses around the modulo are not decoration.** `WalkPattern` writes
 `return (pIndex % 4) switch`; `IdleCell` wrote `return pIndex % 4 switch`. **With the
