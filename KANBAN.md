@@ -2583,7 +2583,7 @@ look for the next island of that shape.**
 | memory | ~~`10820` `11530` `11540`~~ | **~~memorize location, memorize and play BGM — DONE~~** |
 | memory | `10830` `10910` | **Recall To Location is in liblcf and has no method in this EasyRPG build; Store Terrain ID likewise** |
 | memory | `10920` | **Store Event ID — DONE; the note that it had no method was wrong, see below** |
-| teleport | ~~`11810`~~ | **~~teleport targets — DONE~~** |
+| teleport | ~~`11810` `11820` `11830`~~ | **~~teleport targets, teleport access, escape target — DONE, see below~~** |
 | outcome | ~~`12420` `12510`~~ | **~~game over, return to title — DONE~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
@@ -2597,6 +2597,38 @@ look for the next island of that shape.**
 | ~~misc~~ | ~~`10430` `10460` `10470`~~ | **~~actor parameters, HP, SP — DONE, see below~~** |
 | ~~access~~ | ~~`11840` `11930` `11960`~~ | **~~escape, save, main menu access — DONE, see below~~** |
 | ~~misc~~ | ~~`10120` `10130` `10230`~~ | **~~message options, face graphic, timer — DONE, see below~~** |
+
+## `11820` and `11830` are done — and one of them was never on the board
+
+**`11820 Change Teleport Access` fehlt in K-136 vollständig.** Das Board
+führte den Bereich "`11810`–`11840`" mit Einzelcodes, und dieser fiel zwischen
+den Einträgen durch. Die Referenz hat ihn: `SetAllowTeleport(parameters[0] !=
+0)`. Es ist der **vierte** der vier Ein-Zeiler-Access-Befehle, und **ein Board,
+das Lücken zwischen Bereichsangaben hat, verliert Befehle.**
+
+**Und `11830 Escape Target` hat dieselbe vierte Parameterbedeutung wie der
+Sprungpunkt:** "der Schalter muss AN sein". Wer sie als "benutze einen Schalter"
+liest, macht einen gesperrten Fluchtpunkt von der ersten Minute an verfügbar —
+und ein Spiel, das seinen Ausgang hinter einem Schalter versteckt, wäre direkt
+hinauslaufbar.
+
+**Es gibt genau einen Fluchtpunkt, und ein zweiter Befehl ersetzt ihn.**
+`SetEscapeTarget` setzt. **Wer eine Liste führte, müsste eine Regel erfinden,
+welcher gewinnt** — und die hat das Spiel nie geschrieben.
+
+**Der Default-Parameter auf `true` war eine Falle, und die Tests haben sie
+gefunden.** `SetAccess` bekam einen vierten Parameter `pTeleport = true`, und
+**jeder der drei älteren Aufrufe setzte Teleport damit still zurück** — der
+letzte Befehl gewann, nicht der, der das Flag benannt hatte. Das ist exakt der
+Fehler, den `SetTimer` und `StartTimer` einmal gekostet hat, in einer anderen
+Form. Der Default ist jetzt weg, weil ein Default auf dem Zustandswert hier
+nichts zu suchen hat.
+
+**Test evidence** `test_rm2k_teleport_access.cs`, 9 tests.
+**1141/1141**, `TestRm2kTeleportAccess: 9/9`.
+**Mutations** Ten rules over two runs, **10 of 10 caught**. Two of them broke
+the build first because `SetAccess` has no defaults, and were re-measured with
+code that compiles — a compile error is not a caught rule.
 
 ## `10920`, `11810`, `12420` and `12510` are done — and the board was wrong about one of them
 

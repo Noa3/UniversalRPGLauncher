@@ -164,6 +164,16 @@ public sealed class EventInterpreter
 	/// </summary>
 	public const int GameOver = 12420;
 	public const int ReturnToTitleScreen = 12510;
+	/// <summary>11820 and 11830, Change Teleport Access and Escape Target.</summary>
+	/// <remarks>
+	/// <c>11820</c> is the fourth of the four one-line access commands and was
+	/// missing from the board entirely; <c>11830</c> is the same shape as the
+	/// teleport point, with the same fourth-parameter meaning.
+	/// </remarks>
+	public const int ChangeTeleportAccess = 11820;
+	public const int EscapeTarget = 11830;
+
+	/// <summary>11840, 11930 and 11960, the three other access commands.</summary>
 	public const int ChangeEscapeAccess = 11840;
 	public const int ChangeSaveAccess = 11930;
 	public const int ChangeMainMenuAccess = 11960;
@@ -546,6 +556,14 @@ public sealed class EventInterpreter
 				// the index does not move, so the next frame runs this case
 				// again until the screen is gone.
 				return false;
+
+			case ChangeTeleportAccess:
+				ExecuteAccessChange(cmd, pWhich: AccessFlag.Teleport);
+				return Advance();
+
+			case EscapeTarget:
+				ExecuteEscapeTarget(cmd);
+				return Advance();
 
 			case ChangeEscapeAccess:
 				ExecuteAccessChange(cmd, pWhich: AccessFlag.Escape);
@@ -2222,17 +2240,19 @@ public sealed class EventInterpreter
 	/// rather than implementing a half from imagination.
 	/// </para>
 	/// </remarks>
-	/// <summary>Which of the three player access rights a command addresses.</summary>
+	/// <summary>Which of the four player access rights a command addresses.</summary>
 	private enum AccessFlag
 	{
 		Escape,
 		Save,
 		Menu,
+	/// <summary>The teleport command, from <c>11820</c>.</summary>
+	Teleport,
 	}
 
 	/// <summary>
-	/// 11840, 11930 and 11960, from EasyRPG's <c>CommandChangeEscapeAccess</c>,
-	/// <c>CommandChangeSaveAccess</c> and <c>CommandChangeMainMenuAccess</c>.
+	/// 11820, 11840, 11930 and 11960, the four one-line access commands.
+	/// <c>11820</c> is <c>SetAllowTeleport</c> and was missing from the board.
 	/// </summary>
 	/// <remarks>
 	/// <para>
@@ -2457,6 +2477,76 @@ public sealed class EventInterpreter
 			+ " page holds until it is up");
 	}
 
+	/// <summary>
+	/// 11830, Escape Target, from EasyRPG's <c>CommandEscapeTarget</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>The fourth parameter means the switch must be on</strong>, exactly
+	/// as in <c>11810</c> — the reference reads
+	/// <c>bool switch_on = com.parameters[3]</c> and pairs it with the switch id.
+	/// A reader that read it as "use a switch" would make a locked escape point
+	/// available from the first minute of the game, and a game that hides its
+	/// exit behind a switch would be walkable straight out of it.
+	/// </para>
+	/// <para>
+	/// <strong>There is exactly one and this replaces it.</strong> A map has
+	/// many warp points and one place Escape goes to; a reader that kept a list
+	/// would have to invent a rule for which one wins, and the game never wrote
+	/// that rule.
+	/// </para>
+	/// </remarks>
+	private void ExecuteEscapeTarget(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Escape target");
+			return;
+		}
+		var mapId = pCmd.Parameters[0];
+		var x = pCmd.Parameters[1];
+		var y = pCmd.Parameters[2];
+		var requiresSwitchOn = pCmd.Parameters[3] != 0;
+		var switchId = pCmd.Parameters[4];
+		if (requiresSwitchOn && (switchId < 1
+			|| switchId > GameSimulationState.MaxSwitches))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Escape target needs switch {switchId}, which"
+				+ $" is outside 1 to {GameSimulationState.MaxSwitches}, and the"
+				+ " target was refused");
+			return;
+		}
+		// **A point outside the map is refused, and the escape target is the
+		// last thing that should be wrong**: a player who presses Escape and
+		// lands nowhere is stuck, and a zero coordinate would send them to the
+		// top left corner of the map instead.
+		if (x < 0 || y < 0
+			|| (mapId == _state.MapId
+				&& (x >= _state.MapWidth || y >= _state.MapHeight)))
+		{
+			_state.AddDiagnostic(
+				$"[Event {_eventId}] Escape target {x},{y} on map {mapId} is"
+				+ " outside the map, and the target was refused");
+			return;
+		}
+		_state.EscapeTarget = new GameSimulationState.TeleportTarget
+		{
+			MapId = mapId,
+			X = x,
+			Y = y,
+			RequiresSwitchOn = requiresSwitchOn,
+			SwitchId = requiresSwitchOn ? switchId : 0,
+			IsUsable = true,
+		};
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Escape target is now {x},{y} on map {mapId},"
+			+ (requiresSwitchOn
+				? $" and it needs switch {switchId} on"
+				: " and it is unconditional"));
+	}
+
 	private void ExecuteAccessChange(Rm2kMap.EventCommand pCmd, AccessFlag pWhich)
 	{
 	if (pCmd.Parameters.Count < 1)
@@ -2472,17 +2562,24 @@ public sealed class EventInterpreter
 	switch (pWhich)
 	{
 		case AccessFlag.Escape:
-			_state.SetAccess(allowed, _state.AllowSave, _state.AllowMenu);
+			_state.SetAccess(allowed, _state.AllowSave, _state.AllowMenu,
+				_state.AllowTeleport);
 			break;
 		case AccessFlag.Save:
-			_state.SetAccess(_state.AllowEscape, allowed, _state.AllowMenu);
+			_state.SetAccess(_state.AllowEscape, allowed, _state.AllowMenu,
+				_state.AllowTeleport);
 			break;
 		case AccessFlag.Menu:
-			_state.SetAccess(_state.AllowEscape, _state.AllowSave, allowed);
+			_state.SetAccess(_state.AllowEscape, _state.AllowSave, allowed,
+				_state.AllowTeleport);
+			break;
+		case AccessFlag.Teleport:
+			_state.SetAccess(_state.AllowEscape, _state.AllowSave,
+				_state.AllowMenu, pTeleport: allowed);
 			break;
 		default:
 			_state.AddDiagnostic(
-				$"[Event {_eventId}] Change access: the flag is not one of the three");
+				$"[Event {_eventId}] Change access: the flag is not one of the four");
 			return;
 	}
 	_state.AddDiagnostic(

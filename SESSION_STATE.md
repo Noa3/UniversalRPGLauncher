@@ -2553,3 +2553,31 @@ Warten ohne Grund sieht wie ein Hänger aus.
 **Test evidence** `test_rm2k_teleport_and_outcome.cs` (13). **1132/1132**.
 **Mutations** 10 Regeln, **10 von 10 gefangen** — darunter das Sprung-Flag als
 „es gibt einen Schalter" und das leere Feld mit einer erfundenen ID beantwortet.
+
+## K-136 `11820` / `11830` — DONE, und einer stand nie auf dem Board
+
+**`11820 Change Teleport Access` fehlt in K-136 vollständig.** Das Board führte
+den Bereich "`11810`–`11840`" mit Einzelcodes, und dieser fiel zwischen den
+Einträgen durch. Die Referenz hat ihn: `SetAllowTeleport(parameters[0] != 0)`.
+Es ist der **vierte** der vier Ein-Zeiler-Access-Befehle. **Ein Board, das
+Lücken zwischen Bereichsangaben hat, verliert Befehle** — die Liste wird ab jetzt
+aus der Quelle gemessen und nicht aus dem Board übernommen.
+
+**`11830 Escape Target` hat dieselbe vierte Parameterbedeutung wie der
+Sprungpunkt:** „der Schalter muss AN sein". Wer sie als „benutze einen Schalter"
+liest, macht einen gesperrten Fluchtpunkt von der ersten Minute an verfügbar.
+Es gibt **genau einen** und ein zweiter Befehl ersetzt ihn — wer eine Liste
+führte, müsste eine Regel erfinden, welcher gewinnt, und die hat das Spiel nie
+geschrieben.
+
+**Der Default-Parameter auf `true` war eine Falle, und die Tests haben sie
+gefunden.** `SetAccess` bekam `pTeleport = true`, und **jeder der drei älteren
+Aufrufe setzte Teleport damit still zurück** — der letzte Befehl gewann, nicht
+der, der das Flag benannt hatte. Exakt der Fehler, den `SetTimer` und
+`StartTimer` einmal gekostet hat, in anderer Form. Der Default ist weg.
+
+**Test evidence** `test_rm2k_teleport_access.cs` (9). **1141/1141**.
+**Mutations** 10 Regeln über zwei Läufe, **10 von 10 gefangen**. Zwei brachten
+zuerst den Build zum Scheitern, weil `SetAccess` keine Defaults mehr hat, und
+wurden mit kompilierendem Code nachgemessen — ein Compilefehler ist keine
+gefangene Regel.

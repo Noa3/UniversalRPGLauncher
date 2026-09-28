@@ -265,6 +265,30 @@ public sealed class GameSimulationState
     /// <c>Godot.Collections.Dictionary</c> is a Variant container and a class
     /// is not a Variant — the same GD0301 the actor values ran into.
     /// </remarks>
+    /// <summary>
+    /// Where the player leaves to when they press Escape, from
+    /// <c>11830 Escape Target</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>One and not a list.</strong> A map has many warp points and
+    /// exactly one place Escape goes to, and a reader that stored a list would
+    /// have to invent a rule for which one wins — a rule the game never wrote.
+    /// <c>SetEscapeTarget</c> in the reference replaces, and so does this.
+    /// </remarks>
+    public TeleportTarget? EscapeTarget { get; set; }
+
+    /// <summary>
+    /// Whether the player may use the teleport command, from
+    /// <c>11820 Change Teleport Access</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Defaulted to allowed, with the other three access flags and for
+    /// the same reason</strong> — a database that never ran the command has
+    /// teleport on, and a reader that defaulted to forbidden would leave a game
+    /// with no warps and no way to walk anywhere.
+    /// </remarks>
+    public bool AllowTeleport { get; private set; } = true;
+
     public System.Collections.Generic.Dictionary<int, List<TeleportTarget>> TeleportTargets { get; init; } = new();
 
     /// <summary>Why the interpreter is waiting, when it is.</summary>
@@ -312,13 +336,14 @@ public sealed class GameSimulationState
     /// were once collapsed and the collapse cost a save file. The access flags
     /// are a single assignment each, so one method is enough — but it is one
     /// method and not a public setter, so the next reader does not have to
-    /// rediscover that the three of them move together.
+    /// rediscover that the four of them move together.
     /// </remarks>
-    public void SetAccess(bool pEscape, bool pSave, bool pMenu)
+    public void SetAccess(bool pEscape, bool pSave, bool pMenu, bool pTeleport)
     {
         AllowEscape = pEscape;
         AllowSave = pSave;
         AllowMenu = pMenu;
+        AllowTeleport = pTeleport;
     }
 
     public bool Timer1Active { get; private set; }
@@ -1024,7 +1049,8 @@ public sealed class GameSimulationState
         // **The access flags go back to allowed with everything else.** A new
         // game is a game the player may save and escape from, and a reset that
         // left a cutscene's restrictions in place would lock the next game.
-        SetAccess(pEscape: true, pSave: true, pMenu: true);
+        SetAccess(pEscape: true, pSave: true, pMenu: true, pTeleport: true);
+        EscapeTarget = null;
         // **The outcome belongs to the game, not to the next one.** A new game
         // that started with the last game over screen still up would look like
         // a crash, and one that started with a title request pending would
