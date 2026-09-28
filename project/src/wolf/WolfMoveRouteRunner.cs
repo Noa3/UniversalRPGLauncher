@@ -254,9 +254,13 @@ public sealed class WolfMoveRouteRunner
 				return WolfMoveRouteOutcome.Refused;
 
 			case WolfMoveRouteType.SetSound:
-				// **Refused, because this runner has no audio.** A step that
-				// changed no visible state and reported success would be a lie
-				// the caller could not detect.
+				// **Refused here, and answered on the board.** A sound step needs
+				// the audio state — three channels and the config switches — and
+				// this runner holds one figure and nothing else. The board has
+				// both, so the refusal moved there rather than staying a
+				// refusal: a game with a sound step in every battle was
+				// previously a game where every battle's sound step ended the
+				// route.
 				return WolfMoveRouteOutcome.Refused;
 
 			default:

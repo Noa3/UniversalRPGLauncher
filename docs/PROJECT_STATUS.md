@@ -1005,3 +1005,27 @@ itself is not cleared by reading it either. The seventeenth changed the question
 "is the source wrong" but "does it work outside the thing that reported it".
 
 **1313/1313, sixteen effective mutation rules, sixteen caught.**
+
+**And WOLF had no audio at all, and a sound step in a move route was refused.**
+The refusal was the honest answer while there was nowhere to put one — and a game with a sound
+step in every battle was a game where every battle ended at its sound step. There are three
+channels now: BGM, BGS as the ambient sound the material guide names rain, wind and a
+heartbeat for, and SE, which does not loop.
+
+**The rule that carries the card is that a volume of zero is standard under the old rule and
+silent under the new one.** The material guide says both, for BGM and for SE, and the game
+settings page says a zero was converted to 100 before version 3.681 and that the setting can
+keep it — the case being a background sound mixed at zero for interactive music. Which of the
+two a game uses is a setting, and this reader has none, so a zero is reported as zero and
+named as the ambiguous value it is.
+
+**An effect's time is a delay and a music track's is a fade, and they are not the same
+field.** The guide says the fade time becomes "delay the playback" for an effect, and gives
+sixty frames to the second. And the file name is in the single byte arguments, because a
+route step carries four byte numbers and then single bytes, and a name is text.
+
+**And Clear() emptied the box and left the radio on.** Figures, routes, passability and the party
+all go; the sound did not. A new game that kept the last one's music would open its title
+screen with the previous game's theme, and nothing else on the board would have caught it.
+
+**1324/1324, eleven effective mutation rules, eleven caught.**

@@ -3549,3 +3549,67 @@ nicht dieselbe Messung noch einmal.
 Klammern um das Modulo, die Richtungsreihenfolge, der Zyklus auf der ersten statt der
 mittleren Zelle, der Idle-Zyklus wie der Lauf, der doppelt angewendete Versatz, die
 Stehzelle, das nie abgebuchte Animationsbudget und eine Drehung als Schritt gemeldet.
+
+## WOLF Ton — DONE
+
+**WOLF hatte keinen Ton und der Tonschritt in einer Laufbahn wurde abgelehnt** — die ehrliche
+
+Antwort, solange es nirgendes hinzustellen war. Jetzt: drei Kanaele, die Null-Lautstaerke als
+
+zwei Regeln und der Tonschritt im Brett statt im Läufer.
+
+
+
+**Die Regel, die eine ganze Karte traegt: eine Lautstaerke von 0 ist unter der alten Regel
+
+Standard und unter der neuen stumm.** Die Materialliste sagt beides, und die
+
+Spielkonfiguration sagt, dass vor 3.681 auf 100 umgerechnet wurde und die Einstellung es nun
+
+behaelt — der Fall dafuer ist ein Hintergrundgeraeusch mit Mischung 0 fuer interaktive Musik.
+
+**Welche der beiden ein Spiel benutzt, ist eine Einstellung, und dieser Leser hat keine** —
+
+er meldet eine Null als Null und benennt sie als den mehrdeutigen Wert, der sie ist.
+
+
+
+**Die Zeit eines Effekts ist eine Verzoegerung und die eines Musikstuecks eine Einblendung.**
+
+Die Materialliste sagt, die Einblendzeit werde zu *die Wiedergabe verzoegern* fuer einen
+
+Soundeffekt, und nennt sechzig Bilder pro Sekunde. Ein Leser, der eine Verzoegerung als
+
+Einblendung behandelte, haette den Effekt leise beginnen und lauter werden lassen; einer, der
+
+die Zahl als Millisekunden las, haette ein Sechzigstel der verlangten Wartezeit gewartet.
+
+
+
+**Der Dateiname steht in den Einzel-Byte-Argumenten.** Ein Schritt hat vier Byte-Argumente und
+
+dann Einzel-Byte-Argumente, und ein Dateiname ist Text. Ein Leser, der ihn in den Zahlen
+
+gesucht haette, haette drei ganze Zahlen gefunden und sich gefragt, warum kein Titel laeuft.
+
+
+
+### Der Fund
+
+
+
+**`Clear() leerte die Kiste und liess das Radio laufen.** Figuren, Wege, Passierbarkeit und Partei
+
+werden alle mitgenommen, der Ton nicht. Ein neues Spiel, das die Musik des letzten behaelt,
+
+oeffnet seinen Titelbildschirm mit dem Thema des vorherigen Spiels — und **nichts anderes auf dem
+
+Brett haette es gemerkt**, weil die Figuren fort waren und es keine Figur gibt, die falsch
+
+aussieht.
+
+
+
+**Test evidence** `test_wolf_audio.cs` (11). **1324/1324**, Validator grün.
+
+**Mutations** 11 Regeln über zwei Läufe, **11 von 11 gefangen**.

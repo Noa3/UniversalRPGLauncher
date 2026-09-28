@@ -2602,6 +2602,7 @@ look for the next island of that shape.**
 | wolf | ~~character collision~~ | **~~half-tile hitboxes, pass-through, and a hero who is not a wall — DONE, see below~~** |
 | wolf | ~~target numbers and approach~~ | **~~-1 to -7, five companions, and two approach steps finally run — DONE, see below~~** |
 | wolf | ~~character sheets and animation~~ | **~~the direction order, the walk cycle, and the animation clock — DONE, see below~~** |
+| wolf | ~~audio~~ | **~~three channels, the zero volume rule, and the delay that is not a fade — DONE, see below~~** |
 | teleport access | `11810`–`11840` | targets and the two access flags |
 | saves | `11910` `11930` | open save menu, change save access |
 | menues | `11950` `11960` `12010`-family | open main menu, change access |
@@ -7909,3 +7910,104 @@ three rewritten in K-124's and K-132's files.
 either a broken rule or a test that could not reach the thing it mutated; two
 of them found real product faults — the 102 read from the wrong command, and
 a 103/104 read as a list of options.
+
+
+## WOLF Ton: drei Kanaele, und eine Null, die zwei Bedeutungen hat
+
+**WOLF hatte keinen Ton und der Tonschritt in einer Laufbahn wurde abgelehnt.** Das war
+
+die ehrliche Antwort, solange es nirgends hingesellt werden konnte — und ein Spiel mit
+
+einem Tonschritt in jedem Kampf war bisher ein Spiel, in dem jeder Kampf an der Tonzeile
+
+endete.
+
+
+
+**Drei Kanaele und nicht einer.** BGM ist Hintergrundmusik, BGS ist Hintergrundgeräusch —
+
+die Materialliste nennt es ein Umgebungsgeräusch und nennt Regen, Wind und einen Herzschlag
+
+als seine Verwendung — und SE ist ein Soundeffekt, der nicht wiederholt. Ein Leser mit einer
+
+Liste hätte einen Herzschlag das Stadttema ersetzen lassen.
+
+
+
+### Die drei Regeln, die eine ganze Karte tragen
+
+
+
+**Eine Lautstärke von 0 ist unter der alten Regel Standard und unter der neuen stumm.**
+
+Die Materialliste sagt beides, für BGM wie für SE: 100 ist die normale Lautstärke, 1 bis 100
+
+ist leiser, über 100 ist lauter, und ein Eintrag von 0 wird ebenfalls in normaler Lautstärke
+
+abgespielt. Die Spielkonfiguration sagt dazu, dass vor Version 3.681 die 0 auf 100 umgerechnet
+
+wurde und die Einstellung sie nun bei 0 lässt — und der Fall, für den es die Einstellung gibt,
+
+ist ein Hintergrundgeräusch mit Mischung 0 für interaktive Musik. **Welche der beiden ein
+
+Spiel benutzt, ist eine Einstellung, und dieser Leser hat keine** — er meldet also eine Null als
+
+Null und benennt sie als den mehrdeutigen Wert, der sie ist.
+
+
+
+**Die Zeit eines Effekts ist eine Verzoegerung und die eines Musikstücks eine Einblendung —
+
+und das sind nicht dasselbe Feld.** Die Materialliste sagt, die Einblendzeit des Tonbefehls
+
+werde zu *die Wiedergabe verzögern* für einen Soundeffekt, und nennt die Einheit: sechzig Bilder
+
+sind eine Sekunde. Ein Leser, der eine Verzoegerung als Einblendung behandelte, hätte den
+
+Effekt leise beginnen und lauter werden lassen — und die Verzoegerung eines Sekunde als
+
+Millisekunden gelesen wäre ein Sechzigstel dessen, was das Spiel verlangt hat.
+
+
+
+**Der Dateiname steht in den Einzel-Byte-Argumenten, und die Zahlen in den Vier-Byte-Argumenten.**
+
+Ein Laufbahnschritt hat einen Typ, eine Anzahl Vier-Byte-Werte, diese, eine Anzahl
+
+Einzel-Byte-Werte und diese — und ein Dateiname ist Text, also steht er in der zweiten Liste.
+
+Ein Leser, der den Namen in der ersten gesucht hätte, hätte drei ganze Zahlen gefunden und
+
+sich gefragt, warum kein Titel laeuft.
+
+
+
+### Was der Test fand
+
+
+
+**`Clear() leerte die Kiste und liess das Radio laufen.** Figuren, Wege, Passierbarkeit und
+
+Partei werden alle mitgenommen — und der Ton nicht. Ein neues Spiel, das die Musik des letzten
+
+behaelt, oeffnet seinen Titelbildschirm mit dem Thema dessen, was vorher geladen war, und
+
+**nichts anderes auf dem Brett haette es gemerkt**, weil die Figuren fort waren und es keine
+
+Figur gibt, die falsch aussieht.
+
+
+
+**Test evidence** `test_wolf_audio.cs` (11).
+
+**1324/1324**, Validator grün.
+
+**Mutations** 11 Regeln über zwei Läufe, **11 von 11 gefangen** — darunter der Standardwert 100,
+
+das Beibehalten der Null unter der neuen Regel, der Name aus den falschen Argumenten, BGS und SE
+
+im selben Kanal, die Verzoegerung als Einblendung, SE bekommt die Einblendung der Musik, ein
+
+leerer Name als Klanger, ein abgeschalteter Kanal, der sammelt, und der Tonschritt, der die
+
+Laufbahn beendet.

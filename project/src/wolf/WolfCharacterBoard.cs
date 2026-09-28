@@ -331,6 +331,60 @@ public sealed class WolfCharacterBoard
 	public WolfParty Party { get; } = new();
 
 	/// <summary>
+	/// The sounds the commands ask for, and what has been asked for since.
+	/// </summary>
+	/// <remarks>
+	/// **The board's own, and for the same reason as the party.** A sound step
+	/// runs on a route, and a route runs on the board; a sound state held
+	/// elsewhere would have to be handed in at every step, and a caller that
+	/// forgot would lose the game's background music without an error anywhere.
+	/// </remarks>
+	public WolfAudioState Audio { get; } = new();
+
+	/// <summary>
+	/// The file name a step's single byte arguments spell, in the editor's
+	/// own encoding.
+	/// </summary>
+	/// <param name="pStep">The step to read.</param>
+	/// <returns>The name, or an empty string when the step carries none.</returns>
+	/// <remarks>
+	/// <para>
+	/// <strong>The name is in the single byte arguments, and not in the four
+	/// byte numbers.</strong> A route step's shape is a type, a count of four
+	/// byte values, those values, a count of single byte values, and those — and
+	/// a file name is text, so it is in the second list. A reader that read the
+	/// four byte values as a name would produce a number where a path belongs,
+	/// and a game that asked for <c>SE/door.ogg</c> would be handed something
+	/// like <c>-18867289</c>.
+	/// </para>
+	/// <para>
+	/// <strong>The name is not packed four bytes to a value.</strong> That was
+	/// what this comment claimed first, and the reader does not do it: it puts
+	/// each single byte into its own list entry in file order, so the name is the
+	/// second list joined back together. **The four byte half is the numbers** —
+	/// the volume, the frequency and the delay — and a reader that looked for a
+	/// file name there would find three integers and wonder why no track played.
+	/// </para>
+	/// </remarks>
+	public static string NameOf(WolfMoveRouteStep pStep)
+	{
+		if (pStep.ByteArguments.Count == 0)
+		{
+			return string.Empty;
+		}
+		// **The bytes are the name, in order, and they are already split.** The
+		// reader put each single byte into the list in file order, so joining
+		// them back is the name — and the four byte half is the numbers, which
+		// is where the volume and the frequency live.
+		var chars = new char[pStep.ByteArguments.Count];
+		for (var index = 0; index < chars.Length; index++)
+		{
+			chars[index] = (char)pStep.ByteArguments[index];
+		}
+		return new string(chars);
+	}
+
+	/// <summary>
 	/// How many walking patterns the game's settings use: three or five.
 	/// </summary>
 	/// <remarks>
@@ -669,6 +723,20 @@ public sealed class WolfCharacterBoard
 			// standing at a wall and then a stop nobody asked for. Asking the
 			// timing of a step that did not run is also a question with no
 			// answer: there is nothing to time.
+			// **The sound step is answered here and not by the runner.** It needs
+			// the audio state — three channels, the config switches and the zero
+			// volume setting — and the runner holds one figure and nothing else.
+			// The board has all of it, so the refusal moved here rather than
+			// staying a refusal.
+			if (step.Type == WolfMoveRouteType.SetSound)
+			{
+				// **A sound step is instant and it never stops a route.** A
+				// player that opened a door and whose route then ended would
+				// have the door's script stop at the door, and a reader that
+				// gave the step a frame budget would make every footstep wait.
+				Audio.Play(SoundOf(step));
+				continue;
+			}
 			// **The two approach steps are answered here and not by the runner.**
 			// They need the board — a second figure, or a tile — and the runner
 			// holds one figure, so it refused them outright. That refusal was
@@ -871,6 +939,49 @@ public sealed class WolfCharacterBoard
 	}
 
 	/// <summary>
+	/// What a sound step asks for, from its arguments and its name.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>The channel comes first, and the numbers after it.</strong> The
+	/// material guide describes the sound command with a channel selector, a
+	/// file or a database entry, and then the volume, the frequency and the
+	/// time — and the format's step carries the numbers as four byte values and
+	/// the name as single bytes.
+	/// </para>
+	/// <para>
+	/// <strong>A sound effect's time is a delay and a music track's is a
+	/// fade</strong>, and putting both in one field would have a sound effect
+	/// start quietly and grow. The material guide is explicit that the fade time
+	/// becomes "delay the playback" for an effect, and gives the unit: sixty
+	/// frames is one second.
+	/// </para>
+	/// </remarks>
+	private WolfSoundRequest SoundOf(WolfMoveRouteStep pStep)
+	{
+		var channel = StepArgument(pStep, 0);
+		return new WolfSoundRequest
+		{
+			// **A channel outside the three is the music one, and the reason is
+			// stated.** A step from a newer editor could name a channel this
+			// reader does not have, and the answer is the one that is silent
+			// rather than the one that would be loud and wrong.
+			Channel = channel >= 0 && channel <= WolfSoundChannel.MaxChannel
+				? channel
+				: WolfSoundChannel.Bgm,
+			Name = NameOf(pStep),
+			Volume = StepArgument(pStep, 1),
+			Frequency = StepArgument(pStep, 2),
+			DelayFrames = channel == WolfSoundChannel.Se
+				? StepArgument(pStep, 3)
+				: 0,
+			FadeFrames = channel == WolfSoundChannel.Se
+				? 0
+				: StepArgument(pStep, 3),
+		};
+	}
+
+	/// <summary>
 	/// One four byte argument of a step, or zero when it has none.
 	/// </summary>
 	private static int StepArgument(WolfMoveRouteStep pStep, int pIndex)
@@ -959,6 +1070,12 @@ public sealed class WolfCharacterBoard
 		// **The party goes with them.** A new game that kept the last game's
 		// companions would send a guard walking to a figure that is not there.
 		Party.Clear();
+		// **The sounds go with them, and this is the one the test found.** A
+		// game that kept the last one's background music would open its title
+		// screen playing the theme of whatever was loaded before it — and
+		// nothing else on the board would have caught it, because the figures
+		// were gone and there is no figure to look wrong.
+		Audio.Clear();
 		// **The list goes last and not first**, because clearing it while a
 		// figure still points at it would leave the hero asking a list that no
 		// longer contains it — and asking is how it is told the world is empty.
