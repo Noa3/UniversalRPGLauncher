@@ -170,7 +170,7 @@ public sealed class RubyParser
     /// complained that the closer was missing, which is a misleading message
     /// about a file that is perfectly well formed.
     /// </remarks>
-    private List<RubyNode> ParseStatements(string pCloser)
+    private List<RubyNode> ParseStatements(params string[] pClosers)
     {
         var statements = new List<RubyNode>();
         while (true)
@@ -178,18 +178,29 @@ public sealed class RubyParser
             SkipNewlines();
             if (AtEnd)
             {
-                if (pCloser == "end of input")
+                if (pClosers.Length == 1 && pClosers[0] == "end of input")
                 {
                     return statements;
                 }
+
                 throw new RubyParseException(
-                    $"'{pCloser}' was expected, but the script ends first.",
+                    $"'{pClosers[0]}' was expected, but the script ends first.",
                     Current.Line);
             }
-            if (Is(pCloser))
+
+            // **Einer der Schluesselwoerter genuegt.** `if` wird von `else`
+            // und von `end` beendet, und **ohne diese Liste haette der
+            // Parser `if a then b else c end` als Rumpf `b` gelesen und
+            // `else` als den naechsten Ausdruck erwartet** -- das ist der
+            // Fehler, an dem die erste Fassung des Interpreters scheiterte.
+            foreach (var closer in pClosers)
             {
-                return statements;
+                if (Is(closer))
+                {
+                    return statements;
+                }
             }
+
             statements.Add(ParseStatement());
             SkipNewlines();
         }
@@ -578,6 +589,23 @@ public sealed class RubyParser
         return arguments;
     }
 
+    /// <summary>
+    /// Reads a body up to one of several keywords, and leaves that keyword in
+    /// the stream.
+    /// </summary>
+    /// <param name="pClosers">
+    /// The keywords that end the body. <strong>More than one, because
+    /// <c>if</c> is ended by <c>else</c> as well as by <c>end</c>.</strong>
+    /// </param>
+    /// <remarks>
+    /// <strong>The closer is not consumed here.</strong> Every existing caller
+    /// takes it itself — <c>ReadBody</c> is also the body of a
+    /// <c>def</c>, a <c>class</c> and a <c>do</c> block, where the
+    /// <c>end</c> belongs to the opening keyword's own parse. <strong>A
+    /// version that consumed it would have made <c>def foo; end</c> one
+    /// <c>end</c> short</strong> and handed the next statement to the wrong
+    /// caller.
+    /// </remarks>
     private RubyNode ReadBody(string pCloser)
     {
         var statements = ParseStatements(pCloser);
@@ -595,6 +623,45 @@ public sealed class RubyParser
             Line = statements.Count > 0 ? statements[0].Line : Current.Line,
             Children = statements,
         };
+    }
+
+    /// <summary>
+    /// Reads a body that may be ended by one of several keywords, and stops
+    /// at the first of them <em>without</em> consuming it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is the shape <c>if</c> needs and the one
+    /// <see cref="ReadBody"/> cannot give.</strong> A <c>def</c> or a
+    /// <c>class</c> is ended by exactly one keyword that belongs to it, so it
+    /// reads the body and consumes the closer. An <c>if</c> is ended by
+    /// <c>else</c> or by <c>end</c>, and <strong>the parser has to look at
+    /// which of the two is there before it can decide whether there is a
+    /// second branch at all</strong> — so the closer stays, and the
+    /// <c>if</c> parse consumes it.
+    /// </remarks>
+    private RubyNode ReadBodyUntil(params string[] pClosers)
+    {
+        var statements = ParseStatements(pClosers);
+        foreach (var closer in pClosers)
+        {
+            if (Is(closer))
+            {
+                return new RubyNode
+                {
+                    Kind = RubyNodeKind.Block,
+                    Name = closer,
+                    Line = statements.Count > 0
+                        ? statements[0].Line
+                        : Current.Line,
+                    Children = statements,
+                };
+            }
+        }
+
+        throw new RubyParseException(
+            $"'{pClosers[0]}' was expected at offset {Current.Offset}, but "
+                + $"'{Current.Text}' is there.",
+            Current.Line);
     }
 
     private RubyNode ParsePrimary()
@@ -792,13 +859,97 @@ public sealed class RubyParser
                 var condition = ParseExpression();
                 SkipNewlines();
                 SkipThen();
-                var whenTrue = ReadBody("end");
+                var whenTrue = ReadBodyUntil("else", "elsif", "end");
+                // **Der else-Zweig ist optional.** `ReadBody` laesst das
+                // Schluesselwort stehen -- und **ohne diesen Zweig wuerde der
+                // Parser `else` als den naechsten Ausdruck lesen** und mit
+                // "'else' does not begin an expression" abbrechen.
+                // **Ohne else und ohne elsif steht hier das `end`** -- und
+                // `ReadBodyUntil` hat es stehen gelassen. Ohne diesen Test
+                // gaenge der if-Zweig ins Leere und der naechste Ausdruck
+                // der Datei wuerde als `end` gelesen.
+                if (!IsKeyword("else") && !IsKeyword("elsif") && !IsKeyword("end"))
+                {
+                    throw new RubyParseException(
+                        $"'else' or 'end' was expected at offset "
+                            + $"{Current.Offset}, but '{Current.Text}' is there.",
+                        Current.Line);
+                }
+
+                RubyNode whenFalse = null;
+                if (IsKeyword("elsif"))
+                {
+                    // **elsif ist ein else, dessen Bedingung ein if ist** --
+                    // und genau darum ruft es sich hier auf und liegt nicht
+                    // in einer Schleife.
+                    _index++;
+                    SkipNewlines();
+                    var elsifCondition = ParseExpression();
+                    SkipNewlines();
+                    SkipThen();
+                    var elsifTrue = ReadBodyUntil("else", "elsif", "end");
+                    whenFalse = new RubyNode
+                    {
+                        Kind = RubyNodeKind.If,
+                        Name = "if",
+                        Line = elsifCondition.Line,
+                        Children = [elsifCondition, elsifTrue],
+                        Role_Children =
+                        [
+                            new() { Role = RubyNodeRole.Condition, Node = elsifCondition },
+                            new() { Role = RubyNodeRole.WhenTrue, Node = elsifTrue },
+                        ],
+                    };
+                }
+                else if (IsKeyword("else"))
+                {
+                    _index++;
+                    SkipNewlines();
+                    whenFalse = ReadBody("end");
+                }
+
+                // **Nur der Zweig ohne else schuldet noch ein `end`.** Der
+                // `else`-Arm hat es ueber `ReadBody("end")` schon genommen,
+                // und ein `elsif`-Zweig ist ein vollstaendiges `if`, das
+                // seines selbst genommen hat -- **eine Pruefung, die in
+                // beiden Faellen noch einmal nach `end` sieht, wuerde bei
+                // jedem vollstaendigen `if ... else ... end` fehlschlagen.**
+                var endGenommen = whenFalse != null;
+                if (!endGenommen)
+                {
+                    if (IsKeyword("end"))
+                    {
+                        _index++;
+                    }
+                    else
+                    {
+                        throw new RubyParseException(
+                            $"'end' was expected at offset {Current.Offset}, "
+                                + $"but '{Current.Text}' is there.",
+                            Current.Line);
+                    }
+                }
+
+                var children = new List<RubyNode> { condition, whenTrue };
+                var roles = new List<RubyNodePart>
+                {
+                    new() { Role = RubyNodeRole.Condition, Node = condition },
+                    new() { Role = RubyNodeRole.WhenTrue, Node = whenTrue },
+                };
+                if (whenFalse != null)
+                {
+                    children.Add(whenFalse);
+                    roles.Add(new RubyNodePart
+                        { Role = RubyNodeRole.WhenFalse, Node = whenFalse });
+                }
+
                 return new RubyNode
                 {
                     Kind = RubyNodeKind.If,
                     Name = pToken.Text,
                     Line = pToken.Line,
-                    Children = [condition, whenTrue],
+                    Children = children,
+                    Role_Children = roles,
                 };
             }
             case "while":

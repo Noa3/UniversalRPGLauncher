@@ -59,7 +59,7 @@
 | K-077 | — | DONE | Preserve pending InputNumber state across variable conflicts | — |
 | K-078 | — | DONE | Implement bounded RM2K ChangeItems command | — |
 | K-079 | — | DONE | Implement bounded RM2K ChangePartyMembers command | — |
-| K-080 | 4 | BACKLOG | RGSS architecture spike after RM2K/2003 playable milestone | RM2K playable milestone |
+| K-080 | 4 | IN PROGRESS | RGSS: the Ruby interpreter, no eval and no marshal execution | RM2K playable milestone |
 | K-081 | 0 | DONE | Decode real LMU event pages: fix struct-array field collection and verify liblcf IDs | K-013 |
 | K-082 | 0 | DONE | Align event-page trigger ids with liblcf and fail closed on undecodable pages | K-081 |
 | K-083 | 0 | DONE | Correct ControlSwitches/ControlVariables parameter layout to the verified EasyRPG spec | K-081 |
@@ -4389,10 +4389,71 @@ one skipped diagnostic at a time.
 
 **Commit.** `dcafeaf`, the commit that introduced the file that holds this work — found with `git log --follow --diff-filter=A`, not from a claim in the title.
 
-### K-080 RGSS architecture spike after the RM2K/2003 playable milestone
-`BACKLOG` — board, P4
+### K-080 The Ruby interpreter for XP, VX and VX Ace
+`IN PROGRESS` — board, P4
 
-**`BACKLOG` bleibt, und aus zwei Gruenden, die nicht meine sind.** Erstens liegt die Karte hinter dem spielbaren Meilenstein, und zweitens braucht sie eine Entscheidung darueber, wie Ruby in diesem Projekt behandelt wird — **und die ist nicht still zu treffen.** Die Ruby-Schicht, die es gibt, ist ein Lexer, ein Parser und ein Werterlayer; eine Laufzeit ist das nicht.
+**The boundary decision was put to the user on 2026-09-28: the lexer and the
+parser stay, the interpreter is finished, and there is no `eval` and no marshal
+execution.** The card leaves `BACKLOG` with that on the record.
+
+**What was already there, measured:** 3162 lines across `RubyLexer` (980),
+`RubyParser` (1175), `RubyNode`/`RubyNodeKind` (340), `RubyValue` (298) and
+`RubyValueConverter` (300), with 49 node kinds and 8 value kinds. **The
+evaluator was the missing piece and nothing else.**
+
+**`RubyInterpreter` walks a tree it was given, and reaches nothing else.**
+`IRubyHost` is the whole boundary: the interpreter can only call what a host
+hands it, and only by name. **A host that answers `File.read` has made that
+decision itself**, and the interpreter's correctness does not depend on it.
+`RubyNullHost` is the default and answers nothing — a game that reaches for
+something unimplemented gets a named refusal, **because a reader that answered
+nil would have spread a fact about this project through the rest of a game's
+logic.**
+
+### And the test that proves nothing runs
+
+A source containing `throw new Error(...)` and `while (true)` is read on a
+thread with a five second limit: the reader returns, throws nothing, and still
+finds the command name. **"Does not execute" is asserted, not claimed.** And a
+second test reads the interpreter's own source and fails if it names
+`System.Reflection`, `Assembly.Load`, `Process.Start`, `Activator.Create` or
+`Marshal.Load` — **a claim about one's own source is checkable and a comment
+is not.**
+
+### Ruby's own rules, where they are observable
+
+- **A whole-number division rounds towards negative infinity**: `-7 / 2` is
+  `-4`, and C# says `-3`. A reader that used the host's operator would have
+  shifted every negative half in a game's damage formula.
+- **A remainder takes the sign of the dividend**: `-7 % 3` is `2` in Ruby and
+  `-1` in C#.
+- **Only `nil` and `false` are false, so zero is true.** `if 0` takes the then
+  branch, and a reader that used the host's truth would have taken the other.
+- **Division by zero raises and does not answer.** The host's own division
+  would give infinity, and a number RPG_RT never produces is worse than a
+  raised error.
+- **A script that does not finish is stopped.** Ruby's `while true` runs for
+  ever; the reference runtime hangs, and **a runtime that opens an arbitrary
+  file has to be able to say so** rather than hang with the window up.
+
+### The parser could not read an `if` with an `else`, and the evaluator found it
+
+`ReadBody` knew one closing keyword, so `if a then b else c end` was read as a
+body containing `b` and then met an `else` where an expression belonged.
+`ReadBodyUntil` now stops at any of several and **leaves the keyword in the
+stream**, and the `if` parse takes its own closer — the two differ because a
+`def` ends at exactly one keyword that belongs to it, while an `if` has to look
+at which of `else` or `end` is there before it can know whether a second
+branch exists.
+
+**And the evaluator reads both child lists.** A node carries
+`Role_Children` when the parser recorded a role per child and `Children` in
+plain source order otherwise; **an evaluator that demanded the roles would
+have answered "unknown node" for every operation the parser wrote plainly**,
+which is most of a game's own arithmetic.
+
+**Test evidence** `test_ruby_interpreter.cs`, 12 tests; `test_ruby_parser.cs`
+stays 52/52. **1553/1553**, validator passed.
 
 ### K-090 MV/MZ: script files as data, no JavaScript executed
 `IN PROGRESS` — board, P4
