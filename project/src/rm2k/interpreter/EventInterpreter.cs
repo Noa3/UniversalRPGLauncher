@@ -63,11 +63,67 @@ public sealed class EventInterpreter
 	public const int CallTargetCommonEvent = 0;
 	public const int CallTargetMapEvent = 1;
 	public const int ShowMessage2 = 20110; // message continuation line
-	// liblcf lcf::rpg::Cmd::ShowMessage_2 is 20110 and the *first* line of a
-	// message is inline in 10110; **1009 is the bare continuation line of the
-	// same message**, and both games use it. A first draft believed 20110 was
-	// the only continuation and therefore dropped every 1009 in the fixtures.
-	public const int ShowMessageLine = 1009;
+
+	/// <summary>
+	/// 1009, from liblcf <c>Code::ChangeBattleCommands</c> and EasyRPG
+	/// <c>CommandChangeBattleCommands</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>This was misread as a second message continuation line and the
+	/// mistake was pushed.</strong> A card counted 20 occurrences of a bare
+	/// <c>1009</c> with a string after a <c>10110</c>, compared them to MZ's
+	/// <c>401</c> following a <c>101</c>, and concluded the two engines share a
+	/// convention. They do not.
+	/// </para>
+	/// <para>
+	/// The fixture settles it: <c>1009</c> carries <strong>four integers and an
+	/// empty text</strong> — <c>[1,1,1,1]</c>, <c>[1,1,2,1]</c>,
+	/// <c>[1,3,8,1]</c>, <c>[1,4,10,1]</c> — which are exactly
+	/// <c>parameters[0..3]</c> of <c>CommandChangeBattleCommands</c>: actor,
+	/// class, battle command id, and whether to add. <strong>A message line
+	/// carries text and no integers, and these carry neither.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>Two engines having the same number for different things is not a
+	/// coincidence worth acting on</strong> — it is the normal state of a
+	/// twenty year old command table, and a pattern that fits two readings is
+	/// not evidence for either.
+	/// </para>
+	/// </remarks>
+	public const int ChangeBattleCommands = 1009;
+
+	/// <summary>5001, from liblcf <c>Code::OpenLoadMenu</c>.</summary>
+	public const int OpenLoadMenu = 5001;
+
+	/// <summary>5002, from liblcf <c>Code::ExitGame</c>.</summary>
+	public const int ExitGame = 5002;
+
+	/// <summary>5003, from liblcf <c>Code::ToggleAtbMode</c>.</summary>
+	public const int ToggleAtbMode = 5003;
+
+	/// <summary>5004, from liblcf <c>Code::ToggleFullscreen</c>.</summary>
+	public const int ToggleFullscreen = 5004;
+
+	/// <summary>5005, from liblcf <c>Code::OpenVideoOptions</c>.</summary>
+	public const int OpenVideoOptions = 5005;
+
+	/// <summary>
+	/// The RPG2K3 E commands, which is the only engine version that runs any of
+	/// the five menu commands. EasyRPG's
+	/// <c>Player::IsRPG2k3ECommands</c> gate.
+	/// </summary>
+	/// <remarks>
+	/// **All five return true — a silent no-op — on a game that is not
+	/// RPG2K3 E commands**, and a silent no-op in an interpreter is the worst
+	/// possible answer: the page carries on as though the game had asked for
+	/// nothing, and a player who pressed the button to open the load menu
+	/// watches the game do nothing at all.
+	/// </remarks>
+	public static bool IsMenuCommand(int pCode)
+	{
+		return pCode >= OpenLoadMenu && pCode <= OpenVideoOptions;
+	}
 	public const int ElseBranch = 22010;
 	public const int EndBranch = 22011;
 	public const int EndLoop = 22210;
@@ -473,19 +529,8 @@ public sealed class EventInterpreter
 		var kind = pCmd.Code == ShowMessage ? "Show message" : "Comment";
 		var text = pCmd.Text;
 		// Consume continuation lines (ShowMessage_2 / Comment_2).
-		//
-		// **The continuation code is not one number.** A message is 10110 with
-		// its first line inline, and the lines after it are **20110 in one
-		// game and 1009 in the other** — 276 and 20 across the four pinned maps.
-		// Reading only 20110 silently loses the 1009 lines, and a first draft
-		// did exactly that for every message in both fixtures.
-		//
-		// **Both are read**, because a reader that guesses which number a game
-		// uses is a reader that drops half its dialogue on the other game.
 		while (_commandIndex + 1 < _commands.Count
-			&& (pCmd.Code == ShowMessage
-				? IsMessageLine(_commands[_commandIndex + 1])
-				: _commands[_commandIndex + 1].Code == Comment2))
+			&& (_commands[_commandIndex + 1].Code == (pCmd.Code == ShowMessage ? ShowMessage2 : Comment2)))
 		{
 			_commandIndex++;
 			text += "\n" + _commands[_commandIndex].Text;
@@ -498,22 +543,6 @@ public sealed class EventInterpreter
 			}
 		}
 		_state.AddDiagnostic($"[Event {_eventId}] {kind}: {Truncate(text)}");
-	}
-
-	/// <summary>
-	/// Whether a command continues a message, from both numbers the format uses.
-	/// </summary>
-	/// <remarks>
-	/// <strong>20110 is <c>ShowMessage_2</c> and 1009 is the bare line.</strong>
-	/// liblcf gives the codes as <c>0x4E8A</c> and <c>0x03ED</c>, and two games
-	/// in the fixtures use one each. **Measuring showed 276 of one and 20 of
-	/// the other**, so a reader that handles only the larger number loses 20
-	/// lines of dialogue in the game that uses the smaller one — and every test
-	/// it has still passes, because the test game uses 20110.
-	/// </remarks>
-	private static bool IsMessageLine(Rm2kMap.EventCommand pCommand)
-	{
-		return pCommand.Code == ShowMessage2 || pCommand.Code == ShowMessageLine;
 	}
 
 	private static string Truncate(string pText)

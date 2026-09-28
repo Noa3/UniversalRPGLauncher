@@ -1935,42 +1935,63 @@ Runner verwendete `$TMPDIR/m_<pfad>` als Backup, was mit `/` im Namen scheiterte
 kumulativ kaputte Datei. `git checkout --` hat daraufhin den **ungestagten**
 Slice verworfen; er wurde neu gebaut und sofort gestaged.
 
-## K-135 Die Befehlsverteilung beider echten RM2K-Fixtures — READY angelegt
+## K-135 Drei Selbstkorrekturen und `11610` — VERIFY
 
-**Gemessen, nicht geschätzt.** Jeder Event-Befehl aus allen vier gepinnten
-RM2K-Karten (`rm2k-dragon-destiny` und `easyrpg-testgame`), aus dem
-Wertebaum des Parsers herausgewalkt, gegen die Konstantenliste des
-Interpreters.
+**Die Karte musste sich selbst dreimal widersprechen, und die dritte
+Korrektur hat einen bereits gepushten Fix zurückgenommen.**
 
-**32 von 778 Befehlen werden übersprungen.** Sieben Codes:
+### 1. `1009` ist KEINE Nachrichten-Fortsetzungszeile
 
-| Code | Anzahl | Was |
-|---|---:|---|
-| `1009` | **20** | **die Folgezeile einer Nachricht, ohne eigenen Befehl** |
-| `11610` | **2** | **nicht identifiziert** |
-| `5001`–`5005` | **2 je** | **Move-Route-Schritte, in einer Seite getragen** |
+Der alte Entwurf zählte 20 nackte `1009` mit String nach einem `10110`, sah
+MZ' `401` auf ein `101` folgen und schloss auf eine gemeinsame Konvention.
+**Die gibt es nicht.** Die Fixture entscheidet es:
 
-**`1009` ist die größte Gruppe und ist kein Befehl.** `10110` trägt seine erste
-Zeile inline, und jede Folgezeile ist ein nacktes `1009` mit einem String —
-**genau wie MZ's `401` auf ein `101` folgt.** Ein Leser, der `10110`
-dispatcht und `1009` verwirft, **verliert jede zweite Zeile jeder Nachricht in
-beiden Spielen** — und 20 davon stehen auf einer einzigen Seite, also verliert
-eine Dialogseite zwanzig Zeilen.
+```
+[1,1,1,1]  [1,1,2,1]  [1,3,8,1]  [1,4,10,1]   → vier Integer, LEERER Text
+```
 
-**`5001`–`5005` sind Move-Route-Schritte, keine Event-Befehle** — dieselbe
-Falle wie MZ's `505`, wo K-131 348 davon verschachtelt in `205` fand und keinen
-als eigenen Befehl. Hier je zwei. **Deshalb ist eine rekursive Zählung
-„Codes in diesem Spiel" keine Zählung nicht implementierter Befehle.**
+Das sind exakt `parameters[0..3]` von `CommandChangeBattleCommands`: Actor,
+Klasse, Battle-Command-ID, add/remove. **Eine Nachrichtenzeile trägt Text und
+keine Integer — diese tragen beides nicht.** `liblcf`'s
+`Code::ChangeBattleCommands` ist 1009, EasyRPG gated es auf
+`IsRPG2k3Commands()`.
 
-**Und `11610` ist nicht identifiziert.** Zwei Vorkommen. Dieses Repository
-rät keinen Befehl, den es nicht aus der Referenzimplementierung gelesen hat,
-also sagt die Karte „nicht identifiziert" und nicht, was er vermutlich ist.
+**Der falsche Fix war als `5a9ca22` gepusht und wird hier revertiert.** Er sah
+richtig aus, die Mutationen haben ihn nicht gefangen, und der Grund seiner
+Falschheit ist: **ein Muster, das zu zwei Lesungen passt, ist für keine von
+beiden ein Beleg.**
 
-**Die gepinnte Dragon-Destiny-Fixture hat zwei Karten mit je ~1,2 KB und
-beide ohne Events** (`event_count=0`). Das ist kein Fehler, sondern eine
-Eigenschaft: es ist eine Startkarte. Die Verteilung stammt aus allen vier
-Karten beider Fixtures.
+### 2. `5001`–`5005` sind Menübefehle, keine Move-Route-Schritte
 
-**Nächster Schritt:** `1009` als Folgezeile von `10110` lesen, mit derselben
-Zwei-Phasen-Lesung und derselben Index-Buchführung, die K-133 für MZ gemessen
-hat. Verlust bei null.
+Sie standen in der Karte als „Route-Schritte in einer Seite getragen", ohne
+dass das Feld geöffnet wurde, das es gezeigt hätte. Gemessen: sie stehen
+**direkt in der Befehlsliste der Seite**, zwischen einer Nachricht und einem
+Conditional Branch. **Die Seiten haben sehr wohl 60 Routenlisten — und in
+keiner davon stehen diese fünf Codes.** Ein erster Test behauptete „keine
+Routenliste" und schlug fehl; **60 ist die bessere Messung**, weil sie zeigt,
+dass das Feld existiert und gelesen wurde.
+
+Aus `liblcf`: `OpenLoadMenu = 5001`, `ExitGame = 5002`,
+`ToggleAtbMode = 5003`, `ToggleFullscreen = 5004`, `OpenVideoOptions = 5005`.
+
+### 3. `11610` ist Key Input Proc — gelesen, nicht geraten
+
+Aus `Game_Interpreter::CommandKeyInputProc`. **Parameter 5–9 bedeuten auf 2K
+andere Tasten als auf 2K3**: shift/down/left/right/up gegen
+numbers/operators/time-variable/timed. Die Version wählt die Spalte.
+
+Die Fixture-Vorkommen: `[1,1,0,0,0,1,1,2,1,0,0,0,0,0]` — ein 2K3-Spiel, das
+Ziffern und Operatoren will, zeitlich begrenzt, Antwort in Variable 1,
+verstrichene Zeit in Variable 2.
+
+**`parameters[7]` ist ein `int`, der eine Variable benennt, kein `bool`** — die
+Quelle sagt das im Kommentar ausdrücklich.
+
+Weitere gemessene Regeln: **die Ziffern loopen von 10 bis 1** (`10 + i`), also
+hat **die Ziffer 0 keinen Wert**; **Operatoren schlagen Ziffern im selben
+Frame**, weil die Quelle von höchstem Wert nach unten prüft; **die Maus wird
+zuerst geprüft**, damit DECISION auf der linken Maustaste kein Konflikt ist.
+
+**Test evidence** `test_rm2k_key_input.cs` (10), `test_rm2k_menu_commands.cs` (6).
+**996/996**, `TestRm2kKeyInput: 10/10`, `TestRm2kMenuCommands: 6/6`.
+**Mutations** 9 von 9 gefangen.
