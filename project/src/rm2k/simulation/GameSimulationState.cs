@@ -130,6 +130,135 @@ public sealed class GameSimulationState
     /// </remarks>
     public int EncounterSteps { get; private set; } = 50;
 
+    // ---- Pan Screen (11060)
+
+    /// <summary>What a pan command does, from <c>11060</c>'s first parameter.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Four values, and only the middle two move anything.</strong> The
+    /// reference's switch has 0 lock, 1 unlock, 2 pan and 3 reset — <strong>and
+    /// a value it does not know falls through all four and does nothing at
+    /// all.</strong> A reader that defaulted to the pan would have a game's
+    /// mistyped mode scrolling the screen instead of doing nothing, and a game
+    /// that uses lock to hold the camera during a cutscene would have the
+    /// camera move instead of holding.
+    /// </para>
+    /// </remarks>
+    public enum PanMode
+    {
+        /// <summary>Hold the camera where it is.</summary>
+        Lock,
+
+        /// <summary>Let the camera follow the player again.</summary>
+        Unlock,
+
+        /// <summary>Scroll the camera in a direction.</summary>
+        Pan,
+
+        /// <summary>Return the camera to the player.</summary>
+        Reset,
+    }
+
+    /// <summary>
+    /// The eight pan directions, in the editor's own order.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Up, right, down, left, and then the four diagonals</strong> —
+    /// which is a compass order here and not the passability bit order the
+    /// eight directions use elsewhere. A reader that reused the bit order
+    /// would scroll the wrong way for every diagonal a game pans.
+    /// </remarks>
+    public enum PanDirection
+    {
+        /// <summary>Up.</summary>
+        Up,
+
+        /// <summary>Right.</summary>
+        Right,
+
+        /// <summary>Down.</summary>
+        Down,
+
+        /// <summary>Left.</summary>
+        Left,
+
+        /// <summary>Up and left.</summary>
+        UpLeft,
+
+        /// <summary>Up and right.</summary>
+        UpRight,
+
+        /// <summary>Down and left.</summary>
+        DownLeft,
+
+        /// <summary>Down and right.</summary>
+        DownRight,
+    }
+
+    /// <summary>Whether the camera is held, from <c>11060</c>'s lock and unlock.</summary>
+    public bool IsPanLocked { get; set; }
+
+    /// <summary>Whether a pan is running.</summary>
+    public bool IsPanActive { get; set; }
+
+    /// <summary>Where the pan is going, in tiles.</summary>
+    public int PanTargetX { get; set; }
+
+    /// <summary>Where the pan is going, vertically.</summary>
+    public int PanTargetY { get; set; }
+
+    /// <summary>How fast the pan runs, in the editor's own 1 to 6 scale.</summary>
+    /// <remarks>
+    /// <strong>Clamped to 1 to 6 and not refused.</strong> The reference writes
+    /// <c>Utils::Clamp&lt;int&gt;(com.parameters[3], 1, 6)</c>, so a game that
+    /// wrote a zero or a nine gets the nearest speed and the pan still runs —
+    /// <strong>and a reader that refused would have stopped the event on a
+    /// number the engine repairs.</strong>
+    /// </remarks>
+    public int PanSpeed { get; set; } = 3;
+
+    /// <summary>The frames the pan has left.</summary>
+    public int PanFramesLeft { get; set; }
+
+    /// <summary>What the last pan command asked for.</summary>
+    public PanMode PanLastMode { get; set; } = PanMode.Unlock;
+
+    /// <summary>Which direction the last pan asked for.</summary>
+    public PanDirection PanLastDirection { get; set; } = PanDirection.Up;
+
+    /// <summary>How far the last pan asked to scroll, in tiles.</summary>
+    public int PanLastDistance { get; set; }
+
+    /// <summary>
+    /// Whether the event waits for movement to finish, from <c>11340</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A flag and not a counter.</strong> The reference writes
+    /// <c>_state.wait_movement = true;</c> and nothing else — and the
+    /// interpreter clears it once the movement is over, so a second
+    /// <c>11340</c> before that is one flag written twice and not two waits.
+    /// </remarks>
+    public bool ProceedWithMovement { get; set; }
+
+    /// <summary>
+    /// Stops every pending move on the map, from <c>11350</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The map, and not the player.</strong> The reference calls
+    /// <c>Game_Map::RemoveAllPendingMoves()</c> — every figure with a move
+    /// route still running, and not the hero. <strong>A reader that stopped
+    /// only the player would have a game whose guards keep walking after a
+    /// cutscene stops them.</strong>
+    /// </remarks>
+    public void HaltAllMovement()
+    {
+        ProceedWithMovement = false;
+        // **And the pans stop with them**, because a command that stops
+        // everything and leaves the camera sliding stops less than everything.
+        IsPanActive = false;
+        PanFramesLeft = 0;
+    }
+
     /// <summary>The parallax background, from <c>11720</c>.</summary>
     /// <remarks>
     /// <para>

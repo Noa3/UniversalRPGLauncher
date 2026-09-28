@@ -238,6 +238,41 @@ public sealed class EventInterpreter
 	public const int SetVehicleLocation = 10850;
 
 	/// <summary>
+	/// 11060, Pan Screen, from liblcf's <c>Code::PanScreen</c> and EasyRPG's
+	/// <c>Game_Interpreter_Map::CommandPanScreen</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 5, from the reference's own dispatch line</strong> and not
+	/// the two the board once listed for it. A reader that required fewer would
+	/// have read a wait flag that is not there.
+	/// </remarks>
+	public const int PanScreen = 11060;
+
+	/// <summary>
+	/// 11340, Proceed With Movement, from liblcf's
+	/// <c>Code::ProceedWithMovement</c> and EasyRPG's
+	/// <c>CommandProceedWithMovement</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, and the whole command is one flag.</strong> The
+	/// reference writes <c>_state.wait_movement = true;</c> and nothing else —
+	/// so a reader that expected parameters to read would be reading past the
+	/// end of a list that is not there.
+	/// </remarks>
+	public const int ProceedWithMovement = 11340;
+
+	/// <summary>
+	/// 11350, Halt All Movement, from liblcf's <c>Code::HaltAllMovement</c> and
+	/// EasyRPG's <c>CommandHaltAllMovement</c>.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Width 0, and the whole command is one call.</strong> The
+	/// reference writes <c>Game_Map::RemoveAllPendingMoves();</c> — every
+	/// pending move on the map, and not the player's own.
+	/// </remarks>
+	public const int HaltAllMovement = 11350;
+
+	/// <summary>
 	/// 10490, Full Heal, from liblcf's <c>Code::FullHeal</c> and EasyRPG's
 	/// <c>CommandFullHeal</c>.
 	/// </summary>
@@ -776,6 +811,29 @@ public sealed class EventInterpreter
 
 			case TileSubstitution:
 				ExecuteTileSubstitution(cmd);
+				return Advance();
+
+			case ProceedWithMovement:
+				// **The two movement commands, and both are one line in the
+				// reference.** The board listed them as "liblcf names them and
+				// EasyRPG dispatches them nowhere"; they are dispatched, with a
+				// width of 0 and one statement each.
+				_state.ProceedWithMovement = true;
+				return Advance();
+
+			case HaltAllMovement:
+				// **Every pending move on the map, and not the player's own.**
+				// The reference calls `Game_Map::RemoveAllPendingMoves()`,
+				// which is a map-wide call and not a player one.
+				_state.HaltAllMovement();
+				return Advance();
+
+			case PanScreen:
+				ExecutePanScreen(cmd);
+				// **Through Advance(), exactly like the Wait case above** — the
+				// wait is not taken from the return value but from the frame
+				// budget `ExecuteFrame` checks first, so a pan that was asked
+				// to wait holds its page on the next call and not on this one.
 				return Advance();
 
 			case SimulatedAttack:
@@ -3470,6 +3528,201 @@ public sealed class EventInterpreter
 			+ (steps == 0
 				? " and zero means never — the reference writes it through"
 				: " and a game set this to zero to stop fighting"));
+	}
+
+	/// <summary>
+	/// Runs 11060, Pan Screen, from liblcf's <c>Code::PanScreen</c> and
+	/// EasyRPG's <c>Game_Interpreter_Map::CommandPanScreen</c>.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>Four modes, and only the middle two move anything.</strong> The
+	/// reference's switch is 0 lock, 1 unlock, 2 pan and 3 reset — **and a value
+	/// it does not know falls through all four and does nothing at all**, with
+	/// no diagnostic and no refusal. A reader that defaulted to the pan would
+	/// have a game's mistyped mode scrolling the screen instead of doing
+	/// nothing, and a game that uses lock to hold the camera during a cutscene
+	/// would have the camera move instead of holding.
+	/// </para>
+	/// <para>
+	/// <strong>The speed is clamped to 1 to 6 and not refused.</strong> The
+	/// reference writes <c>Utils::Clamp&lt;int&gt;(com.parameters[3], 1, 6)</c> —
+	/// so a game that wrote a zero or a nine gets the nearest speed and the pan
+	/// still runs, and a reader that refused would have stopped the event on a
+	/// number the engine repairs.
+	/// </para>
+	/// <para>
+	/// <strong>The wait is the rounded distance over the speed.</strong> The
+	/// reference's <c>GetPanWait</c> is
+	/// <c>distance / speed + (distance % speed != 0)</c> — rounded up, so a pan
+	/// of five tiles at speed 3 waits two frames and not one, and a pan that
+	/// would wait zero never ends the frame it started in.
+	/// </para>
+	/// <para>
+	/// <strong>And the reference's own comment says the wait takes the maximum
+	/// over all pending pans, not this one.</strong> That is a statement about
+	/// the engine's behaviour that a reader with one pan has nothing to
+	/// disagree with, and it is recorded here because the alternative — a
+	/// reader that waited for its own pan only — is the shape the code has.
+	/// </para>
+	/// </remarks>
+	private void ExecutePanScreen(Rm2kMap.EventCommand pCmd)
+	{
+		// CmdSetup minimum width 5.
+		if (pCmd.Parameters.Count < 5)
+		{
+			Malformed("Pan screen");
+			return;
+		}
+		var mode = pCmd.Parameters[0];
+		// **The speed, clamped the reference's way** — and read for the two
+		// modes that use it, because lock and unlock have none.
+		var speed = Math.Clamp(pCmd.Parameters[3], 1, 6);
+		var waiting = pCmd.Parameters[4] != 0;
+
+		switch (mode)
+		{
+			case 0:
+				_state.IsPanLocked = true;
+				_state.PanLastMode = GameSimulationState.PanMode.Lock;
+				// **A lock does not stop a pan that is already running** — the
+				// reference calls `LockPan()` and nothing else, and a reader
+				// that halted the pan would freeze a camera mid-scroll.
+				break;
+			case 1:
+				_state.IsPanLocked = false;
+				_state.PanLastMode = GameSimulationState.PanMode.Unlock;
+				break;
+			case 2:
+				{
+					var direction = DirectionOf(pCmd.Parameters[1]);
+					var distance = pCmd.Parameters[2];
+					_state.PanLastMode = GameSimulationState.PanMode.Pan;
+					_state.PanLastDirection = direction;
+					_state.PanLastDistance = distance;
+					_state.PanSpeed = speed;
+					_state.PanTargetX = distance * StepOf(direction, 0);
+					_state.PanTargetY = distance * StepOf(direction, 1);
+					_state.PanFramesLeft = FramesFor(distance, speed);
+					_state.IsPanActive = true;
+					break;
+				}
+			case 3:
+				_state.PanLastMode = GameSimulationState.PanMode.Reset;
+				_state.PanSpeed = speed;
+				_state.PanFramesLeft = FramesFor(
+					Math.Max(Math.Abs(_state.PanTargetX), Math.Abs(_state.PanTargetY)),
+					speed);
+				_state.PanTargetX = 0;
+				_state.PanTargetY = 0;
+				_state.IsPanActive = true;
+				break;
+			default:
+				// **An unknown mode does nothing at all, and says so.** The
+				// reference falls through its switch with no default arm, so a
+				// game's value of 4 is a no-op — and a reader that refused
+				// would have stopped an event the engine walks past.
+				_state.AddDiagnostic(
+					$"[Event {_eventId}] Pan screen: mode {mode} is not 0, 1, 2"
+					+ " or 3, and the reference's switch does nothing for it");
+				return;
+		}
+
+		if (waiting && _state.PanFramesLeft > 0)
+		{
+			// **The wait is this interpreter's own frame budget**, which is the
+			// shape the reference uses for every other timed command — and it
+			// goes through `WaitForFrames`, which clamps to at least one frame
+			// and to the interpreter's maximum. A pan that was asked to wait
+			// and does not would have a cutscene run its next lines while the
+			// camera is still sliding, and an unclamped zero would have made
+			// `11340`'s "wait for the movement" end in the same frame it was
+			// asked for.
+			WaitForFrames(_state.PanFramesLeft);
+		}
+		_state.AddDiagnostic(
+			$"[Event {_eventId}] Pan screen: {_state.PanLastMode}"
+			+ (_state.PanLastMode == GameSimulationState.PanMode.Pan
+				? $" {_state.PanLastDirection} by {_state.PanLastDistance}"
+					+ $" at speed {_state.PanSpeed}"
+				: string.Empty)
+			+ (waiting ? ", and the page waits" : string.Empty));
+	}
+
+	/// <summary>
+	/// The frames a pan of a distance at a speed takes, the reference's way.
+	/// </summary>
+	/// <remarks>
+	/// <strong>Distance over speed, rounded up.</strong> The reference writes
+	/// <c>distance / speed + (distance % speed != 0)</c> in <c>GetPanWait</c> —
+	/// and the rounding is what stops a pan that divides evenly from being one
+	/// frame short, and what stops one that does not from ending the frame it
+	/// started in.
+	/// </remarks>
+	private static int FramesFor(int pDistance, int pSpeed)
+	{
+		var speed = Math.Max(1, pSpeed);
+		return pDistance / speed + (pDistance % speed != 0 ? 1 : 0);
+	}
+
+	/// <summary>
+	/// The step a pan direction takes on each axis, in tiles.
+	/// </summary>
+	/// <remarks>
+	/// <strong>A diagonal is one on both axes and not two.</strong> A reader that
+	/// used a compass distance would have a diagonal pan covering twice the
+	/// ground a cardinal one does over the same number, and a game's cutscene
+	/// that pans to a corner would end past the corner.
+	/// </remarks>
+	private static int StepOf(GameSimulationState.PanDirection pDirection, int pAxis)
+	{
+		var x = pDirection switch
+		{
+			GameSimulationState.PanDirection.Left => -1,
+			GameSimulationState.PanDirection.Right => 1,
+			GameSimulationState.PanDirection.UpLeft => -1,
+			GameSimulationState.PanDirection.UpRight => 1,
+			GameSimulationState.PanDirection.DownLeft => -1,
+			GameSimulationState.PanDirection.DownRight => 1,
+			_ => 0,
+		};
+		var y = pDirection switch
+		{
+			GameSimulationState.PanDirection.Up => -1,
+			GameSimulationState.PanDirection.UpLeft => -1,
+			GameSimulationState.PanDirection.UpRight => -1,
+			GameSimulationState.PanDirection.Down => 1,
+			GameSimulationState.PanDirection.DownLeft => 1,
+			GameSimulationState.PanDirection.DownRight => 1,
+			_ => 0,
+		};
+		return pAxis == 0 ? x : y;
+	}
+
+	/// <summary>
+	/// A pan direction number, from <c>11060</c>'s second parameter.
+	/// </summary>
+	/// <remarks>
+	/// <strong>The reference's own order, and the eight values are a
+	/// compass order after all.</strong> The editor's pan directions are up 0,
+	/// right 1, down 2, left 3 and the four diagonals 4 to 7 — so a reader that
+	/// used the eight-direction passability bit order would scroll the wrong way
+	/// for every diagonal.
+	/// </remarks>
+	private static GameSimulationState.PanDirection DirectionOf(int pNumber)
+	{
+		return pNumber switch
+		{
+			0 => GameSimulationState.PanDirection.Up,
+			1 => GameSimulationState.PanDirection.Right,
+			2 => GameSimulationState.PanDirection.Down,
+			3 => GameSimulationState.PanDirection.Left,
+			4 => GameSimulationState.PanDirection.UpLeft,
+			5 => GameSimulationState.PanDirection.UpRight,
+			6 => GameSimulationState.PanDirection.DownLeft,
+			7 => GameSimulationState.PanDirection.DownRight,
+			_ => GameSimulationState.PanDirection.Up,
+		};
 	}
 
 	/// <summary>

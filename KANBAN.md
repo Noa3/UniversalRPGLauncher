@@ -2628,12 +2628,12 @@ look for the next island of that shape.**
 | area | codes | what it needs |
 |---|---:|---|
 | screen effects | ~~`11010` `11020` `11030`~~ | **~~erase, show and tint — DONE, see below~~** |
-| screen effects | `11060` | **Pan Screen — liblcf names it and EasyRPG dispatches it nowhere** |
+| screen effects | `11060` | **Pan Screen — done: four modes, a clamped speed and a rounded wait** |
 | audio | `11560` | Play Movie — the only audio command left of the six |
 | actor state | ~~`10430`–`10490`~~ | **~~parameters, HP, SP and full heal — DONE, see below; skills, equipment and conditions have no state at all~~** |
 | battle | ~~`10500` `10710`~~ | **~~simulated attack and the encounter — DONE, see below~~** |
 | movement | ~~`11310` `11330`~~ | **~~visibility and move event — DONE, see below~~** |
-| movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — liblcf names them and EasyRPG dispatches them nowhere** |
+| movement | `11340` `11350` | **Proceed With Movement and Halt All Movement — done: one flag and one map-wide call** |
 | shop and inn | `10720` `10730` `20720`–`20732` | a shop scene, an inn scene, and the four transaction states |
 | memory | ~~`10820` `11530` `11540`~~ | **~~memorize location, memorize and play BGM — DONE~~** |
 | memory | `10830` `10910` | **Recall To Location is in liblcf and has no method in this EasyRPG build; Store Terrain ID likewise** |
@@ -3894,10 +3894,16 @@ move_freq = 6;`. A reader that refused would stop a route RPG_RT happily runs,
 and a game that wrote a zero because the editor left the field empty would lose
 its movement. There is a test for all four bad values.
 
-**`11340` and `11350` are in liblcf's enumeration and appear nowhere in
-EasyRPG's interpreter** — no `case`, no method. So this repository does not
-implement them, for the same reason as `11060`: there is nothing to read the
-parameters from.
+**`11340` and `11350` are done, and this card said they did not exist.**
+The board listed them as "liblcf names them and EasyRPG dispatches them
+nowhere" — and that was wrong twice. `Game_Interpreter_Map` has
+`CommandProceedWithMovement` and `CommandHaltAllMovement`, and the claim that
+"there is nothing to read the parameters from" was the interesting part:
+**both commands have a width of zero, because the whole of `11340` is
+`_state.wait_movement = true;` and the whole of `11350` is
+`Game_Map::RemoveAllPendingMoves();`.** A reader that expected parameters to
+read would have been reading past the end of a list that is not there — and
+the same reasoning was what kept `11060` unimplemented.
 
 **The route reaches a character through a hook**, `moveRouteStarter`, which the
 interpreter refuses visibly when it is absent — because a reader that said
@@ -3907,7 +3913,7 @@ nothing would look like a game that asked for no movement at all.
 **1079/1079**, `TestRm2kMoveEvent: 10/10`.
 **Mutations** Eight rules over three runs, **8 of 8 caught**.
 
-## `11010`, `11020` and `11030` are done## `11010`, `11020` and `11030` are done — and `11060` is a liblcf code with no engine
+## `11010`, `11020`, `11030` and `11060` are done — the pan screen, and the card that said it had no engine
 
 **The transition tables are the sharpest thing in this slice, because the
 pairing is not regular.** Show and erase are the same twenty kinds read from
@@ -3942,11 +3948,36 @@ still advanced the page and the wait never happened. The index moves only when
 the command set no wait, which is the same conditional the jump-to-label
 needed and got wrong once already this session.
 
-**`11060 Pan Screen` is in liblcf's enumeration and EasyRPG has no `case` for
-it and no `CommandPanScreen`.** So this repository does not implement it: there
-is nothing to read the parameters from, and a reader that implemented a command
-the reference does not would be inventing a semantic. **It stays on the list as
-a named gap rather than as a guess.**
+**`11060 Pan Screen` is done, and this card said the reference had no
+`CommandPanScreen`.** It has one, with a minimum width of 5 — the two widths
+the board once listed for it were the shapes a reader might have expected, not
+the one the reference uses.
+
+**Four modes, and only the middle two move anything.** The switch is 0 lock,
+1 unlock, 2 pan and 3 reset, **and a value it does not know falls through all
+four and does nothing at all.** A reader that defaulted to the pan would have
+a game's mistyped mode scrolling the screen instead of doing nothing.
+
+**A lock does not stop a pan that is already running.** The reference calls
+`LockPan()` and nothing else, and a reader that halted the pan would freeze a
+camera mid-scroll.
+
+**The speed is clamped to 1 to 6 and not refused** —
+`Utils::Clamp<int>(com.parameters[3], 1, 6)` — so a game that wrote a zero or a
+nine gets the nearest speed and the pan still runs. **A reader that refused
+would have stopped the event on a number the engine repairs.**
+
+**The wait is `distance / speed + (distance % speed != 0)`** — rounded up, in
+`Game_Player::GetPanWait`. Five tiles at speed three is two frames and not
+one, and a pan that would wait zero never ends the frame it started in.
+
+**`11350` stops the map, and the pans with it.** The reference's
+`RemoveAllPendingMoves()` is a map-wide call; a reader that stopped only the
+player would have a game whose guards keep walking after a cutscene stops them.
+
+**Test evidence** `test_rm2k_pan_screen.cs`, 13 tests.
+**1395/1395**, `TestRm2kPanScreen: 13/13`.
+**Mutations** Ten rules over one run, **10 of 10 caught**.
 
 **Test evidence** `test_rm2k_screen.cs`, 14 tests, including all twenty
 parameters of both tables checked one at a time.

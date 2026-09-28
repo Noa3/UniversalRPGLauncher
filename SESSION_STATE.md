@@ -1,11 +1,58 @@
-# UniversalRPG Autonomous Session State
-
-> Updated: 2026-09-26
-> Purpose: small durable checkpoint for Hermes/other autonomous agents.
-
 ## Current card
+## 11060, 11340 and 11350 are done — three commands the card said did not exist
 
-## Current card
+**The card listed `11060`, `11340` and `11350` as "liblcf names them and
+EasyRPG dispatches them nowhere", and said there was "nothing to read the
+parameters from".** All three statements were wrong, and the last one was the
+instructive one: **both movement commands have a width of zero, because the
+whole of `11340` is `_state.wait_movement = true;` and the whole of `11350` is
+`Game_Map::RemoveAllPendingMoves();`.** The absence of parameters was read as
+the absence of a command.
+
+**`11060 Pan Screen` has a minimum width of 5** — not the two the board
+listed. Four modes (0 lock, 1 unlock, 2 pan, 3 reset), and a value the
+reference does not know falls through all four and does nothing. The speed is
+`Utils::Clamp<int>(parameters[3], 1, 6)`, repaired and not refused. The wait is
+`GetPanWait`: `distance / speed + (distance % speed != 0)`, rounded up.
+
+**A lock does not stop a running pan** — the reference calls `LockPan()` and
+nothing else. `11350` stops the map's pending moves and the camera with them.
+
+**Test evidence** `project/tests/core/test_rm2k_pan_screen.cs`, 13 tests.
+**1395/1395**, `TestRm2kPanScreen: 13/13`, validator passed.
+**Mutations** Ten rules, **10 of 10 caught**.
+
+### Failure log: a state file that a rescue turned into a duplicate
+
+The pan block went into `GameSimulationState.cs` three times under three wrong
+assumptions, and each rescue made it worse:
+
+1. Anchored on `ScrollHorizontally`, which is a field of the **nested**
+   `Parallax` class — so the block landed inside it. The compiler said
+   `PanDirection` does not exist in `GameSimulationState`, which was true and
+   which I could have read in one step.
+2. "Fixed" the indentation, which moved it out of the class instead.
+3. Cropped the block by line range, which cut it in half and left a copy.
+
+**The signal that would have ended it in step 1 was the error's own wording** —
+"im Typ `GameSimulationState`" names the type, and the enum was in a
+different one. Measuring the region in isolation, its indentation, its brace
+balance and its class membership all passed, because each of those was
+correct and the mistake was in which class I believed I was editing.
+
+**And the recovery that worked was the one I kept avoiding: `git checkout` the
+file, then make exactly one edit against a confirmed anchor.** The same lesson
+as the sixteen tuple measurements, and the same cost.
+
+### A stale build artefact that looked like eighteen failures
+
+After the mutation run the validator reported **18 of 1395 tests failing**,
+including eight of the thirteen new ones, on source that had been restored
+correctly. The build output was stale: `rm -rf project/.godot/mono/temp/obj`
+and a full build gave 1395/1395. **A test result that contradicts an
+inspection of the source it tests is a build artefact until proven
+otherwise** — and the cheaper check is the one that clears it.
+
 
 K-086 through K-093 and K-095 through K-102 are DONE. K-103 (hero and events in the runtime frame) is next; K-094 (vehicles) stays open at lower priority.
 
