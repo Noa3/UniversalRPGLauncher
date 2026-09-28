@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace UniversalRPG.Web;
@@ -422,11 +423,76 @@ public sealed class MzInterpreter
     }
 
     /// <summary>
+    /// Holds the run up until a <b>condition</b> is met, which is the engine's
+    /// <c>setWaitMode</c> and not its <c>wait</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>These are two different waits and conflating them is a real
+    /// failure.</b> A 230 sets a count, and a caller passes frames until it is
+    /// zero. A 201 sets a mode, and the engine asks a question every frame:
+    /// <c>waiting = $gamePlayer.isTransferring()</c>. A condition wait has no
+    /// length, so a caller passing frames cannot end it and must carry out the
+    /// transfer — and until it does, the run stays exactly where it is.
+    ///
+    /// **The index does not move**, which is what makes it a wait at all: the
+    /// 201 has run, the page is held after it, and the commands that follow do
+    /// not start until the map has actually changed.
+    /// </remarks>
+    public void WaitFor(MzWaitMode pMode)
+    {
+        WaitMode = pMode;
+        Stopped = MzStep.Waiting;
+        Reason = pMode == MzWaitMode.Transfer
+            ? "waiting for the reserved transfer to be carried out, at index"
+                + $" {Index}"
+            : $"waiting for {pMode} at index {Index}";
+    }
+
+    /// <summary>
+    /// Stops the run without a frame to wait for, and says why.
+    /// </summary>
+    /// <remarks>
+    /// **Not the same as a wait and not the same as a stop.** A 201 in a battle
+    /// or with a message on the screen returns false from the engine with
+    /// nothing set — the index stays, the list is not over, and the frame in
+    /// which the message closes is the frame in which the transfer happens.
+    /// That is neither "the event finished" nor "the event is waiting for N
+    /// frames", so it gets its own answer rather than being dressed up as one
+    /// of the two.
+    /// </remarks>
+    public void Refuse(string pReason)
+    {
+        Stopped = MzStep.Refused;
+        Reason = pReason;
+    }
+
+    /// <summary>Why the run is being held up, when the answer is a condition
+    /// and not a count.</summary>
+    public MzWaitMode WaitMode { get; private set; } = MzWaitMode.None;
+
+    /// <summary>
     /// Counts one frame off a wait, which is what the engine does before each
     /// frame, and says whether the wait is over.
     /// </summary>
-    public bool PassFrame()
+    public bool PassFrame(Func<MzWaitMode, bool>? pCheck = null)
     {
+        // **A condition wait is asked about, not counted down.** The engine's
+        // `updateWaitMode` is a question every frame, and a first draft of
+        // this reader counted frames here for a transfer as well — which made
+        // a page wait for a number of frames and then carry on with the player
+        // still on the old map. `pCheck` is the caller's answer to
+        // `isTransferring()`.
+        if (WaitMode != MzWaitMode.None)
+        {
+            if (pCheck != null && pCheck(WaitMode))
+            {
+                WaitMode = MzWaitMode.None;
+                Stopped = MzStep.Stepped;
+                return true;
+            }
+            return false;
+        }
+
         // The engine's `updateWaitCount` is
         // `if (this._waitCount > 0) { this._waitCount--; return true; }`, so a
         // count of zero is over and only a count above zero is counted. **A

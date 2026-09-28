@@ -2725,3 +2725,85 @@ the number changes, and a fixture's claim is a claim about a number.
 must not do; this one says what it can. **1772 of 2432 already run**, and the
 660 that do not are the map of the work that is left — led by 505 at 348, 205
 at 96, 123 at 42, 213 at 36 and 405 at 36.
+
+
+### K-130 Send the player somewhere, and hold the page until they arrive
+`DONE` — runtime, P1, depends on K-124
+
+**Why this one and not the biggest.** The 660 commands that do not run yet
+are led by `505` at 348 and `205` at 96, and both are movement — both need
+`Game_Character`, a move route decoder and a passability model, which is
+three cards before the first of them can be tested. **201 is 33 commands and
+needs none of that**: it changes where the player is, not how they got there,
+and it is on sixteen of the nineteen maps.
+
+**And it is the first command in this reader that is neither a change nor a
+number of frames.** K-125 made a run wait for frames, K-127 for a picture's
+movement, and a 201 for **a condition**:
+
+```
+Game_Interpreter.prototype.command201 = function(params) {
+    if ($gameParty.inBattle() || $gameMessage.isBusy()) { return false; }
+    …
+    $gamePlayer.reserveTransfer(mapId, x, y, params[4], params[5]);
+    this.setWaitMode("transfer");
+    return true;
+};
+```
+
+and `updateWaitMode` answers `waiting = $gamePlayer.isTransferring()`. **A
+condition wait has no length** — a caller passing frames cannot end it, and a
+reader that counted them would let the page on with the player still on the
+old map. `MzWaitMode` is a third shape next to a 230's frames and a 232's
+movement, and the engine's own modes are `message`, `transfer`, `scroll`,
+`route` and `until`.
+
+**Four rules, each a place a first reading goes wrong:**
+
+1. **A transfer is reserved, not carried out.** `reserveTransfer` writes
+   `_transferring = true` and the new map and position and **changes nothing
+   the player can see**; `performTransfer` is what moves them. Applying it
+   while reading the command would move the player before the commands after
+   it had run — the difference between a game that leads the player and one
+   that teleports them mid-sentence.
+2. **The engine returns false and transfers nobody** in a battle or with a
+   message on the screen. That is neither a wait nor a finish: the index
+   stays, and the transfer happens in the frame in which the message closes.
+   `MzStep.Refused` says exactly that and is not dressed up as either of the
+   other two.
+3. **The direction is set on the way, not on the reservation**, because
+   `performTransfer` is what calls `setDirection`. A player that turned one
+   frame early would face a map they are not on yet.
+4. **A map this reader has not read is named and the player stays put.**
+   `command201` does not check and `$gameMap.setup` fails further on where
+   nobody is looking. **Half-applying it is worse than not moving** — the
+   caller would see a position and no file behind it.
+
+**And the numbers are this game's: 33 transfers over sixteen maps, all with
+the first parameter at zero**, so the place is written out rather than read
+from a variable. A reader that always looked in the variables would send
+every player in this game to variable four.
+
+**A C# trap this card walked into and measured.** `$"Map{i:03}.json"` with
+`i = 1` produces **`Map13.json`**. In an interpolated string `i:03` is read as
+a fill character of `0` and a **precision** of `3`, and a whole number with a
+precision is padded on the **right**: 1 becomes "13", 2 becomes "23". Every
+file was missing and the only thing that said so was the reader's own error
+about a file ending mid-value. `ToString("000")` is the right spelling, and the
+reason is in the test so the next card does not walk into it again.
+
+**Test evidence** 5 tests in `project/tests/core/test_mz_player_transfer.cs`.
+**Total 950/950**, validator passed, build 0 errors.
+
+**Mutations** Nine rules, **nine caught, first run, none escaped.** Each of the
+four rules above was broken in the place it actually fails: a reservation that
+moves the player, a turn that happens one frame early, a message that no longer
+refuses, a run that carries on past a refusal, a condition wait counted down in
+frames, a transfer that holds its page for twenty of them, a condition that
+never stops being met, a missing map that is carried out anyway, and a place
+always read from the variables.
+
+**What is not here.** No map is loaded and no tile is drawn: a transfer is a
+position, not a picture of one, and the direction and fade type are kept as
+the numbers the game wrote. The other four wait modes need a scrolling map, a
+moving character and a plugin callback, and none of them is modellable here.

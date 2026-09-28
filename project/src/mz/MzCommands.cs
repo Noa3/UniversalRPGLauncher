@@ -103,6 +103,7 @@ public static class MzCommands
             or MzCommandTable.ControlSwitches
             or MzCommandTable.ControlVariables
             or MzCommandTable.ChangeItems
+            or MzCommandTable.TransferPlayer
             or MzCommandTable.OpenMenu
             or MzCommandTable.PluginCommand
             or MzCommandTable.ShowPicture
@@ -205,6 +206,77 @@ public static class MzCommands
                 // not there is not an error.
                 pActions.Add(new MzAction(
                     pCommand, pFacts.Screen.Erase(At(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.TransferPlayer:
+            {
+                // `command201` is
+                //   if ($gameParty.inBattle() || $gameMessage.isBusy()) {
+                //       return false;
+                //   }
+                //   let mapId, x, y;
+                //   if (params[0] === 0) {
+                //       mapId = params[1]; x = params[2]; y = params[3];
+                //   } else {
+                //       mapId = $gameVariables.value(params[1]);
+                //       x = $gameVariables.value(params[2]);
+                //       y = $gameVariables.value(params[3]);
+                //   }
+                //   $gamePlayer.reserveTransfer(mapId, x, y, params[4], params[5]);
+                //   this.setWaitMode("transfer");
+                //   return true;
+                //
+                // **Three things, and the first is a refusal.** In a battle or
+                // with a message on screen the engine returns false and
+                // transfers nothing, so a reader that moved the player there
+                // would take a player out of a fight.
+                //
+                // **The second is that a transfer is not a move.** `reserve`
+                // records where to go and changes nothing; the map changes in
+                // `performTransfer`, which the scene calls. Applying it here
+                // would move the player before the commands after it ran.
+                //
+                // **The third is the wait, and it is a new kind.** `command201`
+                // returns **true** and does not hold the index — it sets
+                // `setWaitMode("transfer")`, and `updateWaitMode` answers
+                // `waiting = $gamePlayer.isTransferring()`. So the page is held
+                // by a **condition** and not by a frame count, which is a third
+                // shape next to a 230's frames and a 232's movement.
+                if (pFacts.InBattle || pFacts.MessageOpen)
+                {
+                    pActions.Add(new MzAction(
+                        pCommand,
+                        "the player is not transferred, because the engine"
+                        + " transfers nobody in a battle or while a message is"
+                        + " on the screen"));
+                    pInterpreter.Refuse(
+                        "a transfer in a battle or during a message is refused"
+                        + $" by the engine, and the run stops at index"
+                        + $" {pInterpreter.Index} where it stands");
+                    return false;
+                }
+
+                // **The place, from the numbers or from the variables** — the
+                // same kind decision a 231 makes, and the same reason: a first
+                // parameter decides where the other three are read from.
+                var fromVariables = At(pCommand, 0) != 0;
+                var toMap = At(pCommand, 1);
+                var toX = At(pCommand, 2);
+                var toY = At(pCommand, 3);
+                if (fromVariables)
+                {
+                    toMap = From(pCommand, pFacts, 1, true);
+                    toX = From(pCommand, pFacts, 2, true);
+                    toY = From(pCommand, pFacts, 3, true);
+                }
+
+                pActions.Add(new MzAction(
+                    pCommand,
+                    pFacts.Player.Reserve(
+                        toMap, toX, toY,
+                        At(pCommand, 4), At(pCommand, 5))));
+                pInterpreter.WaitFor(MzWaitMode.Transfer);
                 return true;
             }
 

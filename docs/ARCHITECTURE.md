@@ -181,6 +181,38 @@ its author wrote, a 357 plugin call is not made, and a branch of kind 12 or an
 operand of kind 4 returns `ScriptNotRun` with the author's text kept. The engine
 evaluates those with `eval`; this repository does not evaluate a game's code.
 
+### The player, and the wait that is a condition
+
+`MzPlayer` holds where the player is and, separately, whether a transfer is
+**on its way**. The split is the engine's own: `reserveTransfer` records a
+destination and changes nothing a player can see, `performTransfer` is what
+applies it, and only then does `isTransferring()` answer false. **A reader
+that applied a transfer while reading the command would move the player before
+the commands after it had run.**
+
+`MzWaitMode` is the third kind of waiting, next to a 230's frame count and a
+232's picture movement. `command201` returns **true** — it does not hold the
+index — and sets `setWaitMode("transfer")`; `updateWaitMode` then asks
+`$gamePlayer.isTransferring()` every frame. **A condition has no length**, so
+`PassFrame` takes a predicate as well as counting:
+
+```
+interpreter.PassFrame(_ => player.IsTransferring);
+```
+
+Only `Transfer` is modelled. The engine's other modes — `message`, `scroll`,
+`route`, `until` — need a scrolling map, a moving character or a plugin
+callback, and this repository runs none of those.
+
+Two refusals, both the engine's own. A transfer in a battle or with a message
+on the screen returns false and transfers nobody, which is **neither a wait nor
+a finish**: the index stays and the transfer happens in the frame in which the
+message closes, so `MzStep.Refused` says that rather than borrowing one of the
+other two answers. And a map this reader has not read leaves the player where
+they were, with the reservation still standing — the map may be read later, and
+throwing the request away would lose the game's own intent.
+
+
 ## Compatibility Database
 
 The compatibility database is extensible and data-driven:

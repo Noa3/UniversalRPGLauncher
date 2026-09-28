@@ -1584,3 +1584,64 @@ und die Behauptung einer Fixture ist eine Behauptung über eine Zahl.
 **Next: die 660.** 505 Weglisten (348), 205 Movement-Skripte (96), 123
 (42), 213 (36), 405 Choices (36). Und `123` ist Change Gold — dieselbe
 Clamp-Familie wie `126`, aber mit `maxGold` statt `maxItems`.
+
+## K-130 Send the player somewhere, and hold the page until they arrive — DONE
+
+`project/src/mz/MzPlayer.cs`, `MzWaitMode.cs`, `MzCommandTable.TransferPlayer
+= 201`, `MzBranchFacts.Player` / `MessageOpen`, `MzInterpreter.WaitFor` /
+`Refuse` / `PassFrame(Func<MzWaitMode, bool>?)`.
+`project/tests/core/test_mz_player_transfer.cs`, 5 tests.
+
+**950/950**, `TestMzPlayerTransfer: 5/5`, validator passed, build 0 errors.
+**Neun Mutationsregeln, neun gefangen, erster Lauf, keine entkommen.**
+
+**The reason for this card, and it is a reason about testing rather than about
+MZ.** The 660 commands that do not run yet are led by 505 at 348 and 205 at
+96, and both are movement — both need `Game_Character`, a move route decoder
+and a passability model, which is three cards before the first of them can be
+tested. 201 is 33 commands and needs none of that. **A card you can test is
+worth more than a bigger card you cannot**, and the 348 will still be there
+when `Game_Character` exists.
+
+**And it is the first command here that is neither a change nor a number of
+frames.** K-125 waits for frames, K-127 for a picture's movement, and a 201
+for a **condition**: `setWaitMode("transfer")` with
+`updateWaitMode` answering `waiting = $gamePlayer.isTransferring()`. A
+condition wait has no length, so a caller passing frames cannot end it. The
+first draft counted frames and would have let the page on with the player
+still on the old map.
+
+**Four rules, each a place a first reading goes wrong.** A transfer is
+**reserved and not carried out** — `reserveTransfer` changes nothing a player
+can see and `performTransfer` is what moves them. The engine **returns false
+and transfers nobody** in a battle or with a message up, which is neither a
+wait nor a finish, so `MzStep.Refused` says that and is not dressed up as
+either. **The direction is set on the way**, because `performTransfer` is what
+calls `setDirection`. A map this reader has not read is **named and the player
+stays put** — half-applying it is worse than not moving, because the caller
+would see a position and no file behind it.
+
+**This game's own numbers: 33 transfers over sixteen maps, every one with the
+first parameter at zero.** A reader that always looked in the variables would
+send every player in this game to variable four.
+
+**A C# trap, measured and now in the test so the next card does not walk into
+it.** `$"Map{i:03}.json"` with `i = 1` produces **`Map13.json`**. In an
+interpolated string `i:03` is a fill character of `0` and a **precision** of
+`3`, and a whole number with a precision is padded on the **right** — 1
+becomes "13", 2 becomes "23". Every file was missing and the only thing that
+said so was the reader's own error about a file ending mid-value. `ToString
+("000")` is the right spelling. **It took four rebuilds and a `Console
+.WriteLine` to see it**, because every other signal said the code was correct
+and it was.
+
+**A build note, measured, so it is not measured again.** `dotnet build -m:1`
+reports **53 warnings**, and the same tree without the switch reports **0
+warnings, 0 errors**. The warnings are the parallel build's, not the code's:
+the schalter forces a shared compiler instance and warns about it. **The
+seriellen Build ist der ehrliche, und `-m:1` gehört nicht in die Abnahme.**
+
+**Not here.** No map is loaded and no tile is drawn. The other four wait modes
+need a scrolling map, a moving character and a plugin callback.
+
+**Next: 505 Move Route at 348, which needs `Game_Character` first.**

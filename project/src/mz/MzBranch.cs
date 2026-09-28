@@ -235,6 +235,21 @@ public sealed class MzBranchFacts
     public bool InBattle { get; init; }
 
     /// <summary>
+    /// Where the player is, and whether a transfer is still on its way.
+    /// </summary>
+    public MzPlayer Player { get; init; } = new();
+
+    /// <summary>
+    /// Whether a message is on the screen, which is the second thing that stops
+    /// a 201 doing anything. <c>command201</c> is
+    /// <c>if ($gameParty.inBattle() || $gameMessage.isBusy()) return false;
+    /// </c> — the engine transfers nobody in a battle and nobody while a text
+    /// box is up, and a reader that moved the player through one would put them
+    /// on a new map with the old message still running.
+    /// </summary>
+    public bool MessageOpen { get; set; }
+
+    /// <summary>
     /// Whether a menu is open, as the last 351 left it.
     /// </summary>
     /// <remarks>

@@ -62,6 +62,12 @@ public static class MzCommandTable
     /// <summary>Removes a picture from the screen.</summary>
     public const int ErasePicture = 235;
 
+    /// <summary>Sends the player to another place. The engine's
+    /// <c>command201</c> returns <b>false</b> in a battle or with a message on
+    /// the screen, and otherwise only <i>reserves</i> the transfer and sets
+    /// <c>setWaitMode("transfer")</c>.</summary>
+    public const int TransferPlayer = 201;
+
     /// <summary>Opens the menu. The engine's own
     /// <c>command351</c> is <c>if (!$gameParty.inBattle()) {
     /// SceneManager.push(Scene_Menu); }</c> — no number changes, and a menu is
