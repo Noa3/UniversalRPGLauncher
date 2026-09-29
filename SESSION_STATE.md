@@ -8924,3 +8924,28 @@ die Zerlegung schreiben.
 **Test evidence** `test_rm2k_enemy_encounter.cs` (7). **1382/1382**, Validator gruen.
 
 **Mutations** 9 Regeln, **9 von 9 gefangen**.
+
+## 2026-09-29 — the RM2K command coverage became a test
+
+**117 of 117, and the check is in code.** `test_rm2k_command_coverage.cs`
+compares the interpreter's dispatch against liblcf's own enumeration. The card
+had carried three numbers that contradicted each other ("117 of 121", "164
+codes, 43 dispatched", "89 real RPG commands have no case"), **and two of them
+measured the constant list rather than the dispatch.**
+
+**Three faults found while building it, all worth keeping:**
+
+1. **The hand-written reference list was a guess.** Written as a run of
+   five-digit numbers, it named four hundred codes liblcf does not have and
+   missed thirty it does. liblcf's 117 values replaced it, with its names.
+2. **`GD0001` is not a `CS` error.** Godot's source generator refused a
+   non-partial `TestBase` subclass, and every build check in this session
+   filtered on `error CS` — **so a new suite sat in the tree reporting a
+   green build and running nothing.** The filter is now `error (CS|GD|NETSDK)`.
+3. **`os.utime` in a mutation harness defeats MSBuild's change detection.**
+   After the restore the source was right and the DLL still held the mutation;
+   22 unrelated tests failed against a correct tree. Mutation runs build with
+   `-t:Rebuild` from now on.
+
+**`TestRm2kCommandCoverage: 2/2`, `All 1584 tests passed`, validator passed,
+mutations 3 of 3.**
