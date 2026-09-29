@@ -111,36 +111,53 @@ public partial class TestRubyInterpreter
     }
 
     /// <summary>
-    /// A pattern from a script is not run, and it says so.
+    /// A pattern from a script runs, inside a bound, and a text over the
+    /// bound is refused by name.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And it is not run because a pattern that runs long is a way to
-    /// stop a game.</strong> <c>gsub(/[0-9]/, "X")</c> is ordinary,
-    /// <strong>and this reader does not execute a pattern that came from a
-    /// script without a time limit</strong>, because a reader without a limit
-    /// gives that away.
+    /// <strong>And the earlier version of this test said the opposite, and
+    /// was right at the time.</strong> It was written before
+    /// <c>MusterBauen</c> and <c>LaufZaehlt</c> existed,
+    /// **and the first version of <c>gsub</c> refused every pattern instead
+    /// of refusing a long one** -- **a refusal with no bound, which is a
+    /// refusal for safety's sake and not for any bound at all.**
     /// </para>
     /// <para>
-    /// <strong>And the answer is nil plus a message that names the
-    /// pattern.</strong> A silent nil
-    /// <strong>would look exactly like a text that had no digits in it</strong>
-    /// — and the game would have drawn the name it read, with the marker
-    /// still in it, and nothing would say why.
+    /// <strong>And the bound is still there, and it is the one
+    /// <c>=~</c> uses.</strong> A text over 4096 bytes is refused,
+    /// <strong>and the message names the pattern</strong> -- because a
+    /// message that does not name it sends the reader looking, and a
+    /// silent nil
+    /// <strong>would look exactly like a text that had no digits in
+    /// it</strong> — and the game would have drawn the name it read, with
+    /// the marker still in it, and nothing would say why.
     /// </para>
     /// </remarks>
-    public void Test_APatternFromAScriptIsNotRunAndItSaysSo()
+    public void Test_APatternFromAScriptRunsAndALongOneIsRefusedByName()
     {
         var mit = new RubyInterpreter(new RubyNullHost());
         var wert = mit.RunProgram(Statements("\"a1b2\".gsub(/[0-9]/, \"X\")\n"));
+        AssertEq(System.Text.Encoding.UTF8.GetString(wert.Bytes), "aXbX",
+            "**the pattern ran** — and it refused every pattern before, "
+                + "which was a refusal for safety's sake and not for any "
+                + "bound at all; the bound is here and this text is inside "
+                + "it");
 
-        AssertTrue(wert.Kind == RubyValueKind.Nil,
-            "**nil, and not the text unchanged** — a reader that returned the "
+        // **Und die Schranke ist echt.** 4097 Bytes sind drueber,
+        // **und der Leser laesst das Muster nicht laufen.**
+        var lang = new RubyInterpreter(new RubyNullHost());
+        var ziffern = new string('a', 4097);
+        var abgelehnt = lang.RunProgram(Statements(
+            "\"" + ziffern + "\".gsub(/[0-9]/, \"X\")\n"));
+        AssertTrue(abgelehnt.Kind == RubyValueKind.Nil,
+            "**a text over the bound is refused** — and the answer is nil and "
+                + "not the text unchanged, because a reader that returned the "
                 + "text would make the game draw the name with the marker "
-                + "still in it, and nothing would say why");
+                + "still in it");
 
         var genannt = false;
-        foreach (var d in mit.Diagnostics)
+        foreach (var d in lang.Diagnostics)
         {
             if (d.Contains("[0-9]"))
             {
@@ -149,9 +166,9 @@ public partial class TestRubyInterpreter
         }
 
         AssertTrue(genannt,
-            "**and the message names the pattern** — a message that does not "
-                + "name it sends the reader looking; the diagnostics were: "
-                + string.Join(" | ", mit.Diagnostics));
+            "**and the message names the pattern** — a message that does "
+                + "not name it sends the reader looking; the diagnostics "
+                + "were: " + string.Join(" | ", lang.Diagnostics));
     }
 
     /// <summary>

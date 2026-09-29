@@ -9769,3 +9769,82 @@ Batch -- **nach dem `case "%" when beideZahlen` ohne Zahl und dem
 Methode auch gar nicht kennt.** *Ein Test, der ein "nichts" sieht,
 muss pruefen, dass es wirklich "nichts sagen will" ist und nicht
 "nichts sagen konnte".*
+
+
+## Und `sub`/`gsub`: drei Testfehler, die keiner wie ein Testfehler aussah
+
+**`"aXbXc".sub("X", "-")` antwortete `'a-b-c'`.** `Replace` fuer beides
+-- **und ein Spiel, das eine Marke aus einem Namen streicht, haette alle
+gestrichen.** Und `Replace` mit leerem Text tut in neueren Laufzeiten
+nichts mehr, **und darum hat die leere Ersetzung einen eigenen Weg.**
+
+**Und der Block war an keiner Stelle:** `gsub("X") { |t| t * 2 }`
+antwortete `'abc'` statt `'aXXbXXc'`. `BrauchtBlock` nannte `sub` und
+`gsub` nicht,
+**und ein Block kommt nur an den Aufruf, wenn diese Liste ihn nennt** --
+**und `gsub` lief also mit leerem Ersatz und strich jedes X.**
+
+**Und die drei Fehler waren:**
+
+1. `"#{$1}"` ist eine andere Ruby-Sache als `$1`. **Der Leser hat sie
+   nicht, und mein Test behauptete, er habe sie.**
+   *Ein Test, der eine Form behauptet, ist manchmal die Form, die fehlt.*
+2. `"\1"` ist **der Oktalwert 1** -- **gemessen: genau ein Byte `01`**.
+   **Der Gruppenrueckverweis steht in `"\\1"`.**
+   *Ein Backslash im Ruby-Text ist eine Oktalzahl und kein Backslash, und
+   das weiss man erst, wenn man die Bytes ansieht.*
+3. `["a", "b"]` prueft **eine Sammlung** und nicht zwei Umbenennungen --
+   **und der Test lief in eine `IndexOutOfRangeException`, die aussah wie
+   ein Leserfehler.**
+
+**Und die Gruppenliste faengt bei 0 an, die Ziffer im Ersatzerzeugnis bei
+1.** `"anna bob".gsub(/(\w+) (\w+)/, "\\2 \\1")` antwortete `' bob'`
+-- **und das sieht wie ein Zeichenfehler aus und ist einer**, denn beide
+Gruppen waren vertauscht.
+
+**Und die alte Regel `Test_APatternFromAScriptIsNotRunAndItSaysSo` war
+damals richtig und ist es nicht mehr.** Muster aus Skripten laufen jetzt in
+derselben Schranke wie `=~` (4096 Bytes), **und die Meldung nennt jetzt
+das Muster und nicht nur die Laenge.**
+
+`TestRubyInterpreter: 232/232`, `All 1790 tests passed`.
+**Und die alte Regel `Test_APatternFromAScriptIsNotRunAndItSaysSo` war
+damals richtig und ist es nicht mehr.** Muster aus Skripten laufen jetzt in
+derselben Schranke wie `=~` (4096 Bytes), **und die Meldung nennt jetzt
+das Muster und nicht nur die Laenge.**
+
+## Und zwei ueberlebende Mutationen, und eine davon war kein Testfehler
+
+**Erstes Ergebnis: 6 von 9.** Zwei Ueberlebende waren *dieselbe*
+Luecke -- **kein Test hatte `sub` mit einem Muster und zwei Treffern** --
+**und `sub` mit einem Muster ist ein eigener Weg** (`Matches` statt
+`IndexOf`), **und ein Leser, der den Textweg repariert und den Musterweg
+nicht, haette ein `gsub` im Namensfeld eines Spiels.**
+`Test_SubWithAPatternStopsAfterTheFirstOne` haelt jetzt **beide Wege**
+fest, weil *das Ueberleben einer Mutation eine Aussage ueber die Test ist
+und keine ueber den Code*.
+
+**Die dritte Ueberlebende war meine eigene Dummheit, und sie ist lehrreicher
+als die anderen beiden.** Die Regel entfernte `sub` und `gsub` aus
+`BrauchtBlock` -- **und nichts ging kaputt.** Der Grund: **der Musterweg
+liest den Block aus `pArgumente`, und der Textweg aus `IstBlock`, und
+beide brauchen die Liste gar nicht**, **um zu laufen** -- **die Liste
+entscheidet nur, ob der Block am Aufruf *haengt*.** Und der Aufruf haengte
+ihn trotzdem, **weil es noch einen zweiten Weg gab, den ich nicht gesehen
+habe.**
+
+*Ein Anker, der gebaut ist und nichts aendert, sieht wie ein ueberlebender
+Test aus und ist ein Messfehler.* **Also: die Regel pruefen, ob ihr
+Ersatz wirklich etwas tut, bevor man sie als Belegzaehlt** -- **und das
+ist ein Schritt, den die Mutationsliste bisher nicht hatte.**
+
+**Und nachgemessen: es waren zwei `break` fuer `sub` im Musterweg, einer am
+Anfang der Schleife und einer am Ende, und der am Ende erreichte das
+`break` immer zuerst.** Der Anker auf dem am Anfang war ein No-op,
+**und der tote Zweig ist jetzt weg.**
+
+**Und die Regel heisst damit: in eine Mutationsliste gehoeren zwei
+Pruefungen.** Der Anker kommt genau einmal vor, **und der Ersatz ist nicht
+identisch mit dem Anker.** Die zweite fehlte bisher,
+**und deshalb stand hier zwei Laeufe lang eine tote Regel als Befund in
+der Liste.**

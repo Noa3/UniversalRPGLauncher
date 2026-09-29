@@ -1,7 +1,56 @@
 ## Active
 
 **Und die Regel "Exception faengt alles" war ueberfluessig, und ich habe sie
-geloescht, statt sie zu dokumentieren.** `RuntimeError -> StandardError ->
+gelo
+
+**Und `sub` und `gsub` gab es als einen Satz, und sie sind zwei.** Gemessen
+vorher: `"aXbXc".sub("X", "-")` antwortete `'a-b-c'` --
+**und ein Leser, der `Replace` fuer beides nahm, macht aus einem Spiel, das
+eine Marke aus einem Namen streicht, eines, das alle streicht.**
+**Und `Replace` mit leerem Text tut in neueren Laufzeiten nichts mehr**,
+**und darum hat die leere Ersetzung einen eigenen Weg mit `Remove`.**
+
+**Und der Block war an keiner Stelle.** `gsub("X") { |t| t * 2 }` antwortete
+`'abc'` -- **und nicht `'aXXbXXc'`** -- **und die leere Ersetzung war
+nicht geraten, sie war gemessen.** `BrauchtBlock` nannte `sub` und `gsub`
+nicht,
+**und ein Block wird nur dann an den Aufruf gehaengt, wenn diese Liste ihn
+nennt** -- **und `gsub` lief also mit leerem Ersatz und strich jedes X**,
+**und ein Spiel, das seinen Gegaennamen in Grossbuchstaben schreibt,
+haette leere Zeichen daraus gemacht und der Name waere weg.**
+
+**Und drei der Fehler in diesem Batch waren Testfehler, und keiner davon
+sah aus wie ein Testfehler:**
+
+1. `"#{$1}"` ist eine andere Ruby-Sache als `$1`, **und der Leser hat sie
+   nicht** -- **und mein Test behauptete, er habe sie.**
+2. `"\1"` ist **der Oktalwert 1**, **gemessen: genau ein Byte `01`** --
+   **und der Gruppenrueckverweis steht in `"\\1"`.** *Ein Backslash im
+   Ruby-Text ist eine Oktalzahl und kein Backslash.*
+3. `["a", "b"]` in einem Test prueft **eine Sammlung**, **und nicht zwei
+   Umbenennungen** -- **und der Test lief in einen
+   `IndexOutOfRangeException`, die aussah wie ein Leserfehler.**
+
+**Und die Gruppenliste faengt bei 0 an, und die Ziffer im Ersatzerzeugnis
+bei 1.** `"anna bob".gsub(/(\w+) (\w+)/, "\\2 \\1")` antwortete
+`' bob'` -- **und das sieht wie ein Zeichenfehler aus und ist einer**,
+**denn beide Gruppen waren vertauscht.**
+
+**Und Muster aus Skripten laufen jetzt in derselben Schranke wie `=~`,
+nachdem sie vorher alle abgelehnt wurden.** Die alte Regel
+`Test_APatternFromAScriptIsNotRunAndItSaysSo` **war damals richtig und
+ist es nicht mehr** -- **und ein Test, der eine Regel festschreibt, die
+der Leser abschafft, muss mit der Regel gehen und nicht gegen sie.**
+4097 Bytes werden abgelehnt, **und die Meldung nennt jetzt das Muster und
+nicht nur die Laenge** -- **denn bei hundert Mustern in einem Spiel weiss
+man dann nicht, welches zu gross war.**
+
+**Und `String * Integer` ist der Trennstrich zwischen zwei Fenstern.** `"-" *
+30`,
+**und ohne das antwortete der Leser *undefined operator '*' for a String
+and a Integer*** -- **und die Meldung waere wieder ueber einen Operator
+gewesen, den es gibt.**
+escht, statt sie zu dokumentieren.** `RuntimeError -> StandardError ->
 Exception` -- **die Elternkette enthaelt `Exception` von selbst**,
 **und der Sonderzweig daneben hat nichts beigetragen.** Ein Sonderzweig,
 der neben der allgemeinen Regel steht und dasselbe sagt,
@@ -76,6 +125,77 @@ Breite, Praezision, Wand, `*` aus einem Wert, `%%`. Gemessen: `"%05.2f" %
   **und `%.2s` schneidet einen Text ab, ohne zu runden.**
 - **Und `printf` gibt nil zurueck, weil es schreibt**, **und `sprintf`
   gibt den Text zurueck.**
+**Und `sub` und `gsub` gab es als einen Satz, und sie sind zwei.** Gemessen
+vorher: `"aXbXc".sub("X", "-")` antwortete `'a-b-c'` --
+**und ein Leser, der `Replace` fuer beides nimmt, macht aus einem Spiel, das
+eine Marke aus einem Namen streicht, eines, das alle streicht.**
+**Und `Replace` mit leerem Text tut in neueren Laufzeiten nichts mehr**,
+**und darum hat die leere Ersetzung einen eigenen Weg.**
+
+**Und der Block war an keiner Stelle.** `gsub("X") { |t| t * 2 }` antwortete
+`'abc'` -- **und nicht `'aXXbXXc'`** -- **und die leere Ersetzung war nicht
+geraten, sie war gemessen.** `BrauchtBlock` nannte `sub` und `gsub` nicht,
+**und ein Block wird nur dann an den Aufruf gehaengt, wenn diese Liste ihn
+nennt** -- **und `gsub` lief also mit leerem Ersatz und strich jedes X**,
+**und ein Spiel, das seinen Gegaennamen in Grossbuchstaben schreibt, haette
+leere Zeichen daraus gemacht und der Name waere weg.**
+
+**Und die achte Mutation war toter Code, und das ist die dritte Form des
+Problems in diesem Batch.** Zwei Ueberlebende waren *dieselbe* Luecke --
+**kein Test hatte `sub` mit einem Muster** -- **und `sub` mit einem Muster
+ist ein eigener Weg** (`Matches` statt `IndexOf`),
+**und `Test_SubWithAPatternStopsAfterTheFirstOne` haelt jetzt beide Wege
+fest.** *Ein Ueberleben ist eine Aussage ueber den Test und keine ueber den
+Code.*
+
+**Und die dritte Ueberlebende war ein Anker, der nichts aendert.** Im
+Musterweg stand **zwei** `break` fuer `sub` -- **einer am Anfang der
+Schleife, einer am Ende** -- **und der am Ende erreichte das `break` immer
+zuerst**, **und ein Anker auf dem am Anfang war damit ein No-op**, **und
+ein No-op sieht in der Mutationsliste aus wie ein Test, der zu schwach ist.
+Also: **der tote Zweig ist weg**, **und die Regel sitzt jetzt auf dem
+Abbruch, der tatsaechlich entscheidet.**
+
+*Ein Anker, der gebaut ist und nichts aendert, sieht wie ein ueberlebender
+Test aus und ist ein Messfehler.* **Also gehoert in jede Mutationsliste
+zwei Pruefungen: der Anker kommt genau einmal vor, **und der Ersatz ist
+nicht identisch mit dem Anker.** Die zweite habe ich bis heute nicht
+gemacht, **und deshalb habe ich eine tote Regel zwei Laeufe lang als
+Befund gemeldet.**
+
+**Und drei der Fehler in diesem Batch waren Testfehler, und keiner davon sah
+aus wie ein Testfehler:**
+
+1. `"#{$1}"` ist eine andere Ruby-Sache als `$1`, **und der Leser hat sie
+   nicht** -- **und mein Test behauptete, er habe sie.**
+   *Ein Test, der eine Form behauptet, ist manchmal genau die Form, die
+   fehlt.*
+2. `"\1"` ist **der Oktalwert 1** -- **gemessen: genau ein Byte `01`** --
+   **und der Gruppenrueckverweis steht in `"\\1"`.**
+   *Ein Backslash im Ruby-Text ist eine Oktalzahl und kein Backslash, und das
+   weiss man erst, wenn man die Bytes ansieht.*
+3. `["a", "b"]` in einem Test prueft **eine Sammlung**, **und nicht zwei
+   Umbenennungen** -- **und der Test lief in einen
+   `IndexOutOfRangeException`, der aussah wie ein Leserfehler.**
+
+**Und die Gruppenliste faengt bei 0 an, und die Ziffer im Ersatzerzeugnis
+bei 1.** `"anna bob".gsub(/(\w+) (\w+)/, "\\2 \\1")` antwortete
+`' bob'` -- **und das sieht wie ein Zeichenfehler aus und ist einer**,
+**denn beide Gruppen waren vertauscht.**
+
+**Und Muster aus Skripten laufen jetzt in derselben Schranke wie `=~`, nachdem
+sie vorher alle abgelehnt wurden.** Die alte Regel
+`Test_APatternFromAScriptIsNotRunAndItSaysSo` **war damals richtig und ist es
+nicht mehr** -- **und ein Test, der eine Regel festschreibt, muss mit der
+Regel gehen und nicht gegen sie.** 4097 Bytes werden abgelehnt, **und die
+Meldung nennt jetzt das Muster und nicht nur die Laenge** -- **denn bei
+hundert Mustern in einem Spiel weiss man sonst nicht, welches zu gross war.**
+
+**Und `String * Integer` ist der Trennstrich zwischen zwei Fenstern.** `"-" *
+30`,
+**und ohne das antwortete der Leser *undefined operator '*' for a String and
+a Integer*** -- **und die Meldung waere wieder ueber einen Operator gewesen,
+den es gibt.**
 
 **Und die siebte Mutation lebte, und gemessen war sie ein Testfehler und
 kein Codefehler:** `printf("%d", 5)` antwortet `Nil`, **und
@@ -4399,7 +4519,8 @@ den Ort gesucht, an dem `class` wirklich beantwortet wird:**
 Block-Umbrueche mit Argumenten (`break 1`), `dup`/`clone` mit echter Kopie,
 `find`/`detect`/`inject`/`group_by`/`each_with_object`,
 `Struct`, `raise`, `require`, `printf`/`sprintf`,
-`gsub` mit einer Blockersetzung, `String#%`, und
+`String#%`, `gsub` mit einer Blockersetzung und `sub` mit dem ersten
+Treffer, `String * Integer`, und
 `\A`/`\z` als Anker in CP932.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`

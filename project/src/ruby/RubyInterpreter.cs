@@ -737,6 +737,31 @@ public sealed class RubyInterpreter
 
         switch (pOperator)
         {
+            // **Und `*` mit einer Zahl wiederholt den Text.** `"-" * 30`
+            // ist die Trennlinie zwischen zwei Fenstern,
+            // **und `str * n` steht in jedem Bildschirm, der eine Leiste
+            // zeichnet** -- **und ein Leser, der nur Zahlen nahm, wuerde
+            // *„undefined operator '*' for a String and a Integer"*
+            // sagen**, **und die Meldung waere ueber einen Operator, den es
+            // gibt.**
+            case "*" when pLeft.Kind == RubyValueKind.String
+                && (pRight.Kind == RubyValueKind.Integer
+                    || pRight.Kind == RubyValueKind.Float):
+            {
+                var anzahl = (int)Math.Max(
+                    0d,
+                    pRight.Kind == RubyValueKind.Integer
+                        ? pRight.Integer
+                        : pRight.Real);
+                var wiederholt = new List<byte>(pLeft.Bytes.Length * anzahl);
+                for(var mal = 0; mal < anzahl; mal++)
+                {
+                    wiederholt.AddRange(pLeft.Bytes);
+                }
+
+                return RubyValue.OfBytes([.. wiederholt]);
+            }
+
             case "+" when pLeft.Kind == RubyValueKind.String:
                 return RubyValue.OfBytes(Concat(pLeft.Bytes, pRight.Bytes));
             case "+" when beideZahlen:
@@ -2785,88 +2810,417 @@ public sealed class RubyInterpreter
 
 
 
-    /// <summary>The text with one or every part replaced.</summary>
+    /// <summary>
+    /// `sub` and `gsub`, with a text, a pattern, or a block.
+    /// </summary>
     /// <param name="pText">The text.</param>
-    /// <param name="pMethode">Either <c>sub</c> or <c>gsub</c>.</param>
+    /// <param name="pMethode">`sub` or `gsub`.</param>
     /// <param name="pArgumente">What to look for and what to put there.</param>
-    /// <returns>The new text.</returns>
+    /// <returns>The new text, or nil when there is nothing to look for.</returns>
     /// <remarks>
     /// <para>
-    /// <strong>And a pattern from a game is not run here.</strong>
-    /// <c>gsub(/[0-9]/, "X")</c> takes a pattern,
-    /// <strong>und diese Runtime fuehrt kein Muster aus einem Spiel aus,
-    /// ohne eine Zeitgrenze** -- **ein Muster, das laeuft, ist ein Weg, ein
-    /// Spiel anzuhalten, und ein Leser ohne Grenze gibt das preis.**
+    /// <strong>And `sub` replaces the first one and `gsub` all of
+    /// them.</strong> That is the whole difference,
+    /// <strong>and a reader that used <c>Replace</c> for both would turn a
+    /// game that removes one mark from a name into one that removes
+    /// all</strong> — and the name the game writes into its list would not
+    /// be the one it looked for.
     /// </para>
     /// <para>
-    /// <strong>So wird es gemeldet und nicht geraten.</strong> Ein Spiel, das
-    /// `gsub` mit einem Muster schreibt, bekommt nil **und eine Diagnose,
-    /// die das Muster nennt** -- **und ein stilles nil wuerde so aussehen,
-    /// als haette das Spiel die Zeichenkette unveraendert zurueckbekommen**,
-    /// was dieselbe Folge hat wie ein Fehler, den niemand liest.
+    /// <strong>And a block is the form every text rewriter uses.</strong>
+    /// <c>gsub(/(\w+)/) { |w| w.upcase }</c>,
+    /// <strong>and without it a game's item renamer, its tag filter and
+    /// its dialogue formatter all fail at the same line.</strong>
     /// </para>
     /// <para>
-    /// <strong>Und `sub` ersetzt das erste und `gsub` alle.</strong> Genau
-    /// das ist der Unterschied,
-    /// **und ein Leser, der beide gleich macht, wuerde aus einem Spiel, das
-    /// eine Marke aus einem Namen entfernt, eines machen, das alle
-    /// entfernt.**
+    /// <strong>And the block gets the match, and the whole match.</strong>
+    /// It is not given the name of a pattern group,
+    /// <strong>because <c>$1</c> is how a game reads one</strong> — and
+    /// that is the sentence the block and the global both serve.
     /// </para>
     /// </remarks>
     private RubyValue Ersetzt(
         string pText, string pMethode, IReadOnlyList<RubyValue> pArgumente)
     {
-        if (pArgumente.Count < 2)
+        if (pArgumente.Count == 0)
         {
             _diagnostics.Add(
-                pMethode + " needs what to look for and what to put there, and "
-                    + "got " + pArgumente.Count + " arguments; a replacement "
-                    + "without a search would change nothing and look like it "
-                    + "worked");
+                pMethode + " needs what to look for, and got no arguments; a "
+                    + "replacement without a search would change nothing and "
+                    + "look like it worked");
             return RubyValue.Nil;
         }
 
+        // **Und ein Muster darf laufen, weil es hier eine Schranke
+        // gibt.** Die gemessene Grenze liegt beim Muster selbst,
+        // **und ein Muster ohne Schranke ist ein Weg, ein Spiel von innen
+        // anzuhalten** -- ein verschachteltes `*` ueber einen langen Text
+        // tut es in ein paar hundert Millisekunden.
+        // **Die erste Fassung hat jedes Muster abgelehnt, und damit auch
+        // jedes Skript, das eines schreibt** --
+        // **und die Absicht war Sicherheit, und die Wirkung war eine
+        // Ablehnung ohne Grenze.** Die Grenze ist hier, und die Messung
+        // sagt, welche.
         if (pArgumente[0].Kind == RubyValueKind.Regexp)
         {
-            _diagnostics.Add(
-                pMethode + " was given the pattern /"
-                    + (pArgumente[0].Source ?? "") + "/, and this reader does "
-                    + "not run a pattern that came from a script without a "
-                    + "time limit; a pattern that runs long is a way to stop a "
-                    + "game, and a reader without a limit gives that away");
-            return RubyValue.Nil;
+            return ErsetztNachMuster(
+                pText, pMethode, pArgumente[0], pArgumente);
         }
 
         if (pArgumente[0].Kind != RubyValueKind.String)
         {
+            _diagnostics.Add(
+                pMethode + " was given something that is neither a text nor a "
+                    + "pattern to look for");
             return RubyValue.Nil;
         }
 
         var gesucht = AlsText(pArgumente[0]);
-        var ersatz = AlsText(pArgumente[1]);
         if (gesucht.Length == 0)
         {
             return Text(pText);
         }
 
-        // **Und `sub` ersetzt das erste, `gsub` alle.** Das ist der ganze
-        // Unterschied, **und ein Leser, der beide gleich macht, wuerde aus
-        // einem Spiel, das eine Marke aus einem Namen entfernt, eines
-        // machen, das alle entfernt.**
-        //
-        // **Und eine leere Ersetzung braucht `Remove` und nicht
-        // `Replace`.** `Replace` mit leerem Text tut in neueren
+        var erstes = pText.IndexOf(gesucht, StringComparison.Ordinal);
+        if (erstes < 0)
+        {
+            return Text(pText);
+        }
+
+        // **Und ein Block laeuft auch bei einem Text, und nicht nur bei
+        // einem Muster.** `gsub("X") { |x| x * 2 }` ist derselbe Satz,
+        // **und er ist der, den ein Spiel schreibt, wenn es ein Zeichen
+        // umschreibt, ohne ein Muster zu bauen** --
+        // **und ein Leser, der den Block nur im Musterpfad annahm, wuerde
+        // hier den leeren Ersatz nehmen**, **und jedes X streichen, und der
+        // Name waere weg.**
+        if (pArgumente.Count > 1 && IstBlock(pArgumente[1]))
+        {
+            return ErsetztMitBlock(pText, pMethode, gesucht, pArgumente[1]);
+        }
+
+        if (pMethode == "sub")
+        {
+            var ersatz = pArgumente.Count > 1
+                ? AlsText(pArgumente[1])
+                : gesucht;
+            return Text(pText[..erstes] + ersatz + pText[(erstes + gesucht.Length)..]);
+        }
+
+        // **Und `gsub` mit einer leeren Ersetzung braucht `Remove` und
+        // nicht `Replace`.** `Replace` mit leerem Text tut in neueren
         // Laufzeiten nichts mehr,
         // **und ein Spiel, das eine Marke aus einem Namen streicht, haette
-        // den Namen unveraendert behalten** -- und der Name, den das Spiel
-        // in die Liste schreibt, waere ein anderer als der, den es sucht.
-        return Text(pMethode == "gsub"
-            ? pText.Replace(gesucht, ersatz, StringComparison.Ordinal)
-            : ersatz.Length == 0
-                ? pText.Remove(
-                    pText.IndexOf(gesucht, StringComparison.Ordinal), gesucht.Length)
-                : pText.Replace(gesucht, ersatz, StringComparison.Ordinal));
+        // den Namen unveraendert behalten.**
+        var ersatzGsub = pArgumente.Count > 1 && !IstBlock(pArgumente[1])
+            ? AlsText(pArgumente[1])
+            : string.Empty;
+        if (ersatzGsub.Length == 0)
+        {
+            var neu = new System.Text.StringBuilder();
+            var stelle = 0;
+            while(erstes >= 0)
+            {
+                neu.Append(pText, stelle, erstes - stelle);
+                stelle = erstes + gesucht.Length;
+                erstes = pText.IndexOf(gesucht, stelle, StringComparison.Ordinal);
+            }
+
+            neu.Append(pText, stelle, pText.Length - stelle);
+            return Text(neu.ToString());
+        }
+
+        return Text(pText.Replace(gesucht, ersatzGsub, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// Whether a value is a block and not an answer.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>true when it is a block.</returns>
+    /// <remarks>
+    /// <strong>And a block is a value and not a list of words.</strong>
+    /// <c>gsub("X", "Y")</c> and <c>gsub("X") { "Y" }</c> sind derselbe
+    /// Satz,
+    /// **und der Leser muss sie unterscheiden koennen, ohne die Form zu
+    /// raten** -- **und raten heisst hier: der Block als Text, und der
+    /// Spieler sieht `X` und `Y` und eine leere Zeile dazwischen.**
+    /// </remarks>
+    /// <summary>
+    /// `sub` and `gsub` with a pattern, and the block that answers each
+    /// match.
+    /// </summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pMethode">`sub` or `gsub`.</param>
+    /// <param name="pMuster">The pattern, as written.</param>
+    /// <param name="pArgumente">What to put there, and the block.</param>
+    /// <returns>The new text, or nil when the pattern did not run.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the pattern runs inside the bound, and the bound is
+    /// already written.</strong> <c>MusterBauen</c> and <c>LaufZaehlt</c>
+    /// came with the first pattern this reader ever ran,
+    /// **and the first version of this method refused every pattern
+    /// instead** -- **a refusal with no bound, which is a refusal for
+    /// safety's sake and not for any bound at all.** The bound is here,
+    /// the same one `=~` uses,
+    /// **and a game that rewrites its item names is no longer refused.**
+    /// </para>
+    /// <para>
+    /// <strong>And the block gets the match, and the whole match.</strong>
+    /// `gsub(/(\w+)/) { |w| w.upcase }`,
+    /// **and a reader that gave the block only a group would make the
+    /// commonest form of the sentence fail** -- and the game would
+    /// uppercase nothing and draw the text unchanged.
+    /// </para>
+    /// <para>
+    /// <strong>And `$1` is the group of the match being replaced, and not
+    /// of the last one.</strong> `gsub` is a loop over the matches,
+    /// **and a reader that ran the block after collecting them all would
+    /// have every replacement see the last match's groups** -- and
+    /// <c>gsub(/(\w+)/) { $1.capitalize }</c> is a game's name tidy.
+    /// </para>
+    /// </remarks>
+    private RubyValue ErsetztNachMuster(
+        string pText,
+        string pMethode,
+        RubyValue pMuster,
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        var gebaut = MusterBauen(pMuster);
+        if (gebaut?.Engine == null)
+        {
+            return RubyValue.Nil;
+        }
+
+        if (!gebaut.LaufZaehlt(pText.Length))
+        {
+            // **Und die Meldung nennt das Musster.** Die alte Fassung
+            // sagte nur die Laenge,
+            // **und eine Meldung ohne das Muster schickt den Leser
+            // suchen** -- **und bei hundert Mustern in einem Spiel weiss
+            // er dann nicht, welches von ihnen zu gross war.**
+            _diagnostics.Add(
+                pMethode + " was not run on " + pText.Length + " bytes, "
+                    + "because the pattern /" + gebaut.Quelle + "/ is only "
+                    + "run while the text stays under 4096 bytes; a pattern "
+                    + "that runs long is a way to stop a game, and a reader "
+                    + "without a bound gives that away");
+            return RubyValue.Nil;
+        }
+
+        var block = pArgumente.Count > 1 && pArgumente[1].Kind == RubyValueKind.Proc
+            ? pArgumente[1].Block
+            : null;
+        var ersatz = block == null && pArgumente.Count > 1
+            ? AlsText(pArgumente[1])
+            : null;
+        var text = RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(pText));
+
+        var Ergebnis = new System.Text.StringBuilder();
+        var stelle = 0;
+        foreach (System.Text.RegularExpressions.Match treffer
+            in gebaut.Engine.Matches(pText))
+        {
+
+            Ergebnis.Append(pText, stelle, treffer.Index - stelle);
+
+            // **Und `$1` gehoert zu diesem Treffer**, **und nicht zum
+            // letzten** -- **und das ist der ganze Grund, warum es den
+            // Block gibt.**
+            var alterTreffer = _letzterTreffer;
+            _letzterTreffer = new TrefferDaten
+            {
+                Getroffen = true,
+                Vorher = pText[..treffer.Index],
+                Nachher = pText[(treffer.Index + treffer.Length)..],
+                Ganz = treffer.Value,
+                Stelle = treffer.Index,
+                Gruppen =
+                [
+                    .. Enumerable.Range(1, Math.Max(0, treffer.Groups.Count - 1))
+                        .Select(gruppe => treffGruppe(treffer, gruppe)),
+                ],
+                GruppenDa =
+                [
+                    .. Enumerable.Range(1, Math.Max(0, treffer.Groups.Count - 1))
+                        .Select(gruppe => treffer.Groups[gruppe].Success),
+                ],
+            };
+            try
+            {
+                if (block != null)
+                {
+                    var antwort = BlockAufrufen(
+                        block,
+                        [text, RubyValue.OfInteger(treffer.Index)],
+                        text);
+                    Ergebnis.Append(
+                        antwort.Kind == RubyValueKind.String
+                            ? System.Text.Encoding.UTF8.GetString(antwort.Bytes)
+                            : WertAlsText(antwort));
+                }
+                else
+                {
+                    Ergebnis.Append(ErsatzzEingesetzt(
+                        ersatz ?? string.Empty, treffer.Value, _letzterTreffer.Gruppen));
+                }
+            }
+            finally
+            {
+                _letzterTreffer = alterTreffer;
+            }
+
+            stelle = treffer.Index + treffer.Length;
+            if (pMethode == "sub")
+            {
+                break;
+            }
+        }
+
+        Ergebnis.Append(pText, stelle, pText.Length - stelle);
+        return Text(Ergebnis.ToString());
+    }
+
+
+
+
+
+    /// <summary>
+    /// The replacement text, with `\1` and `\0` standing for the groups.
+    /// </summary>
+    /// <param name="pErsatz">The replacement, as written.</param>
+    /// <param name="pGanze">The whole match.</param>
+    /// <param name="pGruppen">The pattern's groups, as values.</param>
+    /// <returns>The text that replaces the match.</returns>
+    /// <remarks>
+    /// <strong>And `\0` is the whole match and `\1` the first group.</strong>
+    /// That is Ruby 1.8,
+    /// **and a reader that only knew `\1` would leave `\0` standing in
+    /// every replacement** -- and a game that swaps the halves of a name
+    /// with `\0` would write the two characters `\` and `0` into it.
+    /// </remarks>
+    private static string ErsatzzEingesetzt(
+        string pErsatz,
+        string pGanze,
+        IReadOnlyList<string> pGruppen)
+    {
+        if (!pErsatz.Contains('\\'))
+        {
+            return pErsatz;
+        }
+
+        var Ergebnis = new System.Text.StringBuilder();
+        for(var stelle = 0; stelle < pErsatz.Length; stelle++)
+        {
+            if (pErsatz[stelle] != '\\' || stelle + 1 >= pErsatz.Length)
+            {
+                Ergebnis.Append(pErsatz[stelle]);
+                continue;
+            }
+
+            stelle++;
+            var ziffer = pErsatz[stelle];
+            if (ziffer is >= '0' and <= '9')
+            {
+                var nummer = ziffer - '0';
+                if (nummer == 0)
+                {
+                    Ergebnis.Append(pGanze);
+                }
+                else if (nummer > 0 && nummer <= pGruppen.Count)
+                {
+                    // **Und die Liste der Gruppen faengt bei 0 an, und die
+                    // Ziffer im Ersatzerzeugnis bei 1.** `\1` ist die erste
+                    // Gruppe,
+                    // **und ein Leser, der die Ziffer direkt als Index nahm,
+                    // gab `\1` die zweite Gruppe zurueck** --
+                    // **und `"anna bob".gsub(/(\w+) (\w+)/, "\\2 \\1")`
+                    // antwortete dann `' bob'`, weil beide Gruppen
+                    // vertauscht waren** -- **und das sieht wie ein
+                    // Zeichenfehler aus und ist einer.**
+                    Ergebnis.Append(pGruppen[nummer - 1] ?? string.Empty);
+                }
+
+                continue;
+            }
+
+            Ergebnis.Append('\\');
+            Ergebnis.Append(ziffer);
+        }
+
+        return Ergebnis.ToString();
+    }
+
+
+
+
+    /// <summary>
+    /// `sub` and `gsub` with a text to look for, and a block that answers.
+    /// </summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pMethode">`sub` or `gsub`.</param>
+    /// <param name="pGesucht">The text to look for.</param>
+    /// <param name="pBlock">The block, as a value.</param>
+    /// <returns>The new text.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the block gets the whole match and the place.</strong>
+    /// `gsub("X") { |x| x * 2 }`,
+    /// **and a reader that gave the block only the text it found would make
+    /// the block unable to ask where it was</strong> — and a game that
+    /// doubles a letter only every second time needs the place.
+    /// </para>
+    /// <para>
+    /// <strong>And the block's answer is the text that goes there, and not
+    /// a conversion of it.</strong> A block that answers a number and
+    /// `<c>to_s`es it is how a game turns a mark into its own name.
+    /// </para>
+    /// </remarks>
+    private RubyValue ErsetztMitBlock(
+        string pText,
+        string pMethode,
+        string pGesucht,
+        RubyValue pBlock)
+    {
+        var text = RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(pText));
+        var Ergebnis = new System.Text.StringBuilder();
+        var stelle = 0;
+        var treffer = pText.IndexOf(pGesucht, StringComparison.Ordinal);
+        while(treffer >= 0)
+        {
+            Ergebnis.Append(pText, stelle, treffer - stelle);
+            var antwort = BlockAufrufen(
+                pBlock.Block,
+                [RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(pGesucht)),
+                 RubyValue.OfInteger(treffer)],
+                text);
+            Ergebnis.Append(
+                antwort.Kind == RubyValueKind.String
+                    ? System.Text.Encoding.UTF8.GetString(antwort.Bytes)
+                    : WertAlsText(antwort));
+            stelle = treffer + pGesucht.Length;
+            if (pMethode == "sub")
+            {
+                break;
+            }
+
+            treffer = pText.IndexOf(pGesucht, stelle, StringComparison.Ordinal);
+        }
+
+        if (stelle <= pText.Length)
+        {
+            Ergebnis.Append(pText, stelle, pText.Length - stelle);
+        }
+
+        return Text(Ergebnis.ToString());
+    }
+
+
+    private static bool IstBlock(RubyValue pWert)
+        => pWert.Kind == RubyValueKind.Proc;
+
+
 
     /// <summary>The text with its line ending taken off.</summary>
     /// <param name="pText">The text.</param>
@@ -7984,6 +8338,15 @@ public sealed class RubyInterpreter
             or "inject" or "reduce" or "each_with_object"
             or "group_by" or "partition" or "sort_by" or "min_by" or "max_by"
             or "flat_map"
+            // **Und `sub` und `gsub`, denn mit einem Block sind sie der
+            // Satz, mit dem ein Spiel seinen Text umschreibt.**
+            // `name.gsub(/(\w+)/) { |w| w.upcase }`,
+            // **und ein Leser, der sie nicht hier nennt, haette den Block
+            // nie an den Aufruf gehaengt** -- **und `gsub` wuerde mit einem
+            // leeren Ersatz laufen und jedes X streichen**, und **ein Spiel,
+            // das seinen Gegaennamen in Grossbuchstaben schreibt, wuerde
+            // leere Zeichen daraus machen und der Name waere weg.**
+            or "sub" or "gsub" or "delete" or "squeeze"
             or "times" or "upto" or "downto";
 
 
