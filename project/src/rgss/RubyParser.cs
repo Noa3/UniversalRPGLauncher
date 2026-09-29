@@ -790,6 +790,130 @@ public sealed class RubyParser
                 {
                     return node;
                 }
+
+                // **`draw(x)` ist ein Aufruf, und das ist die Form, die es
+                // schon immer gab.** Sie steht hier zuerst, **weil sie der
+                // klammerlose Zweig unten nicht ersetzt sondern ergaenzt** --
+                // und beide sind ein Aufruf mit demselben Namen, nur mit
+                // unterschiedlicher Herkunft im Baum. **Ein Leser, der nur
+                // einen der beiden Zweige haette, haette `draw(x)` oder
+                // `attr_accessor :hp` fuer eine Variable gehalten**, und das
+                // sind die beiden Schreibweisen, die ein Spiel benutzt.
+                if (Is("("))
+                {
+                    var mit_klammern = ReadArguments();
+                    return new RubyNode
+                    {
+                        Kind = RubyNodeKind.Call,
+                        Name = token.Text,
+                        Line = token.Line,
+                        Children = [node, .. mit_klammern],
+                        Role_Children = CallParts(node, mit_klammern),
+                    };
+                }
+
+                // **Ein Bezeichner mit Argumenten ohne Klammern ist ein
+                // Aufruf, und es ist der haeufigste, den ein Spiel
+                // schreibt.** `attr_accessor :hp, :mp`, `attr_reader :name`,
+                // `include Beweglich`, `include A, B` -- **keines davon hat
+                // Klammern, und ohne diesen Zweig wuerde der Parser eine
+                // Variable mit dem Namen des Aufrufs machen und die Argumente
+                // als weitere Anweisungen lesen.** Ein Spiel, das
+                // `attr_accessor :hp` schreibt, haette damit eine Variable
+                // `attr_accessor` und eine verlassene Konstante `hp`.
+                // **Ein Argument, und kein Operator.** `StartsAValue()`
+                // allein genuegt nicht: es sagt bei `*` und `+` ja, **und
+                // `a * b` ist eine Malrechnung und kein Aufruf mit einem
+                // Argument.** Ein Argument ohne Klammern steht immer an
+                // erster Stelle nach dem Namen -- **sobald ein Operator
+                // kommt, ist es keine Argumentliste mehr**, und genau
+                // darum wird hier nicht der Wert, sondern der ganze erste
+                // Ausdruck gelesen.
+                //
+                // **Hier wird kein Zeilenumbruch uebersprungen, und das ist
+                // der ganze Unterschied.** `a` und `b = 1` in zwei Zeilen
+                // sind zwei Anweisungen, **und ein `SkipNewlines` vor der
+                // Pruefung liest sie als einen Aufruf `a(b)`** -- die erste
+                // Fassage hatte genau das und verlor beide Anweisungen.
+                // **Die klammerlose Form laeuft in Ruby nie ueber eine
+                // Zeile**, und `include` und `attr_accessor` schreibt
+                // niemand so.
+                // **Beide Bedingungen muessen wahr sein, und `StartsAValue`
+                // allein genuegt nicht.** `*`, `+`, `-` und `::` koennen
+                // einen Wert eroeffnen, **und `a * b` ist eine Rechnung und
+                // kein Aufruf.** `StartsAnArgument` sagt genau das, was an
+                // erster Stelle nach dem Namen stehen darf.
+                // **Und `attr_accessor` allein ist auch ein Aufruf, mit null
+                // Argumenten.** Es gibt diese Form, und Ruby akzeptiert sie --
+                // **ohne die vier Namen hier waere es eine Variable, und die
+                // Zeile waere eine Zuweisung, die nichts zuweist.** Die vier
+                // stehen im Interpreter, und **sie stehen dort wieder**, weil
+                // der Parser nicht wissen kann, was ein Host als eingebaut
+                // fuehrt.
+                // **Die Klammern um `is` sind nicht Kosmetik.** Ohne sie
+                // bindet `&&` staerker als das `or` in `is`, und der ganze
+                // Ausdruck laesst den `is`-Zweig an allem vorbei, was keine
+                // der vier Namen ist -- **das heisst, `a is "attr_reader"
+                // or "include"` waere true, sobald irgendetwas `include` war.**
+                //
+                // **Und der Zeilenumbruch vor dem ersten Argument ist
+                // verboten.** `a` und `b = 1` in zwei Zeilen sind zwei
+                // Anweisungen, **und die erste Fassage las sie als einen
+                // Aufruf `a(b)` mit einer Zuweisung als Argument** -- der
+                // `SkipNewlines` oben stand noch da. **Die klammerlose
+                // Form laeuft in Ruby nie ueber eine Zeile**, und `include`
+                // und `attr_accessor` schreibt niemand so.
+                // **Keine eigene Abfrage auf den Zeilenumbruch, und das ist
+                // der Punkt.** `StartsAValue` ist bei einem Newline-Token
+                // false, **weil ein Newline kein Wert ist** -- die erste
+                // Fassage hatte zusaetzlich `Current.Kind != Newline`
+                // darueber, **und die Mutation, die sie entfernte, lebte**:
+                // `StartsAValue` deckte die Regel schon ab. **Ein Test, der
+                // eine Bedingung aufhebt, die eine andere traegt, misst die
+                // andere**, und zwei Bedingungen fuer eine Regel sind zwei
+                // Orte, an denen sie auseinanderlaufen.
+                if (StartsAValue() && StartsAnArgument()
+                    || (Current.Kind == RubyTokenKind.Newline
+                        && (token.Text is ("attr_accessor" or "attr_reader"
+                            or "attr_writer" or "include"))))
+                {
+                    // **Erst hier wird der Zeilenumbruch uebersprungen, und
+                    // nur fuer die Form ohne Argumente.** `attr_accessor`
+                    // allein steht am Zeilenende, **und ohne dieses
+                    // `SkipNewlines` waere der Zweig nie erreicht**, weil
+                    // `Current` dann schon das `end` der naechsten Zeile
+                    // waere.
+                    SkipNewlines();
+                    var argumente = new List<RubyNode>();
+                    while (true)
+                    {
+                        argumente.Add(ParsePostfix(ParsePrimary()));
+                        if (!Is(","))
+                        {
+                            break;
+                        }
+
+                        _index++;
+                        SkipNewlines();
+                    }
+
+                    return new RubyNode
+                    {
+                        Kind = RubyNodeKind.SelfCall,
+                        Name = token.Text,
+                        Line = token.Line,
+                        Children = argumente,
+                        Role_Children =
+                        [
+                            .. argumente.Select(a => new RubyNodePart
+                            {
+                                Role = RubyNodeRole.Argument,
+                                Node = a,
+                            }),
+                        ],
+                    };
+                }
+
                 return node;
             }
             case RubyTokenKind.Delimiter when token.Text == "(":
@@ -1486,6 +1610,50 @@ public sealed class RubyParser
         }
         var token = Take();
         return Literal(RubyNodeKind.Symbol, token.Line, null, null, token.Text);
+    }
+
+    /// <summary>
+    /// True where a bracketless argument may begin.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>An operator is never the start of an argument.</strong>
+    /// `attr_accessor :hp` writes a symbol and `include Beweglich` a name,
+    /// and both begin where a value begins — <strong>and `a * b` also
+    /// begins where a value begins, because <c>*</c> can start one.</strong>
+    /// The two are told apart by what follows the name and not by the name:
+    /// an operator there means the name was a value in a calculation.
+    /// </para>
+    /// <para>
+    /// <strong>This is a shorter list than <c>StartsAValue</c> on
+    /// purpose.</strong> A splat, an address-of and a range are legal
+    /// arguments in Ruby, and a game's <c>include</c> does not use them —
+    /// <strong>and a list that guessed would have made <c>a * b</c> a call
+    /// and then read the rest of the file as its arguments.</strong>
+    /// </para>
+    /// </remarks>
+    private bool StartsAnArgument()
+    {
+        return Current.Kind switch
+        {
+            RubyTokenKind.Integer or RubyTokenKind.Float
+                or RubyTokenKind.String or RubyTokenKind.Symbol
+                or RubyTokenKind.Regexp or RubyTokenKind.Identifier
+                or RubyTokenKind.Constant or RubyTokenKind.InstanceVariable
+                or RubyTokenKind.GlobalVariable
+                => true,
+            // **Nur "(" und nicht "[" oder "{"** -- **und das ist der
+            // Unterschied zu `StartsAValue`.** `items[0]` ist ein Index
+            // und kein Aufruf mit einer Liste als Argument, **und der
+            // Postfix-Parser liest die Klammern, sobald er an ihnen
+            // vorbeikommt.** Ein Leser, der "[" hier zugelassen haette,
+            // haette aus `items[0]` den Aufruf `items([0])` gemacht,
+            // **und `items` mit einem Argument aufgerufen, das Ruby ihm
+            // nie gibt.**
+            RubyTokenKind.Delimiter => Current.Text is "(",
+            RubyTokenKind.Keyword => Current.Text is "nil" or "true" or "false",
+            _ => false,
+        };
     }
 
     /// <summary>True where a value may begin, so an operator after it is binary.</summary>

@@ -3148,8 +3148,90 @@ would have to be decoded with the script's own encoding.** An assertion over
 `ToString` would have tested `ToString` and not the value — so the two methods
 under comparison are now two different *numbers*.
 
-**Still not evaluated:** a module's `include`, `attr_accessor`, `defined?`,
-and blocks with parameters passed to methods.
+### `attr_accessor`, `include`, and the call without parentheses
+
+**These four are built in, and "built in" is a narrower word than usual.** A
+host cannot implement them, because the one thing they do is write into the
+class they are written in, and only the call knows which class that is.
+**A reader that let them fall through to the host would answer "this host
+does not implement it" for `attr_accessor :hp`, and that would stop an RPG
+Maker script on its second line.**
+
+**`attr_accessor` makes a reader and a writer, and the two stand for one
+field.** The writer is filed under `hp=` and reads `@hp`, and the reader under
+`hp` and reads the same one — **a reader that gave the writer its own field
+would have written to a place nothing reads.** And they live in
+`_instanceVariables`, which is the same storage `@hp` reads directly: **a
+second store would have uncoupled `attr_accessor` from `@hp`**, and the same
+script would have seen one value in one place and another in the other.
+
+**An attribute is not copied by `include`.** It is a pair of methods standing
+for a field, and the field belongs to the class that made it — **copying it
+would have given the including class a reader and a writer over a name it does
+not own, and a game with a module of attributes would have had two classes
+writing to one place.**
+
+## Three gaps the tests found, and all three were in the "self" that means nothing
+
+**`self` is not a name, it is "the class this is running in".** Every bare
+call went through `EigeneMethode(Symbol("self"), name)`, and `"self"` is not in
+the type table, so **every one of them found nothing** — not just
+`attr_accessor`, but every klammerloser Aufruf a game writes. The fix is in two
+places because it is two questions: **the lookup** (`self` means the running
+class) and **the body** (`_aktuellerTyp` was set only for the class body, so
+`self.hp = 42` inside a method had no class to write to).
+
+**And a bare name is a variable first and a method second.** That is Ruby's own
+order, and the reason is the method's own parameters: a method with a parameter
+`hp` and an `attr_accessor :hp` reads the parameter. **This is a runtime
+decision and not a parse** — the parser cannot know whether a class has a
+method of that name, **and a parser that guessed would have turned every local
+named like a method into a call.**
+
+**And a call without parentheses is a call.** `attr_accessor :hp, :mp`,
+`include Beweglich`, `draw x` — the parser read a variable and then the
+arguments as further statements, **and a game that wrote `attr_accessor :hp`
+had a local named `attr_accessor` and an abandoned constant**. Three
+conditions guard it, and each one was a bug first:
+
+- **the argument may not be an operator** — `a * b` is a multiplication, and
+  `StartsAValue` says yes at `*` because `*` can start a value;
+- **the argument may not be across a line** — `a` and `b = 1` on two lines are
+  two statements, and the first version read them as `a(b = 1)`. **The guard
+  is the absence of a `SkipNewlines` before the test and not a test of its
+  own**: `StartsAValue` is false at a Newline token because a newline is not a
+  value. The separate `Current.Kind != Newline` check came first, **and the
+  mutation that removed it survived** — the other condition was already
+  carrying the rule. **A test that lifts one condition that another one
+  already carries is measuring the other one**, and two conditions for one
+  rule are two places where they can drift apart;
+- **`[` is not an argument** — `items[0]` is an index, and the postfix parser
+  reads the brackets itself.
+
+**And the parenthesis form is not replaced by it, only joined.** `draw(x)`
+built a `Call` with the name as its first child, and the first version of the
+bracketless branch swallowed it — so the branch that was added to *complete*
+the parser *removed* half of it.
+
+## Two rules the interpreter was making up, and both are gone
+
+**`attr_accessor` with no arguments is not an error.** Ruby makes no method and
+raises nothing; it is a call with an empty argument list. **The first version
+reported it, and that report was a rule that does not exist in Ruby** — a game
+calling it conditionally empty would have stopped on a line the reference runs.
+
+**And an assignment is a value.** `def w; self.hp = 30; end` answers `30`,
+not nil. The first test claimed nil, **and that was my invention and not
+Ruby's behaviour** — a game that ends a method with an assignment would have
+got something else.
+
+**And the limit, written down:** this interpreter has no objects, so an
+attribute is one value for the class and not one for each thing made from it.
+A game with two actors shares `@hp`. **That is not Ruby, it is a boundary of
+this runtime, and a limit that is documented is a limit and not a defect.**
+
+**Still not evaluated:** `defined?`, `extend`, `alias`, and blocks with
+parameters passed to methods.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

@@ -117,6 +117,43 @@ public sealed class RubyMethod
     /// </remarks>
     public bool IsOnSelf { get; init; }
 
+    /// <summary>
+    /// Whether this was made by `attr_reader`, `attr_writer` or
+    /// `attr_accessor` and is not a body the script wrote.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The flag is what keeps an attribute out of an
+    /// `include`.</strong> Including a module copies its methods, and an
+    /// attribute is a pair of methods standing for a field — <strong>a reader
+    /// that copied it would have copied the class's storage into the
+    /// including class</strong>, and the two classes would share a value.
+    /// </remarks>
+    public bool IsAttribute { get; init; }
+
+    /// <summary>
+    /// The instance variable an attribute stands for, and null for a
+    /// method with a body.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The field name is the method's own name with an
+    /// <c>@</c> in front.</strong> That is Ruby's rule, and it is why the
+    /// reader and the writer can be told apart by the one character: a
+    /// writer is stored under `hp=` and stands for `@hp`, **and a reader that
+    /// gave the writer its own field would have written to a place nothing
+    /// reads.**
+    /// </remarks>
+    public string? Field { get; init; }
+
+    /// <summary>
+    /// Whether this is the writer half of an attribute.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Only the writer assigns.</strong> A reader that made the
+    /// reader assign would have a game where reading a value changes it, and
+    /// <strong>the reference would have raised</strong> for a constant.
+    /// </remarks>
+    public bool IsWriter { get; init; }
+
     /// <summary>What it runs.</summary>
     public RubyNode Body { get; init; } = null!;
 }

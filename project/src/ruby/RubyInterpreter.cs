@@ -54,6 +54,19 @@ public sealed class RubyInterpreter
     private Dictionary<string, RubyValue> _instanceVariables = new();
     private readonly List<string> _diagnostics = new List<string>();
 
+    /// <summary>
+    /// The last constant the host did not know, for the caller that needs
+    /// the name and not the value.
+    /// </summary>
+    /// <remarks>
+    /// <strong>One value, and the newest wins.</strong> `include Fehlt` runs
+    /// the constant first and reads the name straight after, and there is no
+    /// other caller between the two — <strong>a reader that kept a list
+    /// would have had to decide which entry belonged to which
+    /// argument.</strong>
+    /// </remarks>
+    private string? _letzteUnbekannteKonstante;
+
     /// <summary>Builds an interpreter that can only reach one host.</summary>
     /// <param name="pHost">What it may call, and nothing else.</param>
     public RubyInterpreter(IRubyHost pHost)
@@ -215,7 +228,17 @@ public sealed class RubyInterpreter
             RubyNodeKind.Symbol => RubyValue.OfSymbol(pNode.Name ?? pNode.Text ?? string.Empty),
             RubyNodeKind.Regexp => RubyValue.OfRegexp(pNode.Text ?? string.Empty, 0),
             RubyNodeKind.Constant => Constant(pNode),
-            RubyNodeKind.Identifier => Local(pNode.Name ?? string.Empty),
+            // **Ein Name ist erst eine Variable und dann ein Aufruf.** Ruby
+            // entscheidet das zur Laufzeit, **und der Parser kann es nicht**:
+            // er sieht `hp` und weiss nicht, ob die Klasse eine Methode
+            // `hp` hat. **Also entscheidet es der Interpreter, und die
+            // Reihenfolge ist die von Ruby:** erst die lokale Variable,
+            // und wenn es keine gibt, die Methode. **Ein Leser, der immer
+            // die Variable zuerst nähme, hätte ein Spiel, das `@hp`
+            // gleichzeitig als Feld und als Methode benutzt, mit dem
+            // Feld gewinnen lassen** — und eins, das nur die Methode
+            // meint, mit der Methode.
+            RubyNodeKind.Identifier => Name(pNode),
             RubyNodeKind.InstanceVariable => _scopes.Count > 0
                 ? _instanceVariables.TryGetValue(
                     pNode.Name ?? string.Empty, out var iv) ? iv : RubyValue.Nil
@@ -528,6 +551,11 @@ public sealed class RubyInterpreter
             return wert;
         }
 
+        // **Der Name bleibt fuer den Aufrufer sichtbar.** `include Fehlt`
+        // braucht ihn, um sagen zu koennen, welches Modul fehlt -- **und
+        // eine Diagnose, die den Namen nicht nennt, laesst den Leser
+        // raten.**
+        _letzteUnbekannteKonstante = name;
         _diagnostics.Add(
             $"the constant {name} is not defined by this host, and the "
             + "interpreter does not guess; a game's own constant needs a host "
@@ -567,6 +595,33 @@ public sealed class RubyInterpreter
         var methode = pNode.Name ?? string.Empty;
         var argumente = EvaluateChildren(pNode, RubyNodeRole.Argument);
 
+        // **Drei eingebaute Namen, und sie sind eingebaut, weil sie keine
+        // Skriptmethode sind.** `attr_accessor`, `attr_reader` und
+        // `attr_writer` erzeugen Methoden, **und diese Methoden gehoeren zu
+        // der Klasse, in der sie geschrieben wurden** -- **ein eingebauter
+        // Aufruf, der die Klasse nicht kennt, kann sie nicht erzeugen, und
+        // ein Leser, der sie als "diese Methode kennt der Host nicht"
+        // ablehnte, wuerde jedes RPG-Maker-Skript an seiner zweiten Zeile
+        // anhalten.** `include` gehoert in dieselbe Reihe, und es ist
+        // keine Methode, sondern ein Satz ueber die Klasse.
+        // **Die vier Namen, ob mit oder ohne Klammern.** `attr_accessor`
+        // ohne ein einziges Argument ist ein Aufruf mit null Argumenten und
+        // **nicht das Fehlen eines Aufrufs** -- **und ein Leser, der nur
+        // die Form mit Klammern erkannte, wuerde ein alleinstehendes
+        // `attr_accessor` fuer eine Variable halten** und die Zeile als
+        // Zuweisung lesen.
+        if (_aktuellerTyp != null
+            && (methode == "attr_accessor"
+                || methode == "attr_reader"
+                || methode == "attr_writer"
+                || methode == "include"))
+        {
+            if (Eingebaut(_aktuellerTyp, methode, argumente))
+            {
+                return RubyValue.OfSymbol(methode);
+            }
+        }
+
         // **Erst die Skript-Methodentabelle, dann der Host.** Ein Aufruf,
         // den das Skript selbst definiert hat, gehoert dem Skript -- **und
         // ein Leser, der immer zum Host ginge, wuerde jedes `def` eines
@@ -582,7 +637,9 @@ public sealed class RubyInterpreter
             return Aufrufen(
                 eigene,
                 argumente,
-                empfaenger.Kind == RubyValueKind.Symbol ? empfaenger.Name : null);
+                empfaenger.Kind == RubyValueKind.Symbol && empfaenger.Name != "self"
+                    ? empfaenger.Name
+                    : _aktuellerTyp?.Name);
         }
 
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
@@ -612,13 +669,19 @@ public sealed class RubyInterpreter
     /// </remarks>
     private RubyMethod? EigeneMethode(RubyValue pReceiver, string pMethod)
     {
-        if (pReceiver.Kind != RubyValueKind.Symbol)
-        {
-            return null;
-        }
+        // **`self` heisst die Klasse, in der gerade laeuft.** Ein
+        // Aufruf ohne ausgeschriebenen Empfaenger hat keinen, **und
+        // `EigeneMethode` bekam deshalb immer `self` und fand nie etwas.**
+        // Das war keine Besonderheit von `attr_accessor`: **jeder
+        // klammerlose Aufruf eines Spiels hat denselben Weg genommen und
+        // dieselbe stille Antwort bekommen** -- und die Tabelle, in der
+        // `hp` stand, wurde nie befragt.
+        var name = pReceiver.Kind == RubyValueKind.Symbol
+            && pReceiver.Name != "self"
+            ? pReceiver.Name
+            : _aktuellerTyp?.Name;
 
-        var name = pReceiver.Name ?? string.Empty;
-        if (name.Length == 0 || !_types.ContainsKey(name))
+        if (name == null || name.Length == 0 || !_types.ContainsKey(name))
         {
             return null;
         }
@@ -672,6 +735,20 @@ public sealed class RubyInterpreter
         var alteMethode = _aktuelleMethode;
         _aktuelleArgumente = pArgumente;
         _aktuelleMethode = pMethode.Name;
+
+        // **Und die Klasse, in der die Methode geschrieben wurde, ist
+        // "self" fuer ihren Rumpf.** `_aktuellerTyp` gilt nur fuer den
+        // Klassenrumpf -- **und ohne diesen Satz war er beim Aufruf einer
+        // Methode null**, also war `self.hp = 42` ein Aufruf an niemanden,
+        // und `super` fand die Klasse nicht. **Das war derselbe Fehler
+        // zweimal**: einmal fuer die Methodensuche und einmal fuer den
+        // Rumpf.
+        var laufenderTyp = _aktuellerTyp;
+        var typWar = pKlasse == null
+            ? null
+            : _types.TryGetValue(pKlasse, out var gefunden) ? gefunden : null;
+        _aktuellerTyp = typWar;
+
         _scopes.Add(new Dictionary<string, RubyValue>());
         for (var i = 0; i < pMethode.Parameters.Count; i++)
         {
@@ -681,13 +758,21 @@ public sealed class RubyInterpreter
         }
 
         _returned = false;
-        var wert = Evaluate(pMethode.Body);
+
+        // **Ein Attribut hat keinen Rumpf, und es braucht auch keinen.**
+        // `attr_accessor :hp` erzeugt einen Leser und einen Schreiber fuer
+        // `@hp` -- **und der Leser liest das Feld und der Schreiber schreibt
+        // es**, statt einen Knoten zu haben, den man laufen lassen koennte.
+        var wert = pMethode.IsAttribute
+            ? Attribut(pMethode, pArgumente)
+            : Evaluate(pMethode.Body);
         _returned = false;
         _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
         _methodenGrenze = grenze;
         _aufrufKette.RemoveAt(_aufrufKette.Count - 1);
         _aktuelleArgumente = alteArgumente;
         _aktuelleMethode = alteMethode;
+        _aktuellerTyp = laufenderTyp;
         return wert;
     }
 
@@ -709,21 +794,44 @@ public sealed class RubyInterpreter
                 }
 
                 return wert;
-            default:
-                // **Ein Aufruf auf der linken Seite ist kein Ziel, das man
-                // belegen kann** -- Ruby wertet `a.b = 1` als einen Methoden-
-                // aufruf aus, und genau so wird es hier auch getan.
+            case RubyNodeKind.Call:
+            case RubyNodeKind.SelfCall:
+            case RubyNodeKind.MethodCall:
+                // **Ein Aufruf auf der linken Seite ist ein Schreibaufruf,
+                // und sein Name ist der Name des Aufrufs plus ein
+                // `=`.** Ruby wertet `self.hp = 42` als `hp=(42)` aus --
+                // **und der Empfänger des Aufrufs ist nicht das Ziel, er ist
+                // sein Empfaenger.** Der erste Versuch gab den Zielknoten
+                // selbst als Empfaenger weiter, **und `self.hp` ist kein
+                // Wert: es ist ein Knoten**, den `EigeneMethode` nicht
+                // entpackt. Die Zuweisung lief ins Leere und der Leser
+                // sah nil.
                 return Call(new RubyNode
                 {
                     Kind = RubyNodeKind.Call,
-                    Name = ziel.Name,
+                    Name = ziel.Name + "=",
                     Line = pNode.Line,
                     Role_Children =
                     [
-                        new RubyNodePart { Role = RubyNodeRole.Receiver, Node = ziel },
-                        new RubyNodePart { Role = RubyNodeRole.Value, Node = Child(pNode, RubyNodeRole.Value) },
+                        new RubyNodePart
+                        {
+                            Role = RubyNodeRole.Receiver,
+                            Node = Child(ziel, RubyNodeRole.Receiver),
+                        },
+                        new RubyNodePart
+                        {
+                            Role = RubyNodeRole.Argument,
+                            Node = Child(pNode, RubyNodeRole.Value),
+                        },
                     ],
                 });
+
+            default:
+                _diagnostics.Add(
+                    $"{ziel.Kind} is on the left of an = and there is nowhere "
+                    + "to put the value; the reference would raise, and this "
+                    + "reader does not guess a place");
+                return wert;
         }
     }
 
@@ -1318,6 +1426,8 @@ public sealed class RubyInterpreter
     private string _aktuelleMethode = string.Empty;
 
 
+
+
     /// <summary>
     /// Runs the same method one level up the superclass chain.
     /// </summary>
@@ -1417,6 +1527,295 @@ public sealed class RubyInterpreter
         return _aktuelleArgumente;
     }
 
+
+    /// <summary>
+    /// The four built-ins that act on the class they are written in.
+    /// </summary>
+    /// <param name="pTyp">The class the call stands in.</param>
+    /// <param name="pMethode">The built-in's name.</param>
+    /// <param name="pArgumente">The arguments, already evaluated.</param>
+    /// <returns>true when it was one of the four.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>These four are not script methods and they are not host
+    /// methods.</strong> They write into the class they stand in, and the
+    /// caller is the only place that knows which class that is — which is
+    /// why a host cannot implement them.
+    /// </para>
+    /// <para>
+    /// <strong>`attr_accessor` writes a reader and a writer, `attr_reader`
+    /// only the reader, `attr_writer` only the writer.</strong> A game writes
+    /// `attr_accessor :hp` and then assigns and reads `@hp` in a dozen
+    /// methods, **and a reader that made only a reader would have a game that
+    /// raises on its first assignment.**
+    /// </para>
+    /// </para>
+    /// <para>
+    /// <strong>The values live in the class and not in an instance.</strong>
+    /// This interpreter has no objects, so an instance variable has nowhere
+    /// else to go — **and a reader that invented an object model here would
+    /// have had a class whose attributes were shared between every thing
+    /// made from it**, which is a different language. What this gives is the
+    /// attribute's own storage, and a game that reads it back gets its own
+    /// last value. That is stated here because it is a limit and not a
+    /// detail.
+    /// </para>
+    /// </remarks>
+    private bool Eingebaut(RubyType pTyp, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pMethode == "include")
+        {
+            return Included(pTyp, pArgumente);
+        }
+
+        return Attribute(pTyp, pMethode, pArgumente);
+    }
+
+    /// <summary>
+    /// Writes the reader and the writer for a list of attribute names.
+    /// </summary>
+    /// <returns>true when the names were all symbols.</returns>
+    /// <remarks>
+    /// <strong>A name that is not a symbol is refused and said so.</strong>
+    /// `attr_accessor "hp"` is Ruby and it uses the string as the name, and
+    /// this parser gives a bare word no type — <strong>so a reader that
+    /// accepted anything would have created a method named after whatever
+    /// the game wrote</strong>, including a number.
+    /// </remarks>
+    private bool Attribute(
+        RubyType pTyp,
+        string pMethode,
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        // **Null Namen ist kein Fehler.** Ruby macht dann keine Methode
+        // und sagt nichts -- **es ist ein Aufruf mit leerer Argumentliste,
+        // und das ist erlaubt.** Die erste Fassage meldete das, **und diese
+        // Meldung waere eine Regel, die es in Ruby nicht gibt**; ein Spiel,
+        // das `attr_accessor` bedinghaft leer aufruft, haette an einer Zeile
+        // gestoppt, die der Referenz durchlaeuft.
+        if (pArgumente.Count == 0)
+        {
+            return true;
+        }
+
+        var lesen = pMethode is not "attr_writer";
+        var schreiben = pMethode is not "attr_reader";
+        foreach (var arg in pArgumente)
+        {
+            if (arg.Kind != RubyValueKind.Symbol)
+            {
+                _diagnostics.Add(
+                    $"attr_{pMethode} takes names as symbols, and the "
+                    + "argument is not one; a reader that took anything would "
+                    + "have made a method out of whatever the game wrote");
+                return false;
+            }
+
+            var feld = "@" + (arg.Name ?? string.Empty);
+            if (lesen)
+            {
+                pTyp.Methods[arg.Name ?? string.Empty] = new RubyMethod
+                {
+                    Name = arg.Name ?? string.Empty,
+                    IsAttribute = true,
+                    Field = feld,
+                };
+            }
+
+            if (schreiben)
+            {
+                pTyp.Methods[arg.Name + "="] = new RubyMethod
+                {
+                    Name = arg.Name + "=",
+                    IsAttribute = true,
+                    IsWriter = true,
+                    Field = feld,
+                };
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Copies a module's methods into a class.
+    /// </summary>
+    /// <returns>true when the module was found.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>At the moment of the call, and by copy.</strong> A module
+    /// included before its own methods are defined contributes nothing —
+    /// <strong>and that is the reference's own order, not a shortcut.</strong>
+    /// A reader that deferred the copy to the lookup would have a class whose
+    /// methods changed under a running game.
+    /// </para>
+    /// <para>
+    /// <strong>A module that is not there is a diagnostic and names
+    /// itself.</strong> "this host does not implement it" would be the wrong
+    /// sentence: the module is not a method, it is a type, and the game
+    /// wrote its name.
+    /// </para>
+    /// </remarks>
+    private bool Included(RubyType pTyp, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pArgumente.Count == 0)
+        {
+            _diagnostics.Add(
+                "include was called with no module, and there is nothing to "
+                    + "take methods from");
+            return false;
+        }
+
+        foreach (var arg in pArgumente)
+        {
+            // **Eine Konstante, die es nicht gibt, ist immer noch ein Name.**
+            // `Constant` gibt nil zurueck und schreibt eine Diagnose, weil
+            // es den Wert nicht kennt -- **und `include Fehlt` will genau
+            // den Namen, nicht den Wert.** Ein Leser, der hier nur Symbole
+            // annimmt, wuerde sagen "include names (nothing)" **und damit
+            // die eine Angabe wegnehmen, die bei diesem Fehler alles
+            // traegt**: welches Modul das Spiel wollte.
+            var name = arg.Kind switch
+            {
+                RubyValueKind.Symbol => arg.Name,
+                RubyValueKind.Nil => _letzteUnbekannteKonstante,
+                _ => null,
+            };
+            if (name == null || !_types.TryGetValue(name, out var modul))
+            {
+                // **`name` und nicht `arg.Name`.** Eine Konstante, die es
+                // nicht gibt, ist `nil`, **und `nil` hat keinen Namen** --
+                // der Name steckt in dem, was `Constant` gemerkt hat. Der
+                // erste Versuch schrieb `arg.Name`, **und die Meldung
+                // sagte "include names (nothing)" fuer ein Spiel, das
+                // `include Beweglich` geschrieben hatte**: der eine Satz, an
+                // dem jemand nachsehen wuerde, war der leere.
+                _diagnostics.Add(
+                    $"include names {name ?? "(nothing)"}, and this "
+                    + "interpreter has no module under that name; a module is a "
+                    + "type and not a method, so a message about the host "
+                    + "would be the wrong sentence");
+                return false;
+            }
+
+            foreach (var methode in modul.Methods)
+            {
+                // **Ein eingebautes Attribut wird nicht kopiert**, und
+                // **die Basisklasse einer-Klasse folgt nicht** -- beides
+                // waere eine Kopie von etwas, das die Quelle nicht hatte.
+                if (methode.Value.IsAttribute)
+                {
+                    continue;
+                }
+
+                pTyp.Methods[methode.Key] = methode.Value;
+            }
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Reads or writes an attribute's value.
+    /// </summary>
+    /// <param name="pMethode">The reader or the writer.</param>
+    /// <param name="pArgumente">The call's arguments.</param>
+    /// <returns>The value for a reader, and the written one for a
+    /// writer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>A reader with no value yet answers nil, and does not
+    /// raise.</strong> Ruby would raise <c>NameError</c> for an unset
+    /// instance variable — <strong>and a game's <c>attr_accessor</c> is
+    /// read before it is written more often than anyone expects</strong>,
+    /// because <c>initialize</c> runs after the object exists. Failing here
+    /// would stop a game on a field it is about to set.
+    /// </para>
+    /// <para>
+    /// <strong>A writer with no argument writes nil.</strong> That is
+    /// Ruby's own answer for `send(:hp=)`, and a reader that refused the call
+    /// would have rejected a program the reference runs.
+    /// </para>
+    /// </remarks>
+    private RubyValue Attribut(RubyMethod pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        var feld = pMethode.Field ?? string.Empty;
+
+        if (pMethode.IsWriter)
+        {
+            var geschrieben = pArgumente.Count > 0 ? pArgumente[0] : RubyValue.Nil;
+            _instanceVariables[feld] = geschrieben;
+            return geschrieben;
+        }
+
+        // **Ein noch nie gesetztes Feld ist nil, und das ist hier kein
+        // Fehler.** Ruby wuerde `NameError` sagen -- **und ein Spiel liest
+        // sein `attr_accessor` haeufig, bevor es schreibt**, weil
+        // `initialize` nach dem Objekt laeuft. **Und `_instanceVariables` ist
+        // derselbe Speicher, den `@hp` direkt liest** -- **ein zweiter
+        // Speicher je Klasse wuerde `attr_accessor` und `@hp` entkoppelt
+        // haben**, und das Skript wuerde in einem Fall einen Wert sehen und
+        // im anderen einen anderen.
+        return _instanceVariables.TryGetValue(feld, out var gelesen)
+            ? gelesen
+            : RubyValue.Nil;
+    }
+
+
+
+    /// <summary>
+    /// A bare name: the local variable if there is one, and the method if
+    /// not.
+    /// </summary>
+    /// <param name="pNode">The identifier node.</param>
+    /// <returns>Whatever the name means here.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The local first, and that is Ruby's own order.</strong> A
+    /// method's own parameter is a local, and a method that has a parameter
+    /// called <c>hp</c> and also has an <c>attr_accessor :hp</c> reads the
+    /// parameter — **and a reader that asked the class first would have read
+    /// the attribute and taken the argument away from the body.**
+    /// </para>
+    /// <para>
+    /// <strong>And this is a runtime decision, not a parse.</strong> The
+    /// parser cannot know whether a class has a method of that name, and a
+    /// parser that guessed would have turned every local named like a method
+    /// into a call — <strong>and a game with a local <c>name</c> and a
+    /// method <c>name</c> would have lost the local.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue Name(RubyNode pNode)
+    {
+        var name = pNode.Name ?? string.Empty;
+        if (_scopes.Count > 0 && _scopes[^1].ContainsKey(name))
+        {
+            return Local(name);
+        }
+
+        if (_aktuellerTyp != null && FindMethod(_aktuellerTyp.Name, name) != null)
+        {
+            return Call(new RubyNode
+            {
+                Kind = RubyNodeKind.SelfCall,
+                Name = name,
+                Line = pNode.Line,
+                Role_Children = [new RubyNodePart { Role = RubyNodeRole.Receiver, Node = SelfNode(pNode.Line) }],
+            });
+        }
+
+        return Local(name);
+    }
+
+    /// <summary>
+    /// The `self` node a bare call hangs its receiver from.
+    /// </summary>
+    private static RubyNode SelfNode(int pLine) => new()
+    {
+        Kind = RubyNodeKind.Self,
+        Line = pLine,
+    };
 
     // ---- Helpers
 

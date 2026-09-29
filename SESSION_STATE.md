@@ -8949,3 +8949,48 @@ measured the constant list rather than the dispatch.**
 
 **`TestRm2kCommandCoverage: 2/2`, `All 1584 tests passed`, validator passed,
 mutations 3 of 3.**
+
+## 2026-09-29 — attr_accessor, include, and the call without parentheses
+
+**These four are built in**, because the one thing they do is write into the
+class they are written in, and only the call knows which class that is. A
+reader that let them fall through to the host would say "this host does not
+implement it" for `attr_accessor :hp` — **and that would stop an RPG Maker
+script on its second line.**
+
+**And the root cause behind all three test failures was one thing: `self` is
+not a name, it is "the class this is running in".** Every bare call went
+through `EigeneMethode(Symbol("self"), name)`, and `"self"` is not in the type
+table — **so every bare call a game writes found nothing**, not just
+`attr_accessor`. It needed two fixes because it is two questions: the lookup
+(`self` means the running class) and the body (`_aktuellerTyp` was set only
+for the class body, so `self.hp = 42` inside a method had no class).
+
+**A bare name is a variable first and a method second** — Ruby's own order,
+and the reason is the method's parameters. **It is a runtime decision, not a
+parse**: the parser cannot know whether a class has a method of that name.
+
+**Three guards on the bracketless call, and each was a bug first:** the
+argument may not be an operator (`a * b` is a multiplication), may not be
+across a line (`a` and `b = 1` are two statements), and `[` is not an argument
+(`items[0]` is an index). **And the parenthesis form was joined, not
+replaced** — the new branch swallowed `draw(x)` until it was put back.
+
+**Two rules the interpreter was making up, both now gone:** `attr_accessor`
+with no arguments is not an error (Ruby makes no method and raises nothing),
+and an assignment is a value (`def w; self.hp = 30; end` answers `30`, and
+the first test claimed nil — **that was my invention and not Ruby's
+behaviour**).
+
+**And a mutation that could not be killed, which is worth the note:** the
+separate `Current.Kind != Newline` check survived removal because
+`StartsAValue` is already false at a newline. **A test that lifts one
+condition another one already carries is measuring the other one** — so the
+redundant check is gone and the rule is the absence of a `SkipNewlines`.
+
+**The harness now builds with `-t:Rebuild` and counts `: error` rather than
+`error CS`.** Both were found the hard way: a stale DLL gave 22 failures
+against a correct tree, and `GD0001` is not a `CS` error.
+
+`TestRubyInterpreter: 50/50`, `TestRubyParser: 53/53`, `All 1594 tests
+passed`, validator passed, mutations 8 of 8.

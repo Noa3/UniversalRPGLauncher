@@ -211,13 +211,26 @@ public partial class TestRubyParser : TestBase
         AssertEq(node.Children[2].Name, "y", "the second");
     }
 
-    public void Test_AMethodCallWithNoReceiverHasTheNameAsItsFirstChild()
+    public void Test_AMethodCallWithNoReceiverCarriesItsArgumentsByRole()
     {
         var node = One("draw(x)");
         AssertEq(node.Kind, RubyNodeKind.Call, "a bare call is still a call");
         AssertEq(node.Name, "draw", "naming the method");
-        AssertEq(node.First!.Name, "draw", "with the name itself first");
-        AssertEq(node.Children.Count, 2, "so a reader cannot mistake it for a receiver");
+        // **Der Empfaenger kommt aus dem Namen, nicht aus einem Kind.**
+        // `draw(x)` hat keinen geschriebenen Empfaenger, **und ein Leser,
+        // der das Kind an erster Stelle erwartete, haette `draw` fuer einen
+        // Empfaenger gehalten und `x` fuer den Methodennamen** -- der Name
+        // steht jetzt am Knoten und die Argumente tragen ihre Rolle.
+        AssertEq(node.Children.Count, 2,
+            "**the arguments and the name are both there** — one child for "
+                + "the name and one for the argument, so nothing is lost");
+        var mit_rolle = node.Role_Children!.Where(pPart =>
+            pPart.Role == RubyNodeRole.Argument).ToList();
+        AssertEq(mit_rolle.Count, 1,
+            "**and exactly one carries the argument role** — the reader that "
+                + "walks the roles gets `x`, and the one that walks the first "
+                + "child gets the name, and both are right about their own");
+        AssertEq(mit_rolle[0].Node.Name, "x", "which is the argument that was written");
     }
 
     public void Test_IndexingIsACallNamedForTheIndexOperator()
@@ -379,6 +392,41 @@ public partial class TestRubyParser : TestBase
         AssertEq(statements.Count, 2, "a newline separates two statements");
         AssertEq(statements[0].Line, 1, "the first is on line one");
         AssertEq(statements[1].Line, 2, "and the second on line two");
+    }
+
+    /// <summary>
+    /// A name on one line and a value on the next are two statements, and not
+    /// a call with the second as its argument.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is the rule the bracketless branch nearly broke.</strong>
+    /// The parser skips newlines before it decides whether a name has
+    /// arguments, and with that skip in place `a` and `b = 1` became one
+    /// statement: the call `a` with an assignment as its argument.
+    /// </para>
+    /// <para>
+    /// <strong>The line count alone did not catch it.</strong>
+    /// <c>Test_ANodeCarriesTheLineItStartedOn</c> read two statements and two
+    /// lines, and it stayed green through that — <strong>because the
+    /// statement was the wrong one and the count was still two.</strong>
+    /// The mutation that removed the guard survived until this test, and it
+    /// is here because **a test that checks how many statements there are
+    /// does not check which statements they are.**
+    /// </para>
+    /// </remarks>
+    public void Test_ABareNameDoesNotTakeTheNextLineAsItsArgument()
+    {
+        var statements = Parse("a\nb = 1");
+        AssertEq(statements[0].Kind, RubyNodeKind.Identifier,
+            "**the first statement is a bare name** — and a reader that made "
+                + "it a call would have taken the second line as its "
+                + "argument, and a game that writes a name and then a value "
+                + "would have lost both");
+        AssertEq(statements[0].Name, "a", "and it is the name that was written");
+        AssertEq(statements[1].Kind, RubyNodeKind.Assignment,
+            "**and the second is still an assignment** — the newline ended the "
+                + "first statement, which is what a newline is for");
     }
 
     public void Test_PowerBindsTighterThanEveryArithmeticOperator()
