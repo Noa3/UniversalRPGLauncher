@@ -462,4 +462,45 @@ public partial class TestRubyInterpreter
             "**and an unset one is nil** — so `defined?` can tell a class "
                 + "that has been set up from one that has not");
     }
+
+    /// <summary>A probe, removed after measuring.</summary>
+    public void Test_Sonde()
+    {
+        var aufgaben = new[] {
+            "class A\n  def initialize\n    @hp = 10\n  end\n  def gruessen\n    'hi'\n  end\nend\nA.new.send(:gruessen)",
+            "class A\n  def initialize\n    @hp = 10\n  end\nend\nA.new.instance_variable_get(:@hp)",
+            "class A\n  def initialize\n    @hp = 10\n  end\nend\nA.new.instance_variable_set(:@mp, 20)",
+            "class A\n  def initialize\n    @hp = 10\n  end\nend\nA.new.instance_variables",
+            "class A\n  def initialize\n    @hp = 10\n  end\nend\nA.new.instance_variable_defined?(:@hp)",
+            "A.new.instance_of?(A)",
+            "class A\n  def x\n  end\nend\na = A.new\na.freeze\na.frozen?",
+            "class A\n  def x\n    __method__\n  end\nend\nA.new.x",
+            "class A\n  def x\n  end\nend\nA.new.object_id > 0",
+            "1.send(:+, 2)",
+        };
+        foreach (var q in aufgaben)
+        {
+            var m = new RubyInterpreter(new RubyNullHost());
+            try
+            {
+                var w = m.RunProgram(Statements(q + "\n"));
+                System.Console.WriteLine(
+                    "JC  " + q.Replace("\n", " / ").Substring(
+                        0, Math.Min(58, q.Replace("\n", " / ").Length))
+                    + "\n     =>  " + w.Kind
+                    + (w.Kind == RubyValueKind.String
+                        ? " '" + System.Text.Encoding.UTF8.GetString(w.Bytes) + "'"
+                        : w.Kind == RubyValueKind.Symbol
+                            ? " :" + w.Name : "")
+                    + (w.Kind == RubyValueKind.Integer
+                        ? " " + w.Integer : "")
+                    + " DIAG=[" + string.Join(" | ", m.Diagnostics) + "]");
+            }
+            catch (System.Exception e)
+            {
+                System.Console.WriteLine("JC  " + q.Replace("\n", " / ")
+                    + "  WIRHT " + e.GetType().Name + ": " + e.Message);
+            }
+        }
+    }
 }

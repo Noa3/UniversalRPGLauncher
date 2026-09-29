@@ -9899,3 +9899,36 @@ Pruefungen.** Der Anker kommt genau einmal vor, **und der Ersatz ist nicht
 identisch mit dem Anker.** Die zweite fehlte bisher,
 **und deshalb stand hier zwei Laeufe lang eine tote Regel als Befund in
 der Liste.**
+
+
+## Und die Fragen, die ein Objekt an sich selbst stellt
+
+**Gemessen vorher: neun von zehn fehlten.** `A.new.send(:gruessen)` ->
+*A has no method 'send' on this host*; `__method__` -> `nil` **ohne ein
+Wort**, **und das ist die schlimmste Form einer Ablehnung**, denn der
+Aufrufer kann es nicht von einer Methode unterscheiden, die nichts
+zurueckgibt.
+
+**Und `send` laeuft ueber dieselbe Suche wie ein geschriebener Name**,
+denn ein Leser, der den Namen selbst aufgeloest haette, waere an `super`
+und am Empfaenger vorbeigelaufen. **`1.send(:+, 2)` ist `1 + 2`** --
+**und `OperatorName` ist eine Liste und keine Ratswende.**
+
+**Und `__method__` ohne Klammern ist ein Bezeichner.** `Name(pNode)` sah nur
+in der Skripttabelle nach,
+**und ein Leser, der das tat, fand eine lokale Variable namens
+`__method__`** -- **und die ist nil.** *Genau an der Stelle, an der eine
+Methode sagen muss, welche sie ist.*
+
+**Und `object_id` wird gezaehlt.** Eine Tabelle, **und nicht die Adresse** --
+**eine Sammlung zwischen zwei Aufrufen wuerde dieselbe Zahl noch einmal
+ausgeben**, **und `list.uniq` haette zwei verschiedene Helden in einem
+Eintrag.**
+
+**Und vierter Testfehler dieser Form: mein Test behauptete `get(:mp)` sei
+`10`.** Gemessen: **es ist `20`** -- `:mp` ohne `@` ist das Feld `@mp`.
+**Und die Sonde, die mir etwas anderes sagte, las `Items[0].Integer` von
+einem Objekt, das `nil` war** -- *ein Index auf einem Wert, den man nicht
+geprueft hat, gibt eine Zahl und nicht "nichts".*
+
+`TestRubyInterpreter: 249/249`, `All 1801 tests passed`.

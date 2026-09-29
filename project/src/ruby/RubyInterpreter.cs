@@ -143,6 +143,23 @@ public sealed class RubyInterpreter
     private readonly HashSet<string> _geladeneSkripte = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// The number each object was given, so `object_id` is the same for one
+    /// object and not for another.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a table, and not the address.</strong> Ruby counts
+    /// objects,
+    /// **and a reader that made the number from the place in memory would
+    /// give the same number twice** -- a collection between two calls would
+    /// hand it out again, **and <c>list.uniq</c> would have two different
+    /// heroes in one entry.**
+    /// </remarks>
+    private readonly Dictionary<RubyValue, int> _instanzNummern = [];
+
+    /// <summary>The number the next object gets.</summary>
+    private int _naechsteInstanzNummer;
+
+    /// <summary>
     /// The error classes of the language, by name.
     /// </summary>
     /// <remarks>
@@ -1303,6 +1320,181 @@ public sealed class RubyInterpreter
     /// made the interpreter look like it needed one.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The questions an object is asked about its own fields.
+    /// </summary>
+    /// <param name="pObjekt">The object.</param>
+    /// <param name="pMethode">The question.</param>
+    /// <param name="pArgumente">The name of the field, and its new
+    /// value.</param>
+    /// <returns>The answer, or nil.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the fields are the object's own store, and not a copy.</strong>
+    /// <c>instance_variable_set(:@hp, 20)</c> then
+    /// <c>instance_variable_get(:@hp)</c> is <c>20</c>,
+    /// **and a reader that answered from a table of its own would give a
+    /// number the object does not have** — and a plugin that writes a
+    /// field would then read nil.
+    /// </para>
+    /// <para>
+    /// <strong>And a name without the <c>@</c> is the same name.</strong>
+    /// <c>instance_variable_get(:hp)</c> is <c>:@hp</c>,
+    /// **and a reader that demanded the <c>@</c> would say *no such
+    /// variable* for the spelling a game writes most** —
+    /// <strong>and every <c>get</c>/<c>set</c> pair would fail for half its
+    /// callers.**
+    /// </para>
+    /// <para>
+    /// <strong>And a name that is not a name is a diagnostic.</strong>
+    /// <c>instance_variable_get("@hp")</c> is a text,
+    /// **and Ruby refuses it** — <strong>and a reader that accepted a text
+    /// would make a game that writes the wrong thing look like it
+    /// worked.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue InstanzVariable(
+        RubyValue pObjekt,
+        string pMethode,
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        // **And `instance_variables` takes no argument.** It is the only
+        // one of these five questions that takes no names,
+        // **and a reader that checked the same argument for all five would
+        /// answer `nil` here** -- **and this is exactly the question every
+        // plugin that walks `@ivars` asks.**
+        if (pMethode == "instance_variables")
+        {
+            var alleNamen = new List<RubyValue>();
+            foreach (var feld in pObjekt.Felder.Keys
+                .OrderBy(k => k, StringComparer.Ordinal))
+            {
+                if (feld.StartsWith("@", StringComparison.Ordinal))
+                {
+                    alleNamen.Add(RubyValue.OfSymbol(feld));
+                }
+            }
+
+            return RubyValue.OfArray(alleNamen);
+        }
+
+        if (pArgumente.Count == 0
+            || pArgumente[0].Kind != RubyValueKind.Symbol)
+        {
+            _diagnostics.Add(
+                pMethode + " takes the name of a field as a symbol, and the "
+                    + "first argument is not one; a reader that took any "
+                    + "value would have answered about whatever the game "
+                    + "wrote");
+            return RubyValue.Nil;
+        }
+
+        // **Und der Punkt gehoert zum Namen.** `instance_variable_get(:hp)`
+        // und `:@hp` sind derselbe Satz,
+        // **und der Leser haette sonst fuer die haeufigere Schreibweise
+        // *no such variable* gesagt.**
+        var name = pArgumente[0].Name ?? string.Empty;
+        if (!name.StartsWith("@", StringComparison.Ordinal))
+        {
+            name = "@" + name;
+        }
+
+        switch (pMethode)
+        {
+            case "instance_variable_get":
+                // **Und ein Feld, das es nicht gibt, ist nil und kein
+                // Fehler.** `p.instance_variable_get(:@optional)` ist der
+                // Satz, mit dem ein Plugin einen Zustand liest, den es
+                // selbst gesetzt hat,
+                // **und ein Leser, der das ablehnt, wuerde jedes Plugin
+                // stoppen, das einen Zustand erst spaeter setzt.**
+                return pObjekt.Felder.TryGetValue(name, out var wert)
+                    ? wert
+                    : RubyValue.Nil;
+
+            case "instance_variable_defined?":
+                return RubyValue.OfBoolean(pObjekt.Felder.ContainsKey(name));
+
+            case "instance_variable_set":
+                if (pArgumente.Count < 2)
+                {
+                    _diagnostics.Add(
+                        "instance_variable_set takes a name and a value, and "
+                            + "only the name came; a reader that set nil "
+                            + "would have written a field the game never "
+                            + "gave");
+                    return RubyValue.Nil;
+                }
+
+                pObjekt.Felder[name] = pArgumente[1];
+                return pArgumente[1];
+
+            case "remove_instance_variable":
+                if (!pObjekt.Felder.TryGetValue(name, out var alt))
+                {
+                    return RubyValue.Nil;
+                }
+
+                pObjekt.Felder.Remove(name);
+                return alt;
+
+        }
+
+        return RubyValue.Nil;
+    }
+
+    /// <summary>
+    /// A number that is the same for one object and not for another.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>Its number.</returns>
+    /// <remarks>
+    /// <strong>And it is counted, and not made from the address.</strong>
+    /// Ruby counts objects, **and a reader that made the number from the
+    /// place in memory would give the same number twice** — a garbage
+    /// collection between two calls would hand it out again,
+    /// **and `list.uniq` would have two different heroes in one entry.**
+    /// </remarks>
+    /// <summary>
+    /// Whether a name is one this reader answers as an operator.
+    /// </summary>
+    /// <param name="pName">The name, as `send` received it.</param>
+    /// <returns>true when it is an operator.</returns>
+    /// <remarks>
+    /// <strong>And a list, and not a guess.</strong>
+    /// <c>send(:+)</c>, <c>send(:[])</c> and <c>send(:&lt;=&gt;)</c> are the
+    /// names a plugin writes,
+    /// **and a reader that tried every name as an operator would answer a
+    /// value for a method that does not exist** — and the game would carry
+    /// a number it never computed.
+    /// </remarks>
+    private static bool OperatorName(string pName) => pName is
+        "+" or "-" or "*" or "/" or "%" or "**" or "==" or "!=" or "<"
+        or ">" or "<=" or ">=" or "<=>" or "<<" or ">>" or "&" or "|"
+        or "^" or "[]" or "[]=" or "==" or "===";
+
+
+    private int InstanzNummer(RubyValue pWert)
+    {
+        if (pWert.Kind != RubyValueKind.Object)
+        {
+            // **Und fuer jeden Wert gilt derselbe Satz.** `1.object_id` ist
+            // eine Zahl und `1.object_id == 1.object_id`,
+            // **denn kleine Zahlen sind in Ruby dieselben Objekte.**
+            return 8 + (int)pWert.Kind;
+        }
+
+        if (!_instanzNummern.TryGetValue(pWert, out var nummer))
+        {
+            _naechsteInstanzNummer += 2;
+            nummer = _naechsteInstanzNummer;
+            _instanzNummern[pWert] = nummer;
+        }
+
+        return nummer;
+    }
+
+
     private RubyValue? WertMethode(
         RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
     {
@@ -1363,6 +1555,104 @@ public sealed class RubyInterpreter
 
                 return RubyValue.OfSymbol(
                     pEmpfaenger.Kind == RubyValueKind.Nil ? "NilClass" : "Object");
+
+            // **Und die Fragen, die ein Spiel an sein eigenes Objekt
+            // stellt.** `instance_variable_get(:@hp)` steht in jedem
+            // Plugin, das `@ivars` durchsucht,
+            // **und `send` ist der Satz, mit dem ein Plugin eine Methode
+            // aufruft, deren Namen es erst zur Laufzeit kennt.**
+            case "instance_variable_get" or "instance_variable_set"
+                or "instance_variables" or "instance_variable_defined?"
+                or "remove_instance_variable":
+                return InstanzVariable(
+                    pEmpfaenger, pMethode, pArgumente);
+
+            case "send" or "public_send" or "__send__":
+                // **Und `send` nimmt einen Namen und ruft die Methode.**
+                // `1.send(:+, 2)` ist `1 + 2`,
+                // **und das ist der Satz, mit dem ein Plugin einen
+                // Operator ueber seinen Namen anwendet** -- **und ein
+                // Leser, der `send` ablehnt, wuerde einem Plugin, das
+                // `list.send(:sort!)` schreibt, jede Aenderung verweigern.**
+                if (pArgumente.Count == 0
+                    || pArgumente[0].Kind != RubyValueKind.Symbol)
+                {
+                    _diagnostics.Add(
+                        pMethode + " takes the name of a method as a symbol, "
+                            + "and the first argument is not one; a reader "
+                            + "that took any value would have called a "
+                            + "method named after whatever the game wrote");
+                    return RubyValue.Nil;
+                }
+
+                // **And the call goes through the same search as a call
+                // with a written name.** That is why `send` lives here and
+                // not at the host,
+                // **and a reader that resolved the name itself would go
+                // around `super` and the receiver.**
+                var gesuchterName = pArgumente[0].Name ?? string.Empty;
+                var weitere = System.Linq.Enumerable
+                    .Skip(pArgumente, 1).ToList();
+                var eigene = EigeneMethode(pEmpfaenger, gesuchterName);
+                if (eigene != null)
+                {
+                    return Aufrufen(
+                        eigene, weitere,
+                        pEmpfaenger.Kind == RubyValueKind.Object
+                            ? pEmpfaenger.ClassName
+                            : gesuchterName,
+                        pEmpfaenger);
+                }
+
+                // **And the operators, because `1.send(:+, 2)` is `1 + 2`.**
+                // An operator is not a method under a name in this reader,
+                // **and a reader that only asked `WertMethode` would answer
+                /// nil** -- **and `send` is exactly the sentence a plugin
+                // uses when it applies an operator by its name.**
+                if (OperatorName(gesuchterName) && weitere.Count == 1)
+                {
+                    return Apply(
+                        gesuchterName, pEmpfaenger, weitere[0]);
+                }
+
+                // **And the value's other methods.**
+                var wertAntwort = WertMethode(
+                    pEmpfaenger, gesuchterName, weitere);
+                if (wertAntwort != null)
+                {
+                    return wertAntwort;
+                }
+
+                _diagnostics.Add(
+                    gesuchterName + " is a name this value has no method "
+                        + "under, and send does not guess; a reader that took "
+                        + "any name would have called a method nobody wrote");
+                return RubyValue.Nil;
+
+            case "instance_of?":
+                return RubyValue.OfBoolean(
+                    pArgumente.Count == 1
+                    && pArgumente[0].Kind == RubyValueKind.Symbol
+                    && pArgumente[0].Name == pEmpfaenger.ClassName);
+
+            case "object_id":
+                // **Und eine Zahl, die pro Objekt verschieden ist.**
+                // `equal?` und `object_id` sind derselbe Satz,
+                // **und eine feste Zahl wuerde jedes Objekt gleich
+                // machen** -- **und `list.uniq` haette dann zwei verschiedene
+                // Helden zu einer gemacht.**
+                return RubyValue.OfInteger(InstanzNummer(pEmpfaenger));
+
+            case "__method__":
+                // **Und der Name der Methode, die gerade laeuft.** Ruby gibt
+                // ein Symbol zurueck,
+                // **und ein Leser, das nil gibt, schweigt** -- **und
+                // `__method__` wird genau dann gebraucht, wenn man nicht
+                // weiss, in welcher Methode man ist.**
+                return RubyValue.OfSymbol(
+                    string.IsNullOrEmpty(_aktuelleMethode)
+                        ? "Object"
+                        : _aktuelleMethode);
 
             case "freeze" or "frozen?" or "dup" or "clone" or "itself":
                 // **`freeze` gibt den Empfaenger zurueck, weil nichts
@@ -9392,6 +9682,20 @@ public sealed class RubyInterpreter
                 Line = pNode.Line,
                 Role_Children = [new RubyNodePart { Role = RubyNodeRole.Receiver, Node = SelfNode(pNode.Line) }],
             });
+        }
+
+        // **And `__method__` is a built-in, and not a script method.**
+        // Written without brackets it is an identifier,
+        // **and a reader that only looked in the script's own table would
+        // answer a local variable of that name** -- **which is nil** --
+        // **and `__method__` would be silent where it is exactly the thing
+        /// a method needs to say which one it is.**
+        if (name == "__method__" || name == "__dir__")
+        {
+            return RubyValue.OfSymbol(
+                string.IsNullOrEmpty(_aktuelleMethode)
+                    ? "Object"
+                    : _aktuelleMethode);
         }
 
         return Local(name);

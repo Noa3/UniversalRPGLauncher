@@ -45,8 +45,7 @@ der Leser abschafft, muss mit der Regel gehen und nicht gegen sie.**
 nicht nur die Laenge** -- **denn bei hundert Mustern in einem Spiel weiss
 man dann nicht, welches zu gross war.**
 
-**Und die Fragen an einen Typ fehlten alle zehn, und die zweite Fehlermeldung
-war falsch.** Gemessen: `M.instance_methods` sagte *M has no method
+        if (pMethode == "instance_variables")\n        {\n            var alleNamen = new List Gemessen: `M.instance_methods` sagte *M has no method
 'instance_methods' on this host*, **und `Object.ancestors` sagte erst *the
 constant Object is not defined by this host* und dann *nil has no method
 'ancestors'*** -- **und beide Haelften waren falsch:** `Object` ist Teil
@@ -92,6 +91,44 @@ dritte Form: *ein Test, der mehrere Dinge misst, braucht eine Liste, die
 waechst.*** **Und der vierte: `Object.superclass` ist `BasicObject` und
 erst dessen ist nil** -- **ich hatte `nil` behauptet, um die Kette zu
 beenden, und damit `ancestors` um ein Glied gekuerzt.**
+
+**Und die Fragen, die ein Objekt an sich selbst stellt, fehlten neun von
+zehn, und eine davon schwieg.** `A.new.send(:gruessen)` sagte *A has no
+method 'send' on this host* -- **und `__method__` antwortete `nil` ohne ein
+Wort** -- **und das ist die schlimmste Form einer Ablehnung**, denn der
+Aufrufer kann es nicht von einer Methode unterscheiden, die nichts zurueckgibt.
+
+**Und `send` laeuft ueber dieselbe Suche wie ein geschriebener Name** -- **und
+ein Leser, der den Namen selbst aufgeloest haette, waere an `super` und am
+Empfaenger vorbeigelaufen**, **und ein Plugin, das eine Methode einer
+Unterklasse durch `send` ruft, wuerde die der Basisklasse ausfuehren.**
+
+**Und `1.send(:+, 2)` ist `1 + 2`**, **und ein Operator ist hier keine Methode
+unter einem Namen** -- **und `OperatorName` ist eine Liste und keine
+Ratswende**, **denn ein Leser, der jeden Namen als Operator probierte, wuerde
+einem Spiel eine Zahl liefern, die es nie gerechnet hat.**
+
+**Und `__method__` ohne Klammern ist ein Bezeichner und kein Aufruf.** Der
+Leser sah nur in der Skripttabelle nach,
+**und ein Leser, der das tat, fand eine lokale Variable namens
+`__method__`** -- **und die ist nil.** *Genau an der Stelle, an der eine
+Methode sagen muss, welche sie ist.*
+
+**Und `object_id` wird gezaehlt, und nicht aus der Adresse gebildet** --
+**eine Sammlung zwischen zwei Aufrufen wuerde dieselbe Zahl noch einmal
+ausgeben**, **und `list.uniq` haette zwei verschiedene Helden in einem
+Eintrag.**
+
+**Und `instance_variables` nimmt kein Argument, und es ist die einzige dieser
+fuenf Fragen, die keine Namen nimmt.** Der Leser pruefte bei allen fuenf
+dasselbe Argument,
+**und genau hier sagte er `nil` -- und genau hier steht die Frage in jedem
+Plugin, das `@ivars` durchsucht.**
+
+**Und vierter Testfehler dieser Form: mein Test behauptete `get(:mp)` sei
+`10`.** Gemessen: **es ist `20`**, denn `:mp` ohne `@` bedeutet das Feld
+`@mp` -- **und ein Test, der eine Erweiterung behauptet, muss auch die
+richtige Zahl nennen.**
 
 **Und `String * Integer` ist der Trennstrich zwischen zwei Fenstern.****Und `String * Integer` ist der Trennstrich zwischen zwei Fenstern.** `"-" *
 30`,
