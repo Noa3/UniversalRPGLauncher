@@ -9151,3 +9151,26 @@ filename comparison — `FindByName(..., "RPG_RT.exe")` scores a directory as
 RM2K by looking at the name. Measured before it was written down.
 
 `TestRuntimeBoundary: 2/2`, `All 1625 tests passed`, validator passed.
+
+## 2026-09-29 — qa_patches/, and the test one of its patches asked for
+
+**`qa_patches/` is unversioned and is not this session's work**: a QA
+dispatcher's output from 2026-08-24. Two things came of reading it.
+
+**The audit is a dated snapshot, not a specification** — it lists XP and MZ as
+"Missing Ruby execution" and WOLF as "Partial", and since 2026-08-24 this
+repository has a working Ruby interpreter with 71 tests, reads 23 real XP data
+files and a real RM2K game, and has measured the WOLF games as encrypted.
+
+**`t_ba1d255d.patch` asked for a test the repository was missing.**
+`ExpectedSystemDataPath` and `HasSystemData` were written by `Initialize` and
+read by nobody — **and that is a missing surface, not a missing test**: the
+path is decided in the constructor, `Initialize` needs a plugin selection the
+selector refuses for RGSS, and so the field was unreachable from a test. **The
+first version of the test built a `RgssRuntimeInfo` and asserted on it, which
+proves nothing** — it asserts that a value the test wrote is the value the
+test read back. **The fix was a one-line public property on the runtime.**
+
+`TestRgssRuntime` is 6/6, mutations 3 of 3. The other two patches are not
+gaps: their content is in `HEAD` in a later form, and `t_ae3e01c0.patch` is
+empty.

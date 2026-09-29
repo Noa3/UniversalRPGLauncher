@@ -73,6 +73,28 @@ public sealed class RgssEngineRuntime : IEngineRuntime
 
     public PluginRuntimeState State { get; private set; } = PluginRuntimeState.Created;
     public RgssRuntimeInfo? RuntimeInfo { get; private set; }
+
+    /// <summary>
+    /// The system data this generation needs, as the constructor decided it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>It is public because otherwise the rule lives nowhere a test
+    /// can reach.</strong> The path is computed in the constructor, written
+    /// into <see cref="RuntimeInfo"/> by <c>Initialize</c>, <strong>and read
+    /// by nothing</strong> — and <c>Initialize</c> needs a plugin selection
+    /// that this project's selector refuses for RGSS, so the field was
+    /// untestable rather than merely unverified.
+    /// </para>
+    /// <para>
+    /// <strong>So a test had a copy of this rule</strong>, which is the second
+    /// place a rule lives and the reason a change to one can pass without the
+    /// other noticing. This property is the fix: <strong>one place, readable
+    /// without starting anything.</strong> The reader is on the runtime and
+    /// not on the info, because the constructor is where the decision is made.
+    /// </para>
+    /// </remarks>
+    public string ExpectedSystemDataPath => _systemDataPath;
     public int SimulationTicks => _clock.GetSimulationTicks();
     public int InspectedFileCount => RuntimeInfo?.InspectedFileCount ?? 0;
 

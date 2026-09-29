@@ -1432,6 +1432,47 @@ principle; the test reads the smallest, the largest and one from the middle,
 **because a reader that reads those three has not proved it reads all 743**,
 and claiming otherwise would be the same kind of guess.
 
+### `qa_patches/` — a stale audit and three over-expected patches, and what came of them
+
+**`qa_patches/` is unversioned and it is not this session's work.** It is a
+QA dispatcher's output from 2026-08-24: an `ENGINE_COVERAGE_AUDIT.md` and four
+worktree patches. Two things came out of reading it, and both are worth having.
+
+**The audit's columns are a month stale** and its own text says so by
+implication: it lists XP and MZ as "Missing Ruby execution" and WOLF as
+"Partial: explicit unencrypted JSON test envelope", **and since 2026-08-24 this
+repository has a working Ruby interpreter with 71 tests, reads 23 real XP data
+files and a real RM2K game, and has proven the WOLF games encrypted.** **A
+snapshot with a date on it is history and not a specification**, so the file
+stays where it is and the board carries the current numbers.
+
+**And one of the patches asked for a test the repository was missing.**
+`t_ba1d255d.patch` asserts `ExpectedSystemDataPath` and `HasSystemData` — and
+**both fields were written by `Initialize` and read by nobody.** That is not a
+missing test, it is a missing surface: the path is decided in the constructor,
+`Initialize` needs a plugin selection the selector refuses for RGSS, **and so
+the field could not be reached by a test at all.**
+
+> **The first version of the test built a `RgssRuntimeInfo` and asserted on
+> it — which proves nothing**, because it asserts that a value the test itself
+> wrote is the value the test read back. **The fix was a one-line public
+> property on the runtime**, and **a field that only `Initialize` writes and
+> nothing reads becomes wrong without a run noticing.**
+
+`RgssEngineRuntime.ExpectedSystemDataPath` is public now, and
+`TestRgssRuntime` is **6/6** with three new cases: the three generations name
+three different files, an unknown generation names none, and **the three names
+are three and not one** — a runtime that answered `rxdata` for all of them
+would pass a per-generation test and be wrong about two engines.
+
+**The other two patches are not gaps.** `t_a37367ee.patch`'s MV title parsing
+is in `BuiltInEnginePlugins.cs` in a later form (`title` from a different
+regex, no intermediate `System.Text.RegularExpressions` line), **and its
+`SESSION_STATE.md` and `docs/PROJECT_STATUS.md` lines describe a state that has
+since moved on.** `t_dbb7d1bd.patch` touches `game_detector.cs` and three
+plugin files, and **every one of those files is in `HEAD` with later work on
+it.** `t_ae3e01c0.patch` is empty.
+
 ### The RTP, and the measured answer to "download it"
 
 **The runtime reads the game and never the RTP, and that is now a test and
