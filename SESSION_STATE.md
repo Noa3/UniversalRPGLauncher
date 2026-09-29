@@ -9130,3 +9130,24 @@ WolfRPGEditor game as a fixture at `project/tests/fixtures/wolf/real/`.
 **And the RTP is authorised but not done.** The user said to download and
 unpack it and to name the sources per engine — that is the next card and not
 this one.
+
+## 2026-09-29 — the RTP, and the measured answer to "download it"
+
+**The user authorised downloading and unpacking the RTP, and the measurement
+says it is unnecessary.** `TestRuntimeBoundary` walks **every** C# file under
+`src/` — 127, counted against the files on disk and not against a threshold —
+and finds no `LoadLibrary`, no `GetProcAddress`, no `DllImport`, no
+`Process.Start`, no `Assembly.Load`, no `Reflection.Emit`. **And there is no
+RTP directory reference anywhere in the source.**
+
+`RgssRuntimeInfo` carries `RtpDependency` as the string `"RPG_RT"` — **a name
+and not a place**, and the test asserts that directly, **because a field that
+held a path would be exactly where a download could be wired in.** The only
+paths the RGSS backend opens are the game's own `Data/System.rxdata`,
+`.rvdata` and `.rvdata2`.
+
+**A note on the two `Game.exe` mentions:** both are documentation and a
+filename comparison — `FindByName(..., "RPG_RT.exe")` scores a directory as
+RM2K by looking at the name. Measured before it was written down.
+
+`TestRuntimeBoundary: 2/2`, `All 1625 tests passed`, validator passed.

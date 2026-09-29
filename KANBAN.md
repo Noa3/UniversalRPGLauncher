@@ -1432,6 +1432,31 @@ principle; the test reads the smallest, the largest and one from the middle,
 **because a reader that reads those three has not proved it reads all 743**,
 and claiming otherwise would be the same kind of guess.
 
+### The RTP, and the measured answer to "download it"
+
+**The runtime reads the game and never the RTP, and that is now a test and
+not a claim.** `TestRuntimeBoundary` walks **every** C# file under `src/` —
+**127 of them, counted against the files on disk rather than against a
+threshold**, because a threshold is a rounded guess and this repository has had
+two of those in two days — and finds no `LoadLibrary`, no `GetProcAddress`, no
+`DllImport`, no `Process.Start`, no `Assembly.Load`, no `Reflection.Emit`.
+
+**And there is no RTP directory in any code path.** `RgssRuntimeInfo` carries
+`RtpDependency` as the string `"RPG_RT"` — **a name and not a place**, which is
+asserted directly, **because a field that held a path would be exactly where a
+download could be wired in.** The only file paths the RGSS backend opens are
+`Data/System.rxdata`, `.rvdata` and `.rvdata2` — the game's own files.
+
+**So downloading the RTP would change nothing about what this software does.**
+It is not refused for policy; **it is unnecessary, and a test now says so in a
+way that fails if a future change wires a path in.** Criterion 9 is met by the
+runtime not needing it, and that is a better answer than 1.5 GB of installers.
+
+**And the two `Game.exe` mentions in the source are documentation and a
+filename comparison** — `FindByName(..., "RPG_RT.exe")` scores a directory as
+RM2K **by looking at the name and not by running it**. That was measured before
+it was written down.
+
 ### The WOLF games are encrypted, and that is where this stops
 
 **Both `Data.wolf` files begin with no readable magic** —
