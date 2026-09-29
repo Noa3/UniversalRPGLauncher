@@ -57,6 +57,7 @@ public enum RubyNodeKind
     Begin,
 
     // Definitions.
+    Alias,
     Class,
     Module,
     Def,

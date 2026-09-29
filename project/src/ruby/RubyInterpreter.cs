@@ -262,6 +262,7 @@ public sealed class RubyInterpreter
             RubyNodeKind.Module => DefineType(pNode, false),
             RubyNodeKind.Def => DefineMethod(pNode, false),
             RubyNodeKind.DefS => DefineMethod(pNode, true),
+            RubyNodeKind.Alias => DefineAlias(pNode),
             RubyNodeKind.SuperCall => EvaluateSuper(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
@@ -1816,6 +1817,64 @@ public sealed class RubyInterpreter
         Kind = RubyNodeKind.Self,
         Line = pLine,
     };
+
+    /// <summary>
+    /// Files an existing method under a second name.
+    /// </summary>
+    /// <param name="pNode">The alias node.</param>
+    /// <returns>The new name as a symbol.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The method is copied and not the name.</strong> An alias is
+    /// a second door into the same room: change the body and both doors
+    /// open onto the change. <strong>A reader that stored a second name and
+    /// looked the body up under it would have given the game's override
+    /// nothing to override</strong> — `super` from the new name would have
+    /// gone to the old one and the game's replacement would have been lost.
+    /// </para>
+    /// <para>
+    /// <strong>And it resolves the chain.</strong> `alias b a` where `a` is
+    /// itself an alias has to find the method behind both — <strong>and a
+    /// reader that only looked in the class's own table would have failed on
+    /// the second alias</strong>, which is a thing games write when they
+    /// rename something twice.
+    /// </para>
+    /// <para>
+    /// <strong>An alias outside a class is a diagnostic and names both
+    /// names.</strong> Ruby would put it on `Object`; this interpreter files
+    /// methods under a class, so it says which thing would have to provide
+    /// that.
+    /// </para>
+    /// </remarks>
+    private RubyValue DefineAlias(RubyNode pNode)
+    {
+        var neuer = pNode.Name ?? string.Empty;
+        var alter = pNode.Operator ?? string.Empty;
+        var typ = _aktuellerTyp;
+        if (typ == null)
+        {
+            _diagnostics.Add(
+                $"alias {neuer} {alter} stands outside a class, and this "
+                + "interpreter files methods under a class; the reference "
+                + "would put it on Object, and that is a host's job");
+            return RubyValue.Nil;
+        }
+
+        var methode = FindMethod(typ.Name, alter);
+        if (methode == null)
+        {
+            _diagnostics.Add(
+                $"{typ.Name} does not have {alter}, so alias {neuer} has "
+                    + "nothing to point at; an alias is a second name for an "
+                    + "existing method and not a new one");
+            return RubyValue.Nil;
+        }
+
+        typ.Methods[neuer] = methode;
+        return RubyValue.OfSymbol(neuer);
+    }
+
+
 
     // ---- Helpers
 

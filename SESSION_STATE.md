@@ -8994,3 +8994,27 @@ against a correct tree, and `GD0001` is not a `CS` error.
 
 `TestRubyInterpreter: 50/50`, `TestRubyParser: 53/53`, `All 1594 tests
 passed`, validator passed, mutations 8 of 8.
+
+## 2026-09-29 — alias, verified against ruby/ruby's own source
+
+**`alias` holds the method, not the name.** `ruby/ruby`'s `vm_method.c` stores
+a `VM_METHOD_TYPE_ALIAS` entry carrying `body.alias.original_me` — the method
+entry as it was when the alias ran — **and a later `def alt` writes
+`Methods["alt"]` and leaves the alias's entry alone.** Read at the source
+because the first version of the test asserted the opposite and called a copy a
+share; the implementation was right and the test was wrong.
+
+**Two mutations of the same line survived until a subclass was in the test.**
+Storing the method under the new name and storing what the class's own table
+holds under the old name are indistinguishable while both names are in the same
+class, **because there the table's entry and the method are the same object**.
+In a subclass the method comes from the base and the table has no entry for
+the old name — **a name pointer would have made no alias at all**, and a game
+that aliases an inherited method and then overrides it is doing the one thing a
+plugin layer does.
+
+**The two spellings name the same thing, and the colon lives in `Text` and not
+in `Value`.** A reader that took `Text` would have stored `:neu` as the name.
+
+`TestRubyInterpreter: 57/57`, `TestRubyParser: 53/53`, `All 1601 tests
+passed`, validator passed, mutations 6 of 6.

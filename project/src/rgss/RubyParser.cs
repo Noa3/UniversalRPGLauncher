@@ -1338,6 +1338,32 @@ public sealed class RubyParser
                     Children = arguments,
                 };
             }
+            case "alias":
+            {
+                _index++;
+                SkipNewlines();
+
+                // **Zwei Namen, und der neue kann ein Symbol sein.** `alias
+                // alt neu` und `alias :alt :neu` sind dieselbe Anweisung --
+                // **und der Leser, der nur den Bezeichner nahme, wuerde
+                // `alias :alt :neu` als zwei Symbole lesen und den neuen
+                // Namen mit einem Doppelpunkt speichern**, und `alter.neu`
+                // waere dann ein Aufruf einer Methode, die es nicht gibt.
+                var neuer = ReadAliasName();
+                SkipNewlines();
+                var alter = ReadAliasName();
+                return new RubyNode
+                {
+                    Kind = RubyNodeKind.Alias,
+                    Name = neuer,
+                    // **Der alte Name steht im Operator und nicht in einem
+                    // Kind**, weil er kein Knoten ist: er ist ein Name, und
+                    // ein Knoten daraus wuerde ihn auswerten statt ihn
+                    // benennen.
+                    Operator = alter,
+                    Line = pToken.Line,
+                };
+            }
             case "def":
             {
                 _index++;
@@ -1654,6 +1680,48 @@ public sealed class RubyParser
             RubyTokenKind.Keyword => Current.Text is "nil" or "true" or "false",
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// One name in an `alias`, with or without a colon in front of it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Both spellings and no more.</strong> `alias alt neu` writes
+    /// two bare words and `alias :alt :neu` two symbols — <strong>and a
+    /// reader that only took the word would have kept the colon as part of
+    /// the new name</strong>, so `obj.neu` would have looked for a method
+    /// whose name begins with a colon and found nothing.
+    /// </remarks>
+    private string ReadAliasName()
+    {
+        var token = Current;
+        if (token.Kind == RubyTokenKind.Symbol)
+        {
+            _index++;
+
+            // **`Value` und nicht `Text`.** Ein Symbol-Token traegt den
+            // Doppelpunkt in `Text` und den Namen ohne in `Value` -- **und
+            // ein Leser, der `Text` nahm, haette den Doppelpunkt als Teil
+            // des Methodennamens gespeichert**: `alias :neu :alt` waere dann
+            // ein Alias auf `:neu`, **und `obj.neu` wuerde eine Methode
+            // suchen, die mit einem Doppelpunkt beginnt**, und nichts
+            // finden. Die andere Form, `alias neu alt`, schreibt zwei
+            // Bezeichner ohne Doppelpunkt -- **und beide muessen denselben
+            // Namen ergeben.**
+            return token.Value ?? token.Text.TrimStart(':');
+        }
+
+        if (token.Kind is RubyTokenKind.Identifier or RubyTokenKind.Constant
+            or RubyTokenKind.Keyword)
+        {
+            _index++;
+            return token.Text;
+        }
+
+        throw new RubyParseException(
+            $"an alias names two things, and '{token.Text}' is at offset "
+                + $"{token.Offset} where a name belongs.",
+            token.Line);
     }
 
     /// <summary>True where a value may begin, so an operator after it is binary.</summary>

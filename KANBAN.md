@@ -3230,7 +3230,47 @@ attribute is one value for the class and not one for each thing made from it.
 A game with two actors shares `@hp`. **That is not Ruby, it is a boundary of
 this runtime, and a limit that is documented is a limit and not a defect.**
 
-**Still not evaluated:** `defined?`, `extend`, `alias`, and blocks with
+### `alias`, verified against the reference's own source
+
+**An alias is a second name for a method, and it holds the method, not the
+name.** `ruby/ruby`'s `vm_method.c` stores a `VM_METHOD_TYPE_ALIAS` entry
+carrying `body.alias.original_me` — the method entry as it was when the alias
+ran — **and a later `def alt` writes `Methods["alt"]` and leaves the alias's
+entry alone.** That is verified at the source and not from memory.
+
+**And the first version of this test asserted the opposite** and called a copy
+a share. The implementation was right and the test was wrong, **and the
+difference is exactly the one a game that renames and then overrides depends
+on**: a subclass's `alias` plus its own `def` under the old name is a
+deliberate way to keep the old behaviour reachable.
+
+**The alias resolves the chain, so renaming twice works.** `alias b a` where
+`a` is itself an alias finds the method behind both, **and a reader that only
+looked in the class's own table would have found nothing for the second one.**
+
+**And the case that separates a method from a name is a subclass.** Two
+mutations of the same line — store the method under the new name, or store
+what the class's own table holds under the old name — are indistinguishable
+while both names are in the same class, **because there the table's entry and
+the method are the same object**, and two of six rules survived until that was
+written down. In a subclass the method comes from the base and **the table has
+no entry for the old name at all** — a reader that stored a name pointer would
+have made no alias, **and a game that aliases an inherited method and then
+overrides it would have had nothing to override**, which is the one thing a
+game's plugin layer does.
+
+**And the two spellings name the same thing.** `alias neu alt` and
+`alias :neu :alt` are one instruction, and **a reader that took the token's
+`Text` would have kept the colon in the name** — `obj.neu` would then look for
+a method beginning with a colon. The name is in `Value`; `Text` carries the
+punctuation.
+
+**An alias of a method that is not there names both names and makes nothing.**
+A reader that made a stub would have given the game a method that always
+answers nil, **which is a bug that only shows up as a character who cannot do
+the one thing they were renamed for.**
+
+**Still not evaluated:** `defined?`, `extend`, `undef`, and blocks with
 parameters passed to methods.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
