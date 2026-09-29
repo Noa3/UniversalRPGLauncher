@@ -3619,8 +3619,60 @@ voraussetzt, muss sie an einem Knoten messen, den er selbst gebaut hat.**
 einem** — `each_with_index` gibt beides, **und ein Test, der nur eines davon
 erlaubt, schreibt die falsche Regel fest.**
 
-**Noch nicht ausgewertet:** `method_missing`, `respond_to?`,
-`instance_eval`, `define_singleton_method` auf einem Objekt, und
+### `method_missing` und `respond_to?`, und zwei Fragen, die nicht dieselbe sind
+
+**Der Handler wird erst am Ende der Kette gefragt.** `FindMethod` laeuft die
+Kette hoch und gibt `null` zurueck, **und erst dann kommt
+`MissingMethod`** -- **ein Leser, das am Anfang nachsehen wuerde, wuerde es
+auch fuer eine Methode benutzen, die es gibt**, und `method_missing` waere
+ein Test, der nein sagt, wenn die Antwort ja ist.
+
+**Und er ist ein Singleton.** `def self.method_missing(name)` ist, wie ein
+Spiel es schreibt, **und ein Leser, der in der Instanztabelle gesucht haette,
+haette nichts gefunden** -- ein Plugin, das hundert Befehlsnamen beantwortet,
+waere eine Klasse, die alle ablehnt.
+
+**Und der Name kommt als erster Wert, nicht als Signatur.** `mit[0] =
+RubyValue.OfSymbol(pName)`, **und ein Leser, der die Argumente
+unveraendert durchgereicht haette, haette dem Handler das erste Argument
+unter dem Namen `name` gegeben** -- ein Plugin, das nach Namen antwortet,
+haette fuer jeden einzelnen Befehl stillschweigend den falschen beantwortet.
+
+**Und `respond_to?` zaehlt `method_missing` nicht.** Ruby hat dafuer ein
+zweites Argument, **und der Default ist nein** -- der Sinn der Frage ist zu
+wissen, ob ein Aufruf ohne Fehler durchgeht. **Eine Klasse, die ueber
+`method_missing` alles beantwortet, wuerde ja zu allem sagen, und die Frage
+waere wertlos.**
+
+> **Der Fall steckt im eigenen Code, den ich beim Schreiben beschrieben
+> hatte:** `FindMethod` faellt am Ende auf `method_missing` zurueck,
+> **also haette `Antwortet` mit `FindMethod` gearbeitet und die Frage fuer
+> jede Klasse mit einem Handler mit ja beantwortet.** `HatMethode` geht
+> dieselbe Kette ab, **ohne den Fallback** -- **dieselbe Wanderung und nicht
+> dieselbe Antwort**, und genau darum sind es zwei Funktionen.
+
+**Und `FindMethod` faellt bewusst NICHT auf den Handler zurueck.** Die vier
+Aufrufer -- `super`, `alias`, die Suche nach einer Klassenmethode und
+`AufrufenMitName` -- fragen "hat die Kette diese Methode",
+**und ein Rueckfall wuerde `super` in den Handler schicken.** **Der Handler
+ist fuer Namen gedacht, die es nicht gibt, und `super` fragt nach einer
+Basisversion eines Namens, den es sehr wohl gibt.**
+
+**Und `undef` markiert beide Namen.** `typ.Undefiniert.Add(name)` allein hat
+die Marke unter `method_missing` gelassen, **während `MissingMethod` unter
+`self.method_missing` nachsah** -- **zwei Namen und eine Marke.** Der Test,
+der das toetet, schreibt `undef` in eine **Unterklasse ohne eigenen
+Handler**, **denn das Loeschen des eigenen Tabelleneintrags kannte der
+Leser schon, und nur der Fall, fuer den die Marke da ist, ist der, in dem
+die Basis sie liefern wuerde.**
+
+**Und der Host wird mitgefragt, ueber seine eigene Liste.** Ein Spiel fragt
+`respond_to?(:draw)` ueber eine Hostmethode, **und ein Leser, der nur im
+Skript gesucht haette, wuerde nein sagen und ein Spiel wuerde eine Funktion
+ueberspringen, die es gibt.**
+
+**Noch nicht ausgewertet:** `instance_eval`, `instance_exec`,
+`define_singleton_method` auf einem Objekt, `respond_to_missing?`, und
 Blockparameter mit Vorgabewerten.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`

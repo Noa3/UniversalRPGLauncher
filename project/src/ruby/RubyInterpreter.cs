@@ -711,6 +711,57 @@ public sealed class RubyInterpreter
             return BlockAufrufen(empfaenger.Block, argumente, empfaenger);
         }
 
+        // **`respond_to?` ist eine Frage und kein Aufruf, und sie geht an
+        // keine Klasse des Skripts.** Sie wird zuerst gestellt, **denn ein
+        // Spiel, das `respond_to?(:m)` schreibt, erwartet eine Antwort ueber
+        // den Host und ueber das Skript** -- und **ein Leser, der sie als
+        // Skriptmethode behandelte, wuerde sie an den Host geben, und der
+        // Host wuerde Nein sagen fuer eine Methode, die das Skript
+        // beantwortet.**
+        if (methode is "respond_to?" or "is_a?" or "kind_of?")
+        {
+            if (argumente.Count == 0
+                || (argumente[0].Kind != RubyValueKind.Symbol
+                    && argumente[0].Kind != RubyValueKind.String))
+            {
+                _diagnostics.Add(
+                    $"{methode} needs a name, and a symbol is what a game "
+                    + "writes; this reader does not guess a name out of an "
+                    + "expression");
+                return RubyValue.Nil;
+            }
+
+            return RubyValue.OfBoolean(
+                Antwortet(empfaenger, argumente[0].Name ?? string.Empty, methode));
+        }
+
+        // **`method_missing`, bevor der Host gefragt wird und bevor die
+        // Diagnose steht.** Ein Spiel, das hundert Befehlsnamen ueber
+        // `method_missing` beantwortet, **ruft Namen auf, die weder der Host
+        // noch eine Skriptmethode kennt** -- **und ein Leser, der erst den
+        // Host fruege, wuerde bei jedem davon "diese Methode kennt der Host
+        // nicht" sagen** und damit die Klasse, die sie beantworten soll,
+        // nie erreichen.
+        //
+        // **Und die Klasse, in der gesucht wird, ist die, in der der Aufruf
+        // geschrieben wurde, und nicht die des Empfaengers.** `self.` ist
+        // hier `A`, **und `pKlasse` ist es auch** -- `EigeneMethode` rechnet
+        // es aus dem Empfaenger, und der Empfaenger eines
+        // `method_missing`-Aufrufs ist der Wert, **nicht die Klasse**.
+        var klasse = empfaenger.Kind == RubyValueKind.Symbol
+            && empfaenger.Name != "self"
+            && _types.ContainsKey(empfaenger.Name)
+            ? empfaenger.Name
+            : _aktuellerTyp?.Name;
+        if (klasse != null)
+        {
+            var fehlend = MissingMethod(klasse, methode);
+            if (fehlend != null)
+            {
+                return AufrufenMitName(fehlend, argumente, klasse, methode);
+            }
+        }
+
         var eigene = EigeneMethode(empfaenger, methode);
         if (eigene != null)
         {
@@ -1726,6 +1777,248 @@ public sealed class RubyInterpreter
             name = typ.Superclass;
         }
 
+        // **Kein Rueckfall auf `method_missing`, und das ist Absicht.**
+        // `FindMethod` beantwortet "hat die Kette diese Methode",
+        // **und die vier Aufrufer fragen genau das**: `super`, `alias`, die
+        // Suche nach einer Klassenmethode und `AufrufenMitName`.
+        //
+        // **Ein Rueckfall wuerde `super` in den Handler schicken.** Ein Spiel
+        // mit `def self.method_missing` und einem `super` in einer Methode
+        // haette dann den Handler aufgerufen, **wo Ruby `NoMethodError`
+        // sagen wuerde** -- und `super` ist die Stelle, an der ein Handler am
+        // wenigsten gehoert, **denn er ist fuer Namen gedacht, die es nicht
+        // gibt, und `super` fragt nach einer Basisversion eines Namens, den
+        // es sehr wohl gibt.**
+        //
+        // **Die Suche nach dem Handler laeuft in `Call`, und dort steht sie
+        // auch.** `Call` fragt `MissingMethod` selbst, **und genau deshalb
+        // sind die beiden getrennt**: eine Suche, die zurueckfaellt, und
+        // eine Frage, die zurueckfaellt, sind zwei Regeln an zwei Stellen.
+        return null;
+    }
+    /// <summary>
+    /// Runs a `method_missing`, with the name the caller wrote as its first
+    /// argument.
+    /// </summary>
+    /// <param name="pMethode">The handler.</param>
+    /// <param name="pArgumente">The arguments the call carried.</param>
+    /// <param name="pKlasse">The class the call was written in.</param>
+    /// <param name="pName">The method's name as the caller wrote it.</param>
+    /// <returns>What the handler answered.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The name is the first argument and not the second.</strong>
+    /// `method_missing(name, *args)` is the whole shape,
+    /// <strong>and a reader that passed the caller's arguments unchanged
+    /// would have handed the handler the first argument under the name
+    /// `name`** — so a plugin that answers by name would have answered for
+    /// the wrong command, silently, on every single one.
+    /// </para>
+    /// <para>
+    /// <strong>The parameters come from the handler, and the name is not one
+    /// of them.</strong> A handler written as `def self.method_missing(name,
+    /// *args)` has one named parameter, <strong>and binding the call's first
+    /// argument to it would have overwritten the name</strong> — the one
+    /// value the handler exists to receive.
+    /// </para>
+    /// <para>
+    /// <strong>And it answers nil without a word when it declines.</strong> A
+    /// handler may return nil to mean "I do not know that one",
+    /// <strong>and this runtime says so and moves on** — a game that probes
+    /// for a method with a handler that declines is not an error.
+    /// </para>
+    /// </remarks>
+    private RubyValue AufrufenMitName(
+        RubyMethod pMethode,
+        IReadOnlyList<RubyValue> pArgumente,
+        string? pKlasse,
+        string pName)
+    {
+        if (pMethode.Parameters.Count == 0)
+        {
+            // **Kein Parameter, und trotzdem der Name zuerst.** Ein Handler
+            // `def self.method_missing; ...; end` **sieht den Namen nicht**,
+            // und das ist sein Recht -- **aber das Spiel soll nicht daran
+            // scheitern, und der Aufruf laeuft trotzdem.**
+            var ohne = pArgumente.ToArray();
+            return Aufrufen(pMethode, ohne, pKlasse);
+        }
+
+        var mit = new RubyValue[pArgumente.Count + 1];
+        mit[0] = RubyValue.OfSymbol(pName);
+        for (var i = 0; i < pArgumente.Count; i++)
+        {
+            mit[i + 1] = pArgumente[i];
+        }
+
+        return Aufrufen(pMethode, mit, pKlasse);
+    }
+
+
+
+    /// <summary>
+    /// Whether the chain has a method under that name, with no
+    /// `method_missing` fallback.
+    /// </summary>
+    /// <param name="pTypeName">The class to look in.</param>
+    /// <param name="pMethod">The method's name.</param>
+    /// <returns>true when a class in the chain has it.</returns>
+    /// <remarks>
+    /// <strong>The same walk as <c>FindMethod</c> and not the call.</strong>
+    /// <c>FindMethod</c> answers a question about "can this call work",
+    /// <strong>and this one answers "is there a method by that name"</strong> —
+    /// two different questions, and only the first one may fall back to
+    /// <c>method_missing</c>. **Sharing the walk and not the fallback is the
+    /// whole point**, and a reader that called `FindMethod` here would have
+    /// made <c>respond_to?</c> say yes to everything.
+    /// </remarks>
+    private bool HatMethode(string pTypeName, string pMethod)
+    {
+        var gesehen = new HashSet<string>(StringComparer.Ordinal);
+        var name = pTypeName;
+        while (name != null && _types.TryGetValue(name, out var typ) && gesehen.Add(name))
+        {
+            if (typ.Undefiniert.Contains(pMethod))
+            {
+                return false;
+            }
+
+            if (typ.Methods.ContainsKey(pMethod))
+            {
+                return true;
+            }
+
+            name = typ.Superclass;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Answers `respond_to?` for a name, over the host and the script.
+    /// </summary>
+    /// <param name="pEmpfaenger">The receiver the question was written on.</param>
+    /// <param name="pName">The name asked about.</param>
+    /// <param name="pMethode">The question, so a caller can tell it apart.</param>
+    /// <returns>true when something would answer that name.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And `method_missing` is not an answer.</strong> Ruby's
+    /// <c>respond_to?</c> takes a second argument that says whether to count
+    /// <c>method_missing</c>, <strong>and the default is no</strong> — because
+    /// the point of the question is to know whether a call will work without
+    /// raising, <strong>and a class that answers everything through
+    /// <c>method_missing</c> would say yes to everything and the question
+    /// would be worthless.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>The host is asked too, and it has a list.</strong> A game asks
+    /// <c>respond_to?(:draw)</c> about a host method,
+    /// <strong>and a reader that only looked at the script would say no and a
+    /// game would skip a feature the host does have.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>`is_a?` and `kind_of?` are about the class, and this runtime
+    /// has no objects.</strong> A receiver that is a class name answers true
+    /// for its own name and for `Object`-shaped questions,
+    /// <strong>and anything else answers false</strong> — a reader that
+    /// invented an object model here would have had to invent the classes too.
+    /// </para>
+    /// </remarks>
+    private bool Antwortet(RubyValue pEmpfaenger, string pName, string pMethode)
+    {
+        if (pMethode is "is_a?" or "kind_of?")
+        {
+            // **Nur der Name, und kein Gast.** `Sprite.is_a?(Image)` ist eine
+            // Frage ueber die Klasse selbst, **und diese Runtime haelt
+            // Skripttypen in einer Tabelle und sonst nichts** -- es gibt kein
+            // `Object`, in das man alles einordnen koennte, ohne eine
+            // Objektwaelt zu erfinden, die es nicht gibt.
+            var eigen = pEmpfaenger.Kind == RubyValueKind.Symbol
+                && pEmpfaenger.Name != "self";
+            return eigen && _types.ContainsKey(pEmpfaenger.Name ?? string.Empty);
+        }
+
+        // **Der Host zuerst, und ueber seine eigene Liste.** Der Host weiss,
+        // was er kann, **und ein Spiel fragt genau danach**.
+        if (_host.KnownMethods.Contains(pName, StringComparer.Ordinal))
+        {
+            return true;
+        }
+
+        // **Und dann das Skript, ueber die Kette, und ueber `self.` mit.**
+        var klasse = pEmpfaenger.Kind == RubyValueKind.Symbol
+            && pEmpfaenger.Name != "self"
+            && _types.ContainsKey(pEmpfaenger.Name)
+            ? pEmpfaenger.Name
+            : _aktuellerTyp?.Name;
+        if (klasse == null)
+        {
+            return false;
+        }
+
+        // **Und `FindMethod` darf hier nicht benutzt werden, denn es faellt
+        // am Ende auf `method_missing` zurueck.** Das wuerde `respond_to?`
+        // zu "ja, solange die Klasse einen Handler hat" machen,
+        // **und damit waere die Frage fuer jede Klasse mit einem Handler
+        // nutzlos** -- genau das, wovor der Kommentar oben warnt. **Die
+        // Kette wird deshalb ohne den Fallback abgegangen.**
+        return HatMethode(klasse, pName) || HatMethode(klasse, "self." + pName);
+    }
+
+
+
+
+    /// <summary>
+    /// A class's `method_missing`, when it has one and nothing else answered.
+    /// </summary>
+    /// <param name="pTypeName">The class the call was written in.</param>
+    /// <param name="pMethod">The method's name.</param>
+    /// <returns>The method, or null.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>It has to be a singleton, and that is the whole feature.</strong>
+    /// `def self.method_missing(name)` is how a game writes one,
+    /// <strong>and a reader that looked in the instance table would have
+    /// found nothing</strong> — so a plugin that answers a hundred command
+    /// names through `method_missing` would have been a class that refuses
+    /// all of them.
+    /// </para>
+    /// <para>
+    /// <strong>The name arrives as a value, not as a string in the
+    /// signature.</strong> `method_missing(name, *args)` takes the name the
+    /// caller wrote, <strong>and a reader that passed the method's own name
+    /// would have told the game its own name instead of the one that was
+    /// missing</strong> — which is the one piece of information the handler
+    /// exists to give.
+    /// </para>
+    /// <para>
+    /// <strong>It is looked up by name, so the search order matters and is
+    /// the class's own first.</strong> A subclass that defines one overrides
+    /// the base's, <strong>and a reader that took the first it found walking
+    /// down would have had the base answer for a subclass that answered
+    /// differently.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyMethod? MissingMethod(string? pTypeName, string pMethod)
+    {
+        var gesehen = new HashSet<string>(StringComparer.Ordinal);
+        var name = pTypeName;
+        while (name != null && _types.TryGetValue(name, out var typ) && gesehen.Add(name))
+        {
+            if (typ.Undefiniert.Contains("self.method_missing"))
+            {
+                return null;
+            }
+
+            if (typ.Methods.TryGetValue("self.method_missing", out var fehlend))
+            {
+                return fehlend;
+            }
+
+            name = typ.Superclass;
+        }
+
         return null;
     }
 
@@ -2569,6 +2862,16 @@ public sealed class RubyInterpreter
             // haette die andere Form ins Leere gehen lassen.**
             var name = UndefName(teil);
             typ.Undefiniert.Add(name);
+
+            // **Und die Singleton-Form, denn `undef` nimmt beides weg.**
+            // `undef m` nimmt `m` und `self.m` aus der Tabelle,
+            // **und die Marke bisher nur fuer `m`** -- sodass
+            // `MissingMethod` seine eigene Marke unter
+            // `self.method_missing` suchte und keine fand.
+            // **`undef method_missing` muss die Basis daran hindern, den
+            // Handler zu liefern** -- und genau daran scheitert es, wenn die
+            // Marke unter dem blossen Namen liegt.
+            typ.Undefiniert.Add("self." + name);
             typ.Methods.Remove(name);
             typ.Methods.Remove("self." + name);
             letzter = RubyValue.OfSymbol(name);

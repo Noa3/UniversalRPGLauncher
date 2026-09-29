@@ -9247,5 +9247,37 @@ dem, was der Rumpf beantwortet hat.**
 stimmt. **Ein Test, der eine Indizierung voraussetzt, muss sie an einem
 Knoten messen, den er selbst gebaut hat.**
 
-`TestRubyInterpreter: 107/107`, `All 1664 tests passed`, Mutationen 6 von 8
+`TestRubyInterpreter: 117/117`, `All 1674 tests passed`, Mutationen 8 von 8
 mit zwei gemessenen No-ops.
+
+## 2026-09-29 — `method_missing` und `respond_to?`
+
+**Der Handler wird erst am Ende der Kette gefragt, und er ist ein Singleton.**
+`def self.method_missing(name, x)` ist, wie ein Spiel es schreibt, **und ein
+Leser, der in der Instanztabelle gesucht haette, haette nichts gefunden** --
+ein Plugin, das hundert Befehlsnamen beantwortet, waere eine Klasse, die alle
+ablehnt. **Und der Name kommt als erster Wert**, weil ein Handler, der die
+Argumente unveraendert durchreichte, **fuer jeden einzelnen Befehl still
+das falsche beantwortet haette.**
+
+**`respond_to?` zaehlt `method_missing` nicht** -- der Sinn der Frage ist zu
+wissen, ob ein Aufruf ohne Fehler durchgeht, **und eine Klasse, die alles
+beantwortet, wuerde ja zu allem sagen und die Frage waere wertlos.** Der Fall
+steckte im eigenen Code, den ich beim Schreiben beschrieben hatte: `FindMethod`
+faellt auf den Handler zurueck, **also haette `Antwortet` mit `FindMethod`
+gearbeitet und die Frage fuer jede Klasse mit einem Handler mit ja
+beantwortet.** `HatMethode` geht dieselbe Kette ab, **ohne den Fallback.**
+
+**Und `FindMethod` faellt bewusst nicht zurueck.** Die vier Aufrufer --
+`super`, `alias`, die Klassenmethoden-Suche und `AufrufenMitName` -- fragen
+"hat die Kette diese Methode", **und ein Rueckfall wuerde `super` in den
+Handler schicken.**
+
+**Und `undef` markierte nur einen von zwei Namen.** Die Mutation, die das
+`self.method_missing`-Pruefen abschaltete, ueberlebte zuerst -- **weil der
+Test in derselben Klasse `undef` schrieb und ein Leser das Loeschen des
+eigenen Eintrags schon richtig hatte.** Der Fall, fuer den die Marke da ist,
+ist eine Unterklasse **ohne** eigenen Handler, **die die Basis daran hindern
+ muss.**
+
+`TestRubyInterpreter: 117/117`, `All 1674 tests passed`, Mutationen 8 von 8.
