@@ -14,7 +14,15 @@ echo "[1/4] .NET restore"
 dotnet restore
 
 echo "[2/4] .NET build"
-dotnet build --no-restore
+# **`-t:Rebuild` und nicht ein inkrementelles `dotnet build`.** Ein
+# inkrementeller Build haelt eine DLL, die nicht mehr zum Quelltext passt,
+# und **der Testlauf prueft dann die alte Datei gegen den neuen Text** --
+# am 2026-09-29 gemessen: 2 Fehler in einem Baum, der gruen war, und nach
+# einem Rebuild 0. **Ein Validator, der eine veraltete Assemmbly prueft,
+# meldet Fehler, die es nicht gibt, und das ist schlimmer als ein
+# Validator, der schweigt**: Wer ihm glaubt, sucht einen Fehler in
+# Code, der richtig ist.
+dotnet build --no-restore -t:Rebuild
 
 find_godot() {
   if [[ -n "${GODOT_BIN:-}" && -x "${GODOT_BIN}" ]]; then

@@ -9045,3 +9045,30 @@ answered nil.**
 
 `TestRubyInterpreter: 64/64`, `TestRubyParser: 53/53`, `All 1608 tests
 passed`, validator passed, mutations 6 of 6.
+
+## 2026-09-29 — extend, and a validator that could be wrong
+
+**`validate.sh` built incrementally and reported failures that did not
+exist.** It kept a DLL that no longer matched the source, so the test run
+checked the old file against the new text: **2 failures in a tree that was
+green, 0 after a rebuild.** A validator that checks a stale assembly is worse
+than one that stays silent, because whoever believes it looks for a bug in
+code that is right. `dotnet build --no-restore -t:Rebuild` is the build step
+now, and the reason is in the script.
+
+**`extend` is `include` with `self` in front.** Ruby defines the methods as
+singleton methods of the object, and in a class body the object is the class
+— a reader that treated it as `include` would have filed the method on
+instances, and this runtime has none. `Eingemischt` writes under the `self.`
+prefix for `extend` and plainly for `include`, and the two do not collide.
+
+**And the prefix is not added twice**: a module's `def self.x` is already
+filed as `self.x`, and prepending again would have made `self.self.x` — a name
+the game never wrote and no call can reach.
+
+**Six mutation rules, all killed, with the anchors read out of the source
+rather than typed from memory** — three earlier attempts at editing a harness
+by string surgery failed before the anchors were derived mechanically.
+
+`TestRubyInterpreter: 68/68`, `TestRubyParser: 53/53`, `All 1612 tests
+passed`, validator passed, mutations 6 of 6.

@@ -3311,8 +3311,39 @@ the host's missing method rather than `nil` — **and a game's
 `defined?(a.b) ? x : y` would take the first arm on a name nobody
 defined.**
 
-**Still not evaluated:** `extend`, `undef`, and blocks with parameters passed
-to methods.
+### `extend`, and a validator that could be wrong
+
+**`extend` is `include` written with `self` in front.** Ruby defines the
+methods as singleton methods of the object, and in a class body that object is
+the class — **a reader that treated it as `include` would have filed the
+method on the instances, and this runtime has none**, so the call would have
+found nothing. `Eingemischt` writes under the `self.` prefix for `extend` and
+plainly for `include`, **and the two do not collide: a class with both gets
+both, which is what a game's mixin class wants.**
+
+**And the prefix is not added twice.** A module's `def self.x` is already
+filed as `self.x`, **and a reader that prepended the prefix again would have
+made `self.self.x`** — a name the game never wrote and no call can reach,
+while the real name stayed unreachable from the module's own key.
+
+**An attribute is not extended either, for the same reason it is not
+included:** it stands for a field the class does not own, **and a class method
+reading it would read somewhere nobody wrote.**
+
+### The validator was reporting failures that did not exist
+
+**`validate.sh` built incrementally.** It kept a DLL that no longer matched
+the source, and the test run then checked the old file against the new text —
+**measured on 2026-09-29: 2 failures in a tree that was green, and 0 after a
+rebuild.** A validator that checks a stale assembly reports errors that are
+not there, **and that is worse than one that stays silent**, because whoever
+believes it looks for a bug in code that is right.
+
+`dotnet build --no-restore -t:Rebuild` is the build step now, and the reason is
+in the script.
+
+**Still not evaluated:** `undef`, and blocks with parameters passed to
+methods.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

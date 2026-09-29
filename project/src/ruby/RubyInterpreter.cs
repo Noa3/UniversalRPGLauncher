@@ -628,7 +628,8 @@ public sealed class RubyInterpreter
             && (methode == "attr_accessor"
                 || methode == "attr_reader"
                 || methode == "attr_writer"
-                || methode == "include"))
+                || methode == "include"
+                || methode == "extend"))
         {
             if (Eingebaut(_aktuellerTyp, methode, argumente))
             {
@@ -1585,9 +1586,9 @@ public sealed class RubyInterpreter
     /// </remarks>
     private bool Eingebaut(RubyType pTyp, string pMethode, IReadOnlyList<RubyValue> pArgumente)
     {
-        if (pMethode == "include")
+        if (pMethode is "include" or "extend")
         {
-            return Included(pTyp, pArgumente);
+            return Eingemischt(pTyp, pMethode, pArgumente);
         }
 
         return Attribute(pTyp, pMethode, pArgumente);
@@ -1660,43 +1661,52 @@ public sealed class RubyInterpreter
     }
 
     /// <summary>
-    /// Copies a module's methods into a class.
+    /// Puts a module's methods into a class, or into the class itself.
     /// </summary>
-    /// <returns>true when the module was found.</returns>
+    /// <param name="pTyp">The class the call stands in.</param>
+    /// <param name="pMethode">`include` or `extend`.</param>
+    /// <param name="pArgumente">The modules, already evaluated.</param>
+    /// <returns>true when every module was found.</returns>
     /// <remarks>
     /// <para>
-    /// <strong>At the moment of the call, and by copy.</strong> A module
-    /// included before its own methods are defined contributes nothing —
-    /// <strong>and that is the reference's own order, not a shortcut.</strong>
-    /// A reader that deferred the copy to the lookup would have a class whose
-    /// methods changed under a running game.
+    /// <strong>`extend` is `include` written with `self` in front.</strong>
+    /// Ruby defines the methods as singleton methods of the object, and in a
+    /// class body that object is the class — <strong>so a class method made by
+    /// `extend` belongs to the class and not to the things made from
+    /// it.</strong> This runtime has no objects, <strong>and a class method
+    /// is the only place a module's methods can go under `extend`</strong>,
+    /// because the alternative would be to give every instance of the class
+    /// its own copy and this runtime does not have instances.
     /// </para>
     /// <para>
-    /// <strong>A module that is not there is a diagnostic and names
+    /// <strong>So `extend` writes under the `self.` prefix</strong>, and
+    /// `include` writes plainly, and the two do not collide: a class with
+    /// both gets both, <strong>which is what a game's mixin class
+    /// wants.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a module that is not there is a diagnostic and names
     /// itself.</strong> "this host does not implement it" would be the wrong
-    /// sentence: the module is not a method, it is a type, and the game
-    /// wrote its name.
+    /// sentence: a module is a type and the game wrote its name.
     /// </para>
     /// </remarks>
-    private bool Included(RubyType pTyp, IReadOnlyList<RubyValue> pArgumente)
+    private bool Eingemischt(
+        RubyType pTyp,
+        string pMethode,
+        IReadOnlyList<RubyValue> pArgumente)
     {
         if (pArgumente.Count == 0)
         {
             _diagnostics.Add(
-                "include was called with no module, and there is nothing to "
-                    + "take methods from");
+                $"{pMethode} was called with no module, and there is nothing "
+                    + "to take methods from");
             return false;
         }
 
+        var praefix = pMethode == "extend" ? "self." : string.Empty;
         foreach (var arg in pArgumente)
         {
             // **Eine Konstante, die es nicht gibt, ist immer noch ein Name.**
-            // `Constant` gibt nil zurueck und schreibt eine Diagnose, weil
-            // es den Wert nicht kennt -- **und `include Fehlt` will genau
-            // den Namen, nicht den Wert.** Ein Leser, der hier nur Symbole
-            // annimmt, wuerde sagen "include names (nothing)" **und damit
-            // die eine Angabe wegnehmen, die bei diesem Fehler alles
-            // traegt**: welches Modul das Spiel wollte.
             var name = arg.Kind switch
             {
                 RubyValueKind.Symbol => arg.Name,
@@ -1705,15 +1715,8 @@ public sealed class RubyInterpreter
             };
             if (name == null || !_types.TryGetValue(name, out var modul))
             {
-                // **`name` und nicht `arg.Name`.** Eine Konstante, die es
-                // nicht gibt, ist `nil`, **und `nil` hat keinen Namen** --
-                // der Name steckt in dem, was `Constant` gemerkt hat. Der
-                // erste Versuch schrieb `arg.Name`, **und die Meldung
-                // sagte "include names (nothing)" fuer ein Spiel, das
-                // `include Beweglich` geschrieben hatte**: der eine Satz, an
-                // dem jemand nachsehen wuerde, war der leere.
                 _diagnostics.Add(
-                    $"include names {name ?? "(nothing)"}, and this "
+                    $"{pMethode} names {name ?? "(nothing)"}, and this "
                     + "interpreter has no module under that name; a module is a "
                     + "type and not a method, so a message about the host "
                     + "would be the wrong sentence");
@@ -1723,20 +1726,26 @@ public sealed class RubyInterpreter
             foreach (var methode in modul.Methods)
             {
                 // **Ein eingebautes Attribut wird nicht kopiert**, und
-                // **die Basisklasse einer-Klasse folgt nicht** -- beides
+                // **die Basisklasse einer Klasse folgt nicht** -- beides
                 // waere eine Kopie von etwas, das die Quelle nicht hatte.
                 if (methode.Value.IsAttribute)
                 {
                     continue;
                 }
 
-                pTyp.Methods[methode.Key] = methode.Value;
+                // **Der Schluessel, den eine Klassenmethode schon traegt,
+                // wird nicht doppelt gesetzt.** `def self.x` im Modul gibt
+                // `self.x`, und `extend` setzt daraus kein `self.self.x` --
+                // **sonst waere die Methode unter einem Namen erreichbar,
+                // den das Spiel nie geschrieben hat.**
+                pTyp.Methods[methode.Key.StartsWith("self.", StringComparison.Ordinal)
+                    ? methode.Key
+                    : praefix + methode.Key] = methode.Value;
             }
         }
 
         return true;
     }
-
 
     /// <summary>
     /// Reads or writes an attribute's value.
