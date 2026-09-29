@@ -3847,10 +3847,81 @@ gemacht hat, **und ein Spiel haette zwei Sprites, wo es eines gemacht hat.**
 `5.gibtsnicht` sagt es, **denn ein Leser, der alles beantwortet haette,
 wuerde einen Tippfehler wie eine Methode aussehen lassen.**
 
+### `new`, und die Luecke davor war die groesste im ganzen Ruby-Teil
+
+**Es gab kein `new`.** `Game_Party.new`, `Game_Actor.new(1)` und
+`Sprite.new` sind die ersten Zeilen fast jedes RPG-Maker-Skripts,
+**und ohne sie hat ein Spiel keine Schauspieler, keine Party und keine Karte** --
+es laeuft gar nichts.
+
+**Und die Felder waren ein Speicher fuer das ganze Programm.** `@hp` lag in
+einer Tabelle, die jedes Objekt geteilt hat,
+**also haette jeder Schauspieler den Wert des letzten gehabt** -- ein Spiel,
+in dem jede Figur mit derselben Zahl geht, **und in dem nichts im Skript
+sagt, warum.**
+
+**Und `EigeneMethode` fragte die falsche Klasse.** Sie nahm den Namen aus
+dem, was gerade laeuft, **und nicht aus dem Empfaenger** -- **auf der
+obersten Ebene ist das null**, **also lief `Held.new.staerke` mit einem
+leeren Klassennamen**, und `super` suchte in einer Klasse ohne Namen nach
+einer Oberklasse **und fand keine.** Das ist derselbe Fehler an zwei
+Stellen, **und er wurde erst sichtbar, seit es Objekte gibt:** vorher gab
+es keinen Empfaenger, der eine Klasse traegt und zugleich nicht `self` ist.
+
+**Und der Empfaenger fiel auf die laufende Klasse zurueck, auch wenn er ein
+String war.** `"b" <=> "c"` ist `String#<=>`,
+**und ein Leser, der die laufende Klasse fragt, laesst in `Kachel#<=>` den
+Vergleich wieder `Kachel#<=>` rufen** -- **mit einem String** -- **bis der
+Stapel ueberlief.** Gemessen: `Stack overflow`.
+
+**Und `def <=>(andere)` parste nicht.** `ReadMemberName` erwartete einen
+Namen, **und der Fehler nannte den Operator, nicht die Stelle** -- **also
+wurde jede sortierbare Klasse abgelehnt**, und der Tippfehler sah aus wie
+ein Schreibfehler.
+
+**Und `<=>` ging an eine statische Methode.** `Apply` hat keinen Interpreter
+und **kann keine Skriptmethode rufen** -- **also hatte es fuer ein Objekt nur
+die Antwort nil**, und nil heisst "unvergleichbar". **Ein Spiel, das seine
+eigene Vergleichsregel schreibt, hat sie nie bekommen.**
+
+**Und der Sort verglich die Werte selbst.** Jetzt geht er ueber dieselbe
+Regel, die `<` nimmt, **und die vier Vergleiche fragen auch dieselbe** --
+**ein Leser, der sie einzeln baute, wuerde einem Spiel erlauben, zwei
+Regeln zu schreiben und zwei Reihenfolgen zu bekommen.**
+
+### Und `map`, `each`, `select` -- es gab nur den Host
+
+**`aktoren.map { |a| a.name }` ist der Weg, aus einem Spiel ein Menue zu
+machen**, **und ein Host, der keine Liste von Spielobjekten zum Ablaufen
+hat, hat nichts zum Ablaufen** -- der NullHost schon gar nicht,
+**also haette kein Test zeigen koennen, was ein Menue anzeigt.**
+
+**Und der Block ist das letzte Argument, weil die Sprache ihn dorthin
+legt.** `|x|` bindet den ersten Wert, **und das stimmt zufaellig** -- **und
+falsch, sobald das Spiel zwei Parameter schreibt.**
+
+**Und `each` antwortet die Liste**, nicht nil: `liste.each { |x| x.hp += 1 }`
+liest die Antwort etwa bei jedem zweiten Mal, **und nil wuerde die Kette
+stillschweigend beenden.**
+
+> **Eine Regel wurde einzeln gemessen und dann ENTFERNT, nicht behalten.**
+> "Der Klassenrumpf hat keinen eigenen Feldspeicher" hat die Tests nicht
+> getoetet, **weil `@x` in einem Klassenrumpf in dieser Runtime nicht wieder
+> lesbar ist** -- es gibt kein `class_eval { @x }`. **Der Code war ein
+> No-op und sah aus, als gaebe er eine Antwort**, also ist er weg.
+
+**Und ein Test wurde gegen die Quelle geprueft statt gegen meine
+Annahme.** `class A; @x = 1; attr_reader :x; end` -- **was liest der Leser
+an `A.new`?** Ich habe `rb_attr` in `eval.c` aus Ruby 1.8.1 gelesen: es baut
+den Leser als `NEW_IVAR(attriv)`, **und das liest `@name` vom Empfaenger.**
+**Ein Leser, der das Feld der Klasse laest, haette 0 geantwortet** -- ein
+Spiel, in dem jeder Schauspieler mit dem Wert des Klassenrumpfs beginnt.
+
 **Noch nicht ausgewertet:** `respond_to_missing?`, `binding`,
 `Module`-Methoden (`include?`, `instance_methods`),
-Block-Umbrueche mit Argumenten (`break 1`), `Array#each` mit zwei Werten aus
-dem Host, und `Comparable` (`<=>` zwischen Werten, das Games sortieren).
+Block-Umbrueche mit Argumenten (`break 1`), `ClassVariable` (`@@x`, das der
+Lexer liest und der Interpreter nicht auswertet), `dup`/`clone` mit echter
+Kopie, `is_a?`/`kind_of?`/`instance_of?`, und `Struct`.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

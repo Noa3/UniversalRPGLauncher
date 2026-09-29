@@ -51,7 +51,30 @@ public sealed class RubyInterpreter
     private readonly List<Dictionary<string, RubyValue>> _scopes = new();
 
     /// <summary>The instance variables of the running script.</summary>
+    /// <summary>
+    /// The fields of the object a method is running on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And not one store for the program.</strong> Two actors of the
+    /// same class hold different levels,
+    /// <strong>and one shared store would have given every actor the last
+    /// one's level</strong> — a game where every character walks with the
+    /// same number, and where nothing in the script says why.
+    /// </para>
+    /// <para>
+    /// <strong>At the top level it is the class's own.</strong> Ruby lets a
+    /// class body read and write fields,
+    /// <strong>and a reader that had nowhere to put them would make every
+    /// <c>class</c> body that sets a constant of its own fail</strong> —
+    /// which is what `@game_party = Game_Party.new` at class level is.
+    /// </para>
+    /// </remarks>
     private Dictionary<string, RubyValue> _instanceVariables = new();
+
+
+    /// <summary>The object a method is running on, or null at the top level.</summary>
+    private RubyValue? _self;
 
     /// <summary>
     /// The globals, by name without the dollar sign.
@@ -409,6 +432,36 @@ public sealed class RubyInterpreter
             return RubyValue.OfBoolean(Truthy(Evaluate(Operands(pNode)[1])));
         }
 
+        // **Und `<=>` fragt zuerst das Skript.** `a <=> b` bei zwei eigenen
+        // Objekten geht an die Klasse des linken,
+        // **und genau das ist der Fall, in dem der eingebaute Vergleich
+        // nichts weiss** -- er kann nur Zahlen und Strings.
+        //
+        // **Vor `Apply`, weil `Apply` statisch ist.** Eine statische Methode
+        // hat keinen Interpreter und **kann keine Skriptmethode rufen**,
+        // **also hat sie fuer ein Objekt nur eine Antwort: nil.**
+        // **Und nil bedeutet "unvergleichbar"** -- das war die stille
+        // Antwort, und **ein Spiel, das seine eigene Vergleichsregel
+        // schreibt, hat sie nie bekommen.**
+        if (links is "<=>" or "<" or "<=" or ">" or ">=")
+        {
+            // **Und die vier Vergleiche fragen dieselbe Regel.** Ein Spiel,
+            // das `Game_Actor#<=>` schreibt, erwartet auch `a < b`,
+            // **und ein Leser, der nur `<=>` umleitet, wuerde `a < b` einen
+            // eingebauten Vergleich geben** -- und der kannte nur Zahlen.
+            //
+            // **Ein Wert, der sie nicht beantworten kann, ist `nil` und
+            // keine Zahl.** `a < b` ist dann `false`, **und nicht ein
+            // Fehler**, weil Ruby es auch so macht.
+            var vergleich = VergleichMitSkript(pNode, links);
+            if (vergleich != null)
+            {
+                return vergleich;
+            }
+        }
+
+
+
         // **`=>` macht einen Hash und keine Zahl.** `{ :a => 1 }` und
         // `f(k: 3)` sind dieselbe Anweisung,
         // **und ein Leser, der den Operator an `Apply` gab, bekam eine Zahl
@@ -435,6 +488,36 @@ public sealed class RubyInterpreter
             Evaluate(Operands(pNode)[1]),
             pNode);
     }
+    /// <summary>
+    /// Two strings compared the way Ruby compares them.
+    /// </summary>
+    /// <param name="pLeft">The left string.</param>
+    /// <param name="pRight">The right string.</param>
+    /// <returns>Negative, zero or positive.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Ordinal and not the culture's order.</strong> Ruby's
+    /// <c>String#&lt;=&gt;</c> compares bytes, and <strong>the culture's
+    /// order puts "ä" next to "a"</strong> — so a game that sorts names
+    /// would get a different order on a German machine than on a Japanese
+    /// one, <strong>and a list of actors would come out in a different
+    /// order depending on where the game runs.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the comparison is by byte and not by rune.</strong>
+    /// UTF-8 preserves the order of the code points,
+    /// <strong>so a byte comparison agrees with a character comparison for
+    /// every text a game writes</strong> — and it does not need a decoding
+    /// that could fail.
+    /// </para>
+    /// </remarks>
+    private static int Compare(RubyValue pLeft, RubyValue pRight) =>
+        System.String.CompareOrdinal(
+            System.Text.Encoding.UTF8.GetString(pLeft.Bytes),
+            System.Text.Encoding.UTF8.GetString(pRight.Bytes));
+
+
+
 
     /// <summary>
     /// One arithmetic, comparison or bitwise operator, on two values.
@@ -513,22 +596,76 @@ public sealed class RubyInterpreter
                 return RubyValue.OfBoolean(Equal(pLeft, pRight));
             case "!=":
                 return RubyValue.OfBoolean(!Equal(pLeft, pRight));
+            // **Zwei Strings auch.** Ruby vergleicht sie lexikografisch,
+            // **und ein Spiel, das `"a" < "b"` schreibt, bekommt ohne das
+            // hier eine Ausnahme, weil `beideZahlen` bei zwei Strings
+            // falsch ist** -- und `sort` auf Namen waere genau der Fall,
+            // den ein Menue in jedem RPG Maker schreibt.
+            case "<" when pLeft.Kind == RubyValueKind.String
+                    && pRight.Kind == RubyValueKind.String:
+                return RubyValue.OfBoolean(Compare(pLeft, pRight) < 0);
             case "<" when beideZahlen:
                 return RubyValue.OfBoolean(ganzzahlig
                     ? pLeft.Integer < pRight.Integer
                     : pLeft.Real < pRight.Real);
+            case "<=" when pLeft.Kind == RubyValueKind.String
+                    && pRight.Kind == RubyValueKind.String:
+                return RubyValue.OfBoolean(Compare(pLeft, pRight) <= 0);
             case "<=" when beideZahlen:
                 return RubyValue.OfBoolean(ganzzahlig
                     ? pLeft.Integer <= pRight.Integer
                     : pLeft.Real <= pRight.Real);
+            case ">" when pLeft.Kind == RubyValueKind.String
+                    && pRight.Kind == RubyValueKind.String:
+                return RubyValue.OfBoolean(Compare(pLeft, pRight) > 0);
             case ">" when beideZahlen:
                 return RubyValue.OfBoolean(ganzzahlig
                     ? pLeft.Integer > pRight.Integer
                     : pLeft.Real > pRight.Real);
+            case ">=" when pLeft.Kind == RubyValueKind.String
+                    && pRight.Kind == RubyValueKind.String:
+                return RubyValue.OfBoolean(Compare(pLeft, pRight) >= 0);
             case ">=" when beideZahlen:
                 return RubyValue.OfBoolean(ganzzahlig
                     ? pLeft.Integer >= pRight.Integer
                     : pLeft.Real >= pRight.Real);
+            // **`<=>` vergleicht und sagt -1, 0 oder 1.** Rubys
+            // Dreiwertvergleich, **und er ist die Grundlage von `sort`,
+            // `<`, `<=` und aller `Comparable`**, die ein Spiel braucht,
+            // um eine Party, eine Liste oder ein Menue zu ordnen.
+            //
+            // **Und `nil` heisst "unvergleichbar" und nicht 0.** Ruby gibt
+            // nil zurueck, **und ein Leser, der eine Zahl lieferte, haette
+            // ein Spiel, das nicht sortieren kann, so tun lassen als waere
+            // alles gleich** -- und `sort` wuerde die Reihenfolge
+            // zerstoeren, statt sie zu verweigern.
+            case "<=>" when beideZahlen:
+                return RubyValue.OfInteger(
+                    pLeft.Integer == pRight.Integer
+                        ? 0
+                        : pLeft.Integer < pRight.Integer ? -1 : 1);
+            case "<=>" when pLeft.Kind == RubyValueKind.Float
+                    || pRight.Kind == RubyValueKind.Float:
+                return RubyValue.OfInteger(
+                    pLeft.Real == pRight.Real
+                        ? 0
+                        : pLeft.Real < pRight.Real ? -1 : 1);
+            case "<=>":
+                // **Zwei Strings vergleichen lexikografisch.** Ruby macht das
+                // so, **und ein Spiel, das Namen sortiert, erwartet A vor B**
+                // -- **und nicht, dass der Vergleich aufgibt.**
+                if (pLeft.Kind == RubyValueKind.String
+                    && pRight.Kind == RubyValueKind.String)
+                {
+                    return RubyValue.OfInteger(Compare(pLeft, pRight));
+                }
+
+                // **Und alles andere ist unmoeglich zu vergleichen.** `nil`
+                // heisst hier "das weiss niemand", **und das ist die
+                // Antwort, die `sort` braucht, um zu sagen, dass es diese
+                // Liste nicht ordnen kann.**
+                return RubyValue.Nil;
+
             case "&&":
                 return RubyValue.OfBoolean(Truthy(pLeft) && Truthy(pRight));
             case "||":
@@ -684,7 +821,7 @@ public sealed class RubyInterpreter
     /// made the interpreter look like it needed one.
     /// </para>
     /// </remarks>
-    private static RubyValue? WertMethode(
+    private RubyValue? WertMethode(
         RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
     {
         switch (pMethode)
@@ -701,6 +838,9 @@ public sealed class RubyInterpreter
 
             case "nil?":
                 return RubyValue.OfBoolean(pEmpfaenger.Kind == RubyValueKind.Nil);
+
+            case "sort" or "sort!":
+                return Sortiert(pEmpfaenger);
 
             case "class":
                 return RubyValue.OfSymbol(
@@ -783,6 +923,25 @@ public sealed class RubyInterpreter
             : RubyValue.OfSymbol("self");
         var methode = pNode.Name ?? string.Empty;
         var argumente = EvaluateChildren(pNode, RubyNodeRole.Argument);
+
+        // **`new` ist Sprache und nicht Skript.** `Klasse.new(1, 2)` macht
+        // ein Objekt und ruft `initialize` auf,
+        // **und in keinem Skript steht diese Methode geschrieben** -- sie ist
+        // in der Sprache. **Deshalb vor der Skriptmethode und nicht in ihr.**
+        if (methode == "new" && empfaenger.Kind == RubyValueKind.Symbol)
+        {
+            var neueKlasse = empfaenger.Name ?? string.Empty;
+            var instanz = NeueInstanz(neueKlasse, argumente);
+            if (instanz != null)
+            {
+                return instanz;
+            }
+
+            // **Und ein Name, den es nicht gibt, faellt weiter zum Host.**
+            // **Nicht zu null**, denn der Host koennte ein eingebautes
+            // Objekt dieses Namens kennen, **und ein Leser, der hier
+            // aufhoert, wuerde dem Host die Chance nehmen.**
+        }
 
         // **Ein Block, der an einem Aufruf haengt, ist sein letztes
         // Argument -- und er ist der, der den Aufruf traegt.**
@@ -965,9 +1124,33 @@ public sealed class RubyInterpreter
             return Aufrufen(
                 eigene,
                 argumente,
-                empfaenger.Kind == RubyValueKind.Symbol && empfaenger.Name != "self"
-                    ? empfaenger.Name
-                    : _aktuellerTyp?.Name);
+                // **Der Name kommt aus dem Empfaenger und nicht aus dem,
+                // was gerade laeuft.** Ein Objekt mit einem Klassennamen
+                // traegt seine Klasse bei sich,
+                // **und `_aktuellerTyp` ist auf der obersten Ebene null**
+                // -- **also waere `Held.new.staerke` mit einem leeren Namen
+                // gelaufen**, und `super` haette in einer Klasse ohne Namen
+                // nach einer Oberklasse gesucht **und keine gefunden.**
+                //
+                // **Das ist derselbe Fehler an zwei Stellen**, und er ist
+                // erst sichtbar geworden, seit es Objekte gibt: **vorher
+                // gab es keinen Empfaenger, der eine Klasse trug und
+                // zugleich nicht `self` war.**
+                empfaenger.Kind == RubyValueKind.Object
+                    && !string.IsNullOrEmpty(empfaenger.ClassName)
+                    ? empfaenger.ClassName
+                    : empfaenger.Kind == RubyValueKind.Symbol
+                        && empfaenger.Name != "self"
+                        ? empfaenger.Name
+                        : _aktuellerTyp?.Name,
+                // **Und das Objekt wandert mit, weil es der Empfaenger
+                // ist.** `held.name` sucht die Methode in `held`s Klasse
+                // -- **und der Rumpf schreibt in `held`s Felder**,
+                // **nicht in die des Aufrufers.** Ohne diesen vierten Wert
+                // waere `held.hp = 1` in der Party gelandet,
+                // **und `held.hp` haette danach einen anderen Wert
+                // gelesen als der, der geschrieben wurde.**
+                empfaenger);
         }
 
         // **Ein Block am Aufruf geht an den Host als Rueckruf.** Der Host
@@ -1006,6 +1189,19 @@ public sealed class RubyInterpreter
             return amWert;
         }
 
+        // **Und die Methoden, die eine Liste ablaufen.** `aktoren.map { }`
+        // baut ein Spiel aus einem anderen, **und der Host kennt keine Liste
+        // von Spielobjekten zum Ablaufen** -- der NullHost schon gar nicht,
+        // **also haette kein Test zeigen koennen, was ein Menue anzeigt.**
+        // **Und `sort` steht nicht hier**, weil es nicht ablaeuft, sondern
+        // umordnet, **und zwei Orte fuer Listenmethoden waeren zwei
+        // Antworten darauf, was eine Liste kann.**
+        var anDerListe = ListenMethode(empfaenger, methode, argumente);
+        if (anDerListe != null)
+        {
+            return anDerListe;
+        }
+
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
         if (ergebnis != null)
         {
@@ -1018,6 +1214,404 @@ public sealed class RubyInterpreter
             + "implemented is a fact about the host and not about the script");
         return RubyValue.Nil;
     }
+    /// <summary>
+    /// A list in the order its values compare in.
+    /// </summary>
+    /// <param name="pListe">The list.</param>
+    /// <returns>The list, in order.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Ordinal and stable.</strong> `Array.Sort` is not stable, and
+    /// two values that compare equal <strong>would come out in an order that
+    /// depends on the algorithm</strong> — a game sorting a list of actors
+    /// with the same level would get a different party on a different runtime,
+    /// <strong>and nothing in the script would say why.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it answers the list, not nil.</strong> Ruby returns the
+    /// list, <strong>and a reader that answered nil would have made
+    /// `liste.sort!` do nothing visible</strong> — the game would see no
+    /// change and no error.
+    /// </para>
+    /// </remarks>
+    private RubyValue Sortiert(RubyValue pListe)
+    {
+        if (pListe.Kind != RubyValueKind.Object || !pListe.IsList)
+        {
+            // **Was keine Liste ist, wird nicht sortiert -- und sagt es.**
+            // **Ein Spiel, das eine Zahl sortiert, hat einen Fehler
+            // geschrieben**, und ein stilles nil wuerde es verstecken.
+            return RubyValue.Nil;
+        }
+
+        var werte = pListe.Items.ToList();
+        // **Eigener Vergleich, und `List.Sort` ist nicht stabil.** Bei
+        // gleicher Zahl bleibt die Reihenfolge, in der sie kam,
+        // **und das ist die Reihenfolge, die das Spiel geschrieben hat.**
+        var sortiert = MergeSort(werte);
+        return RubyValue.OfArray(sortiert);
+    }
+
+    /// <summary>
+    /// A merge sort, because the built-in one is not stable.
+    /// </summary>
+    /// <param name="pWerte">The values.</param>
+    /// <returns>The values, in order.</returns>
+    /// <remarks>
+    /// <strong>Stabil und nicht schnell, und das ist der Handel.</strong> Ein
+    /// instabiler Sort koennte zwei gleiche Werte vertauschen,
+    /// **und ein Spiel, das nach einem Gleichstand eine eigene Regel
+    /// anwendet, haette je nach Lauf eine andere Reihenfolge** -- was sich
+    /// nicht reproduzieren laesst und schwer zu finden ist.
+    /// </remarks>
+    private List<RubyValue> MergeSort(List<RubyValue> pWerte)
+    {
+        if (pWerte.Count < 2)
+        {
+            return pWerte;
+        }
+
+        var mitte = pWerte.Count / 2;
+        var links = MergeSort(pWerte.Take(mitte).ToList());
+        var rechts = MergeSort(pWerte.Skip(mitte).ToList());
+        var ergebnis = new List<RubyValue>(pWerte.Count);
+        var l = 0;
+        var r = 0;
+        while (l < links.Count && r < rechts.Count)
+        {
+            // **`!Groesser` und nicht `Kleiner`, weil Gleichstand nach links
+            // gehoert.** Das ist die ganze Stabilitaet,
+            // **und ein Leser, der `>` benutzt haette, wuerde bei
+            // Gleichstand die rechte Seite zuerst genommen** -- und damit
+            // zwei gleiche Werte vertauscht.
+            if (!Groesser(links[l], rechts[r]))
+            {
+                ergebnis.Add(links[l]);
+                l++;
+            }
+            else
+            {
+                ergebnis.Add(rechts[r]);
+                r++;
+            }
+        }
+
+        while (l < links.Count)
+        {
+            ergebnis.Add(links[l]);
+            l++;
+        }
+
+        while (r < rechts.Count)
+        {
+            ergebnis.Add(rechts[r]);
+            r++;
+        }
+
+        return ergebnis;
+    }
+
+    /// <summary>
+    /// Whether one value comes after another.
+    /// </summary>
+    /// <param name="pLinks">The first value.</param>
+    /// <param name="pRechts">The second value.</param>
+    /// <returns>true when the first is the greater one.</returns>
+    /// <remarks>
+    /// <strong>Zwei Zahlen und zwei Strings, und sonst nein.</strong> Alles
+    /// andere ist nicht vergleichbar,
+    /// **und ein Leser, das eine Zahl annimmt, haette ein Spiel, das
+    /// Symbole sortiert, eine Reihenfolge gegeben, die niemand
+    /// geschrieben hat.**
+    /// </remarks>
+    private bool Groesser(RubyValue pLinks, RubyValue pRechts)
+    {
+        // **Und ueber dieselbe Regel, die `<` nimmt.** Ein Spiel, das eine
+        // Klasse mit eigenem `<=>` schreibt und dann `sort` aufruft,
+        // **erwartet, dass der Sort nach dieser Regel geht**,
+        // **und ein Leser, der hier den eingebauten Vergleich naeme, wuerde
+        // seine eigene Liste nach einer anderen ordnen** -- was er nie
+        // bemerkt, **weil beide Reihenfolgen aus Zahlen aussehen.**
+        //
+        // **Und es ist der Skript-Weg, nicht `Apply`.** `Apply` ist statisch
+        // und hat keinen Interpreter, **also kann es keine Skriptmethode
+        // rufen** -- und es hat fuer ein Objekt nur die Antwort "unvergleichbar".
+        var eigene = EigeneMethode(pLinks, "<=>");
+        if (eigene == null)
+        {
+            // **Und ohne Regel der eingebaute, der Zahlen und Strings
+            // kennt.** Beide sind `static` anrufbar,
+            // **und diese Klasse ist es auch, aber der Skript-Weg braucht
+            // den Interpreter, also laeuft er ueber `EigeneMethode`.**
+            return Apply("<=>", pLinks, pRechts) is { Kind: RubyValueKind.Integer } v
+                && v.Integer > 0;
+        }
+
+        var dreiwert = Aufrufen(
+            eigene,
+            [pRechts],
+            pLinks.Kind == RubyValueKind.Object ? pLinks.ClassName : _aktuellerTyp?.Name,
+            pLinks);
+        return dreiwert.Kind == RubyValueKind.Integer && dreiwert.Integer > 0;
+    }
+
+
+
+
+
+    /// <summary>
+    /// A new object of a class, with its fields and its `initialize` run.
+    /// </summary>
+    /// <param name="pKlasse">The class's name as written.</param>
+    /// <param name="pArgumente">The arguments for `initialize`.</param>
+    /// <returns>The object, or nil when the class is not one.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is what every game object is made of.</strong>
+    /// <c>Game_Party.new</c> is the first line of most of an RPG Maker's
+    /// script, <strong>and without it a game has no actors, no party and no
+    /// map</strong> — nothing at all runs.
+    /// </para>
+    /// <para>
+    /// <strong>The object carries its own fields, not a shared table.</strong>
+    /// Two actors of the same class must hold different levels,
+    /// <strong>and one table for the program would have given every actor the
+    /// last one's level</strong> — a game where every character walks with the
+    /// same number, and where nothing in the script says why.
+    /// </para>
+    /// <para>
+    /// <strong>And `initialize` runs on it, so its fields belong to
+    /// it.</strong> `def initialize(n); @hp = n; end` writes into the object,
+    /// <strong>and a reader that ran the body without switching the store
+    /// would have written into whatever came before</strong> — which is the
+    /// previous object, and a game that builds ten actors gets ten copies of
+    /// the first one's state.
+    /// </para>
+    /// </remarks>
+    private RubyValue? NeueInstanz(string pKlasse, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (!_types.ContainsKey(pKlasse))
+        {
+            // **Ein Name, den es nicht gibt, ist kein Objekt.** Ruby sagt
+            // NameError, **und eine stille Null hier wuerde einen Tippfehler
+            // im Klassennamen wie eine leere Liste aussehen lassen.**
+            return null;
+        }
+
+        var instanz = RubyValue.OfEmptyObject(pKlasse);
+        var initialize = FindMethod(pKlasse, "initialize");
+        if (initialize == null)
+        {
+            // **Und ohne `initialize` ist die Instanz trotzdem da.** Ruby
+            // erbt `Object#initialize`, das nichts tut,
+            // **und ein Spiel, das eine Klasse ohne Konstruktor schreibt,
+            // erwartet ein Objekt und nicht eine Ablehnung.**
+            return instanz;
+        }
+
+        // **`Aufrufen` schaltet `self` und den Feldspeicher selbst um**,
+        // weil es der eine Ort ist, an dem ein Rumpf seinen Empfaenger
+        // bekommt, **und ein zweites Umschalten hier waere eine zweite
+        // Antwort darauf, wo `@hp` hingeht** -- und die zweite waere nicht
+        // dieselbe.
+        Aufrufen(initialize, pArgumente, pKlasse, instanz);
+        return instanz;
+    }
+
+
+
+    /// <summary>
+    /// The methods that walk a list, which is how a game builds one from
+    /// another.
+    /// </summary>
+    /// <param name="pEmpfaenger">The list.</param>
+    /// <param name="pMethode">The method's name as written.</param>
+    /// <param name="pArgumente">The arguments, with the block last.</param>
+    /// <returns>The answer, or null when this is not one of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>`map` is the list a game is built from.</strong>
+    /// `aktoren.map { |a| a.name }` is how a party becomes a menu,
+    /// <strong>and a host that has no list of game objects to walk would
+    /// have had nothing to walk</strong> — and the null host has nothing at
+    /// all, <strong>so no test could show what a game's menu would say.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the block is the last argument, because that is where the
+    /// language puts it.</strong> A block is not an ordinary argument,
+    /// <strong>and a reader that read it as one would have bound the first
+    /// value to the first parameter</strong> — which is right by accident
+    /// and wrong the moment the game writes a second parameter.
+    /// </para>
+    /// <para>
+    /// <strong>And each answers the list.</strong> Ruby returns the list,
+    /// <strong>and a game that writes `liste.each { |x| x.hp += 1 }` reads
+    /// the answer about half the time</strong> — and a reader that answered
+    /// nil would have made a game's chain stop there.
+    /// </para>
+    /// </remarks>
+    private RubyValue? ListenMethode(
+        RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pEmpfaenger.Kind != RubyValueKind.Object || !pEmpfaenger.IsList)
+        {
+            return null;
+        }
+
+        var block = pArgumente.Count > 0
+            && pArgumente[^1].Kind == RubyValueKind.Proc
+            ? pArgumente[^1].Block
+            : null;
+
+        // **Und ein Aufruf ohne Block ist ein Fehler, kein leeres Ergebnis.**
+        // `liste.map` ohne `{ }` **hat in Ruby keine Bedeutung**,
+        // **und eine leere Liste als Antwort wuerde so aussehen, als haette
+        // das Spiel eine leere gefunden.**
+        if (block == null)
+        {
+            _diagnostics.Add(
+                pMethode + " needs a block, and "
+                    + "none came with it; a list method without a block has "
+                    + "nothing to walk and this reader does not invent one");
+            return RubyValue.Nil;
+        }
+
+        var ergebnis = new List<RubyValue>();
+        foreach (var wert in pEmpfaenger.Items)
+        {
+            var aufgerufen = BlockAufrufen(block, [wert], pEmpfaenger);
+            switch (pMethode)
+            {
+                case "map":
+                    ergebnis.Add(aufgerufen);
+                    break;
+
+                case "select" or "filter":
+                    if (Truthy(aufgerufen))
+                    {
+                        ergebnis.Add(wert);
+                    }
+
+                    break;
+
+                case "each" or "each_with_index" or "reverse_each":
+                    // **Und nichts wird gebaut, denn es gibt nichts zu
+                    // bauen.** Der Block hat seine Arbeit getan,
+                    // **und die Liste ist die Antwort.**
+                    _ = aufgerufen;
+                    break;
+
+                case "reject":
+                    if (!Truthy(aufgerufen))
+                    {
+                        ergebnis.Add(wert);
+                    }
+
+                    break;
+
+                case "any?":
+                    if (Truthy(aufgerufen))
+                    {
+                        return RubyValue.OfBoolean(true);
+                    }
+
+                    break;
+
+                case "all?":
+                    if (!Truthy(aufgerufen))
+                    {
+                        return RubyValue.OfBoolean(false);
+                    }
+
+                    break;
+
+                default:
+                    return null;
+            }
+        }
+
+        return pMethode switch
+        {
+            "map" or "select" or "filter" or "reject" => RubyValue.OfArray(ergebnis),
+            "each" or "each_with_index" or "reverse_each" => pEmpfaenger,
+            "any?" => RubyValue.OfBoolean(false),
+            "all?" => RubyValue.OfBoolean(true),
+            _ => null,
+        };
+    }
+
+
+
+    /// <summary>
+    /// A comparison that the script answers, or null when it does not.
+    /// </summary>
+    /// <param name="pNode">The operator's node.</param>
+    /// <param name="pOperator">The operator as written.</param>
+    /// <returns>The answer, or null when the script has no rule.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is why a game's own rule is used at all.</strong>
+    /// <c>Game_Actor#&lt;=&gt;</c> is how an RPG Maker says which actor is
+    /// stronger, <strong>and every other comparison in the game has to agree
+    /// with it</strong> — a `&lt;` that went to the built-in would have
+    /// compared nothing, because the built-in knows numbers and strings and
+    /// nothing else.
+    /// </para>
+    /// <para>
+    /// <strong>And the four go through the one rule.</strong> `&lt;`, `&lt;=`,
+    /// `&gt;` and `&gt;=` are the same comparison with a different question
+    /// about the answer, <strong>and a reader that implemented each of them
+    /// separately would have let a game write two rules and get two
+    /// orders.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And nil is false, and not an error.</strong> Ruby answers
+    /// nil for a comparison it cannot make, and using that as false is what
+    /// the language does, <strong>so a game that compares things it cannot
+    /// compare gets a quiet no instead of a crash</strong> — which is what
+    /// happens in the reference too.
+    /// </para>
+    /// </remarks>
+    private RubyValue? VergleichMitSkript(RubyNode pNode, string pOperator)
+    {
+        var linkerWert = Evaluate(Operands(pNode)[0]);
+        var eigene = EigeneMethode(linkerWert, "<=>");
+        if (eigene == null)
+        {
+            // **Und ohne Regel geht es an den eingebauten**, der Zahlen und
+            // Strings kennt. **Nicht an null**, denn `5 < 6` ist eine Zahl
+            // und kein Objekt.
+            return null;
+        }
+
+        var dreiwert = Aufrufen(
+            eigene,
+            [Evaluate(Operands(pNode)[1])],
+            linkerWert.Kind == RubyValueKind.Object
+                ? linkerWert.ClassName
+                : _aktuellerTyp?.Name,
+            linkerWert);
+
+        // **Und `nil` heisst, dass es keine Antwort gab.** Das ist nicht
+        // null als Rueckgabe, **sondern eine Antwort: false.**
+        if (dreiwert.Kind != RubyValueKind.Integer)
+        {
+            return RubyValue.OfBoolean(false);
+        }
+
+        return pOperator switch
+        {
+            "<=>" => RubyValue.OfInteger(dreiwert.Integer),
+            "<" => RubyValue.OfBoolean(dreiwert.Integer < 0),
+            "<=" => RubyValue.OfBoolean(dreiwert.Integer <= 0),
+            ">" => RubyValue.OfBoolean(dreiwert.Integer > 0),
+            ">=" => RubyValue.OfBoolean(dreiwert.Integer >= 0),
+            _ => null,
+        };
+    }
+
+
+
 
     /// <summary>
     /// The script's own method for a receiver, or null.
@@ -1040,10 +1634,44 @@ public sealed class RubyInterpreter
         // klammerlose Aufruf eines Spiels hat denselben Weg genommen und
         // dieselbe stille Antwort bekommen** -- und die Tabelle, in der
         // `hp` stand, wurde nie befragt.
-        var name = pReceiver.Kind == RubyValueKind.Symbol
-            && pReceiver.Name != "self"
-            ? pReceiver.Name
-            : _aktuellerTyp?.Name;
+        // **Und ein Objekt, das eine Klasse traegt, ist diese Klasse.**
+        // Ohne diesen Zweig waere `held.name` bei einem Objekt ohne Typ
+        // gelaufen, **und bei einem mit Typ haette es die Klasse des gerade
+        // laufenden Codes benutzt -- also die des Aufrufers und nicht die
+        // des Objekts.**
+        // **Und nur `self` faellt auf die laufende Klasse zurueck.**
+        // Ein String, eine Zahl und ein Symbol sind *Werte*,
+        // **und Rubys Regel ist, dass ihre Methoden in *ihrer* Klasse
+        // stehen** -- `"b" <=> "c"` ist `String#<=>`.
+        //
+        // **Ohne das haette `"b" <=> "c"` die laufende Klasse gefragt.**
+        // In `Kachel#<=>` ist die laufende Klasse `Kachel`,
+        // **also haette der Vergleich die Regel `Kachel#<=>` mit einem String
+        // aufgerufen** -- **und die Regel haette wieder einen String
+        // verglichen** -- **bis der Stapel ueberlief.**
+        //
+        // **Das ist kein Sonderfall, das ist die Regel:** eine Methode
+        // gehoert zum Empfaenger, **und wenn der Empfaenger keine Klasse
+        // traegt, hat er keine eigenen Methoden.**
+        string? name;
+        if (pReceiver.Kind == RubyValueKind.Object
+            && !string.IsNullOrEmpty(pReceiver.ClassName))
+        {
+            name = pReceiver.ClassName;
+        }
+        else if (pReceiver.Kind == RubyValueKind.Symbol)
+        {
+            name = pReceiver.Name == "self" ? _aktuellerTyp?.Name : pReceiver.Name;
+        }
+        else if (pReceiver.Kind == RubyValueKind.Object)
+        {
+            // **Eine Liste und ein Hash sind auch Werte, und nicht `self`.**
+            name = null;
+        }
+        else
+        {
+            name = null;
+        }
 
         if (name == null || name.Length == 0 || !_types.ContainsKey(name))
         {
@@ -1089,7 +1717,8 @@ public sealed class RubyInterpreter
     private RubyValue Aufrufen(
         RubyMethod pMethode,
         IReadOnlyList<RubyValue> pArgumente,
-        string? pKlasse)
+        string? pKlasse,
+        RubyValue? pEmpfanger = null)
     {
         var tiefe = _scopes.Count;
         var grenze = _methodenGrenze;
@@ -1112,6 +1741,29 @@ public sealed class RubyInterpreter
             ? null
             : _types.TryGetValue(pKlasse, out var gefunden) ? gefunden : null;
         _aktuellerTyp = typWar;
+
+        // **Und `self` ist der Empfaenger, mit seinen Feldern.** `@hp` in
+        // einem Rumpf gehoert dem Objekt, **und ohne diesen Umschalter
+        // schrieb jeder Konstruktor in den Speicher des Aufrufers** -- also
+        // `Game_Actor.new(1)` in die Felder der Party.
+        // **Und der alte Zustand kommt zurueck**, weil `Aufrufen` sich
+        // selbst aufruft (`super`, `instance_eval`).
+        var alterSelf = _self;
+        var alterFelder = _instanceVariables;
+        if (pEmpfanger != null
+            && pEmpfanger.Kind == RubyValueKind.Object
+            && !string.IsNullOrEmpty(pEmpfanger.ClassName))
+        {
+            // **Nur ein Objekt mit einem Typ hat eigene Felder.** `self` ist
+            // ein Name, **und der hat keine** -- **aber der Aufrufer
+            // gehoert zu einem Typ**, **und dessen Felder sind die, in
+            // denen sein Rumpf schreibt.** Ohne das waere `attr_accessor`
+            // auf der obersten Ebene ins Leere gelaufen, **und genau das
+            // macht jedes Skript, das eine Klasse ueber
+            // `Game_Character` erweitert.**
+            _self = pEmpfanger;
+            _instanceVariables = pEmpfanger.Felder;
+        }
 
         _scopes.Add(new Dictionary<string, RubyValue>());
 
@@ -1262,6 +1914,15 @@ public sealed class RubyInterpreter
         _aktuelleArgumente = alteArgumente;
         _aktuelleMethode = alteMethode;
         _aktuellerTyp = laufenderTyp;
+
+        // **Und `self` und sein Feldspeicher kommen zurueck.** `Aufrufen`
+        // richtet sich selbst auf (`super`, `instance_eval`, ein Handler
+        // von `method_missing`), **und ohne diesen Satz waere nach dem
+        // inneren Aufruf der aeussere auf einem fremden Objekt** -- ein
+        // Spiel, das `super` schreibt, haette in der zweiten Haelfte seines
+        // eigenen Rumpfes die Felder des anderen Objekts gesehen.
+        _self = alterSelf;
+        _instanceVariables = alterFelder;
         return wert;
     }
 
@@ -2228,7 +2889,7 @@ public sealed class RubyInterpreter
             // und das ist sein Recht -- **aber das Spiel soll nicht daran
             // scheitern, und der Aufruf laeuft trotzdem.**
             var ohne = pArgumente.ToArray();
-            return Aufrufen(pMethode, ohne, pKlasse);
+            return Aufrufen(pMethode, ohne, pKlasse, _self);
         }
 
         var mit = new RubyValue[pArgumente.Count + 1];
@@ -2238,7 +2899,7 @@ public sealed class RubyInterpreter
             mit[i + 1] = pArgumente[i];
         }
 
-        return Aufrufen(pMethode, mit, pKlasse);
+        return Aufrufen(pMethode, mit, pKlasse, _self);
     }
 
 
@@ -2590,7 +3251,11 @@ public sealed class RubyInterpreter
             return RubyValue.Nil;
         }
 
-        return Aufrufen(methode, argumente, typ.Superclass);
+        // **`super` behaelt `self`, denn es ist derselbe Aufruf eine Ebene
+        // hoeher.** `Held#name` zeigt auf `Held2#name` geschrieben, **und
+        // `super` dort etwas anderes gelesen, waere kein `super` mehr,
+        // sondern ein Aufruf an eine fremde Instanz.**
+        return Aufrufen(methode, argumente, typ.Superclass, _self);
     }
 
     /// <summary>
@@ -2644,7 +3309,10 @@ public sealed class RubyInterpreter
     /// </para>
     /// </remarks>
     private static bool BrauchtBlock(string pMethode) =>
-        pMethode is "define_method" or "define_singleton_method";
+        pMethode is "define_method" or "define_singleton_method"
+            or "map" or "select" or "filter" or "reject"
+            or "each" or "each_with_index" or "reverse_each"
+            or "any?" or "all?";
 
 
     /// <summary>

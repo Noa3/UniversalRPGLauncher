@@ -162,6 +162,34 @@ public sealed class RubyValue : IEquatable<RubyValue>
     public string? ClassName { get; private init; }
 
     /// <summary>
+    /// The fields a script wrote on this object, by name.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And not the members a host owns.</strong> A host that hands
+    /// over a game object has its own data in <c>Members</c>,
+    /// <strong>and a script that wrote a field of the same name must not
+    /// change it</strong> — so the two tables are apart and neither one
+    /// hides the other.
+    /// </para>
+    /// <para>
+    /// <strong>One per object, and not one for the program.</strong> Two
+    /// actors of the same class hold different levels,
+    /// <strong>and one shared table would have given every actor the last
+    /// one's level</strong> — a game where every character walks with the
+    /// same number, and where nothing in the script says why.
+    /// </para>
+    /// <para>
+    /// <strong>And a dictionary, so a field is found by name.</strong> A
+    /// list would make finding one a search,
+    /// <strong>and a game that reads a field in a loop would pay for the
+    /// search every time.</strong>
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, RubyValue> Felder { get; private init; } =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Whether this value is a list rather than a whole value.
     /// </summary>
     /// <remarks>

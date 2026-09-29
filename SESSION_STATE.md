@@ -9349,3 +9349,43 @@ ihr die eigene wegnehmen.**
 kein anderes Spiel liest.**
 
 `TestRubyInterpreter: 148/148`, `All 1706 tests passed`, Mutationen 5 von 5.
+
+## 2026-09-29 — `new`, Felder pro Objekt, `<=>`, und `map`
+
+**Es gab kein `new`.** `Game_Party.new` ist die erste Zeile fast jedes
+RPG-Maker-Skripts, **und ohne sie hat ein Spiel keine Schauspieler, keine Party
+und keine Karte.**
+
+**Und die Felder waren ein Speicher fuer das ganze Programm.** **Jeder
+Schauspieler haette den Wert des letzten gehabt** -- ein Spiel, in dem jede
+Figur mit derselben Zahl geht.
+
+**Und `EigeneMethode` fragte die falsche Klasse:** sie nahm den Namen aus dem,
+was gerade laeuft, **und nicht aus dem Empfaenger** -- **auf der obersten
+Ebene ist das null**, **also lief `Held.new.staerke` mit leerem Namen**, und
+`super` fand keine Oberklasse. **Derselbe Fehler an zwei Stellen, sichtbar
+geworden erst, seit es Objekte gibt.**
+
+**Und der Empfaenger fiel auf die laufende Klasse zurueck, auch wenn er ein
+String war** -- `"b" <=> "c"` in `Kachel#<=>` rief wieder `Kachel#<=>` mit
+einem String, **bis der Stapel ueberlief.** Gemessen: `Stack overflow`.
+
+**Und `def <=>(andere)` parste nicht** -- `ReadMemberName` erwartete einen
+Namen, **und der Fehler nannte den Operator statt der Stelle.**
+
+**Und `<=>` ging an die statische `Apply`** -- **die hat keinen Interpreter
+und kann keine Skriptmethode rufen**, **also nur nil fuer ein Objekt.**
+
+**Und `map`/`each`/`select` gab es nur beim Host** -- **also konnte kein Test
+zeigen, was ein Menue anzeigt.**
+
+**Eine Regel wurde einzeln gemessen und ENTFERNT:** der Feldspeicher des
+Klassenrumpfs war ein No-op, **weil `@x` dort in dieser Runtime nicht wieder
+lesbar ist.** Code, der aussieht, als gaebe er eine Antwort, und keine gibt,
+ist schlimmer als keiner.
+
+**Ein Test wurde gegen die Quelle geprueft:** `rb_attr` in `eval.c` aus Ruby
+1.8.1 baut den Leser als `NEW_IVAR(attriv)` -- **er liest `@name` vom
+Empfaenger, nicht von der Klasse.**
+
+`TestRubyInterpreter: 163/163`, `All 1721 tests passed`, Mutationen 5 von 5.

@@ -557,6 +557,24 @@ public sealed class RubyParser
             _index++;
             return token.Text;
         }
+
+        // **Und die Vergleichs-Operatoren, denn die sind Namen.**
+        // `def <=>(andere)` ist, was ein Spiel fuer eine sortierbare Klasse
+        // schreibt, **und der Leser hat hier keinen Operator erwartet** --
+        // **also wurde jede sortierbare Klasse in einem Syntaxfehler
+        // abgelehnt, und der Fehler nannte den Operator, nicht die Stelle.**
+        //
+        // **Nur die vier, die Ruby als Methodennamen kennt.** `+` und `[]`
+        // sind auch Namen, **aber die kommen in einem anderen Zweig und
+        // werden hier nicht geraten** -- **ein Leser, der alles zulaesst,
+        // macht aus `def ` + einem Tippfehler eine Methode**, die es nicht gibt.
+        if (token.Kind == RubyTokenKind.Operator
+            && token.Text is "<=>" or "==" or "===" or "<<" or ">>")
+        {
+            _index++;
+            return token.Text;
+        }
+
         throw new RubyParseException(
             $"A member name was expected at offset {token.Offset}, but '{token.Text}' is there.",
             token.Line);

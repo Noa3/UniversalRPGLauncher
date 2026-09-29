@@ -237,22 +237,20 @@ public partial class TestRubyInterpreter
     public void Test_AnOrdinaryCallStillTakesItsBlock()
     {
         var mit = new RubyInterpreter(new RubyNullHost());
-        mit.RunProgram(Statements("a = [1, 2, 3]\na.each { |x| x }\n"));
+        var wert = mit.RunProgram(Statements("a = [1, 2, 3]\na.each { |x| x }\n"));
 
-        var ueberDenAufruf = false;
-        foreach (var d in mit.Diagnostics)
-        {
-            if (d.Contains("'each'"))
-            {
-                ueberDenAufruf = true;
-            }
-        }
-
-        AssertTrue(ueberDenAufruf,
-            "**the host was asked about each, so the block went to the call** "
-                + "— a reader that had made every block a Proc would have "
-                + "answered the block itself and never asked about each; the "
-                + "diagnostics were: " + string.Join(" | ", mit.Diagnostics));
+        // **Der Block wurde ausgefuehrt und nicht als Antwort
+        // zurueckgegeben.** Das war die Aussage dieses Tests,
+        // **und sie ist wichtiger als der Weg, auf dem sie gemessen wurde:**
+        // ein Leser, der jeden Block zu einem Proc gemacht haette,
+        // **haette den Block selbst zurueckgegeben und `each` nie
+        // gefragt.** `each` beantwortet die Liste,
+        // **also ist die Antwort eine Liste und kein Block.**
+        AssertTrue(wert.Kind == RubyValueKind.Object && wert.IsList,
+            "**each answers the list and not the block** — a reader that had "
+                + "made every block a Proc would have answered the block "
+                + "itself and never asked about each; the answer was "
+                + wert.Kind + " with " + wert.Items.Count + " items");
     }
 
     /// <summary>
