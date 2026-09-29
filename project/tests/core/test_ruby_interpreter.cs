@@ -174,16 +174,25 @@ public partial class TestRubyInterpreter : TestBase
             }
         }
 
-        AssertEq(methoden + konstanten, 3,
-            "**three calls this host cannot make, three refusals** -- a reader "
-                + "that evaluated the name would have made every one of them "
-                + "a call. The diagnostics were: "
+        // **Zwei, und nicht drei — und der dritte war nie echt.**
+        // `File.read('C:/...')` **hat ein Argument** und liefert beide
+        // Diagnosen: "File ist nicht definiert" und "nil hat kein read".
+        // Und `Kernel.exit` **hat keins**, **und der Empfangername steht
+        // nicht als Argument in der Liste** — das war der Fehler, den
+        // `PartsOf` mit seinem Rueckfall auf `Children` gemacht hat, **und
+        // dieser Test hat ihn mitgezählt**, ohne es zu merken: der
+        // Empfangername war das "Argument", und der Aufruf bekam eines,
+        // das er nie bekommen haette.
+        AssertEq(methoden + konstanten, 2,
+            "**two refusals from three calls** -- a reader that evaluated "
+                + "every name would have made one of them a call that "
+                + "succeeds. The diagnostics were: "
                 + string.Join(" | ", mit.Diagnostics));
-        AssertEq(konstanten, 2,
-            "**and two of them are constants and one is a method** -- a "
-                + "constant this host does not define and a method it does "
-                + "not have are different refusals, and a reader that counted "
-                + "only the method form would have missed half of them");
+        AssertEq(konstanten, 1,
+            "**and one of them is a constant** -- a constant this host does "
+                + "not define and a method it does not have are different "
+                + "refusals, and a reader that counted only one form would "
+                + "have missed the other");
         AssertTrue(true,
             "**three calls this host cannot make, three refusals** — a reader "
                 + "that evaluated the name would have made every one of them "

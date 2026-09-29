@@ -812,6 +812,19 @@ public sealed class RubyInterpreter
             }
         }
 
+        if (Environment.GetEnvironmentVariable("URPG_TRACE_CALL") == "1")
+        {
+            System.Console.WriteLine(
+                $"CALL methode={methode} kind={pNode.Kind} "
+                + $"empfaenger={empfaenger.Kind}:{empfaenger.Name} "
+                + $"argumente={argumente.Count} "
+                + "[" + string.Join(",", argumente.Select(a => a.Kind.ToString()))
+                + "] "
+                + $"kinder={pNode.Children.Count} "
+                + $"rollen={pNode.Role_Children?.Count.ToString() ?? "-"} "
+                + $"typen={_aktuellerTyp?.Name ?? "-"}");
+        }
+
         var eigene = EigeneMethode(empfaenger, methode);
         if (eigene != null)
         {
@@ -3226,6 +3239,23 @@ public sealed class RubyInterpreter
         if (liste.Count > 0)
         {
             return liste;
+        }
+
+        // **Der Rueckfall gilt nur fuer einen Knoten ohne Rollen ueberhaupt.**
+        // Ein Aufruf traegt **immer** eine `Receiver`-Rolle, **und wenn er
+        // keine Argumente hat, gibt es keine `Argument`-Rolle** --
+        // `[A.m()]` hatte eine `Receiver`-Rolle und ein Kind, **und der
+        // Rueckfall auf `Children` lieferte den Empfaenger als Argument.**
+        //
+        // **Das hiess:** `def m(x = 9)` bekam `x = A`, **der Rumpf las `A`,
+        // und der Aufruf antwortete mit dem Empfaenger statt mit dem
+        // Rumpf.** Gemessen am 2026-09-29 mit `URPG_TRACE_CALL`:
+        // `argumente=1 [Symbol] kinder=1 rollen=1` -- **ein Argument, ein
+        // Kind, eine Rolle.** Ein Aufruf ohne Argumente **hat null
+        // Argumente**, und das ist der ganze Unterschied.
+        if (pNode.Role_Children != null && pNode.Role_Children.Count > 0)
+        {
+            return [];
         }
 
         // **Ohne Rollen bleibt die Quellordnung** -- und das ist die

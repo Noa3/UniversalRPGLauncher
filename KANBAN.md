@@ -3731,14 +3731,26 @@ ueberschrieben**, und `m(1, 3)` haette `b` als Zwei bekommen.
 **Und die Vorgaben liegen nach Namen, nicht nach Position.** Eine Liste
 waere eine Stelle mehr, an der sie auseinanderlaufen koennten.
 
-**Und ein Aufruf ohne Argument erreicht den Rumpf nicht.** `A.m()` gibt
-`Symbol:A` zurueck -- **den Empfaenger**, wenn der Rumpf den Parameter liest;
-mit festem Rumpf oder mit einem Argument antwortet dieselbe Methode richtig.
-**Das ist NICHT die Vorgabewerte**: derselbe Fehler tritt ohne jede Vorgabe auf.
-**Der Test `Test_AZeroArgumentCallDoesNotReachTheBody` ist rot und benennt
-alles, was ausgeschlossen wurde** -- Knotenform, `Child`,
-`EvaluateChildren`, `EigeneMethode`, `Aufrufen`, `Name` -- **damit der
-naechste Versuch nicht dieselben Wege geht.**
+**Und der Aufruf ohne Argument war ein uralter Fehler in `PartsOf`.**
+`PartsOf` fiel auf `Children` zurueck, **wenn keine Rolle vergaben war** --
+und ein Aufruf traegt **immer** eine `Receiver`-Rolle, **hat aber ohne
+Argumente keine `Argument`-Rolle.** `A.m()` hatte also eine Rolle und ein
+Kind, **und der Rueckfall lieferte den Empfaenger als Argument.**
+
+> **Das hiess:** `def m(x = 9)` bekam `x = A`, **der Rumpf las `A`, und der
+> Aufruf antwortete mit dem Empfaenger statt mit dem Rumpf.** Kein Vorgabewert
+> und kein `Name()`-Fehler -- **der Empfangername war das Argument.**
+
+**Und ein Alt-Test hatte den Fehler mitgezaehlt, ohne es zu merken.**
+`Test_AMethodThisHostDoesNotHaveIsARefusal` erwartete drei Ablehnungen aus
+drei Aufrufen **und bekam jetzt zwei** -- **weil `Kernel.exit` vorher ein
+Argument hatte, das der Empfangername war.** Der Test zaehlt jetzt, was
+wirklich passiert, **und der Kommentar sagt, warum die Zahl kleiner wurde.**
+
+**Der Fehler wurde mit einem Trace gefunden, nicht durch Lesen:**
+`URPG_TRACE_CALL=1` schrieb `argumente=1 [Symbol] kinder=1 rollen=1` --
+**ein Argument, ein Kind, eine Rolle.** **Ein Aufruf ohne Argumente hat null
+Argumente, und genau das sagt diese Zeile aus.**
 
 **Noch nicht ausgewertet:** `*args` und `**opts` (der Parser liest sie, der
 Interpreter noch nicht), `respond_to_missing?`, `binding`, `Object`- und
