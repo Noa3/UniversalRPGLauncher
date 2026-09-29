@@ -9072,3 +9072,27 @@ by string surgery failed before the anchors were derived mechanically.
 
 `TestRubyInterpreter: 68/68`, `TestRubyParser: 53/53`, `All 1612 tests
 passed`, validator passed, mutations 6 of 6.
+
+## 2026-09-29 — a block reaches a host as something to call
+
+**No closures and no objects, and that sets the shape.** `IRubyHost` grew
+`CallMethodWithBlock`: the host decides how often and with what, the
+interpreter binds the block's parameters when the host calls back. `Array#each`,
+`Integer#times` and `String#each_line` come through exactly this way.
+
+**A block is a cloak around a call and not an argument to it** — the parser
+makes one node whose first child is the call, and without noticing that the
+call never reached the host.
+
+**The parameters are written straight into the new level, not with
+`SetLocal`.** `SetLocal` searches from the inside out and writes where it finds
+the name, **so a parameter that shadowed an outer variable was never created**
+and the body's first assignment went outwards: `x = 100` with `each do |x|`
+ended at three.
+
+**Not reached:** a block given to a method of the script's own — no `Proc`, no
+`lambda`, so `items.map { |x| x * 2 }` is still a host method. Stated, not
+worked around.
+
+`TestRubyInterpreter: 71/71`, `TestRubyParser: 53/53`, `All 1615 tests
+passed`, validator passed, mutations 4 of 4.

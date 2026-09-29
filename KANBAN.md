@@ -3342,8 +3342,40 @@ believes it looks for a bug in code that is right.
 `dotnet build --no-restore -t:Rebuild` is the build step now, and the reason is
 in the script.
 
-**Still not evaluated:** `undef`, and blocks with parameters passed to
-methods.
+### A block reaches a host as something to call, and not as code
+
+**There were no closures and no objects, and that is what sets the shape.** A
+block cannot be handed to a host as a value here, so `IRubyHost` grew
+`CallMethodWithBlock` — **the host decides how often and with what, and the
+interpreter binds the block's parameters when the host calls back.**
+`Array#each`, `Integer#times` and `String#each_line` are the three a game
+writes most, and all three come through exactly this way.
+
+**A block is a cloak around a call and not an argument to it.** The parser
+builds one node for `a.each do |x| ... end`, whose first child is the call
+`a.each` — **and without noticing that, the call never reached the host**, no
+list came out, and the body never ran. That is the form a game writes most, and
+it needed a shortcut that did not exist.
+
+**And the parameters are written straight into the new level, not with
+`SetLocal`.** `SetLocal` searches from the inside out and writes into the level
+where it finds the name — **so a parameter that shadowed an outer variable of
+the same name was never created**, and the first assignment in the body wrote
+outwards. A game with `x = 100` and `each do |x| ... end` ended at three
+instead of a hundred, **and that is the most common shape of everything a
+script writes.**
+
+**The binding is by position and stops at the parameter list.** `|a|` with two
+values takes the first and drops the second, **because handing the last value
+to a single parameter would make `|a|` in `each_with_index` swap the two.**
+
+**What this does not reach:** a block given to a method of the script's own.
+There is no `Proc` and no `lambda` here, **so `items.map { |x| x * 2 }` is
+still a host method and not a thing a class can define** — and that limit is
+stated rather than worked around.
+
+**Still not evaluated:** `undef`, `Proc`, `lambda`, and block parameters with
+default values.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

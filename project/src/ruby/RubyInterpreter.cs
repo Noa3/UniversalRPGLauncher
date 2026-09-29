@@ -125,6 +125,17 @@ public sealed class RubyInterpreter
     private readonly List<string> _aufrufKette = new();
 
     /// <summary>
+    /// The blocks wrapping the calls now running, outermost first.
+    /// </summary>
+    /// <remarks>
+    /// **A stack and not one value**, because a block can be inside a block:
+    /// `a.each { b.each { ... } }` has two. **A reader that kept one would
+    /// have let the inner block's parameters bind to the outer block's
+    /// values**, and a game's nested loop would have used the wrong element.
+    /// </remarks>
+    private readonly List<RubyNode> _blockKette = new();
+
+    /// <summary>
     /// How far down the stack a method call may see.
     /// </summary>
     /// <remarks>
@@ -655,6 +666,25 @@ public sealed class RubyInterpreter
                 empfaenger.Kind == RubyValueKind.Symbol && empfaenger.Name != "self"
                     ? empfaenger.Name
                     : _aktuellerTyp?.Name);
+        }
+
+        // **Ein Block am Aufruf geht an den Host als Rueckruf.** Der Host
+        // entscheidet, wie oft und womit, **und der Interpreter bindet die
+        // Parameter des Blocks, wenn der Host zurueckruft** -- es gibt
+        // keine Objekte und keine Closures, **und die kleinste ehrliche
+        // Form eines Blocks auf diesem Weg ist ein Aufruf, den der Host
+        // macht**. `Array#each`, `Integer#times` und `String#each_line`
+        // sind die drei, die ein XP-Skript am haeufigsten schreibt, und
+        // alle drei kommen ueber genau diesen Weg.
+        var block = _blockKette.Count > 0 ? _blockKette[^1] : null;
+        if (block != null)
+        {
+            var mitBlock = _host.CallMethodWithBlock(
+                empfaenger, methode, argumente, werte => Yield(block, werte));
+            if (mitBlock != null)
+            {
+                return mitBlock;
+            }
         }
 
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
@@ -1218,6 +1248,29 @@ public sealed class RubyInterpreter
 
     private RubyValue EvaluateBlock(RubyNode pNode)
     {
+        // **Ein Block an einem Aufruf ist kein eigener Anweisungstyp, sondern
+        // ein Mantel um den Aufruf.** `a.each do |x| ... end` ist ein Block,
+        // dessen erstes Kind der Aufruf `a.each` ist -- **und ohne diesen
+        // Schritt ginge der Aufruf nie zum Host**, es kaeme nie eine Liste
+        // heraus, und der Rumpf wuerde nie laufen. **Das ist die Form, die
+        // ein Spiel am haeufigsten schreibt**, und sie brauchte eine eigene
+        // Abkuerzung, die es vorher nicht gab.
+        if (pNode.Kind == RubyNodeKind.Block
+            && pNode.Children.Count >= 3
+            && pNode.Children[0].Kind is RubyNodeKind.Call
+                or RubyNodeKind.MethodCall)
+        {
+            _blockKette.Add(pNode);
+            try
+            {
+                return Evaluate(pNode.Children[0]);
+            }
+            finally
+            {
+                _blockKette.RemoveAt(_blockKette.Count - 1);
+            }
+        }
+
         var letztes = RubyValue.Nil;
         foreach (var teil in Statements(pNode))
         {
@@ -2032,6 +2085,72 @@ public sealed class RubyInterpreter
     /// <summary>A kind as a symbol, or nil.</summary>
     private static RubyValue Defined(string? pKind)
         => pKind == null ? RubyValue.Nil : RubyValue.OfSymbol(pKind);
+
+
+
+    /// <summary>
+    /// Runs a block once with the values the host handed it.
+    /// </summary>
+    /// <param name="pBlock">The block node.</param>
+    /// <param name="pWerte">The values for this round.</param>
+    /// <returns>What the block's last statement returned.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The parameters are bound in a new level and not over the
+    /// caller's.</strong> A block sees the locals around it, <strong>and
+    /// this runtime gives it its own level on top of them** — so a block's
+    /// parameter shadows an outer variable of the same name inside the
+    /// block and not outside it, which is the difference between a block and
+    /// a method.
+    /// </para>
+    /// <para>
+    /// <strong>A value the block did not name is still passed on.</strong>
+    /// `|a|` with two values gives `a` the first and throws the second
+    /// away, and `each_with_index`'s two values are the ones a game asks
+    /// for — <strong>so the binding is by position and stops at the
+    /// parameter list</strong>, because a reader that handed the last value
+    /// to a single parameter would have made `|a| a.each { |x, i| }` swap
+    /// the two.
+    /// </para>
+    /// </remarks>
+    private RubyValue Yield(RubyNode pBlock, IReadOnlyList<RubyValue> pWerte)
+    {
+        var rumpf = pBlock.Children.Count > 2 ? pBlock.Children[2] : null;
+        var parameter = pBlock.Children.Count > 1 ? pBlock.Children[1] : null;
+        if (rumpf == null)
+        {
+            return RubyValue.Nil;
+        }
+
+        var namen = parameter == null
+            ? []
+            : Statements(parameter).Select(t => t.Name ?? string.Empty).ToList();
+        var tiefe = _scopes.Count;
+        var ebene = new Dictionary<string, RubyValue>(StringComparer.Ordinal);
+        _scopes.Add(ebene);
+
+        // **Direkt in die neue Ebene und nicht mit `SetLocal`.** Der
+        // Aufrufer kann eine Variable gleichen Namens haben, **und
+        // `SetLocal` sucht von innen nach aussen und schreibt in die Ebene,
+        // in der es den findet** -- **der Parameter waere also nie
+        // angelegt worden**, und die erste Zuweisung im Rumpf haette nach
+        // aussen geschrieben. Ein Spiel mit `x = 100` und `each do |x|`
+        // haette am Ende drei statt hundert, **und das ist die haeufigste
+        // Form von allem, was ein Skript schreibt**.
+        for (var i = 0; i < namen.Count; i++)
+        {
+            if (namen[i].Length == 0)
+            {
+                continue;
+            }
+
+            ebene[namen[i]] = i < pWerte.Count ? pWerte[i] : RubyValue.Nil;
+        }
+
+        var wert = EvaluateBlock(rumpf);
+        _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
+        return wert;
+    }
 
 
 

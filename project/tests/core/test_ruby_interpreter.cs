@@ -411,6 +411,21 @@ public partial class TestRubyInterpreter : TestBase
             return pMethod == "rand" ? RubyValue.OfInteger(6) : null;
         }
 
+        /// <summary>
+        /// This host has no method that takes a block, and says so the same
+        /// way it says no to everything else.
+        /// </summary>
+        public RubyValue? CallMethodWithBlock(
+            RubyValue pReceiver,
+            string pMethod,
+            IReadOnlyList<RubyValue> pArguments,
+            Func<IReadOnlyList<RubyValue>, RubyValue> pYield)
+        {
+            _ = pReceiver;
+            _ = pYield;
+            return CallMethod(pReceiver, pMethod, pArguments);
+        }
+
         public RubyValue? LookupConstant(string pName)
         {
             _ = pName;

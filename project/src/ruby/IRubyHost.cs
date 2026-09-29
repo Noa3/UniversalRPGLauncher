@@ -41,6 +41,33 @@ public interface IRubyHost
         IReadOnlyList<RubyValue> pArguments);
 
     /// <summary>
+    /// Hands a block to this host, which may run it once per value.
+    /// </summary>
+    /// <param name="pReceiver">The receiver, which may be nil for.</param>
+    /// <param name="pMethod">The method's name as written.</param>
+    /// <param name="pArguments">The arguments, already evaluated.</param>
+    /// <param name="pYield">
+    /// Runs the block with one value, and returns what it returned.
+    /// </param>
+    /// <returns>
+    /// The result, or null when this host has no such method — which is a
+    /// refusal and not a value.
+    /// </returns>
+    /// <remarks>
+    /// <strong>A block reaches a host as a thing to call and not as
+    /// code.</strong> The host decides how often and with what, and this
+    /// runtime has no objects and no closures, <strong>so the only shape a
+    /// block can take on the way out is a callback</strong>. A host that
+    /// wants a `Proc` has none here, **and a reader that invented one would
+    /// have a closure model this interpreter does not have.**
+    /// </remarks>
+    RubyValue? CallMethodWithBlock(
+        RubyValue pReceiver,
+        string pMethod,
+        IReadOnlyList<RubyValue> pArguments,
+        Func<IReadOnlyList<RubyValue>, RubyValue> pYield);
+
+    /// <summary>
     /// Reads a constant by name.
     /// </summary>
     /// <param name="pName">The constant's name as written.</param>
@@ -73,6 +100,28 @@ public sealed class RubyNullHost : IRubyHost
         _ = pReceiver;
         _ = pMethod;
         _ = pArguments;
+        return null;
+    }
+
+    /// <summary>
+    /// This host has no method that takes a block either.
+    /// </summary>
+    /// <remarks>
+    /// **The null host is the one that says "no"**, and it says it the same
+    /// way for a block as for everything else — **so a call with a block on a
+    /// host that cannot do it gets the same diagnostic as a call without
+    /// one**, and a game's `each` fails in the place a reader can see.
+    /// </remarks>
+    public RubyValue? CallMethodWithBlock(
+        RubyValue pReceiver,
+        string pMethod,
+        IReadOnlyList<RubyValue> pArguments,
+        Func<IReadOnlyList<RubyValue>, RubyValue> pYield)
+    {
+        _ = pReceiver;
+        _ = pMethod;
+        _ = pArguments;
+        _ = pYield;
         return null;
     }
 
