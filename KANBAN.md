@@ -4091,8 +4091,57 @@ anderswo suchen.**
 Block-Umbrueche mit Argumenten (`break 1`), `dup`/`clone` mit echter Kopie,
 `find`/`detect`/`inject`/`group_by`/`each_with_object`,
 `Struct`, `raise`, `require`, `printf`/`sprintf`,
-`$~`/`Regexp.last_match` (der Block bekommt die Gruppen, das global
-Merkmal gibt es nicht), `gsub` mit einer Blockersetzung, und
+`gsub` mit einer Blockersetzung, und
+`\A`/`\z` als Anker in CP932.
+
+### `$1` -- und ein Global, das gesetzt werden, aber nicht gelesen werden konnte
+
+**Ein Global liess sich nicht.** `$x = 1` hat funktioniert, **und `$x` nicht** --
+**weil die Zuweisung an die Tabelle ging und das Lesen nirgends hin**.
+Gemessen: *„this interpreter does not evaluate a GlobalVariable node"*.
+**Und `$game_party` ist die erste Zeile von jedem RPG-Maker-Skript.**
+
+**Und ein Treffer war eine Zahl und sonst nichts.** `s =~ /(\d+)/` sagt wo,
+**und ein Skript, das danach `$1` liest, hatte nichts zu lesen** --
+**das ist die Form, mit der jedes Plugin die Zahl aus einem Ereignisnamen
+zieht**, **und es ist die Form, die diese Maschine wert macht.**
+
+**Und das sind sechs Namen fuer eine Frage.** `$~`, `$1`, `$&`, `` $` ``,
+`$'` und `Regexp.last_match` fragen dasselbe,
+**und sechs Tabellen wuerden sechs Chancen sein, dass sie sich widersprechen**
+-- **ein Spiel, das `$~` und dann `$1` liest, bekommt sonst zwei
+Antworten.**
+
+**Und `Regexp` gab *„the constant Regexp is not defined by this host"*.** Das
+ist eine Meldung ueber den Host **fuer eine Klasse, die der Leser nicht
+hatte**, **und `Regexp.last_match[1]` steht in fast jedem Plugin.**
+
+**Und eine Gruppe, die nicht teilgenommen hat, ist nil und nicht leer.**
+`"abc" =~ /(a)(z)?/` hat eine zweite Gruppe, die nicht gepasst hat --
+**gemessen: `$2` gab einen leeren Text und `$3` nil.**
+**Und die Liste der Gruppen kann das nicht unterscheiden**,
+**weil in ihr "" steht** -- **deshalb steht jetzt zusaetzlich da, welche
+Gruppen wirklich da waren.**
+
+**Und ein Lauf ohne Treffer loescht den alten.** Ruby setzt nil,
+**und ein Leser, der den alten stehen laesse, haette ein Skript, das nichts
+fand und die Zahl der vorigen Zeile las** -- **das ist eine Speicherdatei
+mit einem Feld mehr, als das Spiel erwartet.**
+
+> **Eine Mutation lebte, weil die anderen Tests die Frage nicht stellten.**
+> *„`$~` gibt nichts"* hat alle fuenf ueberlebt, **weil `$~.pre_match`
+> und `$~[1]` von den Methoden auf dem Wert beantwortet werden und nicht vom
+> Wert selbst** -- **gemessen: `$~[0]`, `$~[1]`, `$~.size` und `$~.begin`
+> antworten alle, auch ohne den Zweig.** **Das ist die genaue Form eines
+> Tests, der den Unterschied nicht sehen kann**, und
+> `Test_TheMatchItselfIsAValueWithItsOwnNumbers` schliesst die Luecke.
+
+**Noch nicht ausgewertet:** `respond_to_missing?`, `binding`,
+`Module`-Methoden (`include?`, `instance_methods`),
+Block-Umbrueche mit Argumenten (`break 1`), `dup`/`clone` mit echter Kopie,
+`find`/`detect`/`inject`/`group_by`/`each_with_object`,
+`Struct`, `raise`, `require`, `printf`/`sprintf`,
+`gsub` mit einer Blockersetzung, `String#%`, und
 `\A`/`\z` als Anker in CP932.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`

@@ -9497,3 +9497,27 @@ endet dort, **und jetzt endet es dort**; **dass die Maschine danach
 `Unterminated [] set` sagt, ist richtig.**
 
 `TestRubyInterpreter: 190/190`, `All 1748 tests passed`, Mutationen 6 von 6.
+
+## 2026-09-29 — `$1`, und ein Global, das gesetzt werden, aber nicht gelesen werden konnte
+
+**Ein Global liess sich nicht:** `$x = 1` hat funktioniert, `$x` nicht --
+**weil die Zuweisung an die Tabelle ging und das Lesen nirgends hin.**
+**Und `$game_party` ist die erste Zeile von jedem RPG-Maker-Skript.**
+
+**Und ein Treffer war eine Zahl und sonst nichts** -- **ein Skript, das
+danach `$1` liest, hatte nichts zu lesen.**
+
+**Und das sind sechs Namen fuer eine Frage** -- **und sechs Tabellen
+wuerden sechs Chancen sein, dass sie sich widersprechen.**
+
+**Und `Regexp` gab „the constant Regexp is not defined by this host"** --
+**eine Meldung ueber den Host fuer eine Klasse, die der Leser nicht hatte.**
+
+**Und eine Gruppe, die nicht teilgenommen hat, ist nil und nicht leer** --
+**gemessen: `$2` gab einen leeren Text und `$3` nil.**
+
+**Und eine Mutation lebte, weil die anderen Tests die Frage nicht
+stellten** -- **weil `$~.pre_match` und `$~[1]` von den Methoden auf dem
+Wert beantwortet werden und nicht vom Wert selbst.**
+
+`TestRubyInterpreter: 196/196`, `All 1754 tests passed`, Mutationen 5 von 5.

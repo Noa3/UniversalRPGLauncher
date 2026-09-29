@@ -73,6 +73,16 @@ public sealed class RubyInterpreter
     private Dictionary<string, RubyValue> _instanceVariables = new();
 
     /// <summary>
+    /// What the last pattern matched, which a script reads as `$~`.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Und null heisst "der letzte Lauf fand nichts".</strong>
+    /// Nicht "es gab nie einen" -- **das ist der Unterschied, den ein Skript
+    /// nicht sieht**, **und deshalb loescht jeder Lauf, auch der leere.**
+    /// </remarks>
+    private TrefferDaten? _letzterTreffer;
+
+    /// <summary>
     /// The class variables, one table per class, shared by its objects.
     /// </summary>
     /// <remarks>
@@ -326,6 +336,14 @@ public sealed class RubyInterpreter
             // und jede Statuszeile** -- **das sind die Dinge, aus denen ein
             // Spiel besteht.**
             RubyNodeKind.Hash => HashWert(pNode),
+            // **Und ein Global wird gelesen.** `$game_party` ist in jedem
+            // RPG-Maker-Skript die erste Zeile,
+            // **und der Knoten wurde nie ausgewertet** -- **gemessen:
+            // `this interpreter does not evaluate a GlobalVariable node`**
+            // -- **und `$x = 1` hat funktioniert, weil die Zuweisung an die
+            // Tabelle ging und das Lesen nicht**,
+            // **also konnte ein Skript setzen, was es nicht lesen konnte.**
+            RubyNodeKind.GlobalVariable => Global(pNode),
             RubyNodeKind.Binary => Binary(pNode),
             RubyNodeKind.Unary => Unary(pNode),
             RubyNodeKind.Not => RubyValue.OfBoolean(
@@ -777,6 +795,16 @@ public sealed class RubyInterpreter
             return RubyValue.OfSymbol(typ.Name);
         }
 
+        // **Und `Regexp` ist die eine Konstante aus der Sprache, die ein
+        // Spiel braucht.** `Regexp.last_match[1]` schreibt jedes Plugin,
+        // **und ohne sie bekam es *„the constant Regexp is not defined by
+        // this host"*** -- **eine Meldung ueber den Host fuer etwas, das
+        // der Leser nicht hatte.**
+        if (name == "Regexp")
+        {
+            return RubyValue.OfSymbol("Regexp");
+        }
+
         var wert = _host.LookupConstant(name);
         if (wert != null)
         {
@@ -907,6 +935,30 @@ public sealed class RubyInterpreter
 
             case "sort" or "sort!":
                 return Sortiert(pEmpfaenger);
+
+            case "pre_match" or "post_match" or "begin":
+                // **Und `pre_match` und `post_match` sind der Text vor und
+                // nach dem Treffer.** Ein Skript schreibt
+                // `$~.pre_match[/(\w+)/, 1]`, um den Namen vor dem
+                // Doppelpunkt zu bekommen,
+                // **und ein Leser, der nil lieferte, wuerde einem Plugin
+                // das halbe Argument geben.**
+                var treffer = _letzterTreffer;
+                if (treffer == null || !treffer.Getroffen)
+                {
+                    return RubyValue.Nil;
+                }
+
+                return pMethode == "pre_match"
+                    ? Text(treffer.Vorher)
+                    : pMethode == "post_match"
+                        ? Text(treffer.Nachher)
+                        : RubyValue.OfInteger(treffer.Stelle);
+
+            case "size" or "length" when _letzterTreffer is { Getroffen: true } t:
+                // **Und `size` ist die Zahl der Gruppen plus eins**, weil
+                // die nullte der ganze Treffer ist.
+                return RubyValue.OfInteger(t.Gruppen.Count + 1);
 
             case "class":
                 return RubyValue.OfSymbol(
@@ -1275,6 +1327,20 @@ public sealed class RubyInterpreter
         // Rubys `Array` und `String`.**
         // **Und nach dem Skript, denn eine Klasse, die `length` selbst
         // schreibt, hat seins.**
+        // **Und `Regexp.last_match` ist derselbe Treffer unter einem
+        // Namen, den jedes Plugin schreibt.** Ruby hat die Klasse `Regexp`
+        // mit `last_match` darauf,
+        // **und ein Skript, das `Regexp.last_match[1]` schreibt, bekommt
+        // ohne das eine Meldung ueber eine Konstante, die der Host nicht
+        // kennt** -- **und die Meldung nennt den Host, obwohl es der
+        // Leser ist, der die Klasse nicht hat.**
+        if (methode == "last_match"
+            && empfaenger.Kind == RubyValueKind.Symbol
+            && empfaenger.Name == "Regexp")
+        {
+            return TrefferAlsWert(_letzterTreffer);
+        }
+
         var anDerSammlung = SammlungMethode(empfaenger, methode, argumente);
         if (anDerSammlung != null)
         {
@@ -1745,6 +1811,33 @@ public sealed class RubyInterpreter
         }
 
         var treffer = gebaut.Engine.Match(inhalt);
+
+        // **Und jeder Lauf merkt sich, was er gefunden hat -- oder dass er
+        // nichts gefunden hat.** Ruby setzt `$~` bei einem Treffer und nil
+        // bei einem Fehlschlag,
+        // **und ein Leser, der den alten Treffer stehen laesse, haette ein
+        // Skript, das nichts fand und die Zahl der vorigen Zeile las.**
+        _letzterTreffer = treffer.Success
+            ? new TrefferDaten
+            {
+                Getroffen = true,
+                Vorher = inhalt[..treffer.Index],
+                Nachher = inhalt[(treffer.Index + treffer.Length)..],
+                Ganz = treffer.Value,
+                Stelle = treffer.Index,
+                Gruppen =
+                [
+                    .. Enumerable.Range(1, Math.Max(0, treffer.Groups.Count - 1))
+                        .Select(n => treffGruppe(treffer, n)),
+                ],
+                GruppenDa =
+                [
+                    .. Enumerable.Range(1, Math.Max(0, treffer.Groups.Count - 1))
+                        .Select(n => treffer.Groups[n].Success),
+                ],
+            }
+            : null;
+
         switch (pMethode)
         {
             case "=~":
@@ -1771,6 +1864,24 @@ public sealed class RubyInterpreter
                 return Scan(gebaut, inhalt, pArgumente, text);
         }
     }
+
+    /// <summary>
+    /// One group of a match, or nothing when it did not take part.
+    /// </summary>
+    /// <param name="pTreffer">The match.</param>
+    /// <param name="pNummer">Which group.</param>
+    /// <returns>The group's text, and empty when it did not take part.</returns>
+    /// <remarks>
+    /// <strong>Und eine Gruppe, die nicht teilgenommen hat, ist nicht dasselbe
+    /// wie eine leere.</strong> `(a)(z)?` gegen `a` hat eine zweite Gruppe,
+    /// die nicht gepasst hat,
+    /// <strong>und Ruby gibt da nil und nicht ""** — **und ein Skript, das
+    /// <c>$2</c> prueft, will wissen, ob es eine zweite Gruppe gab**, nicht,
+    /// ob sie leer war.
+    /// </remarks>
+    private static string treffGruppe(
+        System.Text.RegularExpressions.Match pTreffer, int pNummer)
+        => pTreffer.Groups[pNummer].Success ? pTreffer.Groups[pNummer].Value : string.Empty;
 
     /// <summary>
     /// Every place a pattern matches, and what a game does with them.
@@ -1836,6 +1947,175 @@ public sealed class RubyInterpreter
         }
 
         return RubyValue.OfArray(gefunden);
+    }
+
+
+
+    /// <summary>
+    /// What a pattern matched, kept where a script can read it back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And without it a match is a number and nothing else.</strong>
+    /// `s =~ /(\d+)/` answers where,
+    /// <strong>and a script that then reads <c>$1</c> to get the number has
+    /// nothing to read</strong> — which is the form every plugin uses to
+    /// pull a number out of an event name, **and it is the form that made
+    /// this engine worth building.**
+    /// </para>
+    /// <para>
+    /// <strong>And it is a value, not a set of globals that happen to
+    /// agree.</strong> <c>$~</c>, <c>$1</c>, <c>$&amp;</c>,
+    /// <c>$'</c> and <c>Regexp.last_match</c> all read the same match,
+    /// <strong>and five separate tables would be five chances for them to
+    /// disagree</strong> — a game that reads <c>$~</c> and then <c>$1</c>
+    /// would get two different answers.
+    /// </para>
+    /// <para>
+    /// <strong>And it is set by every match and cleared by every
+    /// failure.</strong> Ruby sets it on a hit and **nil on a miss**,
+    /// <strong>and a reader that left the old match standing would have a
+    /// script that matched nothing and read the previous line's
+    /// number.</strong>
+    /// </para>
+    /// </remarks>
+    private sealed class TrefferDaten
+    {
+        public string Vorher { get; init; } = string.Empty;
+
+        public string Nachher { get; init; } = string.Empty;
+
+        public string Ganz { get; init; } = string.Empty;
+
+        public IReadOnlyList<string> Gruppen { get; init; } = [];
+
+        /// <summary>
+        /// Which groups took part, because "not there" and "there and
+        /// empty" are different answers.
+        /// </summary>
+        /// <remarks>
+        /// <strong>Und die Liste der Gruppen allein kann das nicht
+        /// sagen.</strong> <c>(a)(z)?</c> gegen <c>"a"</c> hat zwei Gruppen,
+        /// **und die zweite ist nicht getroffen** — **in der Liste steht
+        /// da ""**, **und ein Skript, das <c>$2</c> liest, will wissen, ob
+        /// es eine zweite Gruppe gab**, **und nicht, ob sie leer war.**
+        /// **Gemessen: <c>$2</c> gab einen leeren Text und <c>$3</c> nil.**
+        /// </remarks>
+        public IReadOnlyList<bool> GruppenDa { get; init; } = [];
+
+        public int Stelle { get; init; }
+
+        public bool Getroffen { get; init; }
+    }
+
+    /// <summary>
+    /// The last match as a value a script can ask questions of.
+    /// </summary>
+    /// <param name="pDaten">What matched, or null when nothing did.</param>
+    /// <returns>The value.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Und es ist ein Objekt mit einem Klassennamen, und keine
+    /// Liste.</strong> `$~[0]` ist der ganze Treffer,
+    /// <strong>und `Members` ist die Karte, in der der Host seine eigenen
+    /// Werte haelt** — **also steht hier die Trefferliste in `Felder` und
+    /// der Klassenname traegt, dass es ein `MatchData` ist.**
+    /// </para>
+    /// <para>
+    /// <strong>Und <c>[]</c> nimmt eine Zahl und gibt eine Gruppe.</strong>
+    /// `$~[1]` ist die erste Gruppe,
+    /// <strong>und eine Stelle, die es nicht gibt, ist nil** — **denn
+    /// <c>"abc" =~ /(a)(z)?/</c> hat eine zweite Gruppe, die nicht
+    /// teilgenommen hat**, **und ein Skript, das <c>$2</c> liest, will nil
+    /// und nicht den leeren Text.**
+    /// </para>
+    /// </remarks>
+    private RubyValue TrefferAlsWert(TrefferDaten? pDaten)
+    {
+        if (pDaten == null || !pDaten.Getroffen)
+        {
+            return RubyValue.Nil;
+        }
+
+        var werte = new List<RubyValue> { Text(pDaten.Ganz) };
+        foreach (var gruppe in pDaten.Gruppen)
+        {
+            werte.Add(Text(gruppe));
+        }
+
+        return RubyValue.OfArray(werte);
+    }
+
+    /// <summary>
+    /// One global's value, and the six names a pattern fills in.
+    /// </summary>
+    /// <param name="pNode">The global's node.</param>
+    /// <returns>The value.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the one place that answers, because these six
+    /// are not six globals.</strong> <c>$~</c>, <c>$1</c>, <c>$&amp;</c>,
+    /// <c>$`</c>, <c>$'</c> and <c>Regexp.last_match</c> are six ways of
+    /// asking the same question,
+    /// <strong>and six tables would be six chances for them to
+    /// disagree</strong> — a game that reads <c>$~</c> and then
+    /// <c>$1</c> would get two different answers.
+    /// </para>
+    /// <para>
+    /// <strong>And a number is a group.</strong> <c>$1</c> is the first
+    /// group, <c>$2</c> the second,
+    /// <strong>und ein Index, den es nicht gibt, ist nil** — **denn
+    /// <c>"abc" =~ /(a)(z)?/</c> hat eine zweite Gruppe, die nicht
+    /// teilgenommen hat.**
+    /// </para>
+    /// <para>
+    /// <strong>And <c>$&amp;</c> is the whole match, not a number.</strong>
+    /// Das ist der Satz, mit dem ein Skript den gefundenen Namen
+    /// zurueckholt,
+    /// <strong>und ein Leser, der dort eine Zahl gabe, wuerde ein Spiel
+    /// haben, das die Stelle statt des Namens zurueckholt** — and a plugin
+    /// that renames a file would rename it to a number.
+    /// </para>
+    /// </remarks>
+    private RubyValue Global(RubyNode pNode)
+    {
+        var name = (pNode.Name ?? string.Empty).TrimStart('$');
+        if (name == "~" || name == "&" || name == "`" || name == "'")
+        {
+            if (_letzterTreffer == null)
+            {
+                return RubyValue.Nil;
+            }
+
+            return name switch
+            {
+                "&" => Text(_letzterTreffer.Ganz),
+                "`" => Text(_letzterTreffer.Vorher),
+                "'" => Text(_letzterTreffer.Nachher),
+                _ => TrefferAlsWert(_letzterTreffer),
+            };
+        }
+
+        // **Und `$1` bis `$9` sind die Gruppen.** Ruby hat zehn,
+        // **und diese Runtime hat so viele, wie das Muster Gruppen hat** --
+        // **ein zehntes ohne zehnte Gruppe ist nil und nicht der leere
+        /// Text.**
+        if (name.Length > 0 && name.All(char.IsDigit)
+            && int.TryParse(name, out var nummer))
+        {
+            if (_letzterTreffer == null)
+            {
+                return RubyValue.Nil;
+            }
+
+            return nummer >= 1 && nummer <= _letzterTreffer.Gruppen.Count
+                && (_letzterTreffer.GruppenDa.Count < nummer
+                    || _letzterTreffer.GruppenDa[nummer - 1])
+                    ? Text(_letzterTreffer.Gruppen[nummer - 1])
+                    : RubyValue.Nil;
+        }
+
+        return _globals.TryGetValue(name, out var wert) ? wert : RubyValue.Nil;
     }
 
 
