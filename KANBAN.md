@@ -3784,10 +3784,42 @@ ueberzaehligen **Werte**, `**opts` die **Paare**,
 **und ein Leser, der beides unter einem Namen haelt, gibt einem Spiel eine
 Liste, wo es einen Hash erwartet.**
 
+### `k: 3`, und die Luecke war groesser als die Bindung
+
+**Der konnte `f(k: 3)` gar nicht parsen.** `ParseExpression` las `k` als
+Bezeichner, **dann stand ein `:` da, und der Aufruf wurde als Syntaxfehler
+gemeldet** -- **die Schreibweise, die jeder Ruby-Schreibende benutzt und die
+jedes Spiel in jedem Aufruf schreibt.**
+
+**Und `=>` war eine Zahl.** Der Operator ging an `Apply`, **und `Apply`
+liefert fuer einen unbekannten Operator 0** -- **ein Spiel, das `opts[:k]`
+liest, haette auf einer Null gelesen**, und nichts haette es gesagt.
+
+**Und der Wert kannte nur Liste und Ganzes.** `IsHash` gibt es jetzt,
+**und es ist ein eigenes Feld und keine Raten aus dem Inhalt** -- ein Hash
+mit ungerader Paarzahl ist so gewoehnlich wie eine Liste mit ungerader
+Laengenzahl, **und ein Leser, der die Zahl gezaehlt haette, waere bei beiden
+falsch.**
+
+**Und der Schluessel wird zum Symbol.** `k: 3` heisst `:k => 3`,
+**und ein Leser, der den blossen Namen naehme, gaebe einem Spiel einen Hash
+mit einem Schluessel, den es nie schreibt** -- es suchte `opts[:k]` und
+faende nichts.
+
+**Und der Doppelpunkt muss DIREKT nach dem Namen stehen.** `a ? b : c` hat
+auch einen Doppelpunkt, **und ein Leser, der irgendwo nach einem suchte,
+haette das `b` eines Ternaers als Schluessel gelesen.**
+
+> **Eine Mutation bleibt und ist einzeln gemessen:** "jeder Name ist ein
+> Schluessel" laesst den Ternaer weiterhin korrekt parsen, **weil nach `a`
+> ein `?` steht und nicht ein `:`** -- die Bedingung wird also nie zum
+> true, egal was sie zurueckgibt. **Kein Test kann sie toeten, weil es
+> keinen gibt, bei dem die beiden auseinanderlaufen** -- und das ist eine
+> Eigenschaft der Form und kein Testfehler.
+
 **Noch nicht ausgewertet:** `respond_to_missing?`, `binding`, `Object`- und
-`Module`-Methoden, und `**opts` mit echten Schluessel-Wert-Paaren
-(`f(k: 3)`) -- die Optionen werden gebunden, **aber die Paare werden noch
-nicht gesammelt.**
+`Module`-Methoden, Block-Umbrueche mit Argumenten (`break 1`), und
+`Array#each` mit zwei Werten aus dem Host.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

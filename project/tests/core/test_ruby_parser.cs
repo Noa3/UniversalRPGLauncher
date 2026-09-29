@@ -795,4 +795,40 @@ public partial class TestRubyParser : TestBase
         AssertEq(sum.Second!.First!.Name, "b", "of b");
         AssertEq(sum.Second!.Second!.Name, "c", "and c");
     }
+
+    /// <summary>
+    /// A name in an argument list is a key only when a colon says so.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A ternary has a colon too.</strong> <c>f(a ? b : c)</c> has a
+    /// name and a colon in it, and <strong>the colon is not next to the
+    /// name</strong> — a reader that only looked for a colon anywhere in the
+    /// argument would have read the <c>b</c> of a conditional as a key,
+    /// <strong>and a game that passes a conditional as an argument would have
+    /// had its second half read as a named value.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a constant is a key.</strong> <c>Sprite: 1</c> is ordinary
+    /// Ruby, and <strong>a reader that only knew lower-case names would have
+    /// made every named argument with a class name a syntax error.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_ANameIsAKeyOnlyWhenAColonSaysSo()
+    {
+        var miternaer = One("f(a ? b : c)");
+        var dasArgument = miternaer.Role_Children!
+            .First(p => p.Role == RubyNodeRole.Argument);
+        AssertEq(dasArgument.Node.Kind, RubyNodeKind.Ternary,
+            "**a conditional is a ternary and not a pair** — the count was "
+                + "one either way, and it is the kind that says whether the "
+                + "colon was read as a key; a reader that looked for a colon "
+                + "anywhere would have made this a pair with the value `b : c`");
+
+        var klasse = One("f(Sprite: 1)");
+        AssertEq(klasse.Role_Children!.Count(p => p.Role == RubyNodeRole.Argument), 1,
+            "**and a constant is a key like any other name** — a reader that "
+                + "only knew lower-case names would have made every named "
+                + "argument with a class name a syntax error");
+    }
 }

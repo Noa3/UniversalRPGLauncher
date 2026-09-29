@@ -171,6 +171,34 @@ public sealed class RubyValue : IEquatable<RubyValue>
     /// </remarks>
     public bool IsList { get; private init; }
 
+    /// <summary>
+    /// Whether this value is a hash rather than a list.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A second flag and not a guess from the contents.</strong> A
+    /// hash and a list are both <c>Object</c> here, <strong>and a reader that
+    /// told them apart by looking for an odd number of items would be wrong
+    /// on a hash with an odd number of pairs</strong> — and a game's
+    /// options hash has an odd number of pairs about as often as a list has an
+    /// odd number of values.
+    /// </remarks>
+    public bool IsHash { get; private init; }
+
+    /// <summary>
+    /// A hash as a value, from its pairs.
+    /// </summary>
+    /// <param name="pItems">The pairs, key then value.</param>
+    /// <returns>The value.</returns>
+    /// <remarks>
+    /// <strong>The pairs are flat and in order.</strong> There is no hash
+    /// type in this runtime and no objects to put a key on,
+    /// <strong>so a key/value list is the honest shape</strong> — and a game
+    /// that reads <c>opts[:k]</c> gets it by looking for the key, which is
+    /// what a lookup on this shape has to do.
+    /// </remarks>
+    public static RubyValue OfHash(IReadOnlyList<RubyValue> pItems) =>
+        new(RubyValueKind.Object) { Items = pItems, IsHash = true };
+
     /// <summary>Whether this value is the absence of one.</summary>
     public bool IsNil => Kind == RubyValueKind.Nil;
 

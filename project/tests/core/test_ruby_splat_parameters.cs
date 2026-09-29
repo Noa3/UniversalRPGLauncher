@@ -248,4 +248,128 @@ public partial class TestRubyInterpreter
                 + "splat did not take, and a reader that gave the splat "
                 + "everything would have answered nil here");
     }
+
+    /// <summary>
+    /// `k: 3` is a pair, and it reaches `**opts` as one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>It did not parse at all, and that was the whole gap.</strong>
+    /// <c>ParseExpression</c> read <c>k</c> as a name and then stood on a
+    /// <c>:</c>, <strong>and the call was reported as a syntax error</strong> —
+    /// the spelling every Ruby writer uses, in every call a game makes.
+    /// </para>
+    /// <para>
+    /// <strong>And the key becomes a symbol.</strong> <c>k: 3</c> means
+    /// <c>:k =&gt; 3</c> in a hash, <strong>and a reader that kept the bare
+    /// name would have given a game a hash with a key it never writes</strong>
+    /// — it would be looking up <c>opts[:k]</c> and finding nothing.
+    /// </para>
+    /// <para>
+    /// <strong>And the pairs go into one hash, not a list of them.</strong>
+    /// <c>f(a: 1, b: 2)</c> is two pair-hashes from the parser, and the call
+    /// joins them, <strong>because a game reads <c>opts[:a]</c> and
+    /// <c>opts[:b]</c> out of one thing</strong>.
+    /// </para>
+    /// </remarks>
+    public void Test_ANamedArgumentReachesTheOptionsAsAPair()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class A\n"
+            + "  def m(**opts)\n"
+            + "    opts\n"
+            + "  end\n"
+            + "end\n"
+            + "A.m(k: 3)\n"));
+
+        AssertTrue(wert.Kind == RubyValueKind.Object,
+            "**the options came back and not nil** — a reader that answered "
+                + "nil would have made a game's named argument disappear with "
+                + "nothing said, and the call would have looked like it "
+                + "worked");
+        // **Und es ist ein Hash und keine Liste.** Beide sind `Object`,
+        // **und ein Leser, der eine Liste gibt, haette ein Spiel, das
+        // `opts[:k]` liest, auf einer Liste ohne Index** -- und genau hier
+        // faellt es nicht auf, **weil die Items dieselben sind.**
+        AssertTrue(wert.IsHash,
+            "**and it is a hash, not a list** — both are `Object` and both "
+                + "hold the same two values, so nothing else in this test "
+                + "can tell them apart; a game reads `opts[:k]` out of a "
+                + "hash and would have found nothing in a list");
+        AssertEq(wert.Items.Count, 2,
+            "**and they are one pair** — a key and a value, and a reader that "
+                + "put two pairs in would have doubled every named argument "
+                + "a game writes");
+        AssertEq(wert.Items[0].Kind, RubyValueKind.Symbol,
+            "**the key is a symbol** — `k: 3` means `:k => 3`, and a reader "
+                + "that kept the bare name would have given a game a hash with "
+                + "a key it never writes");
+        AssertEq(wert.Items[0].Name, "k",
+            "**and it is named k**");
+        AssertEq(AsInteger(wert.Items[1]), 3,
+            "**and the value is the three**");
+    }
+
+    /// <summary>
+    /// Two named arguments go into one hash, and a value still goes to the
+    /// parameter.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A value goes to exactly one place.</strong> <c>m(1, k: 3)</c>
+    /// gives the parameter the one and the options the three,
+    /// <strong>and a reader that put everything into the hash would have given
+    /// the parameter nothing</strong> — which is a game whose first argument
+    /// is a number it then reads as nil.
+    /// </remarks>
+    public void Test_AValueAndAPairGoToTwoDifferentPlaces()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class A\n"
+            + "  def m(a, **opts)\n"
+            + "    [a, opts]\n"
+            + "  end\n"
+            + "end\n"
+            + "A.m(1, k: 3)\n"));
+
+        AssertEq(AsInteger(wert.Items[0]), 1,
+            "**the parameter has the one** — a value goes to a named "
+                + "parameter and a reader that put everything into the hash "
+                + "would have given it nothing");
+        AssertEq(wert.Items[1].Items.Count, 2,
+            "**and the options have the pair** — one key and one value, not "
+                + "three items and not nil");
+    }
+
+    /// <summary>
+    /// A call with no named arguments gets an empty hash.
+    /// </summary>
+    /// <remarks>
+    /// <strong>An empty hash and not nil.</strong> A game writes
+    /// <c>opts.empty?</c> and a nil would have no answer,
+    /// <strong>and a reader that made a list out of nothing would have given
+    /// a game a thing that answers <c>empty?</c> differently from a hash.</strong>
+    /// </remarks>
+    public void Test_NoNamedArgumentsIsAnEmptyHash()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class A\n"
+            + "  def m(**opts)\n"
+            + "    opts\n"
+            + "  end\n"
+            + "end\n"
+            + "A.m()\n"));
+
+        AssertTrue(wert.Kind == RubyValueKind.Object,
+            "**the options are a value and not nil** — a game writes "
+                + "`opts.empty?` and nil has no answer");
+        AssertTrue(wert.IsHash,
+            "**and it is a hash** — an empty hash answers `empty?` and an "
+                + "empty list does not, so a reader that made a list out of "
+                + "nothing would have changed the answer a game gets");
+        AssertEq(wert.Items.Count, 0,
+            "**and it is empty** — no pairs, and the value says so");
+    }
 }

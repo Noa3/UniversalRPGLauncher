@@ -409,6 +409,26 @@ public sealed class RubyInterpreter
             return RubyValue.OfBoolean(Truthy(Evaluate(Operands(pNode)[1])));
         }
 
+        // **`=>` macht einen Hash und keine Zahl.** `{ :a => 1 }` und
+        // `f(k: 3)` sind dieselbe Anweisung,
+        // **und ein Leser, der den Operator an `Apply` gab, bekam eine Zahl
+        // zurueck** -- die `Apply` fuer einen unbekannten Operator als 0
+        // liefert. **Ein Spiel, das `opts[:k]` liest, haette dann auf einer
+        // Zahl gelesen**, und nichts haette es gesagt.
+        //
+        // **Ein Hash pro Paar, und die Paare kommen in der Liste zusammen.**
+        // `f(a: 1, b: 2)` ergibt zwei Hashes, **und der Aufruf macht aus
+        // allen zweien einen** -- das ist die Form, in der ein `**opts`
+        // sie sieht.
+        if (links == "=>")
+        {
+            return RubyValue.OfHash(
+                [
+                    Evaluate(Operands(pNode)[0]),
+                    Evaluate(Operands(pNode)[1]),
+                ]);
+        }
+
         return Apply(
             links,
             Evaluate(Operands(pNode)[0]),
@@ -1061,16 +1081,30 @@ public sealed class RubyInterpreter
             _scopes[^1][pMethode.SammelParameter] = RubyValue.OfArray(abHier);
         }
 
-        // **Und die Optionen, nach den Parametern.** `**opts` bekommen
-        // **alle Paare, die kein Parameter genommen hat**,
-        // **und ohne `**opts` im Skript faellt der Rest auf die Fuss** --
-        // das ist Rubys Regel, **und ein Spiel, das `f(1, 2)` an eine
-        // Methode mit zwei Parametern schreibt, darf keinen Fehler
-        // bekommen**, nur weil Ruby mehr sagt als der Aufrufer.
+        // **Und die Optionen, aus allen Argumenten mit einem `=>`.** Ruby
+        // 1.8.1, VX und VX Ace geben sie als **Hash**,
+        // **und der Hash ist der Punkt**: ein Spiel schreibt `f(k: 3)` und
+        // liest `opts[:k]`, **und ein Leser, der eine Liste gibt, haette
+        // einen Index von einem Paar, das es nicht gibt.**
+        //
+        // **Ein Wert geht an genau eine Stelle.** `f(1, 2, k: 3)` gibt `a`
+        // die Eins, `*rest` die Zwei und `opts` den Drei.
         if (pMethode.OptionenParameter != null)
         {
-            _scopes[^1][pMethode.OptionenParameter]
-                = RubyValue.OfArray([]);
+            // **Alle Paare in EINEN Hash.** `f(a: 1, b: 2)` ergibt zwei
+            // Paar-Hashes aus dem Parser, **und ein Spiel liest
+            // `opts[:a]` und `opts[:b]` aus einem einzigen** -- **eine Liste
+            // von Hashes haette zwei Dinge, wo das Skript eines erwartet.**
+            var paare = new List<RubyValue>();
+            foreach (var argument in pArgumente)
+            {
+                if (argument.Kind == RubyValueKind.Object && argument.IsHash)
+                {
+                    paare.AddRange(argument.Items);
+                }
+            }
+
+            _scopes[^1][pMethode.OptionenParameter] = RubyValue.OfHash(paare);
         }
 
         _returned = false;

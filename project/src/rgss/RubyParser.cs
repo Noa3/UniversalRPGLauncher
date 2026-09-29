@@ -561,6 +561,53 @@ public sealed class RubyParser
             $"A member name was expected at offset {token.Offset}, but '{token.Text}' is there.",
             token.Line);
     }
+    /// <summary>
+    /// Whether the next tokens are a bare name and a colon.
+    /// </summary>
+    /// <returns>true when a name is followed by a colon.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>A name and not a symbol.</strong> Ruby writes <c>k: 3</c> and
+    /// <c>:k =&gt; 3</c> as the same thing,
+    /// <strong>and a reader that only understood the second would have made
+    /// every game's keyword-argument call a syntax error</strong> — and that
+    /// is the spelling a person writes.
+    /// </para>
+    /// <para>
+    /// <strong>And the colon has to be right there.</strong> <c>a ? b : c</c>
+    /// also has a colon,
+    /// <strong>and a reader that only looked for a colon anywhere would have
+    /// taken the <c>b</c> of a ternary for a key</strong> — and a game that
+    /// writes a ternary as an argument would have had its second half read as
+    /// a named value.
+    /// </para>
+    /// <para>
+    /// <strong>And a constant is a key too.</strong> <c>Sprite: 1</c> is
+    /// ordinary Ruby, <strong>and a reader that only knew lower-case names
+    /// would have made every game's named argument with a class name a
+    /// syntax error.</strong>
+    /// </para>
+    /// </remarks>
+    private bool StartsAKeyAndThenAColon()
+    {
+        if (Current.Kind is not (RubyTokenKind.Identifier or RubyTokenKind.Constant))
+        {
+            return false;
+        }
+
+        // **Der Nachbar, ohne ihn zu nehmen.** `_index + 1` ist der naechste
+        // Token, und der Index wandert und kommt zurueck.
+        if (_index + 1 >= _tokens.Count)
+        {
+            return false;
+        }
+
+        return _tokens[_index + 1].Kind == RubyTokenKind.Delimiter
+            && _tokens[_index + 1].Text == ":";
+    }
+
+
+
 
     private List<RubyNode> ReadArguments()
     {
@@ -575,7 +622,43 @@ public sealed class RubyParser
         while (true)
         {
             SkipNewlines();
-            arguments.Add(ParseExpression());
+
+            // **`name: wert` ist ein Paar und kein Ausdruck.** `ParseExpression`
+            // liest `k` als Bezeichner, **dann steht `:` da, und der
+            // Ausdruck ist vorbei** -- der Aufruf wurde als Fehler gemeldet
+            // und `f(k: 3)` **haette in einem echten Skript nicht
+            // funktioniert**. Das ist die Form, die jeder Ruby-Schreibende
+            // benutzt, **und sie war nicht lesbar.**
+            //
+            // **Und der Schluessel wird zum Symbol.** `k: 3` heisst
+            // `:k => 3` in einem Hash, **und ein Leser, der den Bezeichner
+            // nimmt, haette einen Hash mit einem Schluessel, den ein Spiel
+            // nie schreibt.**
+            if (StartsAKeyAndThenAColon())
+            {
+                var schluessel = Take();
+                _index++;
+                SkipNewlines();
+                arguments.Add(new RubyNode
+                {
+                    Kind = RubyNodeKind.Binary,
+                    Operator = "=>",
+                    Name = schluessel.Text,
+                    Line = schluessel.Line,
+                    Children =
+                    [
+                        Literal(
+                            RubyNodeKind.Symbol, schluessel.Line, null, null,
+                            null, schluessel.Text),
+                        ParseExpression(),
+                    ],
+                });
+            }
+            else
+            {
+                arguments.Add(ParseExpression());
+            }
+
             SkipNewlines();
             if (Is(","))
             {

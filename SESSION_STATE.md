@@ -9304,3 +9304,30 @@ Klasse ist und diese Runtime keine Objekte hat.** Das steht im Doc, weil es
 eine Grenze und kein Detail ist.
 
 `TestRubyInterpreter: 124/124`, `All 1681 tests passed`, Mutationen 5 von 5.
+
+## 2026-09-29 — `*rest`, `**opts` und `f(k: 3)`
+
+**Der Splat stand in der Parameterliste und war damit der naechste
+Parameter.** `def m(a, *rest)` gab `rest` die zweite Zahl statt der Liste
+`[2, 3]`. **Die Stelle wird jetzt gemerkt** (`SammelAb`), und der Wert wird
+nach der Schleife gebunden.
+
+**Und ein Splat in der Mitte nimmt nicht alles.** `def m(*teile, letzte)`
+gibt `teile` alles ausser dem letzten Wert, **und die Parameter nach dem
+Splat zaehlen von hinten** — ein Leser, der von vorn bindet, gibt `letzte`
+den ersten, **und weil der erste auch in der Liste steht, faellt es nicht
+auf.**
+
+**Und `f(k: 3)` parste nicht.** Die Schreibweise, die jeder schreibt, war
+ein Syntaxfehler. **`=>` war eine Zahl**, weil der Operator an `Apply` ging
+und `Apply` fuer einen unbekannten Operator 0 liefert — **ein Spiel, das
+`opts[:k]` las, las auf einer Null**, und nichts sagte es. **`IsHash` gibt
+es jetzt als eigenes Feld**, **weil ein Hash mit ungerader Paarzahl so
+gewoehnlich ist wie eine Liste mit ungerader Laengenzahl.**
+
+**Und eine Bedingung, die nichts sagt, habe ich entfernt statt behalten:**
+`SammelAb >= 0` neben `SammelParameter != null`. **Zwei Bedingungen, die
+dasselbe sagen, sind eine mit zusaetzlichem Code.**
+
+`TestRubyInterpreter: 141/141`, `All 1699 tests passed`, Mutationen 5 von 6
+mit einer einzeln gemessenen No-op.
