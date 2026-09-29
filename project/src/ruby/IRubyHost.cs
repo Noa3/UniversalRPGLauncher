@@ -225,6 +225,45 @@ public sealed class RubyMethod
     public IReadOnlyDictionary<string, RubyNode> Vorgaben { get; init; }
         = new Dictionary<string, RubyNode>(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The name of the `*rest` parameter, and null when the method has none.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A name and not a flag.</strong> A game writes
+    /// <c>def sammle(*teile)</c> and then <c>teile.length</c>,
+    /// <strong>und ein Leser, der nur ein <c>bool</c> gespeichert haette,
+    /// haette den Namen nicht und haette ihn aus dem Aufruf heraus raten
+    /// muessen** -- wo er nicht steht.
+    /// </remarks>
+    public string? SammelParameter { get; init; }
+
+    /// <summary>
+    /// Where the splat begins in the parameter list, and -1 when there is
+    /// none.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The place and not just the fact.</strong> A splat at the end
+    /// takes everything left, and a splat in the middle takes everything left
+    /// <em>from there</em> — and
+    /// <strong>a reader that only knew that one exists would bind it after
+    /// every parameter</strong>, which is right for the common case and wrong
+    /// for `def m(*teile, letzte)`, where the last value is not in the list.
+    /// </remarks>
+    public int SammelAb { get; init; } = -1;
+
+    /// <summary>
+    /// The name of the `**opts` parameter, and null when the method has none.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Separate and not the same field.</strong> <c>*rest</c> sammelt
+    /// die ueberzaehligen **Werte** und <c>**opts</c> die ueberzaehligen
+    /// **Namen/Wert-Paare**,
+    /// <strong>und ein Leser, der beides in eines legte, haette ein Spiel,
+    /// das <c>f(1, 2, k: 3)</c> schreibt, mit einem Argument gespiesen statt
+    /// mit zweien.</strong>
+    /// </remarks>
+    public string? OptionenParameter { get; init; }
+
     /// <summary>What it runs.</summary>
     public RubyNode Body { get; init; } = null!;
 }

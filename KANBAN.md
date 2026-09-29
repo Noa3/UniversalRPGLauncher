@@ -3752,9 +3752,42 @@ wirklich passiert, **und der Kommentar sagt, warum die Zahl kleiner wurde.**
 **ein Argument, ein Kind, eine Rolle.** **Ein Aufruf ohne Argumente hat null
 Argumente, und genau das sagt diese Zeile aus.**
 
-**Noch nicht ausgewertet:** `*args` und `**opts` (der Parser liest sie, der
-Interpreter noch nicht), `respond_to_missing?`, `binding`, `Object`- und
-`Module`-Methoden.
+### `*rest` und `**opts`, und die Stelle im Namen
+
+**Der Parser konnte beide lesen, und der Interpreter hatte sie nie gesehen.**
+`def m(a, *rest)` ergibt einen `BlockPass`-Knoten `rest` in der Liste,
+`def m(**opts)` einen `Hash`-Knoten `opts` -- **und der Interpreter behandelte
+beide wie einen normalen Namen**, also war `rest` ein Parameter, den nichts
+fuellen konnte, **und ein Aufruf mit zusaetzlichen Werten hat sie verworfen.**
+
+**Und der Splat stand in `namen`, also wurde er wie ein Parameter gebunden.**
+`def m(a, *rest)` gab `rest` die **zweite** Zahl statt der Liste `[2, 3]`.
+**Das ist die Form, die man zuerst baut, und sie sieht richtig aus**, bis man
+sie zaehlt.
+
+> **Ein Sammel, der in der Parameterliste steht, ist kein Sammel, sondern
+> der naechste Parameter.** Also steht er drin, **nur damit seine Stelle
+> bekannt ist** -- `SammelAb` merkt sie sich, **und der Wert wird nach der
+> Schleife gebunden.**
+
+**Und ein Splat in der Mitte nimmt nicht alles.**
+`def m(*teile, letzte)` gibt `teile` alles **ausser dem letzten Wert**, weil
+`letzte` ihn braucht -- **und die Parameter nach dem Splat zaehlen von
+hinten.** Ein Leser, der von vorn bindet, gibt `letzte` den ersten Wert,
+**und weil der erste auch in der Liste steht, faellt es nicht auf.**
+
+**Und `*rest` ohne Werte ist eine leere Liste, nicht nil.** Ein Spiel schreibt
+`teile.length`, **und nil haette darauf keine Antwort.**
+
+**Und `**opts` ist ein eigener Parameter und keine Liste.** `*rest` nimmt die
+ueberzaehligen **Werte**, `**opts` die **Paare**,
+**und ein Leser, der beides unter einem Namen haelt, gibt einem Spiel eine
+Liste, wo es einen Hash erwartet.**
+
+**Noch nicht ausgewertet:** `respond_to_missing?`, `binding`, `Object`- und
+`Module`-Methoden, und `**opts` mit echten Schluessel-Wert-Paaren
+(`f(k: 3)`) -- die Optionen werden gebunden, **aber die Paare werden noch
+nicht gesammelt.**
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

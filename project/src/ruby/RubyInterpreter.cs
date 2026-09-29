@@ -812,18 +812,6 @@ public sealed class RubyInterpreter
             }
         }
 
-        if (Environment.GetEnvironmentVariable("URPG_TRACE_CALL") == "1")
-        {
-            System.Console.WriteLine(
-                $"CALL methode={methode} kind={pNode.Kind} "
-                + $"empfaenger={empfaenger.Kind}:{empfaenger.Name} "
-                + $"argumente={argumente.Count} "
-                + "[" + string.Join(",", argumente.Select(a => a.Kind.ToString()))
-                + "] "
-                + $"kinder={pNode.Children.Count} "
-                + $"rollen={pNode.Role_Children?.Count.ToString() ?? "-"} "
-                + $"typen={_aktuellerTyp?.Name ?? "-"}");
-        }
 
         var eigene = EigeneMethode(empfaenger, methode);
         if (eigene != null)
@@ -967,6 +955,18 @@ public sealed class RubyInterpreter
         _aktuellerTyp = typWar;
 
         _scopes.Add(new Dictionary<string, RubyValue>());
+
+        // **Ein Splat in der Mitte oder am Anfang verschiebt, was die
+        // Parameter danach bekommen.** `def m(*teile, letzte)` gibt `letzte`
+        // den *letzten* Wert und nicht den ersten,
+        // **und ein Leser, der von vorn bindet, wuerde `letzte` den ersten
+        // geben** -- ein Spiel, das `m(1, 2, 3)` schreibt, wuerde dann
+        // `letzte == 1` bekommen, **und genau das ist der Wert, den die
+        // Liste auch enthaelt**, also faellt es nicht auf.
+        var nachSammel = pMethode.SammelAb >= 0
+            ? pMethode.Parameters.Count - pMethode.SammelAb
+            : 0;
+
         for (var i = 0; i < pMethode.Parameters.Count; i++)
         {
             var parameter = pMethode.Parameters[i];
@@ -989,9 +989,17 @@ public sealed class RubyInterpreter
             // Ein Spiel mit `def m(x = 9)` **haette den Vorgabewert nie
             // gesehen**, und nur fuer die Parameter, die eine Vorgabe
             // haben, weil die ohne Vorgabe vorher gebunden wurden.
-            if (i < pArgumente.Count)
+            // **Und ein Parameter hinter dem Splat zaeht von hinten.**
+            // Das ist der Unterschied zwischen `def m(*teile, letzte)` und
+            // `def m(erste, *teile)`, **und beide kommen in echten
+            // Skripten vor** -- der erste ist die Form, mit der ein Dispatcher
+            // ein Pfadargument ans Ende stellt.
+            var stelle = pMethode.SammelAb >= 0 && i >= pMethode.SammelAb
+                ? pArgumente.Count - nachSammel + (i - pMethode.SammelAb)
+                : i;
+            if (stelle >= 0 && stelle < pArgumente.Count)
             {
-                _scopes[^1][parameter] = pArgumente[i];
+                _scopes[^1][parameter] = pArgumente[stelle];
             }
             else if (pMethode.Vorgaben.TryGetValue(parameter, out var vorgabe))
             {
@@ -1013,8 +1021,56 @@ public sealed class RubyInterpreter
             }
             else
             {
+                // **Der Sammel kommt hier nicht vor.** `*rest` steht in
+                // `Parameters` an seiner Stelle, **und wird nach der
+                // Schleile gebunden** -- waere er in der Schleife, wuerde
+                // er wie ein normaler Parameter behandelt,
+                // **und `def m(a, *rest)` wuerde `rest` die zweite Zahl
+                // geben statt der Liste aller uebrigen.**
                 _scopes[^1][parameter] = RubyValue.Nil;
             }
+        }
+
+        // **Und jetzt der Sammel, aus seiner Position.** Ab der Stelle, an der
+        // er in der Liste steht, **gehoeren die Argumente in eine Liste** --
+        // und eine leere Liste, wenn keins uebrig ist, **denn `*rest` ohne
+        // Werte ist eine leere Liste und nicht nil.** Ein Spiel, das
+        // `teile.length` schreibt, **haette auf nil sonst keine Antwort.**
+        // **Ohne `SammelAb >= 0`, und das ist gemessen.** Die Bedingung
+        // stand hier, **und die Mutation, die sie abschaltete, liess den
+        // Lauf gruen**: `SammelAb` ist `namen.Count` in dem Moment, in dem
+        // `SammelParameter` gesetzt wird, **und `namen.Count` ist nie
+        // negativ.** **Zwei Bedingungen, die dasselbe sagen, sind eine
+        // Bedingung mit zusaetzlichem Code** -- und die zusaetzliche
+        // Bedingung liest sich, als waere der Fall moeglich, in dem sie
+        // nicht gilt.
+        if (pMethode.SammelParameter != null)
+        {
+            // **Und er endet, wo die Parameter nach ihm beginnen.** `*teile,
+            // letzte` gibt `teile` alles **bis auf den letzten Wert**, weil
+            // `letzte` ihn braucht, **und ein Leser, der ihm alles gaebe,
+            // wuerde den letzten Wert doppelt vergeben** -- einmal in der
+            // Liste und einmal im Parameter.
+            var bisHier = pArgumente.Count - nachSammel;
+            var abHier = new List<RubyValue>();
+            for (var r = pMethode.SammelAb; r < bisHier && r < pArgumente.Count; r++)
+            {
+                abHier.Add(pArgumente[r]);
+            }
+
+            _scopes[^1][pMethode.SammelParameter] = RubyValue.OfArray(abHier);
+        }
+
+        // **Und die Optionen, nach den Parametern.** `**opts` bekommen
+        // **alle Paare, die kein Parameter genommen hat**,
+        // **und ohne `**opts` im Skript faellt der Rest auf die Fuss** --
+        // das ist Rubys Regel, **und ein Spiel, das `f(1, 2)` an eine
+        // Methode mit zwei Parametern schreibt, darf keinen Fehler
+        // bekommen**, nur weil Ruby mehr sagt als der Aufrufer.
+        if (pMethode.OptionenParameter != null)
+        {
+            _scopes[^1][pMethode.OptionenParameter]
+                = RubyValue.OfArray([]);
         }
 
         _returned = false;
@@ -1803,6 +1859,9 @@ public sealed class RubyInterpreter
         var rumpf = pNode.Children.Count > 1 ? pNode.Children[1] : null;
         var namen = new List<string>();
         var vorgaben = new Dictionary<string, RubyNode>(StringComparer.Ordinal);
+        var sammelName = string.Empty;
+        var optionenName = string.Empty;
+        var sammelAb = -1;
         if (parameter != null)
         {
             // **Die Parameterliste traegt jetzt auch Ausdruecke.**
@@ -1816,8 +1875,36 @@ public sealed class RubyInterpreter
             // **und die Methode haette nie einen Vorgabewert gehabt** --
             // genau das, was der Doc dieses Abschnitts behauptete, bevor
             // der Parser ihn liefern konnte.
+            var sammel = string.Empty;
+            var optionen = string.Empty;
             foreach (var teil in Statements(parameter))
             {
+                // **`*rest` und `**opts` sind keine Parameter und doch
+                // Namen.** Sie stehen in derselben Liste und **werden an der
+                // Stelle gebunden, wo sie stehen** -- ein `*rest` am Ende
+                // nimmt die ueberzaehligen Werte, **und ein `*rest` am Anfang
+                // nimmt auch die, die ein mittlerer Parameter nicht
+                // bekommen hat**, weil die Liste erst ab dort beginnt.
+                // **Und sie kommen NICHT in `namen`.** Sie stehen in der
+                // Liste nur an der Stelle, an der der Sammel beginnt,
+                // **und kaemen sie auch in `namen`, wuerde die Bindung sie
+                // wie normale Parameter behandeln** -- `rest` in
+                // `def m(a, *rest)` waere der zweite Parameter,
+                // **bekaeeme `2` statt der Liste `[2, 3]`, und die Liste
+                // waere genau eine Zahl lang.**
+                if (teil.Kind == RubyNodeKind.BlockPass && teil.Name != null)
+                {
+                    sammel = teil.Name;
+                    sammelAb = namen.Count;
+                    continue;
+                }
+
+                if (teil.Kind == RubyNodeKind.Hash && teil.Name != null)
+                {
+                    optionen = teil.Name;
+                    continue;
+                }
+
                 namen.Add(teil.Name ?? string.Empty);
                 if (teil.Kind == RubyNodeKind.Assignment
                     && teil.Children.Count >= 2
@@ -1826,6 +1913,9 @@ public sealed class RubyInterpreter
                     vorgaben[teil.Name] = teil.Children[1];
                 }
             }
+
+            sammelName = sammel;
+            optionenName = optionen;
         }
 
         // **Ein `def` raeumt die Marke von `undef`.** Die Marke sitzt am
@@ -1842,6 +1932,9 @@ public sealed class RubyInterpreter
                 IsOnSelf = pAufSelbst,
                 Parameters = namen,
                 Vorgaben = vorgaben,
+                SammelParameter = sammelName.Length > 0 ? sammelName : null,
+                SammelAb = sammelAb,
+                OptionenParameter = optionenName.Length > 0 ? optionenName : null,
                 Body = rumpf!,
             };
 
