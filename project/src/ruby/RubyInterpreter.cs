@@ -164,6 +164,134 @@ public sealed class RubyInterpreter
         "StopIteration", "FrozenError", "RegexpError", "EncodingError",
     };
 
+    /// <summary>
+    /// The types of the language, by name, with the one that is the base of
+    /// the other.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a fixed list, and not a question to the host.</strong>
+    /// These names are part of the language,
+    /// <strong>and a game's own <c>class Held</c> sits under
+    /// <c>Object</c> whether a host says so or not</strong> — **and a
+    /// reader that asked the host would refuse <c>Object.ancestors</c>
+    /// in every test**, **and a script that walks the chain would stop
+    /// there.**
+    /// </para>
+    /// <para>
+    /// <strong>And <c>BasicObject</c> is the end of every chain.</strong>
+    /// <c>BasicObject.superclass</c> is nil and not <c>BasicObject</c>,
+    /// **and a reader that made a class its own base would walk
+    /// forever.**
+    /// </para>
+    /// <para>
+    /// <strong>And they are real types, and not names.</strong>
+    /// <c>Object.instance_methods</c> has to answer with the methods the
+    /// host gave it, <strong>and a reader that made them names would answer
+    /// an empty list</strong> — **and a plugin that asks
+    /// <c>Object.instance_methods.include?(:draw)</c> before it overrides
+    /// anything would say <c>no</c> and override a method twice.
+    /// </para>
+    /// </remarks>
+    private static readonly (string Name, bool Klasse, string? Basis)[]
+        SprachTypen =
+        [
+            ("BasicObject", true, null),
+            ("Object", true, "BasicObject"),
+            ("Module", true, "Object"),
+            ("Class", true, "Module"),
+            ("Kernel", false, null),
+            ("Comparable", false, null),
+            ("Enumerable", false, null),
+            ("String", true, "Object"),
+            ("Integer", true, "Object"),
+            ("Float", true, "Object"),
+            ("Numeric", true, "Object"),
+            ("Symbol", true, "Object"),
+            ("Array", true, "Object"),
+            ("Hash", true, "Object"),
+            ("Range", true, "Object"),
+            ("Proc", true, "Object"),
+            ("Regexp", true, "Object"),
+            ("NilClass", true, "Object"),
+            ("TrueClass", true, "Object"),
+            ("FalseClass", true, "Object"),
+            ("Struct", true, "Object"),
+            ("Exception", true, "Object"),
+            ("StandardError", true, "Exception"),
+            ("RuntimeError", true, "StandardError"),
+            ("ArgumentError", true, "StandardError"),
+            ("TypeError", true, "StandardError"),
+            ("RangeError", true, "StandardError"),
+            ("ZeroDivisionError", true, "StandardError"),
+            ("FloatDomainError", true, "RangeError"),
+            ("IndexError", true, "StandardError"),
+            ("KeyError", true, "IndexError"),
+            ("IOError", true, "StandardError"),
+            ("EOFError", true, "IOError"),
+            ("ScriptError", true, "Exception"),
+            ("NotImplementedError", true, "ScriptError"),
+            ("LoadError", true, "ScriptError"),
+            ("SyntaxError", true, "ScriptError"),
+            ("LocalJumpError", true, "StandardError"),
+            ("NameError", true, "StandardError"),
+            ("NoMethodError", true, "NameError"),
+            ("SystemExit", true, "Exception"),
+            ("SystemStackError", true, "Exception"),
+            ("StopIteration", true, "IndexError"),
+            ("FrozenError", true, "RuntimeError"),
+            ("RegexpError", true, "StandardError"),
+            ("EncodingError", true, "StandardError"),
+            ("Method", true, "Object"),
+            ("UnboundMethod", true, "Object"),
+            ("Binding", true, "Object"),
+        ];
+
+    /// <summary>
+    /// The modules Ruby puts into the built-in classes, as type and module.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is measured from the language and not guessed.</strong>
+    /// <c>String.include?(Comparable)</c> is true and a class sorted by
+    /// name needs it,
+    /// **and a reader that answered <c>false</c> here would make every sort
+    /// guard in a VX script say "not included"** -- and a plugin that adds
+    /// <c>&lt;=&gt;</c> would be told the class is not comparable.
+    /// </remarks>
+    private static readonly (string Typ, string Modul)[] SprachEingebunden =
+    [
+        ("String", "Comparable"),
+        ("String", "Kernel"),
+        ("Integer", "Comparable"),
+        ("Integer", "Numeric"),
+        ("Integer", "Kernel"),
+        ("Float", "Comparable"),
+        ("Float", "Numeric"),
+        ("Float", "Kernel"),
+        ("Numeric", "Comparable"),
+        ("Numeric", "Kernel"),
+        ("Symbol", "Comparable"),
+        ("Symbol", "Kernel"),
+        ("Array", "Enumerable"),
+        ("Array", "Kernel"),
+        ("Hash", "Enumerable"),
+        ("Hash", "Kernel"),
+        ("Range", "Enumerable"),
+        ("Range", "Kernel"),
+        ("Regexp", "Kernel"),
+        ("Struct", "Enumerable"),
+        ("Struct", "Kernel"),
+        ("Proc", "Kernel"),
+        ("NilClass", "Kernel"),
+        ("TrueClass", "Kernel"),
+        ("FalseClass", "Kernel"),
+        ("Object", "Kernel"),
+    ];
+
+    /// <summary>The names that are the language's and not a script's.</summary>
+    private static readonly HashSet<string> SprachTypennamen =
+        new(SprachTypen.Select(t => t.Name), StringComparer.Ordinal);
+
     /// <summary>The default each struct field was given, by class name.</summary>
     /// <remarks>
     /// <strong>And by the class name, and not in the class.</strong> The
@@ -225,6 +353,43 @@ public sealed class RubyInterpreter
     public RubyInterpreter(IRubyHost pHost)
     {
         _host = pHost ?? new RubyNullHost();
+
+        // **Und die Typen der Sprache stehen da, bevor irgendein Skript
+        // laeuft.** `Object`, `String`, `Module` und die Fehlerklassen
+        // **sind Teile der Sprache und nicht etwas, das ein Host anbietet**,
+        // **und ein Leser, der sie erst beim ersten `include` anlegt, haette
+        // `Object.ancestors` in einer Kette, die vorher nicht existierte.**
+        foreach (var (name, klasse, basis) in SprachTypen)
+        {
+            _types[name] = new RubyType
+            {
+                Name = name,
+                IsClass = klasse,
+                Superclass = basis,
+            };
+        }
+        // **Und die eingebauten Module stehen in den Klassen, in denen
+        // Ruby sie einbindet.** `String.include?(Comparable)` ist wahr und
+        // nicht eine Behauptung dieses Lesers,
+        // **und `Integer` nimmt `Comparable`, `Numeric` und `Kernel`**, **und
+        // `Array`, `Hash` und `Range` nehmen `Enumerable` und `Kernel`**.
+        // **Und jedes Objekt nimmt `Kernel`** -- **denn `puts` und `raise`
+        // sind Methoden von `Kernel` und stehen in jedem Skript ohne
+        // Receiver.**
+        foreach (var (typ, modulName) in SprachEingebunden)
+        {
+            // **`modul` ist ein Schluesselwort in C# und der Name einer
+            // Variablen ist hier keine Ausnahme.** Der erste Versuch hiess
+            // `modul` und der Compiler sagte *the name 'module' does not
+            // exist in the current context* -- **und das sieht nach einem
+            // Tippfehler aus und ist ein Schluesselwort.**
+            if (_types.TryGetValue(typ, out var haelter)
+                && _types.ContainsKey(modulName))
+            {
+                haelter.Eingebunden.Add((modulName, false));
+            }
+        }
+
     }
 
     /// <summary>What the interpreter could not do, and why.</summary>
@@ -312,8 +477,21 @@ public sealed class RubyInterpreter
     /// </remarks>
     private readonly Dictionary<string, RubyType> _types = new(StringComparer.Ordinal);
 
-    /// <summary>The names of the types the script defined, in order.</summary>
-    public IReadOnlyList<string> DefinedTypes => _types.Keys.ToList();
+    /// <summary>
+    /// The names of the types the script defined, in order.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And only those, and not the types of the language.</strong>
+    /// <c>Object</c>, <c>String</c> and the error classes are there from the
+    /// first statement,
+    /// **and a host asking what a script defined does not want a list of
+    /// forty names it did not get from the script** --
+    /// it wants to know what the script added,
+    /// **and that is what a test about a script is about.**
+    /// </remarks>
+    public IReadOnlyList<string> DefinedTypes => _types.Keys
+        .Where(name => !SprachTypennamen.Contains(name))
+        .ToList();
 
     /// <summary>
     /// Runs a tree and answers with its value.
@@ -1321,6 +1499,32 @@ public sealed class RubyInterpreter
             return SkriptLaden(methode == "require",
                 System.Text.Encoding.UTF8.GetString(argumente[0].Bytes));
         }
+
+        // **Und ein Typ ist ein Name und wird befragt.** `M.include?(N)`,
+        // `A.ancestors`, `K.instance_methods` -- **das ist die erste Zeile
+        // von fast jedem VX-Plugin**, **und der Leser hat diese Fragen
+        // bisher nur an Objekte gestellt.**
+        // **Und die Antwort kommt aus zwei Quellen, die getrennt
+        // entstehen:** die eingebundenen Module stehen in `Eingebunden`,
+        // **und die Methoden stehen in `Methods`**, **und ein Leser, der
+        // nur die eine liest, antwortet bei der anderen falsch.**
+        if ((methode == "instance_methods" || methode == "instance_method"
+            || methode == "include?" || methode == "included_modules"
+            || methode == "ancestors" || methode == "name"
+            || methode == "superclass" || methode == "to_s"
+            || methode == "is_a?" || methode == "kind_of?"
+            || methode == "module_function")
+            && empfaenger.Kind == RubyValueKind.Symbol
+            && _types.ContainsKey(empfaenger.Name ?? string.Empty))
+        {
+            var typAntwort = TypBefragt(
+                empfaenger.Name!, methode, argumente);
+            if (typAntwort != null)
+            {
+                return typAntwort;
+            }
+        }
+
 
         if (methode == "new" && empfaenger.Kind == RubyValueKind.Symbol)
         {
@@ -7618,14 +7822,29 @@ public sealed class RubyInterpreter
 
         // **Eine zweite Definition ersetzt die Methoden** -- und die Typ-Art
         // bleibt, weil ein `class` nach einem `class` dieselbe Art ist.
+        // **And `class A` without `<` sits under `Object`.** Ruby gives a
+        // class with no written base the base `Object`,
+        // **and a reader that took `Superclass = null` would have a class
+        // with no parent** -- **and `A.instance_methods` would then be A
+        // alone, `A.is_a?(Object)` would be false, and `A.ancestors` would
+        // be `[A]`** -- **and every guard in a script would say `no` to the
+        // class's own base.**
+        var geschrieben = pNode.Superclass
+            ?? (pIsClass && name != "Object" && name != "BasicObject"
+                ? "Object"
+                : null);
         var typ = _types.TryGetValue(name, out var vorhanden)
             ? vorhanden
             : new RubyType
             {
                 Name = name,
                 IsClass = pIsClass,
-                Superclass = pNode.Superclass,
+                Superclass = geschrieben,
             };
+        if (geschrieben != null)
+        {
+            typ.Superclass = geschrieben;
+        }
         typ.Methods.Clear();
         _types[name] = typ;
 
@@ -8476,9 +8695,444 @@ public sealed class RubyInterpreter
     /// detail.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// What a class or a module answers when it is asked about itself.
+    /// </summary>
+    /// <param name="pName">The type's name.</param>
+    /// <param name="pMethode">The question.</param>
+    /// <param name="pArgumente">What was asked with.</param>
+    /// <returns>The answer, or null when the question was not one of
+    /// these.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And `instance_methods` walks the whole chain, unless the
+    /// caller says not to.</strong> <c>A.instance_methods(false)</c> is
+    /// only A's own, <strong>and that is the argument a plugin uses to ask
+    /// "what did I not already do"</strong> — so a reader that ignored the
+    /// argument would say *yes* to a method its base class has,
+    /// **and it would define the method a second time.**
+    /// </para>
+    /// <para>
+    /// <strong>And the answer is symbols, and a game checks them with
+    /// <c>include?</c>.</strong> <c>M.instance_methods.include?(:x)</c>,
+    /// **and a reader that gave the names as texts would answer
+    /// <c>false</c> for every name the game wrote**, because
+    /// <c>include?(:x)</c> looks for a symbol.
+    /// </para>
+    /// </remarks>
+    private RubyValue? TypBefragt(
+        string pName, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (!_types.TryGetValue(pName, out var typ))
+        {
+            return null;
+        }
+
+        switch (pMethode)
+        {
+            case "name":
+                return RubyValue.OfSymbol(typ.Name);
+
+            case "to_s":
+                // **Und `to_s` sagt `M`, und nicht `#<Module:M>`.** Das ist
+                // die kurze Form,
+                // **und `A.to_s` in einer Meldung ist der Name, den der
+                // Spieler liest** -- **ein Leser, der die Ruby-Darstellung
+                // baute, wuerde in jeder Diagnose eine Klassen-ID zeigen,
+                // die der Spieler nicht kennt.**
+                return RubyValue.OfBytes(
+                    System.Text.Encoding.UTF8.GetBytes(typ.Name));
+
+            case "superclass":
+                // **Und nil, wenn es keine gibt.** `BasicObject.superclass`
+                // ist nil und nicht `BasicObject`,
+                // **und eine Schleife ueber der Elternkette, die sich selbst
+                // zur Basis macht, endet nie.**
+                return typ.Superclass == null
+                    ? RubyValue.Nil
+                    : RubyValue.OfSymbol(typ.Superclass);
+
+            case "include?":
+            case "<":
+                if (pArgumente.Count != 1)
+                {
+                    return RubyValue.OfBoolean(false);
+                }
+
+                // **Und der Name wird aufgeloest, und nicht verglichen.**
+                // `A.include?(String)` nennt die Klasse, nicht einen Text,
+                // **und `Comparable` und `Kernel` sind Namen, die dieser
+                // Leser kennt, ohne dass ein Host sie anbietet.**
+                return RubyValue.OfBoolean(
+                    GehoertTypAn(typ, TypNameAus(pArgumente[0])));
+
+            case "included_modules":
+                {
+                    // **Und was `include?` beantwortet, steht auch hier.**
+                    // **`Kernel` steckt in jeder Klasse, und
+                    // `A.included_modules.include?(Kernel)` muss wahr sein**,
+                    // **denn die beiden Fragen ueber denselben Typ muessen
+                    // sich nicht widersprechen** -- **und ein Leser, der hier
+                    // nur die Skript-Includes nennt, wuerde `false` sagen,
+                    // waehrend `include?` `true` sagt.**
+                    var liste = new List<RubyValue>();
+                    var gesehen = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var eing in typ.Eingebunden)
+                    {
+                        if (gesehen.Add(eing.Name))
+                        {
+                            liste.Add(RubyValue.OfSymbol(eing.Name));
+                        }
+                    }
+
+                    // **Und die Module der Klassen, die in der Kette
+                    // liegen.** `String` nimmt `Comparable` und `Kernel`,
+                    // **und `A < String` erbt beide durch die Basis.**
+                    foreach (var (behaelter, modul) in SprachEingebunden)
+                    {
+                        if (GehoertBasis(typ, behaelter) && gesehen.Add(modul))
+                        {
+                            liste.Add(RubyValue.OfSymbol(modul));
+                        }
+                    }
+
+                    return RubyValue.OfArray(liste);
+                }
+
+            case "ancestors":
+                {
+                    // **Und die Elternkette steht vor den Modulen, und
+                    // das eingebundene Modul vor dem eigenen Typ.**
+                    // Das ist die Reihenfolge, in der Ruby nach einer
+                    // Methode sucht,
+                    // **und ein Leser, der die Module hinten anstellt,
+                    // wuerde einer Basisklasse den Vorrang geben** --
+                    // **und `include M` waere dann ein stiller
+                    // Fehlschlag.**
+                    var liste = new List<RubyValue>();
+                    var klasse = typ.Superclass;
+                    var grenze = 0;
+                    while (klasse != null && grenze < 64)
+                    {
+                        liste.Add(RubyValue.OfSymbol(klasse));
+                        klasse = _types.TryGetValue(klasse, out var oben)
+                            ? oben.Superclass
+                            : null;
+                        grenze++;
+                    }
+
+                    // **Und die eingebundenen Module, und die eingebauten
+                    // mit.** Gemessen: `Object.ancestors` war
+                    // `[BasicObject, Kernel, Object]`,
+                    // **und `Kernel` stand dort nur, weil es in
+                    // `SprachEingebunden` steht, nicht weil es eingebunden
+                    // ist** -- **und ein Typ, dessen Skript kein `include`
+                    // schreibt, hat trotzdem Module, und die gehoeren in
+                    // die Liste.**
+                    foreach (var eing in typ.Eingebunden)
+                    {
+                        if (eing.Vorn)
+                        {
+                            liste.Insert(0, RubyValue.OfSymbol(eing.Name));
+                        }
+                        else
+                        {
+                            liste.Add(RubyValue.OfSymbol(eing.Name));
+                        }
+                    }
+
+                    foreach (var (behaelter, modul) in SprachEingebunden)
+                    {
+                        if (behaelter == typ.Name
+                            && !liste.Any(x => x.Name == modul))
+                        {
+                            liste.Add(RubyValue.OfSymbol(modul));
+                        }
+                    }
+
+                    // **Und der Typ selbst steht am Ende, und nicht in der
+                    // Kette der Basisklassen.** `class A` hat die Basis
+                    // `Object`, **und `Object` steht darum in der Liste,
+                    // weil die Kette dort endet** -- **und gemessen war
+                    // `Object.ancestors` gleich `[BasicObject, Kernel,
+                    // Object]`, was richtig ist, und `A.ancestors` gleich
+                    // `[Object, A]`, was auch richtig ist.**
+                    liste.Add(RubyValue.OfSymbol(typ.Name));
+                    return RubyValue.OfArray(liste);
+                }
+
+            case "is_a?":
+            case "kind_of?":
+                if (pArgumente.Count != 1)
+                {
+                    return RubyValue.Nil;
+                }
+
+                // **Und `M.is_a?(Module)` ist wahr, und `M.is_a?(Class)`
+                // nur fuer eine Klasse.** Das unterscheidet `module` von
+                // `class`,
+                // **und ein Spiel, das eine Basisklasse von einem Modul
+                // unterscheiden muss, kann das nicht ohne diese
+                // Antwort.**
+                var gesucht = TypNameAus(pArgumente[0]);
+                if (gesucht == "Module")
+                {
+                    return RubyValue.OfBoolean(true);
+                }
+
+                if (gesucht == "Class")
+                {
+                    return RubyValue.OfBoolean(typ.IsClass);
+                }
+
+                return RubyValue.OfBoolean(typ.Name == gesucht);
+
+            case "instance_methods":
+            case "instance_method":
+                {
+                    // **And `true` means "the whole chain", and `false`
+                    // means "this type alone".** Ruby takes `true` as the
+                    // default,
+                    // **and the default is not the same as "always
+                    // everything": `A.instance_methods` is the chain, and
+                    // `A.instance_methods(false)` is A alone** --
+                    // **and a reader that had the two the other way round
+                    // would answer `false` for a class with nothing of its
+                    // own** and put every base class's method in the list a
+                    // plugin asks for before it overrides anything.
+                    // **And `nil` stands for `true`, because
+                    // `A.instance_methods nil` is that too.**
+                    var dieGanzeKette = pArgumente.Count == 0
+                        || pArgumente[0].Kind == RubyValueKind.Nil
+                        || (pArgumente[0].Kind == RubyValueKind.Boolean
+                            && pArgumente[0].Boolean);
+                    var namen = new List<RubyValue>();
+                    if (!dieGanzeKette)
+                    {
+                        foreach (var methode in typ.Methods.Keys)
+                        {
+                            if (MethodeGehoertDemTyp(methode, true))
+                            {
+                                namen.Add(RubyValue.OfSymbol(methode));
+                            }
+                        }
+
+                        return RubyValue.OfArray(namen);
+                    }
+
+                    // **Und die eigenen Namen kommen zuerst in die
+                    // Antwort und in die Liste der gesehenen.** Sie stehen
+                    // nicht nur in `gesehen`,
+                    // **sonst waere `A.instance_methods` bei einer Klasse mit
+                    // eigener Methode die leere Liste von der Basis** --
+                    // **und gemessen: `all=[geerbt]` statt `[eigenes,
+                    // geerbt]`, also genau die Methoden, die A nicht
+                    // selbst geschrieben hat.**
+                    var gesehen = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var methode in typ.Methods.Keys)
+                    {
+                        if (MethodeGehoertDemTyp(methode, true))
+                        {
+                            gesehen.Add(methode);
+                            namen.Add(RubyValue.OfSymbol(methode));
+                        }
+                    }
+
+                    // **Und die Kette laeuft von hier nach oben, und jede
+                    // Klasse ueberschreibt die untere.**
+                    var klasse = typ.Superclass;
+                    var grenze = 0;
+                    while (klasse != null && grenze < 64
+                        && _types.TryGetValue(klasse, out var oben))
+                    {
+                        foreach (var methode in oben.Methods.Keys)
+                        {
+                            if (MethodeGehoertDemTyp(methode, true)
+                                && gesehen.Add(methode))
+                            {
+                                namen.Add(RubyValue.OfSymbol(methode));
+                            }
+                        }
+
+                        klasse = oben.Superclass;
+                        grenze++;
+                    }
+
+                    foreach (var eing in typ.Eingebunden)
+                    {
+                        if (!_types.TryGetValue(eing.Name, out var modul))
+                        {
+                            continue;
+                        }
+
+                        foreach (var methode in modul.Methods.Keys)
+                        {
+                            if (MethodeGehoertDemTyp(methode, true)
+                                && gesehen.Add(methode))
+                            {
+                                namen.Add(RubyValue.OfSymbol(methode));
+                            }
+                        }
+                    }
+
+                    return RubyValue.OfArray(namen);
+                }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether a name is a method a caller can send, and not a class
+    /// method or a name `undef` took out.
+    /// </summary>
+    /// <param name="pMethode">The name in the table.</param>
+    /// <param name="pMitSelf">Whether a class method counts.</param>
+    /// <returns>true when a caller could send it.</returns>
+    /// <remarks>
+    /// <strong>And <c>self.</c> is not one of them.</strong>
+    /// <c>A.instance_methods</c> does not list <c>A.selbst</c>,
+    /// **and a reader that listed it would make a plugin
+    /// <c>unless A.instance_methods.include?(method)</c> true for every
+    /// class method it ever wrote** — and it would then skip defining a
+    /// class method it had meant to define.
+    /// </remarks>
+    private static bool MethodeGehoertDemTyp(string pMethode, bool pMitSelf)
+    {
+        if (pMethode.StartsWith("self.", StringComparison.Ordinal))
+        {
+            return pMitSelf;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The type name a value stands for, whether it is a constant or a
+    /// text.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The name, or null when the value names no type.</returns>
+    /// <remarks>
+    /// <strong>And a text counts, because a game writes
+    /// <c>include?("Comparable")</c> too.</strong>
+    /// **A reader that took only symbols would say <c>false</c> for a
+    /// name the game wrote in the other spelling**, **and the plugin would
+    /// include itself a second time.**
+    /// </remarks>
+    private string? TypNameAus(RubyValue pWert) => pWert.Kind switch
+    {
+        RubyValueKind.Symbol => pWert.Name,
+        RubyValueKind.String => System.Text.Encoding.UTF8.GetString(
+            pWert.Bytes),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Whether a type is a module of this one, by name.
+    /// </summary>
+    /// <param name="pTyp">The type asked about.</param>
+    /// <param name="pName">The module's name, or null.</param>
+    /// <returns>true when the module is in the chain.</returns>
+    /// <remarks>
+    /// <strong>And the built-in names count.</strong> A class includes
+    /// <c>Object</c> whether a host says so or not, <strong>and a reader
+    /// that answered from <c>Eingebunden</c> alone would say
+    /// <c>A.include?(Object)</c> is <c>false</c></strong> — and that is the
+    /// question a plugin asks before it redefines the basics.
+    /// </remarks>
+    private bool GehoertTypAn(RubyType pTyp, string? pName)
+    {
+        if (pName == null)
+        {
+            return false;
+        }
+
+        foreach (var eing in pTyp.Eingebunden)
+        {
+            if (eing.Name == pName)
+            {
+                return true;
+            }
+        }
+
+        // **Und die eingebauten Module zaehlen mit.** `A.include?(Kernel)`
+        // ist wahr, weil `Kernel` in jeder Klasse steckt,
+        // **und ein Leser, der nur die Skript-Includes liest, wuerde hier
+        // `false` sagen** -- **und `A.included_modules` wuerde `Kernel` nicht
+        // nennen, obwohl `include?` es behauptet** -- **und die beiden
+        // Fragen widersprachen sich dann.**
+        foreach (var (typ, modulName) in SprachEingebunden)
+        {
+            if (modulName == pName && typ == pTyp.Name)
+            {
+                return true;
+            }
+
+            // **Und die Basisklasse bringt ihre Module mit.** `class A <
+            // String` hat `Comparable` durch die Basis,
+            // **und das ist der Weg, den Ruby geht.**
+            if (modulName == pName && GehoertBasis(pTyp, typ))
+            {
+                return true;
+            }
+        }
+
+        // **Und `Object` steckt in jeder Klasse, die nicht ausdruecklich
+        // `BasicObject` ist.** Ruby nimmt es an,
+        // **und ein Spiel, das `include?(Object)` fragt, erwartet
+        // `true`.**
+        //
+        // **Und die Bedingung fragt die Basiskette und nicht nur das
+        // Feld `Superclass`.** Die erste Fassung schloss `A` aus, wenn
+        // `A.superclass == "Object"` war,
+        // **und `class A` hat seit heute genau das** -- **und damit war
+        // `A.include?(Object)` `false` fuer jede Klasse ohne geschriebene
+        // Basis**, **und `Object.include?(Object)` ebenfalls, weil dort
+        // dasselbe Feld `Object` traegt.** Gemessen: alle drei `false`.
+        // *Ein `include?`, das die Basis ausschliesst statt sie zu suchen,
+        // ist eine membership, die nach einem Feld fragt und nicht nach der
+        // Kette.*
+        return pName == "Object" && GehoertBasis(pTyp, "Object")
+            && pTyp.Name != "Object";
+    }
+    /// <summary>
+    /// Whether a type is a class or has one in its chain.
+    /// </summary>
+    /// <param name="pTyp">The type asked about.</param>
+    /// <param name="pName">The class to look for.</param>
+    /// <returns>true when the class is in the chain.</returns>
+    /// <remarks>
+    /// <strong>And the whole chain, and not only the type itself.</strong>
+    /// `class A &lt; String` has `Comparable` through its base,
+    /// **and a reader that asked only <c>A.Name == "String"</c> would say
+    /// no** -- **and `A.include?(Comparable)` would be false for a class
+    /// that Ruby sorts.**
+    /// </remarks>
+    private bool GehoertBasis(RubyType pTyp, string pName)
+    {
+        var klasse = pTyp.Name;
+        var grenze = 0;
+        while (klasse != null && grenze < 64
+            && _types.TryGetValue(klasse, out var typ))
+        {
+            if (typ.Name == pName)
+            {
+                return true;
+            }
+
+            klasse = typ.Superclass;
+            grenze++;
+        }
+
+        return false;
+    }
+
+
+
     private bool Eingebaut(RubyType pTyp, string pMethode, IReadOnlyList<RubyValue> pArgumente)
     {
-        if (pMethode is "include" or "extend")
+        if (pMethode is "include" or "extend" or "prepend")
         {
             return Eingemischt(pTyp, pMethode, pArgumente);
         }
@@ -8619,6 +9273,13 @@ public sealed class RubyInterpreter
                     + "would be the wrong sentence");
                 return false;
             }
+
+            // **Und das Modul wird gemerkt, und nicht nur seine Methoden.**
+            // `include?` braucht genau das,
+            // **und ein Leser, der nur die Kopie haelt, koennte nie sagen,
+            // ob ein Plugin schon drin ist** -- **und das ist die erste
+            // Zeile von fast jedem VX-Plugin.**
+            pTyp.Eingebunden.Add((name, pMethode == "prepend"));
 
             foreach (var methode in modul.Methods)
             {

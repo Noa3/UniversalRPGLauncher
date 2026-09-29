@@ -362,11 +362,42 @@ public sealed class RubyType
     /// <summary>Whether this is a class and not a module.</summary>
     public bool IsClass { get; init; }
 
-    /// <summary>The superclass as written, or null for a module.</summary>
-    public string? Superclass { get; init; }
+    /// <summary>
+    /// The superclass, as written or as Ruby gives it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And not init, because a class is opened more than
+    /// once.</strong> `class A` twice is one class,
+    /// **and a reader that could only set the base in the object
+    /// initialiser kept the first one** -- **and a game that reopens a class
+    /// under a base it wrote the first time would have the old base, and
+    /// every method the first class had would still be found first.**
+    /// </remarks>
+    public string? Superclass { get; set; }
 
     /// <summary>The methods defined in the body, by name.</summary>
     public Dictionary<string, RubyMethod> Methods { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The modules this type took in, in the order they were written.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a list and not a copy.</strong> <c>include M</c> copies
+    /// M's methods into this type, <strong>and a reader that kept only the
+    /// copy could not answer <c>include?</c></strong> — and
+    /// <c>include?</c> is how a plugin asks whether it is already in a
+    /// class, **which is the first line of most VX plugins**.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>prepend</c> is the same list with the other
+    /// meaning.</strong> A prepended module's methods come before this
+    /// type's own, <strong>and a reader that stored it here without saying
+    /// which, would have it win exactly like an include</strong> — and a
+    /// plugin that meant to wrap a method would have replaced it instead.
+    /// </para>
+    /// </remarks>
+    public List<(string Name, bool Vorn)> Eingebunden { get; } = [];
 
     /// <summary>
     /// The names `undef` took out of this class, whether they were here or

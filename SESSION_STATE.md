@@ -9843,7 +9843,58 @@ Anfang der Schleife und einer am Ende, und der am Ende erreichte das
 `break` immer zuerst.** Der Anker auf dem am Anfang war ein No-op,
 **und der tote Zweig ist jetzt weg.**
 
+## Und die Fragen an einen Typ: alle zehn fehlten, und die zweite
+## Fehlermeldung war falsch
+
+**Gemessen vorher:** `M.instance_methods` → *M has no method
+'instance_methods' on this host*; `Object.ancestors` → erst *the constant
+Object is not defined by this host*, dann *nil has no method 'ancestors'*.
+**Und beide Haelften der zweiten Meldung waren falsch:** `Object` ist Teil
+der Sprache, **und der Leser ist der, der kein `ancestors` hat.**
+
+**Und der Kernfehler darunter war einer, den man nicht sieht:** `include`
+hat die Methoden **kopiert** und das Modul **vergessen** -- **und ohne die
+Liste kann `include?` nicht antworten**, **und `include?` ist die erste
+Zeile von fast jedem VX-Plugin.** `RubyType.Eingebunden` traegt jetzt
+Modulname und `prepend`-Vorn.
+
+**Und `instance_methods(false)` und `instance_methods` waren vertauscht.**
+Gemessen: `A.instance_methods` gab `[geerbt]`, **also genau die Methoden,
+die `A` nicht selbst geschrieben hat** -- **die eigenen Namen standen nur
+in der Liste der Gesehenen und nie in der Antwort.** `true` heisst die
+ganze Kette, `false` nur dieser Typ, `nil` steht fuer `true`.
+
+**Und die Typen der Sprache sind jetzt echte Typen im Konstruktor.**
+`Object`, `String`, `Module`, `Class`, `BasicObject`, `Kernel`,
+`Comparable`, `Enumerable` und die Fehlerklassen,
+**denn `class Held` sitzt unter `Object`, ob ein Host das sagt oder
+nicht.** `DefinedTypes` **zaehlt nur noch, was ein Skript hinzugefuegt
+hat** -- **ein Host, der fragt was ein Skript definiert, will keine vierzig
+Namen aus dem Leser.** Und `String.include?(Comparable)` ist wahr, weil
+Ruby es so macht, ueber `SprachEingebunden`.
+
+**Und `modul` ist ein Schluesselwort in C#.** Der erste Versuch hiess so,
+und der Compiler sagte *the name 'module' does not exist in the current
+context* -- **und das sieht nach einem Tippfehler aus und ist ein
+Schluesselwort.**
+
+**Und der dritte Testfehler dieser Form: eine Liste, die bei jedem Lauf
+geleert wird.** `Test_AMethodThisHostDoesNotHaveIsARefusal` macht drei
+`Run`-Aufrufe **und liest am Ende eine gemeinsame Liste** -- **und `Run`
+leert die Diagnosen, also zaehlt der Test genau den letzten.** Er
+behauptete 2, es sind 4. **Nach `nil` statt eines Wertes und `printf` ist
+das die dritte Form: *ein Test, der mehrere Dinge misst, braucht eine
+Liste, die waechst.***
+
+**Und `Object.superclass` ist `BasicObject` und erst dessen ist nil.** Ich
+hatte `nil` behauptet, um die Kette zu beenden, **und damit `ancestors` um
+ein Glied gekuerzt** -- **ein Test, der eine Kette mit einer falschen
+Erwartung beendet, kuerzt sie.**
+
+`TestRubyInterpreter: 237/237`, `All 1794 tests passed`.
+
 **Und die Regel heisst damit: in eine Mutationsliste gehoeren zwei
+Pruefungen.****Und die Regel heisst damit: in eine Mutationsliste gehoeren zwei
 Pruefungen.** Der Anker kommt genau einmal vor, **und der Ersatz ist nicht
 identisch mit dem Anker.** Die zweite fehlte bisher,
 **und deshalb stand hier zwei Laeufe lang eine tote Regel als Befund in

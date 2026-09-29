@@ -150,9 +150,18 @@ public partial class TestRubyInterpreter : TestBase
     public void Test_AMethodThisHostDoesNotHaveIsARefusal()
     {
         var mit = new RubyInterpreter(new RubyNullHost());
+        // **Und jeder Lauf sammelt fuer sich, weil `Run` die Diagnosen
+        // leert.** Das war schon immer so und ist hier sichtbar geworden,
+        // **als die dritte Zeile anfing zu zaehlen und die ersten beiden
+        // nicht mehr da waren** -- **und ein Test, der drei Laeufe macht
+        // und eine gemeinsame Liste liest, zaehlt genau einen.**
+        var gesammelt = new List<string>();
         mit.Run(One("File.read('C:/Windows/System32/config/SAM')"));
+        gesammelt.AddRange(mit.Diagnostics);
         mit.Run(One("system('rmdir /')"));
+        gesammelt.AddRange(mit.Diagnostics);
         mit.Run(One("Kernel.exit"));
+        gesammelt.AddRange(mit.Diagnostics);
 
         // **Drei Aufrufe, und die Diagnosen sind zweierlei:** `File` und
         // `Kernel` sind Konstanten, die dieser Host nicht kennt, und `exit`
@@ -162,7 +171,7 @@ public partial class TestRubyInterpreter : TestBase
         // gruen.
         var methoden = 0;
         var konstanten = 0;
-        foreach (var d in mit.Diagnostics)
+        foreach (var d in gesammelt)
         {
             if (d.Contains("has no method"))
             {
@@ -175,6 +184,10 @@ public partial class TestRubyInterpreter : TestBase
         }
 
         // **Zwei, und nicht drei — und der dritte war nie echt.**
+        // **Und `Kernel` wird nicht mitgezaehlt, weil es jetzt eine
+        // Konstante der Sprache ist** -- **und `exit` darauf ist eine
+        // Ablehnung von einer anderen Art als `File`:** eine Methode, die es
+        // nicht gibt, **und keine Konstante, die fehlt.**
         // `File.read('C:/...')` **hat ein Argument** und liefert beide
         // Diagnosen: "File ist nicht definiert" und "nil hat kein read".
         // Und `Kernel.exit` **hat keins**, **und der Empfangername steht
@@ -183,21 +196,50 @@ public partial class TestRubyInterpreter : TestBase
         // dieser Test hat ihn mitgezählt**, ohne es zu merken: der
         // Empfangername war das "Argument", und der Aufruf bekam eines,
         // das er nie bekommen haette.
-        AssertEq(methoden + konstanten, 2,
-            "**two refusals from three calls** -- a reader that evaluated "
-                + "every name would have made one of them a call that "
-                + "succeeds. The diagnostics were: "
-                + string.Join(" | ", mit.Diagnostics));
+        // **Und vier, und nicht zwei — und der alte Wert war falsch, weil
+        // der Test drei Laeufe machte und eine gemeinsame Liste las.**
+        // `Run` leert die Diagnosen, **und ein Test, der drei Laeufe macht
+        // und am Ende eine Liste liest, zaehlt genau den letzten.**
+        // **Das ist seit heute der dritte Fund dieser Form:**
+        // einmal `nil` statt eines Wertes, einmal `printf`, und jetzt eine
+        // Liste, die bei jedem Lauf geleert wird.
+        // ***Ein Test, der mehrere Dinge misst, braucht eine Liste, die
+        // waechst, und nicht eine, die zurueckgesetzt wird.***
+        AssertEq(methoden + konstanten, 4,
+            "**four refusals from three calls** — `File.read` names the "
+                + "missing constant and then the missing method, `system` is "
+                + "a method on self, and `Kernel.exit` is a method on a "
+                + "constant of the language. The old count was two because "
+                + "the test read one list after three runs, and `Run` clears "
+                + "it. The diagnostics were: "
+                + string.Join(" | ", gesammelt));
         AssertEq(konstanten, 1,
             "**and one of them is a constant** -- a constant this host does "
                 + "not define and a method it does not have are different "
                 + "refusals, and a reader that counted only one form would "
                 + "have missed the other");
-        AssertTrue(true,
-            "**three calls this host cannot make, three refusals** — a reader "
-                + "that evaluated the name would have made every one of them "
-                + "a call. The diagnostics were: "
-                + string.Join(" | ", mit.Diagnostics));
+        // **Und die dritte Ablehnung ist von einer anderen Art.**
+        // `Kernel` ist eine Konstante der Sprache und antwortet darum ohne
+        // Meldung, `exit` darauf ist eine Methode, die es nicht gibt.
+        // **Ein Leser, der `Kernel.exit` als "unbekannte Konstante" gemeldet
+        // haette, wuerde sagen, der Host kenne `Kernel` nicht** -- **und der
+        // Host kennt es, denn es ist der Leser selbst.**
+        var dritteArt = 0;
+        foreach (var d in gesammelt)
+        {
+            if (d.StartsWith("Kernel has no method", StringComparison.Ordinal))
+            {
+                dritteArt++;
+            }
+        }
+
+        AssertEq(dritteArt, 1,
+            "**and the third refusal says the method and not the "
+                + "constant** — `Kernel` is part of the language and answers "
+                    + "without a word, and a reader that called `Kernel.exit` "
+                    + "an unknown constant would be saying the host does not "
+                    + "know `Kernel`, and the host is the reader. The "
+                    + "diagnostics were: " + string.Join(" | ", gesammelt));
     }
 
     /// <summary>

@@ -129,10 +129,18 @@ public partial class TestRubyInterpreter
             + "    \"von A\"\n"
             + "  end\n"
             + "end\n"
-            + "A.new\n"));
+            + "A.new.to_s\n"));
 
-        // **`new` kennt der Host nicht, also antwortet er nicht.** Der
-        // Test geht deshalb ueber die Klasse selbst.
+        AssertEq(System.Text.Encoding.UTF8.GetString(wert.Bytes), "von A",
+            "**the instance's own `to_s` won** — a reader that asked the "
+                + "value's methods first would have taken every class's own "
+                + "`to_s` away, and a game would show its own name everywhere "
+                + "except where it wrote it");
+
+        // **Und `A.to_s` ist eine andere Frage.** Ein Typ ist kein Objekt,
+        // **und es hat kein `to_s` aus dem Rumpf** -- **es ist sein Name**,
+        // **und die eigene `to_s` des Rumpfs gilt nur fuer die
+        // Instanz.**
         var mit2 = new RubyInterpreter(new RubyNullHost());
         var wert2 = mit2.RunProgram(Statements(
             "class A\n"
@@ -141,15 +149,10 @@ public partial class TestRubyInterpreter
             + "  end\n"
             + "end\n"
             + "A.to_s\n"));
-
-        AssertTrue(wert2.Kind == RubyValueKind.String,
-            "**the class answered and not the value** — a reader that asked "
-                + "the value's methods first would have taken every class's "
-                + "own `to_s` away, and a game would show its own name "
-                + "everywhere except where it wrote it");
-        AssertEq(System.Text.Encoding.UTF8.GetString(wert2.Bytes), "von A",
-            "**and it is the class's own text**");
-        _ = wert;
+        AssertEq(System.Text.Encoding.UTF8.GetString(wert2.Bytes), "A",
+            "**and the type answers with its own name** — measured, and not "
+                + "with the body's text: a type is not an object, and Ruby "
+                + "names it");
     }
 
     /// <summary>

@@ -45,7 +45,55 @@ der Leser abschafft, muss mit der Regel gehen und nicht gegen sie.**
 nicht nur die Laenge** -- **denn bei hundert Mustern in einem Spiel weiss
 man dann nicht, welches zu gross war.**
 
-**Und `String * Integer` ist der Trennstrich zwischen zwei Fenstern.** `"-" *
+**Und die Fragen an einen Typ fehlten alle zehn, und die zweite Fehlermeldung
+war falsch.** Gemessen: `M.instance_methods` sagte *M has no method
+'instance_methods' on this host*, **und `Object.ancestors` sagte erst *the
+constant Object is not defined by this host* und dann *nil has no method
+'ancestors'*** -- **und beide Haelften waren falsch:** `Object` ist Teil
+der Sprache, **und der Leser ist der, der kein `ancestors` hat.**
+`instance_methods`, `include?`, `included_modules`, `ancestors`, `name`,
+`superclass`, `to_s` und `is_a?` auf einem Modul **stehen jetzt da.**
+
+**Und `include` hat die Methoden kopiert und das Modul vergessen.** Genau
+das ist der Kernfehler, **und `include?` kann ohne Liste nicht antworten** --
+**und `include?` ist die erste Zeile von fast jedem VX-Plugin.**
+
+**Und `instance_methods(false)` und `instance_methods` waren vertauscht.**
+Gemessen: `A.instance_methods` gab `[eigenes, geerbt]`? Nein: **`[geerbt]`
+und `[eigenes]`** -- **die eigenen Namen standen nur in der Liste der
+gesehenen und nie in der Antwort**, **und die Kette lief in den Zweig, der
+nur die eigenen zurueckgibt.** `true` heisst die ganze Kette und `false`
+nur dieser Typ, **und nil steht fuer `true`.**
+
+**Und die Typen der Sprache sind jetzt echte Typen, und keine Namen.**
+`Object`, `String`, `Module`, `Class`, `BasicObject`, `Kernel`, `Comparable`,
+`Enumerable` und die Fehlerklassen **stehen im Konstruktor, bevor ein
+Skript laeuft** -- **denn `class Held` sitzt unter `Object`, ob ein Host das
+sagt oder nicht**, **und ein Leser, der erst beim ersten `include` nachsaehe,
+haette `Object.ancestors` in einer Kette, die vorher nicht existierte.**
+`DefinedTypes` **zaehlt nur noch, was ein Skript hinzugefuegt hat**,
+**denn ein Host, der fragt was ein Skript definiert, will keine vierzig
+Namen, die nicht aus dem Skript kommen.**
+
+**Und `String.include?(Comparable)` ist wahr, weil Ruby es so macht.**
+`String`, `Integer`, `Float`, `Numeric`, `Symbol` nehmen `Comparable`,
+`Array`, `Hash` und `Range` nehmen `Enumerable`, **und jedes Objekt nimmt
+`Kernel`** -- **und `modul` ist ein Schluesselwort in C#, der erste
+Versuch hiess so und der Compiler sagte *the name 'module' does not exist
+in the current context***, **und das sieht nach einem Tippfehler aus und ist
+ein Schluesselwort.**
+
+**Und der dritte Testfehler dieser Form: eine Liste, die bei jedem Lauf
+geleert wird.** `Test_AMethodThisHostDoesNotHaveIsARefusal` macht drei
+`Run`-Aufrufe **und liest am Ende eine gemeinsame Liste** -- **und `Run`
+leert die Diagnosen, also zaehlt der Test genau den letzten.** Er behauptete
+2 und es sind 4. **Nach `nil` statt eines Wertes und `printf` ist das die
+dritte Form: *ein Test, der mehrere Dinge misst, braucht eine Liste, die
+waechst.*** **Und der vierte: `Object.superclass` ist `BasicObject` und
+erst dessen ist nil** -- **ich hatte `nil` behauptet, um die Kette zu
+beenden, und damit `ancestors` um ein Glied gekuerzt.**
+
+**Und `String * Integer` ist der Trennstrich zwischen zwei Fenstern.****Und `String * Integer` ist der Trennstrich zwischen zwei Fenstern.** `"-" *
 30`,
 **und ohne das antwortete der Leser *undefined operator '*' for a String
 and a Integer*** -- **und die Meldung waere wieder ueber einen Operator

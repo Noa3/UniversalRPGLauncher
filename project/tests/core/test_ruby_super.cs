@@ -140,17 +140,28 @@ public partial class TestRubyInterpreter
             "**nothing came back** — the reference would raise, and a reader "
                 + "that answered a value would have hidden the break behind a "
                 + "plausible number");
+        // **Und die Meldung sucht jetzt in `Object`, und nicht in "keiner
+        // Basis".** `class Allein` hat seit heute `Object` als Basis,
+        // **und `Object` hat kein `anzahl`** -- **und das ist der Grund, den
+        // man beim Lesen braucht:** die Klasse hat eine Basis, **und die
+        // Basis hat die Methode nicht.**
+        // ***Ein Test, der auf eine Fehlermeldung hoert, die der Leser
+        // abgeschafft hat, prueft eine Form und nicht ein Verhalten.***
         var gesagt = false;
         foreach (var d in mit.Diagnostics)
         {
-            if (d.Contains("no superclass"))
+            if (d.Contains("Object does not have anzahl"))
             {
                 gesagt = true;
             }
         }
 
-        AssertTrue(gesagt, "**and it says which class has no base** — the "
-            + "diagnostics were: " + string.Join(" | ", mit.Diagnostics));
+        AssertTrue(gesagt, "**and it says where the search ended and which "
+            + "method it did not find** — `class Allein` sits under `Object` "
+                + "since a class with no written base gets one, and `Object` "
+                + "has no `anzahl`; the old wording said *no superclass*, and "
+                + "that sentence is no longer true. The diagnostics were: "
+                + string.Join(" | ", mit.Diagnostics));
     }
 
     /// <summary>
