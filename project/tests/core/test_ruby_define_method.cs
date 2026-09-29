@@ -391,39 +391,53 @@ public partial class TestRubyInterpreter
     }
 
     /// <summary>
-    /// A block reaches the host as a callback, and nothing else.
+    /// A block reaches the host as a callback, and it runs there.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>The one thing this test can say today is that the host is
-    /// asked with a callback at all.</strong> A block at an ordinary call
-    /// belongs to that call,
-    /// <strong>and the only shape a block can take on the way out of this
-    /// interpreter is a callback</strong> — so a host that had been handed
-    /// <c>CallMethod</c> instead would have got a block it cannot run, and a
-    /// game's loop would have had nothing to loop over.
+    /// <strong>A block at an ordinary call belongs to that call, and the only
+    /// shape it can take on the way out of this interpreter is a callback.</strong>
+    /// So a host that had been handed <c>CallMethod</c> instead would have got
+    /// a block it cannot run, <strong>and a game's loop would have had nothing
+    /// to loop over.</strong>
     /// </para>
     /// <para>
-    /// <strong>It does not claim that the body runs, because it does
-    /// not.</strong> Measured on 2026-09-29: the host is asked once,
-    /// <c>pYield</c> is called and answers nil, <strong>and the call inside
-    /// the body is never reached.</strong> <c>Yield</c> is a second block
-    /// path next to <c>BlockAufrufen</c> with its own scope handling, and the
-    /// two do not agree — that is a card of its own, and this test says so
-    /// instead of pretending otherwise.
+    /// <strong>And the body really runs, once per value.</strong> The host
+    /// hands over two values and the body calls <c>rand()</c> twice,
+    /// <strong>which is the count that says the block ran and was not merely
+    /// parsed and dropped.</strong> A host that ran it once would drop half
+    /// the list — <strong>which a game shows as a sprite that walks half its
+    /// path.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>The call needs its brackets, and this is where that shows.</strong>
+    /// <c>{ rand }</c> is a bare name and answers nil,
+    /// <strong>and a test that wrote it without brackets would have measured
+    /// the wrong thing entirely</strong> — the body would look broken when it
+    /// is the test that is. That is what this test first got wrong.
     /// </para>
     /// </remarks>
     public void Test_ABlockReachesTheHostAsACallback()
     {
         var host = new BlockHost();
         var mit = new RubyInterpreter(host);
-        mit.RunProgram(Statements("[1].each { rand }\n"));
+        var wert = mit.RunProgram(Statements("[1].each { rand() }\n"));
 
-        AssertEq(host.Aufrufe.Count, 1,
-            "**the host was asked once, and the name was `each`** — a block "
-                + "at an ordinary call belongs to that call, and the only "
-                + "shape it can take on the way out is a callback; the host "
-                + "saw: " + string.Join(", ", host.Aufrufe));
+        // **Einmal je Wert.** Der Gast laeuft die Liste ab und ruft
+        // `pYield` fuer jedes Element, **und genau das ist der Vertrag**:
+        // der Host entscheidet, wie oft und womit.
+        // **`each_with_index` gibt beide Werte in einer Runde** -- es gibt
+        // also beides, und ein Test, der nur eines davon erlaubt, wuerde die
+        // falsche Regel festschreiben.
+        AssertEq(host.Aufrufe.Count, 3,
+            "**the host saw `each` and then `rand` twice** — once per value, "
+                + "because the body ran once per element; the host saw: "
+                + string.Join(", ", host.Aufrufe));
+        AssertEq(AsInteger(wert), 6,
+            "**and the loop answers what the body answered** — `rand()` "
+                + "answers six on this host, and a host that answered nil "
+                + "instead of the body's value would make a game's loop hand "
+                + "back nothing");
     }
 
     /// <summary>
@@ -518,7 +532,22 @@ public partial class TestRubyInterpreter
             // der nur die Haelfte seines Weges geht.**
             Aufrufe.Add(pMethod);
             Argumente.AddRange(pArguments);
-            return pYield([RubyValue.OfInteger(1), RubyValue.OfInteger(2)]);
+            // **Einmal je Wert, mit diesem Wert.** Das ist `each`:
+            // **das Skript bekommt ein Element pro Runde**, und ein Gast,
+            // der alle Werte auf einmal uebergibt, wuerde einem Block mit
+            // einem Parameter nur das erste geben und den Rest fallen
+            // lassen.
+            RubyValue? letztes = null;
+            foreach (var w in new[]
+            {
+                RubyValue.OfInteger(1),
+                RubyValue.OfInteger(2),
+            })
+            {
+                letztes = pYield([w]);
+            }
+
+            return letztes;
         }
 
         public RubyValue? LookupConstant(string pName)
@@ -526,5 +555,42 @@ public partial class TestRubyInterpreter
             _ = pName;
             return null;
         }
+    }
+
+    /// <summary>
+    /// A block's parameter comes from the values the host hands over.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is the whole point of the callback, and the thing
+    /// <c>Yield</c> exists for.</strong> The host hands over values, the block
+    /// names them in its parameters, <strong>and the body uses those
+    /// names</strong> — so the loop in a game walks a list by receiving each
+    /// element. A reader that ran the body without binding would have the
+    /// body see nil, <strong>and `items.each { |i| sum = sum + i }` would add
+    /// nothing at all.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the parameter shadows the caller's name, not overwrites
+    /// it.</strong> The block gets its own level,
+    /// <strong>and a reader that bound the parameter over the caller's
+    /// variable would leave the caller's value changed after the loop</strong>
+    /// — which is a bug a game only shows on the second loop.
+    /// </para>
+    /// </remarks>
+    public void Test_ABlockParameterComesFromTheHostsValues()
+    {
+        var host = new BlockHost();
+        var mit = new RubyInterpreter(host);
+        var wert = mit.RunProgram(Statements(
+            "x = 100\n"
+            + "[1, 2].each { |i| x = x + i }\n"
+            + "x\n"));
+
+        AssertEq(AsInteger(wert), 103,
+            "**the caller's x is 103 and not 100** — the block's `i` was bound "
+                + "to the value the host handed over and added to x, and a "
+                + "reader that ran the body without binding would have added "
+                + "nothing and left x at a hundred");
     }
 }

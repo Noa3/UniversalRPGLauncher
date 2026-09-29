@@ -9235,10 +9235,17 @@ unveraendert gruen: **der Block wird nur angehaengt, wenn `_blockKette`
 nicht leer ist**, und die Kette ist nur gefuellt, wenn ein Block **diesen**
 Aufruf umschliesst. **Zwei Bedingungen, die dasselbe sagen.**
 
-**Und ein offener Produktfehler, gemessen und nicht kaschiert:**
-`[1].each { rand }` ruft den Gast **einmal** mit einem Rueckruf, `pYield`
-antwortet `nil`, **und der Aufruf im Rumpf wird nie erreicht.** `Yield` ist
-ein zweiter Blockpfad neben `BlockAufrufen` mit eigener Scope-Logik.
+**Und der offene Produktfehler war ein Testfehler.** `[1].each { rand }`
+rief den Gast einmal mit einem Rueckruf, `pYield` antwortete `nil`,
+**und der Aufruf im Rumpf wurde nie erreicht** — **`rand` ohne Klammern ist
+ein Bezeichner, kein Aufruf**, `Local("rand")` gibt nil, und der Host wird
+nie gefragt. **Mit `rand()` laeuft der Block, und die Schleife antwortet mit
+dem, was der Rumpf beantwortet hat.**
+
+**Die Knotenform wurde gemessen, nicht geraten:** `[1].each { rand }` ergibt
+`Block[Call:each, Array, Block]`, und `Yield` liest `Children[2]` — das
+stimmt. **Ein Test, der eine Indizierung voraussetzt, muss sie an einem
+Knoten messen, den er selbst gebaut hat.**
 
 `TestRubyInterpreter: 107/107`, `All 1664 tests passed`, Mutationen 6 von 8
 mit zwei gemessenen No-ops.

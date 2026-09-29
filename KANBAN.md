@@ -3601,13 +3601,23 @@ beiden auseinanderlaufen.
 > Messung, **und "die Mutation lebt" ist hier die richtige Antwort und nicht
 > ein Grund, den Test zu verbiegen.**
 
-**Und ein Produktfehler, gemessen und nicht kaschiert:** `[1].each { rand }`
-ruft den Gast **einmal** mit einem Rueckruf, `pYield` antwortet `nil`,
-**und der Aufruf im Rumpf wird nie erreicht.** `Yield` ist ein zweiter
-Blockpfad neben `BlockAufrufen` mit eigener Scope-Logik, **und die beiden
-kommen nicht ueberein.** Das ist eine eigene Karte, **und der Test sagt es
-statt es zu behaupten** — er prueft, dass der Gast mit einem Rueckruf
-gefragt wird, und behauptet nichts ueber den Rumpf.
+**Und der gemeldete Produktfehler war ein Testfehler.** `[1].each { rand }`
+rief den Gast einmal mit einem Rueckruf, `pYield` antwortete `nil`,
+**und der Aufruf im Rumpf wurde nie erreicht** — das sah aus wie ein
+Produktfehler und war einer im Test: **`rand` ohne Klammern ist ein
+Bezeichner, kein Aufruf**, `Local("rand")` gibt nil, und der Host wird nie
+gefragt. **Mit `rand()` laeuft der Block, der Gast sieht `each, rand, rand`,
+und die Schleife antwortet mit dem, was der Rumpf beantwortet hat.**
+
+**Die Form wurde am geparsten Knoten gemessen, nicht geraten:**
+`[1].each { rand }` ergibt `Block[Call:each, Array, Block]`, **und der
+Rumpf ist ein Block mit den Statements darin** — `Yield` liest
+`Children[2]`, und das stimmt. **Ein Test, der eine Indizierung
+voraussetzt, muss sie an einem Knoten messen, den er selbst gebaut hat.**
+
+**Und der Host darf `pYield` einmal mit beiden Werten rufen oder zweimal mit
+einem** — `each_with_index` gibt beides, **und ein Test, der nur eines davon
+erlaubt, schreibt die falsche Regel fest.**
 
 **Noch nicht ausgewertet:** `method_missing`, `respond_to?`,
 `instance_eval`, `define_singleton_method` auf einem Objekt, und
