@@ -1137,7 +1137,12 @@ public sealed class RubyInterpreter
         // bleibt, weil ein `class` nach einem `class` dieselbe Art ist.
         var typ = _types.TryGetValue(name, out var vorhanden)
             ? vorhanden
-            : new RubyType { Name = name, IsClass = pIsClass };
+            : new RubyType
+            {
+                Name = name,
+                IsClass = pIsClass,
+                Superclass = pNode.Superclass,
+            };
         typ.Methods.Clear();
         _types[name] = typ;
 

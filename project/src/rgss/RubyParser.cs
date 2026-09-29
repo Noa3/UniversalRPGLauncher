@@ -1206,10 +1206,16 @@ public sealed class RubyParser
                 _index++;
                 var name = ReadConstantPath();
                 var body = new List<RubyNode>();
+                string? superclass = null;
                 if (Is("<"))
                 {
                     _index++;
-                    ReadConstantPath();
+                    // **Die Superklasse wird gelesen und nicht weggeworfen.**
+                    // Die erste Fassage rief `ReadConstantPath()` auf und
+                    // benutzte das Ergebnis nicht -- **und ein Leser, der die
+                    // Kette nicht fuettert, kann eine geerbte Methode nicht
+                    // finden**, auch wenn der Aufruf sie sucht.
+                    superclass = ReadConstantPath();
                 }
                 SkipNewlines();
                 if (Is("end"))
@@ -1224,6 +1230,11 @@ public sealed class RubyParser
                 {
                     Kind = pToken.Text == "class" ? RubyNodeKind.Class : RubyNodeKind.Module,
                     Name = name,
+                    // **Nur eine Klasse kann eine Superklasse haben.** Ein
+                    // Modul mit einem `<` ist ein Syntaxfehler in Ruby, und
+                    // **ein Leser, der es zulieesse, wuerde einem Modul etwas
+                    // erben lassen, was das Skript nie gefragt hat.**
+                    Superclass = pToken.Text == "class" ? superclass : null,
                     Line = pToken.Line,
                     Children = body,
                 };

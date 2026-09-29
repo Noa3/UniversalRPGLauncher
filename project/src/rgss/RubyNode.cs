@@ -111,6 +111,19 @@ public sealed class RubyNode
     /// <summary>The name, for the nodes that carry one.</summary>
     public string? Name { get; init; }
 
+    /// <summary>
+    /// The superclass as written, on a class node and nowhere else.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The parser records the text and does not look anything
+    /// up</strong>, and that is the same rule the rest of the tree follows:
+    /// a node says what was written, and what it means is a later phase's
+    /// question. <strong>Only a class has one</strong>, because a module with
+    /// a <c>&lt;</c> is not Ruby, and a reader that let one through would let
+    /// a game's module inherit something it never asked for.
+    /// </remarks>
+    public string? Superclass { get; init; }
+
     /// <summary>The operator, for the operator nodes.</summary>
     public string? Operator { get; init; }
 

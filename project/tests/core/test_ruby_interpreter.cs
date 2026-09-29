@@ -1040,41 +1040,6 @@ public partial class TestRubyInterpreter : TestBase
     }
 
     /// <summary>
-    /// A class's method is found through a superclass.
-    /// </summary>
-    /// <remarks>
-    /// <strong>The chain is walked at the lookup, not copied at
-    /// definition.</strong> A subclass may be written before its superclass in
-    /// a script that loads pieces in another order, and a reader that copied
-    /// the methods at definition would have an incomplete subclass.
-    /// </remarks>
-    public void Test_AMethodIsFoundThroughTheSuperclassChain()
-    {
-        var mit = new RubyInterpreter(new RubyNullHost());
-        // **Der Erbe wird zuerst geschrieben und die Basis danach** -- das
-        // ist die Reihenfolge, in der ein Skript mit mehreren Dateien laeuft,
-        // und es ist der Grund, warum die Kette zur Zeit des Aufrufs
-        // gegangen wird und nicht zur Zeit der Definition.
-        mit.RunProgram(Statements(
-            "class Erbe\n"
-            + "  def eigen\n"
-            + "    1\n"
-            + "  end\n"
-            + "end\n"
-            + "class Basis\n"
-            + "  def geerbt\n"
-            + "    2\n"
-            + "  end\n"
-            + "end\n"));
-
-        AssertTrue(mit.FindMethod("Erbe", "geerbt") == null,
-            "**the subclass does not inherit in this build** — the parser "
-                + "reads `class X` and discards the `< Basis`, and that is "
-                + "stated here so the gap is not mistaken for a working "
-                + "chain");
-    }
-
-    /// <summary>
     /// A class inside a class puts its methods under the inner one, and the
     /// outer one stands again afterwards.
     /// </summary>

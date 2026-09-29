@@ -4533,10 +4533,30 @@ have put every game's top-level method in a place no game asks for.**
 what a reopened class does, and a game's second file is a common way to patch
 the first.
 
-**What is not here, and is stated in the test rather than implied:** the parser
-reads `class X` and **discards the `< Basis`**, so the superclass chain exists
-in the evaluator and is not yet fed. One test says so in words, because a
-green test that a reader would take for inheritance is worse than none.
+### The superclass chain, which the parser was throwing away
+
+**The parser read `< Basis` and discarded it.** The evaluator had the chain
+walk and the superclass field, and nothing ever fed them — **and the test said
+so, in words, because a green test a reader would take for "inheritance does
+not work" measures the parser and not the evaluator.** That is the eighth
+shape of the same mistake: **a test that describes a gap reads as a
+measurement of the component the reader happens to be looking at.**
+
+`RubyNode` carries `Superclass`, the parser fills it, and only a class gets
+one:
+
+> **A module with a `<` is not Ruby.** The parser refuses to put one in the
+> node, so `module M < Basis` is a module with no superclass rather than an
+> error — **and the chain walk then has nothing to walk, which is the safe
+> direction**: a module that could inherit would take methods it never asked
+> for.
+
+**The chain is walked at the lookup, not copied at definition.** The subclass
+is written first and the base second — the order a script with several files
+runs in — and a reader that copied the methods at definition would have an
+incomplete subclass that never learns about the base. **And the base keeps its
+own method**: a reader that moved it up the chain instead of finding it would
+have taken it away from the base.
 
 **Still not evaluated:** a module's `include`, `def self.x`, `attr_accessor`,
 blocks with parameters passed to methods, and `super`.
@@ -4562,8 +4582,8 @@ It was replaced with the observable one — the loop binds the element rather
 than a fixed number — and the guard stays, because it is right and costs
 nothing.
 
-**Test evidence** `test_ruby_interpreter.cs`, 32 tests; `test_ruby_parser.cs`
-stays 52/52. **1573/1573**, validator passed, mutations 6 of 6, 6 of 6 and
+**Test evidence** `test_ruby_interpreter.cs` 34 tests across two files;
+`test_ruby_parser.cs` stays 52/52. **1575/1575**, validator passed, mutations 6 of 6, 6 of 6 and
 7 of 7 across the three groups — **and the seventh group is 7 of 7 measured
 rule by rule**, because the script reports six for the class table on a run
 that loads a stale DLL. **A harness result and a measurement of the source are
