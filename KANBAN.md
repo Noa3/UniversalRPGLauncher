@@ -3703,9 +3703,46 @@ Grenze.** `self` ist die Klasse, **und diese Runtime hat keine Objekte** --
 ein Spiel, das ein Objekt braucht, braucht ein Objektmodell, das es hier
 nicht gibt. Das steht im Doc, weil es eine Grenze und kein Detail ist.
 
-**Noch nicht ausgewertet:** `define_singleton_method` auf einem Objekt,
-`respond_to_missing?`, `binding`, `Object`- und `Module`-Methoden, und
-Blockparameter mit Vorgabewerten.
+### Vorgabewerte, und ein Fehler, der nicht die Vorgabewerte sind
+
+**Der Parser konnte kein `=` in einer Parameterliste lesen.** `def m(a, b = 2)`
+wurde zu **vier Parametern: `a`, `b`, `=`, `2`** -- **die Liste nahm Token fuer
+Token und nannte alles Bezeichner.** Ein Aufruf mit zwei Werten haette
+gebunden, **und einer mit einem haette `=` und `2` als Namen bekommen** -- ein
+Spiel, das einen Vorgabewert schreibt, haette eine Methode bekommen, die ihn nie
+benutzt.
+
+**Und der Doc des Interpreters behauptete genau das Gegenteil:** "dieser Parser
+liefert fuer die Parameter eine Liste von Namen und keine Ausdruecke".
+**Das war der ehrliche Stand des Codes und wurde falsch, sobald der Parser es
+lernte.** Ein Kommentar, der eine Einschraenkung erklaert, wird zur Lüge, wenn
+die Einschraenkung wegfällt -- **und niemand hat ihn gelesen, weil er
+stimmte.**
+
+**Und die Vorgaben sind Ausdruecke, keine Zahlen.** `def m(a = rand(6))`
+wird **bei jedem Aufruf** ausgewertet, **und waere es einmal bei der Definition
+bewertet worden, haette jeder Aufruf dieselbe Zahl bekommen** -- und ein Spiel,
+das ein Wuerfel schreibt, haette einen Wuerfel, der immer dieselbe Seite zeigt.
+
+**Und die Reihenfolge ist: geliefertes Argument, dann Vorgabe, dann nil.**
+**Ohne diese Reihenfolge haette der Vorgabewert das gelieferte Argument
+ueberschrieben**, und `m(1, 3)` haette `b` als Zwei bekommen.
+
+**Und die Vorgaben liegen nach Namen, nicht nach Position.** Eine Liste
+waere eine Stelle mehr, an der sie auseinanderlaufen koennten.
+
+**Und ein Aufruf ohne Argument erreicht den Rumpf nicht.** `A.m()` gibt
+`Symbol:A` zurueck -- **den Empfaenger**, wenn der Rumpf den Parameter liest;
+mit festem Rumpf oder mit einem Argument antwortet dieselbe Methode richtig.
+**Das ist NICHT die Vorgabewerte**: derselbe Fehler tritt ohne jede Vorgabe auf.
+**Der Test `Test_AZeroArgumentCallDoesNotReachTheBody` ist rot und benennt
+alles, was ausgeschlossen wurde** -- Knotenform, `Child`,
+`EvaluateChildren`, `EigeneMethode`, `Aufrufen`, `Name` -- **damit der
+naechste Versuch nicht dieselben Wege geht.**
+
+**Noch nicht ausgewertet:** `*args` und `**opts` (der Parser liest sie, der
+Interpreter noch nicht), `respond_to_missing?`, `binding`, `Object`- und
+`Module`-Methoden.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

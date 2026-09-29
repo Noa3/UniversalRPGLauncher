@@ -956,9 +956,52 @@ public sealed class RubyInterpreter
         _scopes.Add(new Dictionary<string, RubyValue>());
         for (var i = 0; i < pMethode.Parameters.Count; i++)
         {
-            SetLocal(
-                pMethode.Parameters[i],
-                i < pArgumente.Count ? pArgumente[i] : RubyValue.Nil);
+            var parameter = pMethode.Parameters[i];
+
+            // **Ein geliefertes Argument schlaegt den Vorgabewert, und ein
+            // fehlendes nimmt ihn.** `def m(a, b = 2)` mit `m(1)` gibt `a`
+            // die Eins und `b` die Zwei,
+            // **und mit `m(1, 3)` gibt es die Drei.**
+            // **Ohne diese Reihenfolge haette der Vorgabewert das gelieferte
+            // Argument ueberschrieben**, und `m(1, 3)` haette `b` als Zwei
+            // bekommen -- **ein Spiel, das einen Wert uebergibt, haette ihn
+            // stillschweigend verloren.**
+            // **Direkt in die neue Ebene und nicht mit `SetLocal`.**
+            // `SetLocal` sucht von innen nach aussen und schreibt in die
+            // Ebene, in der es den Namen findet, **und `Name` liest nur
+            // `_scopes[^1]`.** Ein Parameter, der in eine aeussere Ebene
+            // wanderte, **waere fuer den Rumpf unsichtbar**, und
+            // `Name` liefe weiter in die Methoden-Suche -- **wo `x` als
+            // Klasse behandelt wird und der Aufrufer zurueckkommt.**
+            // Ein Spiel mit `def m(x = 9)` **haette den Vorgabewert nie
+            // gesehen**, und nur fuer die Parameter, die eine Vorgabe
+            // haben, weil die ohne Vorgabe vorher gebunden wurden.
+            if (i < pArgumente.Count)
+            {
+                _scopes[^1][parameter] = pArgumente[i];
+            }
+            else if (pMethode.Vorgaben.TryGetValue(parameter, out var vorgabe))
+            {
+                // **Zur Aufrufzeit und nicht zur Definitionszeit.** Ein
+                // Spiel schreibt `def m(a = rand(6))`,
+                // **und genau deshalb steht dort ein Ausdruck und nicht eine
+                // Zahl** -- waere er einmal berechnet worden, haette jeder
+                // Aufruf dieselbe Zahl bekommen,
+                // und das Waagerechte, fuer das er geschrieben wurde, haette
+                // nie ausgeschlagen.
+                //
+                // **Und der Ausdruck laeuft in der Ebene des Aufrufers.**
+                // Ein Vorgabewert, der eine Variable liest, **liest die des
+                // Aufrufers** -- das ist Rubys Regel,
+                // und ein Leser, der ihn in einem leeren Rahmen laufen
+                // liesse, haette nil gelesen und waere der Variablen
+                // ausweichen, die das Spiel geschrieben hat.
+                _scopes[^1][parameter] = Evaluate(vorgabe);
+            }
+            else
+            {
+                _scopes[^1][parameter] = RubyValue.Nil;
+            }
         }
 
         _returned = false;
@@ -1746,15 +1789,29 @@ public sealed class RubyInterpreter
         var parameter = pNode.Children.Count > 0 ? pNode.Children[0] : null;
         var rumpf = pNode.Children.Count > 1 ? pNode.Children[1] : null;
         var namen = new List<string>();
+        var vorgaben = new Dictionary<string, RubyNode>(StringComparer.Ordinal);
         if (parameter != null)
         {
-            // **Die Parameterliste ist ein Block, und ihre Kinder sind die
-            // Namen.** `Statements` nimmt die Rolle `Body` und sonst die
+            // **Die Parameterliste traegt jetzt auch Ausdruecke.**
+            // `Statements` nimmt die Rolle `Body` und sonst die
             // Quellordnung -- **und fuer diesen Knoten ist die
             // Quellordnung richtig**, weil es keine Rollen gibt.
+            //
+            // **Und ein Eintrag mit einem Ausdruck ist ein Name UND ein
+            // Wert.** `Statements(parameter).Select(t => t.Name)` haette
+            // `b = 2` als Namen `b` genommen und den Ausdruck weggeworfen,
+            // **und die Methode haette nie einen Vorgabewert gehabt** --
+            // genau das, was der Doc dieses Abschnitts behauptete, bevor
+            // der Parser ihn liefern konnte.
             foreach (var teil in Statements(parameter))
             {
                 namen.Add(teil.Name ?? string.Empty);
+                if (teil.Kind == RubyNodeKind.Assignment
+                    && teil.Children.Count >= 2
+                    && teil.Name != null)
+                {
+                    vorgaben[teil.Name] = teil.Children[1];
+                }
             }
         }
 
@@ -1771,6 +1828,7 @@ public sealed class RubyInterpreter
                 Name = name,
                 IsOnSelf = pAufSelbst,
                 Parameters = namen,
+                Vorgaben = vorgaben,
                 Body = rumpf!,
             };
 

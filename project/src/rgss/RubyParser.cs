@@ -1654,9 +1654,84 @@ public sealed class RubyParser
                 throw new RubyParseException(
                     "A parameter list is never closed.", Current.Line);
             }
-            var token = Take();
-            parameters.Add(Literal(
-                RubyNodeKind.Identifier, token.Line, null, null, null, token.Text));
+
+            SkipNewlines();
+
+            // **Drei Formen, und die erste Fassage kannte nur die erste.**
+            // Sie nahm Token fuer Token und nannte alles Identifier,
+            // **und `def m(a, b = 2)` wurde damit zu vier Parametern: `a`,
+            // `b`, `=` und `2`.** Ein Aufruf mit drei Werten haette
+            // gebunden, **und einer mit zwei haette `=` und `2` als Namen
+            // bekommen** -- ein Spiel, das einen Vorgabewert schreibt, haette
+            // eine Methode bekommen, die ihn nie benutzt.
+            //
+            // **Ein Vorgabewert ist ein Ausdruck und wird auch so
+            // gespeichert**, weil er zur Aufrufzeit ausgewertet wird
+            // und nicht zur Definitionszeit -- **und der Ausdruck kann
+            // einen Aufruf enthalten**, was ein Name nicht kann.
+            if (Is("*"))
+            {
+                _index++;
+                var stern = Take();
+                parameters.Add(new RubyNode
+                {
+                    Kind = RubyNodeKind.BlockPass,
+                    Name = stern.Text,
+                    Line = stern.Line,
+                });
+            }
+            else if (Is("**"))
+            {
+                _index++;
+                var doppelt = Take();
+                parameters.Add(new RubyNode
+                {
+                    Kind = RubyNodeKind.Hash,
+                    Name = doppelt.Text,
+                    Line = doppelt.Line,
+                });
+            }
+            else if (Current.Kind is RubyTokenKind.Identifier
+                or RubyTokenKind.InstanceVariable
+                or RubyTokenKind.GlobalVariable)
+            {
+                var token = Take();
+                var name = Literal(
+                    RubyNodeKind.Identifier, token.Line, null, null, null,
+                    token.Text);
+                SkipNewlines();
+                if (Is("=") && !Is("=="))
+                {
+                    _index++;
+                    SkipNewlines();
+                    parameters.Add(new RubyNode
+                    {
+                        Kind = RubyNodeKind.Assignment,
+                        Name = token.Text,
+                        Line = token.Line,
+                        Children =
+                        [
+                            name,
+                            ParseExpression(),
+                        ],
+                    });
+                }
+                else
+                {
+                    parameters.Add(name);
+                }
+            }
+            else
+            {
+                // **Und was kein Parameter ist, ist ein Fehler mit Ort.**
+                // Ein Spiel schreibt `def m(a, b)`,
+                // **und ein Leser, der jedes Token annimmt, haette einen
+                // Tippfehler zu einem Parameter mit einem Namen gemacht,
+                // den niemand aufruft.**
+                parameters.Add(ParseExpression());
+            }
+
+            SkipNewlines();
             if (Is(","))
             {
                 _index++;

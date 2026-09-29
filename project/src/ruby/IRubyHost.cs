@@ -203,6 +203,28 @@ public sealed class RubyMethod
     /// </remarks>
     public bool IsWriter { get; init; }
 
+    /// <summary>
+    /// The expression behind each parameter that has one, by parameter name.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>By name and not by position.</strong> A reader that stored them
+    /// by position would have to keep the two lists in step, <strong>and
+    /// losing the step would bind the wrong default to the wrong
+    /// parameter</strong> — which is a method that answers a number nobody
+    /// wrote.
+    /// </para>
+    /// <para>
+    /// <strong>An expression and not a value.</strong> `def m(a = rand(6))`
+    /// evaluates its default <strong>at every call, not once at
+    /// definition</strong> — and a reader that evaluated it at definition
+    /// would have given every call the same number, which is the whole
+    /// reason a game writes that instead of a constant.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, RubyNode> Vorgaben { get; init; }
+        = new Dictionary<string, RubyNode>(StringComparer.Ordinal);
+
     /// <summary>What it runs.</summary>
     public RubyNode Body { get; init; } = null!;
 }
