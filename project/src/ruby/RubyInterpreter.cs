@@ -87,6 +87,19 @@ public sealed class RubyInterpreter
     private RubyType? _aktuellerTyp;
 
     /// <summary>
+    /// The classes a method call is walking, outermost first.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is what <c>super</c> needs and it is a stack and not a
+    /// name.</strong> A method that calls the base's method of the same name
+    /// pushes the class it ran in, and a <c>super</c> inside that one pushes
+    /// the next — <strong>and a reader that remembered only "the class I am
+    /// in" would have called the subclass's own method again</strong>, which
+    /// is a game going for ever on one line.
+    /// </remarks>
+    private readonly List<string> _aufrufKette = new();
+
+    /// <summary>
     /// How far down the stack a method call may see.
     /// </summary>
     /// <remarks>
@@ -224,7 +237,9 @@ public sealed class RubyInterpreter
             RubyNodeKind.For => EvaluateFor(pNode),
             RubyNodeKind.Class => DefineType(pNode, true),
             RubyNodeKind.Module => DefineType(pNode, false),
-            RubyNodeKind.Def => DefineMethod(pNode),
+            RubyNodeKind.Def => DefineMethod(pNode, false),
+            RubyNodeKind.DefS => DefineMethod(pNode, true),
+            RubyNodeKind.SuperCall => EvaluateSuper(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
             RubyNodeKind.Begin => EvaluateBlock(pNode),
@@ -560,7 +575,14 @@ public sealed class RubyInterpreter
         var eigene = EigeneMethode(empfaenger, methode);
         if (eigene != null)
         {
-            return Aufrufen(eigene, argumente);
+            // **Der Name des Empfaengers wandert mit** -- **und genau der
+            // fehlt `super`**: ohne ihn wuesste der Aufruf nicht, aus
+            // welcher Klasse er kam, und `super` haette nichts, wovon es
+            // eine Ebene hoeher ginge.
+            return Aufrufen(
+                eigene,
+                argumente,
+                empfaenger.Kind == RubyValueKind.Symbol ? empfaenger.Name : null);
         }
 
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
@@ -601,6 +623,19 @@ public sealed class RubyInterpreter
             return null;
         }
 
+        // **Die Klassenmethode zuerst.** `self.` ist der Schluessel, unter
+        // dem sie abgelegt ist, **und ohne diesen Schritt waere
+        // `Klasse.selbst_definiert` nicht erreichbar** -- waehrend
+        // `Klasse.instanz_definiert` es waere.
+        // **Zuerst die Klassenmethode, dann die Kette.** `self.` ist der
+        // Schluessel, unter dem sie abgelegt ist, und **ohne diesen Schritt
+        // waere `Klasse.selbst_definiert` nicht erreichbar** -- waehrend
+        // `Klasse.instanz_definiert` es waere.
+        if (_types[name].Methods.TryGetValue("self." + pMethod, out var aufSelbst))
+        {
+            return aufSelbst;
+        }
+
         return FindMethod(name, pMethod);
     }
 
@@ -624,11 +659,19 @@ public sealed class RubyInterpreter
     /// leaving it out.
     /// </para>
     /// </remarks>
-    private RubyValue Aufrufen(RubyMethod pMethode, IReadOnlyList<RubyValue> pArgumente)
+    private RubyValue Aufrufen(
+        RubyMethod pMethode,
+        IReadOnlyList<RubyValue> pArgumente,
+        string? pKlasse)
     {
         var tiefe = _scopes.Count;
         var grenze = _methodenGrenze;
         _methodenGrenze = tiefe;
+        _aufrufKette.Add(pKlasse ?? string.Empty);
+        var alteArgumente = _aktuelleArgumente;
+        var alteMethode = _aktuelleMethode;
+        _aktuelleArgumente = pArgumente;
+        _aktuelleMethode = pMethode.Name;
         _scopes.Add(new Dictionary<string, RubyValue>());
         for (var i = 0; i < pMethode.Parameters.Count; i++)
         {
@@ -642,6 +685,9 @@ public sealed class RubyInterpreter
         _returned = false;
         _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
         _methodenGrenze = grenze;
+        _aufrufKette.RemoveAt(_aufrufKette.Count - 1);
+        _aktuelleArgumente = alteArgumente;
+        _aktuelleMethode = alteMethode;
         return wert;
     }
 
@@ -1179,7 +1225,7 @@ public sealed class RubyInterpreter
     /// `Object` says so</strong> rather than this reader inventing a root.
     /// </para>
     /// </remarks>
-    private RubyValue DefineMethod(RubyNode pNode)
+    private RubyValue DefineMethod(RubyNode pNode, bool pAufSelbst)
     {
         var name = pNode.Name ?? string.Empty;
         var typ = _aktuellerTyp;
@@ -1207,12 +1253,14 @@ public sealed class RubyInterpreter
             }
         }
 
-        typ.Methods[name] = new RubyMethod
-        {
-            Name = name,
-            Parameters = namen,
-            Body = rumpf!,
-        };
+        typ.Methods[(pAufSelbst ? "self." : string.Empty) + name] =
+            new RubyMethod
+            {
+                Name = name,
+                IsOnSelf = pAufSelbst,
+                Parameters = namen,
+                Body = rumpf!,
+            };
 
         // **Der Rumpf laeuft nicht.** Ruby fuehrt ihn bei der Definition
         // aus, weil die Defaultargumente Ausdruecke sind -- **und dieser
@@ -1244,6 +1292,11 @@ public sealed class RubyInterpreter
         var name = pTypeName;
         while (name != null && _types.TryGetValue(name, out var typ) && gesehen.Add(name))
         {
+            // **Die Basismethode, und nicht die Klassenmethode der
+            // Basis.** `super` aus einer Instanzmethode laeuft zur
+            // Instanzmethode -- **und ein Leser, der auch hier die
+            // Klassenmethode zuerst probierte, wuerde eine Instanzmethode
+            // auf der Basis ausfuehren**, die es dort gar nicht gibt.
             if (typ.Methods.TryGetValue(pMethod, out var methode))
             {
                 return methode;
@@ -1253,6 +1306,115 @@ public sealed class RubyInterpreter
         }
 
         return null;
+    }
+
+
+    /// <summary>
+    /// The arguments of the running method, for a bracketless `super`.
+    /// </summary>
+    private IReadOnlyList<RubyValue> _aktuelleArgumente = [];
+
+    /// <summary>The name of the method that is running, for `super`.</summary>
+    private string _aktuelleMethode = string.Empty;
+
+
+    /// <summary>
+    /// Runs the same method one level up the superclass chain.
+    /// </summary>
+    /// <param name="pNode">The `super` node.</param>
+    /// <returns>What the base's method returned, or nil.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Two forms and they are not the same call.</strong> <c>super</c>
+    /// without brackets hands the arguments on, <c>super(x)</c> hands the
+    /// written ones — and <strong>a reader that treated both alike would have
+    /// called the base with the subclass's arguments</strong>, so an
+    /// override that changes what the base receives would not change anything.
+    /// </para>
+    /// <para>
+    /// <strong>The chain is the call stack and not the class we are
+    /// in.</strong> <c>super</c> inside a method that the base called finds
+    /// the base's base — <strong>and a reader that remembered only the current
+    /// class would have called the subclass's own method again</strong>,
+    /// which is a game going for ever on one line.
+    /// </para>
+    /// <para>
+    /// <strong>A `super` with no base is a diagnostic</strong>, because Ruby
+    /// would raise, and a game whose script has a broken override is broken;
+    /// the message says which thing is missing.
+    /// </para>
+    /// </remarks>
+    private RubyValue EvaluateSuper(RubyNode pNode)
+    {
+        // **Die Argumente der aktuellen Methode**, wenn `super` ohne
+        // Klammern dasteht. Sie stehen in diesem Rahmen, weil `Aufrufen`
+        // sie gebunden hat.
+        // **`super(x)` uebergibt die geschriebenen Argumente, und die
+        // muessen ausgewertet werden, bevor sie weitergegeben werden.** Ein
+        // Knoten, den niemand auswertet, ist eine Liste von Ausdruecken und
+        // kein Wert -- **und `super(a * 2)` wuerde die Basis mit einem
+        // Knoten statt mit zweiundvierzig aufrufen.**
+        var argumente = pNode.Name == "mit"
+            ? pNode.Children.Select(Evaluate).ToList()
+            : CurrentArguments(false);
+
+        // **Die eigene Klasse geht zuerst weg** -- `super` heisst "eine
+        // Ebene hoeher", nicht "in meiner Klasse".
+        if (_aufrufKette.Count == 0)
+        {
+            _diagnostics.Add(
+                "super was called outside a method, and there is no class to "
+                    + "go up to");
+            return RubyValue.Nil;
+        }
+
+        var eigene = _aufrufKette[^1];
+        if (!_types.TryGetValue(eigene, out var typ) || typ.Superclass == null)
+        {
+            _diagnostics.Add(
+                $"{typ?.Name ?? eigene} has no superclass, so super has "
+                    + "nowhere to go; the reference would raise here");
+            return RubyValue.Nil;
+        }
+
+        // **`_aktuelleMethode` ist schon der nackte Name.** Er kommt aus
+        // `RubyMethod.Name`, und dort steht der Name, den das Skript
+        // geschrieben hat -- **der `self.`-Praefix ist ein Schluessel im
+        // Speicher und kein Teil des Namens.** Die erste Fassage hatte
+        // hier noch einen Abzweig, der ihn abschnitt; **die Mutation, die
+        // ihn entfernt, lebt, weil es nichts abzuschneiden gab.**
+        var methode = FindMethod(typ.Superclass, _aktuelleMethode);
+        if (methode == null)
+        {
+            _diagnostics.Add(
+                $"{typ.Superclass} does not have {_aktuelleMethode}, so "
+                    + "super has no method to call");
+            return RubyValue.Nil;
+        }
+
+        return Aufrufen(methode, argumente, typ.Superclass);
+    }
+
+    /// <summary>
+    /// The arguments the running method was called with.
+    /// </summary>
+    /// <param name="pGeschrieben">Whether `super` was written with brackets.</param>
+    /// <returns>The arguments, already evaluated.</returns>
+    /// <remarks>
+    /// <strong>`super` without brackets hands the caller's arguments
+    /// on</strong>, and that is the whole difference between the two forms.
+    /// The values are remembered per frame — <strong>and a reader that read
+    /// them from the current scope would have found the locals of the method
+    /// body</strong>, which is not what a caller passed.
+    /// </remarks>
+    private IReadOnlyList<RubyValue> CurrentArguments(bool pGeschrieben)
+    {
+        if (pGeschrieben)
+        {
+            return [];
+        }
+
+        return _aktuelleArgumente;
     }
 
 

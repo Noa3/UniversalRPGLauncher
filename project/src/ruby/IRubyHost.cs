@@ -105,6 +105,18 @@ public sealed class RubyMethod
     /// <summary>The parameter names, in the order written.</summary>
     public IReadOnlyList<string> Parameters { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Whether this was written `def self.x` and belongs to the class.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A class method and an instance method of the same name are two
+    /// different things</strong>, and a game's script has both under the same
+    /// name more than once. <strong>The flag is what keeps them apart</strong>,
+    /// because a reader that filed them together would have answered a
+    /// <c>self.</c> call with the instance body.
+    /// </remarks>
+    public bool IsOnSelf { get; init; }
+
     /// <summary>What it runs.</summary>
     public RubyNode Body { get; init; } = null!;
 }

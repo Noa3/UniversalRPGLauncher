@@ -4558,8 +4558,77 @@ incomplete subclass that never learns about the base. **And the base keeps its
 own method**: a reader that moved it up the chain instead of finding it would
 have taken it away from the base.
 
-**Still not evaluated:** a module's `include`, `def self.x`, `attr_accessor`,
-blocks with parameters passed to methods, and `super`.
+### `super` needs the call stack, and not the class we are in
+
+**`super` walks the stack of the calls, not the current class.** A `super`
+inside a method the middle class called finds the top class's method — **and a
+reader that remembered only "the class I am in" would have called the
+subclass's own method again**, which is a game going for ever on one line.
+
+**The two forms are two calls.** `super` hands the caller's arguments on,
+`super(x)` hands the written ones — **and a reader that treated both alike
+would have called the base with the subclass's arguments**, so an override
+that changes what the base receives would not change anything.
+
+**And the caller's name has to travel with the call.** The class the receiver
+named is what `super` steps up from — **and a call that passed nothing
+would have left `super` with no class at all**, which the mutation confirmed
+by answering "has no superclass" for a class that is not the one being
+called.
+
+**And `super(x)` has to evaluate the `x` first.** A node nobody evaluates is
+a list of expressions and not a value, **and `super(a * 2)` would have called
+the base with a node instead of forty-two.**
+
+**A `super` with no base is a diagnostic and not a value.** Ruby would raise,
+and a game whose override has no base is broken; the message names the class
+and the method, **because "no superclass" and "the base does not have that
+method" are two different faults** and a reader who sent someone to only one
+of them would have them reading the wrong line.
+
+### `def self.x` and the `self.` prefix
+
+**A class method is filed under `self.` and an instance method is not, and a
+game's script has both under one name more than once.** `EigeneMethode` tries
+the class method first — **without that step `Klasse.selbst_definiert` would
+be unreachable while `Klasse.instanz_definiert` worked.**
+
+**And the test writes the class method FIRST, on purpose.** The first version
+wrote the instance method first, and a reader that filed both under one key
+would have let the second overwrite the first — **and the answer came out the
+same**, so the mutation survived. The order is now the one that makes the
+collision visible: **a test that cannot fail for the wrong reason is not
+measuring the thing it names.**
+
+**But the chain walk does not.** `super` out of an instance method runs the
+base's *instance* method — **and a reader that also tried the class method
+there would have run an instance method of the base that does not exist.**
+
+**And the prefix was never a part of the name.** The first version stripped
+it in a helper called `CurrentMethodName`, and the mutation that removed the
+stripping **survived** — because `_aktuelleMethode` comes from
+`RubyMethod.Name`, which already holds the name the script wrote, and the
+`self.` is a key in the table and not a part of the name. **The branch was
+dead code, and a green mutation result is not evidence that a branch is
+needed.** It is gone, and the note stays because "it looked like a rule and
+was not" is worth writing down.
+
+### Two faults the tests found, and both are worth writing down
+
+**`class allein` is not Ruby.** A class name begins with a capital, and
+`allein` is an identifier — so the call `allein.anzahl` was a variable, went
+to the host, and the diagnostic named the host and not the class. **The reader
+was right and the test was wrong**, and the fix was the fixture, not the
+interpreter.
+
+**And `RubyValue.ToString()` does not give a string's text.** It gives
+`"N bytes"`, **because a Ruby string is a byte sequence here and the text
+would have to be decoded with the script's own encoding.** An assertion over
+`ToString` would have tested `ToString` and not the value — so the two methods
+under comparison are now two different *numbers*.
+
+**Still not evaluated:** a module's `include`, `attr_accessor`, `defined?`,
+and blocks with parameters passed to methods.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

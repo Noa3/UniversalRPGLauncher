@@ -1174,6 +1174,35 @@ public sealed class RubyParser
                     Line = pToken.Line,
                 };
             }
+            case "super":
+            {
+                _index++;
+                // **`super` und `super(...)` sind zweierlei.** Ohne Klammern
+                // gibt Ruby die Argumente weiter, mit Klammern die
+                // geschriebenen -- **und ein Leser, der beides gleich
+                // behandelte, wuerde bei `super` ohne Klammern die Argumente
+                // des Aufrufs nehmen und damit die Basis mit anderen Werten
+                // aufrufen als die, die der Erbe selbst bekommen hat.**
+                var args = new List<RubyNode>();
+                if (Is("("))
+                {
+                    args = ReadArguments();
+                }
+
+                return new RubyNode
+                {
+                    Kind = RubyNodeKind.SuperCall,
+                    // **Das Leerzeichen ist die Form, in der Ruby
+                    // unterscheidet** -- und der Name traegt es hier, weil
+                    // der Knoten nur einen Namen hat.
+                    Name = args.Count > 0 ? "mit" : "ohne",
+                    Line = pToken.Line,
+                    Children = args,
+                    Role_Children =
+                    [.. args.Select(a => new RubyNodePart
+                        { Role = RubyNodeRole.Argument, Node = a })],
+                };
+            }
             case "yield":
             {
                 _index++;
@@ -1189,12 +1218,29 @@ public sealed class RubyParser
             {
                 _index++;
                 var name = ReadMemberName();
+                // **`def self.x` ist eine Methode auf der Klasse selbst**,
+                // und der Unterschied ist der einzige Punkt an diesem
+                // Schluesselwort -- **ein Leser, der ihn uebersieht, wuerde
+                // jede Klassenmethode eines Spiels zur Instanzmethode machen**,
+                // und ein `self.`-Aufruf darin haette kein Ziel.
+                var aufSelbst = false;
+                if (name == "self" && Is("."))
+                {
+                    // **Der Punkt ist noch da** -- `ReadMemberName` hat nur
+                    // "self" genommen, **und ohne ihn waere der zweite
+                    // Lesevorgang auf einem Punkt gelandet**, was als
+                    // Syntaxfehler endet und nicht als "eine Klassenmethode".
+                    _index++;
+                    name = ReadMemberName();
+                    aufSelbst = true;
+                }
+
                 var arguments = ReadParameterList();
                 SkipNewlines();
                 var body = ReadBody("end");
                 return new RubyNode
                 {
-                    Kind = RubyNodeKind.Def,
+                    Kind = aufSelbst ? RubyNodeKind.DefS : RubyNodeKind.Def,
                     Name = name,
                     Line = pToken.Line,
                     Children = [arguments, body],
