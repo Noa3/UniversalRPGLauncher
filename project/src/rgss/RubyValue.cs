@@ -64,6 +64,19 @@ public enum RubyValueKind
     /// </remarks>
     Regexp,
 
+    /// <summary>
+    /// A piece of a script that can be called, and that this runtime holds as
+    /// a value.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A kind of its own and not a number or a name.</strong> A lambda
+    /// answers its arity, takes arguments and answers a value, and <strong>a
+    /// reader that filed it under a number could not tell it from
+    /// zero</strong> -- and a game that stores a lambda in a variable and
+    /// calls it later is the most ordinary thing a script does.
+    /// </remarks>
+    Proc,
+
     /// <summary>A whole value with an identity, which anything can be asked about.</summary>
     /// <remarks>
     /// This covers numbers, strings, symbols, patterns and a game's own
@@ -102,6 +115,17 @@ public sealed class RubyValue : IEquatable<RubyValue>
 
     /// <summary>The bytes, for a <see cref="RubyValueKind.String"/>.</summary>
     public byte[] Bytes { get; private init; } = [];
+
+    /// <summary>
+    /// The block, for the kind that holds one.
+    /// </summary>
+    /// <remarks>
+    /// <strong>It is the node and not a compiled thing.</strong> The
+    /// interpreter has no compiled blocks and no objects, <strong>and a node
+    /// is what it can actually run</strong> -- so a lambda here is the same
+    /// tree the program was written as, and calling it walks that tree.
+    /// </remarks>
+    public RubyNode? Block { get; private init; }
 
     /// <summary>The name, for a <see cref="RubyValueKind.Symbol"/>.</summary>
     public string? Name { get; private init; }
@@ -154,6 +178,12 @@ public sealed class RubyValue : IEquatable<RubyValue>
 
     public static RubyValue OfBoolean(bool pValue) =>
         new(RubyValueKind.Boolean) { Boolean = pValue };
+
+    /// <summary>A block as a value.</summary>
+    public static RubyValue OfBlock(RubyNode pBlock) => new(RubyValueKind.Proc)
+    {
+        Block = pBlock,
+    };
 
     public static RubyValue OfArray(IReadOnlyList<RubyValue> pItems) =>
         new(RubyValueKind.Object) { Items = pItems, IsList = true };

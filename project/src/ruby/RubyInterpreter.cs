@@ -149,6 +149,18 @@ public sealed class RubyInterpreter
     private int _methodenGrenze;
 
     /// <summary>
+    /// The scope depth each open block starts at, and the wall a block does
+    /// not see past.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A stack and not one value, because blocks nest.</strong> A
+    /// lambda inside a lambda inside a method has three walls,
+    /// <strong>and a single value would have let the inner block see the
+    /// middle one's locals</strong> — the same mistake one level down.
+    /// </remarks>
+    private readonly List<int> _blockGrenze = [];
+
+    /// <summary>
     /// The classes and modules the script defined, by name.
     /// </summary>
     /// <remarks>
@@ -591,14 +603,23 @@ public sealed class RubyInterpreter
 
     private RubyValue Local(string pName)
     {
-        // **Nur bis zur uebersten Methodengrenze.** Eine Methode sieht ihre
-        // eigenen Variablen und die der Klammern darueber, **nicht die des
-        // Aufrufers** -- und das ist der Unterschied zwischen einem Bereich
-        // und einem Stapel. **Ein Leser, der alle Ebenen durchsuchte,
-        // wuerde in einer Methode die Variable ihres Aufrufers sehen**, und
-        // ein Spiel, das in einer Methode `x = 1` schreibt und es danach
-        // liest, wuerde den Wert des Aufrufers bekommen.
-        for (var i = _scopes.Count - 1; i >= _methodenGrenze; i--)
+        // **Nur bis zur uebersten Methodengrenze, und in einem Block nur bis
+        // zur Blockgrenze.** Eine Methode sieht ihre eigenen Variablen und
+        // die der Klammern darueber, **nicht die des Aufrufers** -- und das
+        // ist der Unterschied zwischen einem Bereich und einem Stapel. **Ein
+        // Leser, der alle Ebenen durchsuchte, wuerde in einer Methode die
+        // Variable ihres Aufrufers sehen**, und ein Spiel, das in einer
+        // Methode `x = 1` schreibt und es danach liest, wuerde den Wert des
+        // Aufrufers bekommen.
+        //
+        // **Und ein Block sieht gar nichts ausser seinen eigenen Parametern.**
+        // Ein Spiel, das `lambda { x }` schreibt, meint eine neue `x`,
+        // **und diese Schleife gab ihm die der Methode zurueck** -- sie las
+        // also aus einem neuen Namen einen alten Wert, ohne dass irgendwo
+        // ein Fehler entstand. **Dieselbe Wand wie `SetLocal`, aus
+        // demselben Grund, und es sind drei Stellen, nicht eine.**
+        var grenze = _blockGrenze.Count > 0 ? _blockGrenze[^1] : _methodenGrenze;
+        for (var i = _scopes.Count - 1; i >= grenze; i--)
         {
             if (_scopes[i].TryGetValue(pName, out var wert))
             {
@@ -654,6 +675,19 @@ public sealed class RubyInterpreter
         // ein Leser, der immer zum Host ginge, wuerde jedes `def` eines
         // Spiels als "diese Methode kennt der Host nicht" ablehnen**, also
         // waere kein Spiel lauffaehig.
+        // **Ein Aufruf auf einen Block-Wert fuehrt ihn aus.** `f = lambda
+        // { |x| x * 2 }` und dann `f.call(3)` ist die Form, die ein Spiel
+        // schreibt, **und ein Aufruf auf eine Zahl oder einen Namen waere
+        // eine Fehlermeldung des Hosts** -- ein Leser, der den Block nicht
+        // zuerst versucht, wuerde `f.call(3)` als "keine Methode call auf 0"
+        // melden, **und der Empfangername waere eine Zahl statt eines
+        // Blocks**.
+        if (empfaenger.Kind == RubyValueKind.Proc && empfaenger.Block != null
+            && (methode == "call" || methode == "()" || methode == "[]"))
+        {
+            return BlockAufrufen(empfaenger.Block, argumente, empfaenger);
+        }
+
         var eigene = EigeneMethode(empfaenger, methode);
         if (eigene != null)
         {
@@ -822,6 +856,129 @@ public sealed class RubyInterpreter
         return wert;
     }
 
+    /// <summary>
+    /// Runs a block that was kept as a value, with the arguments it was
+    /// called with.
+    /// </summary>
+    /// <param name="pBlock">The block node.</param>
+    /// <param name="pArgumente">The arguments the call carried.</param>
+    /// <param name="pSelbst">The block's own value, for <c>self</c>.</param>
+    /// <returns>What the block's last statement answered.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>A frame of its own and not the caller's variables.</strong> A
+    /// block does not see the locals of the method that built it, <strong>and a
+    /// reader that ran the body on the caller's scope would have let a lambda
+    /// read and change variables the game made local</strong> -- two calls of
+    /// one lambda would then have shared a variable, and a lambda that outlived
+    /// its method would have kept it alive.
+    /// </para>
+    /// <para>
+    /// <strong>Fewer arguments than parameters, and never more.</strong> Ruby
+    /// binds what it can and leaves the rest <c>nil</c>, <strong>and that is
+    /// what lets a game write a two-parameter block for a call that carries
+    /// one value</strong> -- the form a host's own callbacks arrive in.
+    /// </para>
+    /// <para>
+    /// <strong>A block and not a method, so <c>return</c> stops here.</strong>
+    /// <c>return</c> inside a block comes back to the call, <strong>and a
+    /// reader that let it escape would have ended the whole program</strong>
+    /// whenever a game wrote <c>liste.each { return 1 }</c>.
+    /// </para>
+    /// </remarks>
+    private RubyValue BlockAufrufen(
+        RubyNode pBlock, IReadOnlyList<RubyValue> pArgumente, RubyValue pSelbst)
+    {
+        var parameter = pBlock.Children.Count > 1 ? pBlock.Children[1] : null;
+        var rumpf = pBlock.Children.Count > 2 ? pBlock.Children[2] : null;
+        if (rumpf == null)
+        {
+            return RubyValue.Nil;
+        }
+
+        var tiefe = _scopes.Count;
+        _scopes.Add(new Dictionary<string, RubyValue>());
+        _blockGrenze.Add(tiefe);
+        if (parameter != null)
+        {
+            var namen = BlockParameterNamen(parameter);
+            for (var n = 0; n < namen.Count; n++)
+            {
+                SetLocal(
+                    namen[n],
+                    n < pArgumente.Count ? pArgumente[n] : RubyValue.Nil);
+            }
+        }
+
+        // **`_returned` wird hier zur Block-Marke.** Die bestehende
+        // Return-Behandlung kennt nur "das Programm ist zurueck", **und eine
+        // Lambda, die zurueckgibt, wuerde damit das ganze Skript beenden**.
+        var altesSelbst = _aktuellerTyp;
+        _returned = false;
+        try
+        {
+            var letztes = RubyValue.Nil;
+            foreach (var teil in Statements(rumpf))
+            {
+                letztes = Evaluate(teil);
+                if (_returned)
+                {
+                    break;
+                }
+            }
+
+            return letztes;
+        }
+        finally
+        {
+            _returned = false;
+            _aktuellerTyp = altesSelbst;
+            _blockGrenze.RemoveAt(_blockGrenze.Count - 1);
+            _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
+        }
+    }
+
+    /// <summary>
+    /// The names a block's parameter list binds.
+    /// </summary>
+    /// <param name="pParameter">The parameter node.</param>
+    /// <returns>The names, in order.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Both spellings.</strong> A block writes <c>|x, y|</c> and a
+    /// method writes <c>(x, y)</c>, and <strong>a reader that only knew the
+    /// block's would have left every method's parameters empty</strong> -- the
+    /// names sit in different nodes, and a block can carry either.
+    /// </para>
+    /// <para>
+    /// <strong>An empty list binds nothing</strong>, which is the form a game
+    /// writes for a block that only closes over what it already sees -- <strong>and
+    /// a reader that invented a positional name for it would have bound the
+    /// first argument to something the game never named.</strong>
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<string> BlockParameterNamen(RubyNode pParameter)
+    {
+        var namen = new List<string>();
+        foreach (var teil in Statements(pParameter))
+        {
+            switch (teil.Kind)
+            {
+                case RubyNodeKind.Identifier:
+                    namen.Add(teil.Name ?? string.Empty);
+                    break;
+                case RubyNodeKind.Assignment when teil.Children.Count >= 2
+                        && teil.Children[0].Kind == RubyNodeKind.Identifier:
+                    namen.Add(teil.Children[0].Name ?? string.Empty);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return namen;
+    }
+
 
     private RubyValue Assign(RubyNode pNode)
     {
@@ -896,7 +1053,20 @@ public sealed class RubyInterpreter
             _scopes.Add(new Dictionary<string, RubyValue>());
         }
 
-        for (var i = _scopes.Count - 1; i >= _methodenGrenze; i--)
+        // **Ein Block hat eine eigene Wand, und die steht ueber der der
+        // Methode.** Ein Block sieht die lokalen Variablen der Methode
+        // nicht, **und diese Schleife suchte bis zur Methodengrenze nach
+        // aussen** -- das hiess: `lambda { x = 1 }` in einer Methode, in der
+        // `x` schon 99 war, schrieb in die 99 hinein und liess den Wert des
+        // Aufrufers veraendert. **Das ist der Unterschied zwischen einem
+        // Block und eingefrorenem Zustand des Aufrufers.**
+        //
+        // **Innerhalb des Blocks wird weiter nach aussen gesucht**, weil ein
+        // Block einen `while`-Rumpf und ein `begin` in sich tragen kann,
+        // **und die sind kein eigener Rahmen, sondern Teil desselben
+        // Rumpfes.** Die Wand ist der Rahmen, den `BlockAufrufen` gestellt hat.
+        var grenze = _blockGrenze.Count > 0 ? _blockGrenze[^1] : _methodenGrenze;
+        for (var i = _scopes.Count - 1; i >= grenze; i--)
         {
             if (_scopes[i].ContainsKey(pName))
             {
@@ -1256,6 +1426,21 @@ public sealed class RubyInterpreter
         // heraus, und der Rumpf wuerde nie laufen. **Das ist die Form, die
         // ein Spiel am haeufigsten schreibt**, und sie brauchte eine eigene
         // Abkuerzung, die es vorher nicht gab.
+        // **`lambda` und `proc` tragen einen Block ohne Aufruf.** Der
+        // Parser baut aus `lambda { |x| x }` denselben Block-Knoten wie aus
+        // `a.each { |x| x }`, **nur dass der Empfanger ein Bezeichner ist,
+        // den es nicht gibt.** Ohne diesen Zweil wuerde der Block seinen
+        // "Empfaenger" aufrufen, der Host wuerde Nein sagen, **und ein
+        // Spiel, das eine Lambda schreibt, haette einen stillen nil dort,
+        // wo es einen aufrufbaren Wert erwartet.**
+        if (pNode.Kind == RubyNodeKind.Block
+            && pNode.Children.Count >= 3
+            && pNode.Children[0].Kind == RubyNodeKind.Identifier
+            && pNode.Children[0].Name is "lambda" or "proc")
+        {
+            return RubyValue.OfBlock(pNode);
+        }
+
         if (pNode.Kind == RubyNodeKind.Block
             && pNode.Children.Count >= 3
             && pNode.Children[0].Kind is RubyNodeKind.Call
@@ -2089,7 +2274,12 @@ public sealed class RubyInterpreter
     /// <summary>A local in any scope up to the method boundary.</summary>
     private bool HasLocal(string pName)
     {
-        for (var i = _scopes.Count - 1; i >= _methodenGrenze; i--)
+        // **Dieselbe Wand wie `Local` und `SetLocal`.** Sonst wuerde `x` im
+        // Block als "vorhanden" gelten, **während `Local` nil lieferte** --
+        // und ein Spiel, das `defined?(x)` schreibt, bekame eine Antwort,
+        // die der naechste Zugriff nicht bestaetigt.
+        var grenze = _blockGrenze.Count > 0 ? _blockGrenze[^1] : _methodenGrenze;
+        for (var i = _scopes.Count - 1; i >= grenze; i--)
         {
             if (_scopes[i].ContainsKey(pName))
             {

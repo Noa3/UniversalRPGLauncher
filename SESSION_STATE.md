@@ -9174,3 +9174,39 @@ test read back. **The fix was a one-line public property on the runtime.**
 `TestRgssRuntime` is 6/6, mutations 3 of 3. The other two patches are not
 gaps: their content is in `HEAD` in a later form, and `t_ae3e01c0.patch` is
 empty.
+
+## 2026-09-29 — `undef`, `lambda`, `proc`, und eine Scope-Wand an drei Stellen
+
+**`undef` war bereits ein Schluesselwort, und der Lexer-Test sagte es.**
+`Test_TheKeywordListIsTheOneFromTheGrammar` nennt einundvierzig Namen, und
+es waren einundvierzig; **diese Arbeit haette daraus zweiundvierzig gemacht.**
+Derselbe falsche Edit, dasselbe rote Signal, und der Test hatte recht.
+
+**Und `undef a, b` ist eine Liste** (in `v1_8_1`s `parse.y` verifiziert:
+`undef_list: fitem | undef_list ',' fitem`). Die erste Fassung nahm einen
+Namen, **und die Mutation "liest nur den ersten Token" ueberlebte fuenf Tests,
+weil bei einem einzigen Namen beide Lesarten denselben Knoten liefern** — erst
+die Liste trennt sie. **Ein Test, der aus dem falschen Grund nicht scheitern
+kann, misst nicht das, was er benennt.**
+
+**Und die Wand eines Ruby-Blocks war falsch — an drei Stellen von einer.**
+`SetLocal` suchte bis zur Methodengrenze nach aussen. Fuer eine Methode richtig,
+**fuer einen Block falsch**: `lambda { x = 1 }` in einer Methode, in der `x`
+schon 99 war, schrieb in die 99 hinein. **`Local` und `HasLocal` suchten
+genauso nach aussen, und das war der stillere Fehler** — ein Block, der `x`
+schrieb, liess den Wert des Aufrufers in Ordnung, **und ein Block, der nur `x`
+las, bekam die 99 als waere es seine eigene.** Ein Spiel haette aus einem
+Namen, den es nie geschrieben hat, einen Wert gelesen, ohne dass irgendwo ein
+Fehler entstand.
+
+**Und `||` ist hier immer eine leere Parameterliste, weil der Kontext das
+entscheidet.** `ReadBlockParameters` wird nur unmittelbar nach `{` oder `do`
+gerufen, **und ein logisches ODER kann dort nicht stehen.** Die erste Fassung
+entschied ueber das Token danach: `3` ist ein Wert, also las sie ODER und warf
+`lambda { || 3 }` weg. **Ein Nachbar ist kein Kontext.**
+
+**Und die Wand braucht einen Rueckbau.** Zwei Aufrufe derselben Lambda und
+ein Lesen sind noetig, um das zu sehen — **der erste Verschachtelungstest hat
+die Mutation nicht getoetet, weil er nur schrieb und nicht las.**
+
+`TestRubyInterpreter: 93/93`, `All 1650 tests passed`, Mutationen 11 von 11.

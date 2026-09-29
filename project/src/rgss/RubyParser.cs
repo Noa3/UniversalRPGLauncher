@@ -1552,6 +1552,28 @@ public sealed class RubyParser
     /// </remarks>
     private RubyNode ReadBlockParameters()
     {
+        // **`||` ist hier immer eine leere Parameterliste, und der Kontext
+        // entscheidet das allein.** Diese Methode wird **nur** unmittelbar
+        // nach `{` oder nach `do` gerufen -- **und ein logisches ODER kann
+        // dort nicht stehen**, weil direkt nach einer offenen Klammer kein
+        // linker Operand existiert. `lambda { || 3 }` heisst deshalb: leere
+        // Liste, Rumpf `3`.
+        //
+        // **Die erste Fassung entschied ueber das Token danach, und das war
+        // geraten**: `3` ist ein Wert, also las sie ODER undwarf die Zeile
+        // weg. **Ein Nachbar ist kein Kontext** -- die Frage ist nicht, was
+        // als naechstes kommt, sondern wo ueberhaupt gelesen wird.
+        if (Is("||"))
+        {
+            _index++;
+            return new RubyNode
+            {
+                Kind = RubyNodeKind.Array,
+                Line = Current.Line,
+                Children = [],
+            };
+        }
+
         if (!Is("|"))
         {
             return new RubyNode { Kind = RubyNodeKind.Array, Line = Current.Line };

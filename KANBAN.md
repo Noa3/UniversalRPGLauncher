@@ -3518,8 +3518,48 @@ names.**
 **The symbol is read from `Text` and not from `Name`** — the same difference
 `alias` hit, from the same cause, and the second time in a week.
 
-**Still not evaluated:** `Proc`, `lambda`, `define_method`, and block
-parameters with default values.
+### `lambda` und `proc`, und eine Scope-Wand an drei Stellen statt an einer
+
+**Keines der beiden Worte ist ein Schluesselwort.** Die Grammatikliste hat
+einundvierzig Namen und keines ist dabei — **ein Leser, der "Schluesselwort"
+geraten haette, haette zwei hinzufuegen muessen und den Zaehltest gebrochen.**
+
+**Und `||` ist hier immer eine leere Parameterliste, weil der Kontext das
+entscheidet.** `ReadBlockParameters` wird nur unmittelbar nach `{` oder nach
+`do` gerufen, **und ein logisches ODER kann dort nicht stehen**, weil direkt
+nach einer offenen Klammer kein linker Operand existiert. **Die erste Fassung
+entschied ueber das Token danach, und das war geraten**: `3` ist ein Wert, also
+las sie ODER und warf die Zeile weg. **Ein Nachbar ist kein Kontext** — die
+Frage ist nicht, was als naechstes kommt, sondern wo ueberhaupt gelesen wird.
+
+**Und die Wand eines Blocks stand an einer Stelle von dreien.** `SetLocal`
+suchte bis zur Methodengrenze nach aussen, das ist richtig fuer eine Methode
+und falsch fuer einen Block: `lambda { x = 1 }` in einer Methode, in der `x`
+schon 99 war, **schrieb in die 99 hinein**. `Local` und `HasLocal` suchten
+genauso nach aussen, **und das war der stillere Fehler** — ein Block, der
+`x = 1` schrieb, liess den Wert des Aufrufers in Ordnung, **und ein Block, der
+nur `x` las, bekam die 99 als waere es seine eigene.** Ein Spiel haette aus
+einem Namen, den es nie geschrieben hat, einen Wert gelesen, und nirgends
+ stand ein Fehler.
+
+> **Ein Block ist keine eingefrorene Kopie des Aufruferzustands, und das ist
+> an drei Stellen wahr und an einer falsch.**
+
+**Und die Wand braucht einen Rueckbau, sonst steht der naechste Block in der
+vorigen.** Zwei Aufrufe derselben Lambda und ein Lesen sind noetig, um das zu
+sehen — **der erste Verschachtelungstest hat die Mutation nicht getoetet, weil
+er nur schrieb und nicht las.**
+
+**Und `HasLocal` ist die dritte Wand, und sie ist die, die antwortet.**
+`Local` liest einen Wert und `HasLocal` sagt, ob einer da ist, **und sie
+muessen sich einigen**: `lambda { [defined?(x), x] }` waere ein Skript, das
+sich selbst beluegt, wenn `defined?` den Namen nennt und `x` danach nil
+antwortet. **Nur `Local` zu wandeln liess diese Spaltung offen**, und die
+Mutation, die `HasLocal` die Wand nahm, ueberlebte jeden anderen Test in der
+Datei, **weil keiner in einem Block eine Frage stellt.**
+
+**Noch nicht ausgewertet:** `define_method`, `method_missing`,
+`respond_to?` und Blockparameter mit Vorgabewerten.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare
