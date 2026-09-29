@@ -94,7 +94,54 @@ public sealed class RubyInterpreter
 
     /// <summary>The groups `group_by` gathered, in the order they appeared.</summary>
     private readonly Dictionary<RubyValue, List<RubyValue>> Gruppen = [];
-                    // **Und nichts wird gebaut, denn es gibt nichts zu
+
+    /// <summary>
+    /// The constants that hold a value, and not only a type.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a constant may hold a value, and not only a type.</strong>
+    /// <c>Punkt = Struct.new(:x, :y)</c> is exactly that,
+    /// <strong>and <c>RPG::Actor = Struct.new(:id, :name)</c> is the first
+    /// line of the standard library of RPG Maker XP, VX and VX Ace</strong> —
+    /// <strong>without this table not one of those games would be
+    /// readable</strong>, because the value of a constant had nowhere to go.
+    /// </para>
+    /// <para>
+    /// <strong>And it stands next to the types and not inside them.</strong> A
+    /// constant that holds a type is in <c>_types</c>,
+    /// <strong>and one that holds a number cannot be in the same table</strong>
+    /// — <strong>the difference between "this is a class" and "this is a
+    /// value" is the difference between a class and a number</strong>, and a
+    /// game's <c>LIMIT = 100</c> would be a class.
+    /// </para>
+    /// </remarks>
+    private readonly Dictionary<string, RubyValue> _konstanten = new(StringComparer.Ordinal);
+
+    /// <summary>How many structs have been built, and it is only a
+    /// counter.</summary>
+    /// <remarks>
+    /// <strong>And it counts, and it knows nothing.</strong> The name of a
+    /// struct class has to differ from the last one,
+    /// <strong>and that is all it needs</strong> — <strong>a reader that read
+    /// the number as "so many fields" would have called a three-field struct
+    /// the third struct in the world</strong>, and two games with the same
+    /// number would share their fields.
+    /// </remarks>
+    private int _strukturZaehler;
+
+    /// <summary>The default each struct field was given, by class name.</summary>
+    /// <remarks>
+    /// <strong>And by the class name, and not in the class.</strong> The
+    /// fields are in <c>RubyType.Struct</c>,
+    /// <strong>and their defaults are values and not nodes</strong> —
+    /// <strong>a default is a value because it was already evaluated when the
+    /// struct was built</strong>, and a game that wrote
+    /// <c>Struct.new(:id, :name, "")</c> has a default that is a value and
+    /// not an expression to run again.
+    /// </remarks>
+    private readonly Dictionary<string, Dictionary<string, RubyValue>> _strukturVorgaben
+        = new(StringComparer.Ordinal);
 
     /// <summary>
     /// The class variables, one table per class, shared by its objects.
@@ -500,6 +547,40 @@ public sealed class RubyInterpreter
             }
         }
 
+        // **Und `==` und `!=` fragen zuerst das Objekt.** Zwei Structs mit
+        // denselben Feldern sind gleich,
+        // **und ein Leser, der nur die Werte verglich, wuerde sagen, zwei
+        // gleiche Waffen seien verschieden** -- **und
+        // `liste.include?(waffe)` wuerde sie nicht finden,
+        // und jede Lageranzeige waere leer.**
+        //
+        // **Und `!=` ist `not ==`, und nicht ein eigener Vergleich.**
+        // `a != b` ist in Ruby `not (a == b)`,
+        // **und ein Leser, der beides getrennt verglich, haette zwei Stellen,
+        // an denen die Struct-Regel fehlen kann** -- **und an der zweiten
+        // waere sie dann auch weg.**
+        if (links is "==" or "!=")
+        {
+            var erst = Evaluate(Operands(pNode)[0]);
+            var zweit = Evaluate(Operands(pNode)[1]);
+            var verglichen = StructMethode(erst, "==", [zweit]);
+            if (verglichen == null)
+            {
+                // **Und die andere Seite darf es auch sein.** `held == held`
+                // ist symmetrisch,
+                // **und ein Leser, der nur links fragte, haette
+                // `held == held` falsch und `held == held` richtig
+                // beantwortet**, je nachdem, welcher Wert links stand.
+                verglichen = StructMethode(zweit, "==", [erst]);
+            }
+
+            if (verglichen != null)
+            {
+                return links == "==" ? verglichen
+                    : RubyValue.OfBoolean(!Truthy(verglichen));
+            }
+        }
+
         if (links is "<=>" or "<" or "<=" or ">" or ">=")
         {
             // **Und die vier Vergleiche fragen dieselbe Regel.** Ein Spiel,
@@ -797,6 +878,15 @@ public sealed class RubyInterpreter
             return RubyValue.OfSymbol(typ.Name);
         }
 
+        // **And a constant that holds a value gives that value.**
+        // `LIMIT = 100` and `Punkt = Struct.new(:x, :y)`,
+        // **and without this step `LIMIT` was nil and every game that read
+        // it did its arithmetic on nothing.**
+        if (_konstanten.TryGetValue(name, out var konstant))
+        {
+            return konstant;
+        }
+
         // **Und `Regexp` ist die eine Konstante aus der Sprache, die ein
         // Spiel braucht.** `Regexp.last_match[1]` schreibt jedes Plugin,
         // **und ohne sie bekam es *„the constant Regexp is not defined by
@@ -805,6 +895,16 @@ public sealed class RubyInterpreter
         if (name == "Regexp")
         {
             return RubyValue.OfSymbol("Regexp");
+        }
+
+        // **And `Struct` is the second one.** `RPG::Actor = Struct.new(:id,
+        // :name)` is the **first line** of the standard library of XP, VX and
+        // VX Ace, **and without it not one of those games is
+        // readable** -- **this is not a convenience, this is the data
+        /// catalogue of every RPG Maker script.**
+        if (name == "Struct")
+        {
+            return RubyValue.OfSymbol("Struct");
         }
 
         var wert = _host.LookupConstant(name);
@@ -1050,6 +1150,16 @@ public sealed class RubyInterpreter
         // in der Sprache. **Deshalb vor der Skriptmethode und nicht in ihr.**
         if (methode == "new" && empfaenger.Kind == RubyValueKind.Symbol)
         {
+            // **And `Struct.new(:a, :b)` builds a class and gives it
+            // back.** That is neither an object nor a number,
+            // **it is the beginning of a class, and it gets its fields as
+            // attributes** -- **exactly the ones `attr_accessor` makes**,
+            // because Ruby builds nothing of its own here either.
+            if (empfaenger.Name == "Struct")
+            {
+                return StructNeue(argumente);
+            }
+
             var neueKlasse = empfaenger.Name ?? string.Empty;
             var instanz = NeueInstanz(neueKlasse, argumente);
             if (instanz != null)
@@ -1343,6 +1453,26 @@ public sealed class RubyInterpreter
             return TrefferAlsWert(_letzterTreffer);
         }
 
+        // **Und ein Struct wird wie eine Liste behandelt, und nicht als
+        // eine Klasse mit Feldern.** `p[0]`, `p.to_a` und `p.each` sind
+        // Feldzugriffe, nur in der Reihenfolge, in der die Felder
+        // geschrieben wurden,
+        // **und ein Leser, der das als "die Methode kennt der Host nicht"
+        // ablehnte, wuerde `RPG::Actor.new(1, "Held")[1]` zu einer
+        // Fehlermeldung machen** -- **und die Fehlermeldung waere ueber
+        // den Host, obwohl der Struct es sehr wohl kann.**
+        //
+        // **Vor der Sammlung, weil ein Struct eine Liste *ist*.**
+        // `p.size` ist die Zahl der Felder,
+        // **und ohne das haette ein Leser die Felderzaehlung der
+        // Listenlaenge gleichgesetzt** -- und ein Struct mit nil in einem
+        // Feld haette eine andere Laenge als einer mit einer Zahl darin.
+        var anStruct = StructMethode(empfaenger, methode, argumente);
+        if (anStruct != null)
+        {
+            return anStruct;
+        }
+
         var anDerSammlung = SammlungMethode(empfaenger, methode, argumente);
         if (anDerSammlung != null)
         {
@@ -1570,6 +1700,20 @@ public sealed class RubyInterpreter
         }
 
         var instanz = RubyValue.OfEmptyObject(pKlasse);
+
+        // **And a struct gets its fields from the arguments, and that is
+        // the whole difference from a class with an `initialize`.**
+        // `Punkt.new(3, 4)` writes `@x = 3` and `@y = 4`,
+        // **and the order is the one the fields were written in** --
+        // **a reader that looked the fields up by name would have needed
+        // `Punkt.new(:y => 4)`, and `RPG::Actor.new(1, "Held")` does not
+        // write that.**
+        if (_types.TryGetValue(pKlasse, out var typ)
+            && typ.Struct is not null)
+        {
+            StructFuellen(pKlasse, instanz, pArgumente);
+        }
+
         var initialize = FindMethod(pKlasse, "initialize");
         if (initialize == null)
         {
@@ -1608,6 +1752,139 @@ public sealed class RubyInterpreter
     /// byte here, which is what the reference does.**
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The class `Struct.new` builds, and its fields become attributes.
+    /// </summary>
+    /// <param name="pArgumente">The field names, as written.</param>
+    /// <returns>The class, as its name.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the name is a number that counts up.</strong> Ruby names
+    /// them <c>Struct</c>, then <c>Struct::1</c> — <strong>and the number is
+    /// not a count of anything, it just has to differ</strong> from the last
+    /// one. A reader that named them by their field names would give two
+    /// different structs the same type,
+    /// <strong>and <c>is_a?</c> could not tell a game's weapon from its
+    /// armour.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a field with a default is stored, and not ignored.</strong>
+    /// <c>Struct.new(:a, :b, 0)</c> gives <c>b</c> the default 0,
+    /// <strong>and a game that writes
+    /// <c>Struct.new(:id, :name, "")</c> and then reads <c>b</c> expects the
+    /// empty text</strong> — a reader that dropped it would hand nil to a
+    /// field the game declared.
+    /// </para>
+    /// </remarks>
+    private RubyValue StructNeue(IReadOnlyList<RubyValue> pArgumente)
+    {
+        var felder = new List<string>();
+        var vorgaben = new Dictionary<string, RubyValue>(StringComparer.Ordinal);
+        for(var stelle = 0; stelle < pArgumente.Count; stelle++)
+        {
+            var argument = pArgumente[stelle];
+            if (argument.Kind != RubyValueKind.Symbol)
+            {
+                _diagnostics.Add(
+                    "Struct.new was given something that is not a name, and a "
+                        + "field without a name has nowhere to be read from");
+                return RubyValue.Nil;
+            }
+
+            var feld = argument.Name ?? string.Empty;
+            felder.Add(feld);
+
+            // **And the value behind a field is its default.**
+            if (stelle + 1 < pArgumente.Count
+                && pArgumente[stelle + 1].Kind != RubyValueKind.Symbol)
+            {
+                vorgaben[feld] = pArgumente[stelle + 1];
+                stelle++;
+            }
+        }
+
+        _strukturZaehler++;
+        var name = "Struct::"
+            + _strukturZaehler.ToString(CultureInfo.InvariantCulture);
+        var typ = new RubyType
+        {
+            Name = name,
+            IsClass = true,
+            Struct = new RubyStruct { Fields = felder },
+        };
+        _types[name] = typ;
+        _strukturVorgaben[name] = vorgaben;
+
+        // **And the fields get their accessors as attributes, because Ruby
+        // builds nothing of its own here either.** `a.x` reads `@x` and
+        // `a.x = 1` writes `@x`,
+        // **and exactly those two pairs are what a struct needs** —
+        // **the rest (`to_a`, `==`, `each`) is added further down.**
+        foreach(var feld in felder)
+        {
+            typ.Methods[feld] = new RubyMethod
+            {
+                Name = feld,
+                IsAttribute = true,
+                Field = "@" + feld,
+                IsWriter = false,
+            };
+            typ.Methods[feld + "="] = new RubyMethod
+            {
+                Name = feld + "=",
+                IsAttribute = true,
+                Field = "@" + feld,
+                IsWriter = true,
+            };
+        }
+
+        return RubyValue.OfSymbol(name);
+    }
+
+    /// <summary>
+    /// Writes a struct's fields, from the arguments and then the defaults.
+    /// </summary>
+    /// <param name="pKlasse">The struct class's name.</param>
+    /// <param name="pInstanz">The object to write into.</param>
+    /// <param name="pArgumente">The values, in the order written.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a field that got no value gets its default, and a field
+    /// with no default gets nil.</strong> <c>Struct.new(:a, :b, 0)</c> and
+    /// <c>Punkt.new(3)</c> — <strong>and that is the whole answer to "what is
+    /// in this struct"</strong>, because a game's database is full of structs
+    /// built with fewer values than they have fields.
+    /// </para>
+    /// <para>
+    /// <strong>And the values go to the fields in order, and not by
+    /// name.</strong> A struct's constructor takes them positionally, and
+    /// <strong>the reader cannot know which value belongs to which field if it
+    /// guessed</strong> — and a guess would put an actor's name where its id
+    /// belongs, and the game's save would be a list of values in the wrong
+    /// order.
+    /// </para>
+    /// </remarks>
+    private void StructFuellen(
+        string pKlasse,
+        RubyValue pInstanz,
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        var felder = _types[pKlasse].Struct!.Fields;
+        _strukturVorgaben.TryGetValue(pKlasse, out var vorgaben);
+        for(var stelle = 0; stelle < felder.Count; stelle++)
+        {
+            var feld = felder[stelle];
+            if (stelle < pArgumente.Count)
+            {
+                pInstanz.Felder["@" + feld] = pArgumente[stelle];
+            }
+            else if (vorgaben != null && vorgaben.TryGetValue(feld, out var vorgabe))
+            {
+                pInstanz.Felder["@" + feld] = vorgabe;
+            }
+        }
+    }
+
     private sealed class Muster
     {
         public System.Text.RegularExpressions.Regex? Engine { get; init; }
@@ -2966,6 +3243,182 @@ public sealed class RubyInterpreter
     /// looks right.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The methods a struct answers by its fields, in the order they were
+    /// written.
+    /// </summary>
+    /// <param name="pEmpfaenger">The struct.</param>
+    /// <param name="pMethode">The method's name.</param>
+    /// <param name="pArgumente">What the call carried.</param>
+    /// <returns>The answer, or null when this is not a struct method.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And `to_a` is the fields in the order they were written.</strong>
+    /// **That order is the whole reason a struct exists** — it is what a
+    /// save file is,
+    /// <strong>and a reader that sorted them or used a dictionary would write
+    /// a save no other game can read.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And `==` is the fields, one by one, and not the
+    /// identity.</strong> A game that looks for an item in a list writes
+    /// <c>liste.include?(item)</c>,
+    /// <strong>and a reader that compared the objects themselves would never
+    /// find it</strong> — and every inventory screen would be empty.
+    /// </para>
+    /// <para>
+    /// <strong>And a field that is nil counts as a value.</strong>
+    /// <c>Struct.new(:a).new == Struct.new(:a).new</c> is true,
+    /// <strong>because both have nothing in them</strong> — and a reader
+    /// that treated nil as "no answer" would compare two empty structs as
+    /// different, and a game's "do I already have this" check would always
+    /// say no.
+    /// </para>
+    /// </remarks>
+    private RubyValue? StructMethode(
+        RubyValue pEmpfaenger,
+        string pMethode,
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pEmpfaenger.Kind != RubyValueKind.Object
+            || pEmpfaenger.ClassName is not { Length: > 0 } name
+            || !_types.TryGetValue(name, out var typ)
+            || typ.Struct is null)
+        {
+            return null;
+        }
+
+        var felder = typ.Struct.Fields;
+        switch (pMethode)
+        {
+            case "to_a" or "to_ary" or "values":
+                return RubyValue.OfArray(
+                    [.. felder.Select(feld => FeldOderNil(pEmpfaenger, feld))]);
+
+            case "[]":
+                if (pArgumente.Count == 0)
+                {
+                    return RubyValue.OfArray(
+                        [.. felder.Select(feld => FeldOderNil(pEmpfaenger, feld))]);
+                }
+
+                if (pArgumente[0].Kind == RubyValueKind.Integer)
+                {
+                    var stelle = pArgumente[0].Integer;
+                    if (stelle < 0)
+                    {
+                        stelle += felder.Count;
+                    }
+
+                    return stelle >= 0 && stelle < felder.Count
+                        ? FeldOderNil(pEmpfaenger, felder[(int)stelle])
+                        : RubyValue.Nil;
+                }
+
+                // **Und ein Name ist auch ein Feld.** `p[:x]` ist `p.x`,
+                // **und das ist der Fall, den ein Spiel schreibt, wenn es
+                // Felder in einer Schleife liest** -- **ein Leser, der nur
+                // Zahlen nahm, wuerde `held[:hp]` nil geben**, und eine
+                // Statusleiste, die so etwas liest, zeichnete nichts.
+                if (pArgumente[0].Kind == RubyValueKind.Symbol)
+                {
+                    return FeldOderNil(pEmpfaenger, pArgumente[0].Name ?? string.Empty);
+                }
+
+                return RubyValue.Nil;
+
+            case "[]=":
+                if (pArgumente.Count < 2)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var ziel = pArgumente[0].Kind == RubyValueKind.Symbol
+                    ? pArgumente[0].Name ?? string.Empty
+                    : pArgumente[0].Integer >= 0 && pArgumente[0].Integer < felder.Count
+                        ? felder[(int)pArgumente[0].Integer]
+                        : string.Empty;
+                if (ziel.Length == 0)
+                {
+                    return RubyValue.Nil;
+                }
+
+                pEmpfaenger.Felder["@" + ziel] = pArgumente[1];
+                return pArgumente[1];
+
+            case "size" or "length" or "count_fields":
+                return RubyValue.OfInteger(felder.Count);
+
+            case "members" or "keys":
+                return RubyValue.OfArray(
+                    [.. felder.Select(feld => RubyValue.OfSymbol(feld))]);
+
+            // **Und `each` geht ueber die Felder, in ihrer Reihenfolge.**
+            // **Und nicht ueber die Felder mit ihrem Namen**,
+            // **weil Ruby 1.8.1 `struct.each` ohne Block eine Liste gibt**
+            // **und ein Spiel, das `held.each { |v| }` schreibt, will die
+            // Werte in der Reihenfolge, in der sie gespeichert sind.**
+            case "each" or "each_pair":
+                return RubyValue.OfArray(
+                    [.. felder.Select(feld => FeldOderNil(pEmpfaenger, feld))]);
+
+            case "==" or "eql?":
+                if (pArgumente.Count == 0
+                    || pArgumente[0].Kind != RubyValueKind.Object
+                    || pArgumente[0].ClassName != name)
+                {
+                    return RubyValue.OfBoolean(false);
+                }
+
+                // **Und zwei verschiedene Struct-Arten sind nie gleich.**
+                // Eine Waffe und eine Ruestung koennen beide aus drei
+                // Zahlen bestehen,
+                // **und ein Leser, der nur die Felder verglich, wuerde ein
+                // Schwert fuer eine Ruestung halten** -- **und
+                // `liste.include?` wuerde das finden.
+                for(var stelle = 0; stelle < felder.Count; stelle++)
+                {
+                    if (!Truthy(Apply(
+                        "==",
+                        FeldOderNil(pEmpfaenger, felder[stelle]),
+                        FeldOderNil(pArgumente[0], felder[stelle]))))
+                    {
+                        return RubyValue.OfBoolean(false);
+                    }
+                }
+
+                return RubyValue.OfBoolean(true);
+
+            case "to_s" or "inspect":
+                return RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(
+                    "#<" + name + " "
+                    + ">"));
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// A struct's field, or nil when nothing was put into it.
+    /// </summary>
+    /// <param name="pInstanz">The struct.</param>
+    /// <param name="pFeld">The field's name, without the <c>@</c>.</param>
+    /// <returns>The value.</returns>
+    /// <remarks>
+    /// <strong>Und nil, und nicht eine Fehlermeldung.</strong> Ruby gibt nil
+    /// fuer ein Feld, in dem nichts steht,
+    /// **und ein Leser, der einen Fehler daraus gemacht haette, wuerde ein
+    /// Feld, das die Reihenfolge nicht erreicht, zum Abbruch fuehren** --
+    /// **und genau das passiert in jedem Spiel, das einen Struct mit weniger
+    /// Werten baut, als er Felder hat.**
+    /// </remarks>
+    private static RubyValue FeldOderNil(RubyValue pInstanz, string pFeld)
+        => pInstanz.Felder.TryGetValue("@" + pFeld, out var wert)
+            ? wert
+            : RubyValue.Nil;
+
+
     private RubyValue? SammlungMethode(
         RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
     {
@@ -4903,6 +5356,49 @@ public sealed class RubyInterpreter
                 // und die Zuweisung waere ins Leere gegangen.
                 _globals[GlobalName(ziel)] = wert;
                 return wert;
+            // **And a constant may be given a value.** Ruby allows it,
+            // **and `Klasse = Struct.new(:a, :b)` is the line every XP data
+            // class is born on** --
+            // `RPG::Actor = Struct.new(:id, :name)` is the first line of the
+            // standard library of XP, VX and VX Ace.
+            // Without this branch it said *„is on the left of an = and there
+            // is nowhere to put the value"*,
+            // **and a message about the reader for something the reader very
+            // well can do** -- **and the script that needs it is every game
+            // from that time.**
+            case RubyNodeKind.Constant:
+                // **Und der Name traegt den aeusseren Typ mit.** `module
+                // RPG; KLASSE = 1; end` legt `RPG::KLASSE` ab,
+                // **weil `RPG::KLASSE` danach gelesen wird**
+                // **und `KLASSE` allein waere ein Name, den nichts findet**
+                // -- **und `RPG::Actor = Struct.new(:id, :name)` ist genau
+                // diese Form, und sie ist die erste Zeile jedes
+                // RPG-Maker-Skripts.**
+                var name = ziel.Name ?? string.Empty;
+                _konstanten[name] = wert;
+                if (_aktuellerTyp?.Name is { Length: > 0} aussen
+                    && name.IndexOf("::", StringComparison.Ordinal) < 0)
+                {
+                    _konstanten[aussen + "::" + name] = wert;
+                    if (wert.Kind == RubyValueKind.Symbol
+                        && wert.Name is { Length: > 0 } symbolisch
+                        && _types.TryGetValue(symbolisch, out var getypt))
+                    {
+                        // **Und die Klasse steht auch unter dem vollen
+                        // Namen.** `RPG::Actor` ist ein Typ, und nicht nur
+                        // ein Wert,
+                        // **und `RPG::Actor.new(1)` sucht den Typen** --
+                        // **ein Leser, der nur den Wert ablegte, wuerde bei
+                        // `.new` den Typen nicht finden**, und `nil.new`
+                        // waere die Antwort,
+                        // **und die Meldung ginge ueber den Host, obwohl die
+                        // Klasse genau da ist.**
+                        _types[aussen + "::" + name] = getypt;
+                    }
+                }
+
+                return wert;
+
             case RubyNodeKind.Call:
             case RubyNodeKind.SelfCall:
             case RubyNodeKind.MethodCall:
@@ -5472,8 +5968,15 @@ public sealed class RubyInterpreter
             Evaluate(teil);
         }
 
+        // **Und der aeussere Typ steht wieder, wenn der innere fertig
+        // ist.** `class Aussen; class Innen; def a; end; def b; end; end`
+        // -- **ohne diesen Satz waere `b` unter `Innen` gelandet**, und
+        // **ein Leser, der den inneren Typen stehen liess, haette die
+        // aeusseren Methoden des Spiels in einer Hilfsklasse
+        // eingesammelt.**
         _aktuellerTyp = vorher;
         _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
+
         return RubyValue.OfSymbol(name);
     }
 

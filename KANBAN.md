@@ -4158,6 +4158,46 @@ Reiter, `min_by` findet den schwaechsten.
   nil anfing, gaebe nil fuer jede Liste, und ein Spiel, das die Level einer
   Party ohne Anfang summiert, zeigte nichts.**
 
+**Und `Struct` gab es gar nicht, und eine Konstante konnte keinen Wert
+halten.** `RPG::Actor = Struct.new(:id, :name, :class_id)` ist die
+**erste Zeile** der Standardbibliothek von RPG Maker XP, VX und VX Ace,
+**und ohne sie ist kein einziges dieser Spiele lesbar** -- **das ist
+keine Bequemlichkeit, das ist der Datenkatalog.**
+
+Und die Zeile scheiterte an **zwei** Dingen:
+
+- **Und `Punkt = Struct.new(:x, :y)` sagte *„is on the left of an = and
+  there is nowhere to put the value"*.** Eine Meldung ueber den Leser fuer
+  etwas, das der Leser sehr wohl tun kann, **und das Skript, das es
+  braucht, ist jedes Spiel aus dieser Zeit.** Ruby erlaubt es, **und
+  `LIMIT = 100` ebenso** -- **die Zahl 100 ist die erste Zeile der halben
+  Skripte in VX Aces Konfiguration.**
+- **Und `RPG::Actor` las der Parser als *„rufe `Actor` auf `RPG` auf"*.**
+  `::` ohne Klammern machte immer einen Aufruf,
+  **und `RPG` ist ein Modul, und Module haben keine Methode `Actor`**
+  -- **also nil, und dann `nil.new`, und dann `nil.id`, und drei
+  Fehlermeldungen ueber einen Host, der nichts davon getan hat.**
+
+Und **die Felder eines Structs sind Attribute, und keine zweite Art von
+Mitglied.** `a.x` und `a.x = 1` sind Leser und Schreiber von `@x`,
+**und Ruby baut die Zugriffe eines Structs genau so** -- **ein Struct
+braucht also eine Klasse, eine Instanzvariable und keinen neuen Code.**
+
+- **Und `to_a` ist die Felder in der Reihenfolge, in der sie geschrieben
+  wurden** -- **und diese Reihenfolge ist der ganze Grund, warum es ein
+  Struct gibt: sie ist, was eine Speicherdatei ist.** Ein Leser, der sie
+  sortierte, wuerde **eine Speicherdatei schreiben, die kein anderes Spiel
+  lesen kann.**
+- **Und `==` sind die Felder, eines nach dem anderen, und nicht die
+  Identitaet.** `liste.include?(waffe)` ist der Satz, den jedes Spiel
+  schreibt, **und ein Leser, der die Objekte selbst verglich, wuerde es nie
+  finden, und jede Lageranzeige waere leer.**
+- **Und zwei verschiedene Struct-Arten sind nie gleich.** Eine Waffe und
+  eine Ruestung koennen beide aus drei Zahlen bestehen,
+  **und ein Leser, der nur die Felder verglich, haelte ein Schwert fuer
+  eine Ruestung.**
+
+
 > **Eine Mutation lebte, weil die anderen Tests die Frage nicht stellten.**
 > *„`$~` gibt nichts"* hat alle fuenf ueberlebt, **weil `$~.pre_match`
 > und `$~[1]` von den Methoden auf dem Wert beantwortet werden und nicht vom

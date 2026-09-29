@@ -269,6 +269,32 @@ public sealed class RubyMethod
 }
 
 /// <summary>
+/// A class that `Struct` built, and the fields it was given.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>And it is a class and not a special case.</strong>
+/// <c>Struct.new(:a, :b)</c> gives a class, and that class goes into the
+/// same table as one the script wrote,
+/// <strong>so every method that finds a class finds this one too</strong> —
+/// and a reader that gave Struct its own storage would have made a game's
+/// <c>RPG::Actor</c> invisible to the code that reads it.
+/// </para>
+/// <para>
+/// <strong>And the fields are attributes, and not a second kind of
+/// member.</strong> <c>a.x</c> and <c>a.x = 1</c> are the reader and the
+/// writer of <c>@x</c>,
+/// <strong>and Ruby builds a struct's accessors exactly that way</strong> —
+/// so a game's struct takes a class, an instance variable and no new code.
+/// </para>
+/// </remarks>
+public sealed class RubyStruct
+{
+    /// <summary>The field names, in the order they were written.</summary>
+    public IReadOnlyList<string> Fields { get; init; } = Array.Empty<string>();
+}
+
+/// <summary>
 /// One class or module a script defined, with the methods in it.
 /// </summary>
 /// <param name="pName">The class's name as written.</param>
@@ -312,6 +338,20 @@ public sealed class RubyType
     /// </para>
     /// </remarks>
     public HashSet<string> Undefiniert { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The fields, when `Struct` built this class, and null when a script
+    /// wrote it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Null and not an empty list.</strong> A class a script wrote has
+    /// no fields, and a class `Struct` built has them,
+    /// <strong>and a reader that gave both an empty list could not tell
+    /// <c>to_a</c> from a mistake</strong> — a hand-written class has no
+    /// members because nothing said it should, and that is different from
+    /// having none.
+    /// </remarks>
+    public RubyStruct? Struct { get; set; }
 }
 
 /// <summary>

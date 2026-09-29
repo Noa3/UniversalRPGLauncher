@@ -9549,3 +9549,45 @@ gab zwei Werte statt vier.** Und `min` auf einer leeren Liste gab 0 statt
 nil.
 
 `TestRubyInterpreter: 203/203`, `All 1761 tests passed`, Mutationen 5 von 5.
+
+
+## 2026-09-29 — `Struct`, und eine Datei, die sich fuenfmal selbst zerschnitt
+
+**`Struct` gab es nicht, und eine Konstante konnte keinen Wert halten.**
+`RPG::Actor = Struct.new(:id, :name, :class_id)` ist die **erste Zeile**
+der Standardbibliothek von XP, VX und VX Ace -- **das ist der
+Datenkatalog, keine Bequemlichkeit.**
+
+Und die Zeile scheiterte an **zwei** unabhaengigen Stellen:
+
+1. **`Punkt = Struct.new(:x, :y)`** gab *„is on the left of an = and there
+   is nowhere to put the value"* -- **eine Meldung ueber den Leser fuer
+   etwas, das der Leser sehr wohl tun kann.** Ruby erlaubt es, und
+   `LIMIT = 100` ebenso.
+2. **`RPG::Actor` las der Parser als *„rufe `Actor` auf `RPG` auf"*.**
+   `::` ohne Klammern machte immer einen Aufruf,
+   **und `RPG` ist ein Modul, und Module haben keine Methode `Actor`**
+   -- **also nil, und dann `nil.new`, und dann `nil.id`, und drei
+   Fehlermeldungen ueber einen Host, der nichts davon getan hat.**
+
+**Und `==` kam als `Binary("==")` und nicht als Methodenaufruf** --
+**gemessen: `Struct.new(:x,:y).new(3,4) == Struct.new(:x,:y).new(3,4)`
+gab `false`**, und `StructMethode` war an der Aufrufstelle verdrahtet,
+nicht an der Vergleichsstelle.
+
+**Und viermal zerschnitt dieselbe Datei sich selbst.** Ein
+Feldblock (`_instanceVariables`, `Paare`, `Gruppen`) wanderte in
+`RubyParser.cs`, in `IRubyHost.cs` und mitten in `Call` und `DefineType`
+-- **weil ein Anker `private Dictionary<...> _instanceVariables = new();`
+an mehreren Stellen passt**, und ein Ersetzen mit genau diesem Text
+schlug an **allen** Stellen gleichzeitig zu.
+
+**Die Regel, die daraus folgt:** ein Anker muss **einzigartig** sein,
+**und "einzigartig" heisst: einmal suchen, nicht viermal raten.**
+Zwei Zeilen zurueckgesetzt, drei Mal dasselbe verloren, dann ueber
+Zeilennummern gearbeitet -- **und die Zeilennummern verschoben sich
+mitten in der Arbeit**, weil das Entfernen des Blocks die Zeilen darunter
+verschob. **Ab dem vierten Mal: Textanker mit `count == 1`, plus eine
+Klammerbilanz als Wächter.**
+
+`TestRubyInterpreter: 210/210`, `All 1768 tests passed`.

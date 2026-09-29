@@ -443,6 +443,47 @@ public sealed class RubyParser
                 var separator = Take().Text;
                 SkipNewlines();
                 var name = ReadMemberName();
+
+                // **Und `::` ohne Klammern ist eine Konstante und kein
+                // Aufruf.** `RPG::Actor` ist ein Name,
+                // **und `RPG::Actor.new(1)` ist beides: erst der Name, dann
+                // der Aufruf darauf.**
+                //
+                // **Vor dem Klammern-Zweig**, weil `RPG::Actor` keine
+                // Klammern hat,
+                // **und ein Leser, der hier immer einen Aufruf baute, las
+                // `RPG::Actor` als "rufe `Actor` auf `RPG` auf"**,
+                // **und `RPG` ist ein Modul, und Module haben keine Methode
+                // `Actor`** -- **also nil, und dann `nil.new`, und dann
+                // `nil.id`, und drei Fehlermeldungen ueber einen Host, der
+                // nichts davon getan hat.**
+                //
+                // **Und `A::b` bleibt ein Aufruf**, wenn links kein Name
+                // stand: `held::name` ist eine Methode auf `held`,
+                // **und ein Leser, der den Namen auch aus einem Aufruf
+                // baute, wuerde `p::x` zu einem Objekt mit dem Namen
+                // `p::x` machen** -- **und die Suche nach diesem Namen
+                // fiele in jedem Spiel immer ins Leere.**
+                if (separator == "::" && !Is("("))
+                {
+                    node = node.Kind == RubyNodeKind.Constant
+                        ? new RubyNode
+                        {
+                            Kind = RubyNodeKind.Constant,
+                            Name = (node.Name ?? string.Empty) + "::" + name,
+                            Line = node.Line,
+                        }
+                        : new RubyNode
+                        {
+                            Kind = RubyNodeKind.Call,
+                            Name = name,
+                            Line = node.Line,
+                            Children = [node],
+                            Role_Children = CallParts(node, Array.Empty<RubyNode>()),
+                        };
+                    continue;
+                }
+
                 if (Is("("))
                 {
                     var arguments = ReadArguments();
