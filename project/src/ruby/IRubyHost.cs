@@ -86,6 +86,56 @@ public sealed class RubyNullHost : IRubyHost
 }
 
 /// <summary>
+/// One method a script defined, with the parameters it takes.
+/// </summary>
+/// <param name="pName">The method's name as written.</param>
+/// <param name="pParameters">The parameter names, in the order written.</param>
+/// <param name="pBody">What it runs, as a block node.</param>
+/// <remarks>
+/// <strong>A method and a class body are the same thing here</strong>, because
+/// Ruby's <c>def</c> inside a class body defines a method on that class and
+/// <c>def self.x</c> defines one on the class itself — <strong>and the only
+/// difference a reader has to see is which table the name lands in.</strong>
+/// </remarks>
+public sealed class RubyMethod
+{
+    /// <summary>The method's name as written.</summary>
+    public string Name { get; init; } = "";
+
+    /// <summary>The parameter names, in the order written.</summary>
+    public IReadOnlyList<string> Parameters { get; init; } = Array.Empty<string>();
+
+    /// <summary>What it runs.</summary>
+    public RubyNode Body { get; init; } = null!;
+}
+
+/// <summary>
+/// One class or module a script defined, with the methods in it.
+/// </summary>
+/// <param name="pName">The class's name as written.</param>
+/// <param name="pSuperclass">The superclass, or null.</param>
+/// <remarks>
+/// <strong>A module and a class are kept apart</strong>, because a module has
+/// no superclass and <c>include</c> means something different from
+/// <c>&lt;</c> — <strong>and a reader that treated them alike would let a
+/// game's module inherit something it never asked for.</strong>
+/// </remarks>
+public sealed class RubyType
+{
+    /// <summary>The class's or module's name as written.</summary>
+    public string Name { get; init; } = "";
+
+    /// <summary>Whether this is a class and not a module.</summary>
+    public bool IsClass { get; init; }
+
+    /// <summary>The superclass as written, or null for a module.</summary>
+    public string? Superclass { get; init; }
+
+    /// <summary>The methods defined in the body, by name.</summary>
+    public Dictionary<string, RubyMethod> Methods { get; } = new(StringComparer.Ordinal);
+}
+
+/// <summary>
 /// One thing that went wrong, with where.
 /// </summary>
 /// <remarks>

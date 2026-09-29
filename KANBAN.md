@@ -4501,9 +4501,45 @@ end`.** The rule is the one this card keeps re-learning: **who consumes the
 closer is part of a helper's contract**, and there are now three kinds of body
 reader because there are three contracts.
 
-**Still not evaluated:** a class, a module, a `def` and a block pass. A game's
-scripts define classes before they run anything, and those need method tables,
-which is the next card rather than this one.
+### The class and method table, and a stack that is not a scope chain
+
+**A game's scripts define classes before they run anything**, so this was the
+card. `DefineType` runs the body once and files the methods under the type's
+name; `DefineMethod` files one method and **does not run its body**, because
+this parser gives a parameter list as names and there are no default
+expressions to evaluate. `Call` asks **the script's own table first** — a
+reader that went straight to the host would answer "this host does not
+implement it" for every call a game makes, **and the message would name the
+wrong thing entirely**, because the method is right there in the script.
+
+**A class name is a constant, and the script's types come before the host's.**
+`A.rechnung` writes `A` as the receiver, and **with a constant lookup that
+asked only the host, `A` would be nil and every method of every class a game
+defines would be unreachable.**
+
+**And a method does not see its caller's locals.** That is the difference
+between a stack and a scope chain: a block sees the locals around it, a method
+does not, **because a method has its own frame from the moment it is called.**
+The first version searched all levels and a method's `x = 99` read back the
+caller's `x` — **and a game would have a method whose value depends on who
+called it.** `_methodenGrenze` is that boundary.
+
+**A `def` outside a class is a diagnostic, not a method.** Ruby would define it
+on `Object`; this interpreter files methods under a class, so it says which
+thing would have to provide that — **a reader that invented a root class would
+have put every game's top-level method in a place no game asks for.**
+
+**And a second definition replaces the first one's methods**, because that is
+what a reopened class does, and a game's second file is a common way to patch
+the first.
+
+**What is not here, and is stated in the test rather than implied:** the parser
+reads `class X` and **discards the `< Basis`**, so the superclass chain exists
+in the evaluator and is not yet fed. One test says so in words, because a
+green test that a reader would take for inheritance is worse than none.
+
+**Still not evaluated:** a module's `include`, `def self.x`, `attr_accessor`,
+blocks with parameters passed to methods, and `super`.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare
@@ -4526,9 +4562,13 @@ It was replaced with the observable one — the loop binds the element rather
 than a fixed number — and the guard stays, because it is right and costs
 nothing.
 
-**Test evidence** `test_ruby_interpreter.cs`, 23 tests; `test_ruby_parser.cs`
-stays 52/52. **1564/1564**, validator passed, mutations 6 of 6 for the second
-group and 6 of 6 for this one.
+**Test evidence** `test_ruby_interpreter.cs`, 32 tests; `test_ruby_parser.cs`
+stays 52/52. **1573/1573**, validator passed, mutations 6 of 6, 6 of 6 and
+7 of 7 across the three groups — **and the seventh group is 7 of 7 measured
+rule by rule**, because the script reports six for the class table on a run
+that loads a stale DLL. **A harness result and a measurement of the source are
+two different things, and this one is the seventh time the difference
+appeared.**
 
 ### K-090 MV/MZ: script files as data, no JavaScript executed
 `IN PROGRESS` — board, P4

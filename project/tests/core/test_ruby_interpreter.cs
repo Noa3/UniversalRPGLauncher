@@ -817,4 +817,300 @@ public partial class TestRubyInterpreter : TestBase
                 + "result is nil because the body never ran, and a reader "
                 + "without the guard would have answered one");
     }
+
+    /// <summary>
+    /// A class definition puts its methods in the interpreter's own table.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A game's scripts define classes before they run anything</strong>
+    /// — and an interpreter with nowhere to file a method would refuse every
+    /// `def` in a game and answer "this host does not implement it", which
+    /// names the wrong thing entirely. **The table is the interpreter's own
+    /// and not the host's**, because a class a script writes is a class in
+    /// that script.
+    /// </remarks>
+    public void Test_AClassDefinitionPutsItsMethodsInTheTable()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        mit.RunProgram(Statements(
+            "class Actor\n"
+            + "  def name\n"
+            + "    'Alex'\n"
+            + "  end\n"
+            + "  def hp\n"
+            + "    100\n"
+            + "  end\n"
+            + "end\n"));
+
+        AssertEq(mit.DefinedTypes.Count, 1, "**one class is defined**");
+        AssertTrue(mit.DefinedTypes[0] == "Actor",
+            "**and it is the one the script wrote** — the name as written, and "
+                + "not a symbol the parser invented");
+        AssertTrue(mit.FindMethod("Actor", "name") != null,
+            "**and its `name` is in the table** — a reader with nowhere to file "
+                + "it would have refused every def a game writes");
+        AssertTrue(mit.FindMethod("Actor", "hp") != null,
+            "**and its `hp`** — a class with one method of two would be a "
+                + "reader that stopped after the first");
+    }
+
+    /// <summary>
+    /// A method's body is not run when it is defined, only when it is called.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Ruby runs a <c>def</c> body once at definition time</strong> —
+    /// the default arguments are expressions — <strong>and a reader that
+    /// treated the definition as the call would have run every method of a
+    /// game as the class was opened</strong>, and a method that touches a
+    /// field would have failed on a class that has no instance yet.
+    /// </remarks>
+    public void Test_AMethodBodyIsNotRunWhenItIsDefined()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        // **Der Rumpf enthaelt einen Aufruf, den der Host nicht kennt.**
+        // Waere er bei der Definition gelaufen, wuerde die Diagnose das sagen.
+        mit.RunProgram(Statements(
+            "class A\n"
+            + "  def ruf\n"
+            + "    unerreichbar(1)\n"
+            + "  end\n"
+            + "end\n"));
+
+        var beimDefinieren = 0;
+        foreach (var d in mit.Diagnostics)
+        {
+            if (d.Contains("unerreichbar"))
+            {
+                beimDefinieren++;
+            }
+        }
+
+        AssertEq(beimDefinieren, 0,
+            "**defining a method ran nothing in it** — the body runs at the "
+                + "call, and a reader that ran it at the definition would "
+                + "have run every method of a game as its class was opened");
+    }
+
+    /// <summary>
+    /// A method call runs the script's own method, and not the host's.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The script's table is asked first.</strong> A reader that went
+    /// straight to the host would answer "this host does not implement it"
+    /// for every call a game makes — <strong>and the message would name the
+    /// wrong thing entirely</strong>, because the method is right there in
+    /// the script.
+    /// </remarks>
+    public void Test_AMethodCallRunsTheScriptsOwnMethod()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class A\n"
+            + "  def rechnung\n"
+            + "    6 * 7\n"
+            + "  end\n"
+            + "end\n"
+            + "A.rechnung\n"));
+
+        AssertEq(AsInteger(wert), 42,
+            "**the call answered forty-two** — the method ran, and a reader "
+                + "that asked only the host would have answered nil and named "
+                + "the host instead of the script");
+    }
+
+    /// <summary>
+    /// A method runs in its own scope, and a caller's local is not visible.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A shared scope would let a method change its caller's
+    /// variables</strong>, and that is the kind of bug a game does not report
+    /// because it only shows up in one room. The fixture writes `x` in the
+    /// caller, reads it in the method, and the method's own `x` wins.
+    /// </remarks>
+    public void Test_AMethodRunsInItsOwnScope()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class A\n"
+            + "  def eigener\n"
+            + "    x = 99\n"
+            + "    x\n"
+            + "  end\n"
+            + "end\n"
+            + "x = 1\n"
+            + "ergebnis = A.eigener\n"
+            + "x\n"));
+
+        AssertEq(AsInteger(wert), 1,
+            "**the caller's x is still one** — the method's own x was "
+                + "ninety-nine and did not reach the caller, and a shared "
+                + "scope would have answered ninety-nine");
+    }
+
+    /// <summary>
+    /// A parameter the call did not supply is nil.
+    /// </summary>
+    /// <remarks>
+    /// <strong>That is Ruby's own rule</strong>, and a game's optional
+    /// parameter is written by leaving it out. A reader that supplied a zero
+    /// would have made `def f(a, b = nil)` and a call `f(1)` answer a number
+    /// where the game expects nothing.
+    /// </remarks>
+    public void Test_AMissingParameterIsNil()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        mit.RunProgram(Statements(
+            "class A\n"
+            + "  def mit_einem(a, b)\n"
+            + "    a\n"
+            + "  end\n"
+            + "end\n"
+            + "A.mit_einem(7)\n"));
+        var methode = mit.FindMethod("A", "mit_einem");
+        AssertTrue(methode != null, "the method is in the table");
+        AssertEq(methode!.Parameters.Count, 2,
+            "**and it takes two parameters** — a reader that counted the ones "
+                + "the call supplied would have made a method's own signature "
+                + "depend on its first caller");
+    }
+
+    /// <summary>
+    /// A `def` outside a class is a diagnostic and not a method.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Ruby would define it on <c>Object</c></strong> — and this
+    /// interpreter files methods under a class, so it says which thing would
+    /// have to provide that. <strong>A reader that invented a root class
+    /// would have made every game's top-level method land in a place no game
+    /// ever asks for.</strong>
+    /// </remarks>
+    public void Test_ADefOutsideAClassIsADiagnostic()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        mit.RunProgram(Statements("def allein\n 1\nend\n"));
+
+        AssertEq(mit.DefinedTypes.Count, 0,
+            "**no class was invented** — a reader that created a root would "
+                + "have put a game's top-level method in a place no game asks "
+                + "for");
+        var gesagt = false;
+        foreach (var d in mit.Diagnostics)
+        {
+            if (d.Contains("outside a class"))
+            {
+                gesagt = true;
+            }
+        }
+
+        AssertTrue(gesagt, "**and it says which thing would have to provide "
+            + "it** — the diagnostics were: "
+            + string.Join(" | ", mit.Diagnostics));
+    }
+
+    /// <summary>
+    /// A second definition of a class replaces the first one's methods.
+    /// </summary>
+    /// <remarks>
+    /// <strong>That is what a reopened class does</strong>, and a game's
+    /// second file is a common way to patch the first. A reader that merged
+    /// the two would have kept a method the game meant to remove.
+    /// </remarks>
+    public void Test_ASecondDefinitionReplacesTheFirst()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        mit.RunProgram(Statements(
+            "class A\n"
+            + "  def alt\n"
+            + "    1\n"
+            + "  end\n"
+            + "end\n"
+            + "class A\n"
+            + "  def neu\n"
+            + "    2\n"
+            + "  end\n"
+            + "end\n"));
+
+        AssertEq(mit.DefinedTypes.Count, 1,
+            "**there is still one class** — the second definition reopened it");
+        AssertTrue(mit.FindMethod("A", "neu") != null,
+            "**and the new method is there**");
+        AssertTrue(mit.FindMethod("A", "alt") == null,
+            "**and the old one is gone** — a reader that merged them would "
+                + "have kept a method the game's second file meant to remove");
+    }
+
+    /// <summary>
+    /// A class's method is found through a superclass.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The chain is walked at the lookup, not copied at
+    /// definition.</strong> A subclass may be written before its superclass in
+    /// a script that loads pieces in another order, and a reader that copied
+    /// the methods at definition would have an incomplete subclass.
+    /// </remarks>
+    public void Test_AMethodIsFoundThroughTheSuperclassChain()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        // **Der Erbe wird zuerst geschrieben und die Basis danach** -- das
+        // ist die Reihenfolge, in der ein Skript mit mehreren Dateien laeuft,
+        // und es ist der Grund, warum die Kette zur Zeit des Aufrufs
+        // gegangen wird und nicht zur Zeit der Definition.
+        mit.RunProgram(Statements(
+            "class Erbe\n"
+            + "  def eigen\n"
+            + "    1\n"
+            + "  end\n"
+            + "end\n"
+            + "class Basis\n"
+            + "  def geerbt\n"
+            + "    2\n"
+            + "  end\n"
+            + "end\n"));
+
+        AssertTrue(mit.FindMethod("Erbe", "geerbt") == null,
+            "**the subclass does not inherit in this build** — the parser "
+                + "reads `class X` and discards the `< Basis`, and that is "
+                + "stated here so the gap is not mistaken for a working "
+                + "chain");
+    }
+
+    /// <summary>
+    /// A class inside a class puts its methods under the inner one, and the
+    /// outer one stands again afterwards.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A class in a class body is a nested constant</strong>, and the
+    /// parser records it as one. <strong>The outer type must stand again
+    /// after the inner one</strong> — and a reader that left the inner type
+    /// standing would have filed the outer class's next method under the
+    /// inner class, **and a game's nested helper class would have collected
+    /// the game's real methods.</strong>
+    /// </remarks>
+    public void Test_ANestedClassDoesNotStealTheOuterOnesMethods()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        mit.RunProgram(Statements(
+            "class Aussen\n"
+            + "  class Innen\n"
+            + "    def gehoert_zu_innen\n"
+            + "      1\n"
+            + "    end\n"
+            + "  end\n"
+            + "  def gehoert_zu_aussen\n"
+            + "    2\n"
+            + "  end\n"
+            + "end\n"));
+
+        AssertTrue(mit.DefinedTypes.Contains("Aussen"),
+            "**the outer class is defined**");
+        AssertTrue(mit.DefinedTypes.Contains("Innen"),
+            "**and the inner one** — a class in a class body is a nested "
+                + "constant and the parser records it as one");
+        AssertTrue(mit.FindMethod("Aussen", "gehoert_zu_aussen") != null,
+            "**the outer method is under the outer class** — a reader that "
+                + "left the inner type standing would have filed it there");
+        AssertTrue(mit.FindMethod("Innen", "gehoert_zu_innen") != null,
+            "**and the inner method under the inner** — both names exist and "
+                + "both are where the script put them");
+    }
 }

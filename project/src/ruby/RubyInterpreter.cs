@@ -83,6 +83,36 @@ public sealed class RubyInterpreter
     /// <summary>Whether a <c>return</c> has been seen, which stops the loops.</summary>
     private bool _returned;
 
+    /// <summary>The class the script is inside, or null at the top.</summary>
+    private RubyType? _aktuellerTyp;
+
+    /// <summary>
+    /// How far down the stack a method call may see.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A stack and a scope chain are not the same thing.</strong> A
+    /// block sees the locals around it; a method does not, because a method
+    /// has its own frame from the moment it is called. <strong>Without this
+    /// number, every local a caller had would be visible inside every method
+    /// it calls</strong> — and a game would have a method whose value depends
+    /// on who called it.
+    /// </remarks>
+    private int _methodenGrenze;
+
+    /// <summary>
+    /// The classes and modules the script defined, by name.
+    /// </summary>
+    /// <remarks>
+    /// <strong>This is the interpreter's own and not the host's.</strong> A
+    /// class a script writes is a class in that script, and <strong>a host
+    /// that supplied it would have to be told about every class a game
+    /// defines</strong>, which is the whole program and not a host contract.
+    /// </remarks>
+    private readonly Dictionary<string, RubyType> _types = new(StringComparer.Ordinal);
+
+    /// <summary>The names of the types the script defined, in order.</summary>
+    public IReadOnlyList<string> DefinedTypes => _types.Keys.ToList();
+
     /// <summary>
     /// Runs a tree and answers with its value.
     /// </summary>
@@ -123,6 +153,8 @@ public sealed class RubyInterpreter
     {
         _steps = 0;
         _returned = false;
+        _aktuellerTyp = null;
+        _methodenGrenze = 0;
         _diagnostics.Clear();
         _scopes.Clear();
         if (_scopes.Count == 0)
@@ -190,6 +222,9 @@ public sealed class RubyInterpreter
             RubyNodeKind.Return => EvaluateReturn(pNode),
             RubyNodeKind.Case => EvaluateCase(pNode),
             RubyNodeKind.For => EvaluateFor(pNode),
+            RubyNodeKind.Class => DefineType(pNode, true),
+            RubyNodeKind.Module => DefineType(pNode, false),
+            RubyNodeKind.Def => DefineMethod(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
             RubyNodeKind.Begin => EvaluateBlock(pNode),
@@ -460,6 +495,18 @@ public sealed class RubyInterpreter
     private RubyValue Constant(RubyNode pNode)
     {
         var name = pNode.Name ?? string.Empty;
+
+        // **Erst die Skript-Tabelle, dann der Host.** `A.rechnung` schreibt
+        // `A` als Empfenger, und **wenn eine Konstante nur der Host kennt,
+        // ist sie fuer den Interpreter nil** -- **jede Methode einer Klasse,
+        // die das Skript selbst definiert, waere damit unerreichbar**, und
+        // ein Spiel, das Klassen in eigenen Dateien schreibt, wuerde gar
+        // nichts ausfuehren.
+        if (_types.TryGetValue(name, out var typ))
+        {
+            return RubyValue.OfSymbol(typ.Name);
+        }
+
         var wert = _host.LookupConstant(name);
         if (wert != null)
         {
@@ -475,7 +522,14 @@ public sealed class RubyInterpreter
 
     private RubyValue Local(string pName)
     {
-        for (var i = _scopes.Count - 1; i >= 0; i--)
+        // **Nur bis zur uebersten Methodengrenze.** Eine Methode sieht ihre
+        // eigenen Variablen und die der Klammern darueber, **nicht die des
+        // Aufrufers** -- und das ist der Unterschied zwischen einem Bereich
+        // und einem Stapel. **Ein Leser, der alle Ebenen durchsuchte,
+        // wuerde in einer Methode die Variable ihres Aufrufers sehen**, und
+        // ein Spiel, das in einer Methode `x = 1` schreibt und es danach
+        // liest, wuerde den Wert des Aufrufers bekommen.
+        for (var i = _scopes.Count - 1; i >= _methodenGrenze; i--)
         {
             if (_scopes[i].TryGetValue(pName, out var wert))
             {
@@ -498,6 +552,17 @@ public sealed class RubyInterpreter
         var methode = pNode.Name ?? string.Empty;
         var argumente = EvaluateChildren(pNode, RubyNodeRole.Argument);
 
+        // **Erst die Skript-Methodentabelle, dann der Host.** Ein Aufruf,
+        // den das Skript selbst definiert hat, gehoert dem Skript -- **und
+        // ein Leser, der immer zum Host ginge, wuerde jedes `def` eines
+        // Spiels als "diese Methode kennt der Host nicht" ablehnen**, also
+        // waere kein Spiel lauffaehig.
+        var eigene = EigeneMethode(empfaenger, methode);
+        if (eigene != null)
+        {
+            return Aufrufen(eigene, argumente);
+        }
+
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
         if (ergebnis != null)
         {
@@ -510,6 +575,76 @@ public sealed class RubyInterpreter
             + "implemented is a fact about the host and not about the script");
         return RubyValue.Nil;
     }
+
+    /// <summary>
+    /// The script's own method for a receiver, or null.
+    /// </summary>
+    /// <param name="pReceiver">The receiver, which may carry a class name.</param>
+    /// <param name="pMethod">The method's name.</param>
+    /// <returns>The method, or null when the script has none.</returns>
+    /// <remarks>
+    /// <strong>A class name as receiver means the class itself</strong>, and
+    /// that is how `self.` and a bare class call both arrive here — <strong>a
+    /// reader that only looked at instances would have made every class
+    /// method unreachable.</strong>
+    /// </remarks>
+    private RubyMethod? EigeneMethode(RubyValue pReceiver, string pMethod)
+    {
+        if (pReceiver.Kind != RubyValueKind.Symbol)
+        {
+            return null;
+        }
+
+        var name = pReceiver.Name ?? string.Empty;
+        if (name.Length == 0 || !_types.ContainsKey(name))
+        {
+            return null;
+        }
+
+        return FindMethod(name, pMethod);
+    }
+
+    /// <summary>
+    /// Runs a method with the given arguments bound to its parameters.
+    /// </summary>
+    /// <param name="pMethode">The method to run.</param>
+    /// <param name="pArgumente">The arguments, already evaluated.</param>
+    /// <returns>The value of the last statement, or nil.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the method's own body runs in a fresh scope</strong>, so a
+    /// local of the caller is not visible inside it — <strong>and a reader
+    /// that shared the scope would let a method change its caller's
+    /// variables</strong>, which is exactly the kind of bug a game does not
+    /// report because it only shows up in one room.
+    /// </para>
+    /// <para>
+    /// <strong>A parameter the call did not supply is nil</strong>, because
+    /// that is Ruby's own rule and a game's optional parameter is written by
+    /// leaving it out.
+    /// </para>
+    /// </remarks>
+    private RubyValue Aufrufen(RubyMethod pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        var tiefe = _scopes.Count;
+        var grenze = _methodenGrenze;
+        _methodenGrenze = tiefe;
+        _scopes.Add(new Dictionary<string, RubyValue>());
+        for (var i = 0; i < pMethode.Parameters.Count; i++)
+        {
+            SetLocal(
+                pMethode.Parameters[i],
+                i < pArgumente.Count ? pArgumente[i] : RubyValue.Nil);
+        }
+
+        _returned = false;
+        var wert = Evaluate(pMethode.Body);
+        _returned = false;
+        _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
+        _methodenGrenze = grenze;
+        return wert;
+    }
+
 
     private RubyValue Assign(RubyNode pNode)
     {
@@ -553,7 +688,7 @@ public sealed class RubyInterpreter
             _scopes.Add(new Dictionary<string, RubyValue>());
         }
 
-        for (var i = _scopes.Count - 1; i >= 0; i--)
+        for (var i = _scopes.Count - 1; i >= _methodenGrenze; i--)
         {
             if (_scopes[i].ContainsKey(pName))
             {
@@ -966,6 +1101,155 @@ public sealed class RubyInterpreter
 
         return letztes;
     }
+
+    /// <summary>
+    /// Runs a `class` or `module` body and remembers the type.
+    /// </summary>
+    /// <param name="pNode">The definition node.</param>
+    /// <param name="pIsClass">Whether this is a class and not a module.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>The body runs once, when the definition is reached</strong> —
+    /// and that is what puts the methods in the table. <strong>A second
+    /// definition of the same name replaces the first's methods</strong>,
+    /// because that is what a reopened class does, and a reader that merged
+    /// them would have kept a method a game's later file meant to remove.
+    /// </para>
+    /// <para>
+    /// <strong>And the outer type stands again afterwards</strong> — a class
+    /// inside a class is a nested constant, and <strong>a reader that left
+    /// the inner one standing would have filed the outer class's later
+    /// methods under the inner one.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue DefineType(RubyNode pNode, bool pIsClass)
+    {
+        var name = pNode.Name ?? string.Empty;
+        if (name.Length == 0)
+        {
+            _diagnostics.Add(
+                "a class or module with no name was defined, and there is "
+                    + "nothing to file it under");
+            return RubyValue.Nil;
+        }
+
+        // **Eine zweite Definition ersetzt die Methoden** -- und die Typ-Art
+        // bleibt, weil ein `class` nach einem `class` dieselbe Art ist.
+        var typ = _types.TryGetValue(name, out var vorhanden)
+            ? vorhanden
+            : new RubyType { Name = name, IsClass = pIsClass };
+        typ.Methods.Clear();
+        _types[name] = typ;
+
+        var tiefe = _scopes.Count;
+        var vorher = _aktuellerTyp;
+        _aktuellerTyp = typ;
+        _scopes.Add(new Dictionary<string, RubyValue>());
+        foreach (var teil in Statements(pNode))
+        {
+            Evaluate(teil);
+        }
+
+        _aktuellerTyp = vorher;
+        _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
+        return RubyValue.OfSymbol(name);
+    }
+
+    /// <summary>
+    /// Runs a `def` body once and remembers the method.
+    /// </summary>
+    /// <param name="pNode">The definition node.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>The body is run once, with the parameters bound to
+    /// nil.</strong> That is what Ruby does when a method is defined — the
+    /// default arguments are expressions, evaluated in the definition's own
+    /// scope — <strong>and it is why a method whose name is a variable's
+    /// value is a thing this reader cannot know.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a `def` outside a class is a diagnostic, not a
+    /// method.</strong> Ruby would define it on `Object`; <strong>this
+    /// interpreter files methods under a class, and a host that wants
+    /// `Object` says so</strong> rather than this reader inventing a root.
+    /// </para>
+    /// </remarks>
+    private RubyValue DefineMethod(RubyNode pNode)
+    {
+        var name = pNode.Name ?? string.Empty;
+        var typ = _aktuellerTyp;
+        if (typ == null)
+        {
+            _diagnostics.Add(
+                $"method {name} is defined outside a class, and this "
+                + "interpreter files methods under a class; the reference "
+                + "would define it on Object, and that is a host's job");
+            return RubyValue.Nil;
+        }
+
+        var parameter = pNode.Children.Count > 0 ? pNode.Children[0] : null;
+        var rumpf = pNode.Children.Count > 1 ? pNode.Children[1] : null;
+        var namen = new List<string>();
+        if (parameter != null)
+        {
+            // **Die Parameterliste ist ein Block, und ihre Kinder sind die
+            // Namen.** `Statements` nimmt die Rolle `Body` und sonst die
+            // Quellordnung -- **und fuer diesen Knoten ist die
+            // Quellordnung richtig**, weil es keine Rollen gibt.
+            foreach (var teil in Statements(parameter))
+            {
+                namen.Add(teil.Name ?? string.Empty);
+            }
+        }
+
+        typ.Methods[name] = new RubyMethod
+        {
+            Name = name,
+            Parameters = namen,
+            Body = rumpf!,
+        };
+
+        // **Der Rumpf laeuft nicht.** Ruby fuehrt ihn bei der Definition
+        // aus, weil die Defaultargumente Ausdruecke sind -- **und dieser
+        // Parser liefert fuer die Parameter eine Liste von Namen und keine
+        // Ausdruecke**, es gibt also nichts zu berechnen. **Ein Leser, der
+        // den Rumpf hier laufen liesse, wuerde jede Methode eines Spiels
+        // ausfuehren, sobald ihre Klasse geoeffnet wird** -- und eine Methode,
+        // die ein Feld anfasst, wuerde an einer Klasse scheitern, die noch
+        // keine Instanz hat.
+        return RubyValue.OfSymbol(name);
+    }
+
+    /// <summary>
+    /// Finds a method, walking the superclass chain.
+    /// </summary>
+    /// <param name="pTypeName">The class to look in.</param>
+    /// <param name="pMethod">The method's name.</param>
+    /// <returns>The method, or null when no class in the chain has it.</returns>
+    /// <remarks>
+    /// <strong>The chain is walked, and not flattened at definition
+    /// time.</strong> A subclass may be written before its superclass in a
+    /// script that loads pieces in a different order, and <strong>a reader
+    /// that copied the methods at definition would have an incomplete
+    /// subclass</strong> and would never learn about the rest.
+    /// </remarks>
+    public RubyMethod? FindMethod(string pTypeName, string pMethod)
+    {
+        var gesehen = new HashSet<string>(StringComparer.Ordinal);
+        var name = pTypeName;
+        while (name != null && _types.TryGetValue(name, out var typ) && gesehen.Add(name))
+        {
+            if (typ.Methods.TryGetValue(pMethod, out var methode))
+            {
+                return methode;
+            }
+
+            name = typ.Superclass;
+        }
+
+        return null;
+    }
+
 
     // ---- Helpers
 
