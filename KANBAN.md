@@ -3817,9 +3817,40 @@ haette das `b` eines Ternaers als Schluessel gelesen.**
 > keinen gibt, bei dem die beiden auseinanderlaufen** -- und das ist eine
 > Eigenschaft der Form und kein Testfehler.
 
-**Noch nicht ausgewertet:** `respond_to_missing?`, `binding`, `Object`- und
-`Module`-Methoden, Block-Umbrueche mit Argumenten (`break 1`), und
-`Array#each` mit zwei Werten aus dem Host.
+### Die Wertausdruecke, und warum sie nicht beim Host gehoeren
+
+**`5.to_s` ging an den Host, und kein Host in diesem Repo kann es.**
+Ein echter Host beantwortet `rand` und lehnt den Rest ab,
+**also haette ein Spiel, das `"Level #{level}"` schreibt, an etwas gelegen,
+das es nicht gibt** -- und der NullHost weiss es nie,
+**also haette kein Test ueberhaupt pruefen koennen, ob eine Zahl einen Text
+hat.**
+
+**Die Reihenfolge ist: Skript, dann Wert, dann Host.** Eine Klasse, die `to_s`
+selbst definiert, **hat ihre eigene**, **und ein Leser, der die Wertausdruecke
+zuerst befragte, wuerde jeder Klasse ihre eigene `to_s` wegnehmen** -- ein
+Spiel, das seinen Namen ueberall zeigt ausser da, wo es ihn geschrieben hat.
+
+**Und es ist Rubys Schreibweise und nicht C#s.** `nil` und nicht `Null`,
+`true` und nicht `True`, **und ein Spiel, das das in eine Speicherdatei
+schreibt, haette ein Wort drin, das kein anderes Spiel liest.**
+
+**Und `inspect` ist nicht `to_s`.** Ein String in Anfuehrungszeichen, eine Zahl
+ohne, **und ein Protokoll, das einen Namen von einer Zahl unterscheiden
+will, braucht genau das.**
+
+**Und `freeze` gibt den Empfaenger zurueck, weil hier nichts eingefroren
+werden kann.** Eine Kopie waere ein anderes Ding als das, was das Spiel
+gemacht hat, **und ein Spiel haette zwei Sprites, wo es eines gemacht hat.**
+
+**Und was weder Skript noch Wert noch Host ist, bleibt eine Ablehnung.**
+`5.gibtsnicht` sagt es, **denn ein Leser, der alles beantwortet haette,
+wuerde einen Tippfehler wie eine Methode aussehen lassen.**
+
+**Noch nicht ausgewertet:** `respond_to_missing?`, `binding`,
+`Module`-Methoden (`include?`, `instance_methods`),
+Block-Umbrueche mit Argumenten (`break 1`), `Array#each` mit zwei Werten aus
+dem Host, und `Comparable` (`<=>` zwischen Werten, das Games sortieren).
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

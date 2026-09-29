@@ -9331,3 +9331,21 @@ dasselbe sagen, sind eine mit zusaetzlichem Code.**
 
 `TestRubyInterpreter: 141/141`, `All 1699 tests passed`, Mutationen 5 von 6
 mit einer einzeln gemessenen No-op.
+
+## 2026-09-29 — die Wertausdruecke (`to_s`, `nil?`, `class`, `inspect`)
+
+**`5.to_s` ging an den Host, und kein Host in diesem Repo kann es.** Ein echter
+Host beantwortet `rand` und lehnt den Rest ab, **also haette ein Spiel, das
+`"Level #{level}"` schreibt, an etwas gelegen, das es nicht gibt** -- und der
+NullHost weiss es nie, **also haette kein Test pruefen koennen, ob eine Zahl
+einen Text hat.**
+
+**Die Reihenfolge ist Skript, Wert, Host.** Eine Klasse mit eigener `to_s`
+behaelt sie, **denn ein Leser, der die Wertausdruecke zuerst befragte, wuerde
+ihr die eigene wegnehmen.**
+
+**Und es ist Rubys Schreibweise:** `nil` statt `Null`, `true` statt `True` --
+**ein Spiel, das das in eine Speicherdatei schreibt, schreibt ein Wort, das
+kein anderes Spiel liest.**
+
+`TestRubyInterpreter: 148/148`, `All 1706 tests passed`, Mutationen 5 von 5.

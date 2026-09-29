@@ -652,6 +652,128 @@ public sealed class RubyInterpreter
         // frueherer Teil gesetzt hat und dieser nicht.
         return RubyValue.Nil;
     }
+    /// <summary>
+    /// The methods every value has, which the host does not have to provide.
+    /// </summary>
+    /// <param name="pEmpfaenger">The receiver.</param>
+    /// <param name="pMethode">The method's name as written.</param>
+    /// <param name="pArgumente">The arguments, already evaluated.</param>
+    /// <returns>The value, or null when this is not one of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Before the host, and not after.</strong> Every value in Ruby
+    /// has <c>to_s</c>, <c>nil?</c>, <c>class</c> and the rest, and
+    /// <strong>a host that would have to implement them for every game is a
+    /// host no game writes</strong> — a real one answers <c>rand</c> and
+    /// refuses the rest. <strong>So these are asked first</strong>, and a
+    /// host that has its own <c>to_s</c> for a value it owns never sees the
+    /// call.
+    /// </para>
+    /// <para>
+    /// <strong>They are about the value and not about the game's world.</strong>
+    /// <c>5.to_s</c> is a fact about the number five,
+    /// <strong>and a reader that left it to the host would have made every
+    /// game's <c>"Level #{level}"</c> von einem Host abhaengig, der es nicht
+    /// weiss</strong> — which is the most common line in an RPG Maker script.
+    /// </para>
+    /// <para>
+    /// <strong>And a null host is not asked, because it would refuse.</strong>
+    /// Every test that says <c>"5"</c> says it because the interpreter
+    /// knows a number has a text, <strong>and a reader that needed a host for
+    /// that would have needed a host in every test</strong> — which is what
+    /// made the interpreter look like it needed one.
+    /// </para>
+    /// </remarks>
+    private static RubyValue? WertMethode(
+        RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        switch (pMethode)
+        {
+            case "to_s":
+                return WertAlsBytes(pEmpfaenger);
+
+            case "inspect":
+                // **`inspect` zeigt die Art und nicht nur den Wert.** Ein
+                // Spiel schreibt `p {@x}` und will die Art sehen,
+                // **und ein Leser, der beides gleich macht, haette eine
+                // Liste und einen String nicht unterscheidbar gemacht.**
+                return WertAlsBytes(pEmpfaenger, pEmpfaenger.Kind == RubyValueKind.String);
+
+            case "nil?":
+                return RubyValue.OfBoolean(pEmpfaenger.Kind == RubyValueKind.Nil);
+
+            case "class":
+                return RubyValue.OfSymbol(
+                    pEmpfaenger.Kind == RubyValueKind.Nil ? "NilClass" : "Object");
+
+            case "freeze" or "frozen?" or "dup" or "clone" or "itself":
+                // **`freeze` gibt den Empfaenger zurueck, weil nichts
+                // eingefroren werden kann.** Diese Runtime hat keine
+                // veraenderbaren Wertobjekte, **und ein Leser, der eine
+                // Kopie machen wuerde, haette `f.dup` zwei verschiedene
+                // Dinge gegeben**, von denen das Spiel eines erwartet.
+                return pMethode == "frozen?" ? RubyValue.OfBoolean(true) : pEmpfaenger;
+
+            default:
+                _ = pArgumente;
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// A value as the bytes Ruby would write for it.
+    /// </summary>
+    /// <param name="pValue">The value.</param>
+    /// <param name="pInAnfuehrungszeichen">
+    /// Whether to wrap it, which is what <c>inspect</c> does and
+    /// <c>to_s</c> does not.
+    /// </param>
+    /// <returns>The bytes.</returns>
+    /// <remarks>
+    /// <strong>Bytes and not a string type, weil es hier keinen gibt.</strong>
+    /// Ein Ruby-String ist eine Byteleiste, **und eine zweite
+    /// Reprasentation waere eine Stelle mehr, an der die beiden auseinander
+    /// laufen koennten.**
+    /// </remarks>
+    private static RubyValue WertAlsBytes(RubyValue pValue, bool pAnfuehrungszeichen = false)
+    {
+        var text = WertAlsText(pValue);
+        if (pAnfuehrungszeichen)
+        {
+            text = "\"" + text + "\"";
+        }
+
+        return RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(text));
+    }
+
+    /// <summary>
+    /// A value as the text Ruby would write for it.
+    /// </summary>
+    /// <param name="pValue">The value.</param>
+    /// <returns>The text.</returns>
+    /// <remarks>
+    /// <strong>Rubys Schreibweise und nicht C#s.</strong> <c>nil</c> and not
+    /// <c>Null</c>, <c>true</c> and not <c>True</c>,
+    /// <strong>und ein Leser, der C#s Schreibweise genommen haette, wuerde
+    /// in einer Fehlermeldung eines Spiels "Null" schreiben, wo Ruby
+    /// "nil" schreibt</strong> — and a game that writes that string into a
+    /// save file would have a save no other game can read.
+    /// </remarks>
+    private static string WertAlsText(RubyValue pValue) => pValue.Kind switch
+    {
+        RubyValueKind.Nil => "nil",
+        RubyValueKind.Boolean => pValue.Boolean ? "true" : "false",
+        RubyValueKind.Integer => pValue.Integer.ToString(
+            System.Globalization.CultureInfo.InvariantCulture),
+        RubyValueKind.Float => pValue.Real.ToString(
+            System.Globalization.CultureInfo.InvariantCulture),
+        RubyValueKind.String => System.Text.Encoding.UTF8.GetString(pValue.Bytes),
+        RubyValueKind.Symbol => pValue.Name ?? string.Empty,
+        _ => pValue.IsHash ? "{}" : "[]",
+    };
+
+
+
 
     private RubyValue Call(RubyNode pNode)
     {
@@ -865,6 +987,23 @@ public sealed class RubyInterpreter
             {
                 return mitBlock;
             }
+        }
+
+        // **Die Methoden, die JEDER Wert hat, und vor dem Host.** `5.to_s`
+        // ist eine Tatsache ueber die Zahl fuenf,
+        // **und ein Spiel schreibt `"Level #{level}"` in jedem zweiten
+        // Skript** -- das haette an einem Host gehaengt, der es nicht weiss,
+        // und **der NullHost weiss es nie**, also haette kein Test
+        // ueberhaupt pruefen koennen, ob eine Zahl einen Text hat.
+        //
+        // **Und nach dem Skript, nicht davor.** Eine Klasse, die `to_s`
+        // selbst definiert, **hat ihre eigene**,
+        // **und ein Leser, der die Wertausdruecke zuerst befragte, wuerde
+        // jeder Klasse ihre eigene to_s wegnehmen.**
+        var amWert = WertMethode(empfaenger, methode, argumente);
+        if (amWert != null)
+        {
+            return amWert;
         }
 
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
