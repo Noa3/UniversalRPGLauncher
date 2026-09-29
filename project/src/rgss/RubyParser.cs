@@ -1338,6 +1338,47 @@ public sealed class RubyParser
                     Children = arguments,
                 };
             }
+            case "defined?":
+            {
+                _index++;
+                SkipNewlines();
+
+                // **Ein Ausdruck, und er wird NICHT ausgewertet.** Ruby
+                // beantwortet die Frage "was ist das" und fuehrt den
+                // Ausdruck nicht aus -- **und ein Leser, der ihn
+                // auswertete, wuerde `defined? a.b` auch dann `method`
+                // sagen, wenn `b` fehlt**, und wuerde nebenbei den Aufruf
+                // machen, den die Frage nur stellte. Klammern sind
+                // erlaubt und gehoeren zum Ausdruck.
+                // **Der ganze Ausdruck und nicht nur sein Anfang.**
+                // `defined? 1 + 1` ist eine Frage nach einer Rechnung,
+                // **und `ParsePrimary` allein haette die `1` gelesen und den
+                // Rest als zweite Anweisung**, was `undefined operator '+'
+                // for a Symbol and a Integer` ergab. **`defined? a.b` ist
+                // eine Frage nach einem Aufruf**, und genau so weit muss
+                // der Leser gehen.
+                // **`ParseStatement` und nicht `ParseUnary`.** Die
+                // Unary-Ebene ist die oberste: sie sieht `not` und ein
+                // fuehrendes `+` oder `-` und gibt sonst
+                // `ParsePostfix(ParsePrimary())` zurueck -- **also nur die
+                // `1` von `1 + 1`**, und der Rest wurde zur zweiten
+                // Anweisung, die `undefined operator '+' for a Symbol and a
+                // Integer` ergab. **Die Frage gilt dem ganzen
+                // Ausdruck**, und die Ebene, die einen ganzen Ausdruck
+                // liest, ist `ParseStatement`.
+                var ausdruck = Is("(") ? ReadParenthesised() : ParseStatement();
+                return new RubyNode
+                {
+                    Kind = RubyNodeKind.Defined,
+                    Line = pToken.Line,
+                    Children = [ausdruck],
+                    Role_Children =
+                    [
+                        new RubyNodePart { Role = RubyNodeRole.Condition, Node = ausdruck },
+                    ],
+                };
+            }
+
             case "alias":
             {
                 _index++;
@@ -1680,6 +1721,34 @@ public sealed class RubyParser
             RubyTokenKind.Keyword => Current.Text is "nil" or "true" or "false",
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// A parenthesised expression, without the brackets.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The brackets are gone and the expression is not.</strong> A
+    /// reader that kept them would have made the node's text start with
+    /// `(`, and `defined? (a)` and `defined? a` would have been two
+    /// different things — <strong>and Ruby does not draw that
+    /// distinction.</strong>
+    /// </remarks>
+    private RubyNode ReadParenthesised()
+    {
+        _index++;
+        SkipNewlines();
+        var innen = ParseStatement();
+        SkipNewlines();
+        if (!Is(")"))
+        {
+            throw new RubyParseException(
+                $"An open bracket is never closed; at offset {Current.Offset} "
+                + $"there is '{Current.Text}'.",
+                Current.Line);
+        }
+
+        _index++;
+        return innen;
     }
 
     /// <summary>

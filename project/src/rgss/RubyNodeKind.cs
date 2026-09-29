@@ -56,6 +56,9 @@ public enum RubyNodeKind
     Retry,
     Begin,
 
+    // Questions.
+    Defined,
+
     // Definitions.
     Alias,
     Class,

@@ -52,6 +52,18 @@ public sealed class RubyInterpreter
 
     /// <summary>The instance variables of the running script.</summary>
     private Dictionary<string, RubyValue> _instanceVariables = new();
+
+    /// <summary>
+    /// The globals, by name without the dollar sign.
+    /// </summary>
+    /// <remarks>
+    /// <strong>One flat table and not one per scope.</strong> That is Ruby's
+    /// own rule and the reason a game's flag is visible from a method it did
+    /// not pass through — <strong>and a reader that scoped them would have
+    /// made a global that a method sets invisible to the code that reads
+    /// it.</strong>
+    /// </remarks>
+    private readonly Dictionary<string, RubyValue> _globals = new(StringComparer.Ordinal);
     private readonly List<string> _diagnostics = new List<string>();
 
     /// <summary>
@@ -263,6 +275,7 @@ public sealed class RubyInterpreter
             RubyNodeKind.Def => DefineMethod(pNode, false),
             RubyNodeKind.DefS => DefineMethod(pNode, true),
             RubyNodeKind.Alias => DefineAlias(pNode),
+            RubyNodeKind.Defined => EvaluateDefined(pNode),
             RubyNodeKind.SuperCall => EvaluateSuper(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
@@ -794,6 +807,14 @@ public sealed class RubyInterpreter
                     _instanceVariables[ziel.Name ?? string.Empty] = wert;
                 }
 
+                return wert;
+            case RubyNodeKind.GlobalVariable:
+                // **Ein Global wird auch ausserhalb jeder Ebene
+                // geschrieben.** Der `_scopes.Count > 0`-Test, den das
+                // Instanzfeld braucht, waere hier falsch: **ein Spiel, das
+                // beim Laden ein Globales setzt, hat keine offene Ebene**,
+                // und die Zuweisung waere ins Leere gegangen.
+                _globals[GlobalName(ziel)] = wert;
                 return wert;
             case RubyNodeKind.Call:
             case RubyNodeKind.SelfCall:
@@ -1873,6 +1894,135 @@ public sealed class RubyInterpreter
         typ.Methods[neuer] = methode;
         return RubyValue.OfSymbol(neuer);
     }
+
+
+
+    /// <summary>
+    /// Answers what an expression is, without running it.
+    /// </summary>
+    /// <param name="pNode">The `defined?` node.</param>
+    /// <returns>The kind as a symbol, or nil for "not defined".</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>It answers a question and it does not ask it by doing
+    /// it.</strong> Ruby's <c>is_defined</c> in <c>eval.c</c> walks the node's
+    /// kind and never evaluates the expression — <strong>and a reader that
+    /// evaluated it would have said "method" for <c>defined? a.b</c> even when
+    /// <c>b</c> is not there</strong>, and would have made the call the
+    /// question only asked about.
+    /// </para>
+    /// <para>
+    /// <strong>And it answers a string and not a boolean.</strong> That is
+    /// Ruby 1.8.1, the version RPG Maker XP runs — <strong>and a reader that
+    /// answered true or false would have broken every game that writes
+    /// <c>defined?(@hp) ? "expression" : "nil"</c></strong>, which is how a
+    /// game's own code asks. Current Ruby answers a boolean, and **this
+    /// runtime is the 1.8 one because that is the one being
+    /// emulated.**
+    /// </para>
+    /// <para>
+    /// <strong>What is named here is what this runtime has.</strong> A local
+    /// variable, an instance variable, a global, a class, a method of the
+    /// running class, a constant the script or the host defines, and
+    /// <c>yield</c> and <c>super</c> which this runtime has no frame
+    /// bookkeeping for — <strong>and a reader that guessed at those two
+    /// would have claimed a method exists for a block this runtime does
+    /// not run.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue EvaluateDefined(RubyNode pNode)
+    {
+        var kind = Child(pNode, RubyNodeRole.Condition).Kind;
+        switch (kind)
+        {
+            case RubyNodeKind.Identifier:
+                return Defined(
+                    Local(NameOf(pNode)).IsNil
+                        && !HasLocal(NameOf(pNode)) ? null : "local-variable");
+            case RubyNodeKind.InstanceVariable:
+            case RubyNodeKind.ClassVariable:
+                return Defined(
+                    _instanceVariables.ContainsKey(NameOf(pNode))
+                        ? "instance-variable" : null);
+            case RubyNodeKind.GlobalVariable:
+                return Defined(_globals.ContainsKey(NameOf(pNode)) ? "global-variable" : null);
+            case RubyNodeKind.Constant:
+                return Defined(
+                    _types.ContainsKey(NameOf(pNode)) || _host.LookupConstant(NameOf(pNode)) != null
+                        ? "constant" : null);
+            case RubyNodeKind.Call:
+            case RubyNodeKind.MethodCall:
+            case RubyNodeKind.SelfCall:
+                return Defined(
+                    EigeneMethode(empfaengerOf(pNode), NameOf(pNode)) != null
+                        ? "method" : null);
+            case RubyNodeKind.SuperCall:
+                return Defined(
+                    _aufrufKette.Count > 0 && BasisVon(_aufrufKette[^1]) != null
+                        ? "super" : null);
+            case RubyNodeKind.Yield:
+                return Defined(null);
+            default:
+                // **Jeder andere Ausdruck ist ein Ausdruck**, und das ist
+                // Rubys eigener Default: `is_defined` gibt "expression"
+                // fuer alles, was es nicht benennen kann.
+                return Defined("expression");
+        }
+    }
+
+    /// <summary>
+    /// The name the `defined?` question is about, without a dollar sign.
+    /// </summary>
+    /// <remarks>
+    /// <strong>One place strips the dollar and both sides call
+    /// it.</strong> The lexer writes a global's name as written, with the
+    /// `<c>$</c>` in it, <strong>and the table is keyed without it</strong>.
+    /// The first version stripped it at the assignment and not at the
+    /// question, <strong>and a global that was set answered nil to
+    /// <c>defined?</c></strong> — which is the one use of the word a game
+    /// relies on. **Two places for one rule is two places where the rule
+    /// drifts.**
+    /// </remarks>
+    private static string NameOf(RubyNode pNode)
+        => GlobalName(Child(pNode, RubyNodeRole.Condition));
+
+    /// <summary>A global's name as the table keys it.</summary>
+    private static string GlobalName(RubyNode pNode)
+        => (pNode.Name ?? string.Empty).TrimStart('$');
+
+    /// <summary>The receiver a call in a `defined?` question has.</summary>
+    private RubyValue empfaengerOf(RubyNode pNode)
+    {
+        var ziel = Child(pNode, RubyNodeRole.Condition);
+        if (ziel.Kind == RubyNodeKind.Call || ziel.Kind == RubyNodeKind.MethodCall)
+        {
+            return Evaluate(Child(ziel, RubyNodeRole.Receiver));
+        }
+
+        return RubyValue.OfSymbol("self");
+    }
+
+    /// <summary>The base of a class, or null when it has none.</summary>
+    private string? BasisVon(string pTyp)
+        => _types.TryGetValue(pTyp, out var typ) ? typ.Superclass : null;
+
+    /// <summary>A local in any scope up to the method boundary.</summary>
+    private bool HasLocal(string pName)
+    {
+        for (var i = _scopes.Count - 1; i >= _methodenGrenze; i--)
+        {
+            if (_scopes[i].ContainsKey(pName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A kind as a symbol, or nil.</summary>
+    private static RubyValue Defined(string? pKind)
+        => pKind == null ? RubyValue.Nil : RubyValue.OfSymbol(pKind);
 
 
 

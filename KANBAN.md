@@ -3270,8 +3270,49 @@ A reader that made a stub would have given the game a method that always
 answers nil, **which is a bug that only shows up as a character who cannot do
 the one thing they were renamed for.**
 
-**Still not evaluated:** `defined?`, `extend`, `undef`, and blocks with
-parameters passed to methods.
+### `defined?` answers a word, and that is Ruby 1.8.1
+
+**Read at the source and not from memory**, because the memory was wrong in
+both directions. `v1_8_1`'s `eval.c` has `is_defined`, and it returns
+`"method"`, `"local-variable"`, `"expression"`, `"instance-variable"`,
+`"global-variable"` and `nil` — **strings, and that is the version RPG Maker XP
+runs.** Current Ruby's `vm_insnhelper.c` answers a boolean, and **a reader that
+answered true or false would have broken every game that writes
+`defined?(@hp) ? "expression" : "nil"`**, which is how a game's own code asks.
+
+**And it does not run the expression.** `is_defined` walks the node's kind and
+never evaluates it — **a reader that evaluated it would have said `"method"`
+for `defined? a.b` even when `b` is not there**, and would have made the call
+the question only asked about.
+
+**The question is about the whole expression.** The first version read
+`ParsePrimary`, which takes the `1` out of `1 + 1` and left the rest as a
+second statement, **and the error named a symbol and an integer** — a
+`defined?` that answers about half its question. `ParseStatement` is the level
+that reads one.
+
+**And the global's dollar sign is stripped in one place.** The lexer writes a
+global's name as written, with the `$`, and the table is keyed without it. The
+first version stripped it at the assignment and not at the question,
+**and a global that was set answered `nil` to `defined?`** — the one use of the
+word a game relies on. **Two places for one rule is two places where the rule
+drifts**, and the fix is `GlobalName` and not a second `TrimStart`.
+
+**And the globals themselves had no table at all.** They fell through to
+`Refuse`, **and `defined?` is what made that visible**: a game's own flag was
+a name nothing could store.
+
+**And the mutation that evaluated the question survived until a missing
+method was in a test.** Every other question is about something that works,
+**so a reader that ran the expression would have made the call and then
+answered about it, and the answer would be right by accident.** With the
+method not there, a reader that runs the question answers a diagnostic about
+the host's missing method rather than `nil` — **and a game's
+`defined?(a.b) ? x : y` would take the first arm on a name nobody
+defined.**
+
+**Still not evaluated:** `extend`, `undef`, and blocks with parameters passed
+to methods.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

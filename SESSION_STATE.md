@@ -9018,3 +9018,30 @@ in `Value`.** A reader that took `Text` would have stored `:neu` as the name.
 
 `TestRubyInterpreter: 57/57`, `TestRubyParser: 53/53`, `All 1601 tests
 passed`, validator passed, mutations 6 of 6.
+
+## 2026-09-29 — defined? and the globals it made visible
+
+**`defined?` answers a word, and that is Ruby 1.8.1.** Read at the source:
+`v1_8_1`'s `eval.c` has `is_defined`, returning `"method"`,
+`"local-variable"`, `"expression"`, `"instance-variable"`, `"global-variable"`
+and `nil`. **Current Ruby answers a boolean, and the memory was wrong in both
+directions** — a reader that answered true or false would have broken every
+game that writes `defined?(@hp) ? "expression" : "nil"`.
+
+**It does not run the expression**, and the mutation that made it run survived
+five tests because every question was about something that works — **a reader
+that ran it would have made the call and answered right by accident.** With a
+missing method it answers a diagnostic about the host instead of `nil`.
+
+**The question is about the whole expression.** The first version read
+`ParsePrimary`, which takes the `1` out of `1 + 1`, and the error named a
+symbol and an integer. `ParseStatement` is the level that reads one.
+
+**And the globals had no table at all** — they fell through to `Refuse`, and
+`defined?` is what made that visible. **The dollar sign is stripped in one
+place (`GlobalName`) and not at both ends**, because the first version stripped
+it at the assignment and not at the question, **and a global that was set
+answered nil.**
+
+`TestRubyInterpreter: 64/64`, `TestRubyParser: 53/53`, `All 1608 tests
+passed`, validator passed, mutations 6 of 6.
