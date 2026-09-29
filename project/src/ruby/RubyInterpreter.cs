@@ -72,6 +72,19 @@ public sealed class RubyInterpreter
     /// </remarks>
     private Dictionary<string, RubyValue> _instanceVariables = new();
 
+    /// <summary>
+    /// The class variables, one table per class, shared by its objects.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And not in the objects.</strong> <c>@@zaehler</c> is what a
+    /// class counts its objects with,
+    /// <strong>and a field per object would count nothing</strong> — every
+    /// new object would start at zero, and a game handing out ids from a
+    /// class variable would hand out the same id twice.
+    /// </remarks>
+    private readonly Dictionary<string, Dictionary<string, RubyValue>> _klassenFelder =
+        new(StringComparer.Ordinal);
+
 
     /// <summary>The object a method is running on, or null at the top level.</summary>
     private RubyValue? _self;
@@ -297,10 +310,14 @@ public sealed class RubyInterpreter
             // Feld gewinnen lassen** — und eins, das nur die Methode
             // meint, mit der Methode.
             RubyNodeKind.Identifier => Name(pNode),
+            // **Und die Leseform geht ueber `TabelleFuer`**, weil
+            // `@@x` nicht im Objekt steht, sondern in der Klasse.
             RubyNodeKind.InstanceVariable => _scopes.Count > 0
-                ? _instanceVariables.TryGetValue(
+                ? TabelleFuer(pNode).TryGetValue(
                     pNode.Name ?? string.Empty, out var iv) ? iv : RubyValue.Nil
                 : RubyValue.Nil,
+            RubyNodeKind.ClassVariable => TabelleFuer(pNode).TryGetValue(
+                pNode.Name ?? string.Empty, out var cv) ? cv : RubyValue.Nil,
             RubyNodeKind.Array => RubyValue.OfArray(EvaluateChildren(pNode, RubyNodeRole.Argument)),
             RubyNodeKind.Binary => Binary(pNode),
             RubyNodeKind.Unary => Unary(pNode),
@@ -1612,6 +1629,76 @@ public sealed class RubyInterpreter
 
 
 
+    /// <summary>
+    /// The class variables of a class, made on first use.
+    /// </summary>
+    /// <param name="pKlasse">The class's name as written.</param>
+    /// <returns>The table, the same one every time.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>One per class and shared by every object of it.</strong>
+    /// <c>@@zaehler</c> is what a class counts its objects with,
+    /// <strong>and a table per object would count nothing</strong> — every new
+    /// object would start at zero, and a game that hands out ids from a class
+    /// variable would hand out the same id twice.
+    /// </para>
+    /// <para>
+    /// <strong>And it is a table per class and not one for the program.</strong>
+    /// Two classes each keep their own, <strong>and one table for the whole
+    /// program would have given a game one class's counter inside the
+    /// other</strong> — which is a map's object count inside an actor's id.
+    /// </para>
+    /// </remarks>
+    private Dictionary<string, RubyValue> KlassenFelder(string pKlasse)
+    {
+        if (!_klassenFelder.TryGetValue(pKlasse, out var felder))
+        {
+            felder = new Dictionary<string, RubyValue>(StringComparer.Ordinal);
+            _klassenFelder[pKlasse] = felder;
+        }
+
+        return felder;
+    }
+
+    /// <summary>
+    /// The table a node's variable belongs in.
+    /// </summary>
+    /// <param name="pNode">The variable's node.</param>
+    /// <returns>The table.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the one place that decides.</strong> `@x` belongs to
+    /// the object, <c>@@x</c> to the class,
+    /// <strong>and five places that each asked "which is it" would be five
+    /// answers</strong> — and two of them would disagree, which is how a
+    /// write and a read end up in different tables.
+    /// </para>
+    /// <para>
+    /// <strong>And a class variable outside a class is the top level's.</strong>
+    /// Ruby says <c>@@x</c> at the top level belongs to <c>Object</c>,
+    /// <strong>and a reader that refused it would have made a script that
+    /// keeps a counter between two scenes fail at the first increment.</strong>
+    /// </para>
+    /// </remarks>
+    private Dictionary<string, RubyValue> TabelleFuer(RubyNode pNode)
+    {
+        if (pNode.Kind != RubyNodeKind.ClassVariable)
+        {
+            return _instanceVariables;
+        }
+
+        // **Und die Klasse ist die, in der gerade laeuft, oder die des
+        // Empfaengers.** `class D; @@x = 1; end` ist ein Feld von `D`,
+        // **und `obj.m` ist ein Feld der Klasse des Objekts.**
+        var klasse = _self is { Kind: RubyValueKind.Object } wert
+            && !string.IsNullOrEmpty(wert.ClassName)
+            ? wert.ClassName
+            : _aktuellerTyp?.Name ?? string.Empty;
+        return KlassenFelder(klasse);
+    }
+
+
+
 
     /// <summary>
     /// The script's own method for a receiver, or null.
@@ -2071,6 +2158,10 @@ public sealed class RubyInterpreter
             case RubyNodeKind.Identifier:
                 SetLocal(ziel.Name ?? string.Empty, wert);
                 return wert;
+            // **Und `@@x` geht in die Klasse, nicht in das Objekt.**
+            case RubyNodeKind.ClassVariable:
+                TabelleFuer(ziel)[ziel.Name ?? string.Empty] = wert;
+                return wert;
             case RubyNodeKind.InstanceVariable:
                 if (_scopes.Count > 0)
                 {
@@ -2213,7 +2304,9 @@ public sealed class RubyInterpreter
         }
         else
         {
-            _instanceVariables[ziel.Name ?? string.Empty] = neu;
+            // **Und der Operator-Zuweisung folgt dieselbe Wahl**,
+            // **denn `@@x += 1` ist eine Klassenvariable, die waehlt.**
+            TabelleFuer(ziel)[ziel.Name ?? string.Empty] = neu;
         }
 
         return neu;
@@ -2426,9 +2519,10 @@ public sealed class RubyInterpreter
             {
                 SetLocal(ziel.Name ?? string.Empty, element);
             }
-            else if (ziel.Kind == RubyNodeKind.InstanceVariable)
+            else if (ziel.Kind is RubyNodeKind.InstanceVariable
+                or RubyNodeKind.ClassVariable)
             {
-                _instanceVariables[ziel.Name ?? string.Empty] = element;
+                TabelleFuer(ziel)[ziel.Name ?? string.Empty] = element;
             }
 
             letztes = Evaluate(rumpf);
@@ -3803,29 +3897,81 @@ public sealed class RubyInterpreter
     /// </remarks>
     private RubyValue EvaluateDefined(RubyNode pNode)
     {
-        var kind = Child(pNode, RubyNodeRole.Condition).Kind;
+        // **Und die Art und der Name kommen aus dem Knoten DAVOR.**
+        // `pNode` ist der `defined?`-Knoten, **und der, um den es geht,
+        // ist sein Condition-Kind** -- **ein Leser, der `pNode` selbst
+        // nimmt, sieht die Art `Defined`**,
+        // **und dann ist `@@x` ein Instanzfeld und `defined?(@@x)` gibt
+        // nil, waehrend `@@x` selbst 0 liest.**
+        // **Das ist gemessen:** `@@n = 0; defined?(@@n)` gab nil,
+        // **und `@@n` direkt gab 0.**
+        // **Und `null` ist moeglich, und dann ist es "expression".** Es
+        // gibt Formen von `defined?`, bei denen der Knoten nichts zu
+        // benennen hat,
+        // **und ein Leser, der sofort `.Kind` liest, wuerde dort mit einer
+        // leeren Ausnahme abbrechen** -- **gemessen:
+        // `Object reference not set to an instance of an object`** in
+        // `Test_EachKindOfVariableAnswersWithItsOwnWord`.
+        var geprueft = Child(pNode, RubyNodeRole.Condition);
+        if (geprueft == null)
+        {
+            return Defined("expression");
+        }
+
+        var kind = geprueft.Kind;
         switch (kind)
         {
+            // **Und der Name kommt aus dem geprueften Knoten selbst.**
+            // `NameOf` ist fuer den `defined?`-Knoten geschrieben und sucht
+            // ein Condition-Kind in ihm, **das eine Variable nicht hat** --
+            // **also war der Name leer**, und `defined?(@hp)` gab nil, auch
+            // wenn `@hp` gesetzt war.
             case RubyNodeKind.Identifier:
                 return Defined(
-                    Local(NameOf(pNode)).IsNil
-                        && !HasLocal(NameOf(pNode)) ? null : "local-variable");
+                    Local(geprueft.Name ?? string.Empty).IsNil
+                        && !HasLocal(geprueft.Name ?? string.Empty)
+                            ? null
+                            : "local-variable");
             case RubyNodeKind.InstanceVariable:
-            case RubyNodeKind.ClassVariable:
                 return Defined(
-                    _instanceVariables.ContainsKey(NameOf(pNode))
+                    TabelleFuer(geprueft).ContainsKey(geprueft.Name ?? string.Empty)
                         ? "instance-variable" : null);
+            case RubyNodeKind.ClassVariable:
+                // **Und `defined?` sagt seinen eigenen Namen.** Ruby gibt
+                // `"class variable"` zurueck,
+                // **und ein Leser, der auch hier "instance-variable"
+                // schriebe, haette einem Skript, das `defined?(@@x)`
+                // gegen einen Namen prueft, die falsche Antwort gegeben.**
+                // **Und "class variable" mit Leerzeichen, nicht mit
+                // Bindestrich.** Verifiziert in `eval.c` aus Ruby 1.8.1:
+                // `defined?` antwortet `"class variable"` und daneben
+                // `"local-variable"` **mit Bindestrich** -- **die
+                // Schreibweisen sind nicht einheitlich, und diese Runtime
+                // schreibt, was die Quelle schreibt.**
+                return Defined(
+                    TabelleFuer(geprueft).ContainsKey(geprueft.Name ?? string.Empty)
+                        ? "class variable" : null);
             case RubyNodeKind.GlobalVariable:
-                return Defined(_globals.ContainsKey(NameOf(pNode)) ? "global-variable" : null);
+                return Defined(
+                    _globals.ContainsKey(GlobalName(geprueft))
+                        ? "global-variable" : null);
             case RubyNodeKind.Constant:
                 return Defined(
-                    _types.ContainsKey(NameOf(pNode)) || _host.LookupConstant(NameOf(pNode)) != null
-                        ? "constant" : null);
+                    _types.ContainsKey(geprueft.Name ?? string.Empty)
+                        || _host.LookupConstant(geprueft.Name ?? string.Empty) != null
+                            ? "constant" : null);
             case RubyNodeKind.Call:
             case RubyNodeKind.MethodCall:
             case RubyNodeKind.SelfCall:
                 return Defined(
-                    EigeneMethode(empfaengerOf(pNode), NameOf(pNode)) != null
+                    // **Und `empfaengerOf` will den `defined?`-Knoten, weil
+                    // es das Condition-Kind darin sucht.** Ihm den
+                    // geprueften Knoten zu geben hiesse: **es sucht darin
+                    // ein Condition-Kind, das der Aufruf nicht hat**
+                    // -- **gemessen: `Object reference not set to an
+                    // instance of an object`** bei
+                    // `Test_AMethodThatIsNotThereAnswersNil`.
+                    EigeneMethode(empfaengerOf(pNode), geprueft.Name ?? string.Empty) != null
                         ? "method" : null);
             case RubyNodeKind.SuperCall:
                 return Defined(

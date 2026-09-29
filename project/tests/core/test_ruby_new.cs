@@ -328,4 +328,136 @@ public partial class TestRubyInterpreter
                 + "field would have answered 0, which is a game where every "
                 + "actor starts with the class body's value");
     }
+    /// <summary>
+    /// A class variable is shared by every object of its class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is what a class variable is for.</strong>
+    /// <c>@@zaehler</c> is how a class hands out ids and counts its objects,
+    /// <strong>and a field per object would count nothing</strong> — every new
+    /// object would start at zero, and a game handing out ids from a class
+    /// variable would hand out the same id twice.
+    /// </para>
+    /// <para>
+    /// <strong>And the class body starts it, and the body is where a game
+    /// writes it.</strong> <c>class D; @@anzahl = 0; def setze; @@anzahl =
+    /// @@anzahl + 1; end; end</c> is the ordinary form,
+    /// <strong>and measured before the fix it answered
+    /// <c>NoMethodError: undefined operator '+' for a Nil and a Integer</c>**
+    /// — the class body's value was not readable, so the first increment
+    /// failed.
+    /// </para>
+    /// </remarks>
+    public void Test_AClassVariableIsSharedByEveryObjectOfItsClass()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class D\n"
+            + "  @@anzahl = 0\n"
+            + "  def setze\n"
+            + "    @@anzahl = @@anzahl + 1\n"
+            + "  end\n"
+            + "  def anzahl\n"
+            + "    @@anzahl\n"
+            + "  end\n"
+            + "end\n"
+            + "a = D.new\n"
+            + "b = D.new\n"
+            + "a.setze\n"
+            + "[a.anzahl, b.anzahl]\n"));
+
+        AssertEq(AsInteger(wert.Items[0]), 1,
+            "**the first object sees the count** — a field per object would "
+                + "have left this at zero, and a game handing out ids from a "
+                + "class variable would hand out the same id twice");
+        AssertEq(AsInteger(wert.Items[1]), 1,
+            "**and so does the second** — that is what shared means, and a "
+                + "reader that gave each object its own would have made the "
+                + "second read zero");
+    }
+
+    /// <summary>
+    /// A class variable belongs to its class, and not to the program.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Two classes, two tables.</strong> <c>@@anzahl</c> in one class
+    /// and <c>@@anzahl</c> in another are two counters,
+    /// <strong>and one table for the program would have given a game the
+    /// map's object count inside an actor's id</strong> — which is a number
+    /// that looks right and belongs to something else.
+    /// </remarks>
+    public void Test_AClassVariableBelongsToItsClass()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class A\n"
+            + "  @@n = 0\n"
+            + "  def plus\n"
+            + "    @@n = @@n + 1\n"
+            + "  end\n"
+            + "  def n\n"
+            + "    @@n\n"
+            + "  end\n"
+            + "end\n"
+            + "class B\n"
+            + "  @@n = 100\n"
+            + "  def n\n"
+            + "    @@n\n"
+            + "  end\n"
+            + "end\n"
+            + "a = A.new\n"
+            + "a.plus\n"
+            + "a.plus\n"
+            + "[a.n, B.new.n]\n"));
+
+        AssertEq(AsInteger(wert.Items[0]), 2,
+            "**the first class counted to two** — and a reader that ran every "
+                + "class in one table would have started at the other class's "
+                + "hundred");
+        AssertEq(AsInteger(wert.Items[1]), 100,
+            "**and the second class still has its own hundred** — one table "
+                + "for the program would have put the first class's count "
+                + "inside the second, which is a number that looks right and "
+                + "belongs to something else");
+    }
+
+    /// <summary>
+    /// `defined?` says "class variable" and not "instance variable".
+    /// </summary>
+    /// <remarks>
+    /// <strong>Ruby's own word.</strong> <c>defined?(@@x)</c> answers
+    /// <c>"class variable"</c>,
+    /// <strong>and a reader that said "instance-variable" would have given a
+    /// script that compares the answer against a name the wrong one</strong> —
+    /// and that is a form a game uses to check whether a class has been set
+    /// up yet.
+    /// </remarks>
+    public void Test_DefinedSaysClassVariableAndNotInstanceVariable()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class D\n"
+            + "  @@n = 0\n"
+            + "  def namen\n"
+            + "    [defined?(@@n), defined?(@fehlt)]\n"
+            + "  end\n"
+            + "end\n"
+            + "D.new.namen\n"));
+
+        // **`defined?` antwortet mit einem Symbol, und das ist eine
+        // bestehende, gemessene Entscheidung dieses Lesers** -- die
+        // anderen Antworten sind es auch, und `ToString()` gibt den Namen.
+        AssertEq(wert.Items[0].ToString(), "class variable",
+            "**the class variable says its own name, with a space** — "
+                + "verified in `eval.c` from Ruby 1.8.1, where `defined?` "
+                + "answers `\"class variable\"` and next to it "
+                + "`\"local-variable\"` with a dash: the two spellings "
+                + "are not the same in the reference, and a reader that "
+                + "made them the same would have given a script comparing "
+                + "the answer against a name the wrong word");
+        AssertTrue(wert.Items[1].Kind == RubyValueKind.Nil,
+            "**and an unset one is nil** — so `defined?` can tell a class "
+                + "that has been set up from one that has not");
+    }
 }

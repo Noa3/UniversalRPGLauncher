@@ -3917,11 +3917,47 @@ den Leser als `NEW_IVAR(attriv)`, **und das liest `@name` vom Empfaenger.**
 **Ein Leser, der das Feld der Klasse laest, haette 0 geantwortet** -- ein
 Spiel, in dem jeder Schauspieler mit dem Wert des Klassenrumpfs beginnt.
 
+### `@@x`, und dabei zwei Fehler in `defined?`, die kein Test beruehrt hatte
+
+**Der Lexer las `@@x` und der Interpreter warf es in die Instanz.** Ruby
+unterscheidet die beiden, **und `@@zaehler` ist wie eine Klasse ihre Objekte
+zaehlt und ihnen Nummern gibt** -- **ein Feld pro Objekt wuerde gar nichts
+zaehlen**, jedes neue Objekt faenge bei null an, **und ein Spiel, das Nummern
+aus einer Klassenvariable vergibt, wuerde dieselbe Nummer zweimal vergeben.**
+
+**Gemessen, bevor esrepariert war:**
+`class D; @@anzahl = 0; def setze; @@anzahl = @@anzahl + 1; end; end` --
+`NoMethodError: undefined operator '+' for a Nil and a Integer`.
+**Der Wert im Klassenrumpf war nicht lesbar**, **und das ist genau die Form,
+in der jedes Skript seine Zaehler schreibt.**
+
+**Und `defined?` sah den falschen Knoten.** `EvaluateDefined` las die Art aus
+dem Condition-Kind, **aber die Tabelle und den Namen aus dem `defined?`-Knoten
+selbst** -- **also war `@@x` fuer `defined?` ein Instanzfeld, und `defined?(@@x)`
+gab nil, waehrend `@@x` selbst die Zahl las.**
+
+> **Das war ein stiller Bug in einer Funktion, die 64 Tests hatte.** Kein
+> Test hatte `defined?` auf eine *Instanzvariable* und eine *Klassenvariable*
+> im selben Lauf gestellt, **und beide gaben nil** -- `defined?(@hp)` gab
+> nil, **obwohl `@hp` gesetzt war**, weil `NameOf` ein Condition-Kind in
+> einer Variablen suchte, **das nicht existiert.**
+
+**Und die Schreibweise ist gemischt, und ich habe es nicht vereinheitlicht.**
+Verifiziert in `eval.c` aus Ruby 1.8.1: `defined?` antwortet
+`"class variable"` **mit Leerzeichen** und daneben `"local-variable"`
+**mit Bindestrich**. **Zwei Schreibweisen in derselben Funktion der
+Referenz** -- **und diese Runtime schreibt, was die Quelle schreibt, weil ein
+Skript, das den Antwortnamen vergleicht, sonst das falsche Wort bekommt.**
+
+**Und eine tote Zeile wurde entfernt, nicht dokumentiert.** `_self` im
+Klassenrumpf war ueberflüssig, **weil `_aktuellerTyp` die Klasse ohnehin
+traegt** -- **und die Mutation "der Rumpf sieht die Klasse nicht" hat keinen
+Test getoetet**, was genau das bewiesen hat.
+
 **Noch nicht ausgewertet:** `respond_to_missing?`, `binding`,
 `Module`-Methoden (`include?`, `instance_methods`),
-Block-Umbrueche mit Argumenten (`break 1`), `ClassVariable` (`@@x`, das der
-Lexer liest und der Interpreter nicht auswertet), `dup`/`clone` mit echter
-Kopie, `is_a?`/`kind_of?`/`instance_of?`, und `Struct`.
+Block-Umbrueche mit Argumenten (`break 1`), `dup`/`clone` mit echter Kopie,
+`instance_of?`, und `Struct`.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

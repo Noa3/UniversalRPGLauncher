@@ -9389,3 +9389,32 @@ ist schlimmer als keiner.
 Empfaenger, nicht von der Klasse.**
 
 `TestRubyInterpreter: 163/163`, `All 1721 tests passed`, Mutationen 5 von 5.
+
+## 2026-09-29 — `@@x`, und zwei stille Fehler in `defined?`
+
+**Der Lexer las `@@x` und der Interpreter legte es in die Instanz.** **`@@anzahl`
+ist, wie eine Klasse ihre Objekte zaehlt** -- **ein Feld pro Objekt wuerde
+nichts zaehlen**, **und ein Spiel, das Nummern daraus vergibt, wuerde dieselbe
+zweimal vergeben.**
+
+**Gemessen vor der Reparatur:** `@@anzahl = @@anzahl + 1` im Klassenrumpf gab
+`NoMethodError: undefined operator '+' for a Nil and a Integer` -- **der Wert
+im Rumpf war nicht lesbar**, **und das ist die Form, in der jedes Skript
+zaehlt.**
+
+**Und `defined?` sah den falschen Knoten:** die Art aus dem Condition-Kind,
+**die Tabelle und den Name aus dem `defined?`-Knoten.** **`defined?(@@x)` gab
+nil, waehrend `@@x` selbst die Zahl las** -- **und `defined?(@hp)` gab nil,
+obwohl `@hp` gesetzt war**, weil `NameOf` ein Condition-Kind in einer
+Variablen suchte, **das es nicht gibt.** **Ein stiller Bug in einer Funktion
+mit 64 Tests.**
+
+**Und die Schreibweise ist gemischt:** verifiziert in `eval.c` aus Ruby 1.8.1,
+`"class variable"` mit Leerzeichen und `"local-variable"` mit Bindestrich.
+**Diese Runtime schreibt, was die Quelle schreibt.**
+
+**Eine tote Zeile wurde entfernt:** `_self` im Klassenrumpf war ueberfluessig,
+**weil `_aktuellerTyp` die Klasse traegt** -- **und die passende Mutation hat
+keinen Test getoetet**, was das bewiesen hat.
+
+`TestRubyInterpreter: 166/166`, `All 1724 tests passed`, Mutationen 5 von 5.
