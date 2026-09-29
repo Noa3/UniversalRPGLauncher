@@ -3671,8 +3671,40 @@ die Basis sie liefern wuerde.**
 Skript gesucht haette, wuerde nein sagen und ein Spiel wuerde eine Funktion
 ueberspringen, die es gibt.**
 
-**Noch nicht ausgewertet:** `instance_eval`, `instance_exec`,
-`define_singleton_method` auf einem Objekt, `respond_to_missing?`, und
+### `instance_eval`, und eine Liste, in der ein Name grundlos stand
+
+**Der Block kommt von der Kette und nicht aus den Argumenten.**
+`Klasse.instance_eval { ... }` haengt den Block an den Aufruf,
+**und der Aufruf bekommt ihn nur, wenn er ihn verlangt** --
+`instance_eval` stand zuerst in `BrauchtBlock`, **und damit bekam der Aufruf
+den Block als Argument, der Zweig suchte ihn aber an anderer Stelle, und
+`instance_eval` antwortete nil.**
+
+> **Ein Name in einer Liste braucht einen Grund, und der Grund muss noch
+> gelten.** `Yield` nimmt den Block von der Kette, **und `instance_eval`
+> braucht ihn nicht als Argument: es IST der Block.**
+
+**Und die Klammern um `methode is "instance_eval" or "class_eval"` waren kein
+Kosmetik.** `or` bindet schwaecher als `&&`,
+**und ohne Klammern liess die Zeile jeden `instance_eval` durch, auch ohne
+Block** -- `Ausgewertet` bekam nil und antwortete nil,
+**und der Aufruf sah aus, als haette er ausgewertet.** Ein Spiel, das einen
+String statt eines Blocks schreibt, **haette ein stilles nil bekommen und
+nicht die Meldung, die ihm sagt, was fehlt.**
+
+**Und der Empfaenger schlaegt die Klasse, in der gerade etwas laeuft.**
+`A.instance_eval` muss auf `A` wirken, auch wenn ein anderer Klassenrumpf
+offen ist, **und ein Leser, der die laufende Klasse genommen haette, haette
+gepatcht, was gerade offen war** -- und das ist die Form, in der Plugins
+arbeiten.
+
+**Und hier sind `instance_eval` und `class_eval` dasselbe, und das ist eine
+Grenze.** `self` ist die Klasse, **und diese Runtime hat keine Objekte** --
+ein Spiel, das ein Objekt braucht, braucht ein Objektmodell, das es hier
+nicht gibt. Das steht im Doc, weil es eine Grenze und kein Detail ist.
+
+**Noch nicht ausgewertet:** `define_singleton_method` auf einem Objekt,
+`respond_to_missing?`, `binding`, `Object`- und `Module`-Methoden, und
 Blockparameter mit Vorgabewerten.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`

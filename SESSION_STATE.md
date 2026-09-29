@@ -9281,3 +9281,26 @@ ist eine Unterklasse **ohne** eigenen Handler, **die die Basis daran hindern
  muss.**
 
 `TestRubyInterpreter: 117/117`, `All 1674 tests passed`, Mutationen 8 von 8.
+
+## 2026-09-29 — `instance_eval` und eine Liste, in der ein Name grundlos stand
+
+**Der Block kommt von der Kette und nicht aus den Argumenten.** `instance_eval`
+stand zuerst in `BrauchtBlock`, **und damit bekam der Aufruf den Block als
+Argument, waehrend der Zweig ihn an anderer Stelle suchte** -- das Ergebnis war
+nil, ohne Meldung. **`Yield` nimmt ihn von der Kette, und `instance_eval`
+braucht ihn nicht als Argument: es IST der Block.**
+
+**Und die Klammern um `methode is "instance_eval" or "class_eval"` waren kein
+Kosmetik.** `or` bindet schwaecher als `&&`, **und ohne Klammern liess die
+Zeile jeden `instance_eval` durch, auch ohne Block** -- `Ausgewertet` bekam nil
+und antwortete nil, **und der Aufruf sah aus, als haette er ausgewertet.**
+
+**Und der Empfaenger schlaegt die Klasse, in der gerade etwas laeuft** --
+`A.instance_eval` muss auf `A` wirken, auch wenn ein anderer Klassenrumpf offen
+ist.
+
+**Und hier sind `instance_eval` und `class_eval` dasselbe, weil `self` die
+Klasse ist und diese Runtime keine Objekte hat.** Das steht im Doc, weil es
+eine Grenze und kein Detail ist.
+
+`TestRubyInterpreter: 124/124`, `All 1681 tests passed`, Mutationen 5 von 5.

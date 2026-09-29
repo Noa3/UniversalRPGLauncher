@@ -718,6 +718,56 @@ public sealed class RubyInterpreter
         // Skriptmethode behandelte, wuerde sie an den Host geben, und der
         // Host wuerde Nein sagen fuer eine Methode, die das Skript
         // beantwortet.**
+        // **`instance_eval` und `class_eval` sind dasselbe hier, und das ist
+        // kein Zufall.** Diese Runtime hat keine Objekte, **und `self` ist
+        // die Klasse, in der gerade etwas laeuft** -- ein `instance_eval` auf
+        // eine Klasse macht damit genau das, was ein `class_eval` macht.
+        // **Ein Spiel, das zwischen beiden unterscheidet, verliert hier den
+        // Unterschied**, und das ist eine Grenze und kein Fehler: **es gibt
+        // kein `self`, das nicht die Klasse waere.**
+        // **Die Klammern sind nicht Kosmetik.** `or` bindet schwaecher als
+        // `&&`, **und ohne sie laesst die Zeile jeden `instance_eval`
+        // durch, auch ohne Block** -- `Ausgewertet` bekam dann nil und
+        // antwortete nil, **und der Aufruf sah aus wie er haette
+        // ausgewertet**. Ein Spiel, das `instance_eval` mit einer
+        // Zeichenkette statt eines Blocks schreibt, **haette ein stilles
+        // nil bekommen und nicht die Meldung, die ihm sagt, was fehlt.**
+        if (methode is "instance_eval" or "class_eval" or "instance_exec")
+        {
+            // **Der Block von der Kette, und nicht aus den Argumenten.**
+            // `Klasse.instance_eval { ... }` haengt den Block an den
+            // Aufruf, **und der Aufruf bekommt ihn nur, wenn er ihn
+            // verlangt** -- `BrauchtBlock` entscheidet das fuer
+            // `define_method` und seine Geschwister,
+            // **und `instance_eval` stand nicht in dieser Liste, weil es
+            // den Block nicht braucht: es IST der Block.** `Yield` nimmt
+            // ihn genauso, **und der Gast, der zurueckruft, muss ihn nicht
+            // erst anfordern.**
+            //
+            // **Und die Meldung, wenn keiner da ist, ist der Punkt.** Ein
+            // `instance_eval` mit einer Zeichenkette **ist ein Fehler**, und
+            // **ein Leser, der still nil lieferte, wuerde ein Spiel mit
+            // gebautem Code im Stich lassen** -- und die Zeichenkette steht
+            // da, ohne dass irgendwo etwas sagte, dass sie nicht ausgewertet
+            // wurde.
+            if (_blockKette.Count == 0
+                || _blockKette[^1].Children.Count < 3
+                || _blockKette[^1].Children[0] != pNode)
+            {
+                _diagnostics.Add(
+                    $"{methode} needs a block, and a block is where the code "
+                    + "comes from; "
+                    + (argumente.Count > 0
+                        && argumente[0].Kind == RubyValueKind.String
+                        ? "a string is a string and this reader does not "
+                            + "parse code out of one"
+                        : "without one there is nothing to run"));
+                return RubyValue.Nil;
+            }
+
+            return Ausgewertet(_blockKette[^1], empfaenger);
+        }
+
         if (methode is "respond_to?" or "is_a?" or "kind_of?")
         {
             if (argumente.Count == 0
@@ -1893,6 +1943,101 @@ public sealed class RubyInterpreter
 
         return false;
     }
+    /// <summary>
+    /// Runs a block with `self` set to the class it was written against.
+    /// </summary>
+    /// <param name="pBlock">The block node, off the chain.</param>
+    /// <param name="pEmpfaenger">The receiver the call was written on.</param>
+    /// <returns>What the block's last statement answered.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The point of `instance_eval` is the `self` it sets.</strong> A
+    /// plugin writes `Klasse.instance_eval { def m; end }`
+    /// <strong>so that the method belongs to that class and not to the class
+    /// the script happened to be in</strong> — and a reader that ran the block
+    /// where it stood would have put the method in the wrong table, and the
+    /// game would call a method that is not there.
+    /// </para>
+    /// <para>
+    /// <strong>It is `class_eval` here and the difference is a limit.</strong>
+    /// `self` is the class, so an `instance_eval` on a class and a
+    /// `class_eval` on it are the same act,
+    /// <strong>and a game that needs an object would need an object
+    /// model this runtime does not have.</strong> That is stated here because
+    /// it is a limit and not a detail.
+    /// </para>
+    /// <para>
+    /// <strong>The receiver wins over the class the call stands in.</strong>
+    /// `A.instance_eval` must act on <c>A</c> even while another class's body
+    /// is running, <strong>and a reader that used the current class would
+    /// have patched whichever class happened to be open.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the block gets a frame of its own.</strong> Its parameters
+    /// are bound and it does not see the caller's locals, the same as any
+    /// block — <strong>and a reader that ran the body on the caller's scope
+    /// would have let a game's block write over the variables of the method
+    /// that built it.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue Ausgewertet(RubyNode pBlock, RubyValue pEmpfaenger)
+    {
+        var knoten = pBlock;
+        var parameter = knoten.Children.Count > 1 ? knoten.Children[1] : null;
+        var rumpf = knoten.Children.Count > 2 ? knoten.Children[2] : null;
+        if (rumpf == null)
+        {
+            return RubyValue.Nil;
+        }
+
+        var laufenderTyp = _aktuellerTyp;
+        var name = pEmpfaenger.Kind == RubyValueKind.Symbol
+            && pEmpfaenger.Name != "self"
+            && _types.ContainsKey(pEmpfaenger.Name)
+            ? pEmpfaenger.Name
+            : laufenderTyp?.Name;
+        var ziel = name != null && _types.TryGetValue(name, out var gefunden)
+            ? gefunden
+            : laufenderTyp;
+
+        var tiefe = _scopes.Count;
+        _scopes.Add(new Dictionary<string, RubyValue>());
+        _blockGrenze.Add(tiefe);
+        if (parameter != null)
+        {
+            var namen = BlockParameterNamen(parameter);
+            for (var n = 0; n < namen.Count; n++)
+            {
+                SetLocal(namen[n], RubyValue.Nil);
+            }
+        }
+
+        _aktuellerTyp = ziel;
+        try
+        {
+            var letztes = RubyValue.Nil;
+            foreach (var teil in Statements(rumpf))
+            {
+                letztes = Evaluate(teil);
+                if (_returned)
+                {
+                    break;
+                }
+            }
+
+            return letztes;
+        }
+        finally
+        {
+            _returned = false;
+            _aktuellerTyp = laufenderTyp;
+            _blockGrenze.RemoveAt(_blockGrenze.Count - 1);
+            _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
+        }
+    }
+
+
+
 
     /// <summary>
     /// Answers `respond_to?` for a name, over the host and the script.
@@ -2149,6 +2294,16 @@ public sealed class RubyInterpreter
     /// <strong>Only the two that build a method from it.</strong> They are the
     /// ones whose body exists nowhere else, <strong>and a reader that guessed
     /// would have made a game's every block an argument</strong>.
+    ///
+    /// <para>
+    /// <strong>And `instance_eval` is not among them, even though it takes a
+    /// block.</strong> It does not need the block as an argument —
+    /// <strong>it is the block</strong> — and it takes it off the chain the
+    /// way <c>Yield</c> does. <strong>It was in this list first</strong>, and
+    /// with it there the call answered nil,
+    /// <strong>because the argument never arrived.</strong> A name in a list
+    /// has to be there for a reason and the reason has to still hold.
+    /// </para>
     /// </para>
     /// </remarks>
     private static bool BrauchtBlock(string pMethode) =>
