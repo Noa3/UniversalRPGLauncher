@@ -9521,3 +9521,31 @@ stellten** -- **weil `$~.pre_match` und `$~[1]` von den Methoden auf dem
 Wert beantwortet werden und nicht vom Wert selbst.**
 
 `TestRubyInterpreter: 196/196`, `All 1754 tests passed`, Mutationen 5 von 5.
+
+
+## 2026-09-29 — sechzehn Faltungen, und eine Schleife, die sich selbst zerschnitt
+
+**Sechzehn Methoden zum Falten einer Liste, und sechs davon antworteten.**
+`find`, `detect`, `inject`, `reduce`, `each_with_object`, `group_by`,
+`partition`, `sort_by`, `min_by`, `max_by`, `flat_map`, `none?`, `one?`,
+`take`, `drop`, `flatten`, `compact`, `sum`, `min`, `max` -- **alle mit
+*„has no method on this host"*.** Und **das sind die, aus denen ein Menue
+entsteht.**
+
+**Und der Umbau der Schleife hat sich selbst zerschnitten.** `each` gab nil,
+**weil beim Neuaufbau des Zweigs die Zeile `case "each" or ...`
+verschwunden war und ein Fragment ohne `case` zurueckblieb** -- **ein Stueck
+Code, das aussieht wie ein `break` und keiner ist.** Gefunden durch Messen,
+nicht durch Lesen: **`map` und `select` gingen, `each` nicht** -- und alle
+drei standen in derselben Liste.
+
+**Und `group_by` gab einen Hash ohne Paare** -- **weil ein Helfer eine leere
+Liste zurueckgab und sie nie ablegte, also waere jede Gruppe leer
+geblieben.** Der Helfer ist jetzt weg, **denn ein toter Helfer, dessen Name
+passt, ist der, den jemand in einem Jahr aufruft.**
+
+**Und `flatten` machte nur eine Ebene** -- **gemessen: `[[1, [2]], 3]`
+gab zwei Werte statt vier.** Und `min` auf einer leeren Liste gab 0 statt
+nil.
+
+`TestRubyInterpreter: 203/203`, `All 1761 tests passed`, Mutationen 5 von 5.

@@ -59,6 +59,9 @@ public enum RubyNodeKind
     // Questions.
     Defined,
 
+    // Withdrawals.
+    Undef,
+
     // Definitions.
     Alias,
     Class,

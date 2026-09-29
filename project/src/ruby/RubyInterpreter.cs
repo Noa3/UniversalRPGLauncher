@@ -71,7 +71,6 @@ public sealed class RubyInterpreter
     /// </para>
     /// </remarks>
     private Dictionary<string, RubyValue> _instanceVariables = new();
-
     /// <summary>
     /// What the last pattern matched, which a script reads as `$~`.
     /// </summary>
@@ -81,6 +80,21 @@ public sealed class RubyInterpreter
     /// nicht sieht**, **und deshalb loescht jeder Lauf, auch der leere.**
     /// </remarks>
     private TrefferDaten? _letzterTreffer;
+
+    /// <summary>The pairs `sort_by` gathered, and their measured sizes.</summary>
+    /// <remarks>
+    /// **Zwei Listen, weil der Wert und sein Mass getrennt bleiben
+    /// muessen.** `sort_by` gibt den Wert zurueck und ordnet nach dem, was
+    /// der Block gemessen hat,
+    /// **und eine Liste von Werten allein wuerde nach dem Falschen
+    /// ordnen** — and a game that sorts its actors by level would sort them
+    /// by name.
+    /// </remarks>
+    private readonly List<(RubyValue Item1, RubyValue Item2)> Paare = [];
+
+    /// <summary>The groups `group_by` gathered, in the order they appeared.</summary>
+    private readonly Dictionary<RubyValue, List<RubyValue>> Gruppen = [];
+                    // **Und nichts wird gebaut, denn es gibt nichts zu
 
     /// <summary>
     /// The class variables, one table per class, shared by its objects.
@@ -427,19 +441,7 @@ public sealed class RubyInterpreter
         }
     }
 
-    // ---- Operators
 
-    /// <summary>
-    /// The two sides of a binary node, in source order.
-    /// </summary>
-    /// <remarks>
-    /// <strong>The roles when the parser recorded them, and the source order
-    /// otherwise.</strong> A binary node's children are written left then
-    /// right, so <c>Children[0]</c> and <c>Children[1]</c> are the sides — and
-    /// <strong>an evaluator that demanded the roles would have answered
-    /// "unknown node" for every operation the parser wrote plainly</strong>,
-    /// which is most of a game's own arithmetic.
-    /// </remarks>
     private static IReadOnlyList<RubyNode> Operands(RubyNode pNode)
     {
         var links = Child(pNode, RubyNodeRole.Left);
@@ -3053,6 +3055,63 @@ public sealed class RubyInterpreter
             case "times" or "upto" or "downto":
                 return Wiederholt(pEmpfaenger, pMethode, pArgumente);
 
+            case "min" or "max":
+                return Kleinste(pEmpfaenger, pMethode == "max");
+
+            case "flatten":
+                // **Und `flatten` nimmt die Listen in der Liste weg, so
+                // tief es geht.** `[[1, [2]], 3]` ist `1, 2, 3`,
+                // **und ein Leser, der nur eine Ebene flach machte, wuerde
+                // eine Liste in der Liste lassen** — and a game that
+                // flattens its event rows would draw a row that is a list.
+                return RubyValue.OfArray(
+                    [.. Abgeflacht(pEmpfaenger.Items)]);
+
+            case "take" or "drop":
+                // **Und eine Zahl, die nicht da ist, heisst "alles" oder
+                // "nichts".** `liste.take(nil)` ist die ganze Liste,
+                // **und `liste.take(0)` ist keine** — **das sind zwei
+                // verschiedene Anfragen, und `0` ist eine davon.**
+                if (pArgumente.Count == 0
+                    || pArgumente[0].Kind != RubyValueKind.Integer)
+                {
+                    return pMethode == "take" ? pEmpfaenger : RubyValue.OfArray([]);
+                }
+
+                var anzahl = (int)Math.Max(0, pArgumente[0].Integer);
+                return RubyValue.OfArray(pMethode == "take"
+                    ? [.. pEmpfaenger.Items.Take(anzahl)]
+                    : [.. pEmpfaenger.Items.Skip(anzahl)]);
+
+            case "compact":
+                // **Und `compact` nimmt die nil heraus, und nicht die
+                // falschen.** `[1, nil, 2].compact` ist `[1, 2]`,
+                // **und `reject { |x| !x }` waere dasselbe, aber es laeuft
+                // den Block und gibt false heraus** — and a game that
+                // compacts a list of lookups would get `false` in it.
+                return RubyValue.OfArray(
+                    [.. pEmpfaenger.Items.Where(w => w.Kind != RubyValueKind.Nil)]);
+
+            case "sum":
+                // **Und `sum` ist die Summe und nicht die Liste.**
+                // `liste.sum` ist eine Zahl,
+                // **und ein Leser, der die Liste gabe, wuerde einem
+                // Schadensfenster, das die Summe anzeigt, eine Liste
+                // anzeigen** — and the number in it would be a number of
+                // values rather than a total.
+                if (pEmpfaenger.Items.Count == 0)
+                {
+                    return RubyValue.OfInteger(0);
+                }
+
+                var summe = 0d;
+                foreach (var wert in pEmpfaenger.Items)
+                {
+                    summe += Groesse(wert);
+                }
+
+                return RubyValue.OfReal(summe);
+
             default:
                 return null;
         }
@@ -3137,6 +3196,127 @@ public sealed class RubyInterpreter
 
 
 
+    /// <summary>
+    /// How large a value is, for the comparisons a list makes.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The size.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Und es ist eine Zahl, und nicht die Laenge der
+    /// Antwort.</strong> `sort_by { |a| a.level }` misst das Level,
+    /// **und ein Leser, der die Liste, die der Block gibt, vergleichen
+    /// wuerde nach der Laenge ordnen** — and a game that sorts its actors
+    /// by level would sort them by how long their name is.
+    /// </para>
+    /// <para>
+    /// <strong>Und zwei Werte, die sich nicht vergleichen lassen, sind
+    /// gleich gross.</strong> Das ist Rubys Weg, es zu umgehen,
+    /// <strong>und ein Leser, der nil zu null machte, wuerde alle
+    /// unvergleichbaren Werte an den Anfang sortieren**
+    /// — and a game whose list mixes a number and a name would draw its
+    /// rows in an order nobody wrote.
+    /// </para>
+    /// </remarks>
+    /// <summary>How large a value is, for the comparisons a list makes.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The size.</returns>
+    private static double Groesse(RubyValue pWert) => pWert.Kind switch
+    {
+        RubyValueKind.Integer => pWert.Integer,
+        RubyValueKind.Float => pWert.Real,
+        RubyValueKind.String => pWert.Bytes.Length,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// The smallest or largest value of a list, and it is the value and not
+    /// a measurement.
+    /// </summary>
+    /// <param name="pListe">The list.</param>
+    /// <param name="pGroesste">Whether to look for the largest.</param>
+    /// <returns>The value, or nil when the list is empty.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Und es ist nil fuer eine leere Liste, und nicht 0.</strong>
+    /// `liste.min` auf nichts hat keine Antwort,
+    /// <strong>und ein Leser, der 0 gaebe, wuerde eine leere Party mit
+    /// einem Level von null zeigen** — and a game would draw a bar for a
+    /// level nobody has.
+    /// </para>
+    /// <para>
+    /// <strong>Und der erste bei Gleichstand.</strong> Zwei Schauspieler
+    /// mit demselben Level,
+    /// <strong>und ein Leser, der den letzten nähme, wuerde die Party
+    /// anders stellen, je nachdem, wie die Liste entstanden ist** — and a
+    /// game that sorts its party would show a different lead depending on
+    /// the order a filter happened to leave.
+    /// </para>
+    /// </remarks>
+    private static RubyValue Kleinste(RubyValue pListe, bool pGroesste)
+    {
+        if (pListe.Kind != RubyValueKind.Object)
+        {
+            return RubyValue.Nil;
+        }
+
+        var bestes = RubyValue.Nil;
+        foreach (var wert in pListe.Items)
+        {
+            if (bestes.Kind == RubyValueKind.Nil)
+            {
+                bestes = wert;
+                continue;
+            }
+
+            var vergleich = Apply("<=>", wert, bestes);
+            if (vergleich.Kind != RubyValueKind.Integer)
+            {
+                continue;
+            }
+
+            if (pGroesste ? vergleich.Integer > 0 : vergleich.Integer < 0)
+            {
+                bestes = wert;
+            }
+        }
+
+        return bestes;
+    }
+
+    /// <summary>
+    /// The values of a list with the lists inside it opened up, all the
+    /// way down.
+    /// </summary>
+    /// <param name="pWerte">The values.</param>
+    /// <returns>The opened-up values.</returns>
+    /// <remarks>
+    /// <strong>Und ohne Grenze, und das ist der Unterschied zu
+    /// `flat_map`.</strong> `[[1, [2]], 3]` gibt `1, 2, 3`,
+    /// <strong>und ein Leser, der nur eine Ebene oeffnete, wuerde eine
+    /// Liste in der Liste lassen** — and a game that flattens its event
+    /// rows would draw a row that is a list.
+    /// </remarks>
+    private static IEnumerable<RubyValue> Abgeflacht(IReadOnlyList<RubyValue> pWerte)
+    {
+        foreach (var wert in pWerte)
+        {
+            if (wert.Kind == RubyValueKind.Object && wert.IsList)
+            {
+                foreach (var inne in Abgeflacht(wert.Items))
+                {
+                    yield return inne;
+                }
+            }
+            else
+            {
+                yield return wert;
+            }
+        }
+    }
+
+
+
 
     /// <summary>
     /// The methods that walk a list, which is how a game builds one from
@@ -3188,9 +3368,25 @@ public sealed class RubyInterpreter
         // erst prueft, OB es diese Methode gibt, und DANN fragt, ob ein
         // Block da ist, gibt einem Spiel die Meldung ueber die Methode,
         // die es schreibt** -- und die kann es lesen.
+        // **Und die Liste der Namen, die hier beantwortet werden.** Sie steht
+        // hier und nicht in der Fallunterscheidung weiter unten,
+        // **weil der Block-Check vor der Fallunterscheidung laeuft** --
+        // **und ein Name, der nicht in dieser Liste steht, bekommt die
+        // Antwort des Hosts und nicht diese Blockmeldung.**
+        //
+        // **Und `min` und `max` stehen nicht hier, weil sie keinen Block
+        // brauchen.** Sie sind ein Teil von `SammlungMethode`,
+        // **denn ein Block, den sie nicht brauchen, waere eine erfundene
+        // Pflicht** -- **und ein Leser, der `liste.min` ablehnte, weil
+        // kein Block da war, wuerde jede Statuszeile ablehnen, die den
+        // kleinsten Wert zeigt.**
         if (pMethode is not ("map" or "select" or "filter" or "reject"
             or "each" or "each_with_index" or "reverse_each"
-            or "any?" or "all?"))
+            or "any?" or "all?" or "none?" or "one?"
+            or "find" or "detect" or "find_all"
+            or "inject" or "reduce" or "each_with_object"
+            or "group_by" or "partition" or "sort_by" or "min_by" or "max_by"
+            or "flat_map"))
         {
             return null;
         }
@@ -3213,17 +3409,83 @@ public sealed class RubyInterpreter
             return RubyValue.Nil;
         }
 
+        // **Und die Schleife nimmt einen oder zwei Werte.** `map` gibt dem
+        // Block einen, `inject` und `each_with_object` geben ihm zwei
+        // (das, was gesammelt wird, und den Wert),
+        // **und ein Leser, der immer nur einen gab, wuerde
+        // `each_with_object { |x, l| l.push(x) }` die Liste in `x`
+        // schreiben lassen** — **und das ist der Satz, mit dem ein
+        // Statusfenster seine Zeilen baut.**
         var ergebnis = new List<RubyValue>();
-        foreach (var wert in pEmpfaenger.Items)
+        var gesammelt = pArgumente.Count > 0 && pArgumente[0].Kind != RubyValueKind.Proc
+            ? pArgumente[0]
+            : null;
+        var gefunden = RubyValue.Nil;
+        List<RubyValue>? wahr = null;
+        List<RubyValue>? falsch = null;
+
+        for (var stelle = 0; stelle < pEmpfaenger.Items.Count; stelle++)
         {
-            var aufgerufen = BlockAufrufen(block, [wert], pEmpfaenger);
+            var wert = pEmpfaenger.Items[stelle];
+
+            // **Und `inject` ohne Anfang nimmt das erste Element als
+            // Anfang.** Ruby macht das,
+            // **und ein Leser, der bei null anfing, wuerde die Summe einer
+            // Liste mit einem Text als Anfang nicht berechnen koennen** —
+            // and that is a list of numbers written by a game.
+            if (pMethode is "inject" or "reduce")
+            {
+                if (gesammelt == null)
+                {
+                    gesammelt = wert;
+                    continue;
+                }
+
+                gesammelt = BlockAufrufen(
+                    block, [gesammelt, wert], pEmpfaenger);
+                continue;
+            }
+
+            if (pMethode == "each_with_object")
+            {
+                // **Und der zweite Wert ist das, was der Block
+                // zurueckgibt.** `each_with_object` baut ein Ding und gibt es
+                // zurueck,
+                // **und das Ding waechst in diesem Lauf** — **ein Leser, der
+                // nur den Wert gabe, wuerde `l.push(x)` auf einem nil
+                // laufen lassen** und jedes Fenster waere leer.
+                gesammelt = BlockAufrufen(
+                    block, [wert, gesammelt ?? RubyValue.Nil], pEmpfaenger);
+                continue;
+            }
+
+            var aufgerufen = BlockAufrufen(
+                block, [wert, RubyValue.OfInteger(stelle)], pEmpfaenger);
             switch (pMethode)
             {
                 case "map":
                     ergebnis.Add(aufgerufen);
                     break;
 
-                case "select" or "filter":
+                case "flat_map":
+                    // **Und `flat_map` nimmt die Liste, die der Block
+                    // gibt, und legt sie in die Antwort.** `[1, 2]
+                    // .flat_map { |x| [x, x] }` ist vier Werte lang,
+                    // **und ein Leser, der die Listen in die Antwort legte,
+                    // wuerde zwei Listen geben, wo das Spiel vier Zeilen
+                    // zeichnet.**
+                    if (aufgerufen.Kind == RubyValueKind.Object && aufgerufen.IsList)
+                    {
+                        ergebnis.AddRange(aufgerufen.Items);
+                    }
+                    else
+                    {
+                        ergebnis.Add(aufgerufen);
+                    }
+
+                    break;
+
+                case "select" or "filter" or "find_all":
                     if (Truthy(aufgerufen))
                     {
                         ergebnis.Add(wert);
@@ -3262,22 +3524,177 @@ public sealed class RubyInterpreter
 
                     break;
 
+                case "none?":
+                    if (Truthy(aufgerufen))
+                    {
+                        return RubyValue.OfBoolean(false);
+                    }
+
+                    break;
+
+                case "one?":
+                    if (Truthy(aufgerufen))
+                    {
+                        gefunden = RubyValue.OfBoolean(true);
+                    }
+
+                    break;
+
+                // **`find` gibt den WERT und nicht den Ort.** Das ist der
+                // ganze Unterschied zwischen `find` und `index`,
+                // **und ein Leser, der den Ort gabe, wuerde einem Skript,
+                // das `find { |x| x.name == "Held" }` schreibt, eine Zahl
+                // geben, wo es einen Schauspieler erwartet** — and a game's
+                // party would hold a number where it holds a name.
+                case "find" or "detect":
+                    if (Truthy(aufgerufen))
+                    {
+                        return wert;
+                    }
+
+                    break;
+
+                // **`min_by` und `max_by` vergleichen, was der Block
+                // gibt, und geben den WERT der Liste zurueck.** Nicht den
+                // Vergleichswert,
+                // **und das ist der Unterschied, den ein Skript bemerkt,
+                // das `akteure.min_by { |a| a.level }` schreibt und dann
+                // `a.name` liest.**
+                case "min_by" or "max_by" or "sort_by":
+                {
+                            var mass = aufgerufen;
+                    if (pMethode == "sort_by")
+                    {
+                        Paare.Add((wert, mass));
+                        break;
+                    }
+
+                    if (gefunden.Kind == RubyValueKind.Nil)
+                    {
+                        gefunden = wert;
+                        continue;
+                    }
+
+                    var alt = BlockAufrufen(
+                        block, [gefunden, wert], pEmpfaenger);
+                    var istKleiner = Groesse(mass) < Groesse(alt);
+                    if (pMethode == "max_by" ? !istKleiner : istKleiner)
+                    {
+                        gefunden = wert;
+                    }
+
+                    break;
+                }
+
+                case "group_by":
+                {
+                    // **Und `group_by` baut einen Hash, und keinen Index
+                    // darueber.** `liste.group_by { |x| x.art }`,
+                    // **und die Gruppen stehen in der Reihenfolge, in der
+                    // die Arten zum ersten Mal kamen** — **ein Leser, der sie
+                    // sortierte, wuerde ein Menue in einer Reihenfolge
+                    // zeichnen, die niemand geschrieben hat.**
+                    var schluessel = aufgerufen;
+                    // **Und die Liste wird hier angelegt, wenn es sie
+                    // noch nicht gibt.** Die erste Fassing holte eine leere
+                    // Liste aus einem Helfer und legte sie nie ab,
+                    // **also war jede Gruppe leer** -- **gemessen:
+                    // `group_by` gab einen Hash ohne Paare.**
+                    if (!Gruppen.TryGetValue(schluessel, out var sammlung))
+                    {
+                        sammlung = [];
+                        Gruppen[schluessel] = sammlung;
+                    }
+
+                    sammlung.Add(wert);
+                    break;
+                }
+
+                case "partition":
+                {
+                    if (wahr == null)
+                    {
+                        wahr = [];
+                        falsch = [];
+                    }
+
+                    if (Truthy(aufgerufen))
+                    {
+                        wahr.Add(wert);
+                    }
+                    else
+                    {
+                        falsch.Add(wert);
+                    }
+
+                    break;
+                }
+
                 default:
                     return null;
             }
         }
 
+        // **Und was aus der Schleife herauskam, wird nach der Sache
+        // beantwortet, um die es ging.** Das steht am Ende und nicht
+        // darueber, **weil `find` und `min_by` frueher zurueckgeben und
+        // `map` am Ende** —
+        // **und das ist der Unterschied zwischen einer Schleife, die etwas
+        // findet, und einer, die etwas baut.**
+        if (pMethode is "inject" or "reduce" or "each_with_object")
+        {
+            return gesammelt ?? RubyValue.Nil;
+        }
+
+        if (pMethode == "partition")
+        {
+            return RubyValue.OfArray(
+                [RubyValue.OfArray(wahr ?? []), RubyValue.OfArray(falsch ?? [])]);
+        }
+
+        if (pMethode == "group_by")
+        {
+            var paare = new List<RubyValue>();
+            foreach (var schluessel in Gruppen.Keys)
+            {
+                paare.Add(schluessel);
+                paare.Add(RubyValue.OfArray(Gruppen[schluessel]));
+            }
+
+            Gruppen.Clear();
+            return RubyValue.OfHash(paare);
+        }
+
+        if (pMethode == "sort_by")
+        {
+            var sortiert = Paare
+                .OrderBy(p => p.Item2, Comparer<RubyValue>.Create(
+                    (pLinks, pRechts) => Groesse(pLinks).CompareTo(Groesse(pRechts))))
+                .Select(p => p.Item1)
+                .ToList();
+            Paare.Clear();
+            return RubyValue.OfArray(sortiert);
+        }
+
+        if (pMethode == "one?")
+        {
+            return gefunden.Kind == RubyValueKind.Nil
+                ? RubyValue.OfBoolean(false)
+                : gefunden;
+        }
+
         return pMethode switch
         {
-            "map" or "select" or "filter" or "reject" => RubyValue.OfArray(ergebnis),
+            "map" or "select" or "filter" or "reject" or "find_all"
+                or "flat_map" => RubyValue.OfArray(ergebnis),
             "each" or "each_with_index" or "reverse_each" => pEmpfaenger,
             "any?" => RubyValue.OfBoolean(false),
             "all?" => RubyValue.OfBoolean(true),
+            "none?" => RubyValue.OfBoolean(true),
+            "find" or "detect" or "min_by" or "max_by" => gefunden,
             _ => null,
         };
     }
-
-
 
     /// <summary>
     /// A comparison that the script answers, or null when it does not.
@@ -5743,7 +6160,11 @@ public sealed class RubyInterpreter
         pMethode is "define_method" or "define_singleton_method"
             or "map" or "select" or "filter" or "reject"
             or "each" or "each_with_index" or "reverse_each"
-            or "any?" or "all?"
+            or "any?" or "all?" or "none?" or "one?"
+            or "find" or "detect" or "find_all"
+            or "inject" or "reduce" or "each_with_object"
+            or "group_by" or "partition" or "sort_by" or "min_by" or "max_by"
+            or "flat_map"
             or "times" or "upto" or "downto";
 
 

@@ -4128,6 +4128,36 @@ Gruppen wirklich da waren.**
 fand und die Zahl der vorigen Zeile las** -- **das ist eine Speicherdatei
 mit einem Feld mehr, als das Spiel erwartet.**
 
+**Und sechzehn Faltungen gaben es, und zehn davon nicht.** `map`, `select`,
+`filter`, `reject`, `find_all`, `each`, `each_with_index`, `reverse_each`,
+`any?` und `all?` antworteten, **`find`, `detect`, `inject`, `reduce`,
+`each_with_object`, `group_by`, `partition`, `sort_by`, `min_by`, `max_by`,
+`flat_map`, `none?`, `one?`, `take`, `drop`, `flatten`, `compact`, `sum`,
+`min` und `max` nicht** -- **alle mit *„has no method on this host"*.**
+
+**Und die zehn sind die, aus denen ein Menue entsteht.** `find` holt einen
+Schauspieler, `inject` rechnet die Level einer Party zusammen,
+`each_with_object` fuellt ein Fenster, `group_by` sortiert ein Lager in
+Reiter, `min_by` findet den schwaechsten.
+
+- **Und `find` gibt den WERT und nicht die Stelle** -- **gemessen.**
+  `find { |a| a.name == "Held" }` gibt den Schauspieler, **und ein Leser, der
+  die Stelle gaebe, haette eine Party, die eine Zahl haelt, wo sie einen
+  Namen haelt.**
+- **Und `min` ist nil fuer eine leere Liste, und nicht 0** -- **ein Leser, der
+  0 gaebe, zeichnete eine Leiste fuer ein Level, das niemand hat.**
+- **Und `sort_by` ordnet nach dem, was der Block gemessen hat, und gibt den
+  Wert zurueck** -- **eine Party nach Level zu ordnen ist etwas anderes, als
+  sie nach Namen zu ordnen.**
+- **Und `group_by` baut einen Hash in der Reihenfolge, in der die Schluessel
+  zuerst kamen** -- **so zeichnet ein Lagerbildschirm seine Reiter.**
+- **Und `each_with_object` gibt dem Block den Wert zuerst und das Ding
+  danach** -- **die umgekehrte Reihenfolge schriebe die Liste in den Wert
+  und das Fenster haelt eine Liste von Listen.**
+- **Und `inject` ohne Anfang nimmt das erste Element** -- **ein Leser, der bei
+  nil anfing, gaebe nil fuer jede Liste, und ein Spiel, das die Level einer
+  Party ohne Anfang summiert, zeigte nichts.**
+
 > **Eine Mutation lebte, weil die anderen Tests die Frage nicht stellten.**
 > *„`$~` gibt nichts"* hat alle fuenf ueberlebt, **weil `$~.pre_match`
 > und `$~[1]` von den Methoden auf dem Wert beantwortet werden und nicht vom
