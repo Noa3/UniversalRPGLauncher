@@ -3558,8 +3558,60 @@ antwortet. **Nur `Local` zu wandeln liess diese Spaltung offen**, und die
 Mutation, die `HasLocal` die Wand nahm, ueberlebte jeden anderen Test in der
 Datei, **weil keiner in einem Block eine Frage stellt.**
 
-**Noch nicht ausgewertet:** `define_method`, `method_missing`,
-`respond_to?` und Blockparameter mit Vorgabewerten.
+### `define_method`, und warum der Block kein Argument des Aufrufs ist
+
+**`define_method(:m) { |x| x * 2 }` schreibt den Block hinter die Klammern.**
+Der Block ist damit **nicht** ein Kind des Aufrufsknotens, **sondern dessen
+Mantel** -- `Evaluate` wertet den Aufruf aus und der Block war schon weg,
+bevor `define_method` ihn sehen konnte. **Der erste Versuch bekam null
+Argumente** und meldete `was given no block`, obwohl direkt daneben einer
+stand.
+
+**Und der Mantel ist derselbe, der `lambda { }` zum Wert macht.** Es ist eine
+Frage, **wohin er geht**: bei `lambda` ist er das Ergebnis, bei
+`define_method` das letzte Argument. `_blockKette` traegt ihn, und `Call()`
+haengt ihn **nur fuer die zwei Namen, die eine Methode daraus bauen** an.
+
+> **Die Liste ist absichtlich kurz.** `a.each { |x| x }` gehoert dem `each`
+> und der Host entscheidet, **und ein Leser, der den Block an jeden Aufruf
+> gehaengt haette, wuerde einem Host ein Argument geben, das er nicht
+> erwartet** -- ein Host, der seine Argumente zaehlt, antwortete etwas
+> voellig anderes, und im Skript stuende nichts, was das erklaert.
+
+**Und es landet in genau der Tabelle, in der ein `def` landet.** `def` und
+`define_method` benutzen denselben Knoten und dieselbe Ablage, **weil das
+kleinste gemeinsame Format der Knoten ist, den `def` auch benutzt** -- zwei
+Formen waeren eine Stelle mehr, an der sie auseinanderlaufen koennten, und
+sie laufen auseinander bei den Parametern, bei `self.` und bei der Marke von
+`undef`.
+
+**Zwei Mutationen ueberlebten zehn Tests, und beide sind No-ops.** `BrauchtBlock`
+auf "immer" und die Pruefung, **dass der Block auf dem Stapel derselbe ist,
+der diesen Aufruf umschliesst**. **Beide einzeln gemessen, mit sauberem
+Rebuild: 105/105 und 1662/1662 blieben gruen.** Der Grund ist eine
+Ueberschneidung zweier Bedingungen, nicht ein Testfehler: **der Block wird
+nur angehaengt, wenn `_blockKette` nicht leer ist**, und die Kette ist nur
+gefuellt, wenn ein Block **diesen** Aufruf umschliesst -- **damit macht die
+`Children[0] == pNode`-Pruefung genau das, was die Kettenlaenge schon
+erzwingt.** Kein Test kann sie toeten, weil es keinen gibt, bei dem die
+beiden auseinanderlaufen.
+
+> **Zwei Bedingungen, die dasselbe sagen, sind eine Bedingung mit
+> zusaetzlichem Code.** Die zweite zu loeschen waere eine Aenderung ohne
+> Messung, **und "die Mutation lebt" ist hier die richtige Antwort und nicht
+> ein Grund, den Test zu verbiegen.**
+
+**Und ein Produktfehler, gemessen und nicht kaschiert:** `[1].each { rand }`
+ruft den Gast **einmal** mit einem Rueckruf, `pYield` antwortet `nil`,
+**und der Aufruf im Rumpf wird nie erreicht.** `Yield` ist ein zweiter
+Blockpfad neben `BlockAufrufen` mit eigener Scope-Logik, **und die beiden
+kommen nicht ueberein.** Das ist eine eigene Karte, **und der Test sagt es
+statt es zu behaupten** — er prueft, dass der Gast mit einem Rueckruf
+gefragt wird, und behauptet nichts ueber den Rumpf.
+
+**Noch nicht ausgewertet:** `method_missing`, `respond_to?`,
+`instance_eval`, `define_singleton_method` auf einem Objekt, und
+Blockparameter mit Vorgabewerten.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

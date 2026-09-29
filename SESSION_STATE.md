@@ -9210,3 +9210,35 @@ ein Lesen sind noetig, um das zu sehen — **der erste Verschachtelungstest hat
 die Mutation nicht getoetet, weil er nur schrieb und nicht las.**
 
 `TestRubyInterpreter: 93/93`, `All 1650 tests passed`, Mutationen 11 von 11.
+
+## 2026-09-29 — `define_method`, `scripts/csharp_insert.py`, und ein offener Fehler
+
+**`define_method(:m) { |x| x * 2 }` schreibt den Block hinter die Klammern.**
+Er ist damit **nicht** ein Kind des Aufrufsknotens, sondern dessen Mantel --
+`Evaluate` wertet den Aufruf aus und der Block war weg, bevor
+`define_method` ihn sehen konnte. `_blockKette` traegt ihn, und `Call()`
+haengt ihn **nur fuer die zwei Namen, die eine Methode daraus bauen** an.
+
+**Und er landet in genau der Tabelle, in der ein `def` landet** -- derselbe
+Knoten, dieselbe Ablage, **weil das kleinste gemeinsame Format der Knoten
+ist, den `def` auch benutzt.**
+
+**`scripts/csharp_insert.py` ist entstanden, weil dieselbe splice-Stelle
+dreimal eine Datei zerlegt hat.** Ein Anker, der auch hinter der schliessenden
+Klammer vorkommt, **setzt den Block hinter die Klasse**, und der Compiler
+meldet `CS1519`. **Der Helfer findet die Zeile als Zeilenindex und prueft,
+dass die Einfuegestelle vor der Klassengrenze liegt**, bevor er schreibt.
+
+**Zwei Mutationen sind No-ops, und beide einzeln gemessen.** `BrauchtBlock`
+auf "immer" und die `Children[0] == pNode`-Pruefung lassen den Testlauf
+unveraendert gruen: **der Block wird nur angehaengt, wenn `_blockKette`
+nicht leer ist**, und die Kette ist nur gefuellt, wenn ein Block **diesen**
+Aufruf umschliesst. **Zwei Bedingungen, die dasselbe sagen.**
+
+**Und ein offener Produktfehler, gemessen und nicht kaschiert:**
+`[1].each { rand }` ruft den Gast **einmal** mit einem Rueckruf, `pYield`
+antwortet `nil`, **und der Aufruf im Rumpf wird nie erreicht.** `Yield` ist
+ein zweiter Blockpfad neben `BlockAufrufen` mit eigener Scope-Logik.
+
+`TestRubyInterpreter: 107/107`, `All 1664 tests passed`, Mutationen 6 von 8
+mit zwei gemessenen No-ops.

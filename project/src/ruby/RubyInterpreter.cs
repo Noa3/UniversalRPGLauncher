@@ -642,6 +642,27 @@ public sealed class RubyInterpreter
         var methode = pNode.Name ?? string.Empty;
         var argumente = EvaluateChildren(pNode, RubyNodeRole.Argument);
 
+        // **Ein Block, der an einem Aufruf haengt, ist sein letztes
+        // Argument -- und er ist der, der den Aufruf traegt.**
+        // `define_method(:m) { |x| x }` schreibt den Block hinter die
+        // Klammern, **und ohne diesen Schritt saehe der Aufruf null
+        // Argumente**, weil der Block kein Kind des Aufrufsknotens ist,
+        // sondern sein Mantel. **Derselbe Mantel traegt `lambda { }`**,
+        // und dort wird er zum Wert -- **hier wird er zum Argument**, und
+        // das ist der Unterschied zwischen den beiden.
+        //
+        // **Und nur fuer die, die einen wollen.** `a.each { |x| x }`
+        // schickt seinen Block an `each` ueber den Host, **und ein Leser,
+        // der ihn hier als Argument anhaengte, wuerde `each` ein Argument
+        // geben, das der Host nicht erwartet.**
+        if (_blockKette.Count > 0
+            && _blockKette[^1].Children.Count >= 3
+            && _blockKette[^1].Children[0] == pNode
+            && BrauchtBlock(methode))
+        {
+            argumente = [.. argumente, RubyValue.OfBlock(_blockKette[^1])];
+        }
+
         // **Drei eingebaute Namen, und sie sind eingebaut, weil sie keine
         // Skriptmethode sind.** `attr_accessor`, `attr_reader` und
         // `attr_writer` erzeugen Methoden, **und diese Methoden gehoeren zu
@@ -662,7 +683,9 @@ public sealed class RubyInterpreter
                 || methode == "attr_reader"
                 || methode == "attr_writer"
                 || methode == "include"
-                || methode == "extend"))
+                || methode == "extend"
+                || methode == "define_method"
+                || methode == "define_singleton_method"))
         {
             if (Eingebaut(_aktuellerTyp, methode, argumente))
             {
@@ -913,8 +936,18 @@ public sealed class RubyInterpreter
         // **`_returned` wird hier zur Block-Marke.** Die bestehende
         // Return-Behandlung kennt nur "das Programm ist zurueck", **und eine
         // Lambda, die zurueckgibt, wuerde damit das ganze Skript beenden**.
+        //
+        // **Und der Block gehoert auf die Kette, denn sein Rumpf laeuft jetzt.**
+        // `define_method(:innen) { ... }` **im Rumpf eines anderen Blocks**
+        // ist die Form, die ein Plugin-Layer schreibt, **und ohne diesen
+        // Schritt saehe der innere Aufruf eine leere Kette** -- er haette
+        // seinen eigenen Block nicht als Argument bekommen und gemeldet, es
+        // gebe keinen. **Derselbe Block, zweimal gesehen**: einmal als
+        // Mantel beim Erzeugen des Wertes und einmal als Kette beim
+        // Ausfuehren.
         var altesSelbst = _aktuellerTyp;
         _returned = false;
+        _blockKette.Add(pBlock);
         try
         {
             var letztes = RubyValue.Nil;
@@ -933,6 +966,7 @@ public sealed class RubyInterpreter
         {
             _returned = false;
             _aktuellerTyp = altesSelbst;
+            _blockKette.RemoveAt(_blockKette.Count - 1);
             _blockGrenze.RemoveAt(_blockGrenze.Count - 1);
             _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
         }
@@ -1806,17 +1840,131 @@ public sealed class RubyInterpreter
         return _aktuelleArgumente;
     }
 
+    /// The built-ins that take a block as their last argument.
+    /// </summary>
+    /// <param name="pMethode">The method's name.</param>
+    /// <returns>true when the call wants the block that carries it.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>A short list and not a rule about all calls.</strong> A block at
+    /// an ordinary call belongs to that call and the host decides what to do
+    /// with it, <strong>and appending it here would have handed
+    /// <c>each</c> an argument it does not expect</strong> — a host that
+    /// counts its arguments would answer something else entirely.
+    /// </para>
+    /// <para>
+    /// <strong>Only the two that build a method from it.</strong> They are the
+    /// ones whose body exists nowhere else, <strong>and a reader that guessed
+    /// would have made a game's every block an argument</strong>.
+    /// </para>
+    /// </remarks>
+    private static bool BrauchtBlock(string pMethode) =>
+        pMethode is "define_method" or "define_singleton_method";
+
 
     /// <summary>
-    /// The four built-ins that act on the class they are written in.
+    /// Builds a method from a block, and files it in the class.
     /// </summary>
     /// <param name="pTyp">The class the call stands in.</param>
     /// <param name="pMethode">The built-in's name.</param>
     /// <param name="pArgumente">The arguments, already evaluated.</param>
-    /// <returns>true when it was one of the four.</returns>
+    /// <returns>true when there was something to build from.</returns>
     /// <remarks>
     /// <para>
-    /// <strong>These four are not script methods and they are not host
+    /// <strong>The block's parameters become the method's.</strong>
+    /// `define_method(:doppelt) { |x| x * 2 }` makes a method of arity one,
+    /// **and a reader that filed the block's body as an attribute-like stub
+    /// would have produced a method with no parameters</strong> — so every
+    /// call would have arrived with nothing bound and answered nil.
+    /// </para>
+    /// <para>
+    /// <strong>The name is a symbol and a string is the same name.</strong> A
+    /// game writes `define_method(:m)` and a plugin layer writes
+    /// `define_method("m")`, <strong>and a reader that only read symbols would
+    /// have made the second form a method named after the string's own
+    /// text</strong> — a name no call would ever reach.
+    /// </para>
+    /// <para>
+    /// <strong>`define_singleton_method` files it under `self.`, and that is
+    /// the only difference.</strong> A class method and an instance method
+    /// are two names in this runtime, <strong>and a reader that filed both
+    /// the same way would have had a class whose singleton methods were
+    /// reachable on its instances</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And it clears a mark `undef` left.</strong> Writing the method
+    /// is the same as writing it with `def`, <strong>so a class that takes a
+    /// name out and later defines it through a block means the same thing as
+    /// one that defines it with `def`</strong> — and a reader that left the
+    /// mark would have kept the name dead in one spelling and alive in the
+    /// other.
+    /// </para>
+    /// </remarks>
+    private bool Definiert(
+        RubyType pTyp, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pArgumente.Count == 0 || pArgumente[0].Kind != RubyValueKind.Symbol)
+        {
+            _diagnostics.Add(
+                $"{pMethode} needs a name, and a symbol is what a game writes; "
+                + "the first argument was "
+                + (pArgumente.Count > 0 ? pArgumente[0].Kind.ToString() : "nothing")
+                + ", and this reader does not guess a name out of an "
+                + "expression");
+            return false;
+        }
+
+        // **Der Block ist das zweite Argument und wird nie aufgerufen.**
+        // `define_method` baut eine Methode, **und der Block laeuft erst, wenn
+        // die Methode laeuft** -- ein Leser, der ihn hier ausgewertet haette,
+        // haette die Seite einmal ausgefuehrt und die Methode dann ohne
+        // Rumpf gebaut.
+        var body = pArgumente.Count > 1 && pArgumente[1].Kind == RubyValueKind.Proc
+            ? pArgumente[1].Block
+            : null;
+        if (body == null)
+        {
+            _diagnostics.Add(
+                pMethode + "(:" + pArgumente[0].Name
+                + ") was given no block, and a "
+                + "block is where the method's body comes from; without one "
+                + "the method would answer nothing at all");
+            return false;
+        }
+
+        // **Ein `def`-Knoten, und nicht die Teile einzeln.** `define_method`
+        // und `def` muessen dasselbe ablegen, **und das kleinste gemeinsame
+        // Format ist der Knoten, den `def` auch benutzt** -- eine zweite
+        // Form waere eine Stelle mehr, an der ein `def` und ein
+        // `define_method` auseinanderlaufen koennten.
+        var parameter = body.Children.Count > 1 ? body.Children[1] : null;
+        _aktuellerTyp = pTyp;
+        DefineMethod(
+            new RubyNode
+            {
+                Kind = RubyNodeKind.Def,
+                Name = pArgumente[0].Name,
+                Line = body.Line,
+                Children =
+                [
+                    parameter ?? new RubyNode { Kind = RubyNodeKind.Array, Line = body.Line },
+                    body.Children.Count > 2 ? body.Children[2] : new RubyNode { Kind = RubyNodeKind.Nil, Line = body.Line },
+                ],
+            },
+            pMethode == "define_singleton_method");
+        return true;
+    }
+
+    /// <summary>
+    /// The built-ins that act on the class they are written in.
+    /// </summary>
+    /// <param name="pTyp">The class the call stands in.</param>
+    /// <param name="pMethode">The built-in's name.</param>
+    /// <param name="pArgumente">The arguments, already evaluated.</param>
+    /// <returns>true when it was one of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>These are not script methods and they are not host
     /// methods.</strong> They write into the class they stand in, and the
     /// caller is the only place that knows which class that is — which is
     /// why a host cannot implement them.
@@ -1845,6 +1993,11 @@ public sealed class RubyInterpreter
         if (pMethode is "include" or "extend")
         {
             return Eingemischt(pTyp, pMethode, pArgumente);
+        }
+
+        if (pMethode is "define_method" or "define_singleton_method")
+        {
+            return Definiert(pTyp, pMethode, pArgumente);
         }
 
         return Attribute(pTyp, pMethode, pArgumente);
