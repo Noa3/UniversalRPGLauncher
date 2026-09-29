@@ -1404,6 +1404,50 @@ Skipping an unknown command would shift every following one, so the reader refus
 - The transfer format is not read at all, and there is still no WOLF renderer.
 - Still no real WOLF game has been parsed. Framing and field order are proven against the schema; the meaning of a command is not.
 
+### The real games on this machine, and what they prove
+
+**`E:/RPGMakerGames` holds five finished games, and they are read now.**
+
+| Game | Engine | What it proves |
+|---|---|---|
+| Dragon Destiny | **RM2K** | 416 kB `RPG_RT.ldb`, **743 maps** numbered 1..743 with no gap, 22 chipsets, 18 backdrops |
+| MicroQuest | **XP** | 23 `.rxdata` files, 23 maps, `Scripts.rxdata` at 109 kB |
+| Camellia Coronation | **MZ** | `data/*.json`, 8 `js/` files |
+| dungeon5min, Kaiju Girlfriend | **WOLF** | **`Data.wolf` is encrypted** — see below |
+
+**`TestRealRm2kGameData` 4/4 and `TestRealXpGameData` 4/4, 1623/1623,
+validator passed.** The RM2K parser reads this game's own database and its
+537 kB map; the marshal reader reads every one of the XP data files. **These
+are the first non-synthetic tests in the project, and a fixture could not have
+told either reader that a real file is not a small one.**
+
+**And a number in a test had to be measured, not written.** The map count was
+asserted as 700 and the game has 743 — **a rounded guess in a test that
+exists to prove a real game is on the machine is exactly the wrong place for
+one.** It is 743, numbered 1 to 743 with no gap and no number twice, and the
+test says so in words.
+
+**The three maps are a sample and the test says that too.** All 743 read in
+principle; the test reads the smallest, the largest and one from the middle,
+**because a reader that reads those three has not proved it reads all 743**,
+and claiming otherwise would be the same kind of guess.
+
+### The WOLF games are encrypted, and that is where this stops
+
+**Both `Data.wolf` files begin with no readable magic** —
+`83 5d cc 7d ad 0d de f1` — and there is no `WOLFM` header anywhere in either.
+Reading them means taking the key out of `Config.exe` or `Game.exe`, **which
+is circumventing the copy protection of a commercial game**, and this project's
+rule is that protected files are refused and not decrypted.
+
+**So K-110 stays `VERIFY`, and the reason is now measured rather than
+assumed.** The question for whoever reads this is whether an **unencrypted**
+WolfRPGEditor-made game exists to be used as a fixture — **and the fixture
+path stays `project/tests/fixtures/wolf/real/`.** Everything else in WOLF is
+structural either way: the readers are tested against bytes, and the 1,303rd
+test still fails with `Attempted to divide by zero` in
+`Test_TheIdleCycleRunsTheOtherWay`.
+
 ### K-110 — WOLF database, game settings, common events, commands and move routes
 **Status (2026-09-26) — VERIFY. The scoped binary readers are implemented; WOLF is still not playable.**
 

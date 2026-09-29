@@ -9096,3 +9096,37 @@ worked around.
 
 `TestRubyInterpreter: 71/71`, `TestRubyParser: 53/53`, `All 1615 tests
 passed`, validator passed, mutations 4 of 4.
+
+## 2026-09-29 — the real games on this machine, and the first non-synthetic tests
+
+**`E:/RPGMakerGames` holds five finished games and they are read now.**
+`TestRealRm2kGameData` 4/4 against **Dragon Destiny** — a 416 kB `RPG_RT.ldb`,
+**743 maps** numbered 1 to 743 with no gap, 22 chipsets — and
+`TestRealXpGameData` 4/4 against **MicroQuest**, 23 `.rxdata` files including
+109 kB of scripts. **1623/1623, validator passed.** These are the first
+non-synthetic tests in the project.
+
+**Dragon Destiny is RM2K and not 2003**, and the test asserts the absence of
+`.lcf` and not only the presence of `.ldb` — a folder with both is a folder a
+loader cannot read one of.
+
+**A number in a test had to be measured.** The map count was asserted as 700
+and the game has 743. **A rounded guess in a test whose whole purpose is to
+prove a real game is on the machine is the wrong place for one** — the same
+fault as the hand-written liblcf list, and the test now says 743 in words.
+
+**The three maps are a sample and the test says so.** The smallest, the
+largest and one from the middle; **a reader that reads three has not proved it
+reads 743**, and saying otherwise would be the same kind of claim.
+
+**The two WOLF games are encrypted.** Both `Data.wolf` files start with
+`83 5d cc 7d ad 0d de f1` and neither has a `WOLFM` header. Reading them means
+taking the key from `Config.exe` or `Game.exe`, **which is circumventing the
+copy protection of a commercial game** — and this project refuses protected
+files rather than decrypting them. **K-110 stays VERIFY, and the reason is
+measured rather than assumed.** What would unblock it is an *unencrypted*
+WolfRPGEditor game as a fixture at `project/tests/fixtures/wolf/real/`.
+
+**And the RTP is authorised but not done.** The user said to download and
+unpack it and to name the sources per engine — that is the next card and not
+this one.
