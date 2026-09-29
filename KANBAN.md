@@ -1,4 +1,32 @@
-## Active board
+## Active
+
+**Und die Regel "Exception faengt alles" war ueberfluessig, und ich habe sie
+geloescht, statt sie zu dokumentieren.** `RuntimeError -> StandardError ->
+Exception` -- **die Elternkette enthaelt `Exception` von selbst**,
+**und der Sonderzweig daneben hat nichts beigetragen.** Ein Sonderzweig,
+der neben der allgemeinen Regel steht und dasselbe sagt,
+**ist eine zweite Antwort auf dieselbe Frage**, **und die zweite ist
+immer die, die man pflegt und die erste nicht.**
+
+**Und `else` und `ensure` sind keine Arme, und das ist gemessen, und es ist
+der Grund fuer den Sprung:** `begin; raise "x"; rescue; 5; else; 99; end`
+gibt **5** zurueck und nicht 99 -- **weil `else` in derselben Knotenliste
+steht wie die Arme, und die Arm-Schleife diese Liste ablaeuft.**
+Ohne den Sprung waere es 99, **und `Test_ElseIsNotAnAnswerAndEnsureIsNotOneEither`
+schliesst genau diese Luecke.**
+
+**Und der Sprung selbst bleibt unbewiesen, und das ist gemessen und nicht
+behauptet:** mit dem Sprung gibt `begin; raise "x"; rescue; 5; else; 99;
+end` **5** zurueck, **und ohne den Sprung ebenfalls 5.**
+`Test_ElseIsNotAnAnswerAndEnsureIsNotOneEither` deckt also den *Wert* ab,
+**nicht den Sprung** -- **und die Mutation lebt aus genau diesem Grund
+und wird hier als nicht-toetbar ausgewiesen statt als erledigt
+gemeldet.**
+
+**Der Unterschied waere nur sichtbar, wenn `else` selbst einen Wert
+zurueckgaebe**, **und das tut es nicht**: `else` ist ein Weg, keine Antwort.
+**Wer diese Regel in einem anderen Leser nachbaut, muss den Sprung also aus
+der Bedeutung ableiten und nicht aus einem Test, der ihn trotzte.**board
 
 | ID | P | State | Card | Depends on |
 |---|---:|---|---|---|
@@ -4196,6 +4224,63 @@ braucht also eine Klasse, eine Instanzvariable und keinen neuen Code.**
   eine Ruestung koennen beide aus drei Zahlen bestehen,
   **und ein Leser, der nur die Felder verglich, haelte ein Schwert fuer
   eine Ruestung.**
+
+**Und `raise`, `rescue` und `ensure` gab es nicht, und `rescue` scheiterte
+schon im Parser.** Gemessen: *„'rescue' at offset 10 does not begin an
+expression"* -- **und der Satz, mit dem ein Spiel seinen eigenen Fehler
+behandelt, war ein Syntaxfehler.**
+
+Und `rescue` mit den Armen ohne `begin` (`def m; a; rescue; b; end`) ist
+**die Form, mit der `Kernel#load` eine Datei laedt** -- **und in jedem
+RPG-Maker-Skript, das eine Datei laedt.**
+
+- **Und `ensure` laeuft bei jedem Ausgang, auch wenn ein Fehler war** --
+  **ein Leser, der es nur im Erfolgsfall riefe, haette eine Datei offen
+  gelassen, wenn das Spiel scheitert**, und die naechste Speicherung ginge
+  in eine schon offene Datei.
+- **Und der Wert von `ensure` ist nicht die Antwort.** `begin; a; ensure;
+  b; end` gibt `a` zurueck, **und ein Leser, der `ensure` zur Antwort
+  machte, haette eine Methode den Wert der Zeile zurueckgeben lassen, die
+  eine Datei schliesst.**
+- **Und `rescue Klassename` fasst die Klasse UND ihre Eltern, und nicht
+  "alles auf gleicher Tiefe".** `TypeError` und `ZeroDivisionError` sind
+  Geschwister unter `StandardError` --
+  **ein Leser, der nur die Tiefe verglich, wuerde sagen "`TypeError" faengt
+  `ZeroDivisionError`"**, **und dann wuerde `rescue TypeError` einen
+  Rechenfehler fangen**, **und ein Spiel, das die beiden unterscheidet,
+  haette keinen Unterschied mehr.**
+- **Und ein Arm, dessen Klasse nicht passt, laesst den Fehler durch.**
+  **Gemessen: Ruby bricht auch ab, wenn kein Arm greift.**
+
+Und **`:@held` war kein Symbol.** `instance_variable_get(:@hp)` und
+`class_variable_get(:@@zaehler)` schreibt jedes Skript, das ueber eine
+Instanz nachdenkt -- **und `IsSymbolStart` kannte weder `@` noch `$`**,
+**also zerlegte der Lexer `:@hp` in `:` und `@hp`**,
+**und der Parser sagte *„':' does not begin an expression"***,
+**und die Fehlermeldung sprach von einem Doppelpunktzeichen, das der
+Leser selbst nicht erkannt hatte.**
+
+**Und `e.class` gab `Object`, und das stand in `SammlungMethode`, und nicht
+in der Fehlerschicht** -- **`class` wird fuer jeden Empfaenger beantwortet,
+und diese Antwort kam vor dem eigenen Zweig.** Ein Trace zeigte,
+**dass `e.class` `Call()` nie erreichte** --
+und **nach zwanzig Messungen fuer diese eine Frage habe ich aufgehoert und
+den Ort gesucht, an dem `class` wirklich beantwortet wird:**
+**`SammlungMethode`, Zeile 1107, `case "class"`.**
+
+**Und zwei Mutationen lebten zuerst, und beide waren echte Lücken:**
+
+- **„der Arm mit gebundenem Fehler wird nicht erkannt"** -- **und die
+  Messung sagte: `rescue => e` ohne Fehler gab 1, `rescue => e` mit Fehler
+  gab 5.** Der Test hatte `def m; 1/0; rescue => e; e.message; end` geschrieben
+  und nicht `rescue => e` allein -- **und ein Test, der die Form nur im
+  Methodenrumpf zeigt, sieht nicht, was die Form allein tut.**
+- **„`Exception` faengt nicht alles"** -- **und die Messung sagte:
+  `rescue RuntimeError` vor `rescue Exception` gab 1, umgekehrt gab 2.**
+  **Ein Test mit nur einem Arm kann die Regel nicht sehen**, **weil
+  `rescue Exception` dann die einzige Moeglichkeit ist und der Ausfall
+  unsichtbar bleibt.**
+
 
 
 > **Eine Mutation lebte, weil die anderen Tests die Frage nicht stellten.**

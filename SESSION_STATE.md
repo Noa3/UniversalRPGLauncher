@@ -9591,3 +9591,68 @@ verschob. **Ab dem vierten Mal: Textanker mit `count == 1`, plus eine
 Klammerbilanz als Wächter.**
 
 `TestRubyInterpreter: 210/210`, `All 1768 tests passed`.
+
+
+## 2026-09-29 — `raise`, `rescue`, `ensure`, und `e.class`
+
+**`rescue` scheiterte schon im Parser** -- gemessen: *„'rescue' at offset
+10 does not begin an expression"*. **Und der Satz, mit dem ein Spiel seinen
+eigenen Fehler behandelt, war ein Syntaxfehler.**
+
+**Und `def m; a; rescue; b; end` ohne `begin`** ist die Form, mit der
+`Kernel#load` eine Datei laedt,
+**und in jedem RPG-Maker-Skript, das eine Datei laedt.**
+
+**Und `:@held` war kein Symbol.** `IsSymbolStart` kannte weder `@` noch
+`$`, **also zerlegte der Lexer `:@hp` in `:` und `@hp`**,
+**und die Fehlermeldung sprach von einem Doppelpunktzeichen, das der Leser
+selbst nicht erkannt hatte** -- **eine Meldung ueber ein Zeichen, an dem
+der Fehler gar nicht lag.**
+
+## Und die Regel, die das teuerste war
+
+**Ich habe zwanzig Messungen fuer eine einzige Frage verbraucht:**
+`e.class` gibt `Object` statt der Fehlerklasse.
+
+Der eigene Zweig stand an der richtigen Stelle -- **vor**
+`SammlungMethode` -- **und wurde nie erreicht**, weil `class` fuer jeden
+Empfaenger in `SammlungMethode` beantwortet wird, und der Pfad vorher
+zurueckkam.
+
+**Ein Trace im Interpreter hat nichts gezeigt**, weil die Umgebungsvariable
+den Godot-Prozess nicht erreichte, und **ein Trace im Test hat es
+gezeigt**: der Ast war `Call name='class'`, und der Interpreter rief
+`Call()` nie dafuer auf. **Damit war die Frage beantwortet** -- **und ich
+habe sie trotzdem noch sechsmal gestellt.**
+
+**Die Regel, die daraus folgt: eine Messung, die nichts zeigt, ist ein
+Ergebnis.** *Der eigene Zweig wird nicht erreicht* heisst: **ein frueherer
+Zweig antwortet**, **und man muss ihn suchen, statt den eigenen zu
+reparieren.** **Und wenn man dieselbe Frage zum siebten Mal stellt,
+ist man nicht mehr am Messen, sondern an einer Gewohnheit.**
+
+`TestRubyInterpreter: 215/215`, `All 1773 tests passed`.
+
+
+## Und zwei überlebende Mutationen, von denen eine ein No-op war
+
+**`Exception` fängt alles** ueberlebte als Mutation, und **der Grund war
+eine redundante Regel:** `if (genannt == "Exception") return true;` --
+**und `RuntimeError -> StandardError -> Exception` sagt dasselbe ueber die
+Elternkette.** **Der Sonderzweig ist geloescht worden, nicht dokumentiert:**
+ein Zweig, der neben der allgemeinen Regel steht und dasselbe sagt, ist
+eine zweite Antwort auf dieselbe Frage, **und die zweite ist immer die,
+die man pflegt und die erste nicht.**
+
+**`else`/`ensure` sind keine Arme** ueberlebte ebenfalls, und **der Grund
+ist eine Unsichtbarkeit:** `begin; raise "x"; rescue; 5; else; 99; end`
+gibt 5 zurueck -- **und die Mutation, die den Sprung entfernt, gibt auch 5
+zurueck**, **weil `else` keinen anderen Wert liefert**, den man untersieht.
+**Der Unterschied ist nur sichtbar, wenn `else` einen anderen Wert traegt als
+der Arm** -- und das ist jetzt der Test.
+
+**Und die Regel, die daraus folgt:** *eine Mutation, die lebt, ist erst
+ein Testfehler und dann ein Codebefund.* **Erst messen, ob sich der Wert
+aendert** (`5` gegen `5` heisst No-op) -- **und dann die Frage stellen,
+die den Unterschied sichtbar macht**, statt die Mutation als „unmessbar"
+zu verbuchen.

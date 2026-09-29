@@ -363,7 +363,18 @@ public sealed class RubyLexer
 
     private static bool IsSymbolStart(char pChar)
     {
-        return IsIdentifierStart(pChar) || char.IsDigit(pChar);
+        // **Und `@` und `$`, und weil `:@held` ein Symbol ist.**
+        // `instance_variable_get(:@hp)` und
+        // `class_variable_get(:@@zaehler)` schreibt jedes Skript, das ueber
+        // eine Instanz nachdenkt,
+        // **und ohne diese beiden Zeichen sah der Doppelpunkt nach einem
+        // Trenner aus** --
+        // **der Lexer machte aus `:@hp` ein `:` und ein `@hp`**, und der
+        // Parser sagte *„':' does not begin an expression"*,
+        // **und die Fehlermeldung sprach von einem Doppelpunktzeichen, das
+        // der Leser selbst nicht erkannt hatte.**
+        return IsIdentifierStart(pChar) || char.IsDigit(pChar)
+            || pChar == '@' || pChar == '$';
     }
 
     private static bool IsWordLiteralTail(char pChar)
@@ -476,6 +487,29 @@ public sealed class RubyLexer
         var nameStart = _offset;
         if (!AtEnd && IsIdentifierStart(Current))
         {
+            while (!AtEnd && IsIdentifierPart(Current))
+            {
+                _offset++;
+            }
+        }
+        else if (!AtEnd && (Current == '@' || Current == '$'))
+        {
+            // **Und `:@held`, `:$globals` und `:@@zaehler` sind Symbole.**
+            // `instance_variable_get(:@hp)` und
+            // `class_variable_get(:@@zaehler)` schreiben jedes Skript, das
+            // ueber eine Instanz nachdenkt,
+            // **und ohne diese Regel zerlegte der Lexer `:@hp` in `:` und
+            // `@hp`** --
+            // **und der Parser sagte *„':' does not begin an
+            // expression"*, **und die Fehlermeldung ging um ein
+            // Doppelpunktzeichen, das der Leser selbst nicht erkannt
+            // hatte.**
+            _offset++;
+            if (!AtEnd && Current == '@')
+            {
+                _offset++;
+            }
+
             while (!AtEnd && IsIdentifierPart(Current))
             {
                 _offset++;

@@ -748,6 +748,278 @@ public sealed class RubyParser
     /// <c>end</c> short</strong> and handed the next statement to the wrong
     /// caller.
     /// </remarks>
+    /// <summary>
+    /// Reads the `rescue`, `else` and `ensure` arms after a body, and the
+    /// `end` that closes them.
+    /// </summary>
+    /// <param name="pKoerper">The statements before the first arm.</param>
+    /// <param name="pLine">Where the statement began.</param>
+    /// <returns>The node, with the body first and the arms in run order.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the one place, because `begin` and `def` take the
+    /// same arms.</strong> `def m; a; rescue; b; end` is
+    /// <c>Kernel#load</c>'s way of writing it,
+    /// <strong>and a reader with two copies would have one of them
+    /// wrong</strong> — and the wrong one would be the one no test
+    /// happened to write.
+    /// </para>
+    /// <para>
+    /// <strong>And the order is the order they run in.</strong> Body,
+    /// rescue, else, ensure —
+    /// <strong>and <c>else</c> only runs when nothing was raised</strong>,
+    /// which is its whole difference from a second <c>rescue</c> arm.
+    /// </para>
+    /// </remarks>
+    private RubyNode ArmeSammeln(List<RubyNode> pKoerper, int pLine)
+    {
+        var kinder = new List<RubyNode>
+        {
+            new()
+            {
+                Kind = RubyNodeKind.Block,
+                Name = "end",
+                Line = pLine,
+                Children = pKoerper,
+            },
+        };
+
+        var letzteKlasse = 1;
+        while (IsKeyword("rescue"))
+        {
+            _index++;
+            var klassen = new List<RubyNode>();
+            var name = string.Empty;
+
+            // **Und `rescue => e` bindet den Fehler an einen Namen**, und
+            // **die Klassen kommen vor dem Pfeil.**
+            // `rescue A, B => e` faengt beide,
+            // **und ein Leser, der nur den ersten Namen nahm, haette eine
+            // game's second error class escape** — and the game would crash
+            // on the error it thought it had handled.
+            if (Is("=>"))
+            {
+                _index++;
+                name = ReadMemberName();
+            }
+            else if (NenntKlassen())
+            {
+                while (true)
+                {
+                    klassen.Add(ParseExpression());
+                    if (Is(","))
+                    {
+                        _index++;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                if (Is("=>"))
+                {
+                    _index++;
+                    name = ReadMemberName();
+                }
+            }
+
+            // **Und die Klassenliste geht als letzter Knoten in den Arm,
+            // und nicht in eine Liste, in die man nachtraeglich etwas
+            // schreibt.** `Children` ist eine Liste, die man nicht
+            // veraendert,
+            // **und ein Leser, der sie erweitert haette, muesste den
+            // Knoten schon kennen** -- **und der Knoten entsteht aus genau
+            // den Angaben, um die es hier geht.**
+            var retter = ParseStatements("rescue", "else", "ensure", "end");
+            var inhalt = new List<RubyNode>(retter);
+            if (klassen.Count > 0)
+            {
+                inhalt.Add(new RubyNode
+                {
+                    Kind = RubyNodeKind.Array,
+                    Line = pLine,
+                    Children = klassen,
+                });
+            }
+
+            kinder.Add(new RubyNode
+            {
+                Kind = RubyNodeKind.Block,
+                Name = name,
+                Line = pLine,
+                Children = inhalt,
+            });
+            letzteKlasse = kinder.Count;
+        }
+
+        if (IsKeyword("else"))
+        {
+            _index++;
+            var sonst = ParseStatements("ensure", "end");
+            kinder.Insert(letzteKlasse, new RubyNode
+            {
+                Kind = RubyNodeKind.Block,
+                Name = "else",
+                Line = pLine,
+                Children = sonst,
+            });
+        }
+
+        if (IsKeyword("ensure"))
+        {
+            _index++;
+            var immer = ParseStatements("end");
+            kinder.Add(new RubyNode
+            {
+                Kind = RubyNodeKind.Block,
+                Name = "ensure",
+                Line = pLine,
+                Children = immer,
+            });
+        }
+
+        if (!Is("end"))
+        {
+            throw new RubyParseException(
+                $"'end' was expected at offset {Current.Offset}, but "
+                    + $"'{Current.Text}' is there.",
+                Current.Line);
+        }
+
+        _index++;
+        return new RubyNode
+        {
+            Kind = RubyNodeKind.Begin,
+            Line = pLine,
+            Children = kinder,
+        };
+    }
+
+    /// <summary>
+    /// Reads `begin` with its arms, or without them.
+    /// </summary>
+    /// <param name="pLine">Where the `begin` was written.</param>
+    /// <returns>The node.</returns>
+    /// <remarks>
+    /// <strong>And it is a `Begin` node even with no arms.</strong> That is
+    /// what a `begin` without a `rescue` is,
+    /// <strong>and a reader that made a plain block out of it would have had
+    /// two shapes for one keyword</strong> — and the second one would be the
+    /// one no test wrote.
+    /// </remarks>
+    private RubyNode ReadBegin(int pLine)
+    {
+        var koerper = ParseStatements("rescue", "else", "ensure", "end");
+        return ArmeSammeln(koerper, pLine);
+    }
+
+
+    /// <summary>
+    /// Wraps statements already read into a body node, and takes the `end`
+    /// that closes them.
+    /// </summary>
+    /// <param name="pStatements">The statements.</param>
+    /// <param name="pLine">Where the statement began.</param>
+    /// <returns>The body node.</returns>
+    /// <remarks>
+    /// <strong>And it takes the `end`, because the caller has not.</strong>
+    /// <c>ReadBody</c> reads and takes,
+    /// <strong>and a reader that left the `end` for the caller would have had
+    /// two places to take it</strong> — and one of them would have been
+    /// forgotten. **This exists because the caller had to read the
+    /// statements itself to see whether an arm followed.**
+    /// </remarks>
+    /// <summary>
+    /// Whether an arm names the classes it catches.
+    /// </summary>
+    /// <returns>true when at least one name follows.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a name, and not "something is there".</strong>
+    /// <c>rescue</c> and then <c>2</c> is an arm with no classes and a body
+    /// that begins with 2,
+    /// <strong>and a reader that always read an expression would take the
+    /// body's first line for the class list</strong> — and then
+    /// <c>begin; 1; rescue; 2; end</c> would not parse at all,
+    /// **which is the commonest form of the sentence there is.**
+    /// </para>
+    /// <para>
+    /// <strong>And a constant, or a name qualified with <c>::</c>, and not a
+    /// number or a text.</strong> <c>rescue ZeroDivisionError</c> and
+    /// <c>rescue RPG::Fehler</c> —
+    /// <strong>and a game's own error class is exactly that second
+    /// form</strong>, and a reader that only knew the bare name would have
+    /// made a plugin's error uncaught.
+    /// </para>
+    /// </remarks>
+    private bool NenntKlassen()
+    {
+        if (Current.Kind != RubyTokenKind.Constant)
+        {
+            return false;
+        }
+
+        // **Und nach dem Namen muss ein Pfeil oder ein Komma kommen.**
+        // `rescue A => e` und `rescue A, B => e`,
+        // **und `rescue` mit einem Rumpf, der mit einem Wort beginnt, hat
+        // keine Klassen** --
+        // **ein Leser, der nur auf "irgendein Name" schaute, wuerde
+        // `rescue; name = 1; end` als `rescue name` lesen** und dann der
+        // Zuweisung die Liste der Klassen klauen,
+        // **und `rescue; name = 1; end` ist ein Muster, mit dem ein Spiel
+        // seinen Fehler in einer Variablen ablegt.**
+        // **Und `ReadMemberName` ruckt selbst weiter**, **also steigt
+        // `_index` hier nicht noch einmal** --
+        // **ein Leser, der beides tat, stuende nach dem Namen auf dem
+        // Zeilenumbruch**, **und `rescue TypeError` waere dann ein
+        // Syntaxfehler mit der Meldung *„a member name was expected"*,
+        // **obwohl der Name davor richtig gelesen wurde.**
+        var merke = _index;
+        ReadMemberName();
+        while (Is("::"))
+        {
+            _index++;
+            ReadMemberName();
+        }
+
+        // **Und nach dem Namen darf eine neue Zeile kommen.**
+        // `rescue ZeroDivisionError` steht fuer sich allein,
+        // **und ohne das haette der Rumpf des Arms mit der Konstante
+        // angefangen** -- **und `begin; 1/0; rescue ZeroDivisionError; 2;
+        // end` waere dann ein Syntaxfehler**, **und genau das ist der
+        // Satz, mit dem ein Spiel seinen eigenen Fehler behandelt.**
+        //
+        // **Und es bleibt bei "irgendein Name".** `rescue; name = 1; end`
+        // ist ein Arm ohne Klassen,
+        // **und der Name `name` am Zeilenanfang ist eine Zuweisung, keine
+        // Klasse** -- **die Unterscheidung ist der Zeilenumbruch, und
+        // `rescue name = 1` schreibt man nicht.**
+        _index = merke;
+        return true;
+    }
+
+
+    private RubyNode RumpfAus(List<RubyNode> pStatements, int pLine)
+    {
+        if (!Is("end"))
+        {
+            throw new RubyParseException(
+                $"'end' was expected at offset {Current.Offset}, but "
+                    + $"'{Current.Text}' is there.",
+                Current.Line);
+        }
+
+        _index++;
+        return new RubyNode
+        {
+            Kind = RubyNodeKind.Block,
+            Name = "end",
+            Line = pLine,
+            Children = pStatements,
+        };
+    }
+
+
     private RubyNode ReadBody(string pCloser)
     {
         var statements = ParseStatements(pCloser);
@@ -1624,7 +1896,19 @@ public sealed class RubyParser
 
                 var arguments = ReadParameterList();
                 SkipNewlines();
-                var body = ReadBody("end");
+
+                // **Und ein Rumpf darf `rescue` und `ensure` tragen, ohne
+                // ein `begin` zu schreiben.** Das ist die Form, mit der
+                // `Kernel#load` eine Datei laedt,
+                // **und `def m; a; rescue; b; end` steht in jedem
+                // RPG-Maker-Skript, das eine Datei laedt** --
+                // **ein Leser, der hier immer `end` verlangte, wuerde ein
+                // Skript ablehnen, das die Sprache selbst liest.**
+                var koerper = ParseStatements("rescue", "else", "ensure", "end");
+                var body = IsKeyword("rescue") || IsKeyword("ensure")
+                    || IsKeyword("else")
+                    ? ArmeSammeln(koerper, pToken.Line)
+                    : RumpfAus(koerper, pToken.Line);
                 return new RubyNode
                 {
                     Kind = aufSelbst ? RubyNodeKind.DefS : RubyNodeKind.Def,
@@ -1675,13 +1959,7 @@ public sealed class RubyParser
             case "begin":
             {
                 _index++;
-                var body = ReadBody("end");
-                return new RubyNode
-                {
-                    Kind = RubyNodeKind.Begin,
-                    Line = pToken.Line,
-                    Children = [body],
-                };
+                return ReadBegin(pToken.Line);
             }
         }
 

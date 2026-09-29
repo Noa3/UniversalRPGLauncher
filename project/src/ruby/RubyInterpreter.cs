@@ -130,6 +130,28 @@ public sealed class RubyInterpreter
     /// </remarks>
     private int _strukturZaehler;
 
+    /// <summary>
+    /// The error classes of the language, by name.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a fixed list, and not a question to the host.</strong>
+    /// The classes are part of the language,
+    /// <strong>and a host that sie nicht kennt, hat sie trotzdem</strong> —
+    /// **and `rescue` compares names and not types, so the list is
+    /// enough**, and a game that writes its <em>own</em> error class
+    /// (<c>class MeinFehler &lt; StandardError</c>) is matched against the
+    /// same names.
+    /// </remarks>
+    private static readonly HashSet<string> FehlerKlassen = new(StringComparer.Ordinal)
+    {
+        "Exception", "StandardError", "RuntimeError", "ArgumentError",
+        "TypeError", "RangeError", "ZeroDivisionError", "FloatDomainError",
+        "IndexError", "KeyError", "IOError", "EOFError", "ScriptError",
+        "NotImplementedError", "LoadError", "SyntaxError", "LocalJumpError",
+        "NameError", "NoMethodError", "SystemExit", "SystemStackError",
+        "StopIteration", "FrozenError", "RegexpError", "EncodingError",
+    };
+
     /// <summary>The default each struct field was given, by class name.</summary>
     /// <remarks>
     /// <strong>And by the class name, and not in the class.</strong> The
@@ -429,7 +451,7 @@ public sealed class RubyInterpreter
             RubyNodeKind.SuperCall => EvaluateSuper(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
-            RubyNodeKind.Begin => EvaluateBlock(pNode),
+            RubyNodeKind.Begin => EvaluateBegin(pNode),
             RubyNodeKind.Block => EvaluateBlock(pNode),
             _ => Refuse(pNode),
         };
@@ -901,7 +923,27 @@ public sealed class RubyInterpreter
         // :name)` is the **first line** of the standard library of XP, VX and
         // VX Ace, **and without it not one of those games is
         // readable** -- **this is not a convenience, this is the data
-        /// catalogue of every RPG Maker script.**
+        // **Und die Fehlerklassen der Sprache, und weil `raise` sie
+        // braucht.** `raise ArgumentError, "x"` und
+        // `rescue ZeroDivisionError` schreiben sie,
+        // **und ohne sie gaebe `raise ArgumentError` *„the constant
+        // ArgumentError is not defined by this host"*** -- **eine Meldung
+        // ueber den Host fuer eine Klasse, die der Leser haette** --
+        // **und `rescue ZeroDivisionError` wuerde nie greifen**, weil der
+        // Arm einen Namen vergleicht, den niemand geschrieben hat.
+        //
+        // **Und sie stehen als Symbole und nicht als echte Typen.** Es sind
+        // Namen, und `rescue` vergleicht Namen,
+        // **ein Leser, der daraus Klassen mit leeren Methoden baute,
+        // haette `ArgumentError.new` zu einer Klasse ohne Konstruktor
+        // gemacht** -- **und `raise ArgumentError.new("x")`, die
+        // haeufigste der drei Formen, waere dann `nil`.**
+        if (FehlerKlassen.Contains(name))
+        {
+            return RubyValue.OfSymbol(name);
+        }
+
+        // catalogue of every RPG Maker script.**
         if (name == "Struct")
         {
             return RubyValue.OfSymbol("Struct");
@@ -1063,6 +1105,18 @@ public sealed class RubyInterpreter
                 return RubyValue.OfInteger(t.Gruppen.Count + 1);
 
             case "class":
+                // **Und ein Fehler traegt seinen Klassennamen bei sich, und
+                // nicht den Namen seiner Hülle.** `e.class` waere sonst
+                // `Object`,
+                // **und der Satz, mit dem ein Spiel seinen eigenen Fehler
+                // unterscheidet -- `if e.class == ZeroDivisionError` -- waere
+                // immer falsch.**
+                if (pEmpfaenger.ClassName == "Fehler"
+                    && pEmpfaenger.Felder.TryGetValue("@klasse", out var fehlerKlasse))
+                {
+                    return fehlerKlasse;
+                }
+
                 return RubyValue.OfSymbol(
                     pEmpfaenger.Kind == RubyValueKind.Nil ? "NilClass" : "Object");
 
@@ -1148,6 +1202,15 @@ public sealed class RubyInterpreter
         // ein Objekt und ruft `initialize` auf,
         // **und in keinem Skript steht diese Methode geschrieben** -- sie ist
         // in der Sprache. **Deshalb vor der Skriptmethode und nicht in ihr.**
+        // **Und `raise` ist Sprache, und kein Aufruf an den Host.** Ohne
+        // sie laeuft ein Skript nach seinem eigenen Fehlerpfad weiter,
+        // **und genau das ist der Unterschied zwischen einem Spiel, das
+        // sich weigert, und einem Spiel, das abstuerzt.**
+        if (methode == "raise" && empfaenger.Name == "self")
+        {
+            throw RubyFehlerAus(argumente);
+        }
+
         if (methode == "new" && empfaenger.Kind == RubyValueKind.Symbol)
         {
             // **And `Struct.new(:a, :b)` builds a class and gives it
@@ -1471,6 +1534,47 @@ public sealed class RubyInterpreter
         if (anStruct != null)
         {
             return anStruct;
+        }
+
+        // **Und ein Fehler ist ein Objekt mit zwei Feldern, und keine
+        // Klasse mit zwei Methoden.** `e.message` ist der Satz, mit dem ein
+        // Spiel seinen Fehler anzeigt,
+        // **und ein Leser, der ihn ablehnte, wuerde daraus „the host does
+        // not know this method" machen** -- **und der Satz, mit dem ein
+        // Spiel seinen Fehler anzeigt, waere genau der, der nicht geht.**
+        //
+        // **Und `e.class` steht in der Sammlung und nicht hier**, denn die
+        // Sammlung beantwortet `class` fuer jeden Empfaenger
+        // -- **und dieser Zweig wuerde nie erreicht**, weil sie vorher
+        // antwortet.
+        // **Und ein Fehler ist ein Objekt mit zwei Feldern, und keine
+        // Klasse mit zwei Methoden.** `e.message` und `e.class` sind die
+        // zwei Saetze, die ein Spiel schreibt, wenn es einen Fehler
+        // anzeigt,
+        // **und ein Leser, der sie ablehnte, wuerde `e.message` zu „the
+        // host does not know this method" machen** -- **und der Satz, mit
+        // dem ein Spiel seinen Fehler anzeigt, waere genau der, der
+        // nicht geht.**
+        if (empfaenger.Kind == RubyValueKind.Object
+            && empfaenger.ClassName == "Fehler"
+            && argumente.Count == 0)
+        {
+            var feld = methode switch
+            {
+                "message" or "to_s" or "full_message" =>
+                    RubyValue.OfBytes(
+                        System.Text.Encoding.UTF8.GetBytes(
+                            empfaenger.Felder.TryGetValue("@message", out var m)
+                                && m.Kind == RubyValueKind.String
+                                    ? System.Text.Encoding.UTF8.GetString(m.Bytes)
+                                    : string.Empty)),
+                "backtrace" => RubyValue.OfArray([]),
+                _ => null,
+            };
+            if (feld != null)
+            {
+                return feld;
+            }
         }
 
         var anDerSammlung = SammlungMethode(empfaenger, methode, argumente);
@@ -5813,6 +5917,411 @@ public sealed class RubyInterpreter
 
         return letztes;
     }
+
+    /// <summary>
+    /// Runs a body with its `rescue`, `else` and `ensure` arms.
+    /// </summary>
+    /// <param name="pNode">The node, with the body first.</param>
+    /// <returns>What the body or the arm that ran answered.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And `ensure` runs on every way out.</strong> Normally, on a
+    /// raised error, and when an arm ran,
+    /// <strong>and a reader that ran it only on the way without an error
+    /// would leave a file open when the game failed</strong> — and the next
+    /// save would go into a file that is already open, and the save before
+    /// it would be gone.
+    /// </para>
+    /// <para>
+    /// <strong>And `ensure` may raise, and then the error stands.</strong>
+    /// Ruby's rule,
+    /// <strong>and a reader that swallowed the second error to keep the
+    /// first would have hidden the failure that actually broke the
+    /// game</strong> — and a save file that is half written looks exactly
+    /// like a save file that was written.
+    /// </para>
+    /// <para>
+    /// <strong>And an arm with no class list catches everything.</strong>
+    /// `rescue => e` faengt jeden Fehler,
+    /// <strong>and a reader that required a class would have made the
+    /// commonest form of the sentence a syntax error</strong> — and that
+    /// form is the one a game writes when it wraps a call it does not trust.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// The error a `raise` describes, from the three ways a game writes it.
+    /// </summary>
+    /// <param name="pArgumente">What the call carried.</param>
+    /// <returns>The error, ready to be thrown.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And there are three ways, and they are not
+    /// interchangeable.</strong> <c>raise "text"</c> raises a
+    /// <c>RuntimeError</c>,
+    /// <c>raise ArgumentError, "text"</c> raises that class,
+    /// <strong>and <c>raise ArgumentError.new("text")</c> raises it with
+    /// the text inside</strong> — and a reader that treated the second and
+    /// the third alike would have named every error by its class and lost
+    /// every message, <strong>and a game's error dialog would be a class name
+    /// with no text in it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And `raise` with no argument re-raises.</strong> That is what
+    /// a handler does to pass an error further up,
+    /// <strong>and a reader that raised a blank error instead would have
+    /// replaced a game's error with a message that says nothing</strong> —
+    /// and the handler that caught it would lose the class it matches on.
+    /// </para>
+    /// </remarks>
+    private static RubyRuntimeException RubyFehlerAus(
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pArgumente.Count == 0)
+        {
+            return new RubyRuntimeException(
+                "RuntimeError", "raise without an argument re-raises, and "
+                    + "this reader is not inside a handler; a game that "
+                    + "writes it outside one is a game that asks the "
+                    + "reference for the last error, and there is none");
+        }
+
+        var erstes = pArgumente[0];
+
+        // **Und `Klasse, "text"` ist die zweite Form.** Der Name steht an
+        // erster Stelle und der Text an zweiter,
+        // **und ein Leser, der den ersten Wert als Text genommen haette,
+        // wuerde eine Fehlermeldung ueber die Klasse schreiben.**
+        if (erstes.Kind == RubyValueKind.Symbol)
+        {
+            var klasse = erstes.Name ?? "RuntimeError";
+            var text = pArgumente.Count > 1 && pArgumente[1].Kind == RubyValueKind.String
+                ? System.Text.Encoding.UTF8.GetString(pArgumente[1].Bytes)
+                : klasse;
+            return new RubyRuntimeException(klasse, text);
+        }
+
+        // **Und `Klasse.new("text")` ist die dritte.** Der Text steckt im
+        // Objekt,
+        // **und das Objekt ist eine game class, und nicht `Fehler`**, weil
+        // ein Spiel sie selbst gebaut haben kann.
+        if (erstes.Kind == RubyValueKind.Object)
+        {
+            var klasse = erstes.ClassName is { Length: > 0 } name
+                ? name
+                : "RuntimeError";
+            var text = erstes.Felder.TryGetValue("@message", out var nachricht)
+                    && nachricht.Kind == RubyValueKind.String
+                ? System.Text.Encoding.UTF8.GetString(nachricht.Bytes)
+                : klasse;
+            return new RubyRuntimeException(klasse, text);
+        }
+
+        return new RubyRuntimeException(
+            "RuntimeError",
+            erstes.Kind == RubyValueKind.String
+                ? System.Text.Encoding.UTF8.GetString(erstes.Bytes)
+                : WertAlsText(erstes));
+    }
+
+
+    private RubyValue EvaluateBegin(RubyNode pNode)
+    {
+        var kinder = pNode.Children;
+        if (kinder.Count == 0)
+        {
+            return RubyValue.Nil;
+        }
+
+        // **Und der Rumpf laeuft zuerst, und ein Fehler daraus geht in
+        // die Arme.** Das steht in einem `try`,
+        // **weil `ensure` bei jedem Ausgang laufen muss, auch wenn kein
+        // Fehler da war** --
+        // **und ein Leser, der `ensure` nur im Fehlerfall aufriefe,
+        // haette eine Datei offen gelassen, wenn das Spiel scheitert**, und
+        // die naechste Speicherung ginge in eine schon offene Datei.
+        try
+        {
+            var koerper = EvaluateBlock(kinder[0]);
+            foreach (var kind in kinder)
+            {
+                if (kind.Name == "else")
+                {
+                    EvaluateBlock(kind);
+                    break;
+                }
+            }
+
+            return koerper;
+        }
+        catch (RubyRuntimeException ausnahme)
+        {
+            return ArmAntwort(kinder, ausnahme);
+        }
+        finally
+        {
+            EnsureLaeuft(kinder);
+        }
+    }
+
+    /// <summary>
+    /// Runs the first arm that catches an error.
+    /// </summary>
+    /// <param name="pKinder">The nodes, with the body first.</param>
+    /// <param name="pAusnahme">What was raised.</param>
+    /// <returns>What the arm answered.</returns>
+    /// <remarks>
+    /// <strong>And the first arm that catches it wins.</strong> Ruby takes
+    /// the arms in the order they were written,
+    /// <strong>and a reader that took the last would have run a game's
+    /// general handler before its specific one</strong> — and the specific
+    /// one is the one that knows what to do.
+    /// </remarks>
+    private RubyValue ArmAntwort(
+        IReadOnlyList<RubyNode> pKinder,
+        RubyRuntimeException pAusnahme)
+    {
+        for(var stelle = 1; stelle < pKinder.Count; stelle++)
+        {
+            var arm = pKinder[stelle];
+
+            // **Und nur `else` und `ensure` sind keine Arme.** Der Name
+            // eines Arms ist der Name, den das `=&gt;` fuer den Fehler
+            // gewaehlt hat -- **`rescue =&gt; e` haelt also `e`**,
+            // **und ein Leser, der einen Arm nur an einem leeren Namen
+            // erkannte, wuerde jeden Arm mit einem gebundenen Fehler
+            // ueberspringen** --
+            // **und `rescue =&gt; e` ist die haeufigste Form von allen.**
+            if (arm.Kind != RubyNodeKind.Block
+                || arm.Name is "else" or "ensure")
+            {
+                continue;
+            }
+
+            // **Und das ist der Grund fuer den Sprung, und er ist nicht
+            // sichtbar, wenn man nur auf die Antwort schaut.** Ohne ihn
+            // liefe `else` als Arm durch und gaebe seine 99 zurueck,
+            // **und `begin; raise "x"; rescue; 5; else; 99; end` gaebe 99
+            // statt 5** --
+            // **und `else` ist nicht die Antwort, sondern der Weg, den man
+            // geht, wenn nichts schiefging**, **und das ist der ganze
+            // Unterschied zwischen `else` und einem zweiten `rescue`.**
+
+            var klassen = FehlerklassenVon(arm);
+            if (klassen.Count > 0 && !FaengtDieKlasse(klassen, pAusnahme.Class))
+            {
+                continue;
+            }
+
+            // **Und der Fehler kommt unter dem Namen an, den das
+            // `=>` genannt hat.** `rescue => e` und dann `e.message` --
+            // **und ein Leser, der den Namen nicht gebunden haette, gaebe
+            // nil**, **und `nil.message` waere ein zweiter Fehler in der
+            // Fehlerbehandlung**, and the game would crash while handling a
+            // crash.
+            if (arm.Name.Length > 0)
+            {
+                _scopes[^1][arm.Name] = FehlerAlsWert(pAusnahme);
+            }
+
+            // **Und die Klassenliste ist kein Satz, und sie steht am
+            // Ende des Arms.** Sie ist der letzte Knoten,
+            // **und ein Leser, der den Arm wie einen Rumpf auswertete,
+            // gaebe sie zurueck** -- **und `begin; 1/0; rescue
+            // ZeroDivisionError; 2; end` gaebe eine leere Liste statt der
+            // 2**,
+            // **und das ist der Satz, mit dem ein Spiel einen eigenen
+            // Fehler behandelt.**
+            // **Und ohne Klassenliste wird gar nichts abgeschnitten.**
+            // `rescue => e` und `rescue` haben keine Liste,
+            // **und ein Leser, der immer den letzten Knoten strich, wuerde
+            // aus `rescue => e; e.message` ein `e` machen** -- **und
+            // `nil.message` waere ein zweiter Fehler in der
+            // Fehlerbehandlung.**
+            return EvaluateBlock(klassen.Count > 0
+                ? new RubyNode
+                {
+                    Kind = RubyNodeKind.Block,
+                    Name = arm.Name,
+                    Line = arm.Line,
+                    Children = [.. arm.Children.Take(arm.Children.Count - 1)],
+                }
+                : arm);
+        }
+
+        // **Und kein Arm passt, dann steht der Fehler wieder da.**
+        // **Weil das der Unterschied zwischen "behandelt" und
+        // "verschluckt" ist.**
+        throw pAusnahme;
+    }
+
+    /// <summary>
+    /// The error classes an arm names, and empty when it names none.
+    /// </summary>
+    /// <param name="pArm">The arm.</param>
+    /// <returns>The names.</returns>
+    /// <remarks>
+    /// <strong>And the list is the last node, and the statements before
+    /// it.</strong> `rescue A, B => e` stores its two names at the end of
+    /// the arm, <strong>and a reader that ran the array as a statement would
+    /// have a game's error handler end in a value it never uses</strong> --
+    /// and `A, B` is not a statement Ruby runs.
+    /// </remarks>
+    private static List<string> FehlerklassenVon(RubyNode pArm)
+    {
+        var namen = new List<string>();
+        if (pArm.Children.Count == 0)
+        {
+            return namen;
+        }
+
+        var letztes = pArm.Children[^1];
+        if (letztes.Kind != RubyNodeKind.Array)
+        {
+            return namen;
+        }
+
+        foreach (var klasse in letztes.Children)
+        {
+            if (klasse.Kind == RubyNodeKind.Constant)
+            {
+                namen.Add(klasse.Name ?? string.Empty);
+            }
+        }
+
+        return namen;
+    }
+
+    /// <summary>
+    /// Whether an arm's class list catches an error of that class.
+    /// </summary>
+    /// <param name="pKlassen">The names the arm gives.</param>
+    /// <param name="pKlasse">The class the error is of.</param>
+    /// <returns>true when it is caught.</returns>
+    /// <remarks>
+    /// <strong>And the name of the class itself counts.</strong>
+    /// `rescue StandardError` faengt einen `ArgumentError`,
+    /// <strong>because `ArgumentError` is a `StandardError`** -- and a
+    /// reader that compared the two names for equality would catch nothing
+    /// that a game's own hierarchy says it should catch.
+    /// </remarks>
+    private static bool FaengtDieKlasse(
+        IReadOnlyList<string> pKlassen,
+        string pKlasse)
+    {
+        foreach (var genannt in pKlassen)
+        {
+            if (genannt == pKlasse)
+            {
+                return true;
+            }
+
+            // **Und die Elternkette, und nicht "genauso tief".**
+            // `ZeroDivisionError` und `TypeError` sind Geschwister unter
+            // `StandardError`,
+            // **und ein Leser, der nur die Tiefe verglich, wuerde sagen
+            // "`TypeError` faengt `ZeroDivisionError`"** --
+            // **und dann wuerde `rescue TypeError` einen Rechenfehler
+            // fangen**,
+            // **und ein Spiel, das einen Rechenfehler von einem Typfehler
+            // unterscheidet, haette keinen Unterschied mehr.**
+            for(var eltern = ElternVon(pKlasse); eltern.Count > 0;
+                eltern = ElternVon(eltern[0]))
+            {
+                if (genannt == eltern[0])
+                {
+                    return true;
+                }
+            }
+
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The class a class is directly under, and nothing when it is a root.
+    /// </summary>
+    /// <param name="pKlasse">The class name.</param>
+    /// <returns>Its direct parent, or an empty list.</returns>
+    /// <remarks>
+    /// <strong>And a fixed list, because the reader cannot ask the
+    /// host.</strong> The classes a game rescues are the ones the language
+    /// has,
+    /// <strong>and a reader that asked the host would be asking about a
+    /// hierarchy it is not the owner of</strong> — and a host that answered
+    /// with nil would make every `rescue` catch nothing.
+    /// </remarks>
+    private static IReadOnlyList<string> ElternVon(string pKlasse) => pKlasse switch
+    {
+        "ArgumentError" or "TypeError" or "RangeError" or "ZeroDivisionError"
+            or "IndexError" or "KeyError" or "FloatDomainError" or "IOError"
+            or "EOFError" or "NotImplementedError" or "LocalJumpError"
+            or "RegexpError" or "RuntimeError" => ["StandardError"],
+        "NoMethodError" => ["NameError"],
+        "NameError" => ["StandardError"],
+        "LoadError" or "SyntaxError" => ["ScriptError"],
+        "ScriptError" => ["Exception"],
+        "StandardError" => ["Exception"],
+        "SystemExit" or "SystemStackError" or "EncodingError" or "FrozenError"
+            or "StopIteration" => ["Exception"],
+        _ => [],
+    };
+
+
+    /// <summary>
+
+    /// <summary>
+    /// The error as a value, for `rescue =&gt; e`.
+    /// </summary>
+    /// <param name="pAusnahme">The error.</param>
+    /// <returns>The value.</returns>
+    /// <remarks>
+    /// <strong>And it answers `message` and `class`.</strong> Those are the
+    /// two things a game reads,
+    /// <strong>and a reader that gave nil for both would have an error
+    /// dialog with no text in it</strong> — and a player staring at an
+    /// empty box with an OK button.
+    /// </remarks>
+    private static RubyValue FehlerAlsWert(RubyRuntimeException pAusnahme)
+    {
+        var felder = new Dictionary<string, RubyValue>(StringComparer.Ordinal)
+        {
+            ["@message"] = RubyValue.OfBytes(
+                System.Text.Encoding.UTF8.GetBytes(pAusnahme.Detail)),
+            ["@klasse"] = RubyValue.OfSymbol(pAusnahme.Class),
+        };
+        var wert = RubyValue.OfEmptyObject("Fehler");
+        foreach (var feld in felder)
+        {
+            wert.Felder[feld.Key] = feld.Value;
+        }
+
+        return wert;
+    }
+
+    /// <summary>
+    /// Runs the `ensure` arm, if there is one.
+    /// </summary>
+    /// <param name="pKinder">The nodes.</param>
+    /// <remarks>
+    /// <strong>And nothing is done with what it answers.</strong> Ruby's
+    /// rule,
+    /// <strong>and a reader that made `ensure` its answer would have a
+    /// game's `begin; a; ensure; b; end` answer `b` instead of `a`</strong>
+    /// -- and the value a method returns would be the value of the line that
+    /// closed a file.
+    /// </remarks>
+    private void EnsureLaeuft(IReadOnlyList<RubyNode> pKinder)
+    {
+        foreach (var kind in pKinder)
+        {
+            if (kind.Name == "ensure")
+            {
+                EvaluateBlock(kind);
+            }
+        }
+    }
+
 
     private RubyValue EvaluateBlock(RubyNode pNode)
     {
