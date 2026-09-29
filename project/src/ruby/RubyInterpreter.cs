@@ -431,6 +431,26 @@ public sealed class RubyInterpreter
     /// <summary>Whether a <c>return</c> has been seen, which stops the loops.</summary>
     private bool _returned;
 
+    /// <summary>
+    /// Whether a <c>break</c> has been seen, which stops the loop around it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a flag and not an exception.</strong> Ruby gives
+    /// <c>break</c> a value, and a reader that threw for it would have to
+    /// catch it at every loop, <strong>and a <c>break</c> in a block inside
+    /// a loop would have ended the loop and not the block</strong> — which
+    /// is the sentence <c>[1,2,3].each { |x| break if x == 2 }</c> is.
+    /// </remarks>
+    private bool _gebrochen;
+
+    /// <summary>
+    /// Whether a <c>next</c> has been seen, which skips the rest of one turn.
+    /// </summary>
+    private bool _weiter;
+
+    /// <summary>What <c>break</c> or <c>next</c> carried out of the loop.</summary>
+    private RubyValue _abbruchWert = RubyValue.Nil;
+
     /// <summary>The class the script is inside, or null at the top.</summary>
     private RubyType? _aktuellerTyp;
 
@@ -657,6 +677,8 @@ public sealed class RubyInterpreter
             RubyNodeKind.Undef => EvaluateUndef(pNode),
             RubyNodeKind.SuperCall => EvaluateSuper(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
+            RubyNodeKind.Break => EvaluateAbbruch(pNode, true),
+            RubyNodeKind.Next => EvaluateAbbruch(pNode, false),
             RubyNodeKind.While => EvaluateWhile(pNode),
             RubyNodeKind.Begin => EvaluateBegin(pNode),
             RubyNodeKind.Block => EvaluateBlock(pNode),
@@ -776,30 +798,35 @@ public sealed class RubyInterpreter
             }
         }
 
-        // **Und `==` und `!=` fragen zuerst das Objekt.** Zwei Structs mit
-        // denselben Feldern sind gleich,
-        // **und ein Leser, der nur die Werte verglich, wuerde sagen, zwei
-        // gleiche Waffen seien verschieden** -- **und
-        // `liste.include?(waffe)` wuerde sie nicht finden,
-        // und jede Lageranzeige waere leer.**
+        // **And `==` and `!=` ask the script first.** A game that writes
+        // its own equality writes `def ==(other)`,
+        // **and `a == b` goes to `Apply`, which is static and cannot call a
+        // script method** --
+        // **and without this line a `def ==` in a class had no effect**, and
+        // `list.include?(held)` was always false. Measured: `a == b` with a
+        // `def ==` answered false and said *a value has no method 'n=' on
+        // this host* -- **and the message spoke of a host that was never
+        // asked.**
         //
-        // **Und `!=` ist `not ==`, und nicht ein eigener Vergleich.**
-        // `a != b` ist in Ruby `not (a == b)`,
-        // **und ein Leser, der beides getrennt verglich, haette zwei Stellen,
-        // an denen die Struct-Regel fehlen kann** -- **und an der zweiten
-        // waere sie dann auch weg.**
+        // **And the two sides may answer it.** `held == held` is
+        // symmetric,
+        // **and a reader that asked only the left one would have answered
+        // `a == b` wrong and `b == a` right**, depending on which value
+        // stood on the left.
         if (links is "==" or "!=")
         {
+            var ausDemSkript = VergleichMitSkript(pNode, "==");
+            if (ausDemSkript != null)
+            {
+                return links == "==" ? ausDemSkript
+                    : RubyValue.OfBoolean(!Truthy(ausDemSkript));
+            }
+
             var erst = Evaluate(Operands(pNode)[0]);
             var zweit = Evaluate(Operands(pNode)[1]);
             var verglichen = StructMethode(erst, "==", [zweit]);
             if (verglichen == null)
             {
-                // **Und die andere Seite darf es auch sein.** `held == held`
-                // ist symmetrisch,
-                // **und ein Leser, der nur links fragte, haette
-                // `held == held` falsch und `held == held` richtig
-                // beantwortet**, je nachdem, welcher Wert links stand.
                 verglichen = StructMethode(zweit, "==", [erst]);
             }
 
@@ -1274,7 +1301,24 @@ public sealed class RubyInterpreter
         // zurueckgibt, nicht der, den er sammelt** -- **ein Leser, der
         // beides mochte, muesste die Liste als Empfaenger geben, und das
         // ist die Stelle, an der es entschieden wird.**
-        var grenze = _blockGrenze.Count > 0 ? _blockGrenze[^1] : _methodenGrenze;
+        // **Und ein Block sieht die Variablen der Methode, und das ist
+        // Rubys Regel.** `local_push` haengt die neue Ebene mit
+        // `local->prev = lvtbl` **an die Kette an und kappt sie nicht** --
+        // verifiziert in `parse.y` aus Ruby 1.8.1.
+        //
+        // **Die alte Fassung fing bei der Blockebene an, und damit las und
+        // schrieb ein Block nur seine eigenen Namen.** Gemessen:
+        // `g = []; 3.times { |i| g.push(i) }; g.length` war **0** --
+        // **und genau dieser Satz baut jedes Menue und jedes Fenster eines
+        // Spiels**, **und `g` ist ausserhalb gesetzt, also ist es keine
+        // neue Variable des Blocks.**
+        // *Der Kommentar, der diese Regel begruendete, nannte `3.times
+        // { |i| g.push(i) }` als den Fall, fuer den sie noetig sei --
+        // und der Fall funktionierte nicht.*
+        // **Und die Kette geht bis zur Methode, und nicht bis zur
+        // Blockebene.** `local_push` haengt die Ebene an,
+        // **und nur `ruby_dyna_vars` wird in `opt_block_var` gerettet.**
+        var grenze = _methodenGrenze;
         for (var i = _scopes.Count - 1; i >= grenze; i--)
         {
             if (_scopes[i].TryGetValue(pName, out var wert))
@@ -1443,6 +1487,106 @@ public sealed class RubyInterpreter
         return RubyValue.Nil;
     }
 
+    private int InstanzNummer(RubyValue pWert)
+    {
+        if (pWert.Kind != RubyValueKind.Object)
+        {
+            // **Und fuer jeden Wert gilt derselbe Satz.** `1.object_id` ist
+            // eine Zahl und `1.object_id == 1.object_id`,
+            // **denn kleine Zahlen sind in Ruby dieselben Objekte.**
+            return 8 + (int)pWert.Kind;
+        }
+
+        if (!_instanzNummern.TryGetValue(pWert, out var nummer))
+        {
+            _naechsteInstanzNummer += 2;
+            nummer = _naechsteInstanzNummer;
+            _instanzNummern[pWert] = nummer;
+        }
+
+        return nummer;
+    }
+
+
+    /// <summary>
+    /// A copy that does not share what can be written.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The copy.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the fields are copied one by one.</strong> An object has
+    /// its own store, **and a copy that pointed at the same store would be
+    /// the same object under a second name** — and `a.dup.n = 2` would
+    /// change `a.n`.
+    /// </para>
+    /// <para>
+    /// <strong>And a list is a new list, and a hash a new hash.</strong>
+    /// `l = [1,2]; d = l.dup; d << 3` leaves `l` with two entries,
+    /// **and a reader that handed back the same list would have three in
+    /// both** — and a game's party list would grow when a plugin took a
+    /// copy of it.
+    /// </para>
+    /// <para>
+    /// <strong>And a number and a symbol are themselves.</strong> Ruby hands
+    /// back the same object for those, **and a copy of `1` is `1`** — and a
+    /// reader that made a fresh one would answer an object where a number
+    /// is expected, and every arithmetic on it would go through the host.
+    /// </para>
+    /// </remarks>
+    private static RubyValue Kopie(RubyValue pWert)
+    {
+        switch (pWert.Kind)
+        {
+            case RubyValueKind.Object:
+                {
+                    // **Und ein Objekt mit einer Klasse wird kein
+                    // Feldhaufen.** `Kopie` baut eine Liste, und
+                    // `OfArray` weiss nichts von der Klasse,
+                    // **und `a.dup` waere dann ein Objekt ohne ClassName** --
+                    // **und `EigeneMethode` ginge auf `null` und `b.n = 2`
+                    // wuerde sagen *a value has no method 'n=' on this
+                    // host*** -- **und genau das ist gemessen worden.**
+                    // **Die Kopie traegt also den Klassennamen bei sich,
+                    // und die Felder kommen einzeln hinein.**
+                    if (!string.IsNullOrEmpty(pWert.ClassName)
+                        && pWert.Items.Count == 0)
+                    {
+                        var feldKopie = RubyValue.OfObject(pWert.ClassName, new Dictionary<RubyValue, RubyValue>());
+                        foreach (var (name, wert) in pWert.Felder)
+                        {
+                            feldKopie.Felder[name] = Kopie(wert);
+                        }
+
+                        return feldKopie;
+                    }
+
+                    var neueListe = new List<RubyValue>(pWert.Items.Count);
+                    foreach (var eintrag in pWert.Items)
+                    {
+                        neueListe.Add(Kopie(eintrag));
+                    }
+
+                    var kopie = pWert.IsHash
+                        ? RubyValue.OfHash(neueListe)
+                        : RubyValue.OfArray(neueListe);
+                    foreach (var (name, wert) in pWert.Felder)
+                    {
+                        kopie.Felder[name] = Kopie(wert);
+                    }
+
+                    return kopie;
+                }
+
+            case RubyValueKind.String:
+                return RubyValue.OfBytes([.. pWert.Bytes]);
+
+            default:
+                return pWert;
+        }
+    }
+
+
     /// <summary>
     /// A number that is the same for one object and not for another.
     /// </summary>
@@ -1473,26 +1617,6 @@ public sealed class RubyInterpreter
         or ">" or "<=" or ">=" or "<=>" or "<<" or ">>" or "&" or "|"
         or "^" or "[]" or "[]=" or "==" or "===";
 
-
-    private int InstanzNummer(RubyValue pWert)
-    {
-        if (pWert.Kind != RubyValueKind.Object)
-        {
-            // **Und fuer jeden Wert gilt derselbe Satz.** `1.object_id` ist
-            // eine Zahl und `1.object_id == 1.object_id`,
-            // **denn kleine Zahlen sind in Ruby dieselben Objekte.**
-            return 8 + (int)pWert.Kind;
-        }
-
-        if (!_instanzNummern.TryGetValue(pWert, out var nummer))
-        {
-            _naechsteInstanzNummer += 2;
-            nummer = _naechsteInstanzNummer;
-            _instanzNummern[pWert] = nummer;
-        }
-
-        return nummer;
-    }
 
 
     private RubyValue? WertMethode(
@@ -1654,13 +1778,31 @@ public sealed class RubyInterpreter
                         ? "Object"
                         : _aktuelleMethode);
 
-            case "freeze" or "frozen?" or "dup" or "clone" or "itself":
-                // **`freeze` gibt den Empfaenger zurueck, weil nichts
-                // eingefroren werden kann.** Diese Runtime hat keine
-                // veraenderbaren Wertobjekte, **und ein Leser, der eine
-                // Kopie machen wuerde, haette `f.dup` zwei verschiedene
-                // Dinge gegeben**, von denen das Spiel eines erwartet.
-                return pMethode == "frozen?" ? RubyValue.OfBoolean(true) : pEmpfaenger;
+            case "dup" or "clone":
+                // **Und `dup` macht eine Kopie, und nicht denselben Wert
+                // noch einmal.** `a = Held.new; b = a.dup; b.n = 2`
+                // **laesst `a.n` bei 1**,
+                // **und ein Leser, der den Empfaenger zurueckgab, wuerde
+                // `a.n` auch auf 2 setzen** -- **und ein Spiel, das zwei
+                // Figuren aus einem Helden macht, haette dieselbe Figur
+                // zweimal, und jede Aenderung an der einen waere an der
+                // anderen sichtbar.**
+                return Kopie(pEmpfaenger);
+
+            case "itself":
+                return pEmpfaenger;
+
+            case "freeze" or "frozen?":
+                // **Und `freeze` gibt den Empfaenger zurueck, weil es hier
+                // nichts einzufrieren gibt.** `frozen?` ist immer wahr,
+                // **und ein Leser, der `false` sagte, wuerde jedes Skript
+                // stoppen, das seinen Zustand einfriert**, **obwohl der
+                // Zustand sich trotzdem aendern wuerde** -- **das ist die
+                // schlimmere Haelfte des Vertrags: der Code glaubt, er
+                // sei sicher, und ist es nicht.**
+                return pMethode == "frozen?"
+                    ? RubyValue.OfBoolean(true)
+                    : pEmpfaenger;
 
             default:
                 _ = pArgumente;
@@ -4678,6 +4820,17 @@ public sealed class RubyInterpreter
             // **und `pEmpfaenger` waere die Zahl 3** -- **und ein Leser, der
             // die Zahl als `self` gibt, haette den Block auf einer Zahl
             // laufen lassen**, **wo `@zeilen` nichts ist.**
+            // **Und `break` endet die Zaehlung.** `3.times { |i| break
+            // if i == 2 }` soll zweimal laufen,
+            // **und ohne diese Zeile lief es dreimal und der dritte Durchgang
+            // war der, den das Spiel abbrechen wollte.**
+            if (_gebrochen)
+            {
+                _gebrochen = false;
+                _abbruchWert = RubyValue.Nil;
+                break;
+            }
+
             BlockAufrufen(
                 block, [RubyValue.OfInteger(i)], _self ?? pEmpfaenger);
         }
@@ -5124,6 +5277,31 @@ public sealed class RubyInterpreter
                 default:
                     return null;
             }
+
+            // **Und `next` und `break` kommen hier an, und nicht im
+            // Schleifenkopf.** Das Flag entsteht **während** des Durchgangs,
+            // **und ein Leser, der am Kopf nachsah, sah es einen Durchgang
+            // zu spaet** -- **und `next` waere dann ein `break` und `break`
+            // waere gar nichts.** Gemessen: `[1,2,3].each { |x| next if
+            // x == 2 }` addierte alle drei.
+            // *Ein Steuerwort, das am Kopf geprueft wird, beendet den
+            // Lauf, in dem es geschrieben wurde, und nicht den, der folgt.*
+            if (_gebrochen)
+            {
+                _gebrochen = false;
+                var gebrochenWert = _abbruchWert;
+                _abbruchWert = RubyValue.Nil;
+                return pMethode is "find" or "detect" && gefunden.Kind
+                    != RubyValueKind.Nil
+                        ? gefunden
+                        : gebrochenWert;
+            }
+
+            if (_weiter)
+            {
+                _weiter = false;
+                continue;
+            }
         }
 
         // **Und was aus der Schleife herauskam, wird nach der Sache
@@ -5217,15 +5395,72 @@ public sealed class RubyInterpreter
     /// happens in the reference too.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// A comparison a script wrote, and not the built-in one.
+    /// </summary>
+    /// <param name="pNode">The node.</param>
+    /// <param name="pOperator">The operator as written.</param>
+    /// <returns>The answer, or null when the script has no rule.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And `==` is not built out of `&lt;=&gt;`.</strong>
+    /// <c>def ==(other)</c> is the sentence with which a game writes its own
+    /// equality,
+    /// **and <c>a == b</c> is <c>a.==(b)</c> in Ruby, and not
+    /// <c>a.&lt;=&gt;(b) == 0</c>** -- **and a reader that confused the two
+    /// would hold a class that writes only <c>==</c> to be unequal**,
+    /// **and <c>list.include?(held)</c> would always be false.**
+    /// </para>
+    /// <para>
+    /// <strong>And the other side may answer it.</strong> <c>held == held</c>
+    /// is symmetric,
+    /// **and a reader that asked only the left one would answer <c>a == b</c>
+    /// wrong and <c>b == a</c> right** — and the answer would change when
+    /// the game swapped two operands.
+    /// </para>
+    /// <para>
+    /// <strong>And a value with no rule goes to the built-in, which knows
+    /// numbers and strings</strong> — **and not to null**, because
+    /// <c>5 &lt; 6</c> is a number and not an object.
+    /// </para>
+    /// </remarks>
     private RubyValue? VergleichMitSkript(RubyNode pNode, string pOperator)
     {
         var linkerWert = Evaluate(Operands(pNode)[0]);
+
+        if (pOperator == "==")
+        {
+            var erste = EigeneMethode(linkerWert, "==");
+            if (erste != null)
+            {
+                return Aufrufen(
+                    erste,
+                    [Evaluate(Operands(pNode)[1])],
+                    linkerWert.Kind == RubyValueKind.Object
+                        ? linkerWert.ClassName
+                        : _aktuellerTyp?.Name,
+                    linkerWert);
+            }
+
+            var rechte = Evaluate(Operands(pNode)[1]);
+            var vonRechts = EigeneMethode(rechte, "==");
+            if (vonRechts != null)
+            {
+                return Aufrufen(
+                    vonRechts,
+                    [linkerWert],
+                    rechte.Kind == RubyValueKind.Object
+                        ? rechte.ClassName
+                        : _aktuellerTyp?.Name,
+                    rechte);
+            }
+
+            return null;
+        }
+
         var eigene = EigeneMethode(linkerWert, "<=>");
         if (eigene == null)
         {
-            // **Und ohne Regel geht es an den eingebauten**, der Zahlen und
-            // Strings kennt. **Nicht an null**, denn `5 < 6` ist eine Zahl
-            // und kein Objekt.
             return null;
         }
 
@@ -5237,8 +5472,8 @@ public sealed class RubyInterpreter
                 : _aktuellerTyp?.Name,
             linkerWert);
 
-        // **Und `nil` heisst, dass es keine Antwort gab.** Das ist nicht
-        // null als Rueckgabe, **sondern eine Antwort: false.**
+        // **And `nil` means that there was no answer.** That is not null as
+        // a return, **but an answer: false.**
         if (dreiwert.Kind != RubyValueKind.Integer)
         {
             return RubyValue.OfBoolean(false);
@@ -6305,7 +6540,15 @@ public sealed class RubyInterpreter
             foreach (var teil in Statements(rumpf))
             {
                 letztes = Evaluate(teil);
-                if (_returned)
+
+                // **Und `next` und `break` beenden den Rumpf hier.** `next
+                // if x == 2` ist ein `if`-Knoten im Rumpf,
+                // **und ohne diese Zeile lief der Rest des Rumpfs weiter**
+                // -- **und `each { |x| next if x == 2; r = r + x }` haette
+                // dann bei jedem Element `r` erhoeht.**
+                // *Ein Steuerwort, das im Rumpf steht, beendet den Rumpf und
+                // nicht erst den Lauf um ihn herum.*
+                if (_returned || _gebrochen || _weiter)
                 {
                     break;
                 }
@@ -6497,7 +6740,21 @@ public sealed class RubyInterpreter
         // Block einen `while`-Rumpf und ein `begin` in sich tragen kann,
         // **und die sind kein eigener Rahmen, sondern Teil desselben
         // Rumpfes.** Die Wand ist der Rahmen, den `BlockAufrufen` gestellt hat.
-        var grenze = _blockGrenze.Count > 0 ? _blockGrenze[^1] : _methodenGrenze;
+        // **Und ein Block sieht die Variablen der Methode, und das ist
+        // Rubys Regel.** `local_push` haengt die neue Ebene mit
+        // `local->prev = lvtbl` **an die Kette an und kappt sie nicht** --
+        // verifiziert in `parse.y` aus Ruby 1.8.1.
+        //
+        // **Die alte Fassung fing bei der Blockebene an, und damit las und
+        // schrieb ein Block nur seine eigenen Namen.** Gemessen:
+        // `g = []; 3.times { |i| g.push(i) }; g.length` war **0** --
+        // **und genau dieser Satz baut jedes Menue und jedes Fenster eines
+        // Spiels**, **und `g` ist ausserhalb gesetzt, also ist es keine
+        // neue Variable des Blocks.**
+        // *Der Kommentar, der diese Regel begruendete, nannte `3.times
+        // { |i| g.push(i) }` als den Fall, fuer den sie noetig sei --
+        // und der Fall funktionierte nicht.*
+        var grenze = _methodenGrenze;
         for (var i = _scopes.Count - 1; i >= grenze; i--)
         {
             if (_scopes[i].ContainsKey(pName))
@@ -6617,9 +6874,21 @@ public sealed class RubyInterpreter
         }
 
         var letztes = RubyValue.Nil;
-        while (!Truthy(Evaluate(bedingung)) && !_returned)
+        while (!Truthy(Evaluate(bedingung)) && !_returned && !_gebrochen)
         {
+            _weiter = false;
             letztes = Evaluate(rumpf);
+            _weiter = false;
+            if (_gebrochen)
+            {
+                break;
+            }
+        }
+
+        if (_gebrochen)
+        {
+            _gebrochen = false;
+            return _abbruchWert;
         }
 
         return letztes;
@@ -6785,7 +7054,21 @@ public sealed class RubyInterpreter
                 TabelleFuer(ziel)[ziel.Name ?? string.Empty] = element;
             }
 
+            _weiter = false;
             letztes = Evaluate(rumpf);
+
+            // **Und `break` beendet die Schleife und nimmt seinen Wert
+            // mit.** `for x in xs; break x; end` gibt das erste Element,
+            // **und ein Leser, der den Wert fallen liess, wuerde nil
+            // geben** -- **und `xs.first` waere dann der ganze Satz eines
+            // Spiels.**
+            if (_gebrochen)
+            {
+                _gebrochen = false;
+                return _abbruchWert;
+            }
+
+            _weiter = false;
             if (_returned)
             {
                 break;
@@ -6797,6 +7080,31 @@ public sealed class RubyInterpreter
 
     // ---- Control flow
 
+    /// <summary>
+    /// An `if`, whether it stands on its own or hangs on the statement
+    /// before it.
+    /// </summary>
+    /// <param name="pNode">The node.</param>
+    /// <returns>The branch that ran.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the body is asked before the written form, because a
+    /// modifier writes it under the name <c>Body</c> and the written
+    /// <c>if</c> under <c>WhenTrue</c>.</strong> `next if x == 2` is an
+    /// <c>if</c> whose body is the <c>next</c> and whose condition is
+    /// <c>x == 2</c>,
+    /// **and <c>EvaluateBranch(WhenTrue)</c> delivered an empty list**,
+    /// **because <c>PartsOf</c> gives nothing when the roles are there and
+    /// the name is not among them** — **and the whole body did not run.**
+    /// </para>
+    /// <para>
+    /// <strong>And that is the commoner form of the two.</strong> Measured:
+    /// <c>each { |x| next if x == 2; r = r + x }</c> added all three,
+    /// **and <c>each { |x| if x == 2; next; end; r = r + x }</c> added
+    /// four** — *two spellings of one sentence, and the one with a word
+    /// in the middle did nothing.*
+    /// </para>
+    /// </remarks>
     private RubyValue EvaluateIf(RubyNode pNode)
     {
         var bedingung = Child(pNode, RubyNodeRole.Condition);
@@ -6807,11 +7115,52 @@ public sealed class RubyInterpreter
 
         if (Truthy(Evaluate(bedingung)))
         {
-            return EvaluateBranch(pNode, RubyNodeRole.WhenTrue);
+            return PartsOf(pNode, RubyNodeRole.Body).Count > 0
+                ? EvaluateBranch(pNode, RubyNodeRole.Body)
+                : EvaluateBranch(pNode, RubyNodeRole.WhenTrue);
         }
 
         return EvaluateBranch(pNode, RubyNodeRole.WhenFalse);
     }
+
+    /// <summary>
+    /// `break` and `next`, and what they carry out of the loop.
+    /// </summary>
+    /// <param name="pNode">The node.</param>
+    /// <param name="pIstBreak">true for `break`, false for `next`.</param>
+    /// <returns>What was carried, so a chain sees it.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the value is kept, and not thrown.</strong>
+    /// <c>break 9</c> answers nine,
+    /// **and a reader that answered nil would make a game's search return
+    /// nothing at all** — and a `find`-like sentence that returns the value
+    /// it found would return nil.
+    /// </para>
+    /// <para>
+    /// <strong>And `break` and `next` are two flags and not one.</strong>
+    /// `next` skips the rest of one turn and goes on,
+    /// **and a reader with one flag would have ended the loop on `next`** —
+    /// **and every `next` in every enumerator would have been a `break`.**
+    /// </para>
+    /// </remarks>
+    private RubyValue EvaluateAbbruch(RubyNode pNode, bool pIstBreak)
+    {
+        _abbruchWert = pNode.Children.Count > 0
+            ? Evaluate(pNode.Children[0])
+            : RubyValue.Nil;
+        if (pIstBreak)
+        {
+            _gebrochen = true;
+        }
+        else
+        {
+            _weiter = true;
+        }
+
+        return _abbruchWert;
+    }
+
 
     private RubyValue EvaluateWhile(RubyNode pNode)
     {
@@ -6839,14 +7188,36 @@ public sealed class RubyInterpreter
         }
 
         var letztes = RubyValue.Nil;
-        while (Truthy(Evaluate(bedingung)) && !_returned)
+        while (Truthy(Evaluate(bedingung)) && !_returned && !_gebrochen)
         {
             if (rumpf == null)
             {
                 return Refuse(pNode);
             }
 
+            _weiter = false;
             letztes = Evaluate(rumpf);
+
+            // **Und `next` beendet den Rumpf dieser Runde und nicht die
+            // Schleife.** `while x; next; y; end` macht weiter,
+            // **und ein Leser, der das Flag nicht zuruecksetzte, wuerde die
+            // Runde nach der zweiten beenden** -- **und `y` wuerde nur im
+            // ersten Durchlauf laufen.**
+            if (_weiter)
+            {
+                _weiter = false;
+            }
+
+            if (_gebrochen)
+            {
+                break;
+            }
+        }
+
+        if (_gebrochen)
+        {
+            _gebrochen = false;
+            return _abbruchWert;
         }
 
         return letztes;
@@ -9936,7 +10307,21 @@ public sealed class RubyInterpreter
         // Block als "vorhanden" gelten, **während `Local` nil lieferte** --
         // und ein Spiel, das `defined?(x)` schreibt, bekame eine Antwort,
         // die der naechste Zugriff nicht bestaetigt.
-        var grenze = _blockGrenze.Count > 0 ? _blockGrenze[^1] : _methodenGrenze;
+        // **Und ein Block sieht die Variablen der Methode, und das ist
+        // Rubys Regel.** `local_push` haengt die neue Ebene mit
+        // `local->prev = lvtbl` **an die Kette an und kappt sie nicht** --
+        // verifiziert in `parse.y` aus Ruby 1.8.1.
+        //
+        // **Die alte Fassung fing bei der Blockebene an, und damit las und
+        // schrieb ein Block nur seine eigenen Namen.** Gemessen:
+        // `g = []; 3.times { |i| g.push(i) }; g.length` war **0** --
+        // **und genau dieser Satz baut jedes Menue und jedes Fenster eines
+        // Spiels**, **und `g` ist ausserhalb gesetzt, also ist es keine
+        // neue Variable des Blocks.**
+        // *Der Kommentar, der diese Regel begruendete, nannte `3.times
+        // { |i| g.push(i) }` als den Fall, fuer den sie noetig sei --
+        // und der Fall funktionierte nicht.*
+        var grenze = _methodenGrenze;
         for (var i = _scopes.Count - 1; i >= grenze; i--)
         {
             if (_scopes[i].ContainsKey(pName))

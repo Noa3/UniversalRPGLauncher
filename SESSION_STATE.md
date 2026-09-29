@@ -9932,3 +9932,45 @@ einem Objekt, das `nil` war** -- *ein Index auf einem Wert, den man nicht
 geprueft hat, gibt eine Zahl und nicht "nichts".*
 
 `TestRubyInterpreter: 249/249`, `All 1801 tests passed`.
+
+
+## Und `break`, `dup`, und vier Tests, die eine Abweichung festhielten
+
+**`break` und `next` wurden nie ausgewertet.** `RubyNodeKind.Break`
+existierte, der Parser machte den Knoten, der Interpreter nicht, **und die
+Meldung war *this interpreter does not evaluate a Break node*.**
+**Und `while true; break 7; end` lief 2000000 Schritte**, **und die Meldung
+war *this script ran 2000000 steps without finishing*** -- **und ein Spiel,
+das auf eine Bedingung wartet, hätte zwei Millionen Schritte gehängt und
+danach gestoppt, und der Stopp ist das einzige, was der Spieler sieht.**
+
+**Und der Wert fehlte auch im Parser**: `break 7` wurde zu `break`, und die 7
+blieb als nächster Ausdruck stehen.
+
+**Und `next if x == 2` ist ein `if` mit der Rolle `Body`, während
+`EvaluateIf` nach `WhenTrue` fragte** -- **und `PartsOf` gibt leer zurück,
+wenn die Rollen da sind und der Name fehlt.** Gemessen: `each { |x| next
+if x == 2; r = r + x }` addierte alle drei, **und `each { |x| if x == 2;
+next; end; r = r + x }` addierte vier.** *Zwei Schreibweisen desselben
+Satzes, und die mit einem Wort dazwischen tat nichts.*
+
+**Und `dup` gab denselben Wert noch einmal zurück**, **und die Kopie eines
+Objekts mit Klasse verlor ihren Klassennamen**, **und die Meldung dafür
+sprach von einem Host, der nie gefragt wurde.**
+
+**Und vier Tests hielten eine Abweichung fest, die nicht funktionierte.**
+`Local` und `SetLocal` fingen bei der Blockebene an, **und der Kommentar,
+der das begründete, nannte `3.times { |i| g.push(i) }` als den Fall, für den
+sie nötig sei.** Gemessen: **`g.length` war 0** -- **und genau dieser Satz
+baut jedes Menü eines Spiels.**
+
+**Verifiziert in `parse.y` aus Ruby 1.8.1:** `local_push` schreibt
+`local->prev = lvtbl` und **`lvtbl = local`, und die Kette bleibt offen**;
+**nur `ruby_dyna_vars` wird in `opt_block_var` gerettet.** Die vier Tests
+behaupteten das Gegenteil, ausführlich begründet, **und sie lagen falsch.**
+Sie sind umgestellt.
+
+*Ein Kommentar, der den Fall nennt, an dem die Regel scheitert, ist eine
+Behauptung und kein Beleg.*
+
+`All 1804 tests passed`, Validator gruen.

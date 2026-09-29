@@ -295,15 +295,33 @@ public partial class TestRubyInterpreter
 
         AssertEq(wert.Items.Count, 2,
             "**the method answered two values**");
-        AssertEq(AsInteger(wert.Items[0]), 99,
-            "**the caller's x is still 99 after the block** — the block's x "
-                + "is its own, and a reader that shared the scope would have "
-                + "answered one here, having had the block write over the "
-                + "method's variable");
+        // **Und die Erwartung ist umgedreht, weil die Quelle es so sagt.**
+        // In `parse.y` aus Ruby 1.8.1 haengt `local_push` die neue Ebene
+        // mit `local->prev = lvtbl` **an die Kette an und kappt sie nicht**,
+        // **und nur `ruby_dyna_vars` wird in `opt_block_var` gerettet und
+        // wiederhergestellt.** **Der Block sieht also die Variablen der
+        // Methode**, **und `x = 1` schreibt in ihre 99 hinein.**
+        //
+        // **Die alte Fassung dieses Tests behauptete 99, und die
+        // Abweichung war ausfuehrlich begruendet** -- **mit dem Satz
+        // `3.times { |i| g.push(i) }` als dem Fall, fuer den sie noetig
+        // sei.** Gemessen war genau der Satz **null**: `g = []; 3.times
+        // { |i| g.push(i) }; g.length` gab 0. **Und jetzt gibt es 3.**
+        // *Ein Kommentar, der den Fall nennt, an dem die Regel scheitert,
+        // ist eine Behauptung und kein Beleg -- und der Fall war der
+        // haeufigste, den ein Spiel schreibt.*
+        AssertEq(AsInteger(wert.Items[0]), 1,
+            "**the caller's x is one after the block** — verified in "
+                + "`parse.y` from Ruby 1.8.1, where `local_push` links the "
+                + "new level with `local->prev = lvtbl` and does not cut "
+                + "the chain, and only `ruby_dyna_vars` is saved in "
+                + "`opt_block_var`; a reader that walled the block would "
+                + "have left 99 here, and then "
+                + "`3.times { |i| g.push(i) }` would have gathered nothing");
         AssertEq(AsInteger(wert.Items[1]), 1,
-            "**and the block answered one** — its own x, which is a different "
-                + "x from the caller's, and a reader that looked outward would "
-                + "have written over the method's 99 and answered 99 here");
+            "**and the block answered one** — the same x, and a reader that "
+                + "made a second name for it would have written over the "
+                + "method's 99 and answered 99 here");
     }
 
     /// <summary>
@@ -343,17 +361,24 @@ public partial class TestRubyInterpreter
         AssertEq(wert.Items.Count, 3,
             "**the method answered three values**");
         AssertEq(AsInteger(wert.Items[0]), 99,
-            "**the caller's x is untouched**");
-        AssertEq(AsInteger(wert.Items[1]), 1,
-            "**the outer block's answer is its own one** — a reader whose "
-                + "wall was never popped would have let the inner block see "
-                + "the outer's x and written over it, so the outer would "
-                + "have answered two here");
-        AssertEq(AsInteger(wert.Items[2]), 1,
-            "**and the second call answers the same one** — the wall left "
-                + "behind by the first call is what would have made this "
-                + "answer something else, and two calls are what it takes to "
-                + "see that");
+            "**the caller's x is still 99** — the method's own variable, and "
+                + "the two calls wrote only their own `x = 1` and `x = 2` "
+                + "into the name the block found, which is the method's "
+                + "because `local_push` links the new level with "
+                + "`local->prev = lvtbl` and does not cut the chain");
+        // **Und gemessen: 2 und 2, und nicht 1 und 1.** Der innere Block
+        // schreibt `x = 2` in denselben Namen, und der aeussere liest
+        // danach,
+        // **und das ist die Kette, die Ruby 1.8.1 baut.**
+        AssertEq(AsInteger(wert.Items[1]), 2,
+            "**and the outer block's answer is two** — the inner block wrote "
+                + "`x = 2` into the same name and the outer read it back; the "
+                + "old expectation was one, and it came from the wall that "
+                + "made each block a second name for the same variable");
+        AssertEq(AsInteger(wert.Items[2]), 2,
+            "**and the second call answers the same** — two calls are what "
+                + "it takes to see whether the first left anything behind, and "
+                + "it did not");
     }
 
     /// <summary>
@@ -394,12 +419,19 @@ public partial class TestRubyInterpreter
 
         AssertEq(wert.Items.Count, 2,
             "**the method answered two values**");
-        AssertTrue(wert.Items[0].Kind == RubyValueKind.Nil,
-            "**and the first read is nil** — the block named `x` and did not "
-                + "write it, and a reader whose `Local` walked past the block "
-                + "wall would have handed it the method's 99, which is a "
-                + "value out of a name the block never wrote");
-        AssertTrue(wert.Items[1].Kind == RubyValueKind.Nil,
+        // **Und beide lesen die 99 der Methode, und nicht nil.**
+        // `local_push` haengt die Ebene an die Kette, **und der Weg nach
+        // aussen bleibt offen** -- **und der Name `x` ist derselbe Name,
+        // weil er derselbe ist.**
+        AssertEq(AsInteger(wert.Items[0]), 99,
+            "**the first read is the method's 99** — verified in `parse.y` "
+                + "from Ruby 1.8.1, where `local_push` links with "
+                + "`local->prev = lvtbl` and does not cut the chain; a reader "
+                + "that walled the block would have answered nil here, and "
+                + "then `3.times { |i| g.push(i) }` would have gathered "
+                + "nothing, which is the sentence every window of a game is "
+                + "built from");
+        AssertEq(AsInteger(wert.Items[1]), 99,
             "**and so is the second** — a wall that was pushed and never "
                 + "popped would have left the second call inside the first "
                 + "one's frame, and one read is enough to see it");
@@ -444,14 +476,18 @@ public partial class TestRubyInterpreter
         AssertEq(wert.Items.Count, 2,
             "**the block answered two things** — the question and the value, "
                 + "which are the same fact seen twice");
-        AssertTrue(wert.Items[0].Kind == RubyValueKind.Nil,
-            "**`defined?(x)` in the block is nil** — the block named `x` and "
-                + "wrote nothing, and a reader whose `HasLocal` walked past "
-                + "the block wall would have answered the local-variable word here "
-                + "and then answered nil for the very same name, which is a "
-                + "script lying to itself");
-        AssertTrue(wert.Items[1].Kind == RubyValueKind.Nil,
-            "**and `x` is nil** — the two answers agree, and a reader that "
-                + "walled one and not the other would have them disagree");
+        // **Und die beiden Antworten sind das Wort und die 99, und beide
+        // stimmen.** `defined?(x)` sagt *local-variable*, **und `x` ist die
+        // 99 der Methode** -- **und ein Leser, der eines walled und das
+        // andere nicht, wuerde sie sich widersprechen lassen**, **und genau
+        // das war der Grund, warum beide jetzt durch die Kette gehen.**
+        AssertEq(wert.Items[0].ToString(), "local-variable",
+            "**`defined?(x)` in the block says local-variable** — the name "
+                + "belongs to the method and the block sees it, and the "
+                + "answer is the one Ruby 1.8.1 gives");
+        AssertEq(AsInteger(wert.Items[1]), 99,
+            "**and `x` is the method's 99** — the two answers agree, and a "
+                + "reader that walled one and not the other would have them "
+                + "disagree, which is a script lying to itself");
     }
 }

@@ -638,6 +638,78 @@ public sealed class RubyParser
             $"A member name was expected at offset {token.Offset}, but '{token.Text}' is there.",
             token.Line);
     }
+
+    /// <summary>
+    /// A member name that ends in `=`, which is how a setter is written.
+    /// </summary>
+    /// <returns>The name with its `=`, or null when there is none.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>def hp=(v)</c> is a setter, and the <c>=</c> is part
+    /// of the name.</strong> Ruby allows it, **and <c>attr_writer</c> builds
+    /// exactly such a method**,
+    /// **and a reader that stopped at the identifier would have read
+    /// <c>hp</c> and then found an <c>=</c> where a parameter list
+    /// belongs** — **and every game that writes a setter by hand would be
+    /// a syntax error, while <c>attr_writer</c> in the same file worked.**
+    /// </para>
+    /// <para>
+    /// <strong>And <c>==</c> is not a setter's tail.</strong>
+    /// <c>def ==(other)</c> compares, **and a reader that took the first
+    /// <c>=</c> would have named the method <c>==</c> and then complained
+    /// about the second one.**
+    /// </para>
+    /// </remarks>
+    private string? LeseSchreiberName()
+    {
+        // **Und `def self.x` ist kein Schreiber, und der Punkt ist kein
+        // Name.** Ohne diese Grenze wuerde `LeseSchreiberName` dort eine
+        // Ausnahme werfen, wo vorher der Punktpfad lief,
+        // **und `def self.x=` waere genau so kaputt wie `def self.x`.**
+        if (Current.Kind is not (RubyTokenKind.Identifier
+            or RubyTokenKind.Constant or RubyTokenKind.Keyword)
+            && !(Current.Kind == RubyTokenKind.Operator
+                && Current.Text is "<=>" or "==" or "===" or "<<" or ">>"))
+        {
+            return null;
+        }
+
+        // **Und der Blick nach vorn, bevor der Name gelesen wird.** Der
+        // Name wird hier *einmal* gelesen,
+        // **und ein Leser, der ihn zuerst las und dann nach dem `=` sah,
+        // haette den Namen bei `def n` ohne `=` schon verbraucht** --
+        // **und der Aufrufer haette ihn noch einmal gelesen** -- **und
+        // `ReadMemberName` waere auf ein `end` gelaufen, und die Meldung
+        // waere *A member name was expected at offset 44*.**
+        // *Der Fehler nannte den Namen, und der Name war richtig: der
+        // zweite Lesevorgang hatte ihn aufgegessen.*
+        //
+        // **Und `def ==(other)` ist ein Vergleich und kein Schreiber.** Das
+        // naechste Zeichen ist dann `==` und nicht `=`,
+        // **und `Is("=")` sieht `Current.Text == "="` an** -- **und
+        // `Current` ist hier `==`** -- **und der Vergleich war wahr, und
+        // die Methode hiess `==`**, **und der Vergleich, den ein Spiel
+        // braucht, war ein Schreiber mit einem Namen `==`.**
+        if (Current.Kind == RubyTokenKind.Operator
+            && Current.Text is "==" or "===" or "=>" or "<=" or ">="
+                or "!=" or "=~")
+        {
+            return null;
+        }
+
+        var hier = _index;
+        var name = ReadMemberName();
+        if (!Is("=") || Is("==") || Is("=>") || Is("==="))
+        {
+            // **Und der Index muss zurueck, weil der Aufrufer den Namen
+            // selbst liest, wenn hier keiner herauskam.**
+            _index = hier;
+            return null;
+        }
+
+        _index++;
+        return name + "=";
+    }
     /// <summary>
     /// Whether the next tokens are a bare name and a colon.
     /// </summary>
@@ -1761,6 +1833,25 @@ public sealed class RubyParser
             case "retry":
             {
                 _index++;
+                // **Und ein Wert darf folgen, und der gehoert an denselben
+                // Knoten.** `break 7` und `next 0` sind die Saetze, mit
+                // denen ein Spiel aus einer Schleife einen Wert holt,
+                // **und der Parser nahm nur das Schluesselwort und liess die
+                // Zahl als naechsten Ausdruck stehen** -- **und dann war
+                // `break 7` gleich `break`, und der Wert der Schleife war
+                // nil.** Gemessen: `while true; break 7; end` war nil.
+                //
+                // **Und ein Wert wird nur genommen, wenn wirklich einer
+                // folgt.** `break` am Zeilenende und dann `end` ist ein
+                // Schluesselwort und kein Wert,
+                // **und ein Leser, der unbedingt einen Ausdruck laesst,
+                // wuerde dort `end` als den Wert nehmen.**
+                var wert = new List<RubyNode>();
+                if (StartetAbbruchWert())
+                {
+                    wert.Add(ParseExpression());
+                }
+
                 return new RubyNode
                 {
                     Kind = pToken.Text switch
@@ -1772,6 +1863,7 @@ public sealed class RubyParser
                     },
                     Name = pToken.Text,
                     Line = pToken.Line,
+                    Children = wert,
                 };
             }
             case "super":
@@ -1931,7 +2023,7 @@ public sealed class RubyParser
             case "def":
             {
                 _index++;
-                var name = ReadMemberName();
+                var name = LeseSchreiberName() ?? ReadMemberName();
                 // **`def self.x` ist eine Methode auf der Klasse selbst**,
                 // und der Unterschied ist der einzige Punkt an diesem
                 // Schluesselwort -- **ein Leser, der ihn uebersieht, wuerde
@@ -2417,6 +2509,47 @@ public sealed class RubyParser
             $"an alias names two things, and '{token.Text}' is at offset "
                 + $"{token.Offset} where a name belongs.",
             token.Line);
+    }
+
+    /// <summary>
+    /// Whether a value follows a `break` or a `next`.
+    /// </summary>
+    /// <returns>true when one does.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And not <c>StartsAValue</c>, because that one answers
+    /// <c>true</c> for <c>if</c>.</strong> `StartsAValue` is for a
+    /// statement's first token, where `next if x == 2` **is** an
+    /// expression,
+    /// **and after `next` is a condition and not a value** —
+    /// <strong>and taking it as one gave *'end' was expected, but the script
+    /// ends first***, **because the `if` took the rest of the block with
+    /// it.**
+    /// </para>
+    /// <para>
+    /// <strong>And a modifier at the end of a line is not a value.</strong>
+    /// `next` and then `end` is a keyword and a keyword,
+    /// **and a reader that insisted on a value would take the `end` with
+    /// it.**
+    /// </para>
+    /// </remarks>
+    private bool StartetAbbruchWert()
+    {
+        return Current.Kind switch
+        {
+            RubyTokenKind.Integer => true,
+            RubyTokenKind.Float => true,
+            RubyTokenKind.String => true,
+            RubyTokenKind.Symbol => true,
+            RubyTokenKind.Regexp => true,
+            RubyTokenKind.InstanceVariable => true,
+            RubyTokenKind.GlobalVariable => true,
+            RubyTokenKind.Identifier => true,
+            RubyTokenKind.Constant => true,
+            RubyTokenKind.Delimiter => Current.Text is "(" or "[",
+            RubyTokenKind.Operator => Current.Text is "-" or "!" or "~",
+            _ => false,
+        };
     }
 
     /// <summary>True where a value may begin, so an operator after it is binary.</summary>

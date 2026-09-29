@@ -241,6 +241,72 @@ ein No-op sieht in der Mutationsliste aus wie ein Test, der zu schwach ist.
 Also: **der tote Zweig ist weg**, **und die Regel sitzt jetzt auf dem
 Abbruch, der tatsaechlich entscheidet.**
 
+**Und `break` und `next` wurden nie ausgewertet, und der Wert kam nie an.**
+`RubyNodeKind.Break` existierte, **und der Parser machte den Knoten, und der
+Interpreter nicht** -- **und die Meldung war *this interpreter does not
+evaluate a Break node, and the node is in the tree***, **einmal pro Lauf,
+und ein Spiel, das `break` schreibt, hat seine Diagnosen mit einem Satz über
+den Quelltext des Lesers gefüllt.**
+
+**Und `while true; break 7; end` lief 2000000 Schritte**, **und die Meldung
+war *this script ran 2000000 steps without finishing*** -- **und ein Spiel,
+das auf eine Bedingung wartet, hätte zwei Millionen Schritte gehängt und
+danach gestoppt, und der Stopp ist das einzige, was der Spieler sieht.**
+
+**Und der Wert fehlte auch im Parser.** `break 7` wurde zu `break` und die 7
+blieb als nächster Ausdruck stehen, **und `next if x == 2` wurde zu einem
+`if`, dessen Rolle `Body` heißt, während `EvaluateIf` nach `WhenTrue`
+fragte** -- **und `PartsOf` gibt leer zurück, wenn die Rollen da sind und
+der Name fehlt.** Gemessen: `each { |x| next if x == 2; r = r + x }`
+addierte alle drei, **und `each { |x| if x == 2; next; end; r = r + x }`
+addierte vier.** *Zwei Schreibweisen desselben Satzes, und die mit einem Wort
+dazwischen tat nichts.*
+
+**Und ein Steuerwort, das im Rumpf steht, muss den Rumpf beenden.** Ohne das
+lief `each { |x| next if x == 2; r = r + x }` weiter, **und der Wert des
+Blocks ging in die Antwort statt in die Schleife** -- **und der Leser hat
+den Wert nie angesehen, weil eine Schleife ihren Block aufruft und dessen
+Ergebnis weglegt.**
+
+**Und `dup` gab denselben Wert noch einmal zurück.**
+
+**Und vier Tests hielten eine Abweichung fest, und die Abweichung tat nichts.**
+`Local` und `SetLocal` fingen bei der Blockebene an, **und der Kommentar,
+der das begründete, nannte `3.times { |i| g.push(i) }` als den Fall, für den
+sie nötig sei.** Gemessen: **`g = []; 3.times { |i| g.push(i) }; g.length`
+war 0** -- **und genau dieser Satz baut jedes Menü und jedes Fenster eines
+Spiels.**
+
+**Verifiziert in `parse.y` aus Ruby 1.8.1:** `local_push` schreibt
+`local->prev = lvtbl`, **`lvtbl = local`, und die Kette bleibt offen** --
+**und nur `ruby_dyna_vars` wird in `opt_block_var` gespeichert und
+wiederhergestellt.** Der Block sieht also die Variablen der Methode, **und
+`lambda { x = 1 }` schreibt in ihre 99 hinein.**
+
+**Und vier Tests behaupteten das Gegenteil, ausführlich begründet, und sie
+lagen falsch.** `Test_ABlockHasItsOwnVariables` erwartete 99,
+`Test_ABlockThatOnlyReadsSeesNothing` erwartete nil,
+`Test_DefinedInABlockSeesTheBlockAndNotTheMethod` erwartete nil, **und
+`Test_TwoBlocksDeepAndTheInnerOneSeesNothing` erwartete `[99, 1, 1]`, gemessen
+ist `[99, 2, 2]`.** Sie sind auf die gemessene Wahrheit umgestellt.
+
+*Ein Kommentar, der den Fall nennt, an dem die Regel scheitert, ist eine
+Behauptung und kein Beleg -- und der Fall war der häufigste, den ein Spiel
+schreibt.* **Und ein Test, der eine Abweichung festhält, prüft die
+Abweichung und nicht Ruby.**
+ `a.dup.n = 2` ließ
+`a.n` auch auf 2, **und ein Spiel, das zwei Figuren aus einer Vorlage macht,
+hätte eine Figur zweimal, und jede Änderung an der einen wäre an der
+anderen sichtbar.** Die Kopie trägt jetzt den Klassennamen bei sich --
+**und ohne das sagte `b.n = 2` *a value has no method 'n=' on this host*,
+und die Meldung sprach von einem Host, der nie gefragt wurde.**
+
+**Und `def hp=(v)` war ein Syntaxfehler, und `attr_writer` in derselben Datei
+ging.** Die Fehlermeldung war *A member name was expected at offset 44, but
+'end' is there* -- **und der Name war richtig: der zweite Lesevorgang hatte
+ihn aufgegessen.** Und `def ==(other)` war ein Schreiber mit dem Namen `==`,
+**weil `Is("=")` auf `Current.Text` sieht und dort `==` steht.**
+
 *Ein Anker, der gebaut ist und nichts aendert, sieht wie ein ueberlebender
 Test aus und ist ein Messfehler.* **Also gehoert in jede Mutationsliste
 zwei Pruefungen: der Anker kommt genau einmal vor, **und der Ersatz ist
