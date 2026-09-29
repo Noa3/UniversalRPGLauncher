@@ -9448,3 +9448,31 @@ gemerkt**, **weil kein Test `first` oder `last` benutzt hat.**
 
 `TestRubyInterpreter: 175/175`, `All 1733 tests passed`, Mutationen 5 von 5
 und 6 von 6.
+
+## 2026-09-29 — Textoperationen, und drei stille Fehler dahinter
+
+**Alles war abgelehnt.** `split`, `gsub`, `start_with?`, `strip`, `chomp`,
+`ljust` -- **alle mit „has no method on this host".** Ein Spiel hat damit
+**kein Textfenster, das etwas anzeigt.**
+
+**Und `2.times { }` rief den Block NULLMAL:** die Schleife begann bei der
+Zahl, **also war `2 <= 1` nie wahr.** Genau so baut jedes Statusfenster seine
+Zeilen.
+
+**Und `push` gab eine neue Liste:** `OfArray` baute ein Array, das nicht
+waechst. **Also sammelte jede Schleife nichts.** Beide Fabriken legen jetzt
+eine `List` an, **und `push` waechst an Ort und Stelle.**
+
+**Und `chomp` liess das Wagenruecklauf stehen:** gemessen zwei Bytes statt
+einem.
+
+**Und `tr` ist nach `tr_trans` und `trnext` in `string.c` aus Ruby 1.8.1
+geschrieben, nicht geraten** -- **vier Faelle, die vorher falsch waren.**
+**Und ein Muster aus einem Skript wird nicht ausgefuehrt, und das wird
+gesagt.**
+
+**Und eine Regel wurde einzeln gemessen und entfernt:** der
+`self`-Umschalter im Block war ein No-op.
+
+`TestRubyInterpreter: 182/182`, `All 1740 tests passed`, Mutationen 5 von 5,
+6 von 6 und 5 von 5.

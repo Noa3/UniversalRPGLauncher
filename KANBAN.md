@@ -4003,11 +4003,57 @@ falsche Anzahl von Zeichen zeichnet.** `"abc"[1]` ist deshalb **ein Byte,**
 und in CP932 die halbe Kanji: **das ist Rubys Verhalten und kein Fehler
 hier.**
 
+### Die Textoperationen, und dabei zwei Fehler, die ein Spiel nie zeigt
+
+**Alles war abgelehnt.** Gemessen, bevor etwas davon existierte:
+`"a,b,c".split(",")`, `gsub`, `start_with?`, `strip`, `chomp`, `ljust` --
+**alle mit *„has no method X on this host"*.** Ein Spiel hat damit **kein
+Textfenster, das etwas anzeigt.**
+
+**Und `2.times { }` rief den Block NULLMAL.** Die Schleife begann bei der
+Zahl selbst, **also war `2 <= 1` nie wahr** -- **und genau so baut jedes
+Statusfenster seine Zeilen.** `times` beginnt jetzt bei null, `upto` und
+`downto` bei der Zahl.
+
+**Und `push` gab eine neue Liste und liess die alte unveraendert.** Ruby
+aendert in-place, **und `OfArray` baute aus dem Material ein Array, das
+nicht waechst** -- **also sammelte `3.times { |i| g = g.push(i) }` nichts.**
+`OfArray` und `OfHash` legen jetzt eine `List` an, **und `push` waechst
+an Ort und Stelle.**
+
+**Und `chomp` liess das Wagenruecklauf stehen.** Gemessen: `"a\r\n".chomp`
+gab zwei Bytes statt einem -- **und ein Spiel, das eine Zeile aus einer Datei
+liest, haette am Ende jedes Wortes ein `\r`**, das in keinem Namen steht.
+
+**Und `tr` ist nach `tr_trans` und `trnext` in `string.c` aus Ruby 1.8.1
+geschrieben, nicht geraten.** Eine Tabelle ueber alle 256 Bytes,
+`trnext` liest beide Seiten Zeichen fuer Zeichen, **und das ist der Grund,
+warum `tr("a-z", "x")` jeden Kleinbuchstaben zu einem x macht statt ihn
+dreimal zu uebersetzen.** `"abc".tr("abc", "xy")` ist `"xyy"` -- **weil der
+Ersetzer nach `y` aufgebraucht ist und der letzte stehen bleibt**, **das ist
+das `if (r == -1) r = trrepl.now;` in der Quelle.** `"abc".tr("^b", "x")` ist
+`"xbx"`, **und `tr("a-z", "")` ist `"H"`** -- **vier Faelle, die vorher
+falsch waren oder gar nicht existierten.**
+
+**Und ein Muster aus einem Skript wird nicht ausgefuehrt, und das wird
+gesagt.** `gsub(/[0-9]/, "X")` gibt nil **und eine Diagnose, die das Muster
+nennt** -- **ein stilles nil wuerde aussehen, als haette der Text keine
+Ziffern gehabt**, **und das Spiel haette den Namen mit dem Marker gezeichnet
+und nicht gewusst, warum.**
+
+> **Eine Regel wurde einzeln gemessen und ENTFERNT.** „Der Block laeuft
+> nicht auf seinem Objekt" hat keinen Test getoetet, **weil
+> `_instanceVariables` von `Aufrufen` ohnehin schon auf dem Objekt steht
+> und `pSelbst` dasselbe ist** -- **also war es ein No-op mit einer Doku,
+> die eine Antwort behauptet**, und ist weg. Das ist die zweite Regel in
+> diesem Lauf, die so endet.
+
 **Noch nicht ausgewertet:** `respond_to_missing?`, `binding`,
 `Module`-Methoden (`include?`, `instance_methods`),
 Block-Umbrueche mit Argumenten (`break 1`), `dup`/`clone` mit echter Kopie,
-`sub`/`gsub`/`split`, `find`/`detect`/`inject`/`group_by`,
-`Struct`, `raise`, und `require`.
+`find`/`detect`/`inject`/`group_by`/`each_with_object`,
+`Struct`, `raise`, `require`, `printf`/`sprintf`,
+und jede Regex-Maschine (`match`, `scan`, `=~`).
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

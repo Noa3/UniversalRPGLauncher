@@ -225,7 +225,11 @@ public sealed class RubyValue : IEquatable<RubyValue>
     /// what a lookup on this shape has to do.
     /// </remarks>
     public static RubyValue OfHash(IReadOnlyList<RubyValue> pItems) =>
-        new(RubyValueKind.Object) { Items = pItems, IsHash = true };
+        new(RubyValueKind.Object)
+        {
+            Items = new List<RubyValue>(pItems),
+            IsHash = true,
+        };
 
     /// <summary>Whether this value is the absence of one.</summary>
     public bool IsNil => Kind == RubyValueKind.Nil;
@@ -241,8 +245,39 @@ public sealed class RubyValue : IEquatable<RubyValue>
         Block = pBlock,
     };
 
+    /// <summary>
+    /// A list, and it can grow.
+    /// </summary>
+    /// <param name="pItems">The values it starts with.</param>
+    /// <returns>The list.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The values are copied into a list, and not kept as they
+    /// are.</strong> A caller hands over whatever it has — an array from a
+    /// collection expression, a read-only view —
+    /// <strong>and an array does not grow</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And that is what makes `push` work.</strong>
+    /// <c>akteure.push(held)</c> changes the list the name points at, and
+    /// <strong>a reader whose lists cannot grow makes every loop that
+    /// gathers something a loop that gathers nothing</strong> — measured:
+    /// <c>3.times { |i| g.push(i) }</c> left <c>g</c> empty, and that is how
+    /// every status window builds its rows.
+    /// </para>
+    /// <para>
+    /// <strong>And a hash goes through a different door.</strong> Its pairs
+    /// are read from the same list, and <c>hash.push</c> is a mistake in
+    /// Ruby rather than a change,
+    /// <strong>so the two are apart</strong> and neither hides the other.
+    /// </para>
+    /// </remarks>
     public static RubyValue OfArray(IReadOnlyList<RubyValue> pItems) =>
-        new(RubyValueKind.Object) { Items = pItems, IsList = true };
+        new(RubyValueKind.Object)
+        {
+            Items = new List<RubyValue>(pItems),
+            IsList = true,
+        };
 
     public static RubyValue OfInteger(long pValue) =>
         new(RubyValueKind.Integer) { Integer = pValue };

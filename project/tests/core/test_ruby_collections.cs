@@ -215,10 +215,12 @@ public partial class TestRubyInterpreter
             "**the list is one longer** — and a reader that answered the old "
                 + "list would have made `push` do nothing visible, and the "
                 + "game would add a member and see the same number");
-        AssertEq(AsInteger(wert.Items[1]), 2,
-            "**and the old one is untouched** — that is what a new list "
-                + "means, and a game that pushes onto a list it kept somewhere "
-                + "depends on it");
+        AssertEq(AsInteger(wert.Items[1]), 3,
+            "**and the old one grew too, because `push` changes the list in "
+                + "place** — that is what a loop that gathers depends on: "
+                + "`3.times { |i| g.push(i) }` writes into the list the name "
+                + "points at, and a reader that returned a new list would "
+                + "have made every window in a game draw no rows");
         AssertTrue(wert.Items[2].Boolean,
             "**and it holds the value** — by value and not by identity, or "
                 + "every string a game looks for would come back false");

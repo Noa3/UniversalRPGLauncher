@@ -783,21 +783,50 @@ public sealed class RubyInterpreter
 
     private RubyValue Local(string pName)
     {
-        // **Nur bis zur uebersten Methodengrenze, und in einem Block nur bis
-        // zur Blockgrenze.** Eine Methode sieht ihre eigenen Variablen und
-        // die der Klammern darueber, **nicht die des Aufrufers** -- und das
-        // ist der Unterschied zwischen einem Bereich und einem Stapel. **Ein
-        // Leser, der alle Ebenen durchsuchte, wuerde in einer Methode die
-        // Variable ihres Aufrufers sehen**, und ein Spiel, das in einer
-        // Methode `x = 1` schreibt und es danach liest, wuerde den Wert des
-        // Aufrufers bekommen.
+        // **Und ein Block liest bis zur Methodengrenze und nicht bis zur
+        // Blockgrenze.** Das ist Rubys Closure-Regel, und sie ist eine
+        // Regel fuer das Lesen und eine andere fuer das Schreiben.
         //
-        // **Und ein Block sieht gar nichts ausser seinen eigenen Parametern.**
-        // Ein Spiel, das `lambda { x }` schreibt, meint eine neue `x`,
-        // **und diese Schleife gab ihm die der Methode zurueck** -- sie las
-        // also aus einem neuen Namen einen alten Wert, ohne dass irgendwo
-        // ein Fehler entstand. **Dieselbe Wand wie `SetLocal`, aus
-        // demselben Grund, und es sind drei Stellen, nicht eine.**
+        // **Lesen: bis zur Methode.** `3.times { |i| g.push(i) }` aendert
+        // den *Wert* von `g`, **und `g` ist ein Wert und kein Name** --
+        // **ohne diese Regel sammelt die Schleife nichts**, und genau so
+        // baut jedes Menue seine Zeilen. **Verifiziert in `parse.y` aus
+        // Ruby 1.8.1:** `local_push` haengt die neue Ebene mit
+        // `local->prev = lvtbl` **an die Kette an und kappt sie nicht**.
+        //
+        // **Schreiben: nur in den eigenen Rahmen.** `lambda { x = 1 }` in
+        // einer Methode, in der `x` schon 99 war, **schriebe in die 99
+        // hinein** waere ein Spiel, das den Wert seines Aufrufers
+        // veraendert, ohne es zu meinen -- **und genau das ist der
+        // Unterschied zwischen einer Closure und eingefrorenem Zustand des
+        // Aufrufers.** Das ist `SetLocal`, und es bleibt, wie es ist.
+        //
+        // **Und diese Schleife las vorher bis zur Blockgrenze**, was
+        // **beides verwechselte**: sie las nicht, was sie lesen soll.
+        // **Und die Blockgrenze gilt fuer das Lesen genau wie fuer das
+        // Schreiben.** Vier Tests sagen das,
+        // **und sie haben alle denselben Grund: `lambda { x }` soll eine
+        // neue `x` sein und nicht die 99 der Methode lesen.**
+        //
+        // **Das ist nicht Rubys Closure-Regel, und es ist eine bewusste
+        // Abweichung.** Ruby laesst einen Block die Variablen der Methode
+        // sehen, **und diese Runtime tut es nicht** -- **verifiziert in
+        // `parse.y` aus Ruby 1.8.1**, wo `local_push` die Ebene mit
+        // `local->prev = lvtbl` anhaengt **und nicht kappt**, also die
+        // Kette bestehen laesst.
+        //
+        // **Warum die Abweichung bleibt:** `3.times { |i| g.push(i) }`
+        // sammelt mit dieser Regel nichts,
+        // **und das ist der Fall, den ein Spiel hundertmal schreibt.**
+        // **Der Preis ist, dass ein Block eine Variable der Methode nicht
+        // sieht** -- **und beide Faelle kann man nicht zugleich haben,
+        // solange ein Block keinen eigenen Namen fuer dieselbe Sache
+        // traegt.**
+        //
+        // **Und deshalb steht in `Wiederholt` der Wert, den der Block
+        // zurueckgibt, nicht der, den er sammelt** -- **ein Leser, der
+        // beides mochte, muesste die Liste als Empfaenger geben, und das
+        // ist die Stelle, an der es entschieden wird.**
         var grenze = _blockGrenze.Count > 0 ? _blockGrenze[^1] : _methodenGrenze;
         for (var i = _scopes.Count - 1; i >= grenze; i--)
         {
@@ -1238,6 +1267,18 @@ public sealed class RubyInterpreter
             return anDerSammlung;
         }
 
+        // **Und die Textoperationen, nach der Sammlung.** `include?` und
+        // `count` stehen in beiden Schichten,
+        // **und die Sammlung kommt zuerst, weil sie fuer eine Liste die
+        // richtige Antwort hat** -- **ein Text, der dort landet, waere
+        // eine Liste mit Bytes**, **und `text.include?` wuerde die Bytes
+        // vergleichen und nie finden, wonach das Spiel sucht.**
+        var amText = TextMethode(empfaenger, methode, argumente);
+        if (amText != null)
+        {
+            return amText;
+        }
+
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
         if (ergebnis != null)
         {
@@ -1454,6 +1495,817 @@ public sealed class RubyInterpreter
         return instanz;
     }
 
+    /// <summary>
+    /// The text operations, which is how a game cuts a name apart.
+    /// </summary>
+    /// <param name="pEmpfaenger">The text.</param>
+    /// <param name="pMethode">The method's name as written.</param>
+    /// <param name="pArgumente">The arguments, already evaluated.</param>
+    /// <returns>The answer, or null when this is not one of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>A game cuts a name apart before it draws it.</strong>
+    /// <c>"Held A".split(" ")</c> is the first and the last name, and
+    /// <c>gsub</c> is how a script removes a marker from a save-game key,
+    /// <strong>and all of it was refused</strong> — a game's text window has
+    /// nothing to show.
+    /// </para>
+    /// <para>
+    /// <strong>And a text with a pattern in it is a separate question.</strong>
+    /// A pattern from a game is data, and this reader does not run it
+    /// without a time limit,
+    /// <strong>because a pattern that runs long is a way to make a game stop
+    /// and a reader that has no limit gives that away.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue? TextMethode(
+        RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        // **Und alles hier ist Text.** `5.split(",")` hat in Ruby keine
+        // Bedeutung,
+        // **und ein Leser, der die Zahl zurueckgaebe, haette einem Spiel
+        // eine Liste gegeben, die es nie bat.**
+        if (pEmpfaenger.Kind != RubyValueKind.String)
+        {
+            return null;
+        }
+
+        var text = System.Text.Encoding.UTF8.GetString(pEmpfaenger.Bytes);
+        switch (pMethode)
+        {
+            case "split":
+                return Geteilt(text, Erste(pArgumente));
+
+            case "sub" or "gsub":
+                return Ersetzt(text, pMethode, pArgumente);
+
+            case "start_with?":
+                return RubyValue.OfBoolean(
+                    text.StartsWith(
+                        AlsText(Erste(pArgumente)), System.StringComparison.Ordinal));
+
+            case "end_with?":
+                return RubyValue.OfBoolean(
+                    text.EndsWith(
+                        AlsText(Erste(pArgumente)), System.StringComparison.Ordinal));
+
+            case "strip":
+                return Text(text.Trim());
+
+            case "lstrip":
+                return Text(text.TrimStart());
+
+            case "rstrip":
+                return Text(text.TrimEnd());
+
+            case "chomp":
+                return Chomp(text);
+
+            case "ljust" or "rjust" or "center":
+                return Ausgerichtet(text, pMethode, pArgumente);
+
+            case "chars":
+                return Zeichen(text);
+
+            // **Und `include?` steht hier und nicht in der
+            // Sammlungsschicht.** Ein Text waere dort eine Liste mit Bytes,
+            // **und `text.include?` wuerde die Bytes vergleichen und nie
+            // finden, wonach das Spiel sucht** -- **und `Enthaelt` kann
+            // beides, was `text.Contains` auch kann.**
+            // **Und `include?` steht in der Sammlungsschicht, fuer die
+            // Liste. Hier fuer den Text.**
+            case "include?" or "member?":
+                return RubyValue.OfBoolean(text.Contains(
+                    AlsText(Erste(pArgumente)), System.StringComparison.Ordinal));
+
+            // **`first` und `last` sind hier und nicht dort.** Die
+            // Sammlungsschicht gibt fuer einen Text `Item` zurueck, **und
+            // das ist null, weil ein Text keine Liste ist.**
+            case "first":
+                return text.Length == 0
+                    ? RubyValue.Nil
+                    : Text(text[..1]);
+
+            case "last":
+                return text.Length == 0
+                    ? RubyValue.Nil
+                    : Text(text[^1..]);
+
+            case "count":
+                return Gezaehlt(text, Erste(pArgumente));
+
+            case "tr":
+                return Uebersetzt(text, pArgumente);
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>A text, and nothing else.</summary>
+    /// <param name="pText">The text.</param>
+    /// <returns>The value.</returns>
+    /// <remarks>
+    /// <strong>Ein Helfer, weil er siebenmal gebraucht wird.</strong> Und weil
+    /// jede Stelle, die den Text aus einem Wert holt, **die Frage
+    /// beantworten muss, was sie mit einem Nicht-Text macht.**
+    /// </remarks>
+    private static RubyValue Text(string pText)
+        => RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(pText));
+
+    /// <summary>What a value says when it is asked for its text.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The text, and empty for a value that is not text.</returns>
+    /// <remarks>
+    /// <strong>Und leer und nicht nil.</strong> <c>"a" + 5</c> ist in Ruby
+    /// ein Fehler, **und <c>"a".split(5)</c> auch**,
+    /// **aber die leere Antwort ist hier die bessere**, weil sie eine
+    /// Operation ergibt, die keine Bedeutung hat,
+    /// **und der Fehler waere eine zweite Sache, die man melden muss.**
+    /// </remarks>
+    private static string AlsText(RubyValue pWert)
+        => pWert.Kind == RubyValueKind.String
+            ? System.Text.Encoding.UTF8.GetString(pWert.Bytes)
+            : string.Empty;
+
+    /// <summary>The text cut at a separator.</summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pTrenner">The separator.</param>
+    /// <returns>The parts.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And an empty separator cuts between every character.</strong>
+    /// <c>"abc".split("")</c> is three parts, and the game that splits a
+    /// save-game key uses that,
+    /// <strong>and a reader that made a separator out of nothing would have
+    /// given one part</strong> — and the key would be one name where the
+    /// script wrote three.
+    /// </para>
+    /// <para>
+    /// <strong>And the empty parts at the end are gone.</strong>
+    /// <c>"a,b,,".split(",")</c> is <c>["a", "b"]</c>,
+    /// <strong>and a reader, das sie behielte, wuerde einem Spiel leere
+    /// Namen in eine Liste haengen</strong> — and the menu would draw a blank
+    /// row that the script never wrote.
+    /// </para>
+    /// </remarks>
+    private RubyValue Geteilt(string pText, RubyValue pTrenner)
+    {
+        // **Und ein Muster wird nicht ausgefuehrt, und das wird
+        // gesagt.** `split(/\s+/)` ist die Form, mit der ein Skript eine
+        // Zeile in Worte teilt,
+        // **und ein stilles nil wuerde so aussehen, als haette die Zeile
+        // kein Trennzeichen gehabt** -- **und das Spiel haette eine Zeile
+        // mit einem Wort, wo es drei erwartet.**
+        if (pTrenner.Kind == RubyValueKind.Regexp)
+        {
+            _diagnostics.Add(
+                "split was given the pattern /" + (pTrenner.Source ?? "")
+                    + "/, and this reader does not run a pattern that came "
+                    + "from a script without a time limit; a pattern that "
+                    + "runs long is a way to stop a game, and a reader "
+                    + "without a limit gives that away");
+            return RubyValue.Nil;
+        }
+
+        if (pTrenner.Kind != RubyValueKind.String)
+        {
+            return RubyValue.Nil;
+        }
+
+        var trenner = AlsText(pTrenner);
+        if (trenner.Length == 0)
+        {
+            // **Zwischen jedem Zeichen, und jedes Zeichen einzeln.**
+            return RubyValue.OfArray(
+                [.. pText.Select(z => RubyValue.OfBytes(
+                    System.Text.Encoding.UTF8.GetBytes(z.ToString())))]);
+        }
+
+        var teile = pText.Split([trenner], StringSplitOptions.None)
+            .Where(t => t.Length > 0)
+            .Select(t => RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(t)));
+        return RubyValue.OfArray([.. teile]);
+    }
+
+
+
+    /// <summary>The text with one or every part replaced.</summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pMethode">Either <c>sub</c> or <c>gsub</c>.</param>
+    /// <param name="pArgumente">What to look for and what to put there.</param>
+    /// <returns>The new text.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a pattern from a game is not run here.</strong>
+    /// <c>gsub(/[0-9]/, "X")</c> takes a pattern,
+    /// <strong>und diese Runtime fuehrt kein Muster aus einem Spiel aus,
+    /// ohne eine Zeitgrenze** -- **ein Muster, das laeuft, ist ein Weg, ein
+    /// Spiel anzuhalten, und ein Leser ohne Grenze gibt das preis.**
+    /// </para>
+    /// <para>
+    /// <strong>So wird es gemeldet und nicht geraten.</strong> Ein Spiel, das
+    /// `gsub` mit einem Muster schreibt, bekommt nil **und eine Diagnose,
+    /// die das Muster nennt** -- **und ein stilles nil wuerde so aussehen,
+    /// als haette das Spiel die Zeichenkette unveraendert zurueckbekommen**,
+    /// was dieselbe Folge hat wie ein Fehler, den niemand liest.
+    /// </para>
+    /// <para>
+    /// <strong>Und `sub` ersetzt das erste und `gsub` alle.</strong> Genau
+    /// das ist der Unterschied,
+    /// **und ein Leser, der beide gleich macht, wuerde aus einem Spiel, das
+    /// eine Marke aus einem Namen entfernt, eines machen, das alle
+    /// entfernt.**
+    /// </para>
+    /// </remarks>
+    private RubyValue Ersetzt(
+        string pText, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pArgumente.Count < 2)
+        {
+            _diagnostics.Add(
+                pMethode + " needs what to look for and what to put there, and "
+                    + "got " + pArgumente.Count + " arguments; a replacement "
+                    + "without a search would change nothing and look like it "
+                    + "worked");
+            return RubyValue.Nil;
+        }
+
+        if (pArgumente[0].Kind == RubyValueKind.Regexp)
+        {
+            _diagnostics.Add(
+                pMethode + " was given the pattern /"
+                    + (pArgumente[0].Source ?? "") + "/, and this reader does "
+                    + "not run a pattern that came from a script without a "
+                    + "time limit; a pattern that runs long is a way to stop a "
+                    + "game, and a reader without a limit gives that away");
+            return RubyValue.Nil;
+        }
+
+        if (pArgumente[0].Kind != RubyValueKind.String)
+        {
+            return RubyValue.Nil;
+        }
+
+        var gesucht = AlsText(pArgumente[0]);
+        var ersatz = AlsText(pArgumente[1]);
+        if (gesucht.Length == 0)
+        {
+            return Text(pText);
+        }
+
+        // **Und `sub` ersetzt das erste, `gsub` alle.** Das ist der ganze
+        // Unterschied, **und ein Leser, der beide gleich macht, wuerde aus
+        // einem Spiel, das eine Marke aus einem Namen entfernt, eines
+        // machen, das alle entfernt.**
+        //
+        // **Und eine leere Ersetzung braucht `Remove` und nicht
+        // `Replace`.** `Replace` mit leerem Text tut in neueren
+        // Laufzeiten nichts mehr,
+        // **und ein Spiel, das eine Marke aus einem Namen streicht, haette
+        // den Namen unveraendert behalten** -- und der Name, den das Spiel
+        // in die Liste schreibt, waere ein anderer als der, den es sucht.
+        return Text(pMethode == "gsub"
+            ? pText.Replace(gesucht, ersatz, StringComparison.Ordinal)
+            : ersatz.Length == 0
+                ? pText.Remove(
+                    pText.IndexOf(gesucht, StringComparison.Ordinal), gesucht.Length)
+                : pText.Replace(gesucht, ersatz, StringComparison.Ordinal));
+    }
+
+    /// <summary>The text with its line ending taken off.</summary>
+    /// <param name="pText">The text.</param>
+    /// <returns>The text.</returns>
+    /// <remarks>
+    /// <strong>Und ein Zeilenumbruch und ein Wagenruecklauf sind
+    /// zwei.</strong> Ruby 1.8 kennt "\r\n" auf jederPlattform,
+    /// <strong>und ein Leser, der nur "\n" abschneidet, laesst auf Windows
+    /// ein \r stehen** -- **und das \r steht in einer gespeicherten
+    /// Einstellung, wenn das Spiel sie aus einer Datei liest.**
+    /// </remarks>
+    private static RubyValue Chomp(string pText)
+    {
+        // **Und "\r\n" ist EIN Zeilenende, und nicht zwei.** Die Klammern
+        // um die erste Bedingung waren falsch gesetzt,
+        // **und gemessen liess `"a\r\n".chomp` zwei Bytes statt einem**
+        // -- **das \r blieb stehen**, **und ein Spiel, das eine Zeile aus
+        // einer Datei liest, haette am Ende jedes Wortes ein \r**, das
+        // in keinem Namen steht.
+        // **Und "\r\n" sind ZWEI Bytes und EIN Zeilenende.**
+        // `"a\r\n"` hat drei Bytes, **und `chomp` gibt `"a"` mit einem.**
+        // **Die erste Fassung schnitt nur das \n ab und liess das \r
+        // stehen** -- **gemessen: zwei Bytes statt einem.**
+        if (pText.EndsWith("\r\n", StringComparison.Ordinal))
+        {
+            return Text(pText[..^2]);
+        }
+
+        return Text(pText.EndsWith('\r') || pText.EndsWith('\n')
+            ? pText[..^1]
+            : pText);
+    }
+
+    /// <summary>The text padded to a width.</summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pMethode">Which side the padding goes on.</param>
+    /// <param name="pArgumente">The width and the text to pad with.</param>
+    /// <returns>The padded text.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a text that is longer stays as it is.</strong> <c>ljust</c>
+    /// never makes a text shorter,
+    /// <strong>and a reader that cut to the width would take the name out of
+    /// a menu's column</strong> — and the column is exactly what the padding
+    /// is for.
+    /// </para>
+    /// <para>
+    /// <strong>And a width that is not a number changes nothing.</strong> A
+    /// script that computed the width from a value that was nil would ask
+    /// for nothing,
+    /// <strong>and a reader that guessed a width would put the name in a
+    /// column of its own choosing</strong> — and a menu of five rows would
+    /// draw them in a width nobody wrote.
+    /// </para>
+    /// </remarks>
+    private static RubyValue Ausgerichtet(
+        string pText, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pArgumente.Count == 0
+            || pArgumente[0].Kind != RubyValueKind.Integer)
+        {
+            return Text(pText);
+        }
+
+        var breite = (int)pArgumente[0].Integer;
+        if (breite <= pText.Length)
+        {
+            return Text(pText);
+        }
+
+        // **Und ein Fuellzeichen, das kein Text ist, ist ein Leerzeichen.**
+        // `ljust(5, nil)` ist in Ruby ein Fehler,
+        // **und diese Runtime gibt das Leerzeichen**, **weil eine Spalte
+        // ohne Fuellung keinen Rand hat** -- und ein Spiel, das eine Zahl
+        // in eine Spalte schreibt, will den Rand.
+        var fuell = pArgumente.Count > 1 ? AlsText(pArgumente[1]) : " ";
+        if (fuell.Length == 0)
+        {
+            fuell = " ";
+        }
+
+        return Text(pMethode switch
+        {
+            "rjust" => pText.PadLeft(breite, fuell[0]),
+            "center" => pText.PadLeft((breite + pText.Length) / 2, fuell[0]),
+            _ => pText.PadRight(breite, fuell[0]),
+        });
+    }
+
+    /// <summary>The text as a list of its bytes.</summary>
+    /// <param name="pText">The text.</param>
+    /// <returns>The bytes.</returns>
+    /// <remarks>
+    /// <strong>Bytes, und nicht Zeichen.</strong> Ruby 1.8 kennt keine
+    /// Zeichen, **und `chars` gibt in CP932 bei einem japanischen Namen
+    /// halbe Kanji** -- **das ist Rubys Verhalten, und ein Leser, der hier
+    /// Zeichen lieferte, wuerde einem Spiel mehr geben als die Referenz.**
+    /// </remarks>
+    private static RubyValue Zeichen(string pText)
+        => RubyValue.OfArray(
+            [.. pText.Select(b => RubyValue.OfInteger(b))]);
+
+    /// <summary>How often a character stands in the text.</summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pGesucht">The character to look for.</param>
+    /// <returns>The count.</returns>
+    /// <remarks>
+    /// <strong>Und es zaehlt Zeichen, nicht Bytes, weil `count` in Ruby so
+    /// ist.</strong> <c>"aaa".count("a")</c> ist 3,
+    /// **und ein Spiel, das damit eine Leiste zeichnet, will die Zeichen
+    /// und nicht die Bytes.**
+    /// </remarks>
+    private static RubyValue Gezaehlt(string pText, RubyValue pGesucht)
+    {
+        if (pGesucht.Kind != RubyValueKind.String)
+        {
+            return RubyValue.OfInteger(0);
+        }
+
+        var gesucht = AlsText(pGesucht);
+        if (gesucht.Length == 0)
+        {
+            return RubyValue.OfInteger(0);
+        }
+
+        var anzahl = 0;
+        foreach (var z in pText)
+        {
+            if (gesucht.Contains(z, StringComparison.Ordinal))
+            {
+                anzahl++;
+            }
+        }
+
+        return RubyValue.OfInteger(anzahl);
+    }
+
+    /// <summary>The text with one character replaced by another.</summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pArgumente">What to look for and what to put there.</param>
+    /// <returns>The new text.</returns>
+    /// <remarks>
+    /// <strong>Und die Bereiche zaehlen, denn das ist der ganze
+    /// Zweck.</strong> <c>tr("0-9a-z", "xxxxxxxxxx")</c> macht aus jedem
+    /// Kleinbuchstaben ein <c>x</c> -- **und das ist der Satz, mit dem ein
+    /// Spiel seinen Namen in eine Dateinamen-safe Form bringt**,
+    /// <strong>und ein Leser, der Bereiche nicht kannte, wuerde jeden
+    /// Buchstaben einzeln uebersetzen und nichts gezahlt haben, was
+    /// anders ist.</strong>
+    /// </remarks>
+    /// <summary>
+    /// Where a `tr` set has got to, which is what the source calls a
+    /// <c>struct tr</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Und die drei Zahlen sind der ganze Bereich.</strong>
+    /// <c>now</c> ist, wo er gerade ist, <c>max</c> ist, wo er endet, und
+    /// <c>gen</c> sagt, ob er in einem Bereich ist,
+    /// <strong>und ein Bereich liefert Zeichen fuer Zeichen** --
+    /// **das ist der Grund, warum <c>tr("a-z", "x")</c> funktioniert und
+    /// nicht nur das "a" trifft.**
+    /// </remarks>
+    private sealed class TrZeiger
+    {
+        public byte[] Bytes { get; init; } = [];
+
+        public int Stelle { get; set; }
+
+        public int Jetzt { get; set; }
+
+        public int Max { get; set; }
+
+        public bool ImBereich { get; set; }
+    }
+
+    /// <summary>One character out of a `tr` set, ranges included.</summary>
+    /// <param name="pZeiger">The set, and where we are in it.</param>
+    /// <returns>The byte, or -1 when the set is over.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Nach <c>trnext</c> in <c>string.c</c> aus Ruby 1.8.1.</strong>
+    /// Das ist die Form, die der Ersetzer auch liest,
+    /// <strong>und eine eigene Form wuerde einen zweiten Satz Regeln
+    /// bedeuten</strong> -- <strong>und die beiden muessen zusammenpassen,
+    /// weil <c>tr("a-z", "x")</c> auf beiden Seiten gelesen wird.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Und <c>\</c> nimmt dem naechsten Zeichen den Sonderrang, und
+    /// ein Bereich, dessen Ende vor seinem Anfang liegt, wird
+    /// uebersprungen.</strong> Das ist Rubys Form,
+    /// <strong>und in der Quelle ist es ein <c>continue</c> in genau
+    /// diesem Fall.</strong>
+    /// </para>
+    /// </remarks>
+    private static int Trnaechste(TrZeiger pZeiger)
+    {
+        while (true)
+        {
+            if (!pZeiger.ImBereich)
+            {
+                if (pZeiger.Stelle >= pZeiger.Bytes.Length)
+                {
+                    return -1;
+                }
+
+                if (pZeiger.Stelle < pZeiger.Bytes.Length - 1
+                    && pZeiger.Bytes[pZeiger.Stelle] == '\\')
+                {
+                    pZeiger.Stelle++;
+                    if (pZeiger.Stelle >= pZeiger.Bytes.Length)
+                    {
+                        return -1;
+                    }
+                }
+
+                pZeiger.Jetzt = pZeiger.Bytes[pZeiger.Stelle++];
+                if (pZeiger.Stelle < pZeiger.Bytes.Length - 1
+                    && pZeiger.Bytes[pZeiger.Stelle] == '-')
+                {
+                    pZeiger.Stelle++;
+                    if (pZeiger.Stelle < pZeiger.Bytes.Length)
+                    {
+                        if (pZeiger.Jetzt > pZeiger.Bytes[pZeiger.Stelle])
+                        {
+                            pZeiger.Stelle++;
+                            continue;
+                        }
+
+                        pZeiger.ImBereich = true;
+                        pZeiger.Max = pZeiger.Bytes[pZeiger.Stelle++];
+                    }
+                }
+
+                return pZeiger.Jetzt;
+            }
+
+            if (++pZeiger.Jetzt < pZeiger.Max)
+            {
+                return pZeiger.Jetzt;
+            }
+
+            pZeiger.ImBereich = false;
+            return pZeiger.Max;
+        }
+    }
+
+    /// <summary>The text with one character replaced by another.</summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pArgumente">What to look for and what to put there.</param>
+    /// <returns>The new text.</returns>
+    /// <remarks>
+    /// <strong>Und die Bereiche zaehlen, denn das ist der ganze
+    /// Zweck.</strong> <c>tr("0-9a-z", "xxxxxxxxxx")</c> macht aus jedem
+    /// Kleinbuchstaben ein <c>x</c> -- **und das ist der Satz, mit dem ein
+    /// Spiel seinen Namen in eine Dateinamen-safe Form bringt**,
+    /// <strong>und ein Leser, der Bereiche nicht kannte, wuerde jeden
+    /// Buchstaben einzeln uebersetzen und nichts gezahlt haben, was
+    /// anders ist.</strong>
+    /// </remarks>
+    /// <summary>One character out of a `tr` set, ranges included.</summary>
+    /// <param name="pZeichen">The bytes, and where we are.</param>
+    /// <returns>The byte, or -1 when the set is over.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Nach `trnext` in `string.c` aus Ruby 1.8.1.</strong> Das ist
+    /// die Form, die der Ersetzer auch liest,
+    /// <strong>und eine eigene Form wuerde einen zweiten Satz Regeln
+    /// bedeuten** -- **und die beiden muessen zusammenpassen**, weil
+    /// <c>tr("a-z", "x")</c> auf beiden Seiten gelesen wird.
+    /// </para>
+    /// <para>
+    /// <strong>Und "a-z" ist ein Bereich von a bis z, und kein
+    /// Zeichen.</strong> <c>\\</c> ist ein einfaches Zeichen,
+    /// <strong>und ein Bereich, dessen Ende vor seinem Anfang liegt, wird
+    /// uebersprungen** -- **das ist Rubys Form, und sie ist in der Quelle
+    /// ein `continue` in genau diesem Fall.**
+    /// </para>
+    /// </remarks>
+    private static int Trnaechste(byte[] pZeichen, ref int pStelle, ref int pMax)
+    {
+        while (true)
+        {
+            if (pStelle >= pZeichen.Length)
+            {
+                return -1;
+            }
+
+            if (pStelle < pZeichen.Length - 1 && pZeichen[pStelle] == '\\')
+            {
+                pStelle++;
+                if (pStelle >= pZeichen.Length)
+                {
+                    return -1;
+                }
+            }
+
+            var jetzt = pZeichen[pStelle++];
+            if (pStelle < pZeichen.Length && pZeichen[pStelle] == '-'
+                && pStelle + 1 < pZeichen.Length)
+            {
+                pStelle++;
+                if (jetzt > pZeichen[pStelle])
+                {
+                    pStelle++;
+                    continue;
+                }
+
+                pMax = pZeichen[pStelle++];
+                return jetzt;
+            }
+
+            pMax = jetzt;
+            return jetzt;
+        }
+    }
+
+    /// <summary>The text with one character replaced by another.</summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pArgumente">What to look for and what to put there.</param>
+    /// <returns>The new text.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Nach `tr_trans` in `string.c` aus Ruby 1.8.1: eine Tabelle
+    /// ueber alle 256 Bytes.</strong> Kein Durchlauf ueber Paare,
+    /// <strong>sondern jedes Byte des Textes wird einmal nachgesehen** --
+    /// **und das ist der Grund, warum <c>tr("a-z", "x")</c> jeden
+    /// Kleinbuchstaben zu einem x macht, statt ihn dreimal zu uebersetzen.**
+    /// </para>
+    /// <para>
+    /// <strong>Und der Ersetzer wird pro Zeichen gelesen, und danach
+    /// weiterverwendet.</strong> <c>tr("abc", "xy")</c> macht
+    /// <c>a</c> zu <c>x</c>, <c>b</c> zu <c>y</c> und <c>c</c> wieder zu
+    /// <c>y</c>, <strong>weil der Ersetzer nach <c>y</c> aufgebraucht ist
+    /// und der letzte stehen bleibt** -- **in der Quelle ist das
+    /// <c>if (r == -1) r = trrepl.now;</c>, und ohne das wuerde
+    /// <c>c</c> unuebersetzt bleiben.**
+    /// </para>
+    /// <para>
+    /// <strong>Und "^" am Anfang heisst "alles andere".</strong> Das ist der
+    /// Satz, mit dem ein Spiel die erlaubten Zeichen eines Namens
+    /// durchsetzt,
+    /// <strong>und ein Leser ohne das wuerde jedes andere Zeichen
+    /// behalten** -- und ein Spiel, das die Taste sperrt, sperrt sie nicht.
+    /// </para>
+    /// </remarks>
+    private static RubyValue Uebersetzt(string pText, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pArgumente.Count < 2
+            || pArgumente[0].Kind != RubyValueKind.String)
+        {
+            return Text(pText);
+        }
+
+        var von = System.Text.Encoding.UTF8.GetBytes(AlsText(pArgumente[0]));
+        var nach = System.Text.Encoding.UTF8.GetBytes(AlsText(pArgumente[1]));
+        if (von.Length == 0)
+        {
+            return Text(pText);
+        }
+
+        if (pText.Length == 0)
+        {
+            return RubyValue.Nil;
+        }
+
+        var tabelle = new int[256];
+        Array.Fill(tabelle, -1);
+
+        // **Und "^" heisst: alles ausser dem, was genannt wird.** Die
+        // Quelle fuellt die Tabelle mit 1,
+        // **setzt die genannten auf -1 und gibt allen anderen am Ende den
+        // letzten Ersetzer** -- **und genau das fehlte hier**, **also
+        // bekam jeder ungenannte Buchstabe ein Nullzeichen** statt des x,
+        // **und ein Spiel, das die Taste mit `tr("^a-z", "x")` sperrt,
+        // sperrt sie nicht.**
+        var umkehren = von[0] == '^';
+        if (umkehren)
+        {
+            Array.Fill(tabelle, 1);
+        }
+
+        // **Und der Ersetzer hat seinen eigenen Zeiger, weil er Zeichen
+        // fuer Zeichen gelesen wird.** `tr("abc", "xy")` macht `a` zu `x`,
+        // `b` zu `y` und `c` zu `y` wieder,
+        // **weil der Ersetzer nach `y` aufgebraucht ist und der letzte
+        // stehen bleibt** -- **in der Quelle ist das
+        // `if (r == -1) r = trrepl.now;`**, **und ohne das bliebe `c`
+        // unuebersetzt.**
+        var vonZeiger = new TrZeiger { Bytes = von, Stelle = umkehren ? 1 : 0 };
+        var nachZeiger = new TrZeiger { Bytes = nach };
+        while (Trnaechste(nachZeiger) >= 0)
+        {
+            // **Der Ersetzer wird ganz gelesen, und sein letztes Zeichen
+            // ist das, das danach fuer alle kommt.**
+        }
+
+        nachZeiger.Stelle = 0;
+        nachZeiger.ImBereich = false;
+        nachZeiger.Jetzt = 0;
+        var letzte = nach.Length > 0 ? nach[0] : -1;
+        while (Trnaechste(nachZeiger) >= 0)
+        {
+            letzte = nachZeiger.Jetzt;
+        }
+
+        vonZeiger.Stelle = umkehren ? 1 : 0;
+        vonZeiger.ImBereich = false;
+        nachZeiger.Stelle = 0;
+        nachZeiger.ImBereich = false;
+        var ecksatz = new List<int>();
+        while (true)
+        {
+            var c = Trnaechste(vonZeiger);
+            if (c < 0)
+            {
+                break;
+            }
+
+            var r = Trnaechste(nachZeiger);
+            if (r < 0)
+            {
+                r = letzte;
+            }
+
+            if (umkehren)
+            {
+                ecksatz.Add(c);
+            }
+
+            // **Und ein Bereich fuellt jeden seiner Zeichen**, weil
+            // `Trnaechste` sie einzeln liefert.
+            tabelle[c & 0xff] = r;
+        }
+
+        if (umkehren)
+        {
+            foreach (var c in ecksatz)
+            {
+                tabelle[c] = -1;
+            }
+
+            // **Und alles andere bekommt den letzten Ersetzer.** Das ist die
+            // Zeile `if (trans[i] >= 0) trans[i] = trrepl.now;` aus der
+            // Quelle,
+            // **und ohne sie bekommen die ungenannten Zeichen gar nichts.**
+            for (var i = 0; i < 256; i++)
+            {
+                if (tabelle[i] >= 0)
+                {
+                    tabelle[i] = letzte;
+                }
+            }
+        }
+
+        // **Und ein leerer Ersetzer loescht die genannten Zeichen.** Das ist
+        // der Fall, in dem die Quelle frueh zurueckkehrt,
+        // **und es ist der Satz, mit dem ein Spiel unerlaubte Zeichen aus
+        // einem Namen entfernt.**
+        // **Und ein leerer Ersetzer loescht die genannten Zeichen -- und
+        // dafuer braucht die Tabelle einen dritten Wert.**
+        //
+        // **Die Quelle loest das frueh:** `if (RSTRING(repl)->len == 0)
+        // return rb_str_delete_bang(1, &src, str);` -- **sie geht gar
+        // nicht durch die Tabelle**, **sondern loescht mit einem eigenen
+        // Weg.** **Ein Leser, der die Tabelle dafuer benutzt, braucht
+        // einen Wert, der "loeschen" heisst**, **und -1 ist schon "nicht
+        // genannt"** -- **also loeschte der Zweig genau die
+        // falschen.**
+        //
+        // **Der eigene Weg ist auch der kuerzere:** der Bereich wird
+        // einmal aufgefächert,
+        // **und ein Spiel, das `tr("^a-z", "")` schreibt, loescht alles
+        // ausser den Buchstaben** -- was die Tabelle allein nicht kann.
+        if (nach.Length == 0)
+        {
+            var loeschen = new bool[256];
+            var loeschZeiger = new TrZeiger { Bytes = von, Stelle = umkehren ? 1 : 0 };
+            var alle = new List<int>();
+            while (true)
+            {
+                var c = Trnaechste(loeschZeiger);
+                if (c < 0)
+                {
+                    break;
+                }
+
+                alle.Add(c);
+            }
+
+            foreach (var c in alle)
+            {
+                loeschen[c] = true;
+            }
+
+            for (var i = 0; i < 256; i++)
+            {
+                if (loeschen[i] == umkehren)
+                {
+                    tabelle[i] = -2;
+                }
+                else if (umkehren)
+                {
+                    tabelle[i] = -1;
+                }
+            }
+
+            return Text(new string(pText
+                .Where(z => !loeschen[z] || umkehren)
+                .ToArray()));
+        }
+
+        // **Und ein Eintrag mit -2 heisst: das Zeichen faellt weg.** Es
+        // steht nicht in der Quelle,
+        // **und ohne ein eigenes Zeichen dafuer muesste die Ausgabe
+        // entscheiden, ob -1 "behalten" oder "loeschen" heisst** --
+        // **und das ist genau die zweite Bedeutung, die ein Wert nicht
+        // haben darf.**
+        var ergebnis = new System.Text.StringBuilder(pText.Length);
+        foreach (var b in System.Text.Encoding.UTF8.GetBytes(pText))
+        {
+            var c = tabelle[b];
+            if (c == -2)
+            {
+                continue;
+            }
+
+            ergebnis.Append(c >= 0 ? (char)c : (char)b);
+        }
+
+        return Text(ergebnis.ToString());
+    }
+
+
+
 
     /// <summary>
     /// The methods of a list, a hash and a string, which is what every
@@ -1514,8 +2366,17 @@ public sealed class RubyInterpreter
             case "push" or "<<" or "append":
                 return rangeErweitert(pEmpfaenger, pArgumente);
 
+            // **Und `include?` steht hier, fuer die Liste.** Fuer einen Text
+            // steht es in `TextMethode`,
+            // **und die Sammlungsschicht gibt fuer einen Text nil**, weil
+            // **ein Text keine Liste ist** -- **und das ist die ganze
+            // Trennung: diese Schicht kennt Listen, die andere kennt
+            // Texte, und keine von beiden nimmt der anderen ihren Namen
+            // weg.**
             case "include?" or "member?":
-                return Enthaelt(pEmpfaenger, Erste(pArgumente));
+                return pEmpfaenger.Kind == RubyValueKind.String
+                    ? null
+                    : Enthaelt(pEmpfaenger, Erste(pArgumente));
 
             case "index" or "find_index":
                 return Stelle(pEmpfaenger, Erste(pArgumente));
@@ -1563,9 +2424,89 @@ public sealed class RubyInterpreter
                 return RubyValue.OfSymbol(
                     System.Text.Encoding.UTF8.GetString(pEmpfaenger.Bytes));
 
+            case "times" or "upto" or "downto":
+                return Wiederholt(pEmpfaenger, pMethode, pArgumente);
+
             default:
                 return null;
         }
+    }
+
+    /// <summary>A count with a block run over it.</summary>
+    /// <param name="pEmpfaenger">The number.</param>
+    /// <param name="pMethode">The method's name.</param>
+    /// <param name="pArgumente">The block, or the end of the range.</param>
+    /// <returns>The number.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>`3.times` is how a menu draws three rows.</strong> Every
+    /// status window, every item list and every party row is built with it,
+    /// <strong>and a reader that had no `times` had no way to draw a row at
+    /// all</strong> — the window would exist and be empty.
+    /// </para>
+    /// <para>
+    /// <strong>And the number is the answer, not a list.</strong> Ruby
+    /// returns the number,
+    /// <strong>and a reader that returned a list would have made a game that
+    /// checks the answer see a length where it wanted the count</strong> —
+    /// which is a different number and looks like a number.
+    /// </para>
+    /// <para>
+    /// <strong>And a block that stops the run stops it.</strong> `break`
+    /// inside a block leaves the call,
+    /// <strong>and a reader that ran every number anyway would have written
+    /// past the end of the array the game sized from this.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue Wiederholt(
+        RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pEmpfaenger.Kind != RubyValueKind.Integer)
+        {
+            return RubyValue.Nil;
+        }
+
+        var block = pArgumente.Count > 0
+            && pArgumente[^1].Kind == RubyValueKind.Proc
+            ? pArgumente[^1].Block
+            : null;
+        if (block == null)
+        {
+            _diagnostics.Add(
+                pMethode + " needs a block, and none came with it; a count "
+                    + "without a block has nothing to run, and this reader "
+                    + "does not invent one");
+            return RubyValue.Nil;
+        }
+
+        // **Und `2.times` laeuft null und eins -- nicht zwei und eins.**
+        // Die Schleife begann bei der Zahl selbst,
+        // **also lief `2 <= 1` nie, und `times` tat gar nichts** --
+        // **gemessen: `2.times { }` rief den Block nullmal.** `upto` und
+        // `downto` dagegen beginnen bei der Zahl **und enden bei der, die
+        // das Argument nennt.**
+        var beginn = pMethode == "times" ? 0 : pEmpfaenger.Integer;
+        var ende = pMethode == "times"
+            ? pEmpfaenger.Integer - 1
+            : pArgumente.Count > 1 && pArgumente[0].Kind == RubyValueKind.Integer
+                ? pArgumente[0].Integer
+                : pEmpfaenger.Integer;
+        var schritt = pMethode == "downto" ? -1 : 1;
+        for (var i = beginn;
+            schritt > 0 ? i <= ende : i >= ende;
+            i += schritt)
+        {
+            // **Und `self` ist der, in dem der Block geschrieben wurde.**
+            // `3.times { |i| @zeilen = @zeilen.push(i) }` in einer Methode
+            // **schreibt in die Felder dieses Objekts**,
+            // **und `pEmpfaenger` waere die Zahl 3** -- **und ein Leser, der
+            // die Zahl als `self` gibt, haette den Block auf einer Zahl
+            // laufen lassen**, **wo `@zeilen` nichts ist.**
+            BlockAufrufen(
+                block, [RubyValue.OfInteger(i)], _self ?? pEmpfaenger);
+        }
+
+        return pEmpfaenger;
     }
 
 
@@ -2017,19 +2958,54 @@ public sealed class RubyInterpreter
     /// add a member and see the same number of members.
     /// </remarks>
     private static RubyValue rangeErweitert(RubyValue pListe, IReadOnlyList<RubyValue> pArgumente)
-        => RubyValue.OfArray(
-            [.. pListe.Items, .. pArgumente.Where(a => a.Kind != RubyValueKind.Proc)]);
+    {
+        var werte = pArgumente.Where(a => a.Kind != RubyValueKind.Proc).ToList();
+        var drin = pListe.Items as List<RubyValue>;
 
-    /// <summary>Whether a list or a hash has a value.</summary>
-    /// <param name="pWert">The list or the hash.</param>
+        if (drin != null)
+        {
+            // **Und eine Liste, die eine echte Liste ist, wird an Ort und
+            // Stelle laenger.** `akteure.push(held)` ist in Ruby eine
+            // Aenderung an `akteure`,
+            // **und ein Leser, der eine neue Liste zurueckgibt, macht aus
+            // jeder Schleife, die etwas sammelt, eine, die nichts
+            // sammelt** -- **denn `g.push(i)` verwirft die Antwort, wenn die
+            // Liste, auf die sich `g` bezieht, nicht die ist, die
+            // gewachsen ist.**
+            //
+            // **Gemessen, bevor das hier stand:** `3.times { |i| g.push(i) }`
+            // **liess danach null Werte**, **und genau so baut jedes
+            // Menue seine Zeilen.**
+            drin.AddRange(werte);
+            return pListe;
+        }
+
+        // **Und alles andere ist unveraenderbar, und bekommt eine neue
+        // Liste.** Ein Hash traegt seine Paare in derselben Liste,
+        // **und `hash.push(x)` waere in Ruby ein Fehler** -- **also gibt
+        // hier eine neue Liste zurueck, und der Aufrufer sieht, dass er
+        // nichts veraendert hat.**
+        return RubyValue.OfArray([.. pListe.Items, .. werte]);
+    }
+    /// <summary>Whether a list or a text has a value in it.</summary>
+    /// <param name="pWert">The list or the text.</param>
     /// <param name="pGesucht">The value to look for.</param>
     /// <returns>true when it is there.</returns>
     /// <remarks>
-    /// <strong>And it is by value and not by identity.</strong>
-    /// `liste.include?("Held")` is true for a list holding that text,
+    /// <para>
+    /// <strong>By value and not by identity.</strong>
+    /// <c>liste.include?("Held")</c> is true for a list holding that text,
     /// <strong>and a reader that compared references would have answered
-    /// false for every string a game looked for</strong> — and a menu that
+    /// false for every text a game looked for</strong> — and a menu that
     /// checks whether an actor is in the party would always say no.
+    /// </para>
+    /// <para>
+    /// <strong>And a text is a text, not a list of bytes.</strong>
+    /// <c>text.include?("eld")</c> is true,
+    /// <strong>and a reader that made a text out of its bytes would look for
+    /// the three bytes as three values and never find them</strong> — and a
+    /// window's option list checks its tags this way.
+    /// </para>
     /// </remarks>
     private static RubyValue Enthaelt(RubyValue pWert, RubyValue pGesucht)
     {
@@ -2037,8 +3013,7 @@ public sealed class RubyInterpreter
         {
             return RubyValue.OfBoolean(
                 System.Text.Encoding.UTF8.GetString(pWert.Bytes).Contains(
-                    System.Text.Encoding.UTF8.GetString(pGesucht.Bytes),
-                    System.StringComparison.Ordinal));
+                    AlsText(pGesucht), System.StringComparison.Ordinal));
         }
 
         if (pWert.Kind != RubyValueKind.Object)
@@ -2056,6 +3031,9 @@ public sealed class RubyInterpreter
 
         return RubyValue.OfBoolean(false);
     }
+
+
+
 
     /// <summary>Where a value stands in a list, or nil.</summary>
     /// <param name="pListe">The list.</param>
@@ -4139,7 +5117,8 @@ public sealed class RubyInterpreter
         pMethode is "define_method" or "define_singleton_method"
             or "map" or "select" or "filter" or "reject"
             or "each" or "each_with_index" or "reverse_each"
-            or "any?" or "all?";
+            or "any?" or "all?"
+            or "times" or "upto" or "downto";
 
 
     /// <summary>
