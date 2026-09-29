@@ -188,6 +188,8 @@ public sealed class RubyInterpreter
             RubyNodeKind.Ternary => Ternary(pNode),
             RubyNodeKind.Until => EvaluateUntil(pNode),
             RubyNodeKind.Return => EvaluateReturn(pNode),
+            RubyNodeKind.Case => EvaluateCase(pNode),
+            RubyNodeKind.For => EvaluateFor(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
             RubyNodeKind.Begin => EvaluateBlock(pNode),
@@ -696,6 +698,154 @@ public sealed class RubyInterpreter
         return wert;
     }
 
+
+    /// <summary>
+    /// `case`, and a `when` arm matches when one of its values equals the
+    /// case's.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The children are: the case's value, then each arm, then the
+    /// else block.</strong> A case without a value compares nothing, and a
+    /// bare <c>when</c> matches everything — <strong>both are forms a game
+    /// writes</strong>, and a reader that required a value on either side
+    /// would have said "does not begin an expression" on a script RPG_RT runs.
+    /// </para>
+    /// <para>
+    /// <strong>And the arms are tried in order, and the first one that matches
+    /// runs alone.</strong> <c>when 1, 2</c> is two alternatives and not a
+    /// conjunction — <strong>a reader that required every value to match
+    /// would have made it unreachable</strong>, since a case has one value.
+    /// </para>
+    /// </remarks>
+    private RubyValue EvaluateCase(RubyNode pNode)
+    {
+        // **Die Kinder sind: der Wert, die Arme, und der else-Block.** Ein
+        // `when`-Knoten ist ein Case-Knoten mit einem Namen; ein Block ist der
+        // else-Zweig. **Alles andere im Baum gehoert zu keinem von beiden**,
+        // und ein Kind, das keines ist, wird nicht ausgewertet -- **ein
+        // Leser, der jedes Kind als Arm behandelte, wuerde den else-Block
+        // ausfuehren, sobald sein Wert dem case-Wert entspricht.**
+        RubyValue wert = null;
+        var start = 0;
+        if (pNode.Children.Count > 0 && !IstArm(pNode.Children[0])
+            && !IstBlock(pNode.Children[0]))
+        {
+            wert = Evaluate(pNode.Children[0]);
+            start = 1;
+        }
+
+        for (var i = start; i < pNode.Children.Count; i++)
+        {
+            var kind = pNode.Children[i];
+            if (!IstArm(kind))
+            {
+                continue;
+            }
+
+            // **Die Werte sind alle Kinder ausser dem letzten**, und das
+            // letzte ist der Rumpf -- so schreibt ParseWhen es, und
+            // **ein Rumpf an der ersten Stelle waere ein Arm ohne Koerper**.
+            var rumpf = kind.Children.Count > 0
+                ? kind.Children[kind.Children.Count - 1]
+                : null;
+            if (rumpf == null)
+            {
+                continue;
+            }
+
+            if (kind.Children.Count == 1)
+            {
+                // **Ein nacktes `when` ist der Fangarm**, und ohne ihn waere
+                // der else-Zweig die einzige Wahl -- was ein Spiel, das
+                // `when then` schreibt, nicht meint.
+                return Evaluate(rumpf);
+            }
+
+            for (var k = 0; k < kind.Children.Count - 1; k++)
+            {
+                var test = Evaluate(kind.Children[k]);
+                if (wert != null && BooleanOf(Apply("==", wert, test, pNode)))
+                {
+                    return Evaluate(rumpf);
+                }
+            }
+        }
+
+        // **Und der else-Zweig ist der letzte Block unter den Kindern.**
+        for (var i = pNode.Children.Count - 1; i >= start; i--)
+        {
+            if (IstBlock(pNode.Children[i]))
+            {
+                return Evaluate(pNode.Children[i]);
+            }
+        }
+
+        return RubyValue.Nil;
+    }
+
+    private static bool BooleanOf(RubyValue pValue)
+    {
+        return pValue.Kind == RubyValueKind.Boolean && pValue.Boolean;
+    }
+
+    private static bool IstArm(RubyNode pNode)
+    {
+        return pNode.Kind == RubyNodeKind.Case && pNode.Name is "when";
+    }
+
+    private static bool IstBlock(RubyNode pNode)
+    {
+        return pNode.Kind == RubyNodeKind.Block;
+    }
+
+    /// <summary>
+    /// `for x in liste`, which walks a list and binds each element.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The list is evaluated once, before the first step</strong> — a
+    /// reader that re-evaluated it each time would walk a different list when
+    /// the body changes it, and a game's loop would run a number of times
+    /// nobody wrote. <strong>And a nil list walks zero times</strong>, because
+    /// Ruby's <c>for</c> over nil is empty and not an error.
+    /// </remarks>
+    private RubyValue EvaluateFor(RubyNode pNode)
+    {
+        if (pNode.Children.Count < 3)
+        {
+            return Refuse(pNode);
+        }
+
+        var ziel = pNode.Children[0];
+        var liste = Evaluate(pNode.Children[1]);
+        var rumpf = pNode.Children[2];
+        var letztes = RubyValue.Nil;
+
+        if (liste.Kind != RubyValueKind.Object || !liste.IsList)
+        {
+            return RubyValue.Nil;
+        }
+
+        foreach (var element in liste.Items)
+        {
+            if (ziel.Kind == RubyNodeKind.Identifier)
+            {
+                SetLocal(ziel.Name ?? string.Empty, element);
+            }
+            else if (ziel.Kind == RubyNodeKind.InstanceVariable)
+            {
+                _instanceVariables[ziel.Name ?? string.Empty] = element;
+            }
+
+            letztes = Evaluate(rumpf);
+            if (_returned)
+            {
+                break;
+            }
+        }
+
+        return letztes;
+    }
 
     // ---- Control flow
 

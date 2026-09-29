@@ -4476,11 +4476,34 @@ that ran a program's statements one at a time had the first statement's
 variables gone by the second**, which is exactly what the first version of the
 local-variable test did, and it reported its own memory as a failure.
 
-**Still not evaluated:** `case`/`when` and `for`, because **the parser has
-neither** — the node kinds exist and nothing produces them. A class, a module,
-a `def` and a block pass are the same: a game's scripts define classes before
-they run anything, and those need method tables, which is the next card rather
-than this one.
+### `case`/`when` and `for`, and the parser had neither
+
+**The node kinds existed and nothing produced them** — `RubyNodeKind.Case`
+and `RubyNodeKind.For` were declared, `ParseKeywordPrimary` had no branch for
+either, and the `case` in the parser was the token-kind test that decides
+whether a keyword may begin a value. So this was a parser gap before it was
+an evaluator gap, and **an evaluator written first would have had nothing to
+read.**
+
+**A `when` arm takes several values and they are alternatives.** `when 1, 2, 3`
+matches all three, and a reader that required every value to equal a case that
+holds one value would have made the arm unreachable.
+
+**A bare `when` is the catch-all**, and a game writes `when then` as its else.
+**A `for` over nil walks zero times** — Ruby's own behaviour, and a reader
+that raised would have stopped a game on an unset variable.
+
+**And the closer problem appeared a fourth time.** `ReadBody("end")` consumes
+its closer and `ReadBodyUntil` leaves it, so a `case` with an `else` is read by
+the first and a `case` without one by the second — **and a check that looked
+for `end` again in both cases failed on every complete `case ... else ...
+end`.** The rule is the one this card keeps re-learning: **who consumes the
+closer is part of a helper's contract**, and there are now three kinds of body
+reader because there are three contracts.
+
+**Still not evaluated:** a class, a module, a `def` and a block pass. A game's
+scripts define classes before they run anything, and those need method tables,
+which is the next card rather than this one.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare
@@ -4490,8 +4513,22 @@ for it was a test for something that does not happen, and the mutation
 reaches it**. It was removed, and the rule became the observable one:
 `**=` must take `**` and not `*`.
 
-**Test evidence** `test_ruby_interpreter.cs`, 18 tests; `test_ruby_parser.cs`
-stays 52/52. **1559/1559**, validator passed, mutations 6 of 6.
+**And a guard that cannot be killed, because the model cannot show it.**
+`EvaluateFor` checks `Kind != Object || !IsList` before it walks. **The rule
+that removes that check survived three runs and could not be killed by any
+test, and the reason is the model rather than the tests: `RubyValue.Items`
+defaults to an empty list for everything that is not an array**, so a nil
+list, an integer and an object without a list marker all walk zero times
+whether the guard is there or not. The guard describes a future where a value
+can hold items and not be a list; **this one cannot.**
+
+It was replaced with the observable one — the loop binds the element rather
+than a fixed number — and the guard stays, because it is right and costs
+nothing.
+
+**Test evidence** `test_ruby_interpreter.cs`, 23 tests; `test_ruby_parser.cs`
+stays 52/52. **1564/1564**, validator passed, mutations 6 of 6 for the second
+group and 6 of 6 for this one.
 
 ### K-090 MV/MZ: script files as data, no JavaScript executed
 `IN PROGRESS` — board, P4

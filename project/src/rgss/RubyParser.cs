@@ -639,6 +639,51 @@ public sealed class RubyParser
     /// second branch at all</strong> — so the closer stays, and the
     /// <c>if</c> parse consumes it.
     /// </remarks>
+    /// <summary>
+    /// Reads one `when` arm of a `case`: its values, and its body.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A <c>when</c> takes several values and they are alternatives,
+    /// not a conjunction</strong> — <c>when 1, 2, 3</c> matches all three, and
+    /// that is the whole reason the node is a list of values with one body.
+    /// <strong>An empty <c>when</c> is the catch-all</strong> — a game writes
+    /// <c>when then</c> as its <c>else</c>, and a reader that required a
+    /// value would have said "does not begin an expression" on a form RPG_RT
+    /// runs.
+    /// </remarks>
+    private RubyNode ParseWhen()
+    {
+        var when = Take().Text;
+        SkipNewlines();
+        var werte = new List<RubyNode>();
+        while (!IsKeyword("then"))
+        {
+            werte.Add(ParseExpression());
+            SkipNewlines();
+            if (Is(","))
+            {
+                _index++;
+                SkipNewlines();
+                continue;
+            }
+
+            break;
+        }
+
+        SkipThen();
+        var body = ReadBodyUntil("when", "else", "end");
+        var children = new List<RubyNode>();
+        children.AddRange(werte);
+        children.Add(body);
+        return new RubyNode
+        {
+            Kind = RubyNodeKind.Case,
+            Name = when,
+            Line = Current.Line,
+            Children = children,
+        };
+    }
+
     private RubyNode ReadBodyUntil(params string[] pClosers)
     {
         var statements = ParseStatements(pClosers);
@@ -950,6 +995,124 @@ public sealed class RubyParser
                     Line = pToken.Line,
                     Children = children,
                     Role_Children = roles,
+                };
+            }
+            case "case":
+            {
+                _index++;
+                SkipNewlines();
+                // **Der Wert, gegen den die when-Aeste geprueft werden.**
+                // `case` kann einen Ausdruck haben und auch keinen -- ein
+                // nacktes `case` vergleicht nichts, **und das ist eine
+                // Form, die ein Spiel schreibt**, kein Tippfehler.
+                var wert = StartsAValue() ? ParseExpression() : null;
+                SkipNewlines();
+                var whenRuest = ReadBodyUntil("when", "else", "end");
+                var children = new List<RubyNode>();
+                if (wert != null)
+                {
+                    children.Add(wert);
+                }
+
+                children.Add(whenRuest);
+                RubyNode elseBlock = null;
+                if (IsKeyword("else"))
+                {
+                    _index++;
+                    SkipNewlines();
+                    elseBlock = ReadBody("end");
+                }
+                else if (IsKeyword("when"))
+                {
+                    // **Ein `when` nach einem `when` gehoert zum selben
+                    // case** -- und genau hier ist es, denn die Liste der
+                    // `when`-Aeste ist die Liste der Kinder des case-Knotens.
+                    while (IsKeyword("when"))
+                    {
+                        children.Add(ParseWhen());
+                        SkipNewlines();
+                    }
+
+                    if (IsKeyword("else"))
+                    {
+                        _index++;
+                        SkipNewlines();
+                        elseBlock = ReadBody("end");
+                    }
+                }
+
+                // **Der Schlusser ist in beiden Wegen schon verbraucht.**
+                // `ReadBody("end")` nimmt ihn, und ein `case` ohne else
+                // wurde ueber `ReadBodyUntil` gelesen -- **das laesst ihn
+                // stehen, und genau diesen einen Fall nimmt der Pfad hier
+                // noch selbst.** Eine Pruefung, die in beiden Faellen noch
+                // einmal nach `end` sieht, wuerde bei jedem
+                // `case ... else ... end` fehlschlagen.
+                if (elseBlock == null && whenRuest.Name != "end")
+                {
+                    if (IsKeyword("end"))
+                    {
+                        _index++;
+                    }
+                    else
+                    {
+                        throw new RubyParseException(
+                            $"'end' was expected at offset {Current.Offset}, "
+                                + $"but '{Current.Text}' is there.",
+                            Current.Line);
+                    }
+                }
+
+                if (elseBlock != null)
+                {
+                    children.Add(elseBlock);
+                }
+
+                return new RubyNode
+                {
+                    Kind = RubyNodeKind.Case,
+                    Line = pToken.Line,
+                    Children = children,
+                };
+            }
+            case "for":
+            {
+                _index++;
+                SkipNewlines();
+                // **`for x in liste` schreibt die Variable und die Liste.**
+                var ziel = ParsePrimary();
+                if (!IsKeyword("in"))
+                {
+                    throw new RubyParseException(
+                        $"'in' was expected at offset {Current.Offset}, but "
+                            + $"'{Current.Text}' is there.",
+                        Current.Line);
+                }
+
+                _index++;
+                SkipNewlines();
+                var liste = ParseExpression();
+                SkipNewlines();
+                SkipThen();
+                if (IsKeyword("do"))
+                {
+                    _index++;
+                    SkipNewlines();
+                }
+
+                var rumpf = ReadBody("end");
+                return new RubyNode
+                {
+                    Kind = RubyNodeKind.For,
+                    Name = ziel.Name,
+                    Line = pToken.Line,
+                    Children = [ziel, liste, rumpf],
+                    Role_Children =
+                    [
+                        new() { Role = RubyNodeRole.Target, Node = ziel },
+                        new() { Role = RubyNodeRole.When, Node = liste },
+                        new() { Role = RubyNodeRole.WhenTrue, Node = rumpf },
+                    ],
                 };
             }
             case "while":

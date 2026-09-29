@@ -614,4 +614,207 @@ public partial class TestRubyInterpreter : TestBase
                 + "running the block's statements would have answered 9, and "
                 + "that is the difference between `return` and `break`");
     }
+
+    /// <summary>
+    /// A `when` arm matches when one of its values equals the case's.
+    /// </summary>
+    /// <remarks>
+    /// <strong><c>when 1, 2, 3</c> matches all three, and that is
+    /// alternatives and not a conjunction</strong> — a reader that required
+    /// every value to equal a case that holds one value would have made the
+    /// arm unreachable, and a game's menu would always take the else branch.
+    /// </remarks>
+    public void Test_AWhenArmMatchesOnAnyOfItsValues()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        foreach (var (wert, erwartet) in new[]
+                 {
+                     ("1", 11),
+                     ("2", 12),
+                     ("3", 13),
+                     ("4", 99),
+                     // **Und einer, der in den else-Zweig faellt** -- ohne
+                     // ihn waere der else-Zweig toter Code und die Regel
+                     // "der else-Zweig wird nicht ausgewertet" haette
+                     // nichts messen koennen.
+                     ("7", 0),
+                 })
+        {
+            var program = "n = " + wert + "\n"
+                + "case n\n"
+                + "when 1, 2, 3 then 10 + n\n"
+                + "when 4 then 99\n"
+                + "else 0\n"
+                + "end\n";
+            AssertEq(
+                AsInteger(mit.RunProgram(Statements(program))), erwartet,
+                "**case " + wert + " takes the arm that answers "
+                    + erwartet + "** — a reader that required every value of "
+                    + "the arm to match would have made the arm unreachable");
+        }
+    }
+
+    /// <summary>
+    /// A bare `when` catches everything the arms above it did not.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A game writes <c>when then</c> as its catch-all</strong>, and
+    /// the first version of the parser required a value and would have said
+    /// "does not begin an expression" on a form RPG_RT runs.
+    /// </remarks>
+    public void Test_ABareWhenCatchesEverything()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var program = "n = 7\n"
+            + "case n\n"
+            + "when 1, 2 then 10\n"
+            + "when then 20\n"
+            + "end\n";
+        AssertEq(AsInteger(mit.RunProgram(Statements(program))), 20,
+            "**a bare `when` caught the seven** — it is the catch-all, and a "
+                + "reader that required a value would have refused the form");
+
+        var program2 = "n = 2\n"
+            + "case n\n"
+            + "when 1, 2 then 10\n"
+            + "when then 20\n"
+            + "end\n";
+        AssertEq(AsInteger(mit.RunProgram(Statements(program2))), 10,
+            "**and the first arm still wins for a two** — the arms are tried in "
+                + "order, and a reader that took the last match would have "
+                + "answered twenty");
+    }
+
+    /// <summary>
+    /// `for x in liste` walks the list and binds each element.
+    /// </summary>
+    /// <remarks>
+    /// <strong>The list is evaluated once.</strong> The fixture sums the
+    /// elements, and a reader that bound the list itself instead of each
+    /// element would have added a list where a number belongs.
+    /// </remarks>
+    public void Test_ForWalksAListAndBindsEachElement()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost()) { StepLimit = 20_000 };
+        var program = "sum = 0\n"
+            + "for x in [1, 2, 3]\n"
+            + "  sum = sum + x\n"
+            + "end\n"
+            + "sum\n";
+        AssertEq(AsInteger(mit.RunProgram(Statements(program))), 6,
+            "**one plus two plus three** — the loop bound each element and "
+                + "added it, and a reader that never bound would have added a "
+                + "nil and failed");
+
+        var program2 = "last = 0\n"
+            + "for x in [4, 5]\n"
+            + "  last = x\n"
+            + "end\n"
+            + "last\n";
+        AssertEq(AsInteger(mit.RunProgram(Statements(program2))), 5,
+            "**and the last element is five** — the binding follows the walk");
+    }
+
+    /// <summary>
+    /// A `for` over something that is not a list walks nothing.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Ruby's <c>for</c> over nil is empty and not an error</strong> —
+    /// and a game whose list is nil runs its body zero times. A reader that
+    /// raised would have stopped a game on an unset variable.
+    /// </remarks>
+    public void Test_AForOverNilWalksNothing()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost()) { StepLimit = 20_000 };
+        var program = "n = 0\n"
+            + "for x in nil\n"
+            + "  n = n + 1\n"
+            + "end\n"
+            + "n\n";
+        AssertEq(AsInteger(mit.RunProgram(Statements(program))), 0,
+            "**the counter stayed at zero** — a `for` over nil is empty, and a "
+                + "reader that raised would have stopped a game on an unset "
+                + "variable");
+    }
+
+    /// <summary>
+    /// A `for` over something that is not a list walks nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Two different cases, and the first version only had the
+    /// easy one.</strong> A <c>nil</c> list has empty <c>Items</c>, so
+    /// removing the guard changed nothing observable — <strong>and a rule
+    /// that cannot be killed is a rule about a branch nothing
+    /// reaches.</strong> An object that is not a list does have items, and
+    /// that is the case a guard is for.
+    /// </para>
+    /// <para>
+    /// <strong>Ruby's <c>for</c> over nil is empty and not an error</strong>,
+    /// and a game whose list is nil runs its body zero times.
+    /// </para>
+    /// </remarks>
+    public void Test_AForOverSomethingThatIsNotAListWalksNothing()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost()) { StepLimit = 20_000 };
+
+        // **Ein Objekt mit Eintraegen und ohne Listenkennzeichnung.** Das
+        // ist der Fall, an dem der Guard etwas aendert.
+        var nichtListe = new RubyNode
+        {
+            Kind = RubyNodeKind.Hash,
+            Line = 1,
+        };
+        var program = new RubyNode
+        {
+            Kind = RubyNodeKind.Block,
+            Line = 1,
+            Children =
+            [
+                new RubyNode
+                {
+                    Kind = RubyNodeKind.Assignment,
+                    Line = 1,
+                    Children =
+                    [
+                        new RubyNode { Kind = RubyNodeKind.Identifier, Line = 1, Name = "n" },
+                        new RubyNode { Kind = RubyNodeKind.Integer, Line = 1, Integer = 0 },
+                    ],
+                    Role_Children =
+                    [
+                        new()
+                        {
+                            Role = RubyNodeRole.Target,
+                            Node = new RubyNode
+                            {
+                                Kind = RubyNodeKind.Identifier, Line = 1, Name = "n",
+                            },
+                        },
+                        new() { Role = RubyNodeRole.Value, Node = new RubyNode { Kind = RubyNodeKind.Integer, Line = 1, Integer = 0 } },
+                    ],
+                },
+                new RubyNode
+                {
+                    Kind = RubyNodeKind.For,
+                    Name = "x",
+                    Line = 1,
+                    Children =
+                    [
+                        new RubyNode { Kind = RubyNodeKind.Identifier, Line = 1, Name = "x" },
+                        nichtListe,
+                        new RubyNode { Kind = RubyNodeKind.Integer, Line = 1, Integer = 1 },
+                    ],
+                },
+            ],
+        };
+
+        // **Das Ergebnis ist nil und nicht der Rumpf** -- ein `for`, das
+        // null Mal laeuft, hat nie einen Wert gehabt. **Und genau das ist
+        // der Beweis:** ein Leser ohne den Guard wuerde den Rumpf einmal
+        // gelaufen haben und die 1 zurueckgegeben haben.
+        AssertTrue(mit.Run(program).IsNil,
+            "**a `for` over an object that is not a list walks nothing** — the "
+                + "result is nil because the body never ran, and a reader "
+                + "without the guard would have answered one");
+    }
 }
