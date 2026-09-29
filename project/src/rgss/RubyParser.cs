@@ -1379,6 +1379,53 @@ public sealed class RubyParser
                 };
             }
 
+            case "undef":
+            {
+                _index++;
+                SkipNewlines();
+
+                // **Ein Name, und er darf ein Symbol sein.** `undef m` nimmt
+                // einen Bezeichner und `undef :m` ein Symbol, **und beide
+                // sind dieselbe Anweisung** -- ein Leser, der nur eines
+                // davon las, wuerde die andere Form als Ausdruck lesen und
+                // die Zeile als Zuweisung verschlucken.
+                // **Und `undef` ist ein Schluesselwort, kein Methodenaufruf**:
+                // `Module#undef_method` ist die Methode, und die stand als
+                // `undef_method` in keiner Grammatikliste. Die erste
+                // Fassage des Kommentars hier behauptete das Gegenteil und
+                // war falsch.
+                // **Eine Liste, und nicht ein Name.** `undef a, b` ist in
+                // Rubys Grammatik `undef_list ',' fitem` -- **und die erste
+                // Fassage las genau einen**, sodass `undef a, b` die erste
+                // Methode wegnahm und die zweite als eigene Anweisung
+                // las. **Das ist der Fall, in dem die Mutation "liest nur den
+                // Anfang" durchkam**: bei einem einzigen Namen liefern beide
+                // Wege denselben Knoten, und erst die Liste trennt sie.
+                var namen = new List<RubyNode>();
+                namen.Add(Is("(") ? ReadParenthesised() : ParseStatement());
+                while (Is(","))
+                {
+                    _index++;
+                    SkipNewlines();
+                    namen.Add(ParseStatement());
+                }
+
+                return new RubyNode
+                {
+                    Kind = RubyNodeKind.Undef,
+                    Line = pToken.Line,
+                    Children = namen,
+                    Role_Children =
+                    [
+                        .. namen.Select(pName => new RubyNodePart
+                        {
+                            Role = RubyNodeRole.Condition,
+                            Node = pName,
+                        }),
+                    ],
+                };
+            }
+
             case "alias":
             {
                 _index++;

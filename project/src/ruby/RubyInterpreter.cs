@@ -287,6 +287,7 @@ public sealed class RubyInterpreter
             RubyNodeKind.DefS => DefineMethod(pNode, true),
             RubyNodeKind.Alias => DefineAlias(pNode),
             RubyNodeKind.Defined => EvaluateDefined(pNode),
+            RubyNodeKind.Undef => EvaluateUndef(pNode),
             RubyNodeKind.SuperCall => EvaluateSuper(pNode),
             RubyNodeKind.If => EvaluateIf(pNode),
             RubyNodeKind.While => EvaluateWhile(pNode),
@@ -1437,6 +1438,13 @@ public sealed class RubyInterpreter
             }
         }
 
+        // **Ein `def` raeumt die Marke von `undef`.** Die Marke sitzt am
+        // Namen und nicht am Methodenobjekt, **und ein Leser, der sie an
+        // einem Objekt gehaelt haette, wuerde den Namen fuer immer tot
+        // lassen** -- eine Klasse, die die Methode danach selbst schreibt,
+        // wuerde nie wieder antworten.
+        typ.Undefiniert.Remove(name);
+        typ.Undefiniert.Remove("self." + name);
         typ.Methods[(pAufSelbst ? "self." : string.Empty) + name] =
             new RubyMethod
             {
@@ -1476,6 +1484,16 @@ public sealed class RubyInterpreter
         var name = pTypeName;
         while (name != null && _types.TryGetValue(name, out var typ) && gesehen.Add(name))
         {
+            // **Ein `undef` in dieser Klasse beendet den Weg.** Die Methode
+            // ist nicht da und darf aus der Basis nicht kommen, **und ein
+            // Leser, der nur den Tabelleneintrag loeschte, waere hier
+            // weitergegangen und haette sie gefunden** -- das waere genau das
+            // Gegenteil dessen, was `undef` sagt.
+            if (typ.Undefiniert.Contains(pMethod))
+            {
+                return null;
+            }
+
             // **Die Basismethode, und nicht die Klassenmethode der
             // Basis.** `super` aus einer Instanzmethode laeuft zur
             // Instanzmethode -- **und ein Leser, der auch hier die
@@ -2151,6 +2169,92 @@ public sealed class RubyInterpreter
         _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
         return wert;
     }
+
+
+
+    /// <summary>
+    /// Takes a method out of the class it is written in.
+    /// </summary>
+    /// <param name="pNode">The `undef` node.</param>
+    /// <returns>A symbol naming what was taken out.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>It takes the method out and does not replace it with
+    /// nothing.</strong> Ruby makes the name undefined, so a call after
+    /// <c>undef m</c> raises <c>NoMethodError</c> rather than finding the
+    /// base's method — <strong>and a reader that deleted only the class's own
+    /// entry would let the base's method through</strong>, which is the
+    /// opposite of what <c>undef</c> is for: a game writes it to say *this
+    /// class does not do that*, and inheriting it is exactly the case it
+    /// rules out.
+    /// </para>
+    /// <para>
+    /// <strong>So the name is marked and not merely absent.</strong> The
+    /// chain walk stops at the mark, and that is the one behaviour that
+    /// distinguishes <c>undef</c> from never having defined the method.
+    /// </para>
+    /// <para>
+    /// <strong>And it is a name and not a call.</strong> <c>undef m</c> takes
+    /// the method <em>named</em> <code>m</code>; it does not call it, and a
+    /// reader that evaluated the operand would run a method on the way to
+    /// removing it.
+    /// </para>
+    /// </remarks>
+    private RubyValue EvaluateUndef(RubyNode pNode)
+    {
+        var typ = _aktuellerTyp;
+        if (typ == null)
+        {
+            _diagnostics.Add(
+                $"undef {UndefName(pNode)} stands outside a class, and this "
+                + "interpreter files methods under a class; the reference "
+                + "would put it on Object, and that is a host's job");
+            return RubyValue.Nil;
+        }
+
+        // **Jeder Name in der Liste.** `undef a, b` nimmt beide weg, **und
+        // die erste Fassage nahm nur den ersten** -- der zweite wurde als
+        // eigene Anweisung gelesen und blieb als Name im Skript stehen, wo
+        // ihn nichts aufrief. **Ein Spiel, das zwei Methoden auf einmal
+        // wegnimmt, haette die zweite behalten.**
+        var letzter = RubyValue.Nil;
+        foreach (var teil in Statements(pNode))
+        {
+            // **Ein Bezeichner und ein Symbol sind beides moeglich**, und
+            // beide nennen eine Methode: `undef m` schreibt den Bezeichner,
+            // `undef :m` das Symbol. **Ein Leser, der nur eines davon las,
+            // haette die andere Form ins Leere gehen lassen.**
+            var name = UndefName(teil);
+            typ.Undefiniert.Add(name);
+            typ.Methods.Remove(name);
+            typ.Methods.Remove("self." + name);
+            letzter = RubyValue.OfSymbol(name);
+        }
+
+        return letzter;
+    }
+
+    /// <summary>
+    /// The method name an `undef` names.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Both spellings, and nothing else.</strong> A `def` has no
+    /// other shape, so anything that is not a name or a symbol is a
+    /// diagnostic — **and a reader that took any operand would have removed
+    /// a method named after a number.**
+    /// </remarks>
+    private static string UndefName(RubyNode pNode) => pNode.Kind switch
+    {
+        // **`Text` und nicht `Name` beim Symbol.** Ein Symbol-Knoten traegt
+        // den Namen in `Text` -- `Name` ist fuer die Knoten, die einen Namen
+        // *ueber* ihr Literal fuehren, und ein Symbol fuehrt keinen.
+        // **Das ist derselbe Unterschied wie bei `alias`, aus demselben
+        // Grund, und dieselbe Ursache: `alias :neu :alt` hat es getroffen
+        // und `undef :m` jetzt.**
+        RubyNodeKind.Identifier => pNode.Name ?? string.Empty,
+        RubyNodeKind.Symbol => pNode.Text ?? pNode.Name ?? string.Empty,
+        _ => "",
+    };
 
 
 

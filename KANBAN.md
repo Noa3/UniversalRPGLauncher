@@ -3484,8 +3484,42 @@ There is no `Proc` and no `lambda` here, **so `items.map { |x| x * 2 }` is
 still a host method and not a thing a class can define** — and that limit is
 stated rather than worked around.
 
-**Still not evaluated:** `undef`, `Proc`, `lambda`, and block parameters with
-default values.
+### `undef`, and a test that counted a list instead of reading it
+
+**It is a keyword and the lexer's own grammar list already had it.**
+`Test_TheKeywordListIsTheOneFromTheGrammar` says forty-one names and there
+were forty-one, **and this work nearly made it forty-two** — the same wrong
+edit, the same red test, and the test was right. A test that counts something
+says the size, not the contents, **and the size is what catches the second
+accident.**
+
+**The mark and not the absence of an entry.** `undef m` in a subclass that
+never had an `m` of its own has to stop the base's `m` from coming through,
+**and a table without a mark says nothing about that** — the walk would carry
+on upward and find it. `RubyType.Undefiniert` is a set for exactly that, and
+`FindMethod` stops on it.
+
+**And a `def` clears the mark.** The mark is on the name and not on the method
+object, **and a reader that kept it on an object would have left the name dead
+for good** — a class that brings the method back would never answer again.
+
+**`undef a, b` is a list**, verified in `v1_8_1`'s `parse.y`:
+`undef_list: fitem | undef_list ',' fitem`. The first version took one name,
+so `undef a, b` removed `a` and left `b` sitting in the script as a statement
+nothing calls.
+
+**And that list is the case that kills the "reads only the first token"
+mutation.** With a single name both readings produce the same node, **so every
+other test in this file passed with the list support deleted** — that mutation
+survived five tests until a case existed where the two readings differ. **A
+test that cannot fail for the wrong reason is not measuring the thing it
+names.**
+
+**The symbol is read from `Text` and not from `Name`** — the same difference
+`alias` hit, from the same cause, and the second time in a week.
+
+**Still not evaluated:** `Proc`, `lambda`, `define_method`, and block
+parameters with default values.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

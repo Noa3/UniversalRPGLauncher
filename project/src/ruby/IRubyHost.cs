@@ -231,6 +231,26 @@ public sealed class RubyType
 
     /// <summary>The methods defined in the body, by name.</summary>
     public Dictionary<string, RubyMethod> Methods { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The names `undef` took out of this class, whether they were here or
+    /// inherited.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A set and not the absence of an entry.</strong> `undef m` in a
+    /// subclass that never had its own `m` has to stop the base's `m` from
+    /// coming through, **and a table without an entry says nothing about
+    /// that** — the walk would simply carry on upward and find it.
+    /// </para>
+    /// <para>
+    /// <strong>This is the whole difference between `undef` and never having
+    /// defined the method</strong>, and it is the reason a game's subclass
+    /// can say <em>this class does not do that</em> in a way that survives the
+    /// base class gaining the method later.
+    /// </para>
+    /// </remarks>
+    public HashSet<string> Undefiniert { get; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>
