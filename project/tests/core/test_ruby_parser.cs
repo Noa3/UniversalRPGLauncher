@@ -211,26 +211,39 @@ public partial class TestRubyParser : TestBase
         AssertEq(node.Children[2].Name, "y", "the second");
     }
 
-    public void Test_AMethodCallWithNoReceiverCarriesItsArgumentsByRole()
+    /// <summary>
+    /// A call without a written receiver is a call on `self`, and says so.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the earlier form put the name where the receiver goes.</strong>
+    /// <c>draw(x)</c> hat keinen geschriebenen Empfaenger,
+    /// **und der Knoten legte sich selbst als erstes Kind** —
+    /// **und `Call` wertet sein erstes Kind als Empfaenger aus**,
+    /// **und ein Name, den niemand gesetzt hat, ist nil**,
+    /// **und die Meldung lautete *„nil has no method 'sprintf' on this
+    /// host"*** — **also ueber einen Empfaenger, den der Leser selbst
+    /// erfunden hatte.**
+    /// </para>
+    /// <para>
+    /// <strong>And `SelfCall` is a different kind, and not a different
+    /// name.</strong> The interpreter knows that <c>self</c> was meant,
+    /// **and a call that really has a receiver stays a `Call`** —
+    /// which is the whole difference between <c>draw(x)</c> in a class and
+    /// <c>sprite.draw(x)</c> on an object.
+    /// </para>
+    /// </remarks>
+    public void Test_ACallWithoutAReceiverIsACallOnSelf()
     {
         var node = One("draw(x)");
-        AssertEq(node.Kind, RubyNodeKind.Call, "a bare call is still a call");
-        AssertEq(node.Name, "draw", "naming the method");
-        // **Der Empfaenger kommt aus dem Namen, nicht aus einem Kind.**
-        // `draw(x)` hat keinen geschriebenen Empfaenger, **und ein Leser,
-        // der das Kind an erster Stelle erwartete, haette `draw` fuer einen
-        // Empfaenger gehalten und `x` fuer den Methodennamen** -- der Name
-        // steht jetzt am Knoten und die Argumente tragen ihre Rolle.
-        AssertEq(node.Children.Count, 2,
-            "**the arguments and the name are both there** — one child for "
-                + "the name and one for the argument, so nothing is lost");
-        var mit_rolle = node.Role_Children!.Where(pPart =>
-            pPart.Role == RubyNodeRole.Argument).ToList();
-        AssertEq(mit_rolle.Count, 1,
-            "**and exactly one carries the argument role** — the reader that "
-                + "walks the roles gets `x`, and the one that walks the first "
-                + "child gets the name, and both are right about their own");
-        AssertEq(mit_rolle[0].Node.Name, "x", "which is the argument that was written");
+        AssertEq(node.Kind, RubyNodeKind.SelfCall,
+            "**a call with no written receiver is a call on self** — and a "
+                + "reader that made the name the receiver had a receiver "
+                + "nobody wrote, and the message named a host that had done "
+                + "nothing");
+        AssertEq(node.Name, "draw", "naming the method as written");
+        AssertEq(node.Children.Count, 1, "**and the argument is the only child**");
+        AssertEq(node.Children[0].Name, "x", "which is the argument that was written");
     }
 
     public void Test_IndexingIsACallNamedForTheIndexOperator()

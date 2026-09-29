@@ -714,6 +714,27 @@ public sealed class RubyInterpreter
         var ganzzahlig = pLeft.Kind == RubyValueKind.Integer
             && pRight.Kind == RubyValueKind.Integer;
 
+        // **Und `%` auf einem Text ist das Format, und nicht der Rest.**
+        // `"%05.2f" % wert` steht in jeder Statuszeile von VX,
+        // **und ein Leser, der hier nur Zahlen nahm, wuerde genau diese
+        // Zeile mit *„undefined operator '%' for a String and a
+        // Float"* ablehnen** --
+        // **und die Fehlermeldung waere ueber einen Operator, den es
+        // gibt.**
+        //
+        // **Vor dem `switch`, weil ein `case` mit Bedingung keinen
+        // `goto case` traegt** -- **und ein Leser, der ihn brauchte,
+        // haette ihn nicht geschrieben und waere an der zweiten Stelle
+        // gescheitert.**
+        if (pOperator == "%" && pLeft.Kind == RubyValueKind.String)
+        {
+            var alsText = ProzentFormatieren(pLeft, pRight);
+            if (alsText != null)
+            {
+                return alsText;
+            }
+        }
+
         switch (pOperator)
         {
             case "+" when pLeft.Kind == RubyValueKind.String:
@@ -749,6 +770,14 @@ public sealed class RubyInterpreter
                 }
 
                 return RubyValue.OfReal(pLeft.Real / pRight.Real);
+            // **Und `%` auf einem Text ist das Format, und nicht der Rest.**
+            // `"%05.2f" % wert` steht in jeder Statuszeile von VX,
+            // **und ein Leser, der hier nur Zahlen nahm, wuerde genau diese
+            // Zeile mit *„undefined operator '%' for a String and a
+            // Float"* ablehnen** --
+            // **und die Fehlermeldung waere ueber einen Operator, den es
+            // gibt.**
+
             case "%" when beideZahlen:
                 if (pRight.Integer == 0)
                 {
@@ -1218,6 +1247,35 @@ public sealed class RubyInterpreter
         // sie laeuft ein Skript nach seinem eigenen Fehlerpfad weiter,
         // **und genau das ist der Unterschied zwischen einem Spiel, das
         // sich weigert, und einem Spiel, das abstuerzt.**
+        // **Und `sprintf` und `printf` sind `Kernel`-Methoden, und
+        // `sprintf` ist genau das, was `String#%` tut.** Das ist der
+        // Satz, den jedes Skript schreibt, das eine Zahl in eine Meldung
+        // setzt,
+        // **und ein Leser, der nur den Operator kannte, wuerde beiden
+        // Namen *„has no method 'sprintf' on this host"* sagen** --
+        // **und `printf` schreibt, waehrend `sprintf` zurueckgibt.**
+        if ((methode == "sprintf" || methode == "printf")
+            && empfaenger.Kind == RubyValueKind.Symbol
+            && argumente.Count > 0
+            && argumente[0].Kind == RubyValueKind.String)
+        {
+            var formatiert = ProzentFormatieren(
+                argumente[0],
+                argumente.Count > 1
+                    ? RubyValue.OfArray([.. argumente.Skip(1)])
+                    : RubyValue.OfArray([]));
+            if (formatiert != null)
+            {
+                // **Und `printf` gibt nil zurueck, weil es schreibt.**
+                // Ruby gibt nil zurueck,
+                // **und ein Leser, der den Text zurueckgaebe, haette
+                // `printf(...)` in einer Kette**, **und `puts` und `printf`
+                // hintereinander waere dann eine Ausgabe in einer
+                // Variablen.**
+                return methode == "printf" ? RubyValue.Nil : formatiert;
+            }
+        }
+
         if (methode == "raise" && empfaenger.Name == "self")
         {
             throw RubyFehlerAus(argumente);
@@ -6170,6 +6228,585 @@ public sealed class RubyInterpreter
     /// game's text into two characters</strong> — and a name on a menu
     /// would be a name with holes in it.
     /// </remarks>
+    /// <summary>
+    /// Ruby's `String#%`, which is `rb_str_sprintf` and nothing else.
+    /// </summary>
+    /// <param name="pMuster">The format, as written.</param>
+    /// <param name="pWerte">The values, as evaluated.</param>
+    /// <returns>The text, and nil when the pattern asked for a value that
+    /// is not there.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the grammar of `sprintf.c` from Ruby 1.8.1 and
+    /// not a table I wrote.</strong> Flags, then width, then precision, then
+    /// the conversion,
+    /// <strong>and the one-argument form takes the rest of an array as
+    /// values</strong> — `&quot;%s und %s&quot; % [&quot;a&quot;, &quot;b&quot;]`
+    /// is the sentence a game's message box writes.
+    /// </para>
+    /// <para>
+    /// <strong>And a value that is not there is an error, and not an empty
+    /// string.</strong> `&quot;%d %d&quot; % [1]` raises <c>too few
+    /// argument</c>,
+    /// <strong>because a status line that shows a hole where a number belongs
+    /// is worse than one that stops</strong> — and the reference stops.
+    /// </para>
+    /// <para>
+    /// <strong>And `%%` is a percent sign, and not a conversion.</strong>
+    /// It is in every caption that writes &quot;100%%&quot;.
+    /// </para>
+    /// </remarks>
+    private static RubyValue? ProzentFormatieren(
+        RubyValue pMuster,
+        RubyValue pRechts)
+    {
+        var text = pMuster.Kind == RubyValueKind.String
+            ? System.Text.Encoding.UTF8.GetString(pMuster.Bytes)
+            : string.Empty;
+        var werte = new List<RubyValue>();
+
+        // **Und ein Array rechts ist die Liste der Werte.** `&quot;%s und %s&quot;
+        // % [&quot;a&quot;, &quot;b&quot;]` ist eine Liste und kein Wert,
+        // **und ein Leser, der das Array als Wert formatierte, wuerde
+        // `[&quot;a&quot;, &quot;b&quot;]` in die erste Luecke schreiben** --
+        // **und das ist der Satz, mit dem jedes Spiel eine Meldung
+        // zusammenbaut.**
+        if (pRechts.Kind == RubyValueKind.Object && pRechts.IsList)
+        {
+            werte.AddRange(pRechts.Items);
+        }
+        else
+        {
+            werte.Add(pRechts);
+        }
+
+        var Ergebnis = new System.Text.StringBuilder();
+        var stelle = 0;
+        var naechste = 0;
+        for(var zeichen = 0; zeichen < text.Length; zeichen++)
+        {
+            var z = text[zeichen];
+            if (z != '%')
+            {
+                Ergebnis.Append(z);
+                continue;
+            }
+
+            zeichen++;
+            if (zeichen >= text.Length)
+            {
+                throw new RubyRuntimeException(
+                    "ArgumentError", "malformed format string");
+            }
+
+            if (text[zeichen] == '%')
+            {
+                Ergebnis.Append('%');
+                continue;
+            }
+
+            // **Und die Flags, in der Reihenfolge, in der Ruby sie liest.**
+            var minus = false;
+            var nullen = false;
+            var plus = false;
+            var leerzeichen = false;
+            var raute = false;
+            for(; zeichen < text.Length; zeichen++)
+            {
+                if (text[zeichen] == '-')
+                {
+                    minus = true;
+                }
+                else if (text[zeichen] == '0')
+                {
+                    nullen = true;
+                }
+                else if (text[zeichen] == '+')
+                {
+                    plus = true;
+                }
+                else if (text[zeichen] == ' ')
+                {
+                    leerzeichen = true;
+                }
+                else if (text[zeichen] == '#')
+                {
+                    raute = true;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (zeichen >= text.Length)
+            {
+                throw new RubyRuntimeException(
+                    "ArgumentError", "malformed format string");
+            }
+
+            // **Und die Breite, und sie kann aus einem Wert kommen.**
+            var breite = -1;
+            if (text[zeichen] == '*')
+            {
+                breite = NaechsterZahl(werte, ref naechste, "width given twice");
+                if (breite < 0)
+                {
+                    minus = true;
+                    breite = -breite;
+                }
+
+                zeichen++;
+            }
+            else
+            {
+                var ziffern = 0;
+                while (zeichen < text.Length && char.IsDigit(text[zeichen]))
+                {
+                    ziffern = (ziffern * 10) + (text[zeichen] - '0');
+                    zeichen++;
+                    if (ziffern > 1_000_000)
+                    {
+                        throw new RubyRuntimeException(
+                            "ArgumentError", "malformed format string");
+                    }
+                }
+
+                if (ziffern > 0)
+                {
+                    breite = ziffern;
+                }
+            }
+
+            if (breite < 0 && nullen)
+            {
+                // **Und `0` ohne Breite ist eine Breite von null, und nicht
+                // das Flag fuer sich.** Ruby setzt FWIDTH,
+                // **und ein Leser, der `0` nur als Flag las, wuerde aus
+                // `%010d` eine Zahl ohne Fuehrungsnull machen** --
+                // **und das ist die Form, mit der eine Uhr ihre Stunden
+                // schreibt.**
+                breite = 0;
+            }
+
+            // **Und die Praezision, und sie kann auch aus einem Wert
+            // kommen.**
+            var praezision = -1;
+            if (zeichen < text.Length && text[zeichen] == '.')
+            {
+                zeichen++;
+                if (zeichen < text.Length && text[zeichen] == '*')
+                {
+                    praezision = NaechsterZahl(werte, ref naechste, "precision given twice");
+                    zeichen++;
+                }
+                else
+                {
+                    praezision = 0;
+                    while (zeichen < text.Length && char.IsDigit(text[zeichen]))
+                    {
+                        praezision = (praezision * 10) + (text[zeichen] - '0');
+                        zeichen++;
+                    }
+                }
+            }
+
+            if (zeichen >= text.Length)
+            {
+                throw new RubyRuntimeException(
+                    "ArgumentError", "malformed format string");
+            }
+
+            var wand = text[zeichen];
+            if (wand == 'l' || wand == 'h')
+            {
+                // **Und `l` und `h` sind Längen, und die Formatierung
+                // ändert sich nicht.** Sie stehen in jedem alten printf,
+                // **und ein Leser, der sie ablehnte, würde jedes Skript
+                // aus der Zeit vor 1999 ablehnen.**
+                zeichen++;
+                if (zeichen >= text.Length)
+                {
+                    throw new RubyRuntimeException(
+                        "ArgumentError", "malformed format string");
+                }
+
+                wand = text[zeichen];
+            }
+
+            var wert = NaechsterWert(werte, ref naechste);
+            Ergebnis.Append(
+                WandAn(wand, wert, breite, praezision, minus, nullen, plus,
+                    leerzeichen, raute));
+            stelle++;
+            _ = stelle;
+        }
+
+        return RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(
+            Ergebnis.ToString()));
+    }
+
+
+    /// <summary>
+    /// The next value a format string asked for, and the value itself.
+    /// </summary>
+    /// <param name="pWerte">The values.</param>
+    /// <param name="pNaechste">How many were taken.</param>
+    /// <returns>The value, as written.</returns>
+    /// <remarks>
+    /// <strong>And a value that is not there is an error.</strong> Ruby's own
+    /// message is <c>too few argument</c> and that is the one here,
+    /// <strong>because a status line with a hole in it is worse than one
+    /// that stops</strong> — and the reference stops.
+    /// </remarks>
+    private static RubyValue NaechsterWert(
+        List<RubyValue> pWerte,
+        ref int pNaechste)
+    {
+        if (pNaechste >= pWerte.Count)
+        {
+            throw new RubyRuntimeException("ArgumentError", "too few argument");
+        }
+
+        return pWerte[pNaechste++];
+    }
+
+    /// <summary>
+    /// The next value a format string used as a number.
+    /// </summary>
+    /// <param name="pWerte">The values.</param>
+    /// <param name="pNaechste">How many were taken.</param>
+    /// <param name="pWarum">The message when there is none.</param>
+    /// <returns>The value as a whole number.</returns>
+    /// <remarks>
+    /// <strong>And `*` takes the width from a value, and the value stays a
+    /// value.</strong> <c>"%*d" % [5, 42]</c> is <c>   42</c>,
+    /// <strong>and the 5 is taken for the width and not for the
+    /// number</strong> — **a reader that took it for both would have made
+    /// one value out of two.**
+    /// </remarks>
+    private static int NaechsterZahl(
+        List<RubyValue> pWerte,
+        ref int pNaechste,
+        string pWarum)
+    {
+        var wert = NaechsterWert(pWerte, ref pNaechste);
+        return wert.Kind switch
+        {
+            RubyValueKind.Integer => (int)wert.Integer,
+            RubyValueKind.Float => (int)wert.Real,
+            RubyValueKind.String => int.TryParse(
+                System.Text.Encoding.UTF8.GetString(wert.Bytes),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var gezahlt)
+                ? gezahlt
+                : 0,
+            _ => 0,
+        };
+    }
+
+    /// <summary>
+    /// One conversion, and the whole of what it writes.
+    /// </summary>
+    /// <param name="pWand">The conversion character.</param>
+    /// <param name="pWert">The value.</param>
+    /// <param name="pBreite">The width, or -1.</param>
+    /// <param name="pPraezision">The precision, or -1.</param>
+    /// <param name="pMinus">Whether `-` was written.</param>
+    /// <param name="pNullen">Whether `0` was written.</param>
+    /// <param name="pPlus">Whether `+` was written.</param>
+    /// <param name="pLeerzeichen">Whether a space was written.</param>
+    /// <param name="pRaute">Whether `#` was written.</param>
+    /// <returns>The text this conversion writes.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a value of the wrong kind is converted, and not
+    /// refused.</strong> <c>&quot;%d&quot; % &quot;3&quot;</c> is <c>3</c> in
+    /// Ruby,
+    /// <strong>because a game's save file has numbers as text and the
+    /// status line reads them back</strong> — and a reader that refused
+    /// would break every old save.
+    /// </para>
+    /// <para>
+    /// <strong>And `%s` uses `to_s`, and not `inspect`.</strong> A name on a
+    /// menu is the name,
+    /// <strong>und ein Leser, der `inspect` nähme, würde Anführungszeichen
+    /// um jeden Namen schreiben** — and a menu item would be
+    /// <c>"Held"</c> with the quotes drawn.
+    /// </para>
+    /// </remarks>
+    private static string WandAn(
+        char pWand,
+        RubyValue pWert,
+        int pBreite,
+        int pPraezision,
+        bool pMinus,
+        bool pNullen,
+        bool pPlus,
+        bool pLeerzeichen,
+        bool pRaute)
+    {
+        switch (pWand)
+        {
+            case 'd' or 'i' or 'u':
+                return MitBreite(
+                    Ganzzahl(pWert, pPlus, pLeerzeichen),
+                    pBreite,
+                    pMinus,
+                    pNullen);
+
+            case 'b':
+                return MitBreite(
+                    Vorzeichen(pWert, pPlus, pLeerzeichen)
+                        + System.Convert.ToString(
+                            GroßeVon(pWert), 2),
+                    pBreite,
+                    pMinus,
+                    pNullen);
+
+            case 'o':
+                return MitBreite(
+                    Vorzeichen(pWert, pPlus, pLeerzeichen)
+                        + System.Convert.ToString(
+                            GroßeVon(pWert), 8),
+                    pBreite,
+                    pMinus,
+                    pNullen);
+
+            case 'x':
+                return MitBreite(
+                    Vorzeichen(pWert, pPlus, pLeerzeichen)
+                        + (pRaute ? "0x" : string.Empty)
+                        + System.Convert.ToString(
+                            GroßeVon(pWert), 16),
+                    pBreite,
+                    pMinus,
+                    pNullen);
+
+            case 'X':
+                return MitBreite(
+                    Vorzeichen(pWert, pPlus, pLeerzeichen)
+                        + (pRaute ? "0X" : string.Empty)
+                        + System.Convert.ToString(
+                            GroßeVon(pWert), 16).ToUpperInvariant(),
+                    pBreite,
+                    pMinus,
+                    pNullen);
+
+            case 'f' or 'e' or 'E' or 'g' or 'G':
+            {
+                var zahl = ReelleVon(pWert);
+                var praezision = pPraezision < 0 ? 6 : pPraezision;
+                var kopf = zahl < 0 || (zahl == 0d && 1d / zahl < 0) ? "-" : string.Empty;
+                var mantisse = Math.Abs(zahl);
+                string text;
+                if (pWand is 'e' or 'E')
+                {
+                    text = mantisse.ToString(
+                        (pWand == 'E' ? "E" : "e") + praezision.ToString(
+                            CultureInfo.InvariantCulture),
+                        CultureInfo.InvariantCulture);
+                }
+                else if (pWand is 'g' or 'G')
+                {
+                    // **Und `g` nimmt die kuerzeste Form und faellt auf `e`
+                    // zurueck, wenn die Zahl zu klein oder zu gross ist.**
+                    text = mantisse.ToString(
+                        (pWand == 'G' ? "G" : "G") + Math.Max(
+                            1, pPraezision < 0 ? 6 : pPraezision),
+                        CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    text = mantisse.ToString(
+                        "F" + praezision.ToString(CultureInfo.InvariantCulture),
+                        CultureInfo.InvariantCulture);
+                }
+
+                var mitVorzeichen = kopf;
+                if (zahl >= 0)
+                {
+                    mitVorzeichen = pPlus ? "+" : pLeerzeichen ? " " : string.Empty;
+                }
+
+                return MitBreite(mitVorzeichen + text, pBreite, pMinus, false);
+            }
+
+            case 'c':
+            {
+                // **Und `%c` nimmt die Zahl als Zeichen, und `to_s` von einem
+                // Zeichen als Zeichen.** `"%c" % 65` ist `A`,
+                // **und das ist der Satz, mit dem ein Spiel aus einer
+                // Tastennummer einen Buchstaben macht.**
+                var zeichen = pWert.Kind == RubyValueKind.String
+                    ? System.Text.Encoding.UTF8.GetString(pWert.Bytes)
+                    : ((char)(GroßeVon(pWert) & 0xFFFF)).ToString();
+                return MitBreite(zeichen, pBreite, pMinus, false);
+            }
+
+            case 's':
+            {
+                var inhalt = pWert.Kind == RubyValueKind.String
+                    ? System.Text.Encoding.UTF8.GetString(pWert.Bytes)
+                    : WertAlsText(pWert);
+                return MitBreite(
+                    inhalt,
+                    pBreite,
+                    pMinus,
+                    false,
+                    pPraezision < 0 ? -1 : pPraezision);
+            }
+
+            case 'p':
+                return MitBreite("0x" + System.Convert.ToString(GroßeVon(pWert), 16),
+                    pBreite, pMinus, pNullen);
+
+            default:
+                throw new RubyRuntimeException(
+                    "ArgumentError", $"malformed format string - %{pWand}");
+        }
+    }
+
+    /// <summary>
+    /// A value's size, and nil is zero.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The number.</returns>
+    private static long GroßeVon(RubyValue pWert) => pWert.Kind switch
+    {
+        RubyValueKind.Integer => pWert.Integer,
+        RubyValueKind.Float => (long)pWert.Real,
+        RubyValueKind.String => long.TryParse(
+            System.Text.Encoding.UTF8.GetString(pWert.Bytes),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var gezahlt)
+            ? gezahlt
+            : 0,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// A value as a whole number, with the sign a format asked for.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <param name="pPlus">Whether `+` was written.</param>
+    /// <param name="pLeerzeichen">Whether a space was written.</param>
+    /// <returns>The number as text.</returns>
+    private static string Ganzzahl(RubyValue pWert, bool pPlus, bool pLeerzeichen)
+    {
+        var zahl = GroßeVon(pWert);
+        if (zahl < 0)
+        {
+            return zahl.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (pPlus)
+        {
+            return "+" + zahl.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return pLeerzeichen
+            ? " " + zahl.ToString(CultureInfo.InvariantCulture)
+            : zahl.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// The sign a format asked for, on its own.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <param name="pPlus">Whether `+` was written.</param>
+    /// <param name="pLeerzeichen">Whether a space was written.</param>
+    /// <returns>The sign, or an empty string.</returns>
+    private static string Vorzeichen(RubyValue pWert, bool pPlus, bool pLeerzeichen)
+    {
+        var zahl = GroßeVon(pWert);
+        if (zahl < 0)
+        {
+            return "-";
+        }
+
+        return pPlus ? "+" : pLeerzeichen ? " " : string.Empty;
+    }
+
+    /// <summary>
+    /// A value as a real number.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The number.</returns>
+    private static double ReelleVon(RubyValue pWert) => pWert.Kind switch
+    {
+        RubyValueKind.Integer => pWert.Integer,
+        RubyValueKind.Float => pWert.Real,
+        RubyValueKind.String => double.TryParse(
+            System.Text.Encoding.UTF8.GetString(pWert.Bytes),
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var gezahlt)
+            ? gezahlt
+            : 0d,
+        _ => 0d,
+    };
+
+    /// <summary>
+    /// Text at the width a format asked for.
+    /// </summary>
+    /// <param name="pText">The text.</param>
+    /// <param name="pBreite">The width, or -1.</param>
+    /// <param name="pLinks">Whether it stands left.</param>
+    /// <param name="pNullen">Whether the gap is filled with zeros.</param>
+    /// <param name="pKuerzen">The precision, or -1.</param>
+    /// <returns>The text, at the width.</returns>
+    /// <remarks>
+    /// <strong>Und die Luecke wird bei einer Zahl mit Nullen gefuellt und
+    /// bei einem Text mit Leerzeichen.</strong> `%05d` und `%5s` benutzen
+    /// dieselbe Breite und anderes Fuellmaterial,
+    /// <strong>und ein Leser, der beides gleich macht, wuerde aus
+    /// `%5s` eine Zahl mit Nullen machen</strong> — **und das ist die Form,
+    /// mit der ein Spiel eine Namensspalte ausrichtet: `%5s`, nicht
+    /// `%05d`.**
+    /// </remarks>
+    private static string MitBreite(
+        string pText,
+        int pBreite,
+        bool pLinks,
+        bool pNullen,
+        int pKuerzen = -1)
+    {
+        var text = pKuerzen >= 0 && pText.Length > pKuerzen
+            ? pText[..pKuerzen]
+            : pText;
+        if (pBreite <= 0 || text.Length >= pBreite)
+        {
+            return text;
+        }
+
+        var luecke = pBreite - text.Length;
+        if (pLinks)
+        {
+            return text + new string(' ', luecke);
+        }
+
+        if (pNullen)
+        {
+            // **Und die Nullen gehen hinter das Vorzeichen, und nicht davor.**
+            // `-42` mit `%06d` ist `-00042` in Ruby,
+            // **und ein Leser, der die Nullen davor schriebe, gaebe
+            // `000-42`** — **und das ist eine Zahl, die kein Mensch lesen
+            // kann und kein Spiel anzeigen sollte.**
+            if (text.Length > 0 && (text[0] == '-' || text[0] == '+'))
+            {
+                return text[..1] + new string('0', luecke) + text[1..];
+            }
+
+            return new string('0', luecke) + text;
+        }
+
+        return new string(' ', luecke) + text;
+    }
+
+
     private static string QuelleAlsText(byte[] pQuelle)
     {
         try
@@ -6512,7 +7149,15 @@ public sealed class RubyInterpreter
         if (pNode.Kind == RubyNodeKind.Block
             && pNode.Children.Count >= 3
             && pNode.Children[0].Kind is RubyNodeKind.Call
-                or RubyNodeKind.MethodCall)
+                or RubyNodeKind.MethodCall
+                // **Und `SelfCall`, denn ein Name mit Klammern und ohne
+                // Empfaenger ist jetzt `SelfCall`.** `sprintf("%d", 5) { }`
+                // ist nicht ueblich,
+                // **aber `draw_text(x, y, "a") do ... end` steht in jedem
+                // Bildschirm, der eine Liste zeichnet**,
+                // **und ohne dieses `or` wuerde der Blockzweig den Aufruf
+                // nicht als Aufruf erkennen**, und die Liste waere leer.
+                or RubyNodeKind.SelfCall)
         {
             _blockKette.Add(pNode);
             try

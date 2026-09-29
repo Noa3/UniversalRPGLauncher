@@ -533,16 +533,34 @@ public sealed class RubyParser
                 };
                 continue;
             }
+            // **Und ein Name mit Klammern und ohne Empfaenger ist ein
+            // Aufruf auf `self`, und nicht auf den Namen.** `sprintf("%d", 5)`
+            // und `raise "x"` schreiben alle Spiele,
+            // **und `Call` wertet seinen ersten Kinder als Empfaenger aus** --
+            // **und ein Name, den niemand gesetzt hat, ist nil**,
+            // **und die Meldung lautete *„nil has no method 'sprintf' on this
+            // host"***, **also ueber einen Empfänger, den der Leser selbst
+            // erfunden hatte.**
+            //
+            // **Deshalb `SelfCall`, und der Name ist der Name.** Der
+            // Interpreter weiß dann, dass `self` gemeint war,
+            // **und ein Aufruf, der wirklich einen Empfaenger hat, bleibt
+            // `Call`.**
             if (Is("(") && CanStartACall(node))
             {
                 var arguments = ReadArguments();
                 node = new RubyNode
                 {
-                    Kind = RubyNodeKind.Call,
+                    Kind = RubyNodeKind.SelfCall,
                     Name = node.Name ?? string.Empty,
                     Line = node.Line,
-                    Children = [node, .. arguments],
-                    Role_Children = CallParts(node, arguments),
+                    Children = arguments,
+                    Role_Children = [.. arguments.Select(pArgument =>
+                        new RubyNodePart
+                        {
+                            Role = RubyNodeRole.Argument,
+                            Node = pArgument,
+                        })],
                 };
                 continue;
             }
@@ -1199,6 +1217,17 @@ public sealed class RubyParser
                         Name = token.Text,
                         Line = token.Line,
                         Children = arguments,
+                        // **Und die Argumente tragen ihre Rolle**, weil
+                        // `EvaluateChildren` die Rollen liest und sonst
+                        // **gar nichts findet**,
+                        // **und `f(a ? b : c)` waere dann eine leere
+                        // Argumentliste.**
+                        Role_Children = [.. arguments.Select(pArgument =>
+                            new RubyNodePart
+                            {
+                                Role = RubyNodeRole.Argument,
+                                Node = pArgument,
+                            })],
                     };
                 }
                 return node;
@@ -1220,16 +1249,42 @@ public sealed class RubyParser
                 // einen der beiden Zweige haette, haette `draw(x)` oder
                 // `attr_accessor :hp` fuer eine Variable gehalten**, und das
                 // sind die beiden Schreibweisen, die ein Spiel benutzt.
+                // **Und `sprintf("%d", 5)` hat keinen Empfaenger, und
+                // trotzdem wurde einer erfunden.** Der Name selbst stand
+                // als erstes Kind,
+                // **und `Call` wertet sein erstes Kind als Empfaenger aus** --
+                // **und ein Name, den niemand gesetzt hat, ist nil**,
+                // **und die Meldung lautete *„nil has no method 'sprintf'
+                // on this host"***,
+                // **also ueber einen Empfänger, den der Leser selbst
+                // erfunden hatte.**
+                //
+                // **Deshalb `SelfCall`, und die Kinder sind nur die
+                // Argumente.** Der Interpreter weiss dann, dass `self`
+                // gemeint war,
+                // **und `draw(x)` in einer Klasse ist derselbe Satz** --
+                // **was sich aendert, ist der Empfaenger, den die
+                // Skriptmethode sucht: `self` und nicht der Name.**
                 if (Is("("))
                 {
                     var mit_klammern = ReadArguments();
                     return new RubyNode
                     {
-                        Kind = RubyNodeKind.Call,
+                        Kind = RubyNodeKind.SelfCall,
                         Name = token.Text,
                         Line = token.Line,
-                        Children = [node, .. mit_klammern],
-                        Role_Children = CallParts(node, mit_klammern),
+                        Children = mit_klammern,
+                        // **Und die Argumente tragen ihre Rolle**, weil
+                        // `EvaluateChildren` die Rollen liest und sonst
+                        // **gar nichts findet**,
+                        // **und `f(a ? b : c)` waere dann eine leere
+                        // Argumentliste.**
+                        Role_Children = [.. mit_klammern.Select(pArgument =>
+                            new RubyNodePart
+                            {
+                                Role = RubyNodeRole.Argument,
+                                Node = pArgument,
+                            })],
                     };
                 }
 

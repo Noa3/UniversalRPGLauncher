@@ -61,6 +61,56 @@ den Lexer, den Parser und sich selbst -- **und nur der Host hat Dateien.**
 - **Und ein Syntaxfehler in der geladenen Datei nennt die Datei.** Eine
   Zeilennummer ohne Datei ist eine Zeilennummer in dreihundert Skripten.
 
+**Und `String#%`, `sprintf` und `printf` gab es nicht, und die Grammatik
+kam aus `sprintf.c` von Ruby 1.8.1 und nicht aus meinem Kopf.** Flags,
+Breite, Praezision, Wand, `*` aus einem Wert, `%%`. Gemessen: `"%05.2f" %
+3.14159` war *„undefined operator '%' for a String and a Float"* --
+**und die Meldung war ueber einen Operator, den es gibt.**
+
+- **Und `0` ist ein Flag und nicht die Breite.** `%05.2f` ist Breite fuenf
+  und Praezision zwei, **und ein Leser, der `0` als Breite las, wuerde
+  `%5.2f` daraus machen** -- **und die fuehrende Luecke einer Uhr waere
+  weg.**
+- **Und die Luecke wird bei einer Zahl mit Nullen und bei einem Text mit
+  Leerzeichen gefuellt.** `%05d` und `%5s` benutzen dieselbe Breite,
+  **und `%.2s` schneidet einen Text ab, ohne zu runden.**
+- **Und `printf` gibt nil zurueck, weil es schreibt**, **und `sprintf`
+  gibt den Text zurueck.**
+
+**Und die siebte Mutation lebte, und gemessen war sie ein Testfehler und
+kein Codefehler:** `printf("%d", 5)` antwortet `Nil`, **und
+`sprintf("%d", 5)` antwortet `'5'`.** Die Mutation liess `printf` den Text
+zurueckgeben,
+**und kein Test sah es, weil `printf` bis dahin nur auf seine *Art*
+gesehen wurde** -- **und die Ablehnung antwortet auch mit `Nil`.**
+**Ein Test, der nur `nil` sieht, besteht auf einem Leser, der `printf`
+gar nicht hat.** `Test_SprintfReturnsTheTextAndPrintfReturnsNothing`
+prueft jetzt **die Art *und* die Diagnose**, **und die leere Diagnose
+schliesst den Null-Host als Kandidaten aus.**
+
+
+## Und der Fund, der mehr wert ist als die Formatierung
+
+**Ein Aufruf ohne geschriebenen Empfaenger hat bei diesem Leser einen
+Empfaenger bekommen: seinen eigenen Namen.** `sprintf("%d", 5)` wurde zu
+einem `Call`, dessen erstes Kind der Name `sprintf` war,
+**und `Call` wertet sein erstes Kind als Empfaenger aus**,
+**und ein Name, den niemand gesetzt hat, ist nil** --
+**und die Meldung lautete *„nil has no method 'sprintf' on this host"***,
+**also ueber einen Empfaenger, den der Leser selbst erfunden hatte.**
+
+**Das ist jetzt ein `SelfCall`, und die Argumente sind seine Kinder und
+tragen ihre Rolle.** `Test_ACallWithoutAReceiverIsACallOnSelf` haelt es
+fest. **Und `draw(x)` in einer Klasse ist derselbe Satz** -- **was sich
+aendert, ist der Empfaenger, den die Skriptmethode sucht: `self` und
+nicht der Name.**
+
+**Und das kostete zwei Fehlschlaege, die beide Messungen waren:**
+`rollen=0` nach einer Aenderung, die im Code *stand* --
+**weil sie im anderen der beiden Zweige stand** (`Keyword` bei 1211,
+`Identifier` bei 1273), **und ein Anker mit drei Zeilen passt in beide**.
+
+
 **Und der CP932-Test hat drei Fehler gehabt, und alle drei waren meine, nicht
 des Lesers:**
 

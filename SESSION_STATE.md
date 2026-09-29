@@ -9710,3 +9710,62 @@ die Datei nicht geschrieben hat, und das findet nur ein Leser, der es
 auch nicht gelesen hat.**
 
 `TestRubyInterpreter: 223/223`, `All 1781 tests passed`.
+
+
+## 2026-09-29 — `String#%`, und ein Aufruf, der sich selbst als Empfaenger nahm
+
+**`"%" auf einem Text gab es nicht.** Gemessen: *„undefined operator '%'
+for a String and a Float"* -- **und die Meldung war ueber einen Operator,
+den es gibt**, weil nur die arithmetische Bedeutung von `%` da war.
+**Und die Grammatik kam aus `sprintf.c` von Ruby 1.8.1**, heruntergeladen
+und gelesen, **und nicht aus meinem Kopf** -- **und das hat zwei
+Dinge gerettet:** `0` ist ein *Flag* und nicht die Breite
+(`%05.2f` ist Breite 5, Praezision 2), **und `l`/`h` sind Laengen, die
+die Formatierung nicht aendern** und die in jedem alten printf stehen.
+
+**Und der Fund, der mehr wert war als die Formatierung:**
+
+**Ein Aufruf ohne geschriebenen Empfaenger bekam bei diesem Leser einen
+Empfaenger: seinen eigenen Namen.** `sprintf("%d", 5)` wurde zu einem
+`Call`, dessen erstes Kind der Name war, **und `Call` wertet sein erstes
+Kind als Empfaenger aus**, **und ein Name, den niemand gesetzt hat, ist
+nil** -- **und die Meldung sprach von einem Host, der nichts getan hat.**
+
+**Und das Kostete zwei Fehlschlaege, die beide Messungen waren:**
+
+1. `SelfCall` eingebaut -- `rollen=0`, **und die Aenderung stand im Code.**
+   Sie stand im *anderen* der beiden Zweige (`Keyword` bei 1211,
+   `Identifier` bei 1273), **und ein Anker mit drei Zeilen passt in
+   beide.** *Ein Anker, der an zwei Orten passt, gehoert an genau eine
+   Stelle geschrieben -- und welche, das sagt nicht der Anker, sondern
+   `grep -n`.*
+2. Der Test `Test_AMethodCallWithNoReceiverCarriesItsArgumentsByRole`
+   schlug fehl, **und er behauptete selbst, seine Form sei die
+   richtige** -- **und er hatte recht behalten, weil die Form falsch war.**
+   *Ein Test, der die Form festschreibt statt das Verhalten, ist eine
+   Fehlermeldung mit Extra-Schritten.*
+
+`TestRubyInterpreter: 227/227`, `TestRubyParser: 55/55`, `All 1786 tests
+passed`.
+
+
+## Und die siebte Mutation: `nil` beweist nichts
+
+**`printf("%d", 5)` antwortet `Nil` -- und `sprintf("%d", 5)` antwortet
+`'5'`.** Die Mutation liess `printf` den Text zurueckgeben,
+**und kein Test sah es, weil `printf` nur auf seine *Art* geprueft wurde
+und die Ablehnung auch `Nil` ist.**
+
+**Ein Test, der `nil` sieht, besteht auf einem Leser, der die Methode
+gar nicht hat.** Das ist die dritte Form desselben Problems in diesem
+Batch -- **nach dem `case "%" when beideZahlen` ohne Zahl und dem
+`else`/`ensure` als Arm**:
+
+1. Der Test muss **einen Wert** sehen, der nur die eine Form hat.
+2. Oder er muss die **leere Diagnose** sehen, denn eine Ablehnung
+   hinterlaesst eine.
+
+**Und die Regel heisst: `nil` ist nie ein Beweis, wenn der Leser die
+Methode auch gar nicht kennt.** *Ein Test, der ein "nichts" sieht,
+muss pruefen, dass es wirklich "nichts sagen will" ist und nicht
+"nichts sagen konnte".*
