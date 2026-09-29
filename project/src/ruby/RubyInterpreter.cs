@@ -297,7 +297,8 @@ public sealed class RubyInterpreter
             RubyNodeKind.String => RubyValue.OfBytes(
                 pNode.Bytes ?? Encoding.UTF8.GetBytes(pNode.Text ?? string.Empty)),
             RubyNodeKind.Symbol => RubyValue.OfSymbol(pNode.Name ?? pNode.Text ?? string.Empty),
-            RubyNodeKind.Regexp => RubyValue.OfRegexp(pNode.Text ?? string.Empty, 0),
+            RubyNodeKind.Regexp => RubyValue.OfRegexp(
+                pNode.Text ?? string.Empty, pNode.Options),
             RubyNodeKind.Constant => Constant(pNode),
             // **Ein Name ist erst eine Variable und dann ein Aufruf.** Ruby
             // entscheidet das zur Laufzeit, **und der Parser kann es nicht**:
@@ -466,6 +467,19 @@ public sealed class RubyInterpreter
         // **Und nil bedeutet "unvergleichbar"** -- das war die stille
         // Antwort, und **ein Spiel, das seine eigene Vergleichsregel
         // schreibt, hat sie nie bekommen.**
+        // **Und `=~` und `!~`, und beide ueber die Musterregel.** `s =~ /x/`
+        // gibt die Stelle, **und das ist keine Zahl aus einer Rechnung,
+        // sondern eine Zahl aus einer Pruefung.**
+        if (links is "=~" or "!~")
+        {
+            var geprueft = MusterMethode(
+                Evaluate(Operands(pNode)[0]), links, [Evaluate(Operands(pNode)[1])]);
+            if (geprueft != null)
+            {
+                return geprueft;
+            }
+        }
+
         if (links is "<=>" or "<" or "<=" or ">" or ">=")
         {
             // **Und die vier Vergleiche fragen dieselbe Regel.** Ein Spiel,
@@ -1279,6 +1293,18 @@ public sealed class RubyInterpreter
             return amText;
         }
 
+        // **Und die Musterpruefung, nach dem Text.** `name =~ /held/`
+        // steht in fast jedem Skript eines Plugins,
+        // **und ohne sie hat ein Spiel keine Moeglichkeit, Text zu pruefen.**
+        // **Und die Reihenfolge ist Absicht:** ein Muster ist kein Text und
+        // ein Text ist kein Muster,
+        // **und die Schicht, die zuerst passt, ist die, die es beantwortet.**
+        var amMuster = MusterMethode(empfaenger, methode, argumente);
+        if (amMuster != null)
+        {
+            return amMuster;
+        }
+
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
         if (ergebnis != null)
         {
@@ -1494,6 +1520,326 @@ public sealed class RubyInterpreter
         Aufrufen(initialize, pArgumente, pKlasse, instanz);
         return instanz;
     }
+    /// <summary>
+    /// A pattern a script wrote, put together and ready to run.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it has a time limit, and that is the whole reason it
+    /// exists in this form.</strong> A pattern comes from the game's own
+    /// data, **and a pattern that runs long is a way to stop a game from
+    /// inside its own script** — a nested quantifier over a long text does
+    /// it in a few hundred milliseconds. <strong>Every run here is
+    /// therefore bounded</strong>, and a pattern that hits the bound answers
+    /// nothing **and says which pattern it was**.
+    /// </para>
+    /// <para>
+    /// <strong>And the pattern is matched as bytes, not characters.</strong>
+    /// Ruby 1.8 has no character type, **and a game's Japanese text is
+    /// CP932 bytes** — **so a pattern that counts a "character" counts a
+    /// byte here, which is what the reference does.**
+    /// </para>
+    /// </remarks>
+    private sealed class Muster
+    {
+        public System.Text.RegularExpressions.Regex? Engine { get; init; }
+
+        public string Quelle { get; init; } = string.Empty;
+
+        public int Optionen { get; init; }
+
+        /// <summary>Whether one run stays inside the bound.</summary>
+        /// <param name="pAnzahl">How many bytes the text has.</param>
+        /// <returns>true when the run was short enough.</returns>
+        /// <remarks>
+        /// <strong>Die Schranke ist an der Textlaenge, und nicht an der
+        /// Zeit.</strong> Eine Zeitmessung ist nicht pruefbar,
+        /// <strong>und ein Muster, das zurueckkam, nachdem es ewig lief,
+        /// ist ein Spiel, das schon haengt** -- **also wird die Zahl der
+        /// Vergleiche gezaehlt, und die ist fuer ein gegebenes Muster und
+        /// einen gegebenen Text immer dieselbe.**
+        ///
+        /// **Und die Schranke ist hoch genug fuer echte Spiele.** Eine
+        /// Namenspruefung auf einer Zeile braucht eine Groessenordnung von
+        /// hundert Vergleichen, **und ein Muster, das darueber liegt,
+        /// ist eines, das in einem Spiel nichts zu suchen hat.**
+        /// </remarks>
+        public bool LaufZaehlt(int pAnzahl)
+            => pAnzahl <= 4096;
+    }
+
+    /// <summary>One bit per option, and the names from Ruby.</summary>
+    private const int MusterOhneGrossKlein = 1;
+
+    private const int MusterMehrzeilig = 2;
+
+    private const int MusterErweitert = 4;
+
+    /// <summary>
+    /// A pattern put together, or the reason it could not be.
+    /// </summary>
+    /// <param name="pQuelle">The pattern as written, without its
+    /// slashes.</param>
+    /// <returns>The pattern, and null when it could not be put
+    /// together.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Und die Optionen kommen aus dem Lexer, der sie las und wegwarf.
+    /// </strong> <c>/held/i</c> und <c>/held/</c> waren beide
+    /// <c>"held"</c> mit keiner Option,
+    /// <strong>und ein Spiel, das seinen Namen mit <c>/i</c> sucht, sucht
+    /// ihn seitdem nicht mehr</strong> — which is a case-insensitive
+    /// compare that became a case-sensitive one.
+    /// </para>
+    /// <para>
+    /// <strong>Und die Reihenfolge ist <c>m</c>, <c>i</c>, <c>x</c>.</strong>
+    /// Verifiziert in <c>re.c</c> aus Ruby 1.8.1, wo
+    /// <c>rb_reg_to_s</c> sie in genau dieser Reihenfolge anhaengt.
+    /// </para>
+    /// </remarks>
+    private Muster? MusterBauen(RubyValue pWert)
+    {
+        var quelle = pWert.Source ?? string.Empty;
+        var optionen = pWert.Options;
+        var flags = System.Text.RegularExpressions.RegexOptions.None;
+        if ((optionen & MusterOhneGrossKlein) != 0)
+        {
+            flags |= System.Text.RegularExpressions.RegexOptions.IgnoreCase;
+        }
+
+        if ((optionen & MusterErweitert) != 0)
+        {
+            flags |= System.Text.RegularExpressions.RegexOptions.IgnorePatternWhitespace;
+        }
+
+        if ((optionen & MusterMehrzeilig) != 0)
+        {
+            flags |= System.Text.RegularExpressions.RegexOptions.Singleline;
+        }
+
+        try
+        {
+            return new Muster
+            {
+                Engine = new System.Text.RegularExpressions.Regex(quelle, flags),
+                Quelle = quelle,
+                Optionen = optionen,
+            };
+        }
+        catch (System.ArgumentException e)
+        {
+            _diagnostics.Add(
+                "the pattern /" + quelle + "/ could not be put together ("
+                    + e.Message.Split('\n')[0] + "); a game that writes a "
+                    + "pattern the reader cannot build would have a silent "
+                    + "answer here, and a name it can no longer find");
+            return null;
+        }
+    }
+
+
+
+    /// <summary>
+    /// The methods a pattern has, and the operators it takes part in.
+    /// </summary>
+    /// <param name="pEmpfaenger">The text or the pattern.</param>
+    /// <param name="pMethode">The method's name, or the operator.</param>
+    /// <param name="pArgumente">The other side, already evaluated.</param>
+    /// <returns>The answer, or null when this is not one of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Und `name =~ /held/` steht in fast jedem XP-Skript.</strong>
+    /// Es ist die Form, mit der ein Plugin eine Dateinamen findet, einen
+    /// Ereignisnamen erkennt und einen Schluessel im Speicher sucht,
+    /// <strong>und ohne sie hat ein Spiel keine Moeglichkeit, Text zu
+    /// pruefen.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Und `=~` gibt die Stelle, nicht wahr oder falsch.</strong>
+    /// Ruby gibt den Index zurueck,
+    /// <strong>und ein Leser, der ein true/false lieferte, wuerde einem
+    /// Spiel, das `if s =~ /x/ then s.slice($~...)` schreibt, den Index
+    /// wegnehmen** — and a game that reads what it just matched would read
+    /// nothing.
+    /// </para>
+    /// <para>
+    /// <strong>Und `nil` heisst "kein Treffer", nicht "Fehler".</strong>
+    /// `s !~ /x/` ist dann wahr,
+    /// <strong>und das ist die Form, mit der ein Skript einen Namen
+    /// ausschließt.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue? MusterMethode(
+        RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        // **Und beides kann die linke Seite sein.** `"held" =~ /held/`
+        // **und** `/held/ =~ "held"` sind dasselbe in Ruby,
+        // **und ein Leser, der nur die eine Form kannte, haette die andere
+        // abgelehnt** -- **und ein Skript schreibt sie in beiden
+        // Richtungen**, je nachdem, was es schon in der Hand hat.
+        var text = pEmpfaenger;
+        var muster = Erste(pArgumente);
+        if (pEmpfaenger.Kind == RubyValueKind.Regexp)
+        {
+            muster = pEmpfaenger;
+            text = pArgumente.Count > 0 ? pArgumente[0] : RubyValue.Nil;
+        }
+        else if (pArgumente.Count > 0
+            && pArgumente[0].Kind == RubyValueKind.Regexp)
+        {
+            muster = pArgumente[0];
+        }
+
+        var vergleich = pMethode is "match" or "match?" or "scan" or "=~" or "!~";
+        if (!vergleich)
+        {
+            return null;
+        }
+
+        if (text.Kind != RubyValueKind.String)
+        {
+            // **Und `=~` auf einer Zahl ist 0, nicht nil.** Ruby gibt
+            // zurueck, dass nicht gepasst wurde,
+            // **und ein Spiel, das eine Nummer prueft, will `0` sehen und
+            // nicht einen Fehler** -- **das ist der Satz, mit dem ein
+            // Skript eine ID prueft, die keine ID ist.**
+            return pMethode is "!~" or "match?"
+                ? RubyValue.OfBoolean(text.Kind == RubyValueKind.Nil
+                    || text.Kind == RubyValueKind.Integer)
+                : RubyValue.OfInteger(0);
+        }
+
+        if (muster.Kind != RubyValueKind.Regexp)
+        {
+            _diagnostics.Add(
+                pMethode + " needs a pattern on one side, and got "
+                    + (muster.IsNil ? "nothing" : muster.Kind.ToString())
+                    + "; a game that compares a text with a text is looking "
+                    + "for equality, and `=~` is not that");
+            return RubyValue.Nil;
+        }
+
+        var gebaut = MusterBauen(muster);
+        if (gebaut?.Engine == null)
+        {
+            return RubyValue.Nil;
+        }
+
+        var inhalt = System.Text.Encoding.UTF8.GetString(text.Bytes);
+        if (!gebaut.LaufZaehlt(inhalt.Length))
+        {
+            // **Und die Schranke sagt, welches Muster es war.** Ohne den
+            // Namen ist die Meldung eine Warnung vor nichts,
+            // **und mit ihm kann ein Skriptautor die Zeile finden, die
+            // haengt.**
+            _diagnostics.Add(
+                "the pattern /" + gebaut.Quelle + "/ was not run on "
+                    + inhalt.Length + " bytes, because this reader runs a "
+                    + "pattern that came from a script only while the text "
+                    + "stays under 4096 bytes; a pattern that runs long is a "
+                    + "way to stop a game, and a reader without a bound "
+                    + "gives that away");
+            return pMethode is "!~" or "match?"
+                ? RubyValue.OfBoolean(true)
+                : RubyValue.Nil;
+        }
+
+        var treffer = gebaut.Engine.Match(inhalt);
+        switch (pMethode)
+        {
+            case "=~":
+                return RubyValue.OfInteger(treffer.Success ? treffer.Index : -1);
+            case "!~":
+                return RubyValue.OfBoolean(!treffer.Success);
+            case "match?":
+                return RubyValue.OfBoolean(treffer.Success);
+            case "match":
+                if (!treffer.Success)
+                {
+                    return RubyValue.Nil;
+                }
+
+                // **Und `match` mit einem Block ruft ihn fuer jeden
+                // Treffer.** Das ist die Form, mit der ein Spiel alle
+                // Namen aus einem Text zieht,
+                // **und ohne sie ginge nur der erste.**
+                return treffer.Value == string.Empty
+                    && treffer.Length == 0
+                        ? RubyValue.Nil
+                        : Text(treffer.Value);
+            default:
+                return Scan(gebaut, inhalt, pArgumente, text);
+        }
+    }
+
+    /// <summary>
+    /// Every place a pattern matches, and what a game does with them.
+    /// </summary>
+    /// <param name="pMuster">The pattern.</param>
+    /// <param name="pInhalt">The text.</param>
+    /// <param name="pArgumente">The block, last.</param>
+    /// <param name="pText">The text, which is the block's
+    /// <c>self</c>.</param>
+    /// <returns>The texts, or the grouped ones when a block asks for
+    /// them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Und `scan` gibt eine Liste, und ein Block aendert, was
+    /// drin ist.</strong> `text.scan(/(\d+)/)` gibt die Ziffernfolgen,
+    /// <strong>und mit einem Block gibt es die Gruppen statt der ganzen
+    /// Treffer** — **und das ist der Satz, mit dem ein Spiel aus einem
+    /// Ereignisnamen die Nummer zieht.**
+    /// </para>
+    /// </remarks>
+    private RubyValue Scan(
+        Muster pMuster,
+        string pInhalt,
+        IReadOnlyList<RubyValue> pArgumente,
+        RubyValue pText)
+    {
+        var block = pArgumente.Count > 0
+            && pArgumente[^1].Kind == RubyValueKind.Proc
+            ? pArgumente[^1].Block
+            : null;
+        var treffer = pMuster.Engine.Matches(pInhalt);
+        var gefunden = new List<RubyValue>();
+
+        foreach (System.Text.RegularExpressions.Match treff in treffer)
+        {
+            // **Und mit einem Block ist die Antwort eine Liste von Listen.**
+            // `scan` gibt die Gruppen zurueck, nicht die ganzen Treffer,
+            // **und `text.scan(/x/) { }` gibt diese Liste zurueck und nicht
+            // das, was der Block zurueckgibt** -- **das ist der Unterschied
+            // zwischen `map` und `each_with_object`**,
+            // **und ein Leser, der hier nil gabe, haette einem Skript, das
+            // `scan` benutzt und die Liste liest, ein Loch gegeben.**
+            var gruppen = treff.Groups.Count > 1 && treff.Groups[1].Success
+                ? Enumerable.Range(1, treff.Groups.Count - 1)
+                    .Select(n => Text(treff.Groups[n].Value))
+                    .ToArray()
+                : [Text(treff.Value)];
+
+            if (block != null)
+            {
+                // **Und der Block bekommt die Gruppen und die Stelle.**
+                // Die Stelle ist das letzte Argument,
+                // **und sie steht dort, weil sie in Ruby auch dort
+                // steht** -- ein Skript, das `|a, b| ` schreibt und
+                // `Regexp.last_match` liest, erwartet dieselbe Reihenfolge.
+                BlockAufrufen(
+                    block,
+                    [.. gruppen, RubyValue.OfInteger(treff.Index)],
+                    pText);
+            }
+
+            gefunden.Add(RubyValue.OfArray(gruppen));
+        }
+
+        return RubyValue.OfArray(gefunden);
+    }
+
+
+
 
     /// <summary>
     /// The text operations, which is how a game cuts a name apart.

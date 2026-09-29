@@ -9476,3 +9476,24 @@ gesagt.**
 
 `TestRubyInterpreter: 182/182`, `All 1740 tests passed`, Mutationen 5 von 5,
 6 von 6 und 5 von 5.
+
+## 2026-09-29 — die Mustermaschine, mit einer Schranke
+
+**`name =~ /Held/` gab es nicht.** `=~`, `!~`, `match`, `match?`, `scan` sind
+jetzt da, **und `scan` gibt Gruppen statt ganzer Treffer.**
+
+**Und die Optionen hinter dem zweiten Schraegstrich wurden gelesen und
+weggeworfen** -- **also war `/held/i` dasselbe wie `/held/`.** **Die
+Reihenfolge `m`, `i`, `x` ist verifiziert in `re.c` aus Ruby 1.8.1.**
+
+**Und die Schranke liegt an der Textlaenge, nicht an einer Uhr** -- **eine
+Uhr ist nicht pruefbar, und ein Muster, das zurueckkam, nachdem es ewig
+lief, ist ein Spiel, das schon haengt.** **Die Meldung nennt Muster und
+Grenze.**
+
+**Und ein `[`, dem kein `]` folgt, brach die ganze Datei** -- **gemessen:
+`A regular expression opened at offset 9 is never closed.`** Das Muster
+endet dort, **und jetzt endet es dort**; **dass die Maschine danach
+`Unterminated [] set` sagt, ist richtig.**
+
+`TestRubyInterpreter: 190/190`, `All 1748 tests passed`, Mutationen 6 von 6.

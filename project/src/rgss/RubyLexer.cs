@@ -55,7 +55,8 @@ public sealed class RubyLexer
         "if", "unless", "then", "elsif", "else", "case", "when", "while",
         "until", "for", "break", "next", "redo", "retry", "in", "do", "return",
         "yield", "super", "self", "nil", "true", "false", "and", "or", "not",
-        "alias", "defined?", "BEGIN", "END", "__LINE__", "__FILE__", "__ENCODING__",
+        "alias", "defined?", "BEGIN", "END", "__LINE__", "__FILE__",
+        "__ENCODING__",
     };
 
     private static readonly HashSet<string> KeywordSet =
@@ -842,10 +843,46 @@ public sealed class RubyLexer
         _offset++;
         var parts = new List<RubyStringPart>();
         var inClass = false;
+
+        // **Wo die Klasse anfing, damit ein ungeschlossenes `[` am
+        // Schluss wieder zu einem Zeichen wird.**
+        var klassenStart = -1;
         while (true)
         {
             if (AtEnd || Current == '\n')
             {
+                // **Und endet der Text in einer offenen Klasse, ist das
+                // ein gueltiges Muster und kein halbes.** `/a[/` ist eins,
+                // **und der Fehler "never closed" waere fuer ein Skript,
+                // das ein Muster schreibt, das die Referenz annimmt,
+                // eine Falschmeldung ueber den Leser.**
+                if (inClass && klassenStart >= 0)
+                {
+                    // **Und das `/`, das die Klasse nie schloss, gehoert
+                    // nicht zum Muster.** `/a[/` ist das Muster `a[`,
+                    // **und mit dem Slash darin sucht die Maschine nach
+                    // `a[//`** -- **gemessen: `Invalid pattern 'a[//' at
+                    // offset 3. Unterminated [] set.`**
+                    //
+                    // **Und es steht an letzter Stelle, weil es das
+                    // Zeichen war, das die Schleife verlassen hat.** Also
+                    // wird es hier abgenommen und sonst nirgends.
+                    if (parts.Count > 0 && parts[^1].Text == "/")
+                    {
+                        parts.RemoveAt(parts.Count - 1);
+                    }
+
+                    var text = string.Concat(parts.Select(pTeil => pTeil.Text));
+                    return new RubyToken
+                    {
+                        Kind = RubyTokenKind.Regexp,
+                        Text = _text[pStart.._offset],
+                        Offset = pStart,
+                        Line = pStartLine,
+                        Value = text,
+                    };
+                }
+
                 throw new RubySyntaxException(
                     $"A regular expression opened at offset {pStart} is never closed.",
                     pStartLine);
@@ -872,7 +909,19 @@ public sealed class RubyLexer
             }
             if (c == '[')
             {
+                // **Und ein `[`, dem kein `]` folgt, ist ein Zeichen und
+                // keine oeffnende Klasse.** `/[/` ist in Ruby ein
+                // gueltiges Muster -- eine Klasse mit einem `[` darin,
+                // **und der Lexer nahm es fuer eine offene Klasse und lief
+                // bis zum Ende des Skripts** --
+                // **gemessen: `A regular expression opened at offset 9 is
+                // never closed.`**
+                //
+                // **Und ein `]` ohne `[` ist auch nur ein Zeichen**, und
+                // das war schon richtig, **weil `inClass` dann false
+                // bleibt und der Naechste `/` schliesst.**
                 inClass = true;
+                klassenStart = parts.Count;
             }
             else if (c == ']')
             {
@@ -886,12 +935,30 @@ public sealed class RubyLexer
             parts.Add(new RubyStringPart { IsEscape = false, Text = c.ToString() });
             _offset++;
         }
-        var options = new StringBuilder();
+        // **Und die Buchstaben hinter dem zweiten Schraegstrich sind die
+        // Optionen.** Sie wurden gelesen und dann weggeworfen,
+        // **also war `/held/i` dasselbe wie `/held/`**,
+        // **und ein Spiel, das seinen Namen ohne Rücksicht auf die
+        // Schreibweise sucht, hat ihn nicht gefunden** -- **und nichts hat
+        // es gesagt.**
+        //
+        // **Die Reihenfolge ist nicht meine.** In `re.c` aus Ruby 1.8.1
+        // haengt `rb_reg_to_s` sie als `m`, `i`, `x` an,
+        // **und diese Reihenfolge steht in `MusterOhneGrossKlein` und
+        // seinen Nachbarn.**
+        var optionen = 0;
         while (!AtEnd && (char.IsLetter(Current)))
         {
-            options.Append(Current);
+            optionen |= Current switch
+            {
+                'm' => 2,
+                'i' => 1,
+                'x' => 4,
+                _ => 0,
+            };
             _offset++;
         }
+
         return new RubyToken
         {
             Kind = RubyTokenKind.Regexp,
@@ -899,6 +966,7 @@ public sealed class RubyLexer
             Offset = pStart,
             Line = pStartLine,
             Value = string.Concat(parts.Select(pPart => pPart.Text)),
+            Options = optionen,
         };
     }
 

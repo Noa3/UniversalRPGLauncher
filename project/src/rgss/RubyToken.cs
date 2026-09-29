@@ -42,6 +42,18 @@ public sealed class RubyToken
     /// <summary>For a string, its bytes, which are not necessarily text.</summary>
     public byte[]? Bytes { get; init; }
 
+    /// <summary>
+    /// For a pattern, the option letters behind its second slash.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And they were read and thrown away.</strong> The lexer
+    /// collected the letters after the closing slash and put nothing
+    /// anywhere, <strong>so <c>/held/i</c> and <c>/held/</c> were the same
+    /// pattern</strong> — and a script that looks a name up without caring
+    /// about the spelling did not find it, **and nothing said so.**
+    /// </remarks>
+    public int Options { get; init; }
+
     /// <summary>For a string, its text, when the encoding is one this reader knows.</summary>
     public string? Value { get; init; }
 

@@ -4048,12 +4048,52 @@ und nicht gewusst, warum.**
 > die eine Antwort behauptet**, und ist weg. Das ist die zweite Regel in
 > diesem Lauf, die so endet.
 
+### Die Mustermaschine, und die Schranke ist der eigentliche Grund
+
+**`name =~ /Held/` stand in fast jedem XP-Skript und es gab keine
+Maschine.** `=~`, `!~`, `match`, `match?` und `scan` sind jetzt da.
+
+**Und die Buchstaben hinter dem zweiten Schraegstrich wurden gelesen und
+weggeworfen.** Der Lexer sammelte sie, **und legte sie nirgends hin** --
+**also war `/held/i` dasselbe wie `/held/`**, **und ein Skript, das einen
+Namen ohne Ruecksicht auf die Schreibweise sucht, hat ihn nicht gefunden,
+und nichts hat es gesagt.** **Die Reihenfolge ist `m`, `i`, `x` und nicht
+meine:** verifiziert in `re.c` aus Ruby 1.8.1, wo `rb_reg_to_s` sie in
+genau dieser Reihenfolge anhaengt.
+
+**Und die Schranke liegt an der Textlaenge, nicht an einer Uhr.** Eine Uhr
+ist nicht pruefbar, **und ein Muster, das zurueckkam, nachdem es ewig lief,
+ist ein Spiel, das schon haengt** -- **also wird die Zahl der Bytes
+gezaehlt, und die ist fuer ein gegebenes Muster und einen gegebenen Text
+immer dieselbe.** **Und die Meldung nennt das Muster und die Grenze**, weil
+eine Warnung vor nichts den Suchenden nicht weiterbringt.
+
+**Und `scan` gibt Gruppen und nicht ganze Treffer.** `text.scan(/(\d+)/)`
+gibt die Ziffernfolgen, **und mit einem Block gibt es die Gruppen statt der
+ganzen Treffer** -- **das ist der Satz, mit dem ein Spiel aus einem
+Ereignisnamen die Nummer zieht**, **und der Block aendert die Antwort
+nicht: `scan` gibt seine eigene Liste zurueck.**
+
+**Und ein `[`, dem kein `]` folgt, brach die ganze Datei.** Der Lexer
+setzte sein Klassenzeichen, **wartete auf ein `]`, das nie kam, und lief
+bis zum Skriptende** -- **gemessen: `A regular expression opened at offset 9
+is never closed.`** Das Muster `/a[/` **endet dort**, **und jetzt endet es
+dort**; **dass die Maschine danach `Unterminated [] set` sagt, ist richtig**,
+**denn `a[` ist auch in Rubys Maschine eine offene Menge.**
+
+**Und ein Muster, das nicht gebaut werden kann, sagt es.** `/(a/` gibt nil
+**und die Meldung der Maschine im Klartext** -- **ein stilles nil wuerde
+aussehen, als haette der Text keinen Treffer**, **und ein Spiel wuerde
+anderswo suchen.**
+
 **Noch nicht ausgewertet:** `respond_to_missing?`, `binding`,
 `Module`-Methoden (`include?`, `instance_methods`),
 Block-Umbrueche mit Argumenten (`break 1`), `dup`/`clone` mit echter Kopie,
 `find`/`detect`/`inject`/`group_by`/`each_with_object`,
 `Struct`, `raise`, `require`, `printf`/`sprintf`,
-und jede Regex-Maschine (`match`, `scan`, `=~`).
+`$~`/`Regexp.last_match` (der Block bekommt die Gruppen, das global
+Merkmal gibt es nicht), `gsub` mit einer Blockersetzung, und
+`\A`/`\z` als Anker in CP932.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

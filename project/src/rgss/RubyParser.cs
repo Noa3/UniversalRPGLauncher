@@ -855,7 +855,14 @@ public sealed class RubyParser
                 return Literal(RubyNodeKind.Symbol, token.Line, null, null, token.Value ?? token.Text);
             case RubyTokenKind.Regexp:
                 _index++;
-                return Literal(RubyNodeKind.Regexp, token.Line, null, null, token.Value);
+                return Literal(
+                    RubyNodeKind.Regexp,
+                    token.Line,
+                    null,
+                    null,
+                    token.Value,
+                    null,
+                    token.Options);
             case RubyTokenKind.InstanceVariable:
                 _index++;
                 return Literal(
@@ -2080,7 +2087,7 @@ public sealed class RubyParser
     }
     private static RubyNode Literal(
         RubyNodeKind pKind, int pLine, long? pInteger, double? pReal, string? pText,
-        string? pName = null)
+        string? pName = null, int pOptionen = 0)
     {
         return new RubyNode
         {
@@ -2090,6 +2097,7 @@ public sealed class RubyParser
             Real = pReal,
             Text = pText,
             Name = pName,
+            Options = pOptionen,
         };
     }
 }

@@ -112,6 +112,17 @@ public sealed class RubyNode
     public string? Name { get; init; }
 
     /// <summary>
+    /// For a pattern, the option letters behind its second slash.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Und sie wurden gelesen und weggeworfen.</strong> `/held/i` und
+    /// `/held/` waren dasselbe Muster,
+    /// **und ein Spiel, das einen Namen ohne Ruecksicht auf die Schreibweise
+    /// sucht, hat ihn nicht gefunden** -- **und nichts hat es gesagt.**
+    /// </remarks>
+    public int Options { get; init; }
+
+    /// <summary>
     /// The superclass as written, on a class node and nowhere else.
     /// </summary>
     /// <remarks>
