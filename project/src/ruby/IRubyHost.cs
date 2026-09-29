@@ -26,6 +26,55 @@ namespace UniversalRPG.Rgss;
 public interface IRubyHost
 {
     /// <summary>
+    /// The text of a script a game wants to load, and null when this host
+    /// has no such script.
+    /// </summary>
+    /// <param name="pName">
+    /// The name as written in <c>require</c>, without the <c>.rb</c>.
+    /// </param>
+    /// <param name="pEinmal">
+    /// Whether the game said <c>require</c> and not <c>load</c>: a name
+    /// that was required once is not required again.
+    /// </param>
+    /// <returns>
+    /// The script's bytes, and null when this host has no such script —
+    /// which is a refusal and not an empty script.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the host, and not the interpreter.</strong> The host is
+    /// the only one that has files,
+    /// <strong>and an interpreter that read files would be a program that
+    /// runs a game and can also go looking for things</strong> — which is
+    /// the shape this project refuses everywhere else.
+    /// </para>
+    /// <para>
+    /// <strong>And the name comes in as written, and not resolved.</strong>
+    /// <c>require "Sprite_Picture"</c> asks for <c>Sprite_Picture</c>,
+    /// **and the host decides what that means** — a folder, an extension, a
+    /// search path. A reader that appended <c>.rb</c> here would have
+    /// hard-coded one host's layout into a language runtime.
+    /// </para>
+    /// <para>
+    /// <strong>And a missing script is null, and not empty text.</strong>
+    /// An empty file runs and defines nothing,
+    /// **and a game whose <c>require</c> silently did nothing would go on
+    /// and fail somewhere else, far from the line that was actually
+    /// missing.</strong>
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// <strong>And a host that has no files does not have to say so.</strong>
+    /// The default is null, and null is the refusal,
+    /// <strong>and a host that does not load scripts should not have to write
+    /// a method for it</strong> — **eine Schnittstelle, die jede neue
+    /// Faehigkeit von jedem Host verlangt, waechst schneller als die Hosts,
+    /// die sie brauchen**, **und dann schreibt jeder Host eine leere
+    /// Methode, die niemand liest.**
+    /// </remarks>
+    byte[]? ReadScript(string pName, bool pEinmal) => null;
+
+    /// <summary>
     /// Calls a method on a value.
     /// </summary>
     /// <param name="pReceiver">The receiver, which the host may be nil for.</param>

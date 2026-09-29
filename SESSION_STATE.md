@@ -9656,3 +9656,57 @@ ein Testfehler und dann ein Codebefund.* **Erst messen, ob sich der Wert
 aendert** (`5` gegen `5` heisst No-op) -- **und dann die Frage stellen,
 die den Unterschied sichtbar macht**, statt die Mutation als „unmessbar"
 zu verbuchen.
+
+
+## 2026-09-29 — `require`, und wer die Datei liest
+
+**`require` gab es nicht.** Jedes VX- und VX-Ace-Spiel verteilt seine
+Skripte auf hundert Dateien,
+**und der Leser sagte in Zeile eins jedes Plugins *„self has no method
+'require' on this host"*.**
+
+**Und die Frage war nicht *wie*, sondern *wer*.** Die Datei hat nur der
+Host, **und der Lexer, der Parser und der Interpreter selbst hat nur der
+Interpreter** -- **also hat `require` in `Call()` neben `raise` gehoert,
+mit einem `ReadScript` am Host, das eine Vorgabe hat.**
+
+**Und die Vorgabe war die richtige Form, und das ist gemessen:** fuenf
+Hosts, **von denen vier keine Dateien haben.** Ohne Vorgabe haette jede
+neue Faehigkeit jeden Host gebrochen, **und dann haette jeder Host eine
+leere Methode geschrieben, die niemand liest.**
+
+**Und mein Test war falsch, und die Fixture auch.** Die Fixture definierte
+`def wert`, **und der Test rief `gruessen` auf** -- **gemessen: die
+Antwort war `'aussen'`, nicht `'geerbt'`.** **Die Fixture wurde so
+geaendert, dass die geladene Datei die Methode ueberschreibt, die der
+Test aufruft** -- **denn der eigentlichere Test ist "die geladene Datei
+kann die Klasse des Ladenden ueberschreiben", und nicht "irgendeine
+Methode antwortet".**
+
+`TestRubyInterpreter: 222/222`, `All 1780 tests passed`.
+
+
+## Und der CP932-Test hatte drei Fehler, und alle drei waren meine
+
+**Der Decoder war beim ersten Mal richtig.** **Gemessen: `class Kanji
+Kanji日` aus CP932, und `Kanji<zwei Ersatzzeichen>` aus UTF-8.**
+
+Und trotzdem schlug der Test fehl, **und an drei Stellen lag es an mir:**
+
+1. **Mein Byte-Array hatte ein Leerzeichen vor dem Kanji** --
+   **also standen dort zwei Namen, und der Lexer sah zu Recht zwei.**
+   **Der Lexer hat nie etwas falsch gemacht.**
+2. **Der Test suchte den blossen Kanji-Namen** statt `Kanji<kanji>` --
+   **und haette damit auf einem Leser bestanden, der jedes Kanji ersetzt**,
+   **weil beide nach einem Namen suchen, den die Datei nicht deklariert.**
+3. **`using System;` fehlte**, und der Compiler nannte `CallMethod`
+   statt `Func<>` -- **weil er am ersten unaufgeloesten Member aufgab.**
+
+**Die Lehre ist die dritte und nicht die erste:** *eine Fehlermeldung, die
+etwas anderes nennt als das, was fehlt, ist ein Grund, den ganzen Block zu
+lesen und nicht die erste Zeile zu reparieren.* **Und:** *ein Test, der nach
+einem reparierten Namen sucht, prueft nichts* -- **er sucht nach etwas, das
+die Datei nicht geschrieben hat, und das findet nur ein Leser, der es
+auch nicht gelesen hat.**
+
+`TestRubyInterpreter: 223/223`, `All 1781 tests passed`.

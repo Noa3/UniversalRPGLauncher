@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
 

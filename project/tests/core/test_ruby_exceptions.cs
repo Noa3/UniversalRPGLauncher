@@ -24,33 +24,6 @@ namespace UniversalRPG.Tests.Core;
 public partial class TestRubyInterpreter
 {
     /// <summary>
-    /// The error a script raised, and a failure when it did not.
-    /// </summary>
-    /// <param name="pWas">What to run.</param>
-    /// <returns>The error.</returns>
-    /// <remarks>
-    /// <strong>And a missing error is a failure and not a nil.</strong>
-    /// <c>raise</c> that does not stop the script is the whole thing these
-    /// tests are about,
-    /// <strong>and a test that went quietly on when no error came would
-    /// not see the very thing it is looking for</strong> — and it would
-    /// pass on a reader that runs a game past its own error path.
-    /// </remarks>
-    private static RubyRuntimeException FehlerAus(System.Action pWas)
-    {
-        try
-        {
-            pWas();
-        }
-        catch (RubyRuntimeException ausnahme)
-        {
-            return ausnahme;
-        }
-
-        throw new System.InvalidOperationException(
-            "the script did not raise, and that is the thing under test");
-    }
-    /// <summary>
     /// `raise` stops the script, and the class and the text are the ones
     /// written.
     /// </summary>
@@ -71,7 +44,7 @@ public partial class TestRubyInterpreter
     public void Test_RaiseStopsTheScriptWithTheClassAndTheTextWritten()
     {
         var mit = new RubyInterpreter(new RubyNullHost());
-        var ausnahme = FehlerAus(() =>
+        var ausnahme = FehlerAus<RubyRuntimeException>(() =>
             mit.RunProgram(Statements("raise \"kaputt\"\n")));
         AssertEq(ausnahme.Class, "RuntimeError",
             "**a text alone is a RuntimeError** — and not a class of the "
@@ -80,7 +53,7 @@ public partial class TestRubyInterpreter
             "**and the text is the text**");
 
         var mit2 = new RubyInterpreter(new RubyNullHost());
-        var zweite = FehlerAus(() =>
+        var zweite = FehlerAus<RubyRuntimeException>(() =>
             mit2.RunProgram(Statements("raise ArgumentError, \"kaputt\"\n")));
         AssertEq(zweite.Class, "ArgumentError",
             "**a name and a text raise that class** — and a reader that took "
@@ -142,7 +115,7 @@ public partial class TestRubyInterpreter
         // **und genau diese Unterscheidung ist der Grund, warum es zwei
         // Klassen gibt.**
         var allein = new RubyInterpreter(new RubyNullHost());
-        var durchgelassen = FehlerAus(() => allein.RunProgram(Statements(
+        var durchgelassen = FehlerAus<RubyRuntimeException>(() => allein.RunProgram(Statements(
             "begin\n"
             + "  1/0\n"
             + "rescue TypeError\n"

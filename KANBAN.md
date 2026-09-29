@@ -26,7 +26,60 @@ gemeldet.**
 **Der Unterschied waere nur sichtbar, wenn `else` selbst einen Wert
 zurueckgaebe**, **und das tut es nicht**: `else` ist ein Weg, keine Antwort.
 **Wer diese Regel in einem anderen Leser nachbaut, muss den Sprung also aus
-der Bedeutung ableiten und nicht aus einem Test, der ihn trotzte.**board
+der Bedeutung ableiten und nicht aus einem Test, der ihn trotzte.**
+
+**Und `require` gab es nicht, und `Kernel#require` ist keine
+Bequemlichkeit.** Jedes VX- und VX-Ace-Spiel verteilt seine Skripte auf
+hundert Dateien und laedt sie der Reihe nach,
+**und der Leser sagte in Zeile eins jedes Plugins *„self has no method
+'require' on this host"*.**
+
+Und das braucht **drei** Dinge, und **nur der Interpreter hat zwei davon**:
+den Lexer, den Parser und sich selbst -- **und nur der Host hat Dateien.**
+
+- **Und der Host liest, und nicht der Interpreter.** **Ein Leser, der
+  selbst Dateien oeffnet, waere ein Programm, das ein Spiel laeuft und
+  auch noch herumsuchen kann** -- **und das ist genau die Form, die dieses
+  Projekt ueberall ablehnt.**
+- **Und `ReadScript` ist eine Vorgabemethode, und keine Pflicht.** Sonst
+  haette jede neue Faehigkeit jeden Host gebrochen, **und dann schreibt
+  jeder Host eine leere Methode, die niemand liest** -- **gemessen: fuenf
+  Hosts, von denen vier keine Dateien haben.**
+- **Und `require` zweimal laedt einmal, und `load` immer.** Das ist der
+  ganze Unterschied zwischen den beiden Woertern --
+  **ein Leser, der die Datei immer laeuft, haette jede Klasse eines Spiels
+  zweimal definiert**, und die zweite Definition naehme die Methoden mit,
+  **und eine danach geschriebene Unterklasse erbte von einer anderen
+  Klasse.**
+- **Und die geladene Datei laeuft in DIESEM Interpreter.** Sonst haette
+  jede Klasse eines Spiels eine Welt fuer sich,
+  **und `class Neu < Aussen` in der geladenen Datei haette kein
+  `Aussen`.**
+- **Und CP932, und nicht UTF-8.** Ruby 1.8 kennt keine Kodierungsangabe
+  in der Datei, und jedes Spiel aus dieser Zeit ist Shift_JIS --
+  **ein Leser, der UTF-8 annimmt, macht aus jedem Kanji zwei Zeichen.**
+- **Und ein Syntaxfehler in der geladenen Datei nennt die Datei.** Eine
+  Zeilennummer ohne Datei ist eine Zeilennummer in dreihundert Skripten.
+
+**Und der CP932-Test hat drei Fehler gehabt, und alle drei waren meine, nicht
+des Lesers:**
+
+- **Und das Byte-Array hatte ein Leerzeichen vor dem Kanji** -- **also war
+  `Kanji` ein Name und `日` ein zweiter**, und der Lexer war berechtigt,
+  zwei Namen zu sehen. **Der Lexer hat nie etwas falsch gemacht:**
+  **gemessen: `Constant 'Kanji日'` ohne das Leerzeichen, und
+  `Constant 'Kanji'` plus `Identifier '日'` mit.**
+- **Und der Test suchte den blossen Kanji-Namen, nicht
+  `Kanji<kanji>`.** **Ein Test, der nach dem reparierten Namen sucht,
+  waere auf einem Leser durchgegangen, der jedes Kanji ersetzt** -- **weil
+  beide nach einem Namen suchen, den die Datei nicht deklariert.**
+- **Und `DefinedTypes.Contains` gibt es nicht**, `DefinedTypes` ist eine
+  Liste, **und der Compiler nannte statt dessen `CallMethod`**, weil
+  `using System;` fehlte und er am ersten Member aufgab. **Eine
+  Fehlermeldung, die etwas anderes nennt als das, was fehlt, ist ein
+  Grund, den ganzen Block zu lesen und nicht die erste Zeile zu reparieren.**
+
+board
 
 | ID | P | State | Card | Depends on |
 |---|---:|---|---|---|

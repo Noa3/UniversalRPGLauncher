@@ -130,6 +130,18 @@ public sealed class RubyInterpreter
     /// </remarks>
     private int _strukturZaehler;
 
+    /// <summary>The scripts that were required once, and their names.</summary>
+    /// <remarks>
+    /// <strong>And it belongs to the interpreter, and not to the host.</strong>
+    /// The host has the files, **and "already loaded" is a fact about the
+    /// run and not about the disk** —
+    /// <strong>a host that remembered it would load a game twice as soon as
+    /// it were started again</strong>, **and a game that was started again is
+    /// a new game.** <strong>So `load` skips nothing</strong> —
+    /// **and that is the whole difference between the two words.**
+    /// </remarks>
+    private readonly HashSet<string> _geladeneSkripte = new(StringComparer.Ordinal);
+
     /// <summary>
     /// The error classes of the language, by name.
     /// </summary>
@@ -1209,6 +1221,22 @@ public sealed class RubyInterpreter
         if (methode == "raise" && empfaenger.Name == "self")
         {
             throw RubyFehlerAus(argumente);
+        }
+
+        // **Und `require` und `load` sind auch Sprache, und nicht nur ein
+        // Aufruf an den Host.** Sie brauchen drei Dinge, die nur der
+        // Interpreter hat: **den Lexer, den Parser und sich selbst**,
+        // **und ein Host, der die Datei gibt.**
+        // **Ohne diese drei war `require` eine Ablehnung ueber den Host**
+        // -- **und damit waere jedes VX- und VX-Ace-Skript unlesbar,
+        // denn die laden ihr halbes System nach.**
+        if ((methode == "require" || methode == "load")
+            && empfaenger.Name == "self"
+            && argumente.Count == 1
+            && argumente[0].Kind == RubyValueKind.String)
+        {
+            return SkriptLaden(methode == "require",
+                System.Text.Encoding.UTF8.GetString(argumente[0].Bytes));
         }
 
         if (methode == "new" && empfaenger.Kind == RubyValueKind.Symbol)
@@ -6021,6 +6049,140 @@ public sealed class RubyInterpreter
             erstes.Kind == RubyValueKind.String
                 ? System.Text.Encoding.UTF8.GetString(erstes.Bytes)
                 : WertAlsText(erstes));
+    }
+
+
+    /// <summary>
+    /// Loads a script the game named, and runs it in this interpreter.
+    /// </summary>
+    /// <param name="pEinmal">
+    /// Whether the game said <c>require</c> and not <c>load</c>.
+    /// </param>
+    /// <param name="pName">The name as written.</param>
+    /// <returns>
+    /// True, and false when the name is already loaded.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a name that was required once is not required again.</strong>
+    /// That is the whole difference between `require` and `load`, and it is
+    /// the reason a game's <c>Scene_Base</c> is not defined twice,
+    /// <strong>and a reader that always ran the file would have every class
+    /// in a game defined twice</strong> — and the second definition would
+    /// take the methods with it, and a subclass written after it would
+    /// inherit from a class that is a different one.
+    /// </para>
+    /// <para>
+    /// <strong>And a name that is not there is a refusal, and not an
+    /// empty script.</strong> An empty file runs and defines nothing,
+    /// <strong>and a game whose <c>require</c> silently did nothing would go
+    /// on and fail somewhere else, far from the line that was
+    /// missing</strong> — so this says which name it could not find.
+    /// </para>
+    /// <para>
+    /// <strong>And the file runs in this interpreter, and not in a new
+    /// one.</strong> A class the file defines has to be visible to the file
+    /// that required it,
+    /// <strong>and a reader that made a new interpreter per file would have
+    /// every game's class in a world of its own</strong> — and
+    /// <c>Sprite_Picture &lt; Sprite</c> would have no `Sprite`.
+    /// </para>
+    /// </remarks>
+    private RubyValue SkriptLaden(bool pEinmal, string pName)
+    {
+        if (pName.Length == 0)
+        {
+            throw new RubyRuntimeException(
+                "LoadError", "require and load need a name, and this one is "
+                    + "empty; the reference says the same");
+        }
+
+        // **Und ein Name, der schon da ist, wird nicht wieder gelesen.**
+        if (pEinmal && _geladeneSkripte.Contains(pName))
+        {
+            return RubyValue.OfBoolean(false);
+        }
+
+        var quelle = _host.ReadScript(pName, pEinmal);
+        if (quelle == null)
+        {
+            // **Und der Name steht in der Meldung, weil eine Diagnose ohne
+            // Namen den Leser raten laesst.**
+            _diagnostics.Add(
+                "require " + (pEinmal ? "" : "or load ") + "'" + pName
+                    + "' asked for a script this host does not have; the host "
+                    + "decides what a name means, because a folder, an "
+                    + "extension and a search path are its business and not "
+                    + "the language's");
+            return RubyValue.OfBoolean(false);
+        }
+
+        if (pEinmal)
+        {
+            _geladeneSkripte.Add(pName);
+        }
+
+        // **Und CP932, wenn die Datei so kodiert ist.** Rubys `require`
+        // liest eine `.rb` in der Kodierung des Skripts,
+        // **und ein Spiel aus dieser Zeit hatCP932-Bytes in seinem Quelltext**
+        // -- **ein Leser, der UTF-8 annimmt, wuerde jedes zweite kanji
+        // zweimal lesen und jede Meldung unlesbar machen.**
+        List<RubyNode> anweisungen;
+        try
+        {
+            anweisungen = new RubyParser(
+                new RubyLexer(QuelleAlsText(quelle)).Tokenize()).ParseProgram();
+        }
+        catch (RubyParseException ausnahme)
+        {
+            // **Und ein Syntaxfehler in der geladenen Datei nennt die
+            // Datei.** Sonst stuende eine Zeilennummer ohne Ort da,
+            // **und ein Spiel mit dreihundert Skripten laesst sich so nicht
+            // finden.**
+            throw new RubyRuntimeException(
+                "SyntaxError",
+                "in '" + pName + "': " + ausnahme.Message);
+        }
+
+        foreach (var anweisung in anweisungen)
+        {
+            Evaluate(anweisung);
+            if (_returned)
+            {
+                _returned = false;
+                break;
+            }
+        }
+
+        return RubyValue.OfBoolean(true);
+    }
+
+    /// <summary>
+    /// A script's bytes as text, in the encoding the script says.
+    /// </summary>
+    /// <param name="pQuelle">The bytes.</param>
+    /// <returns>The text.</returns>
+    /// <remarks>
+    /// <strong>And CP932, and not UTF-8.</strong> Ruby 1.8 has no
+    /// encoding magic in a source file, and every game of that time is
+    /// Shift_JIS,
+    /// <strong>and a reader that assumed UTF-8 would turn every kanji in a
+    /// game's text into two characters</strong> — and a name on a menu
+    /// would be a name with holes in it.
+    /// </remarks>
+    private static string QuelleAlsText(byte[] pQuelle)
+    {
+        try
+        {
+            return Encoding.GetEncoding(932).GetString(pQuelle);
+        }
+        catch (DecoderFallbackException)
+        {
+            // **Und was CP932 nicht lesen kann, wird UTF-8 gelesen.**
+            // `�` ist kein moeglicher Kanji,
+            // **und die Datei ist dann keine aus dieser Zeit.**
+            return Encoding.UTF8.GetString(pQuelle);
+        }
     }
 
 

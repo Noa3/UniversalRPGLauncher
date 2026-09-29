@@ -135,4 +135,37 @@ public abstract partial class TestBase : RefCounted
 			Fail($"{pMessage} (both are {pActual})");
 		}
 	}
+
+	/// <summary>
+	/// The error a script raised, and a failure when it did not.
+	/// </summary>
+	/// <param name="pWas">What to run.</param>
+	/// <returns>The error.</returns>
+	/// <remarks>
+	/// <strong>And a missing error is a failure and not a nil.</strong>
+	/// <c>raise</c> that does not stop the script is the whole thing the
+	/// tests that use this are about,
+	/// <strong>and a test that went quietly on when no error came would not
+	/// see the very thing it is looking for</strong> — and it would pass on a
+	/// reader that runs a game past its own error path.
+	/// <strong>And it lives here and not in one test file</strong>, because
+	/// three of them ask the same question
+	/// **and a helper a second file has to borrow is a helper whose home
+	/// was wrong.**
+	/// </remarks>
+	protected static T FehlerAus<T>(System.Action pWas)
+		where T : System.Exception
+	{
+		try
+		{
+			pWas();
+		}
+		catch (T ausnahme)
+		{
+			return ausnahme;
+		}
+
+		throw new System.InvalidOperationException(
+			"the script did not raise, and that is the thing under test");
+	}
 }
