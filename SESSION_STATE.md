@@ -9418,3 +9418,33 @@ mit 64 Tests.**
 keinen Test getoetet**, was das bewiesen hat.
 
 `TestRubyInterpreter: 166/166`, `All 1724 tests passed`, Mutationen 5 von 5.
+
+## 2026-09-29 — die Basis der drei Arten, und ein Hash, der abgelehnt wurde
+
+**Gemessen, nicht geschaetzt:** von den einundvierzig Namen, die ein Skript in
+seinen ersten hundert Zeilen schreibt, **fehlten sechsunddreißig.** `length`
+allein stoppt jedes Menue, das zaehlt.
+
+**Und ein Host kann sie nicht beantworten** -- **ein echter Host kennt
+`Sprite` und `Window_Base` und nicht Rubys `Array` und `String`.**
+
+**Und `is_a?` war zweimal da, und die alte Fassung sagte im Kommentar "this
+runtime has no objects"** -- **das war vor `new` wahr.** Gemessen:
+`held.is_a?(Basis)` gab `false`, `Held.is_a?(Basis)` gab `true`. **Jetzt geht
+die Kette**, **und ein Spiel, das gegen seine eigene Basisklasse prueft,
+sieht seine eigenen Objekte wieder.**
+
+**Und ein Hash wurde abgelehnt** mit *„this interpreter does not evaluate a
+Hash node"* -- **eine Meldung ueber den eigenen Quelltext des Lesers.**
+**Jede gespeicherte Einstellung und jede Statuszeile ist ein Hash.**
+
+**Und eine irrefuehrende Meldung hat alles darueber verdeckt:**
+`[1, 2, 3].length` meldete *„length braucht einen Block"* -- **weil die
+Blockfrage vor der Namensfrage stand.**
+
+**Eine Regel stand zweimal, und die Mutation hat es bewiesen:** die negative
+Stelle wurde in `Item` geaendert und in `Index` nicht, **und kein Test hat es
+gemerkt**, **weil kein Test `first` oder `last` benutzt hat.**
+
+`TestRubyInterpreter: 175/175`, `All 1733 tests passed`, Mutationen 5 von 5
+und 6 von 6.

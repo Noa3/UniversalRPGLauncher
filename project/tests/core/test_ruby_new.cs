@@ -459,5 +459,4 @@ public partial class TestRubyInterpreter
         AssertTrue(wert.Items[1].Kind == RubyValueKind.Nil,
             "**and an unset one is nil** — so `defined?` can tell a class "
                 + "that has been set up from one that has not");
-    }
-}
+    }}

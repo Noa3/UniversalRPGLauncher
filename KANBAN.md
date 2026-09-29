@@ -3954,10 +3954,60 @@ Klassenrumpf war ueberflüssig, **weil `_aktuellerTyp` die Klasse ohnehin
 traegt** -- **und die Mutation "der Rumpf sieht die Klasse nicht" hat keinen
 Test getoetet**, was genau das bewiesen hat.
 
+### Die Basis der drei Arten -- sechsunddreißig Namen fehlten
+
+**Gemessen, nicht geschaetzt:** von den einundvierzig Namen, die ein Skript
+in seinen ersten hundert Zeilen schreibt, waren **sechsunddreißig nicht da.**
+`length` allein stoppt jedes Menue, das zaehlt, `[0]` stoppt jede Liste, die
+ihren ersten Eintrag liest, **und ein Spiel ohne beides ist nicht leicht
+kaputt -- es startet nicht.**
+
+**Und ein Host kann sie nicht beantworten.** Ein echter Host kennt die
+Objekte des Spiels -- `Sprite`, `Window_Base`, `Input` -- **und nicht Rubys
+`Array` und `String`**, **weil ein Spiel den Host nie fragt, was ein Array
+ist.**
+
+**Und `is_a?` war zweimal da.** Es stand in `Antwortet` neben
+`respond_to?`, **und dort stand im Kommentar "this runtime has no
+objects"** -- **das war vor `new` wahr und ist seit `new` falsch**, und die
+alte Fassung verglich nur den eigenen Namen. **Gemessen:
+`held.is_a?(Basis)` gab `false`, `Held.is_a?(Basis)` gab `true`** -- **und ein
+Leser, der nur den Namen vergleicht, sagt `nein` zu jeder Wache, die ein
+Spiel gegen seine eigene Basisklasse schreibt**, **und jedes eigene Objekt
+waere fremd.** Der neue Weg geht die Kette.
+
+**Und ein Hash wurde abgelehnt.** Die Antwort war *„this interpreter does
+not evaluate a Hash node"* -- **eine Meldung ueber den eigenen Quelltext des
+Lesers**, **und jede gespeicherte Einstellung, jede Ereignistabelle und
+jede Statuszeile ist ein Hash.** Das ist der groesste Teil dessen, woraus
+ein Spiel besteht.
+
+**Und eine irrefuehrende Meldung hat alles darueber verdeckt.** Gemessen:
+`[1, 2, 3].length` meldete *„length braucht einen Block"* -- **und das ist
+doppelt falsch**, denn `length` laeuft keinen Block, **und der Host haette
+die richtige Antwort gehabt.** Ursache: die Blockfrage stand **vor** der
+Namensfrage, **also bekam jeder unbekannte Name auf einer Liste die
+Blockmeldung.**
+
+> **Eine Regel stand zweimal, und die Mutation hat es bewiesen.**
+> „Negative Stellen zaehlen nicht von hinten" wurde in `Item` geaendert und
+> in `Index` nicht, **und kein Test hat es gemerkt** -- **weil kein Test
+> `first` oder `last` benutzt hat**, und die beiden Orte sind erst durch
+> `first` und `last` unterscheidbar. **Jetzt ist `Item` der einzige Ort,
+> und `Test_FirstAndLastReadTheEnds` schliesst die Luecke.**
+
+**Und `"abc".length` zaehlt Bytes, nicht Zeichen.** Ruby 1.8 hat keinen
+Zeichentyp, **und ein Leser, der Zeichen zaehlte, gaeve einem Spiel auf
+einer anderen Maschine eine andere Zahl** -- **das ist ein Fenster, das die
+falsche Anzahl von Zeichen zeichnet.** `"abc"[1]` ist deshalb **ein Byte,**
+und in CP932 die halbe Kanji: **das ist Rubys Verhalten und kein Fehler
+hier.**
+
 **Noch nicht ausgewertet:** `respond_to_missing?`, `binding`,
 `Module`-Methoden (`include?`, `instance_methods`),
 Block-Umbrueche mit Argumenten (`break 1`), `dup`/`clone` mit echter Kopie,
-`instance_of?`, und `Struct`.
+`sub`/`gsub`/`split`, `find`/`detect`/`inject`/`group_by`,
+`Struct`, `raise`, und `require`.
 
 **And a dead branch that a mutation could not have caught.** `OpAssign`
 handled `op == "="`, **and the parser never produces this node with a bare

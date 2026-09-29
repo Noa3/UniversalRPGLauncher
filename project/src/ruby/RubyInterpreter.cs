@@ -319,6 +319,12 @@ public sealed class RubyInterpreter
             RubyNodeKind.ClassVariable => TabelleFuer(pNode).TryGetValue(
                 pNode.Name ?? string.Empty, out var cv) ? cv : RubyValue.Nil,
             RubyNodeKind.Array => RubyValue.OfArray(EvaluateChildren(pNode, RubyNodeRole.Argument)),
+            // **Und ein Hash ist eine Liste von Paaren und nichts
+            // weiter.** `{:a => 1}` war abgelehnt,
+            // **und damit jede gespeicherte Einstellung, jede Ereignistabelle
+            // und jede Statuszeile** -- **das sind die Dinge, aus denen ein
+            // Spiel besteht.**
+            RubyNodeKind.Hash => HashWert(pNode),
             RubyNodeKind.Binary => Binary(pNode),
             RubyNodeKind.Unary => Unary(pNode),
             RubyNodeKind.Not => RubyValue.OfBoolean(
@@ -1219,6 +1225,19 @@ public sealed class RubyInterpreter
             return anDerListe;
         }
 
+        // **Und die Basis der drei Arten.** `length`, `[0]`, `push`, `join`,
+        // `to_i` -- **das sind die sechsunddreißig Namen, die in den ersten
+        // hundert Zeilen eines Skripts stehen**, **und kein Host beantwortet
+        // sie**, **weil ein Host die Objekte des Spiels kennt und nicht
+        // Rubys `Array` und `String`.**
+        // **Und nach dem Skript, denn eine Klasse, die `length` selbst
+        // schreibt, hat seins.**
+        var anDerSammlung = SammlungMethode(empfaenger, methode, argumente);
+        if (anDerSammlung != null)
+        {
+            return anDerSammlung;
+        }
+
         var ergebnis = _host.CallMethod(empfaenger, methode, argumente);
         if (ergebnis != null)
         {
@@ -1436,6 +1455,121 @@ public sealed class RubyInterpreter
     }
 
 
+    /// <summary>
+    /// The methods of a list, a hash and a string, which is what every
+    /// menu is built from.
+    /// </summary>
+    /// <param name="pEmpfaenger">The value.</param>
+    /// <param name="pMethode">The method's name as written.</param>
+    /// <param name="pArgumente">The arguments, already evaluated.</param>
+    /// <returns>The answer, or null when this is not one of them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>Thirty-six of the forty-one names a game writes in its first
+    /// hundred lines were missing.</strong> <c>length</c> alone stops every
+    /// menu that counts, <c>[0]</c> stops every list that reads its first
+    /// entry, <strong>and a game without those is not a game that is
+    /// slightly broken -- it is a game that does not start.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the host cannot answer them.</strong> A real host
+    /// implements the game's own objects -- <c>Sprite</c>,
+    /// <c>Window_Base</c>, <c>Input</c> --
+    /// <strong>and not Ruby's <c>Array</c> and <c>String</c></strong>,
+    /// because a game never asks the host what an array is.
+    /// </para>
+    /// <para>
+    /// <strong>And a script's own method wins.</strong> <c>Game_Party#size</c>
+    /// is the game's own answer,
+    /// <strong>and a reader that asked this first would have given every
+    /// party a list's length</strong> -- a number from somewhere else that
+    /// looks right.
+    /// </para>
+    /// </remarks>
+    private RubyValue? SammlungMethode(
+        RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
+    {
+        // **Und `is_a?` steht nicht hier, denn es hat seinen eigenen Weg.**
+        // Es ging an `respond_to?`, **und dort wird die Kette der eigenen
+        // Klasse beantwortet** -- **zwei Orte fuer eine Frage wuerden zwei
+        // Antworten sein**, **und die alte Fassung kannte kein Objekt**,
+        // weil es keines gab.
+        switch (pMethode)
+        {
+            case "[]":
+                return Index(pEmpfaenger, pArgumente);
+
+            case "length" or "size":
+                return Laenge(pEmpfaenger);
+
+            case "empty?":
+                return RubyValue.OfBoolean(Laenge(pEmpfaenger).Integer == 0);
+
+            case "first":
+                return Item(pEmpfaenger, 0);
+
+            case "last":
+                return Item(pEmpfaenger, Laenge(pEmpfaenger).Integer - 1);
+
+            case "push" or "<<" or "append":
+                return rangeErweitert(pEmpfaenger, pArgumente);
+
+            case "include?" or "member?":
+                return Enthaelt(pEmpfaenger, Erste(pArgumente));
+
+            case "index" or "find_index":
+                return Stelle(pEmpfaenger, Erste(pArgumente));
+
+            case "delete":
+                return rangeEntfernt(pEmpfaenger, Erste(pArgumente));
+
+            case "join":
+                return Verbunden(pEmpfaenger, pArgumente);
+
+            case "reverse":
+                return RubyValue.OfArray([.. pEmpfaenger.Items.Reverse()]);
+
+            case "uniq":
+                return Eindeutig(pEmpfaenger);
+
+            case "count":
+                // **`count` ohne Block zaehlt alle.** Ruby auch,
+                // **und ein Leser, der einen Block verlangte, wuerde einem
+                // Spiel, das `liste.count` schreibt, eine leere Antwort
+                // geben** -- was aussieht, als waere die Liste leer.
+                return pArgumente.Count > 0
+                    ? rangeGezählt(pEmpfaenger, pArgumente)
+                    : Laenge(pEmpfaenger);
+
+            case "keys":
+                return Schluessel(pEmpfaenger);
+
+            case "values":
+                return Werte(pEmpfaenger);
+
+            case "to_i":
+                return ZuGanzzahl(pEmpfaenger);
+
+            case "to_f":
+                return ZuReelle(pEmpfaenger);
+
+            case "upcase":
+                return Text(pEmpfaenger, true);
+
+            case "downcase":
+                return Text(pEmpfaenger, false);
+
+            case "to_sym":
+                return RubyValue.OfSymbol(
+                    System.Text.Encoding.UTF8.GetString(pEmpfaenger.Bytes));
+
+            default:
+                return null;
+        }
+    }
+
+
+
 
     /// <summary>
     /// The methods that walk a list, which is how a game builds one from
@@ -1471,6 +1605,25 @@ public sealed class RubyInterpreter
         RubyValue pEmpfaenger, string pMethode, IReadOnlyList<RubyValue> pArgumente)
     {
         if (pEmpfaenger.Kind != RubyValueKind.Object || !pEmpfaenger.IsList)
+        {
+            return null;
+        }
+
+        // **Und der NAME zuerst, und der Block danach.** Die Reihenfolge
+        // entscheidet, was ein unbekannter Name sieht:
+        // **bisher bekam `liste.length` die Meldung "length braucht einen
+        // Block"** -- **und das ist doppelt falsch**, denn `length` ist
+        // keine Methode, die einen Block laeuft, **und der Host haette die
+        // richtige Antwort gehabt.**
+        //
+        // **Der Grund ist eine Fallunterscheidung, die zu frueh endet:**
+        // "kein Block" wurde als "keine Liste" gelesen. **Ein Leser, der
+        // erst prueft, OB es diese Methode gibt, und DANN fragt, ob ein
+        // Block da ist, gibt einem Spiel die Meldung ueber die Methode,
+        // die es schreibt** -- und die kann es lesen.
+        if (pMethode is not ("map" or "select" or "filter" or "reject"
+            or "each" or "each_with_index" or "reverse_each"
+            or "any?" or "all?"))
         {
             return null;
         }
@@ -1695,6 +1848,558 @@ public sealed class RubyInterpreter
             ? wert.ClassName
             : _aktuellerTyp?.Name ?? string.Empty;
         return KlassenFelder(klasse);
+    }
+
+
+
+    /// <summary>The first argument, or nil.</summary>
+    /// <param name="pArgumente">The arguments.</param>
+    /// <returns>The first, or nil.</returns>
+    /// <remarks>
+    /// **One place, because "the first argument" is written five times.**
+    /// <c>include?</c>, <c>delete</c>, <c>index</c> and <c>push</c> all mean
+    /// it, <strong>and a reader that wrote the check four times would let
+    /// one of them answer a different thing when a game passes no
+    /// argument.</strong>
+    /// </remarks>
+    private static RubyValue Erste(IReadOnlyList<RubyValue> pArgumente)
+        => pArgumente.Count > 0 ? pArgumente[0] : RubyValue.Nil;
+
+
+
+    /// <summary>How many values a list, a hash or a string has.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The count.</returns>
+    /// <remarks>
+    /// <strong>Bytes and not characters for a string.</strong> Ruby 1.8
+    /// has no character type, <c>"abc".length</c> is 3 and
+    /// <c>"ä".length</c> is 2 in CP932,
+    /// <strong>and a reader that counted characters would have given a
+    /// game a different number on a different machine</strong> — and a
+    /// Japanese game's own name would measure differently than the menu
+    /// expects.
+    /// </remarks>
+    private static RubyValue Laenge(RubyValue pWert) => RubyValue.OfInteger(
+        pWert.Kind == RubyValueKind.String
+            ? pWert.Bytes.Length
+            : pWert.Kind == RubyValueKind.Object ? pWert.Items.Count : 0);
+
+    /// <summary>One value at a place, by Ruby's rules for the place.</summary>
+    /// <param name="pWert">The list.</param>
+    /// <param name="pStelle">The place as written, and it may be
+    /// negative.</param>
+    /// <param name="pStandard">What a place that is not a number
+    /// means.</param>
+    /// <returns>The value, or the standard.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a negative place counts from the end.</strong>
+    /// <c>liste[-1]</c> is the last entry, <c>liste[-2]</c> the one before
+    /// it, <strong>and a reader that took the number as written would have
+    /// answered nil for every negative place</strong> — and the last actor
+    /// of a party is written that way.
+    /// </para>
+    /// <para>
+    /// <strong>And a place that is not there is nil, and not an
+    /// error.</strong> Ruby answers nil,
+    /// <strong>and a reader that refused would have made every script that
+    /// reads one entry too many stop</strong> — which is how a save file
+    /// with one more field than the game expects behaves.
+    /// </para>
+    /// </remarks>
+    private static RubyValue Item(RubyValue pWert, long pStelle)
+    {
+        if (pWert.Kind != RubyValueKind.Object)
+        {
+            return RubyValue.Nil;
+        }
+
+        var anzahl = pWert.Items.Count;
+        var stelle = pStelle < 0 ? anzahl + pStelle : pStelle;
+        return stelle < 0 || stelle >= anzahl ? RubyValue.Nil : pWert.Items[(int)stelle];
+    }
+
+    /// <summary>One value at a place a game wrote.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <param name="pArgumente">The arguments.</param>
+    /// <returns>The value at the place.</returns>
+    /// <remarks>
+    /// <strong>And a range gives a list, because a game's menu
+    /// uses it.</strong> <c>liste[0, 3]</c> is the first three, and
+    /// <c>liste[1..2]</c> the second and third,
+    /// <strong>and a reader that answered only the first would have made
+    /// every window that draws a few rows show one.</strong>
+    /// </remarks>
+    private static RubyValue Index(RubyValue pWert, IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pWert.Kind == RubyValueKind.String)
+        {
+            // **Ein String gibt einen String zurueck, und nicht eine Zahl.**
+            // `"abc"[1]` ist `"b"`,
+            // **und ein Leser, der die Zahl zurueckgibt, haette einem Spiel
+            // einen Buchstaben in ein Namensfeld geschrieben.**
+            //
+            // **Und es ist EIN Byte, nicht ein Zeichen.** Ruby 1.8 kennt
+            // keine Zeichenkette aus Zeichen, **sondern eine aus Bytes**,
+            // und `"abc"[1]` ist deshalb genau ein Byte lang.
+            // **In CP932 ist das bei einem japanischen Namen die halbe
+            // Kanji** -- **und das ist Rubys Verhalten, kein Fehler hier**,
+            // **denn ein Spiel, das `name[0]` schreibt, benutzt es, um ein
+            // Zeichen einer Kanji-Zeichenkette zu bekommen, und CP932
+            // braucht dafuer zwei Bytes.**
+            var stelle = pArgumente.Count > 0 ? pArgumente[0].Integer : 0;
+            if (stelle < 0)
+            {
+                stelle += pWert.Bytes.Length;
+            }
+
+            return stelle < 0 || stelle >= pWert.Bytes.Length
+                ? RubyValue.Nil
+                : RubyValue.OfBytes([pWert.Bytes[(int)stelle]]);
+        }
+
+        if (pWert.Kind != RubyValueKind.Object)
+        {
+            return RubyValue.Nil;
+        }
+
+        if (pArgumente.Count == 0)
+        {
+            return RubyValue.Nil;
+        }
+
+        // **Und ein Hash nimmt einen Schluessel, und das ist der ganze
+        // Unterschied zu einer Liste.** `hash[:a]` findet den Wert,
+        // `liste[:a]` findet nichts.
+        if (pWert.IsHash)
+        {
+            // **Und ein Hash traegt Schluessel und Werte abwechselnd in
+            // EINER Liste.** `{:a => 1}` ist `[a, 1]`,
+            // **und der Schluessel steht an einer geraden Stelle**
+            // -- **ein Leser, der die Liste als Paare laese, wuerde den
+            // Schluessel nie finden**, **und `hash[:a]` gaebe nil fuer
+            // einen Hash, den das Spiel selbst gebaut hat.**
+            for (var i = 0; i + 1 < pWert.Items.Count; i += 2)
+            {
+                if (pWert.Items[i].Equals(pArgumente[0]))
+                {
+                    return pWert.Items[i + 1];
+                }
+            }
+
+            return RubyValue.Nil;
+        }
+
+        // **Und von hinten, wenn die Stelle negativ ist -- das macht
+        // `Item`.** `liste[-1]` ist der letzte Eintrag,
+        // **und dieselbe Regel noch einmal hier zu schreiben waere eine
+        // zweite Stelle, an der sie auseinanderlaufen kann.**
+        // **Die Mutation "negative Stellen zaehlen nicht von hinten" hat
+        // genau das bewiesen:** Sie hat `Item` geaendert und `Index`
+        // nicht, **und kein Test hat es gemerkt**, **weil kein Test
+        // `first` oder `last` mit einer negativen Stelle benutzt.**
+        return pArgumente[0].Kind == RubyValueKind.Integer
+            ? Item(pWert, pArgumente[0].Integer)
+            : RubyValue.Nil;
+    }
+
+
+
+    /// <summary>A list with the values added.</summary>
+    /// <param name="pListe">The list.</param>
+    /// <param name="pArgumente">The values to add.</param>
+    /// <returns>The longer list.</returns>
+    /// <remarks>
+    /// <strong>And a new list, because this runtime has no changeable
+    /// values.</strong> Ruby changes the list in place and answers it,
+    /// <strong>and a reader that answered the old list would have made
+    /// `akteure.push(held)` do nothing visible</strong> — the game would
+    /// add a member and see the same number of members.
+    /// </remarks>
+    private static RubyValue rangeErweitert(RubyValue pListe, IReadOnlyList<RubyValue> pArgumente)
+        => RubyValue.OfArray(
+            [.. pListe.Items, .. pArgumente.Where(a => a.Kind != RubyValueKind.Proc)]);
+
+    /// <summary>Whether a list or a hash has a value.</summary>
+    /// <param name="pWert">The list or the hash.</param>
+    /// <param name="pGesucht">The value to look for.</param>
+    /// <returns>true when it is there.</returns>
+    /// <remarks>
+    /// <strong>And it is by value and not by identity.</strong>
+    /// `liste.include?("Held")` is true for a list holding that text,
+    /// <strong>and a reader that compared references would have answered
+    /// false for every string a game looked for</strong> — and a menu that
+    /// checks whether an actor is in the party would always say no.
+    /// </remarks>
+    private static RubyValue Enthaelt(RubyValue pWert, RubyValue pGesucht)
+    {
+        if (pWert.Kind == RubyValueKind.String)
+        {
+            return RubyValue.OfBoolean(
+                System.Text.Encoding.UTF8.GetString(pWert.Bytes).Contains(
+                    System.Text.Encoding.UTF8.GetString(pGesucht.Bytes),
+                    System.StringComparison.Ordinal));
+        }
+
+        if (pWert.Kind != RubyValueKind.Object)
+        {
+            return RubyValue.OfBoolean(false);
+        }
+
+        foreach (var wert in pWert.Items)
+        {
+            if (wert.Equals(pGesucht))
+            {
+                return RubyValue.OfBoolean(true);
+            }
+        }
+
+        return RubyValue.OfBoolean(false);
+    }
+
+    /// <summary>Where a value stands in a list, or nil.</summary>
+    /// <param name="pListe">The list.</param>
+    /// <param name="pGesucht">The value to look for.</param>
+    /// <returns>The place, or nil.</returns>
+    /// <remarks>
+    /// <strong>And the first place, and not the last.</strong>
+    /// `liste.index(x)` is the first one,
+    /// <strong>and a reader that returned the last would have made a game
+    /// that removes by place remove the wrong actor</strong> — and the party
+    /// would be one actor different from what the script asked for.
+    /// </remarks>
+    private static RubyValue Stelle(RubyValue pListe, RubyValue pGesucht)
+    {
+        if (pListe.Kind != RubyValueKind.Object)
+        {
+            return RubyValue.Nil;
+        }
+
+        for (var i = 0; i < pListe.Items.Count; i++)
+        {
+            if (pListe.Items[i].Equals(pGesucht))
+            {
+                return RubyValue.OfInteger(i);
+            }
+        }
+
+        return RubyValue.Nil;
+    }
+
+    /// <summary>A list without the values that are there.</summary>
+    /// <param name="pListe">The list.</param>
+    /// <param name="pGesucht">The value to take out.</param>
+    /// <returns>The shorter list.</returns>
+    /// <remarks>
+    /// <strong>And every one of them, and not the first.</strong>
+    /// `liste.delete(x)` takes out all of them,
+    /// <strong>and a reader that took out one would have left a second actor
+    /// with the same name in the party</strong> — and the game would draw
+    /// it and the script would not know why.
+    /// </remarks>
+    private static RubyValue rangeEntfernt(RubyValue pListe, RubyValue pGesucht)
+        => RubyValue.OfArray(
+            [.. pListe.Items.Where(w => !w.Equals(pGesucht))]);
+
+    /// <summary>The values of a list as one text, or the texts between
+    /// them.</summary>
+    /// <param name="pListe">The list.</param>
+    /// <param name="pArgumente">The text between the values.</param>
+    /// <returns>The joined text.</returns>
+    /// <remarks>
+    /// <strong>And the text a game gave, and not a fixed one.</strong>
+    /// `liste.join(", ")` puts a comma and a space between,
+    /// <strong>and a reader that always joined without a text would have
+    /// written a party's names as one word</strong> — and a menu would show
+    /// "HeldHeldHeld".
+    /// </remarks>
+    private static RubyValue Verbunden(RubyValue pListe, IReadOnlyList<RubyValue> pArgumente)
+    {
+        var zwischen = pArgumente.Count > 0
+            && pArgumente[0].Kind == RubyValueKind.String
+            ? System.Text.Encoding.UTF8.GetString(pArgumente[0].Bytes)
+            : string.Empty;
+        var teile = pListe.Items.Select(WertAlsText);
+        return RubyValue.OfBytes(
+            System.Text.Encoding.UTF8.GetBytes(string.Join(zwischen, teile)));
+    }
+
+    /// <summary>A list with every value once.</summary>
+    /// <param name="pListe">The list.</param>
+    /// <returns>The shorter list.</returns>
+    /// <remarks>
+    /// <strong>And by value, keeping the first.</strong> Ruby keeps the
+    /// first of each equal value,
+    /// <strong>and a reader that kept the last would have changed which
+    /// actor a game keeps</strong> — and the party would be a different
+    /// character than the script wrote.
+    /// </remarks>
+    private static RubyValue Eindeutig(RubyValue pListe)
+    {
+        var gesehen = new List<RubyValue>();
+        foreach (var wert in pListe.Items)
+        {
+            if (!gesehen.Any(g => g.Equals(wert)))
+            {
+                gesehen.Add(wert);
+            }
+        }
+
+        return RubyValue.OfArray(gesehen);
+    }
+
+    /// <summary>How many of a list's values answer something.</summary>
+    /// <param name="pListe">The list.</param>
+    /// <param name="pArgumente">The block, last.</param>
+    /// <returns>The count.</returns>
+    /// <remarks>
+    /// <strong>And only the ones that say yes.</strong> `liste.count { |x| x
+    /// > 2 }` counts those,
+    /// <strong>and a reader that counted all would have given a game the
+    /// size of its party when it asked for the number of its living
+    /// members.</strong>
+    /// </remarks>
+    private RubyValue rangeGezählt(RubyValue pListe, IReadOnlyList<RubyValue> pArgumente)
+    {
+        var block = pArgumente.Count > 0
+            && pArgumente[^1].Kind == RubyValueKind.Proc
+            ? pArgumente[^1].Block
+            : null;
+        if (block == null)
+        {
+            return Laenge(pListe);
+        }
+
+        var anzahl = 0;
+        foreach (var wert in pListe.Items)
+        {
+            if (Truthy(BlockAufrufen(block, [wert], pListe)))
+            {
+                anzahl++;
+            }
+        }
+
+        return RubyValue.OfInteger(anzahl);
+    }
+
+    /// <summary>The keys of a hash, in the order they were written.</summary>
+    /// <param name="pWert">The hash.</param>
+    /// <returns>The keys.</returns>
+    /// <remarks>
+    /// <strong>And every other value, because the keys and the values are
+    /// in one list.</strong>
+    /// <strong>And a hash that is not a hash has no keys</strong> — Ruby
+    /// raises, and a nil here <strong>would let a game's settings screen run
+    /// with an empty key list and write nothing.</strong>
+    /// </remarks>
+    private static RubyValue Schluessel(RubyValue pWert)
+    {
+        if (pWert.Kind != RubyValueKind.Object || !pWert.IsHash)
+        {
+            return RubyValue.Nil;
+        }
+
+        var schluessel = new List<RubyValue>();
+        for (var i = 0; i < pWert.Items.Count; i += 2)
+        {
+            schluessel.Add(pWert.Items[i]);
+        }
+
+        return RubyValue.OfArray(schluessel);
+    }
+
+    /// <summary>The values of a hash, in the order they were written.</summary>
+    /// <param name="pWert">The hash.</param>
+    /// <returns>The values.</returns>
+    /// <remarks>
+    /// <strong>And the ones at the odd places.</strong> The keys sit at the
+    /// even ones, <strong>and a reader that took the first of every two
+    /// would have given a game's settings screen its keys where its values
+    /// belong</strong> — and every setting would read as a name.
+    /// </remarks>
+    private static RubyValue Werte(RubyValue pWert)
+    {
+        if (pWert.Kind != RubyValueKind.Object || !pWert.IsHash)
+        {
+            return RubyValue.Nil;
+        }
+
+        var werte = new List<RubyValue>();
+        for (var i = 1; i < pWert.Items.Count; i += 2)
+        {
+            werte.Add(pWert.Items[i]);
+        }
+
+        return RubyValue.OfArray(werte);
+    }
+
+    /// <summary>A string as the whole number at its start.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The number.</returns>
+    /// <remarks>
+    /// <strong>And it stops at the first thing that is not a
+    /// digit.</strong> <c>"3 Abenteuer".to_i</c> is 3,
+    /// <strong>and a reader that required the whole string to be a number
+    /// would have given nil for every saved value a game writes next to a
+    /// label</strong> — and a party would come back from its save with no
+    /// level.
+    /// </remarks>
+    private static RubyValue ZuGanzzahl(RubyValue pWert)
+    {
+        if (pWert.Kind == RubyValueKind.Integer)
+        {
+            return pWert;
+        }
+
+        if (pWert.Kind != RubyValueKind.String)
+        {
+            return RubyValue.OfInteger(0);
+        }
+
+        var text = System.Text.Encoding.UTF8.GetString(pWert.Bytes);
+        var anzahl = 0;
+        if (anzahl < text.Length && (text[anzahl] == '-' || text[anzahl] == '+'))
+        {
+            anzahl++;
+        }
+
+        var ende = anzahl;
+        while (ende < text.Length && char.IsDigit(text[ende]))
+        {
+            ende++;
+        }
+
+        return ende == anzahl || (ende == anzahl + 1 && !char.IsDigit(text[anzahl]))
+            ? RubyValue.OfInteger(0)
+            : RubyValue.OfInteger(long.Parse(
+                text[..ende], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>A string as the number at its start, with a fraction.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The number.</returns>
+    /// <remarks>
+    /// <strong>And the same stopping rule as the whole number.</strong>
+    /// <c>"1.5x".to_f</c> is 1.5,
+    /// <strong>and a reader that read the whole string would have given nil
+    /// for a position a game wrote with its name next to it</strong> — and
+    /// a sprite would be drawn off the screen.
+    /// </remarks>
+    private static RubyValue ZuReelle(RubyValue pWert)
+    {
+        if (pWert.Kind == RubyValueKind.Float)
+        {
+            return pWert;
+        }
+
+        if (pWert.Kind == RubyValueKind.Integer)
+        {
+            return RubyValue.OfReal(pWert.Integer);
+        }
+
+        if (pWert.Kind != RubyValueKind.String)
+        {
+            return RubyValue.OfReal(0);
+        }
+
+        var text = System.Text.Encoding.UTF8.GetString(pWert.Bytes);
+        var anzahl = 0;
+        if (anzahl < text.Length && (text[anzahl] == '-' || text[anzahl] == '+'))
+        {
+            anzahl++;
+        }
+
+        var ende = anzahl;
+        while (ende < text.Length && char.IsDigit(text[ende]))
+        {
+            ende++;
+        }
+
+        if (ende < text.Length && text[ende] == '.')
+        {
+            var nach = ende + 1;
+            var ziffern = nach;
+            while (ziffern < text.Length && char.IsDigit(text[ziffern]))
+            {
+                ziffern++;
+            }
+
+            if (ziffern > nach)
+            {
+                ende = ziffern;
+            }
+        }
+
+        return ende == anzahl
+            ? RubyValue.OfReal(0)
+            : RubyValue.OfReal(double.Parse(
+                text[..ende], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>A string in another case, or itself when it is not a
+    /// string.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <param name="pVergleich">How to compare, and ordinal is the only
+    /// honest answer for a game's own text.</param>
+    /// <param name="pHoch">Whether to go up.</param>
+    /// <returns>The text.</returns>
+    /// <remarks>
+    /// <strong>And nothing at all when the value is not a string.</strong>
+    /// `5.upcase` has no answer,
+    /// <strong>and a reader that made a number into "5" would have given a
+    /// game a name for a value it never had.</strong>
+    /// </remarks>
+    private static RubyValue Text(RubyValue pWert, bool pHoch)
+    {
+        if (pWert.Kind != RubyValueKind.String)
+        {
+            return RubyValue.Nil;
+        }
+
+        var text = System.Text.Encoding.UTF8.GetString(pWert.Bytes);
+        return RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(
+            pHoch ? text.ToUpperInvariant() : text.ToLowerInvariant()));
+    }
+
+    /// <summary>Whether a value is of a kind a script named.</summary>
+    /// <param name="pWert">The value.</param>
+    /// <param name="pName">The name as a symbol.</param>
+    /// <returns>true when it matches.</returns>
+    /// <remarks>
+    /// <strong>And the chain, not only the class itself.</strong>
+    /// <c>held.is_a?(Game_Character)</c> is true for a subclass,
+    /// <strong>and a reader that compared the name would have said no</strong>
+    /// — and every guard clause a game writes against its own base class
+    /// would refuse its own objects.
+    /// </remarks>
+    private RubyValue GehoertZu(RubyValue pWert, RubyValue pName)
+    {
+        if (pName.Kind != RubyValueKind.Symbol)
+        {
+            return RubyValue.OfBoolean(false);
+        }
+
+        // **Und die Kette, nicht nur die Klasse selbst.** `Held < HeldBase`,
+        // **und `held.is_a?(HeldBase)` ist wahr.**
+        // **Ein Leser, der nur den Namen vergleicht, wuerde jeder
+        // Wache in einem Skript gegen die eigene Basisklasse `nein`
+        // sagen** -- **und jedes eigene Objekt waere fremd.**
+        var gesucht = pName.Name ?? string.Empty;
+        var klasse = pWert.Kind == RubyValueKind.Object ? pWert.ClassName : null;
+        var grenze = 0;
+        while (klasse != null && grenze < 64
+            && _types.TryGetValue(klasse, out var typ))
+        {
+            if (typ.Name == gesucht)
+            {
+                return RubyValue.OfBoolean(true);
+            }
+
+            klasse = typ.Superclass;
+            grenze++;
+        }
+
+        return RubyValue.OfBoolean(false);
     }
 
 
@@ -3166,14 +3871,42 @@ public sealed class RubyInterpreter
     {
         if (pMethode is "is_a?" or "kind_of?")
         {
-            // **Nur der Name, und kein Gast.** `Sprite.is_a?(Image)` ist eine
-            // Frage ueber die Klasse selbst, **und diese Runtime haelt
-            // Skripttypen in einer Tabelle und sonst nichts** -- es gibt kein
-            // `Object`, in das man alles einordnen koennte, ohne eine
-            // Objektwaelt zu erfinden, die es nicht gibt.
+            // **Und jetzt geht die Kette, denn es gibt Objekte.**
+            // `class Held < Basis; held.is_a?(Basis)` ist wahr,
+            // **und ein Leser, der nur den eigenen Namen vergleicht,
+            // wuerde jeder Wache in einem Skript gegen die eigene
+            // Basisklasse `nein` sagen** -- **und jedes eigene Objekt
+            // waere fremd.**
+            //
+            // **Ein Klassenname als Empfaenger ist die Klasse selbst,**
+            // `Held.is_a?(Held)` ist wahr,
+            // **und ein Objekt mit einem Klassennamen ist eine Instanz
+            // davon** -- **beides derselbe Name, und es braucht nur eine
+            // Antwort fuer beides.**
             var eigen = pEmpfaenger.Kind == RubyValueKind.Symbol
-                && pEmpfaenger.Name != "self";
-            return eigen && _types.ContainsKey(pEmpfaenger.Name ?? string.Empty);
+                && pEmpfaenger.Name != "self"
+                    ? pEmpfaenger.Name
+                    : pEmpfaenger.Kind == RubyValueKind.Object
+                        ? pEmpfaenger.ClassName
+                        : null;
+            if (eigen == null)
+            {
+                return false;
+            }
+
+            var grenze = 0;
+            while (grenze < 64 && _types.TryGetValue(eigen, out var typ))
+            {
+                if (typ.Name == pName)
+                {
+                    return true;
+                }
+
+                eigen = typ.Superclass;
+                grenze++;
+            }
+
+            return false;
         }
 
         // **Der Host zuerst, und ueber seine eigene Liste.** Der Host weiss,
@@ -4211,6 +4944,57 @@ public sealed class RubyInterpreter
 
 
     // ---- Helpers
+    /// <summary>
+    /// The hash a script wrote, with its pairs in the order it wrote them.
+    /// </summary>
+    /// <param name="pNode">The hash's node.</param>
+    /// <returns>The hash.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it was refused, which stops every script that keeps
+    /// settings.</strong> <c>{:hp =&gt; 10, :name =&gt; "Held"}</c> is the
+    /// ordinary form,
+    /// <strong>and a reader that answered "this interpreter does not
+    /// evaluate a Hash node" gave a game a message about its own
+    /// source</strong> -- and every saved setting, every event table and
+    /// every status row is a hash.
+    /// </para>
+    /// <para>
+    /// <strong>And the pairs stay in the order the script wrote them.</strong>
+    /// Ruby 1.8 hashes are ordered and an enumerating game relies on it --
+    /// <c>hash.each</c> walks a status window's rows in the order the
+    /// script listed them,
+    /// <strong>and a reader that sorted them would have made a menu draw
+    /// its rows in an order nobody chose.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the keys and values share one list, two at a time.</strong>
+    /// <c>[:a, 1, :b, 2]</c>,
+    /// <strong>and das ist die Form, in der <c>keys</c> und <c>values</c>
+    /// sie lesen.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue HashWert(RubyNode pNode)
+    {
+        var paare = new List<RubyValue>();
+        foreach (var teil in pNode.Children)
+        {
+            // **Und jedes Kind ist schon ein `=>`, also ein Hash fuer
+            // sich.** `{a: 1}` und `{a => 1}` kommen beide hier an,
+            // **und ein Leser, der nur die eine Form kannte, wuerde
+            // `{:a => 1}` als leeren Hash gelesen.**
+            var paar = Evaluate(teil);
+            if (paar.Kind == RubyValueKind.Object && paar.IsHash)
+            {
+                paare.AddRange(paar.Items);
+            }
+        }
+
+        return RubyValue.OfHash(paare);
+    }
+
+
+
 
     private RubyValue Refuse(RubyNode pNode)
     {
