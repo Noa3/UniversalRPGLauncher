@@ -127,6 +127,8 @@ public static class MzCommands
             or MzCommandTable.SetEventLocation
             or MzCommandTable.BattleProcessing
             or MzCommandTable.ChangeVehicleImage
+            or MzCommandTable.ShowChoiceList
+            or MzCommandTable.ChoicesOption
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -1360,7 +1362,17 @@ public static class MzCommands
     }
 
 
-    private static int At(MzCommandEntry pCommand, int pIndex) =>
+    /// <summary>
+    /// A parameter as a number, and zero where there is none.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is internal, and not private, because two files read
+    /// command parameters.</strong> It was private while only `MzCommands`
+    /// used it, **and the choice block in `MzControlFlow` was a second
+    /// reader that could not have had it</strong> — **and a second
+    /// reader with its own copy is two places to get a number wrong.**
+    /// </remarks>
+    internal static int At(MzCommandEntry pCommand, int pIndex) =>
         pIndex < pCommand.Parameters.Count
         && int.TryParse(
             pCommand.Parameters[pIndex],

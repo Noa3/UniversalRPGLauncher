@@ -309,6 +309,87 @@ public sealed class MzInterpreter
     /// way the engine's <c>skipBranch</c> does, and says so when the list ends
     /// before the branch does.
     /// </summary>
+    /// <summary>
+    /// The options a choice is made of, read off the <c>402</c>s that
+    /// follow a <c>102</c>, and where the choice ends.
+    /// </summary>
+    /// <param name="pOptions">The option texts, in the game's order.</param>
+    /// <param name="pEnd">The index of the first command after the
+    /// choice.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the options are not in the <c>102</c> at all.</strong>
+    /// Measured: <c>102 [["Yes", "No"], 1, 0, 2, 0]</c> is followed by
+    /// <c>402 [0, "Yes"]</c> and <c>402 [1, "No"]</c> — <strong>and the
+    /// second parameter of the <c>102</c> is the *cancel branch*, not
+    /// the number of options</strong>, **so a reader that read it as a
+    /// count opened a choice of one.**
+    /// </para>
+    /// <para>
+    /// <strong>And a choice ends where its indent ends.</strong> The
+    /// <c>102</c> and its <c>402</c>s are at indent 0,
+    /// <strong>their branches at 1</strong>, **and a reader that looked
+    /// for a <c>412</c> to close it found none**, **because the
+    /// branches close themselves and the <c>412</c> belongs to an
+    /// ordinary <c>411</c> branch.**
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Remembers the open choice: what the player was asked and where
+    /// each answer leads.
+    /// </summary>
+    /// <param name="pChoice">The choice the game wrote.</param>
+    /// <param name="pBranches">Each option's branch, by its own index.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the branches are a map, and not a list.</strong>
+    /// Measured: <c>402 [0, "Yes"]</c>, <c>402 [1, "No"]</c> —
+    /// <strong>the index is in the first parameter, and it counts from
+    /// zero.</strong> A list indexed by it would be off by one on every
+    /// branch, <strong>and a choice of two would jump into the third
+    /// thing in the list.</strong>
+    /// </para>
+    /// </remarks>
+    public void SetChoice(
+        MzChoice.Set pChoice, IReadOnlyDictionary<int, int> pBranches)
+    {
+        _choice = pChoice;
+        _choiceBranches = pBranches;
+    }
+
+    /// <summary>The options of the open choice, and none without one.</summary>
+    public IReadOnlyList<string> ChoiceOptions => _choice.Options;
+
+    /// <summary>Whether a choice is open on this interpreter.</summary>
+    public bool HasChoice => _choice.Options.Count > 0;
+
+    /// <summary>
+    /// Where the answer <c>pBranch</c> leads, or -1.
+    /// </summary>
+    /// <param name="pBranch">Which answer, counting from one.</param>
+    public int ChoiceBranch(int pBranch)
+    {
+        return _choiceBranches.TryGetValue(pBranch - 1, out var ziel)
+            ? ziel
+            : -1;
+    }
+
+    /// <summary>
+    /// Steps over an option line that was reached on its own.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And an option is never its own command.</strong> It is a
+    /// line the <c>102</c> reads, <strong>and a reader that executed one
+    /// on its own ran a command the engine has no method for.</strong>
+    /// </remarks>
+    public void SkipChoiceOption() => Index++;
+
+    private MzChoice.Set _choice = MzChoice.Read(System.Array.Empty<string>());
+
+    private IReadOnlyDictionary<int, int> _choiceBranches =
+        new Dictionary<int, int>();
+
+
     public bool SkipBranch()
     {
         var indent = _commands[Index].Indent;

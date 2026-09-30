@@ -221,6 +221,8 @@ public partial class TestRealMzGameData : TestBase
             UniversalRPG.Web.MzCommandTable.SetEventLocation,  // 203
             UniversalRPG.Web.MzCommandTable.BattleProcessing,  // 301
             UniversalRPG.Web.MzCommandTable.ChangeVehicleImage, // 322
+            UniversalRPG.Web.MzCommandTable.ShowChoiceList,   // 102
+            UniversalRPG.Web.MzCommandTable.ChoicesOption,   // 402
         };
 
         var nicht = vorkommen

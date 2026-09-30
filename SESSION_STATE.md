@@ -10749,3 +10749,61 @@ laeuft noch nicht.**
 **Punkt fuer den naechsten Zyklus: `102 Show Choice List` mit dem
 zugehoerigen Block ist groesser als ein Befehl und der letzte grosse
 Block im MZ-Dispatch.**
+
+## Und der Choice-Block ist gebaut
+
+**Und er war kein Befehl, sondern ein Block** -- **und genau darum waren
+`402`, `404`, `405` und `412` als No-ops dokumentiert und nicht als
+fehlend.**
+
+**Die gemessene Form, `Map004` Event 14:** `401`, dann `102
+[["Yes", "No"], 1, 0, 2, 0]` bei Einzug 0, dann `402 [0, "Yes"]` bei
+Einzug 0 mit ihren Zweigen bei 1, dann `402 [1, "No"]`, dann `404`, dann
+`412`.
+
+**Und die Texte stehen zweimal, und beide Stellen haben alle.** **Die
+Liste in `params[0]` ist die Quelle.**
+
+**Und `402` sind zwei Befehle unter einer Nummer** -- **`ContinueText`
+und `ChoicesOption` stehen jetzt beide in der Tabelle.**
+
+**Und der zweite Parameter der `102` ist der Abbruchzweig, und nicht die
+Anzahl der Optionen.**
+
+**Und die Zweige zaehlen in der Datei von null, die Antworten von eins.**
+
+### Zwei Fehler, die die Tests gefunden haben
+
+1. **`break` statt `continue` beim Sammeln der Zweige.** **Ein Zweig
+   liegt bei Einzug 1, der Befehl bei 0** -- **und ein `break` dort hat
+   nach dem ersten Zweig aufgehoert**, **und so fand der Leser nur die
+   erste Option und meldete der zweiten einen Zweig, den es nicht gibt.**
+2. **Der Testwert 4 fuer den zweiten Zweig war geraten, und gemessen ist
+   er 5** -- **weil der erste Zweig zwei Zeilen hat.**
+
+**Und die Regel *nach dem ersten Zweig wird aufgehoert* ist jetzt
+mitgefuehrt, denn sie ist derselbe Fehler noch einmal.**
+
+**Neu gemessen: 1750 von 2436 ausfuehrbar** (vorher 1726).
+
+## Und der Choice-Block ist fertig, mit neun von neun Regeln gefangen
+
+**Neu gemessen: 1750 von 2436 ausfuehrbar** (vorher 1726).
+`All 2158 tests passed`, Validator gruen, Mutationen **9/9**.
+
+**Und die Regel *der Abbruchzweig ist immer gesetzt* hat aufgedeckt, dass
+`MzChoice` `CancelType` und `NoCancel = -2` schon hatte** -- **und ich
+hatte eine eigene Rechnung daneben gestellt**, **zwei Wahrheiten ueber
+dieselbe Zahl**, **und sie liefen auseinander, als das Spiel `-2`
+schrieb.** **Jetzt wird `CancelType` gelesen.**
+
+**Und `405` ist noch immer ein No-op**, **und das ist jetzt richtig**:
+**`405` traegt im Choice-Block den Text einer Option**, **und die
+Optionen kommen aus `params[0]`, wo sie vollstaendig stehen**,
+**also ist `405` im Choice-Block eine Dublette von `params[0]`** --
+**und im Dialog-Block ist es etwas anderes**, **das diese Messung nicht
+geklaert hat.**
+
+**Naechster Schritt fuer MZ:** **die `404` und `412` des Choice-Blocks
+ausfuehren** -- **`404` hat keinen Namen in `MzCommandTable`, und
+`412 EndBranch` ist verdrahtet fuer den `411`-Zweig.**

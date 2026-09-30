@@ -253,6 +253,84 @@ public sealed class MzBranchFacts
     /// player will fight.*
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The choice a player is looking at, and the number it answers with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a choice is three things, and a number alone is not
+    /// one.</strong> The engine's own <c>command102</c> reads the option
+    /// texts off the following <c>402</c>s, shows them, waits for a key,
+    /// and then jumps into the branch of the one that was chosen. <strong>A
+    /// reader that kept only the chosen number had no text to show and
+    /// nothing to jump into</strong>, **and the event that made the
+    /// choice would have gone on down the list as if nothing had been
+    /// asked.**
+    /// </para>
+    /// <para>
+    /// <strong>And the engine numbers the branches from one.</strong> The
+    /// <c>402</c> that opens a branch carries its own index in its first
+    /// parameter — measured: <c>[0, "Yes"]</c>, <c>[1, "No"]</c> — **and
+    /// <c>0</c> is not a branch nobody may take, it is the first one.**
+    /// </para>
+    /// </para>
+    /// </remarks>
+    public MzOpenChoice? OpenChoice { get; private set; }
+
+    /// <summary>
+    /// The options a choice is made of, and nothing while none is open.
+    /// </summary>
+    public IReadOnlyList<string> ChoiceOptions
+    {
+        get
+        {
+            var offen = OpenChoice;
+            return offen == null
+                ? System.Array.Empty<string>()
+                : offen.Options;
+        }
+    }
+
+    /// <summary>Whether a choice is waiting for the player.</summary>
+    public bool ChoicePending => OpenChoice != null;
+
+    /// <summary>The branch a settled choice landed in, or -1.</summary>
+    public int ChoiceResult { get; private set; } = -1;
+
+    /// <summary>
+    /// Opens a choice, from <c>102 Show Choice List</c>.
+    /// </summary>
+    /// <param name="pOptions">The option texts, in the game's order.</param>
+    /// <param name="pCancel">Whether the last option cancels the choice.</param>
+    public void StartChoice(MzChoice.Set pChoice, bool pCancel)
+    {
+        OpenChoice = new MzOpenChoice(pChoice.Options, pCancel);
+        ChoiceResult = -1;
+    }
+
+    /// <summary>
+    /// Answers the open choice, from a key press, and says which branch
+    /// it landed in.
+    /// </summary>
+    /// <param name="pBranch">Which branch, counting from one.</param>
+    /// <returns>Whether the answer was one of the options.</returns>
+    public bool AnswerChoice(int pBranch)
+    {
+        var offen = OpenChoice;
+        if (offen == null)
+        {
+            return false;
+        }
+
+        if (pBranch < 1 || pBranch > offen.Options.Count)
+        {
+            return false;
+        }
+
+        OpenChoice = null;
+        ChoiceResult = pBranch;
+        return true;
+    }
     public int BattleTroop { get; private set; }
 
     /// <summary>Whether the player may flee, from <c>301</c>'s second field.</summary>

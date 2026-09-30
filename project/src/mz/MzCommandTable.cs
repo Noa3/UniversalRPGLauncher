@@ -112,9 +112,32 @@ public static class MzCommandTable
     public const int ShowChoices = 405;
 
     /// <summary>
-    /// Carries on with the next line, the counterpart of a 401.
+    /// The 402, which is two commands and not one.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the same number is two different commands.</strong>
+    /// Inside a <c>401 Show Text</c> block it is *carries on with the
+    /// next line* — the counterpart of a <c>401</c>. Inside a
+    /// <c>102 Show Choice List</c> block it is <strong>one option of
+    /// the choice</strong>, carrying its branch index and its text:
+    /// measured <c>[0, "Yes"]</c> and <c>[1, "No"]</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that named it once had one of the two.</strong>
+    /// Naming it <em>Continue Text</em> made a choice of six options look
+    /// like six lines of dialogue; <strong>naming it <em>Choice
+    /// Option</em> made a four-line dialogue look like a choice.</strong>
+    /// <strong>Both names are here, and the code that uses each one says
+    /// which block it is in.</strong>
+    /// </para>
+    /// </remarks>
     public const int ContinueText = 402;
+
+    /// <summary>
+    /// The same 402, read as one option of a <c>102</c>.
+    /// </summary>
+    public const int ChoicesOption = 402;
 
     /// <summary>
     /// Forces a move route onto a character. <c>command205</c> is

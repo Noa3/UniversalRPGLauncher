@@ -10897,3 +10897,73 @@ und `412` sich verzweigen.**
 
 **Und das ist die naechste Aufgabe fuer MZ, und sie ist groesser als ein
 Befehl:** `102 Show Choice List` mit dem zugehoerigen Block.
+
+## Und der Choice-Block: 102 mit seinen 402, 404 und 412
+
+**Und das ist kein Befehl, sondern ein Block** -- **und genau darum
+waren `402`, `404`, `405` und `412` als No-ops dokumentiert und nicht als
+fehlend: sie sind Teile eines Blocks, und der Block lief nicht.**
+
+**Die gemessene Form, `CamelliaCoronation`, `Map004`, Event 14:**
+
+```
+401 ["(Done looking around for today?)"]
+102 [["Yes", "No"], 1, 0, 2, 0]     Einzug 0
+402 [0, "Yes"]                     Einzug 0
+221 []                             Einzug 1
+101 ["", 0, 0, 2, ""]              Einzug 1
+402 [1, "No"]                      Einzug 0
+404 []                             Einzug 0
+412 []                             Einzug 1
+```
+
+**Und die Texte stehen zweimal, und beide Stellen haben alle:** einmal
+als Liste in `params[0]`, und einmal auf den `402`-Zeilen. **Die Liste
+ist die Quelle**, **denn eine `402`, deren Zweig leer ist, traegt ihren
+Text trotzdem.**
+
+**Und `402` sind zwei Befehle unter einer Nummer.** In einem `401`-Block
+ist es *die naechste Zeile*, in einem `102`-Block ist es **eine Option
+mit ihrem Zweig-Index und ihrem Text**. **Beide Namen stehen jetzt in
+der Tabelle**, **`ContinueText` und `ChoicesOption`**, **und der Code,
+der den einen braucht, sagt, in welchem Block er ist.**
+
+**Und der zweite Parameter ist der Abbruchzweig, und nicht die Anzahl
+der Optionen.** **Ein Leser, der ihn als Anzahl las, oeffnete eine Wahl
+mit einer Option.**
+
+**Und die Zweige zaehlen in der Datei von null und die Antworten von
+eins.** **`402 [0, "Yes"]` ist der Zweig der Antwort 1** -- **und ein
+Leser, der die Null der Datei als Antwortnummer nahm, hat die zweite
+Option unerreichbar gemacht.**
+
+**Und eine Wahl braucht beides:** **die Texte ohne Zweige ergeben einen
+Bildschirm, auf dem der Spieler antwortet und nichts passiert**, **und
+die Zweige ohne Texte ergeben nichts, was man beantworten kann.**
+**Beide Faelle werden abgewiesen und gesagt.**
+
+**Test evidence** `test_mz_choice.cs` (4), **und der Test baut den
+gemessenen Block statt nur der `102`** -- **denn ein Test, der nur den
+Befehl baut, testet ein Programm, das kein Spiel schreibt.**
+
+**Und `MzChoice` hatte `CancelType` und `NoCancel = -2` schon**, **und
+ich hatte eine eigene Rechnung daneben gestellt** -- **zwei Wahrheiten
+ueber dieselbe Zahl**, **und sie liefen auseinander, als das Spiel `-2`
+schrieb.** **Jetzt wird `CancelType` gelesen, und es gibt nur eine
+Rechnung.**
+
+**Und ein Fehler, den ein Test fand, weil er den Dispatch benutzt:** **ein
+Zweig liegt bei Einzug 1, der Befehl bei 0** -- **und ein `break` an
+dieser Stelle hat nach dem ersten Zweig aufgehoert**, **und so fand der
+Leser nur die erste Option und meldete der zweiten einen Zweig, den es
+nicht gibt.**
+
+**Und ein zweiter Fehler derselben Art: der Testwert 4 fuer den zweiten
+Zweig war geraten, und gemessen ist er 5** -- **weil der erste Zweig
+zwei Zeilen hat.**
+
+**Test evidence** `test_mz_choice.cs` (8), **und vier davon gehen durch
+den Dispatch statt durch einen handgeschriebenen Zustand**, **weil
+genau dort drei Regeln lebten, die sonst durchkamen.**
+
+**Neu gemessen: 1750 von 2436 ausfuehrbar** (vorher 1726).
