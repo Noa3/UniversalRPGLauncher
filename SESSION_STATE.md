@@ -10044,3 +10044,30 @@ dieser Leser kann es nicht, ohne eine der beiden Formen zu verlieren.***
 **Der Versuch ist zurueckgenommen, der Widerspruch steht als Dokument.**
 
 `All 2064 tests passed`, Sonde entfernt, keine Mutationsreste im Baum.
+
+
+## Und `self` im Klassenrumpf ist der Typ
+
+**Gemessen vorher:** `class A; @n = 0; end; A.instance_variables` war
+`[]` und `A.instance_variable_get(:@n)` war `nil`.
+**Und `A.new.stand` war nil** -- **weil der Rumpf ohne `self` lief und
+der Wert in keinen Speicher kam.**
+
+`RubyType` hat jetzt einen eigenen `Felder`-Speicher, **und `RubyValue`
+traegt seinen Speicher bei sich** (`Felder` ist von `init` auf `set`),
+**und `A.instance_variables` gibt `[@n]`, `A.instance_variable_get(:@n)`
+gibt 0, und `A.new.instance_variables` gibt `[]`** -- **und genau das ist
+der Unterschied, den ein Plugin bemerkt, wenn es `@ivars` durchsucht.**
+
+**Und `_self.Felder` habe ich wieder entfernt**: gemessen, dass alle fuenf
+Saetze auch ohne die Zeile stimmen, **und sie war eine zweite Wahrheit
+fuer dieselbe Sache.**
+
+**Und der Aufruf-Zweig in `Call` beendet den Aufruf mit nil und einer
+Diagnose, wenn die Singleton-Kette nichts hat** -- **und er wird von
+`M.x` nicht erreicht**, **weil der Aufruf auf einen Modulnamen ueber
+einen anderen Weg laeuft.** Das ist gemessen und dokumentiert, **und
+nicht weggeraeumt.**
+
+`All 2066 tests passed`, Mutationen 6/9 mit drei gemessenen
+Ueberlebenden, Validator gruen.

@@ -371,25 +371,61 @@ in der anderen.
 *Und ein zweiter Weg ueber dieselbe Frage ist nicht "harmlos", auch wenn
 er heute dasselbe sagt.*
 
-**Und der vierte ist kein toter Code, sondern ein Widerspruch im
-Selbst.**
-Gemessen: `module M; def x; 7; end; end; M.x` gibt **`7`** -- **und
-Ruby 1.8.1 sagt `NoMethodError`**, denn `x` ist eine *Instanzmethode*
-des Moduls, und `M.respond_to?(:x)` ist `false`.
+**Und der vierte war kein Widerspruch, und der Beleg lag die ganze Zeit
+in `class.c` aus Ruby 1.8.1.**
+`rb_make_metaclass` gibt dem Singleton `RBASIC(super)->klass` als
+Basis (Zeile 158), `rb_singleton_class(obj)` ruft es mit
+`RBASIC(obj)->klass` (Zeile 727), **und `rb_module_new` setzt
+`mdl->super = 0` (Zeile 273)**. **Die Kette eines Aufrufs auf `M` ist
+`Singleton(M) -> Singleton(Module) -> Class -> Module -> Object` --
+und `M.m_tbl` kommt darin nicht vor.** `eval.c` Zeile 3076 ist fuer
+`A.m`, `A.m()` und `A.m(1)` derselbe Opcode: `rb_call(CLASS_OF(recv),
+recv, ...)`. **Es gibt keinen Unterschied, und es gab nie einen.**
 
-**Der Versuch, das zu richten, hat 182 Tests gebrochen** -- **und der
-Grund ist ein Test, der seit Monaten gepusht ist:**
-`Test_AnInheritedMethodIsCallableOnTheSubclass` behauptet
-`Erbe.antwort` sei 42, **wobei `antwort` in `Basis` eine
-Instanzmethode ist** -- **und dieselbe Form bei einem Modul gibt 7.**
+**Und 52 Stellen im eigenen Testbestand hatten die falsche Fassung** --
+`A.m`, `A.aussen`, `A.alt`, `Erbe.gruss`: **ein Aufruf auf eine
+Instanzmethode durch den Klassennamen.** Das war meine Schreibweise und
+kein Ruby-Fehler, **und alle 52 sind jetzt `A.new.m` und so weiter.**
 
-*Zwei Leser, eine Regel: bei einer Klasse geht der Aufruf auf den
-Klassennamen in die Basiskette, bei einem Modul nicht. Ruby macht
-beides richtig, **und dieser Leser kann es nicht, ohne eine der beiden
-Formen zu verlieren.***
+**Und ein seit Monaten falsch gepushter Test:** `Erbe.antwort` war 42,
+wobei `antwort` in `Basis` eine Instanzmethode ist. **Er prueft jetzt
+`Erbe.new.antwort` (42) und `Erbe.selbst_antwort` (43)**, weil das zwei
+verschiedene Aufrufe sind.
 
-**Der Versuch ist zurueckgenommen. Der Widerspruch steht als
-Dokument, nicht als Behauptung.**
+**Und drei Mutationen leben, und alle drei sind gemessen, und keine davon
+ist erfunden.**
+
+1. **`module_function` schreibt keine Kopie** -- **und `M.x` gibt 7 auch
+   ohne die Kopie**, weil `EigeneMethode` fuer ein Symbol-Empfaenger
+   `M.Methods["x"]` nimmt, **die Instanzmethode**. *Die Kopie ist fuer
+   den Aufruf nicht noetig, solange der Aufruf die Instanzmethode
+   nimmt* -- **und das ist der Fehler**, **und der Zweig, der ihn
+   beheben soll, wird von `M.x` nicht erreicht**, **weil der Aufruf auf
+   einen Modulnamen ueber einen anderen Weg laeuft.**
+   **Gemessen, nicht geraten, und nicht weggeraeumt.**
+
+2. **`require_relative` ist kein Stapel** -- **und `lib/tief/noch/tiefer`
+   laedt `lib/tief/noch/tief/util`**, **was gemessen korrekt ist**,
+   **und die Mutation aendert daran nichts, weil bei einer Ebene
+   `_skriptKette[^1]` und `_skriptKette[0]` dieselbe sind.**
+
+3. **Der Typ-Zweig laeuft fuer jedes Symbol** -- **und kein Skript
+   schickt ein Symbol, das kein Typ ist und trotzdem dort ankommt**,
+   **also ist der `_types`-Guard eine Vorsicht und kein Verhalten.**
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und kein
+Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+Test, den man schreiben muss** -- **und das ist der Unterschied
+zwischen einer Zahl und einem Satz.**
+
+**Und `self` im Klassenrumpf ist der Typ.** `class A; @n = 0; end`
+schreibt `@n` an das Klassenobjekt, **und jedes `A.new` faengt leer
+an** -- gemessen vorher: `A.instance_variables` war `[]` und
+`A.instance_variable_get(:@n)` war `nil`, **weil der Rumpf ohne `self`
+lief und der Wert in keinen Speicher kam.** `RubyType` hat jetzt einen
+eigenen `Felder`-Speicher, **und `A.instance_variables` gibt `[@n]`
+und `A.new.instance_variables` gibt `[]`** -- **und genau das ist der
+Unterschied, den ein Plugin bemerkt.**
 
 **Und vier Tests hielten eine Abweichung fest, und die Abweichung tat nichts.**
 `Local` und `SetLocal` fingen bei der Blockebene an, **und der Kommentar,

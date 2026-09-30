@@ -1703,6 +1703,26 @@ public sealed class RubyInterpreter
             case "instance_variable_get" or "instance_variable_set"
                 or "instance_variables" or "instance_variable_defined?"
                 or "remove_instance_variable":
+                // **Und ein Typname traegt den Speicher des Typs, und
+                // nicht den eines Symbols ohne Felder.** `A.instance_variables`
+                // nach `class A; @n = 0; end` ist `[":@n"]`,
+                // **und ein Leser, der `pEmpfaenger.Felder` ohne Nachsicht
+                // las, bekam die leere Liste eines Symbols, das nie
+                // Felder bekommen hat** -- **und `instance_variable_get`
+                // ist der Satz, mit dem ein Plugin `@ivars` durchsucht**,
+                // **und es durchsucht sie an `self`, und `self` ist in
+                // einem Skript oft eine Klasse.**
+                if (pEmpfaenger.Kind == RubyValueKind.Symbol
+                    && pEmpfaenger.Name != null
+                    && pEmpfaenger.Name != "self"
+                    && _types.TryGetValue(pEmpfaenger.Name, out var befragter))
+                {
+                    var typAlsWert = RubyValue.OfSymbol(befragter.Name);
+                    typAlsWert.Felder = befragter.Felder;
+                    return InstanzVariable(
+                        typAlsWert, pMethode, pArgumente);
+                }
+
                 return InstanzVariable(
                     pEmpfaenger, pMethode, pArgumente);
 
@@ -1888,7 +1908,6 @@ public sealed class RubyInterpreter
             : RubyValue.OfSymbol("self");
         var methode = pNode.Name ?? string.Empty;
         var argumente = EvaluateChildren(pNode, RubyNodeRole.Argument);
-
         // **`new` ist Sprache und nicht Skript.** `Klasse.new(1, 2)` macht
         // ein Objekt und ruft `initialize` auf,
         // **und in keinem Skript steht diese Methode geschrieben** -- sie ist
@@ -2359,6 +2378,30 @@ public sealed class RubyInterpreter
             {
                 return typAntwort;
             }
+
+            // **Und der Aufruf endet hier, und nicht bei
+            // `EigeneMethode`.** Ruby 1.8.1's `rb_call` geht in die
+            // Singleton-Kette, **und die endet nach `Module`, und
+            // `M.m_tbl` steht nicht darin** -- **und `EigeneMethode`
+            // nimmt fuer ein Symbol-Empfaenger `M.Methods["x"]`, also
+            // die Instanzmethode**, **und damit waere
+            // `M.x` eine Instanzmethode auf dem Modul**, **und genau
+            // das ist es nicht.**
+            //
+            // **Und gemessen ist ausserdem: dieser Zweig wird von
+            // `M.x` nicht erreicht** (`module M; def x; 7; end; end;
+            // M.x` gibt 7 und keine Diagnose), **weil der Aufruf auf
+            // einen Modulnamen ueber einen anderen Weg laeuft**. Der
+            // Zweig steht trotzdem hier, **denn er ist die richtige
+            // Regel fuer `def self.x`**, und **ein gemessener Fehler
+            // wird nicht weggeraeumt, indem man die Regel loescht, die
+            // ihn beheben soll.**
+            _diagnostics.Add(
+                $"{empfaenger.Name} has no method '{methode}' on this "
+                    + "host; the interpreter does not guess, and a method "
+                    + "that is not implemented is a fact about the host "
+                    + "and not about the script");
+            return RubyValue.Nil;
         }
 
 
@@ -8648,14 +8691,15 @@ public sealed class RubyInterpreter
         // Das ist kein Randfall: `class Game_Character; @id = 0; end`
         // **ist der erste Satz von fast jedem VX-Skript**, und der Wert
         // gehoert dem Typ und nicht dem Objekt.
-        // **Und der Empfaenger traegt den Speicher des Typs bei
-        // sich.** `RubyValue.Felder` ist der Ort, an dem `@x` landet,
-        // **und ein `Symbol` ohne diesen Speicher schrieb `@n` in
-        // einen, den niemand liest** -- **und `A.instance_variables`
-        // kam dann leer zurueck**, **und beide Zeilen stehen drei
-        // Zeilen auseinander in einem Plugin, das den Rumpf liest.**
+        // **Und `_instanceVariables` ist der Ort, an dem `@x` landet.**
+        // `_self` zeigt nur, wem ein Aufruf ohne Empfaenger gehoert --
+        // `def self.x` schreibt in die Typ-Tabelle, **und `@n = 0` geht
+        // ueber `_instanceVariables`**, **und ein Leser, der den einen
+        // setzte und nicht den anderen, haette den Rumpf zur Haelfte
+        // ausgefuehrt** -- **und die Haelfte, die fehlt, ist die mit den
+        // Instanzvariablen, und die faellt bei einem Plugin eher auf als
+        // die mit den Methoden.**
         _self = RubyValue.OfSymbol(name);
-        _self.Felder = typ.Felder;
         _instanceVariables = typ.Felder;
         _scopes.Add(new Dictionary<string, RubyValue>());
         try

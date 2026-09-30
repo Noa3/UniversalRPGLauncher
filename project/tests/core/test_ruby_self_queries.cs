@@ -257,6 +257,70 @@ public partial class TestRubyInterpreter
     }
 
     /// <summary>
+    /// A class body writes to the class, and a new object starts empty.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>self</c> in a class body is the class.</strong>
+    /// <c>class A; @n = 0; end</c> writes <c>@n</c> on the class itself,
+    /// **and every <c>A.new</c> starts with nothing** — **and a reader
+    /// that ran the body without a <c>self</c> wrote the value into no
+    /// store at all**, so <c>A.instance_variables</c> came back empty
+    /// **and <c>A.new.stand</c> came back nil** — **and both of those
+    /// are three lines apart in a plugin that walks <c>@ivars</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the class is the answer to its own questions.</strong>
+    /// <c>A.instance_variable_get(:@n)</c> is <c>0</c> and
+    /// <c>A.instance_variable_defined?(:@n)</c> is <c>true</c>,
+    /// **and a reader that asked only objects gave nil and false** —
+    /// **and <c>self</c> is a class in a great many scripts**, because
+    /// the class body is where a class keeps its own count.
+    /// </para>
+    /// <para>
+    /// <strong>And an alias of the class is the same class.</strong>
+    /// <c>B = A; B.instance_variable_get(:@n)</c> is <c>0</c>,
+    /// **and a reader with a table per name would have given nil.**
+    /// </para>
+    /// </remarks>
+    public void Test_AClassBodyWritesToTheClassAndNotToItsObjects()
+    {
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wert = mit.RunProgram(Statements(
+            "class A\n"
+            + "  @n = 0\n"
+            + "end\n"
+            + "B = A\n"
+            + "[A.instance_variables.include?(:@n),"
+                + " A.instance_variable_get(:@n),"
+                + " A.instance_variable_defined?(:@n),"
+                + " A.new.instance_variables.length,"
+                + " B.instance_variable_get(:@n)]\n"));
+
+        AssertEq(wert.Items[0].Boolean, true,
+            "**the class's own list has the name** -- `self` in a class "
+                + "body is the class, and a reader that ran the body without "
+                + "one wrote the value into no store, and the list came "
+                + "back empty three lines after a plugin asked for it");
+        AssertEq(wert.Items[1].Integer, 0,
+            "**and the class reads its own value** -- and a reader that "
+                + "asked only objects gave nil here and the empty list "
+                + "there, and the two disagree about the same class");
+        AssertEq(wert.Items[2].Boolean, true,
+            "**and it says the name is there** -- `self` is a class in a "
+                + "great many scripts, and a class is a value that can be "
+                + "sent these five questions");
+        AssertEq(wert.Items[3].Integer, 0,
+            "**and a new object starts with nothing** -- `@n = 0` in the "
+                + "body is the class's, and a reader that filed it under "
+                + "the class's *instances* would have given every object "
+                + "the class's number");
+        AssertEq(wert.Items[4].Integer, 0,
+            "**and an alias is the same class** -- `B = A` binds the same "
+                + "store, and a reader with a table per name gave nil");
+    }
+
+    /// <summary>
     /// `instance_of?` is the class itself and not a superclass.
     /// </summary>
     /// <remarks>
