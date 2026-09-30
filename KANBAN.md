@@ -721,7 +721,41 @@ traegt `magnify = 0`, und 0 ist schon in der Schranke.** **Also
 pruefe ich jetzt die obere Transparenz mit 250, und die kommt als 100
 zurueck.** 4/4.
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und keinhlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+**Und Kriterium 7 ist gemessen, und die Zahl ist schlechter als
+angenommen.**
+
+**Auf dieser Maschine liegt ein fertiges MZ-Projekt:**
+`CamelliaCoronation-Win`, 20 Karten, echte Tilesets,
+`System.json` mit `screenWidth: 816`.
+
+**Und der Interpreter fuehrt 2436 Eventbefehle dieser 20 Karten in
+1548 aus, und 888 nicht.**
+
+**Und die 19 Befehle, die nicht laufen, sind keine Randfaelle:**
+`123 Control Self Switch` (42x), `213 Show Balloon Icon` (36x),
+`129 Change Party Member` (25x), `250 Play SE` (18x),
+`221 Fadeout Screen` (16x), `402 When [**]` (16x),
+`222 Fadein Screen` (14x), `203 Set Event Location` (10x),
+`301 Battle Processing` (7x), `322 Change Actor Images` (6x),
+`105 Show Scrolling Text` (4x), `241 Play BGM` (4x),
+`225 Shake Screen` (2x), `314 Recover All` (1x).
+
+**Ein Spiel, dessen Musik nie beginnt und dessen Kaempfe nie
+beginnen, laeuft und ist nicht das Spiel.**
+
+**Und meine erste Zahl war 3509, und die war falsch:** ich hatte
+mit einem regulaeren Ausdruck gezählt **und Codes 0, 1, 2, 3, 29 und
+505 gefunden** -- **und die sind gar keine Befehle**, **sondern liegen
+in den Parametern von `205 Set Movement Route`**, **das ist eine
+Bewegungsliste fuer sich.** **Ein Ausdruck kann einen Befehl nicht
+von einem Parameter unterscheiden, und eine Zahl, die Parameter
+zaehlt, ist eine Zahl ueber nichts.** **Also zaehlt der Test jetzt
+die JSON-Struktur.**
+
+**Und die Tabelle hat 114 Namen, 27 davon sind C#-Felder, und 22
+werden dispatcht** -- **und 93 der 114 tun nichts.**
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und keinlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 

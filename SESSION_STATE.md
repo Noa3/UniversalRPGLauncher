@@ -10477,3 +10477,23 @@ Saettigung, kein Effektmodus, kein Name.**
 Spielbefehl `magnify = 0` traegt** — 0 ist in der Schranke. **Also
 pruefe ich die obere Transparenz mit 250, und sie kommt als 100 zurueck.**
 4/4. `All 2120 tests passed`.
+
+
+## Und Kriterium 7 ist gemessen: 888 von 2436 Befehlen laufen nicht
+
+**`CamelliaCoronation-Win` liegt hier: 20 Karten, echte Tilesets.**
+
+**Gemessen: 2436 Eventbefehle, 1548 ausfuehrbar, 888 nicht.** Die
+nicht ausfuehrbaren Codes sind keine Randfaelle: `123 Control Self
+Switch` (42x), `213 Show Balloon Icon` (36x), `129 Change Party Member`
+(25x), `250 Play SE` (18x), `221/222 Fadeout/Fadein` (30x), `203 Set
+Event Location` (10x), `301 Battle Processing` (7x), `241 Play BGM` (4x).
+
+**Und meine erste Zahl 3509 war falsch:** ich hatte mit einem Ausdruck
+gezaehlt und Codes 0, 1, 2, 3, 29, 505 gefunden — **die liegen in den
+Parametern von `205 Set Movement Route`, das ist eine Bewegungsliste.
+Ein Ausdruck kann einen Befehl nicht von einem Parameter
+unterscheiden.** Der Test zaehlt jetzt die JSON-Struktur.
+
+**Und die Tabelle: 114 Namen, 27 C#-Felder, 22 dispatcht, 93 tun
+nichts.** `All 2121 tests passed`.
