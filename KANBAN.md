@@ -10967,3 +10967,21 @@ den Dispatch statt durch einen handgeschriebenen Zustand**, **weil
 genau dort drei Regeln lebten, die sonst durchkamen.**
 
 **Neu gemessen: 1750 von 2436 ausfuehrbar** (vorher 1726).
+
+## Und was vom Choice-Block noch offen ist: 404
+
+**Gemessen:** `404` steht bei Einzug 0, **unmittelbar nach dem letzten
+`402`**, **und in dem Beispiel von `Map004` Event 14 traegt es keine
+Zweige** -- **es ist der "sonst"-Zweig, und er ist leer.**
+
+**Und `404` hat keinen Namen in `MzCommandTable`, und keine Seite in der
+offiziellen Hilfe.** **Und `102 Show Choice List` hat auch keine Seite** --
+**das, was ich im Handbuch fand, war die Liste der Steuerzeichen, und
+nicht der Befehl.** **Also ist beides gemessen, aber nicht erklaert:**
+**`404` ist der Abschluss des Choice-Blocks nach der Form des Spiels,
+und warum es keine Seite hat, weiss ich nicht.**
+
+**Und `405` traegt im Choice-Block den Text einer Option, und die
+Optionen stehen vollstaendig in `params[0]`** -- **also ist `405` dort
+eine Dublette.** **Im Dialog-Block ist es etwas anderes, und diese
+Messung hat das nicht geklaert.**
