@@ -192,6 +192,31 @@ public static class MzCommandTable
     /// <summary>Stops the sound effect, from <c>command251</c>.</summary>
     public const int StopSe = 251;
 
+    /// <summary>Controls a self switch, from <c>command123</c>.</summary>
+    /// <remarks>
+    /// <strong>And the first parameter is a letter and not a number.</strong>
+    /// Measured on a finished project: <c>123 ["A", 0]</c> — **and
+    /// four letters for four switches, A through D**, **which the
+    /// official help names as such**: *Self Switch — Specify the target
+    /// self switch (A through D).*
+    /// </remarks>
+    public const int ControlSelfSwitch = 123;
+
+    /// <summary>Changes the party, from <c>command129</c>.</summary>
+    public const int ChangePartyMember = 129;
+
+    /// <summary>Shows a balloon icon over a character, from
+    /// <c>command213</c>.</summary>
+    /// <remarks>
+    /// <strong>And the first parameter is a character, and not an
+    /// actor id.</strong> Measured: <c>213 [-1, 2, false]</c> — **and
+    /// minus one is the player**, **and the official help says the
+    /// position is *based on the position of the player or event*.**
+    /// A reader that read the first parameter as an actor id looked up
+    /// actor minus one and found nobody.
+    /// </remarks>
+    public const int ShowBalloonIcon = 213;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>

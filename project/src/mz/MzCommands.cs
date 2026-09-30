@@ -119,6 +119,9 @@ public static class MzCommands
             or MzCommandTable.PlayMe
             or MzCommandTable.PlaySe
             or MzCommandTable.StopSe
+            or MzCommandTable.ControlSelfSwitch
+            or MzCommandTable.ChangePartyMember
+            or MzCommandTable.ShowBalloonIcon
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -689,6 +692,161 @@ public static class MzCommands
             }
 
 
+            case MzCommandTable.ControlSelfSwitch:
+            {
+                // Die offizielle Hilfe zu `123 Control Self Switch`
+                // sagt: *Self Switch — Specify the target self switch
+                // (A through D). Operation — Specify the value
+                // (ON/OFF) to store in the switch.*
+                //
+                // **Und gemessen an einem fertigen Projekt: `123 ["A",
+                // 0]`** — **ein Buchstabe als erster Parameter, und keine
+                // Zahl.**
+                //
+                // **Und die zweite Zahl ist 0 fuer an und 1 fuer
+                // aus**, **und nicht umgekehrt** -- **denn 121 Control
+                // Switches benutzt 0 fuer an, und ein Leser, der den
+                // Wert fuer beide gleichnahm, schaltete jeden
+                // Selbstschalter genau um.**
+                // **Und der erste Parameter ist ein Buchstabe, und keine
+                // Zahl** -- **also kann `At` hier nichts lesen**, **und
+                // `At("A")` gibt 0, und 0 ist Schalter A**, **und das
+                // geht fuer A, B, C und D gleichermassen falsch.**
+                //
+                // **Also wird der Buchstabe gelesen, und nicht die Zahl
+                // an seiner Stelle.**
+                var roh = pCommand.Parameters.Count > 0
+                    ? pCommand.Parameters[0]
+                    : "";
+                var schalter = SelfSwitchIndex(roh);
+                if (schalter < 0)
+                {
+                    pFacts.Notices.Add(
+                        $"self switch '{roh}' is not one of A to D, and "
+                        + "there are four and no fifth");
+                    return true;
+                }
+
+                var an = At(pCommand, 1) == 0;
+                pFacts.SelfSwitches[SelfSwitchName(schalter)] = an;
+                pActions.Add(new MzAction(pCommand,
+                    $"self switch {SelfSwitchName(schalter)} "
+                    + (an ? "on" : "off")));
+                return true;
+            }
+
+            case MzCommandTable.ChangePartyMember:
+            {
+                // Die Hilfe zu `129 Change Party Members` sagt: *Actors —
+                // Select the actor to change. Operation — Select which
+                // operation to perform (Add/Remove). Initialize — When
+                // enabled, the traits when adding an actor will be reset
+                // according to the parameters in the Database.*
+                //
+                // **Und gemessen: `129 [2, 0, false]`** -- **also
+                // Darsteller, dann 0 fuer Hinzufuegen und 1 fuer
+                // Entfernen, und dann das Flag.**
+                var darsteller = At(pCommand, 0);
+                var entfernen = At(pCommand, 1) == 1;
+                if (entfernen)
+                {
+                    pFacts.PartyMembers.Remove(darsteller);
+                }
+                else
+                {
+                    pFacts.PartyMembers.Add(darsteller);
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"actor {darsteller} "
+                    + (entfernen ? "removed from" : "added to")
+                    + " the party, and the party holds "
+                    + pFacts.PartyMembers.Count));
+                return true;
+            }
+
+            case MzCommandTable.ShowBalloonIcon:
+            {
+                // Die Hilfe zu `213 Show Balloon Icon` sagt: *Character —
+                // The display location will be based on the position of
+                // the player or event. Balloon Icon — Specify the
+                // balloon icon to display. Wait for Completion — When
+                // enabled, the event will be paused until the balloon
+                // icon being displayed has disappeared.*
+                //
+                // **Und gemessen: `213 [-1, 2, false]`** -- **und
+                // minus eins ist der Spieler**, **und nicht eine
+                // Darsteller-Id**, **und ein Leser, der die erste Zahl
+                // als Darsteller las, suchte Darsteller minus eins und
+                // fand niemanden.**
+                // **Und der Spieler ist ein eigener Typ, und traegt
+                // denselben Zustand** -- **und gemessen kommt -1 in
+                // dem Spiel 15 mal vor, also fuer den Spieler, und
+                // 21 mal fuer Figuren.**
+                // **Und der erste Parameter waehlt, ueber wem das Icon
+                // steht** -- **und minus eins ist der Spieler.**
+                // **Gemessen: -1 kommt 15 mal vor, Figurnummern 21.**
+                // **Und wie lange das Icon bleibt, sagt die Hilfe
+                // nicht.** Die drei Einstellungen des Befehls sind
+                // die Figur, das Icon und das Warten,
+                // **und keine vierte, und keine Dauer irgendwo.**
+                // **Und ohne eine Dauer waere *Wait for Completion*
+                // eine Wartezeit, die nie endet** -- **also nimmt
+                // dieser Leser eine Sekunde, und sagt es zweimal:**
+                // einmal hier und einmal an der Konstante.
+                var ziel = At(pCommand, 0);
+                // **Und der dritte Parameter sagt, ob gewartet wird,
+                // und der Rueckgabewert sagt, ob die Liste weitergeht.**
+                // **Die beiden sind nicht dasselbe**, **und der
+                // Ballon wartet ueber `pInterpreter.Wait`**, **und
+                // `Wait` setzt den Zustand selbst.**
+                //
+                // **Also gibt dieser Zweig `true` zurueck, wenn er nicht
+                // wartet, und `false`, wenn er wartet** -- **und ein
+                // `return false` ohne Warten liest denselben Befehl im
+                // naechsten Bild noch einmal**, **und das Bild, in dem
+                // die Liste wieder laeuft, ist dasselbe Bild, in dem das
+                // Icon erscheint**, **und also wartet die Liste auf
+                // einen Ballon, den sie selbst nicht beendet.**
+                if (ziel < 0)
+                {
+                    var warten = At(pCommand, 2) == 1;
+                    pFacts.Player.ShowBalloon(
+                        At(pCommand, 1), MzScreen.MaxBalloonFrames);
+                    if (warten)
+                    {
+                        pInterpreter.Wait(MzScreen.MaxBalloonFrames);
+                    }
+
+                    pActions.Add(new MzAction(pCommand,
+                        $"balloon icon {At(pCommand, 1)} over the player"
+                        + (warten ? ", waiting for it to go" : "")));
+                    return !warten;
+                }
+
+                if (!pFacts.Characters.TryGetValue(ziel, out var figur)
+                    || figur == null)
+                {
+                    pFacts.Notices.Add(
+                        $"balloon icon asked for character {ziel}, and "
+                        + "this map has no such character");
+                    return true;
+                }
+
+                var warte = At(pCommand, 2) == 1;
+                figur.ShowBalloon(
+                    At(pCommand, 1), MzScreen.MaxBalloonFrames);
+                if (warte)
+                {
+                    pInterpreter.Wait(MzScreen.MaxBalloonFrames);
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"balloon icon {At(pCommand, 1)} over character {ziel}"
+                    + (warte ? ", waiting for it to go" : "")));
+                return !warte;
+            }
+
             case MzCommandTable.ControlSwitches:
             {
                 // for (let i = params[0]; i <= params[1]; i++) — inclusive, and
@@ -995,6 +1153,61 @@ public static class MzCommands
             pCommand.Parameters.Count > 1 ? At(pCommand, 1) : 0,
             pCommand.Parameters.Count > 2 ? At(pCommand, 2) : 0);
     }
+
+
+    /// <summary>
+    /// The name of one of the four self switches, from the letter the
+    /// command carries.
+    /// </summary>
+    /// <param name="pIndex">Zero for A, one for B, and so on.</param>
+    /// <returns>The letter, or a question mark for a number that is not
+    /// one of the four.</returns>
+    /// <remarks>
+    /// <strong>And the letters are the engine's, and not an
+    /// abbreviation this repository chose.</strong> The official help
+    /// says *Specify the target self switch (A through D)*,
+    /// **and a reader that stored the number showed a player "0" where
+    /// a game's own event names "A" in its comments.**
+    /// </remarks>
+    /// <summary>
+    /// Which of the four self switches a letter names, or -1.
+    /// </summary>
+    /// <param name="pLetter">The letter, as the file wrote it.</param>
+    /// <returns>Zero for A, one for B, and so on; -1 for anything
+    /// else.</returns>
+    /// <remarks>
+    /// <strong>And a lowercase letter is the same switch.</strong> The
+    /// editor writes upper case, **and a plugin that writes its own
+    /// events in lower case wrote the same switch** — **and a reader
+    /// that compared exactly would have written "a" and branched on
+    /// "A" and never seen its own switch turn on.**
+    /// </remarks>
+    internal static int SelfSwitchIndex(string pLetter)
+    {
+        if (string.IsNullOrEmpty(pLetter))
+        {
+            return -1;
+        }
+
+        var gross = char.ToUpperInvariant(pLetter[0]);
+        for (var index = 0; index < SelfSwitchLetters.Length; index++)
+        {
+            if (SelfSwitchLetters[index] == gross)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+
+    internal static string SelfSwitchName(int pIndex) =>
+        pIndex >= 0 && pIndex < SelfSwitchLetters.Length
+            ? SelfSwitchLetters[pIndex].ToString()
+            : "?";
+
+    private const string SelfSwitchLetters = "ABCD";
 
 
     internal static IEnumerable<int> Range(int pFrom, int pTo)

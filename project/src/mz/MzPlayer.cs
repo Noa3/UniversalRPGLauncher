@@ -72,6 +72,70 @@ public sealed class MzPlayer
     /// </summary>
     public int Direction { get; private set; }
 
+    /// <summary>
+    /// The balloon icon over the player, and how long it has left.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the player carries one, and not the map.</strong>
+    /// Measured on a finished project: <c>213 [-1, 2, false]</c> fifteen
+    /// times, **and minus one is the player** — the official help says
+    /// *The display location will be based on the position of the
+    /// player or event*, **and the first parameter chooses which of the
+    /// two.**
+    /// </para>
+    /// <para>
+    /// <strong>And this is the same state an event carries, and not a
+    /// copy of it.</strong> A player and a figure are different types
+    /// here for their own reasons, **and a balloon is the same three
+    /// numbers on both**, **so the numbers are written out twice and the
+    /// behaviour is not** — a reader that gave the player no balloon at
+    /// all lost fifteen of thirty-six commands in the game in front of
+    /// us.
+    /// </para>
+    /// </remarks>
+    public int BalloonIcon { get; private set; } = MzCharacter.NoBalloon;
+
+    /// <summary>Whether an icon is showing over the player.</summary>
+    public bool HasBalloon => BalloonIcon != MzCharacter.NoBalloon;
+
+    /// <summary>Frames the icon has left, and zero when none shows.</summary>
+    public int BalloonFramesLeft { get; private set; }
+
+    /// <summary>Shows an icon over the player, from <c>213</c>.</summary>
+    /// <param name="pIcon">Which icon.</param>
+    /// <param name="pFrames">How long it stays.</param>
+    public void ShowBalloon(int pIcon, int pFrames)
+    {
+        BalloonIcon = pIcon;
+        BalloonFramesLeft = pFrames;
+    }
+
+    /// <summary>Takes the icon away at once.</summary>
+    public void ClearBalloon()
+    {
+        BalloonIcon = MzCharacter.NoBalloon;
+        BalloonFramesLeft = 0;
+    }
+
+    /// <summary>Counts the icon's clock down.</summary>
+    /// <param name="pFrames">How many frames passed.</param>
+    public void TickBalloon(int pFrames)
+    {
+        if (BalloonFramesLeft <= 0)
+        {
+            return;
+        }
+
+        BalloonFramesLeft -= pFrames;
+        if (BalloonFramesLeft <= 0)
+        {
+            BalloonFramesLeft = 0;
+            BalloonIcon = MzCharacter.NoBalloon;
+        }
+    }
+
+
     private Reservation? _reserved;
 
     /// <summary>

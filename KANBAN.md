@@ -10581,3 +10581,77 @@ Spiel statt pro Aufruf, das fehlende Spiel-Self, das fehlende Event, das scheite
 nach der Rueckkehr stehen bleibende Rahmen, die negative Id als gesuchte, der Schreibweg, der
 
 die Self-Baender umgeht, und der Befehl, der aus der Datei nicht ankommt.
+
+
+## MZ: 123 Control Self Switch, 129 Change Party Members, 213 Show Balloon Icon
+
+**Quelle.** Die offizielle MZ-Hilfe, nicht EasyRPG: **EasyRPG 0.8 hat weder
+`SelfSwitch` noch `Balloon`** -- **diese drei Befehle sind MZ eigen**, **und
+`123 Control Self Switch` steht in keinem anderen Quelltext, den wir haben.**
+
+**Und die Hilfe sagt, was die Parameter sind.** `123`: *Self Switch — Specify
+the target self switch (A through D). Operation — Specify the value (ON/OFF) to
+store in the switch.* `129`: *Actors — Select the actor to change. Operation —
+Select which operation to perform (Add/Remove).* `213`: *Character — The
+display location will be based on the position of the player or event.*
+
+**Und die gemessenen Formen sind `123 ["A", 0]`, `129 [2, 0, false]` und
+`213 [-1, 2, false]`** -- **ein Buchstabe, eine Zahl und eine negative.**
+
+**Drei Befunde, die ein naiv lesender Befehlssatz falsch macht.**
+
+1. **Der erste Parameter von `123` ist ein Buchstabe.** `At(pCommand, 0)` liest
+   Zahlen und gibt fuer `"A"` deshalb **0 zurueck** -- **und 0 ist Schalter A,
+   und das geht fuer B, C und D gleichermassen falsch.** Gelesen wird jetzt der
+   Buchstabe, und Kleinschreibung zaehlt als derselbe Schalter.
+2. **Minus eins ist der Spieler, und keine Darsteller-Id.** Gemessen: `-1`
+   **15 mal**, Figurnummern **21 mal**. Der Spieler und die Figur tragen
+   denselben Zustand, **und sie sind zwei Typen**, **und ein Leser, der dem
+   Spieler keinen Ballon gab, verlor fuenfzehn von sechsunddreissig Befehlen
+   des Spiels vor uns.**
+3. **`return false` ohne zu warten ist ein Fehler, und kein Zufall.** `TryExecute`
+   gibt `false` zurueck, und das heisst *die Liste wartet noch* -- **und dann
+   steht der Index still**, **und der Runner liest denselben Befehl noch
+   einmal, einmal pro Bild**, **und der Ballon wird dabei jedes Bild neu
+   gesetzt**, **und seine Uhr steht bei 60**, **und `MZ` friert nach 100 000
+   Befehlen ein.**
+
+**Und der Ballon hatte keinen Takt.** `MzScreen.PassFrame` hat keinen Aufrufer
+in `src/`, und `TickBalloon` auch nicht -- **das Icon blieb ueber einem Kopf
+stehen, und die Hilfe nennt dieses Feld *wait for the icon to disappear*.** Der
+Takt haengt jetzt an `MzEventRunner.Run`, an derselben Stelle, an der ein
+Befehl ein Bild verbraucht, **und `MzBranchFacts.TickBalloons` zaehlt Spieler
+und Figuren gemeinsam.**
+
+**Und die Dauer ist eine Zahl, die dieses Repository gewaehlt hat.** Die Hilfe
+nennt drei Einstellungen -- Figur, Icon, Warten -- **und keine vierte, und
+keine Dauer irgendwo im Befehl.** Ohne eine Dauer waere *wait for the icon to
+disappear* eine Wartezeit, die nie endet. Sekunde, und die Konstante sagt es
+zweimal: einmal am Aufrufer und einmal bei sich.
+
+**Und `MzCharacter.BalloonIcon` stand auf 0, und nicht auf -1.** Null ist das
+erste Icon der Editorliste, **und ein Feld, das auf 0 startet, antwortet
+"ja, da ist eins"** -- **und eine frisch geladene Figur traegt dann das erste
+Icon, von dem Bild an, an dem die Karte geladen wurde.** Das hat eine lebende
+Mutationsregel aufgedeckt.
+
+**Test evidence** `test_mz_party_and_switches.cs` (4), davon einer ueber den
+Runner statt ueber `TryExecute`, **weil die drei anderen den Verdrahtungspunkt
+nicht erreichen.**
+
+**Und der gemessene Bestand.** `CamelliaCoronation-Win`: **2436 Befehle, davon
+1673 ausfuehrbar, 763 nicht** -- **vor diesem Schritt waren es 1570 und 866.**
+Die 103 neuen sind genau die Summe der drei Befehle im Spiel.
+
+**Und was danach noch offen ist, gemessen.** Nach Abzug der Trenner `0` und
+`505` und der vier dokumentierten No-ops `402`, `404`, `405`, `412` bleiben
+**17 Codes**, **und die groessten drei sind `221` und `222` mit je
+**null Parametern** -- **das ist `Erase Picture` und `Erase Event`, und beide
+sind ein Befehl ohne Argumente** -- **sowie `203` mit zehn verschiedenen
+Formen** -- **das ist `Change Image`, und ein Bildwechsel hat mehr Parameter
+als alle drei anderen.**
+
+**Mutations** 11 Regeln, **11 von 11 gefangen** -- darunter die vier, die
+nur ein Test ueber den Runner findet: **der Ballon ohne Takt**, **die Figur
+mit Icon 0 von Anfang an**, **das `return false` ohne Warten**, **und der
+Selbstschalter, der alle vier Buchstaben auf A legt.**

@@ -322,6 +322,35 @@ public sealed class MzScreen
     public const int MaxAudioFadeFrames = 3600;
 
     /// <summary>
+    /// How long a balloon icon stays when the command did not say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a number this repository chose, and the code
+    /// says so twice.</strong> The official help for
+    /// <c>213 Show Balloon Icon</c> names three settings — the
+    /// character, the icon, and whether to wait — <strong>and no fourth
+    /// one, and no duration anywhere in the command.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And without a duration, "wait for the icon to disappear"
+    /// is a wait that never ends</strong> — the event would sit on its
+    /// branch for ever, and the player would see a game that stopped.
+    /// <strong>A second is the shortest span a player perceives as
+    /// "it was there", and a minute is longer than any balloon in any
+    /// game of that time.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a game whose balloon is meant to stay until something
+    /// else erases it will lose that here</strong>, **and the honest
+    /// thing is to say the number is a choice rather than to hide it in
+    /// a constant whose name does not admit it.**
+    /// </para>
+    /// </remarks>
+    public const int MaxBalloonFrames = 60;
+
+
+    /// <summary>
     /// Advances a fade by a frame, and silences the channel when it ends.
     /// </summary>
     /// <remarks>

@@ -257,6 +257,37 @@ public sealed class MzBranchFacts
     public MzPlayer Player { get; init; } = new();
 
     /// <summary>
+    /// Counts one frame off everything that has a clock: the balloon
+    /// icons over the player and over every figure.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the manual says the icon goes away on its own.</strong>
+    /// For <c>213 Show Balloon Icon</c>: *When enabled, the event will be
+    /// paused until the balloon icon being displayed has disappeared.*
+    /// <strong>And nothing disappears without a clock, and
+    /// <c>213</c> carries no duration** — **so a reader that wrote the
+    /// icon and never counted it left it over a head for ever**, and the
+    /// event that asked to wait for it never came back.
+    /// </para>
+    /// <para>
+    /// <strong>And the figures are a dictionary, and every one of them
+    /// is stepped.</strong> The player's and the figures' clocks are
+    /// written out twice in the classes,
+    /// <strong>and a step that covered only the player left every other
+    /// icon on the map for the rest of the game.</strong>
+    /// </para>
+    /// </remarks>
+    public void TickBalloons(int pFrames)
+    {
+        Player.TickBalloon(pFrames);
+        foreach (var character in Characters.Values)
+        {
+            character?.TickBalloon(pFrames);
+        }
+    }
+
+    /// <summary>
     /// The lines read so far, in the order they were read.
     /// </summary>
     /// <remarks>

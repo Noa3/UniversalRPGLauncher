@@ -24,6 +24,34 @@ public partial class CSharpRunner : Node
 	private int _total;
 	private int _passed;
 
+	/// <summary>
+	/// Which suite names an argument asked for, and null for all of them.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And a whole run passes no argument.</strong> The complete
+	/// suite runs through <c>scripts/validate.sh</c> without one,
+	/// <strong>and this is a debugging tool for one suite at a time.</strong>
+	/// </remarks>
+	private string _nurSuite = ReadSuiteFilter();
+
+	private static string ReadSuiteFilter()
+	{
+		// **Und `GetCmdlineUserArgs`, und nicht `GetCmdlineArgs`** --
+			// **denn Godot legt alles nach `--` in die Benutzerliste, und
+			// die Motorliste ist alles davor.** **Ein Leser, der die
+			// falsche fragt, sieht sein eigenes Argument nie und
+			// laesst alles laufen.**
+			foreach (var argument in OS.GetCmdlineUserArgs())
+		{
+			if (argument.StartsWith("--suite=", StringComparison.Ordinal))
+			{
+				return argument["--suite=".Length..];
+			}
+		}
+
+		return null;
+	}
+
 	public override void _Ready()
 	{
 		TranslationServer.SetLocale("en");
@@ -56,6 +84,17 @@ public partial class CSharpRunner : Node
 
 		foreach (var suiteType in suiteTypes)
 		{
+			// Ein Argument wie `--suite TestMzPartyAndSwitches` laesst nur
+			// diese Suite laufen. **Und das ist ein Werkzeug fuer die
+			// Fehlersuche, und keine Ausnahme**, **denn die vollstaendige
+			// Suite laeuft ueber `scripts/validate.sh` und dort ist kein
+			// Argument gesetzt.**
+			if (_nurSuite != null
+				&& !suiteType.Name.Contains(_nurSuite, StringComparison.Ordinal))
+			{
+				continue;
+			}
+
 			var suite = Activator.CreateInstance(suiteType) as TestBase;
 			if (suite == null)
 			{

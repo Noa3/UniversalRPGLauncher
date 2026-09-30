@@ -253,6 +253,19 @@ public sealed class MzEventRunner
                 continue;
             }
 
+            // **Und die Ballons laufen auf demselben Bild wie die
+            // Befehle** -- **denn die Hilfe zu 213 sagt *the event will
+            // be paused until the balloon icon being displayed has
+            // disappeared***, **und nichts verschwindet ohne einen
+            // Takt.**
+            //
+            // **Und die Bilder und die Ueberblendungen haben ihren
+            // Takt an `MzScreen.PassFrame`** -- **und der wird von
+            // hier aus nicht gerufen**, **also laeuft hier auch kein
+            // Icon herunter, und ein Ereignis, das auf eines wartet,
+            // kommt nie zurueck.**
+            pBranchFacts.TickBalloons(1);
+            pBranchFacts.Screen.PassFrame();
             frame.Interpreter.ExecuteOne(actions, pBranchFacts);
             taken++;
 

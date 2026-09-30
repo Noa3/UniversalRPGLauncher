@@ -96,6 +96,98 @@ public sealed class MzCharacter
     public bool Waiting { get; private set; }
 
     /// <summary>
+    /// The balloon icon over this figure, and how long it has left.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a balloon is a request with a clock, and not a
+    /// picture.</strong> The official help for <c>213 Show Balloon
+    /// Icon</c> says: *Display icons that express emotions in balloons
+    /// that appear over a party member or event* and *When enabled, the
+    /// event will be paused until the balloon icon being displayed has
+    /// disappeared.*
+    /// </para>
+    /// <para>
+    /// <strong>And the icon is a name, and not a number.</strong> The
+    /// help says *There are ten types of icons available, such as a "!"
+    /// for expressing surprise*, **and it is also possible for users to
+    /// define their own** — **so the value in the file is a position
+    /// into a list the game may have replaced, and this reader keeps the
+    /// number and says what it cannot know.**
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// <strong>And it starts at <c>NoBalloon</c>, and not at zero.</strong>
+    /// Zero is the editor's first icon, **and a figure whose field starts
+    /// at zero answers "yes, there is an icon"** — **and a game whose
+    /// first balloon is icon 0 would be right by luck and every other
+    /// figure would show one from the frame the map loaded.**
+    /// </remarks>
+    public int BalloonIcon { get; private set; } = NoBalloon;
+
+    /// <summary>
+    /// Whether an icon is showing over this figure.
+    /// </summary>
+    public bool HasBalloon => BalloonIcon != NoBalloon;
+
+    /// <summary>
+    /// Frames the balloon has left, and zero when none is showing.
+    /// </summary>
+    public int BalloonFramesLeft { get; private set; }
+
+    /// <summary>What "no icon" is, and not zero.</summary>
+    /// <remarks>
+    /// <strong>And zero is the first icon, and not the absence of
+    /// one.</strong> The editor's list starts at zero,
+    /// **and a figure whose icon was cleared would be marked as showing
+    /// the first one** — **and the official help says an event can
+    /// choose to wait for the icon to disappear, which is a wait that
+    /// never ends.**
+    /// </remarks>
+    public const int NoBalloon = -1;
+
+    /// <summary>
+    /// Shows an icon over this figure, from <c>213</c>.
+    /// </summary>
+    /// <param name="pIcon">Which icon, from the game's own list.</param>
+    /// <param name="pFrames">How long it stays.</param>
+    public void ShowBalloon(int pIcon, int pFrames)
+    {
+        BalloonIcon = pIcon;
+        BalloonFramesLeft = pFrames;
+    }
+
+    /// <summary>
+    /// Takes the icon away at once, which is what <c>214 Erase Event</c>
+    /// does to everything it owns.
+    /// </summary>
+    public void ClearBalloon()
+    {
+        BalloonIcon = NoBalloon;
+        BalloonFramesLeft = 0;
+    }
+
+    /// <summary>
+    /// Counts the icon's clock down, and takes it away when it is gone.
+    /// </summary>
+    /// <param name="pFrames">How many frames passed.</param>
+    public void TickBalloon(int pFrames)
+    {
+        if (BalloonFramesLeft <= 0)
+        {
+            return;
+        }
+
+        BalloonFramesLeft -= pFrames;
+        if (BalloonFramesLeft <= 0)
+        {
+            BalloonFramesLeft = 0;
+            BalloonIcon = NoBalloon;
+        }
+    }
+
+
+    /// <summary>
     /// Whether the character has arrived, as <c>isStopping</c> reports it.
     /// </summary>
     /// <remarks>

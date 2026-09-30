@@ -10515,3 +10515,55 @@ niemand es angefasst hat).
 
 **Neu gemessen: 1570 von 2436 ausfuehrbar** (vorher 1548).
 Mutationen 4/4. `All 2125 tests passed`.
+
+## Und die naechsten drei MZ-Befehle: 123, 129, 213
+
+**Die Quelle ist die offizielle Hilfe, und nicht EasyRPG** -- **EasyRPG 0.8
+hat weder `SelfSwitch` noch `Balloon`, und diese drei Befehle sind MZ
+eigen.**
+
+**Drei Befunde, die ein naiv lesender Befehlssatz falsch macht.**
+
+- **Der erste Parameter von `123` ist ein Buchstabe.** `At(pCommand, 0)` gibt
+  fuer `"A"` zurueck: 0 -- **und 0 ist Schalter A, und das geht fuer B, C
+  und D gleichermassen falsch.**
+- **Minus eins ist der Spieler, und keine Darsteller-Id.** Gemessen: `-1` 15
+  mal, Figurnummern 21 mal. Spieler und Figur tragen denselben Zustand in
+  zwei Typen, **und `MzPlayer` hatte keinen Ballon.**
+- **`return false` ohne zu warten ist ein Fehler.** Der Runner liest denselben
+  Befehl noch einmal, **das Icon wird jedes Bild neu gesetzt, seine Uhr
+  steht bei 60, und MZ friert nach 100 000 Befehlen ein.** Das fand der
+  erste Test ueber den Runner, **und nicht die Mutation**, **weil die drei
+  anderen Tests `TryExecute` direkt rufen und den Verdrahtungspunkt nicht
+  erreichen.**
+
+**Und der Ballon hatte keinen Takt:** `MzScreen.PassFrame` hat keinen Aufrufer
+in `src/`, `TickBalloon` auch nicht. Der Takt haengt jetzt an
+`MzEventRunner.Run`, und `MzBranchFacts.TickBalloons` zaehlt Spieler und
+Figuren gemeinsam.
+
+**Und `MzCharacter.BalloonIcon` stand auf 0, und nicht auf -1** -- **null ist
+das erste Icon der Editorliste.** Eine lebende Mutationsregel hat das
+aufgedeckt.
+
+**Die Dauer des Icons ist eine Zahl, die dieses Repository gewaehlt hat**
+(Sekunde), **und die Konstante sagt es zweimal**, **denn die Hilfe nennt
+keine Dauer und ohne eine waere *wait for the icon to disappear* eine
+Wartezeit, die nie endet.**
+
+**Neu gemessen: 1673 von 2436 ausfuehrbar** (vorher 1570).
+Mutationen 11/11. `All 2129 tests passed`, Validator gruen.
+
+**Und als Werkzeug dazugekommen:** `--suite=<Name>` fuer den Test-Runner.
+**Und es hat einen Fehler aufgedeckt, den die Suite nicht aufgedeckt hat:**
+`OS.GetCmdlineArgs` statt `OS.GetCmdlineUserArgs` -- **alles nach `--` steht
+in der Benutzerliste, und die Motorliste ist alles davor.**
+
+**Und ein einmaliger Absturz:** ein voller Lauf endete einmal in
+`Internal CLR error (0x80131506)` nach `TestRm2kPanScreen`, **waehrend ein
+Mutationslauf lief.** Der Lauf direkt danach und der Lauf davor waren gruen,
+`TestRm2kParser` allein ist gruen. **Nicht reproduziert, und nicht
+untersucht** -- **und das ist eine offene Luecke, keine Entwarnung.**
+
+**Naechster Schritt fuer MZ:** `221 Erase Picture` und `222 Erase Event`
+(beide **null Parameter**, 16x und 14x) und `203 Change Image` (10 Formen).
