@@ -10718,3 +10718,34 @@ mitgebracht haette, das Schiffsbild auf den Spieler gelegt.**
 **Und was danach noch offen ist, gemessen:** **4 Befehle in drei Codes**
 -- `102` (8x, das ist *Show Choice List*, der zweite Teil von `405`),
 `105` (4x) und `225` (2x), `314` (1x).
+
+## Der naechste Schritt ist groesser als ein Befehl: die Wahl
+
+**Gemessen:** `102` steht 8x zwischen `401` und `402` mit
+`["['Yes', 'No']", 1, 0, 2, 0]`, `105` steht 4x zwischen `221` und `405`
+mit `[1, false]`, **und in diesem Block stehen fuenf, zwoelf und
+vierzehn `405`.**
+
+**Und `102`, `105`, `225` und `314` haben keine Seite in der offiziellen
+Hilfe und keinen Namen in `MzCommandTable`.**
+
+**Und `225` und `314` sind etwas anderes:** `225` steht zwischen `250`
+und `101` mit `[3, 6, 60, true]`, **und `314` zwischen `123` und `0` mit
+`[0, 0]`.** **Das sind entweder Plugin-Daten oder Codes, die dieses
+Spiel von einem Plugin benutzt** -- **und beides ist ein Befund, keine
+Annahme, und es ist nicht entschieden.**
+
+**Und `MzCommandTable` wusste es und hat es gesagt:** *the choices as the
+editor wrote them, under a 102. It has no <c>command405</c> method,
+because the 102 that shows them reads it by position.*
+
+**Also: die Wahl braucht drei Dinge, und keines ist gebaut.** **Eine
+Liste der Optionen aus den `405`, eine Eingabe, die eine davon waehlt,
+und eine Zahl, auf die `102` und `412` sich verzweigen.** **Und bis das
+gebaut ist, bleiben `402`, `404`, `405` und `412` No-ops** -- **und das
+ist richtig so, denn sie sind Bestandteile eines Blocks, und der Block
+laeuft noch nicht.**
+
+**Punkt fuer den naechsten Zyklus: `102 Show Choice List` mit dem
+zugehoerigen Block ist groesser als ein Befehl und der letzte grosse
+Block im MZ-Dispatch.**

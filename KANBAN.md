@@ -10861,3 +10861,39 @@ das Schiffsbild auf den Spieler gelegt.**
 **Test evidence** `test_mz_vehicle_image.cs` (5), **4/4 und dann 5/5.**
 
 **Neu gemessen: 1726 von 2436 ausfuehrbar** (vorher 1720).
+
+## Und was die letzten vier Codes wirklich sind: die Wahl ist ein Block, kein Befehl
+
+**Gemessen an `CamelliaCoronation-Win`, mit dem Nachbarn jedes Blocks.**
+
+| Code | steht zwischen | Parameter | Vorkommen |
+|---|---|---|---|
+| `102` | `401` und `402` | `["['Yes', 'No']", 1, 0, 2, 0]` | 8 |
+| `105` | `221` und `405` | `[1, false]` | 4 |
+| `225` | `250` und `101` | `[3, 6, 60, true]` | 2 |
+| `314` | `123` und `0` | `[0, 0]` | 1 |
+
+**Und keiner der vier hat eine Seite in der offiziellen Hilfe**, **und
+keiner hat einen Namen in `MzCommandTable`** -- **und `105` ist der
+Eroeffner eines Blocks, in dem fuenf, zwoelf und vierzehn `405` stehen.**
+
+**Die Tabelle wusste es und hat es gesagt:** `MzCommandTable.ShowChoices`
+traegt die Bemerkung *the choices as the editor wrote them, under a 102. It
+has no <c>command405</c> method, because the 102 that shows them reads it by
+position.*
+
+**Und `105` ist also derselbe Mechanismus unter einer anderen
+Nummer** -- **oder ein anderer, und das weiss ich nicht.** **Gemessen
+steht `105` nie zwischen `401` und `402`, sondern zwischen `221` und
+`405`** -- **das heisst, es ist nicht der Dialog-Zweig, sondern ein
+zweiter Weg, eine Wahl zu eroeffnen.**
+
+**Und das ist der Grund, warum `402`, `404`, `405` und `412` als No-ops
+dokumentiert sind, und nicht als fehlend:** **sie sind Bestandteile eines
+Blocks, und der Block laeuft noch nicht.** **Die Wahl braucht drei
+Dinge, und keines davon ist gebaut:** **eine Liste der Optionen aus den
+`405`, eine Eingabe, die eine davon waehlt, und eine Zahl, auf die `102`
+und `412` sich verzweigen.**
+
+**Und das ist die naechste Aufgabe fuer MZ, und sie ist groesser als ein
+Befehl:** `102 Show Choice List` mit dem zugehoerigen Block.
