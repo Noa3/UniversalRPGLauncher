@@ -10144,3 +10144,25 @@ erzeugt `SelfCall` nur fuer geschweifte und runde Klammern.
 
 `All 2068 tests passed`, Mutationen 3/4 (die Ueberlebende ist ein
 gemessener No-op: sie betrifft nur die Zweitdefinition).
+
+
+## Und ein Symbol traegt sein Namensende
+
+**Gemessen vorher:**
+- `send(:reich?)` → *")" at offset 52 does not begin an expression*
+- `send(:"reich?")` → *":" at offset 45 does not begin an expression*
+
+**Zwei Ursachen, beide belegt:**
+1. `IsSymbolStart` kannte kein Anfuehrungszeichen, `ReadSymbol` schon.
+   **Regel und Bedingung an zwei Orten; der Zweig unter der
+   Bedingung war nicht erreichbar.** Token gemessen:
+   `Delimiter :` + `String "r?"` → jetzt `Symbol :"r?" value=r?`
+2. `ReadSymbol` nahm kein `!`/`?`-Ende. `parse.y:4314` gilt fuer jeden
+   Namen — **und ein Symbol ist ein Name.**
+
+**Und `def x=(v)`, `def x!=(v)`, `def ==(o)` waren nie kaputt:**
+gemessen fuenf/fuenf/true auch ohne jede Aenderung. Der Test bleibt
+mit dem Vermerk, dass er kein Fund ist.
+
+`All 2078 tests passed`, Mutationen 2/3 (Ueberlebende: `ReadWord`
+nimmt `!` selbst, also ist der Unterschied selten).

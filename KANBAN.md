@@ -449,16 +449,43 @@ baut.** Kein Spiel-Host muss etwas bereitstellen.
 `def setup` auf oberster Ebene steht in der zweiten Datei jedes VX-,
 VX-Ace- und XP-Projekts.
 
-**Mutationen 3/4, und die eine Ueberlebende ist gemessen ein No-op:**
-sie verhindert nur die *zweite* Definition derselben Methode auf
-`Object` (`!objectTyp.Methods.ContainsKey(name)` ist beim ersten `def`
-wahr), **und ein Test, der das prueft, prueft eine Zweitdefinition,
-und nicht die Regel.**
-beide `FeldFrage`** — **und eine dritte Regel schliesst per
-`compile`, weil C# kein zweites `out var` in derselben Bedingung
-zulässt** — **und das ist eine Eigenschaft der Sprache und kein
-Testfehler.**
+**Und `:"..."` und `:name?` sind jetzt ein Symbol.**
 
+**Gemessen vorher:** `send(:reich?)` warf *")" at offset 52 does not
+begin an expression*, **und `send(:"reich?")` warf *":" at offset 45
+does not begin an expression*.**
+
+**Zwei Fehler, zwei Ursachen, beide belegt:**
+
+1. **`IsSymbolStart` kannte kein Anfuehrungszeichen**, **und
+   `ReadSymbol` behandelte eines** -- **die Regel stand in einem Ort
+   und ihre Bedingung in einem anderen, und der Zweig unter der
+   Bedingung war geschrieben und nicht erreichbar.** Token fuer
+   Token gemessen: `Delimiter text=:` gefolgt von `String text="r?"`;
+jetzt `Symbol text=:"r?" value=r? bytes=2`.
+
+2. **Ein Symbol nahm kein Namensende.** `parse.y` Zeile 4314 gilt
+   fuer **jeden** Namen, **und ein Symbol ist ein Name** --
+   `:reich?` und `:ungleich!` sind Symbole, **und
+   `send(:reich?)` ist der Satz, mit dem jedes Plugin eine
+   Praedikatmethode aufruft.**
+
+**Und `def x=(v)`, `def x!=(v)` und `def ==(o)` waren nie kaputt**
+-- **gemessen: mit allen Aenderungen entfernt bleiben sie fuenf,
+fuenf und true, und nur die zwei Symbol-Tests fallen.** Der Test
+bleibt, **und der Kommentar sagt, dass er kein Fund ist, damit
+die naechste Sitzung nicht nach einem Fehler sucht, den es nicht
+gab.**
+
+Mutationen 2/3, und die Ueberlebende ist gemessen ein No-op:
+`ReadWord` nimmt `!` bereits selbst in den Namen, **und ein Leser
+der beides tut, unterscheidet `!` erst dann, wenn ein Skript es
+schreibt -- und `:ungleich!` ist selten genug, dass kein Test
+darueber laeuft.**
+
+**Und `parse.y:4314` ist die Quelle fuer beides, und `IsIdentifierPart`
+ist bewusst nicht geaendert** -- **ein `!` im Namen waere `x != 1`
+verschluckt, und ein Leser, der das tut, vergleicht nichts.**
 *Ein Ueberleben, das man messen kann, ist eine Angabe und kein, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied

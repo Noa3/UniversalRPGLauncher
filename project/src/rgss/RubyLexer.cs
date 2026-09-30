@@ -170,7 +170,18 @@ public sealed class RubyLexer
         {
             return ReadQuoted(start, startLine, '`');
         }
-        if (c == ':' && Peek(1) != ':' && (IsSymbolStart(Peek(1)) || IsOperatorTail(Peek(1))))
+        // **Und ein Doppelpunkt vor einem Anfuehrungszeichen ist ein
+        // Symbol, und kein Trenner.** `send(:"reich?")` und
+        // `:"a b"` schreibt jedes Skript, das einen Namen als Daten
+        // uebergibt, **und gemessen lieferte der Lexer
+        // `Delimiter :` und dann `String "r?"`** --
+        // **und der Parser sagte *":" at offset 45 does not begin an
+        // expression*, und die Meldung sprach von einem
+        // Doppelpunktzeichen, das der Leser selbst erkannt hatte und
+        // nicht als Symbol behandelt.**
+        if (c == ':' && Peek(1) != ':'
+            && (IsSymbolStart(Peek(1)) || IsOperatorTail(Peek(1))
+                || Peek(1) == '"' || Peek(1) == '\''))
         {
             return ReadSymbol(start, startLine);
         }
@@ -356,6 +367,50 @@ public sealed class RubyLexer
         return char.IsLetter(pChar) || pChar == '_';
     }
 
+    /// <summary>
+    /// Whether a name ends here, and whether it takes the `!` or the `?`.
+    /// </summary>
+    /// <param name="pStart">Where the name began.</param>
+    /// <returns>
+    /// A `!` or a `?` that belongs to the name, and an empty string when the
+    /// name ends without one.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the three conditions are measured.</strong> `parse.y`
+    /// line 4314: the character is <c>!</c> or <c>?</c>, the name has at
+    /// least one character, and the character after it is not <c>=</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And a symbol is a name, and the rule speaks of names.</strong>
+    /// <c>:reich?</c> and <c>:ungleich!</c> are symbols, **and
+    /// <c>send(:reich?)</c> is the sentence every plugin writes**, **and
+    /// a reader that stops the symbol at the <c>?</c> parses a colon, an
+    /// expression and a closing bracket** -- measured.
+    /// </para>
+    /// <para>
+    /// <strong>And this one place serves the symbols only.</strong>
+    /// <c>ReadWord</c> takes <c>?</c> and <c>!</c> into the name itself,
+    /// **and measured: <c>def x=(v)</c> and <c>def x!=(v)</c> answered
+    /// five, and <c>def ==(o)</c> answered true, on the tree without
+    /// this method being reachable from there.**
+    /// </para>
+    /// </remarks>
+    private string ReadNamensende(int pStart)
+    {
+        if (AtEnd
+            || (Current != '!' && Current != '?')
+            || pStart >= _offset
+            || Peek(1) == '=')
+        {
+            return string.Empty;
+        }
+
+        var zeichen = Current;
+        _offset++;
+        return zeichen.ToString();
+    }
+
     private static bool IsIdentifierPart(char pChar)
     {
         return char.IsLetterOrDigit(pChar) || pChar == '_';
@@ -491,6 +546,16 @@ public sealed class RubyLexer
             {
                 _offset++;
             }
+
+            // **Und ein Symbol traegt dasselbe Ende wie ein Name.**
+            // `:reich?` und `:"ungleich!"` sind Symbole,
+            // **und `send(:reich?)` ist der Satz, mit dem jedes
+            // Plugin eine Praedikatmethode aufruft** --
+            // **und ohne das las der Lexer `:reich` und las `?` als
+            // Naechstes, und der Parser sagte *")" at offset 52 does
+            // not begin an expression*.** `parse.y` Zeile 4314 gilt
+            // fuer jeden Namen, **und ein Symbol ist ein Name.**
+            _offset += ReadNamensende(nameStart).Length;
         }
         else if (!AtEnd && (Current == '@' || Current == '$'))
         {
