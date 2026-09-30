@@ -688,8 +688,12 @@ public sealed class MzMetadataResult
 
 public sealed class RpgMakerMzPlugin : WebRpgPlugin
 {
-    public RpgMakerMzPlugin() : base(EnginePluginIds.RpgMakerMz, "RPG Maker MZ", "mz", "rmmz_core.js", "js/rmmz_core.js", 30) { }
+    public override PluginResult<IEngineRuntime> CreateRuntime(
+        EnginePluginRuntimeContext pContext)
+        => PluginResult<IEngineRuntime>.Succeeded(new MzEngineRuntime(
+            Metadata.Id, "MZ", pContext.Game));
 
+    public RpgMakerMzPlugin() : base(EnginePluginIds.RpgMakerMz, "RPG Maker MZ", "mz", "rmmz_core.js", "js/rmmz_core.js", 30) { }
     private const int MaxSystemJsonBytes = 512 * 1024; // 512 KiB cap
 
     public override EngineDetectionProbe Detect(EngineInspectionContext pContext)

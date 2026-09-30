@@ -1,0 +1,417 @@
+using System;
+using System.Collections.Generic;
+using UniversalRPG.Plugins;
+using UniversalRPG.Tests.Framework;
+
+namespace UniversalRPG.Tests.Core;
+
+/// <summary>
+/// The first run of an MZ project's own maps through the reader.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>And this test is the answer to a measurement, not to an
+/// idea.</strong> Before <c>MzEngineRuntime</c> existed:
+/// <c>MzEventRunner</c>, <c>MzInterpreter</c>, <c>MzCommandEntry</c> and
+/// <c>MzBranchFacts</c> had <em>no caller outside
+/// <c>project/src/mz/</c> at all</em>. The dispatch read real commands
+/// out of a real finished project and executed them in the right order,
+/// <strong>and nothing ran a game.</strong>
+/// </para>
+/// <para>
+/// <strong>And the start map comes from <c>System.json</c>, and not
+/// from <c>MapInfos.json</c> and not from the first file that happens to
+/// be there.</strong> This is the same mistake <c>rm2k</c> made with
+/// <c>Directory.EnumerateFiles(...).FirstOrDefault()</c>, and the same
+/// correction: the project says which map it starts on — and here it
+/// says it in <c>System.json</c>, which was measured, not guessed.
+/// </para>
+/// </remarks>
+public partial class TestRealMzRuntimeRun : TestBase
+{
+    private const string Projekt = "E:/RPGMakerGames/CamelliaCoronation-Win";
+
+    private static bool Vorhanden()
+    {
+        return System.IO.Directory.Exists(Projekt)
+            && System.IO.File.Exists(
+                Projekt + "/data/MapInfos.json");
+    }
+
+    /// <summary>
+    /// Starts the project the way the application does.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And through the host, and not by building the runtime by
+    /// hand.</strong> The re2k test does the same,
+    /// <strong>and a test that builds the runtime itself proved that the
+    /// class works and not that the program can reach it</strong> --
+    /// <strong>and the whole gap this class closes was exactly that it
+    /// was not reachable.</strong>
+    /// </remarks>
+    private static (EnginePluginHost Host, PluginOperationResult Started)
+        Starten()
+    {
+        var game = new PluginGameInfo
+        {
+            GameDirectory = Projekt,
+            EngineId = EnginePluginIds.RpgMakerMz,
+            Generation = "mz",
+            DetectorScore = 3,
+        };
+        var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        return (host, host.Start(game));
+    }
+
+    /// <summary>
+    /// A detected project's maps are read, and the one it starts on is
+    /// the one it names.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the assertion is the project's own start map, and
+    /// not "a map was loaded".</strong> A green run that only says
+    /// "some map was read" would pass for the wrong map,
+    /// <strong>and the wrong map is exactly the mistake
+    /// <c>rm2k</c> made and had to be corrected for.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>MapInfos.json</c> is the trap.</strong> Measured on
+    /// this project: <em>nineteen</em> entries have no <c>parentId</c>,
+    /// <strong>so a reader that took the first of those started the game
+    /// on map 1 and one that took the last started it on map 17</strong>
+    /// — <strong>and the project says <c>"startMapId": 2</c>.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DasProjektLaesstSeineKartenLesenUndStartetAufDerGenannten()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+
+        AssertTrue(gestartet.Success,
+            "**and the project starts** -- and it did not before this "
+                + "runtime existed, because no runtime existed, and the "
+                + "refusal is: " + gestartet.Error?.Message);
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+        AssertTrue(lauf.MapCount > 0,
+            "**and it has maps**");
+        AssertEq(lauf.SkippedMaps.Count, 0,
+            "**and none of them was skipped** -- and a reader that "
+                + "silently skipped a map it could not read would leave a "
+                + "game with a hole in it and no word about it");
+
+        AssertTrue(lauf.CurrentMapId > 0,
+            "**and it is on a map**");
+
+        // **Und die behauptete Startkarte steht in `System.json`.**
+        var erwartet = StartMapFromSystemFile();
+        AssertTrue(erwartet > 0,
+            "**and the project names a start map**");
+        AssertEq(lauf.CurrentMapId, erwartet,
+            "**and it is the one the project named** -- and a reader that "
+                + "took the first map it found would start a game in a "
+                + "room the game never made, which is the mistake rm2k "
+                + "made and had to be corrected for");
+    }
+
+    /// <summary>
+    /// A frame runs the project's own commands and writes what they say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the test that says whether the reader is
+    /// reachable at all.</strong> Not "the dispatch is correct" —
+    /// <strong>that was already true, and it changed nothing, because
+    /// nothing called it.</strong> This asks whether a project on disk
+    /// produces state.
+    /// </para>
+    /// <para>
+    /// <strong>And the assertion is state, and not "no crash".</strong> A
+    /// run that throws on frame one is not a run; a run that ticks a
+    /// hundred times and changes nothing is not a run either.
+    /// </para>
+    /// </remarks>
+    public void Test_EinBildFuehrtDieEigenenBefehleDesProjektsAus()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success,
+            "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.SimulationTicks == 0,
+            "**and no frame has passed before the first one**");
+
+        var ersterFrame = lauf.Update(1.0 / 60.0);
+        if (!ersterFrame.Success)
+        {
+            }
+
+        for (var i = 0; i < 100; i++)
+        {
+            lauf.Update(1.0 / 60.0);
+            if (lauf.State != PluginRuntimeState.Running)
+            {
+                break;
+            }
+        }
+
+        for (var k = 0; k < 3 && k < lauf.Actions.Count; k++)
+        {
+            }
+
+        var karte = lauf.Maps[lauf.CurrentMapId];
+        var ev = karte.Root.Member("events")?.Items;
+        if (ev != null)
+        {
+            var anzahl = 0;
+            foreach (var e in ev)
+            {
+                if (anzahl++ >= 3)
+                {
+                    break;
+                }
+
+                var seiten = e.Member("pages")?.Items;
+                var befehle = 0;
+                if (seiten != null)
+                {
+                    foreach (var seite in seiten)
+                    {
+                        var liste = seite.Member("list")?.Items;
+                        if (liste != null)
+                        {
+                            befehle += liste.Count;
+                        }
+                    }
+                }
+
+                    }
+        }
+
+        // **Und wie viele Seiten findet der Lauf?**
+        var seitenGesamt = 0;
+        foreach (var karte2 in lauf.Maps.Values)
+        {
+            var ev2 = karte2.Root.Member("events")?.Items;
+            if (ev2 == null)
+            {
+                continue;
+            }
+
+            foreach (var e in ev2)
+            {
+                var ps = e.Member("pages")?.Items;
+                if (ps == null)
+                {
+                    continue;
+                }
+
+                foreach (var pg in ps)
+                {
+                    var li = pg.Member("list")?.Items;
+                    if (li != null && li.Count > 0)
+                    {
+                        seitenGesamt++;
+                    }
+                }
+            }
+        }
+
+        var aufStart = 0;
+        if (lauf.Maps.TryGetValue(lauf.CurrentMapId, out var startKarte))
+        {
+            var ev3 = startKarte.Root.Member("events")?.Items;
+            if (ev3 != null)
+            {
+                foreach (var e in ev3)
+                {
+                    var ps = e.Member("pages")?.Items;
+                    if (ps == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var pg in ps)
+                    {
+                        var li = pg.Member("list")?.Items;
+                        if (li != null && li.Count > 0)
+                        {
+                            aufStart++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // **Und was der Lauf selbst sieht: dieselbe Karte, aber mit
+        // `MzCommandEntry.From` auf jede Zeile.**
+        var befehlGesamt = 0;
+        if (lauf.Maps.TryGetValue(lauf.CurrentMapId, out var k3))
+        {
+            var ev4 = k3.Root.Member("events")?.Items;
+            if (ev4 != null)
+            {
+                foreach (var e in ev4)
+                {
+                    var ps = e.Member("pages")?.Items;
+                    if (ps == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var pg in ps)
+                    {
+                        var li = pg.Member("list")?.Items;
+                        if (li == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var zeile in li)
+                        {
+                            var befehl = UniversalRPG.Web.MzCommandEntry.From(zeile);
+                            if (befehl != null)
+                            {
+                                befehlGesamt++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach (var kv in lauf.Maps)
+        {
+            }
+        AssertTrue(lauf.SimulationTicks > 0,
+            "**and frames passed**");
+
+        // **Und es hat etwas getan, und nicht nur nichts abgestuerzt.**
+        // **Das ist die Assertion, die die ganze Klasse rechtfertigt:**
+        // **vor ihr war der Dispatch korrekt und unerreichbar**,
+        // **und "kein Absturz" waere auch fuer eine Runtime gruen
+        // gewesen, die nichts laesst.**
+        AssertTrue(lauf.Actions.Count > 0,
+            "**and the run did something** -- and the project has "
+                + "commands on its start map, and a runtime that ticked a "
+                + "hundred times and recorded nothing was not running the "
+                + "game");
+
+        // **Und mindestens eine davon nennt ein Bild, das die Datei
+        // traegt** -- **denn "202 Aktionen" allein beweist nur, dass
+        // etwas lief.**
+        var genannt = 0;
+        foreach (var aktion in lauf.Actions)
+        {
+            if (aktion.What.Length > 0
+                && (aktion.What.Contains("volume")
+                    || aktion.What.Contains("transfer")
+                    || aktion.What.Contains("switch")
+                    || aktion.What.Contains("picture")
+                    || aktion.What.Contains("choice")))
+            {
+                genannt++;
+            }
+        }
+
+        AssertTrue(genannt > 0,
+            "**and at least one of them names what the file asked for** -- "
+                + "a count of actions proves only that something ran, and "
+                + "the sentence is what a reader of a log actually reads");
+
+        // **Und entweder hat der Lauf gearbeitet, oder er hat mit einem
+        // Grund aufgehoert** -- **und der Grund steht in
+        // `StopReason`, und nicht nur in einem Zustand.**
+        if (lauf.State == PluginRuntimeState.Stopped)
+        {
+            AssertTrue(lauf.StopReason.Length > 0,
+                "**and a stop says why** -- and a run that stopped on a "
+                    + "refused command is a project this reader cannot "
+                    + "finish, and a log that only said \"stopped\" would "
+                    + "leave a reader guessing whether the file or this "
+                    + "program was wrong");
+        }
+        else
+        {
+            AssertTrue(lauf.State == PluginRuntimeState.Running,
+                "**and a run that has not stopped is running**");
+        }
+    }
+
+    /// <summary>
+    /// A frame before the run has started is refused.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the lifecycle, and it is not decoration.</strong>
+    /// A runtime that ticked before it had read a map would count frames
+    /// over an empty world, <strong>and the number would look like
+    /// progress in a log.</strong>
+    /// </remarks>
+    public void Test_EinBildVorDemStartWirdAbgewiesen()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var lauf = new MzEngineRuntime(
+            EnginePluginIds.RpgMakerMz, "MZ", new PluginGameInfo
+            {
+                EngineId = EnginePluginIds.RpgMakerMz,
+                GameDirectory = Projekt,
+            });
+
+        var vorher = lauf.Update(1.0 / 60.0);
+        AssertTrue(!vorher.Success,
+            "**and a frame before the start is refused** -- and a runtime "
+                + "that ticked then counted frames over an empty world, "
+                + "and the number looked like progress in a log");
+        AssertEq(lauf.SimulationTicks, 0,
+            "**and no frame was counted**");
+    }
+
+    /// <summary>
+    /// The start map, read from the same place the runtime reads it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this reads <c>System.json</c>, because that is where
+    /// the project writes it.</strong> Measured: <c>"startMapId": 2</c>.
+    /// <strong>And <c>MapInfos.json</c> has nineteen entries without a
+    /// <c>parentId</c></strong> — <strong>so a reader that took the
+    /// first or the last of those started the game on map 1 or map 17,
+    /// and neither is where it begins.</strong>
+    /// </remarks>
+    private static int StartMapFromSystemFile()
+    {
+        var pfad = Projekt + "/data/System.json";
+        if (!System.IO.File.Exists(pfad))
+        {
+            return -1;
+        }
+
+        var text = System.IO.File.ReadAllText(pfad);
+        var daten = UniversalRPG.Web.MzDataFile.ReadText(
+            "data/System.json", text);
+        return daten.Root.Member("startMapId")?.IntOr(-1) ?? -1;
+    }
+}

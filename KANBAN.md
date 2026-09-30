@@ -11053,3 +11053,78 @@ Skripte verschluesselt sind.**
 
 **Das ist kein Fortschrittsbericht, das ist die Grenze, und sie ist
 gemessen.**
+
+## Und was die MZ-Zahl bedeutet -- und was sie nicht bedeutet
+
+**Es gibt keine MZ-`IEngineRuntime`.** **Alle fuenf Implementierungen
+sind `EngineBootstrapRuntime`, `RgssEngineRuntime`, `Rm2kEngineRuntime`
+und `WolfEngineRuntime`.** **Keine gehoert zu MZ.**
+
+**Und gemessen: `MzEventRunner`, `MzInterpreter`, `MzCommandEntry` und
+`MzBranchFacts` werden von keiner Datei ausserhalb von
+`project/src/mz/` aufgerufen.** **Ueberhaupt nicht.**
+
+**Also ist `1750 von 2436 ausfuehrbar` eine Aussage ueber den Dispatch
+und nicht ueber ein laufendes Spiel.** **Der Dispatch liest echte
+Befehle aus einem echten fertigen Projekt und fuehrt sie in der
+richtigen Reihenfolge aus -- aber kein Bild, kein Ton und keine Karte
+eines MZ-Spiels werden von ihm gezeichnet oder gespielt.**
+
+**Das ist dieselbe Luecke wie bei XP, VX und VX Ace, und sie ist an
+beiden Stellen dieselbe: es fehlt die Runtime, die das Plug-in dem
+Programm gibt.**
+
+**Und es ist die naechste Aufgabe fuer MZ, und sie ist eine einzige
+Klasse:** **eine `IEngineRuntime`, die die Karten eines Projekts laedt,
+den `MzEventRunner` pro Bild aufruft und das Ergebnis ueber die
+bestehende `PresentationState` zeigt** -- **genauso, wie
+`Rm2kEngineRuntime` es fuer RM2K tut, in 2251 Zeilen.**
+
+## Und der erste MZ-Spielaufruf: MzEngineRuntime
+
+**Vor dieser Klasse war gemessen: `MzEventRunner`, `MzInterpreter`,
+`MzCommandEntry` und `MzBranchFacts` hatten keinen Aufrufer ausserhalb von
+`project/src/mz/`.** **Ueberhaupt nicht.** **Der Dispatch las echte
+Befehle aus einem echten fertigen Projekt und fuehrte sie richtig aus, und
+kein Spiel lief.**
+
+### Der Lauf, gemessen an `CamelliaCoronation-Win`
+
+- **19 Karten gelesen, 0 uebersprungen**
+- **Startkarte 2, und die steht in `System.json` als `"startMapId": 2`**
+- **100 Bilder, 202 Aktionen**, **und die nennen, was die Datei traegt:**
+  **`Move1 volume 90 pitch 100 pan 0`** und **`a transfer to map 1 at
+  14,12 is reserved`**
+
+### Vier Fehler, die der erste Lauf aufgedeckt hat
+
+1. **Der Inspektor liest Verzeichnisdateien nur als Vorspann von 4096
+   Bytes** (`GameInspectionLimits.MaxPrefixBytes`), **und 18 von 20
+   Karten des Projekts sind groesser** -- **jede kam als abgeschnittenes
+   JSON an und wurde uebersprungen.** **Die Runtime liest die Dateien
+   jetzt selbst.**
+2. **`MapInfos.json` ist die Falle, und nicht `System.json`.** **Gemessen:
+   neunzehn Eintraege ohne `parentId`**, **und ein Leser, der die
+   hoechste davon nahm, startete auf Karte 17 statt auf 2.** **Das ist
+   fast derselbe Fehler, den rm2k mit
+   `Directory.EnumerateFiles(...).FirstOrDefault()` gemacht hat.**
+3. **Die Seiten liegen unter `events[].pages[].list`**, **und nicht unter
+   den Feldern der Karte** -- **und ein Entwurf, der die Arrays aus dem
+   Wurzelobjekt las, fand nie eine Seite**, **und der Lauf tat nach
+   hundert Bildern nichts und sagte keinen Grund.**
+4. **`MzEventRunner.Run` gibt seine Aktionen in `Result.Actions`
+   zurueck**, **und es gibt keine gemeinsame Liste** -- **und ein
+   Entwurf, der die eigene Liste las, blieb bei null Aktionen**, **und
+   das Feld `ActionCount` im Log sah nach einem Lauf aus.**
+
+**Und die Assertion, die die Klasse rechtfertigt, ist nicht "kein
+Absturz":** **"es hat etwas getan" und "mindestens eine Aktion nennt,
+was die Datei getragen hat".** **Denn ein gruener Lauf, der nichts
+tut, waere auch fuer eine Runtime gruen, die nichts laesst** -- **und
+genau das war der Zustand, in dem der Dispatch vier Runden lang
+gemessen wurde.**
+
+**Test evidence** `test_real_mz_runtime_run.cs` (3), **ueber
+`EnginePluginHost.Start` und nicht ueber eine von Hand gebaute
+Runtime** -- **denn die ganze Luecke war, dass die Klasse nicht
+erreichbar war.**

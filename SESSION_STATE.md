@@ -10838,3 +10838,38 @@ werden.**
 **Also: Kriterium 1 und 2 (RM2K) sind weitgehend belegt, 7 (MZ) ist im
 Dispatch bei 1750 von 2436 Befehlen, und 3, 4, 5 und 6 sind
 Erkennungsgrenzen.**
+
+## Der erste MZ-Spielaufruf ist gebaut
+
+**`MzEngineRuntime` laeuft, und es ist der erste.**
+
+**Gemessen an `CamelliaCoronation-Win`: 19 Karten gelesen, 0
+uebersprungen, Startkarte 2, 100 Bilder, 202 Aktionen**, **und die
+Aktionen nennen, was die Datei traegt** -- **`Move1 volume 90 pitch 100
+pan 0`** und **`a transfer to map 1 at 14,12 is reserved`**.
+
+**Vier Fehler hat dieser eine Lauf aufgedeckt**, **und alle vier waren
+Fehler, die ein Dispatch-Test nie gesehen haette:**
+
+1. **`GameInspectionLimits.MaxPrefixBytes` ist 4096**, **und 18 von 20
+   Karten sind groesser** -- **jede kam abgeschnitten an und wurde
+   uebersprungen.**
+2. **`MapInfos.json` hat neunzehn Eintraege ohne `parentId`**, **und die
+   Startkarte steht in `System.json`.** **Ein Leser, der die hoechste
+   davon nahm, startete auf Karte 17 statt 2.**
+3. **Die Seiten liegen unter `events[].pages[].list`**, **und ein
+   Entwurf, der die Arrays der Karte las, fand nie eine Seite.**
+4. **`MzEventRunner.Run` gibt die Aktionen in `Result.Actions`
+   zurueck**, **und es gibt keine gemeinsame Liste** -- **und ein
+   Entwurf, der die eigene las, blieb bei null Aktionen.**
+
+**Und die Assertion ist nicht "kein Absturz", sondern "es hat etwas
+getan" und "eine Aktion nennt, was die Datei getragen hat".**
+
+**`All 2161 tests passed`, Validator gruen.**
+
+**Und das aendert die Antwort auf Kriterium 7:** **vorher war MZ
+`1750/2436` eine Aussage ueber den Dispatch**, **und jetzt ist es eine
+Aussage ueber einen Lauf, der ein Projekt auf der Platte startet.**
+**Was noch fehlt, ist das Zeichnen** -- **die Runtime fuehrt Befehle
+aus, und sie malt nichts.**
