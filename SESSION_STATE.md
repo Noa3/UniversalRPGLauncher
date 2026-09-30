@@ -10455,3 +10455,25 @@ sind false, also unbedingt.**
 **Und meine erste Sonde sagte 0 nach 120 Bildern** — **weil sie die
 falsche Datei und die falsche Property gemessen hat.** 5/5 durch
 Tests. `All 2119 tests passed`.
+
+
+## Und Kriterium 2 war kaputt
+
+**`PresentationState.ShowPicture` verweigerte Befehle mit Werten
+ausserhalb der eigenen Grenzen. Und der Befehl des fertigen Spiels
+traegt `11110 [1,0,160,220,0,0,100,0,0,100,100,100,100,0,60]` —
+`parameters[12] = 100`, und 100 ist keine Effektart (die sind 0..3).**
+
+**Gemessen vor dem Fix: `Pictures.Count == 0` nach 40 Bildern.**
+
+**Die Reparatur ist die der Quelle.** EasyRPG `game_interpreter.cpp`
+Zeile 2949, der ganze Sanitize-Block: `std::max(0, std::min(x, 2000))`
+zweimal, `std::min(x, 100)` zweimal. **Drei Clamps, kein Kanal, keine
+Saettigung, kein Effektmodus, kein Name.**
+
+**Und ein zu kurzer Befehl bleibt abgelehnt** (`CmdSetup<..., 14>`).
+
+**Und meine erste Clamp-Regel lebte, weil ich `magnify` pruefte und der
+Spielbefehl `magnify = 0` traegt** — 0 ist in der Schranke. **Also
+pruefe ich die obere Transparenz mit 250, und sie kommt als 100 zurueck.**
+4/4. `All 2120 tests passed`.

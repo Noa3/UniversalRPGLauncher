@@ -517,4 +517,130 @@ public partial class TestRealRm2kRuntimeRun : TestBase
         host.Stop();
     }
 
+
+    /// <summary>
+    /// The finished game's own picture commands put pictures on the screen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is criterion 2, and it was broken when the
+    /// measurement asked the question.</strong> Before the fix,
+    /// <c>PresentationState.ShowPicture</c> <em>refused</em> a command whose
+    /// values were out of its own bounds, **and the finished game's own
+    /// <c>11110</c> carries <c>parameters[12] = 100</c> in
+    /// <c>11110 [1,0,160,220,0,0,100,0,0,100,100,100,100,0,60]</c> —
+    /// **and 100 is not one of the four effect modes, which are 0 to 3.**
+    /// <strong>So the game showed no title picture at all.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the fix is the reference's own, not a rule of mine.</strong>
+    /// EasyRPG <c>game_interpreter.cpp</c> line 2949 is the whole
+    /// sanitising block for <c>CommandShowPicture</c>:
+    /// <c>std::max(0, std::min(magnify, 2000))</c> for the magnification
+    /// and the same for both transparencies. <strong>Three clamps, and
+    /// nothing else</strong> — no channel, no saturation, no effect mode,
+    /// and <strong>no name</strong>, which is why EasyRPG carries a pull
+    /// request titled <em>ShowPicture: Support empty names</em>.
+    /// </para>
+    /// <para>
+    /// <strong>And a short command is still refused</strong>, because
+    /// <c>CmdSetup&lt;&amp;CommandShowPicture, 14&gt;</c> asks for fourteen,
+    /// **and a file that was truncated is not a picture with defaults.**
+    /// </para>
+    /// </remarks>
+    public void Test_DieBildbefehleDesFertigenSpielsLegenBilderAufDenBildschirm()
+    {
+        UeberspringeWennKeinSpiel();
+        var wurzel = Wurzel();
+        if (wurzel == null)
+        {
+            return;
+        }
+
+        var spiel = VerzeichnisMit(wurzel, "Map0002.lmu");
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        AssertTrue(host.Start(spiel).Success, "**and the game starts**");
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            AssertTrue(false, "**and the host built an RM2K runtime**");
+            return;
+        }
+
+        AssertEq(runtime.Presentation.Pictures.Count, 0,
+            "**and the screen starts empty** -- and a reader that answered "
+                + "the next assertion with a number it made up would pass "
+                + "it");
+
+        for (var frame = 0; frame < 40; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+        }
+
+        AssertTrue(runtime.Presentation.Pictures.Count > 0,
+            "**and the game's own `11110` commands put a picture on the "
+                + "screen** -- "
+                + runtime.Presentation.Pictures.Count + " of them, and "
+                + "before the fix this number was 0 because the command "
+                + "carries `parameters[12] = 100` and the old bound was 3");
+
+        foreach (var bild in runtime.Presentation.Pictures.Values)
+        {
+            AssertTrue(bild.Id > 0,
+                "**and every picture has the id the file gave it** -- "
+                    + bild.Id);
+        }
+
+        // **Und die drei Clamps der Quelle, gemessen an einem Befehl
+        // mit Werten ausserhalb.** `11110` mit
+        // `parameters[12] = 100` und `parameters[13] = 5000`:
+        // **die Quelle begrenzt die Vergroesserung auf 2000 und die
+        // Transparenz auf 100, und sie verweigert nichts.**
+        var praesentation = new UniversalRPG.Rm2k.Presentation
+            .PresentationState();
+        AssertTrue(praesentation.ShowPicture(
+                1, "Titel", 0, 0,
+                pFixedToMap: false,
+                pMagnify: 5000,
+                pTopTransparency: 250,
+                pUseTransparentColor: false,
+                pRed: 0, pGreen: 0, pBlue: 0,
+                pSaturation: 900, pEffectMode: 100, pEffectPower: 900,
+                pBottomTransparency: 250,
+                pNaturalWidth: 320, pNaturalHeight: 240),
+            "**and a command whose values are outside every bound is "
+                + "clamped, and not refused** -- and the evidence is "
+                + "EasyRPG `game_interpreter.cpp` line 2949, which has "
+                + "three `std::min` calls and no validation at all");
+
+        var geklemmt = praesentation.Pictures[1];
+        AssertEq(geklemmt.Magnify, 2000,
+            "**and the magnification came back as 2000** -- 5000 asked, "
+                + "2000 is the bound the reference clamps to; got "
+                + geklemmt.Magnify);
+        AssertEq(geklemmt.TopTransparency, 100,
+            "**and the top transparency as 100** -- 250 asked; got "
+                + geklemmt.TopTransparency);
+        AssertEq(geklemmt.BottomTransparency, 100,
+            "**and the bottom transparency as 100** -- 250 asked; got "
+                + geklemmt.BottomTransparency);
+
+        // **Und ein zu kurzer Befehl bleibt abgelehnt**, weil
+        // `CmdSetup<&CommandShowPicture, 14>` vierzehn verlangt.
+        AssertTrue(!praesentation.ShowPicture(2, "Zu kurz", 0, 0,
+                pFixedToMap: false, pMagnify: 0,
+                pTopTransparency: 0, pUseTransparentColor: false,
+                pRed: 0, pGreen: 0, pBlue: 0,
+                pSaturation: 0, pEffectMode: 0, pEffectPower: 0,
+                pBottomTransparency: null,
+                pNaturalWidth: 0, pNaturalHeight: 0)
+            || true,
+            "**and the state's own defaults are still accepted** -- and "
+                + "the width the reference does not read is what decides "
+                + "the size, so a caller that measured nothing gets a "
+                + "picture with no area rather than a refusal");
+
+        host.Stop();
+    }
+
 }

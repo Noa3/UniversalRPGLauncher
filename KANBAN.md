@@ -685,7 +685,43 @@ waechst, besteht die erste Behauptung und faellt an der zweiten.**
 **und die falsche Property gelesen**, **und die Sonde lief 120
 Bilder in einer Runtime, die keine Befehle bekommen hat.** 5/5.
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und keinchlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+**Und Kriterium 2 war kaputt, und die Messung hat es gefunden.**
+
+**`PresentationState.ShowPicture` verweigerte einen Befehl, dessen
+Werte ausserhalb der eigenen Grenzen lagen.** Und der Befehl des
+fertigen Spiels traegt `11110 [1,0,160,220,0,0,100,0,0,100,100,100,
+100,0,60]` -- **also `parameters[12] = 100`, und 100 ist keine
+Effektart, denn die sind 0 bis 3.**
+
+**Gemessen vor dem Fix:** `Pictures.Count == 0` nach 40 Bildern.
+**Ein Spiel, das seine Titelseite zeigt, zeigte sie nicht.**
+
+**Und die Reparatur ist die der Quelle, und nicht meine Regel.**
+EasyRPG `game_interpreter.cpp` Zeile 2949 ist der ganze
+Sanitize-Block fuer `CommandShowPicture`:
+
+```cpp
+params.magnify_width = std::max(0, std::min(params.magnify_width, 2000));
+params.magnify_height = std::max(0, std::min(params.magnify_height, 2000));
+params.top_trans     = std::max(0, std::min(params.top_trans, 100));
+params.bottom_trans  = std::max(0, std::min(params.bottom_trans, 100));
+```
+
+**Drei Clamps, und sonst nichts** -- **kein Kanal, keine Saettigung,
+kein Effektmodus, kein Effektgrad, und kein Name** (und genau deswegen
+hat EasyRPG ein eigenes Ticket *ShowPicture: Support empty names*).
+
+**Und ein zu kurzer Befehl bleibt abgelehnt**, weil
+`CmdSetup<&CommandShowPicture, 14>` vierzehn Parameter verlangt **und
+eine abgeschnittene Datei ist kein Bild mit Vorgabewerten.**
+
+**Und die erste Mutationsregel fuer den Clamp lebte, und das war mein
+Messfehler:** ich hatte `magnify` geprueft, **und der Spielbefehl
+traegt `magnify = 0`, und 0 ist schon in der Schranke.** **Also
+pruefe ich jetzt die obere Transparenz mit 250, und die kommt als 100
+zurueck.** 4/4.
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und keinhlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 

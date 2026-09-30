@@ -981,16 +981,38 @@ public sealed class PresentationState
         // Every bound here is the reference's own clamp, not one this
         // repository chose: magnify 0..2000, transparency 0..100 percent,
         // saturation 0..200, effect power 0..100.
-        if (pId <= 0 || pId > MaxPictures || string.IsNullOrWhiteSpace(pName) ||
-            pName.Length > MaxPictureNameCharacters ||
-            pMagnify < 0 || pMagnify > MaxMagnifyPercent ||
-            pTopTransparency < 0 || pTopTransparency > MaxTransparencyPercent ||
-            pBottomTransparency is int bottom
-                && (bottom < 0 || bottom > MaxTransparencyPercent) ||
-            !IsChannel(pRed) || !IsChannel(pGreen) || !IsChannel(pBlue) ||
-            pSaturation < 0 || pSaturation > MaxSaturationPercent ||
-            pEffectMode < 0 || pEffectMode > MaxEffectMode ||
-            pEffectPower < 0 || pEffectPower > 100)
+        // **Und der Beleg dafuer ist EasyRPG `game_interpreter.cpp`
+        // Zeile 2949, und nicht meine Regel.** Der einzige Sanitize-Block,
+        // den die Referenz fuer `CommandShowPicture` hat:
+        //
+        // ```cpp
+        // params.magnify_width = std::max(0, std::min(params.magnify_width, 2000));
+        // params.magnify_height = std::max(0, std::min(params.magnify_height, 2000));
+        // params.top_trans = std::max(0, std::min(params.top_trans, 100));
+        // params.bottom_trans = std::max(0, std::min(params.bottom_trans, 100));
+        // ```
+        //
+        // **Drei Clamps, und sonst nichts.** Kein Kanal, keine
+        // Saettigung, kein Effektmodus, kein Effektgrad, **und kein
+        // Name.**
+        //
+        // **Und gemessen an einem fertigen Spiel:** der Befehl
+        // `11110 [1,0,160,220,0,0,100,0,0,100,100,100,100,0,60]` traegt
+        // `parameters[12] = 100` -- **und 100 ist keine Effektart, denn
+        // die sind 0 bis 3.** **Der alte Code verweigerte den Befehl
+        // darueber**, **und `Show` in EasyRPG kann nie `false`
+        // zurueckgeben**, **und ein Spiel, das eine Titelseite zeigt,
+        // zeigte sie nicht.**
+        //
+        // **Und EasyRPG hat dafuer ausdruecklich PR #2523 *ShowPicture:
+        // Support empty names* gemacht** -- **also ist ein leerer Name
+        // gueltig und keine Ablehnung.**
+        if (pId <= 0 || pId > MaxPictures)
+        {
+            return false;
+        }
+
+        if (pName.Length > MaxPictureNameCharacters)
         {
             return false;
         }
@@ -1000,7 +1022,16 @@ public sealed class PresentationState
         // had its command refused over a value the engine accepts.
         // A magnification of 0 is accepted and produces no area, because the
         // reference's own clamp is 0..2000 and 0 is inside it.
-        var magnify = pMagnify;
+        // **Und die drei Clamps der Quelle, an den drei Stellen, an
+        // denen die Quelle sie hat.** `std::max(0, std::min(x, 2000))`
+        // ist zweimal, weil der Wert zweimal begrenzt wird --
+        // **und ein Befehl mit `magnify = 5000` ergibt 2000 und keine
+        // Ablehnung.**
+        var magnify = Math.Clamp(pMagnify, 0, MaxMagnifyPercent);
+        var topTrans = Math.Clamp(pTopTransparency, 0, MaxTransparencyPercent);
+        var bottomTrans = pBottomTransparency is int roh
+            ? Math.Clamp(roh, 0, MaxTransparencyPercent)
+            : 0;
         var breite = pNaturalWidth > 0
             ? Math.Clamp(pNaturalWidth * magnify / 100, 1, MaxPictureDimension)
             : pNaturalWidth;
@@ -1017,8 +1048,8 @@ public sealed class PresentationState
             Height = hoehe,
             FixedToMap = pFixedToMap,
             Magnify = magnify,
-            TopTransparency = pTopTransparency,
-            BottomTransparency = pBottomTransparency ?? 0,
+            TopTransparency = topTrans,
+            BottomTransparency = bottomTrans,
             UseTransparentColor = pUseTransparentColor,
             Red = pRed,
             Green = pGreen,
