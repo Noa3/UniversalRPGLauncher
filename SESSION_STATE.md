@@ -10268,3 +10268,26 @@ falsch.**
 
 **Und `355`, `402` und `405` habe ich NICHT end to end gemessen, und
 ich melde sie als offen, nicht als fehlend.**
+
+
+## Und die drei "offenen" MZ-Namen waren drei No-ops
+
+**`355`, `402`, `405` und `412` habe ich end to end gemessen:** eine
+Liste, die nur aus einem davon besteht, endet mit `Finished` und
+**null Aktionen** — **und das ist genau die Regel der Engine**
+(`MzInterpreter` Zeile 265: *a command the engine has no method for is
+stepped over*).
+
+**Und ich hatte sie zuerst als fehlend gemeldet**, weil ich nur in den
+Dispatch-Zweigen gesucht habe **und nicht in dem Pfad, der sie
+abfaengt.**
+
+**Und `EndBranch` habe ich zweimal gemessen**, weil mein erster Test
+`ShowText` mit den Parametern `"0" "0" "1" "0" "1"` gebaut hat, und die
+bedeuten *Schalter 0* — **der Befehl war richtig und mein Test war
+falsch.**
+
+**Und `ClearBranch` hat keinen Aufrufer** (gemessen) — **und ich habe
+es geloescht, statt eine tote Regel zu dokumentieren.**
+
+Mutationen 3/3, alle durch Tests. `All 2097 tests passed`.

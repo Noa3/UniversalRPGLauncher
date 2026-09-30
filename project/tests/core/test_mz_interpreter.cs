@@ -1180,4 +1180,60 @@ partial class TestMzInterpreter : TestBase
         }
         return lists;
     }
+    /// <summary>
+    /// A command the engine has no method for is stepped over.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And that is implemented, and not missing.</strong> Four of
+    /// the 114 names this table carries are named and treated nowhere:
+    /// <c>355 Script</c>, <c>402 ContinueText</c>, <c>405 ShowChoices</c>
+    /// and <c>412 EndBranch</c>. Measured end to end, **a list that
+    /// consists of one of them ends with <c>Finished</c> and zero
+    /// actions.**
+    /// </para>
+    /// <para>
+    /// <strong>And that is the engine rule</strong> — it asks whether a
+    /// method exists for the number and advances anyway when it does not
+    /// (<c>MzInterpreter</c> line 265). **And a reader that treated a
+    /// skipped command as a refusal would stop every list that contains
+    /// one**, **and a list with an <c>EndBranch</c> is every
+    /// conditional in a game.**
+    /// </para>
+    /// <para>
+    /// <strong>And I reported these as missing first</strong>, because I
+    /// looked in the two dispatch switches and not in the path that catches
+    /// them. **And a command the engine steps over is implemented** — **and
+    /// the difference between "not treated" and "not executed" is the
+    /// difference between a command with no effect and a command that does
+    /// not exist.**
+    /// </para>
+    /// </remarks>
+    public void Test_ACommandWithNoMethodIsSteppedOver()
+    {
+        var namen = new[]
+        {
+            ("EndBranch", MzCommandTable.EndBranch,
+                System.Array.Empty<string>()),
+            ("ContinueText", MzCommandTable.ContinueText,
+                System.Array.Empty<string>()),
+            ("ShowChoices", MzCommandTable.ShowChoices, new[] { "1", "1" }),
+            ("Script", MzCommandTable.Script, new[] { "1", "0", "0", "x" }),
+        };
+
+        foreach (var (name, code, parameter) in namen)
+        {
+            var liste = ListFrom((code, 0, parameter));
+            var lauf = Run(liste, out var aktionen);
+
+            AssertEq(lauf.Stopped, MzStep.Finished,
+                $"**a list of only {name} runs to its end** -- and a reader"
+                + " that treated a skipped command as a refusal would stop"
+                + " every list that contains one");
+            AssertEq(aktionen.Count, 0,
+                $"**and it records nothing for {name}** -- there is no"
+                + " effect to record, and a log that said otherwise would"
+                + " be a log of the reader rather than of the game");
+        }
+    }
 }

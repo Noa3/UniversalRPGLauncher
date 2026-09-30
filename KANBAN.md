@@ -466,6 +466,26 @@ mit Text) sind genau das.
 **Und vier Tabellennamen werden nirgends behandelt:** `355 Script`,
 `402 ContinueText`, `405 ShowChoices` und `412 EndBranch`.
 
+**Und alle vier habe ich end to end gemessen, und alle vier laufen
+sauber durch:** eine Liste, die nur aus einem davon besteht, endet mit
+`Finished` und **null Aktionen** -- **und das ist genau das Verhalten
+der Engine**, **denn sie fragt, ob es eine Methode fuer die Nummer
+gibt, und wenn nicht, geht sie trotzdem weiter** (`MzInterpreter`
+Zeile 265: *"A command the engine has no method for is stepped over"*).
+
+**Und ich habe sie zuerst als fehlend gemeldet, und das war falsch.** Ich
+hatte nur in den Dispatch-Zweigen gesucht **und nicht in dem Pfad, der
+sie abfaengt** -- **und ein Befehl, den die Engine ueberspringt, ist
+implementiert.**
+
+**Und `ClearBranch` hat keinen Aufrufer (gemessen: eine Suche ueber das
+ganze Projekt findet nur die Definition)** -- **und ich habe es
+geloescht, statt eine tote Regel zu dokumentieren.**
+
+**Mutationen 3/3, alle drei durch Tests** -- **und die dritte war vorher
+per `compile` geschlossen, und `compile` ist kein Test, und ich habe sie
+als gueltiges C# geschrieben.**
+
 **Und `EndBranch` habe ich end to end gemessen, und es laeuft
 durch:** `EndBranch` allein in einer Liste endet mit `Waiting` und
 einer Aktion, **nicht mit `Refused`** -- **und mein erster Test
@@ -475,10 +495,14 @@ Leser sagte *switch 0*, weil der Schalter nicht da ist.** **Der
 Befehl war richtig und mein Test war falsch, und das ist der
 gemessene Befund und nicht ein No-op, das ich wegzaehle.**
 
-**Und die drei anderen (`355`, `402`, `405`) habe ich nicht end to end
-gemessen, und ich melde sie als offen, nicht als fehlend.**
+**Und `355`, `402` und `405` habe ich jetzt end to end gemessen, und
+sie sind keine Luecken** -- **und `EndBranch` habe ich zweimal
+gemessen, weil mein erster Test die falschen Parameter fuer
+`ShowText` gebaut hat** -- **und der Unterschied zwischen "nicht
+behandelt" und "nicht ausgefuehrt" ist der Unterschied zwischen einem
+Befehl ohne Wirkung und einem Befehl, den es nicht gibt.**
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und kein, ist eine Angabe und kein
+*Ein Ueberleben, das man messen kann, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**

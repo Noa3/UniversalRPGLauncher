@@ -304,8 +304,6 @@ public sealed class MzInterpreter
 
     public void SetBranch(int pIndent, bool? pValue) => _branch[pIndent] = pValue;
 
-    public void ClearBranch(int pIndent) => _branch.Remove(pIndent);
-
     /// <summary>
     /// Steps over every command that sits inside the branch this one opens, the
     /// way the engine's <c>skipBranch</c> does, and says so when the list ends
