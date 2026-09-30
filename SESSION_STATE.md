@@ -10223,3 +10223,23 @@ Wurf verlässt *jeden* Block bis zum `catch`, **und der Leser hatte
 recht; der Test steht jetzt auf dem gemessenen Wert.**
 
 `All 2092 tests passed`, Mutationen 6/7 (Ueberlebende: ein No-op).
+
+
+## Und `const_missing` ist eine Methode des Spiels
+
+**Belegt an der Quelle:** `variable.c` Zeile 1120 macht
+`rb_funcall(klass, "const_missing", 1, ID2SYM(id))` — `klass` ist das
+Modul, auf das geschrieben wurde, **und der Name kommt als Symbol an.**
+
+**Gemessen vorher:** nil und *the constant GIBT_ES_NICHT is not defined
+by this host* — **und die Meldung fragt den Host nach etwas, das das
+Spiel selbst schreiben muss.**
+
+**Und `module RPG; module Actors; end; end` laeuft in jedem VX-Projekt
+ueber genau diesen Weg.**
+
+**Und ein Name, den weder der Leser noch das Spiel hat, wird weiterhin
+nicht geraten**, **und die Meldung nennt ihn.**
+
+`All 2096 tests passed`, Mutationen 4/5 (Ueberlebende: ein No-op,
+`BasicObject` hat kein `const_missing`).

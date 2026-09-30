@@ -1281,6 +1281,30 @@ public sealed class RubyInterpreter
             return wert;
         }
 
+        // **Und `const_missing` ist eine Methode, und kein Haken des
+        // Lesers.** Ruby 1.8.1 macht `rb_funcall(klass,
+        // "const_missing", 1, ID2SYM(id))` (`variable.c` Zeile 1120),
+        // **und `klass` ist das Modul, auf das geschrieben wurde**
+        // -- **und ohne das kann kein Skript eine Klasse erfinden,**
+        // **und `module RPG; module Actors; end; end` gefuehrt in
+        // jedem VX-Projekt ueber genau diesen Weg.**
+        if (FehlerKlassen.Contains(name)
+            || _types.TryGetValue(name, out _))
+        {
+            _diagnostics.Add(
+                $"the constant {name} is not defined, and "
+                + "`const_missing` would have to be written by the "
+                + "game to answer it");
+            _letzteUnbekannteKonstante = name;
+            return RubyValue.Nil;
+        }
+
+        var erfunden = FehlendeKonstante(name);
+        if (erfunden != null)
+        {
+            return erfunden;
+        }
+
         // **Der Name bleibt fuer den Aufrufer sichtbar.** `include Fehlt`
         // braucht ihn, um sagen zu koennen, welches Modul fehlt -- **und
         // eine Diagnose, die den Namen nicht nennt, laesst den Leser
@@ -1291,6 +1315,70 @@ public sealed class RubyInterpreter
             + "interpreter does not guess; a game's own constant needs a host "
             + "that provides it");
         return RubyValue.Nil;
+    }
+
+    /// <summary>
+    /// What a missing constant is, when the game wrote `const_missing`.
+    /// </summary>
+    /// <param name="pName">The name as written.</param>
+    /// <returns>The value the game gave, and null when it gave none.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is a method and not a hook of this reader.</strong>
+    /// Ruby 1.8.1 does <c>rb_funcall(klass, "const_missing", 1,
+    /// ID2SYM(id))</c> (<c>variable.c</c> line 1120), **and `klass` is
+    /// the module the name was written on** — **and that is how a game
+    /// invents a class at the moment it is first named**, which is the
+    /// line `module RPG; module Actors; end; end` runs through in every
+    /// VX project.
+    /// </para>
+    /// <para>
+    /// <strong>And the name arrives as a symbol</strong> — `ID2SYM(id)`
+    /// — **and a game that writes `def self.const_missing(n)` and then
+    /// `n.to_s` gets the name it asked for.**
+    /// </para>
+    /// </remarks>
+    private RubyValue? FehlendeKonstante(string pName)
+    {
+        if (!_types.TryGetValue("Object", out var objectTyp))
+        {
+            return null;
+        }
+
+        // **Und die Suche laeuft die Kette nach oben**, **weil
+        // `const_missing` auch in einem Modul stehen kann, das ein
+        // Spiel einbindet** -- **und `Module#const_missing` ist in
+        // Ruby eine private Methode**, **und `private` heisst hier
+        // nicht, dass der Aufruf scheitert, sondern dass er ohne
+        // ausgeschriebenen Empfaenger laeuft.**
+        var laufende = objectTyp.Name;
+        while (true)
+        {
+            if (!_types.TryGetValue(laufende, out var typ))
+            {
+                return null;
+            }
+
+            if (typ.Methods.TryGetValue("self.const_missing", out var methode))
+            {
+                var aufruf = new List<RubyValue>
+                {
+                    RubyValue.OfSymbol(pName),
+                };
+                return Aufrufen(
+                    methode, aufruf, typ.Name, RubyValue.OfSymbol(typ.Name));
+            }
+
+            var basis = BasisVon(typ.Name);
+            if (basis == null)
+            {
+                return null;
+            }
+
+            laufende = basis;
+        }
+
+        return null;
     }
 
     private RubyValue Local(string pName)

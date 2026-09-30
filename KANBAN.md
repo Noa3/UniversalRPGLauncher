@@ -449,45 +449,31 @@ baut.** Kein Spiel-Host muss etwas bereitstellen.
 `def setup` auf oberster Ebene steht in der zweiten Datei jedes VX-,
 VX-Ace- und XP-Projekts.
 
-**Und `catch`/`throw`, `tap`/`then`, `print`/`puts`/`p` sind jetzt
-Sprache, und nicht Host.**
+**Und `const_missing` ist jetzt eine Methode, die das Spiel schreibt,
+und nicht ein Haken des Lesers.**
 
-**Gemessen vorher:** alles nil mit *self has no method 'catch' on this
-host* -- **und diese Meldung geht ueber den Host, obwohl es der
-Leser ist, der die Sprache nicht gebaut hat.**
+**Belegt an der Quelle:** `variable.c` Zeile 1120 macht
+`rb_funcall(klass, "const_missing", 1, ID2SYM(id))` — **und `klass` ist
+das Modul, auf das geschrieben wurde, und der Name kommt als
+Symbol an.**
 
-**Drei Befunde, alle gemessen:**
+**Gemessen vorher:** nil und *the constant GIBT_ES_NICHT is not defined
+by this host, and the interpreter does not guess; a game own constant
+needs a host that provides it* — **und diese Meldung fragt den Host
+nach etwas, das das Spiel selbst schreiben muss.**
 
-1. **Der Block kam zweimal aus dem falschen Ort.** Er haengt am
-   Aufruf, und `EvaluateBlock` legt ihn auf `_blockKette` -- **und
-   es ist der ganze Blockknoten, und nicht der Rumpf**, **weil
-   `BlockAufrufen` sich selbst `Children[1]` fuer die Parameter und
-   `Children[2]` fuer den Rumpf liest.** Und `5.tap { }` kommt als
-   Argument an, **weil `tap` einen Empfaenger hat und `catch`
-   keinen.**
-2. **Ein Name ohne Klammern erreicht den Aufruf nur, wenn
-   `FindMethod` etwas findet.** `puts 3` und `p 4` sind ohne
-   Klammern, **und der Parser macht daraus einen `Identifier`, und
-   `Name()` sah nur nach einer Skriptmethode** -- **und gemessen
-   schrieb `print 1, 2` und danach nichts.**
-3. **`puts [1, 2]` war `puts[1, 2]`.** Der Indexzweig nahm jede
-   Klammer, **und Ruby liest eine Klammer nach einem Leerzeichen
-   als Argument.** Der Abstand zweier Token ist der ganze
-   Unterschied, **und der Lexer weiss ihn.**
+**Und `module RPG; module Actors; end; end` laeuft in jedem
+VX-Projekt ueber genau diesen Weg** — **und ein Spiel kann
+`const_missing` in ein eingebundenes Modul schreiben, und die Suche
+laeuft die Kette nach oben.**
 
-**Und `IRubyHost` hat jetzt `Write` und `WriteLine` als
-Default-Member** -- **kein Host muss sie bauen, und ein Leser, der
-selbst auf die Konsole schriebe, wuerde das dem Spiel wegnehmen.**
+**Und ein Name, den weder der Leser noch das Spiel hat, wird
+weiterhin nicht geraten** — **und die Meldung nennt ihn**, weil
+`include Fehlt` ihn braucht.
 
-**Und ich hatte bei `throw` 21 erwartet und gemessen wurde 1** --
-**und der Leser hatte recht:** ein Wurf verlaesst *jeden* Block bis
-zum `catch`, **und der Test steht jetzt auf dem gemessenen Wert
-und nicht auf dem erwarteten.**
-
-Mutationen 6/7, **und die Ueberlebende ist ein No-op:** `p` steht
-auch im Objektweg, **und ein Leser, der es an zwei Orten beantwortet,
-antwortet es an beiden gleich** -- **und die Liste ist damit eine
-Beschreibung und keine Regel.**
+Mutationen 4/5. **Die Ueberlebende ist ein No-op:** `BasicObject` hat
+kein `const_missing`, **und dort endet die Suche ohnehin, und ein
+Stopp nach `Object` aendert fuer keinen Namen etwas.**
 
 *Ein Ueberleben, das man messen kann, ist eine Angabe und kein, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
