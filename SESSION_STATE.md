@@ -10243,3 +10243,28 @@ nicht geraten**, **und die Meldung nennt ihn.**
 
 `All 2096 tests passed`, Mutationen 4/5 (Ueberlebende: ein No-op,
 `BasicObject` hat kein `const_missing`).
+
+
+## Und MZ: 114 Befehle benannt, 21 ausfuehrbar
+
+**Das ist der Unterschied zwischen "das Geraet erkannt" und "das Spiel
+laeuft", in Zahlen:** `MzCommandTable.Count` ist 114, **und in
+`MzCommands.TryExecute` stehen 13 Faelle, in `MzControlFlow.TryExecute`
+8** -- **also 21 von 114 fuehren etwas aus.**
+
+**Und die 204 Befehle in den echten Fixtures benutzen 22 Nummern, und
+20 davon sind behandelt.** Die zwei Ausnahmen (`655`, `657`) liest die
+Engine als Daten eines Befehls, nicht als Befehl.
+
+**Und vier Tabellennamen werden nirgends behandelt:** `355 Script`,
+`402 ContinueText`, `405 ShowChoices`, `412 EndBranch`.
+
+**Und `EndBranch` habe ich end to end gemessen, und es laeuft durch:**
+allein in einer Liste endet es mit `Waiting` und einer Aktion, **nicht
+mit `Refused`.** Mein erster Test bekam `Refused`, **weil ich
+`ShowText` mit den Parametern `"0" "0" "1" "0" "1"` gebaut habe, und die
+bedeuten *Schalter 0*** -- **der Befehl war richtig und mein Test war
+falsch.**
+
+**Und `355`, `402` und `405` habe ich NICHT end to end gemessen, und
+ich melde sie als offen, nicht als fehlend.**

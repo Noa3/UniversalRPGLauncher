@@ -449,31 +449,34 @@ baut.** Kein Spiel-Host muss etwas bereitstellen.
 `def setup` auf oberster Ebene steht in der zweiten Datei jedes VX-,
 VX-Ace- und XP-Projekts.
 
-**Und `const_missing` ist jetzt eine Methode, die das Spiel schreibt,
-und nicht ein Haken des Lesers.**
+**Und MZ ist gemessen: 114 Befehle benannt, 21 ausführbar.**
 
-**Belegt an der Quelle:** `variable.c` Zeile 1120 macht
-`rb_funcall(klass, "const_missing", 1, ID2SYM(id))` — **und `klass` ist
-das Modul, auf das geschrieben wurde, und der Name kommt als
-Symbol an.**
+**Das ist der Unterschied zwischen "das Geraet erkannt" und "das Spiel
+laeuft", und er ist in Zahlen festgehalten:** `MzCommandTable.Count` ist
+114 (gemessen, und der Test sagt es), **und in `MzCommands.TryExecute`
+stehen 13 Faelle und in `MzControlFlow.TryExecute` 8** -- **also 21
+von 114 Befehlen fuehren etwas aus.**
 
-**Gemessen vorher:** nil und *the constant GIBT_ES_NICHT is not defined
-by this host, and the interpreter does not guess; a game own constant
-needs a host that provides it* — **und diese Meldung fragt den Host
-nach etwas, das das Spiel selbst schreiben muss.**
+**Und die 204 Befehle in den echten Fixtures dieser Engine benutzen 22
+Nummern** -- **und 20 davon sind behandelt, und die zwei Ausnahmen sind
+Numern, die die Engine als Daten eines Befehls liest, nicht als
+Befehl.** `655` (Plugin-Kommando, 67 mal) und `657` (Plugin-Kommando
+mit Text) sind genau das.
 
-**Und `module RPG; module Actors; end; end` laeuft in jedem
-VX-Projekt ueber genau diesen Weg** — **und ein Spiel kann
-`const_missing` in ein eingebundenes Modul schreiben, und die Suche
-laeuft die Kette nach oben.**
+**Und vier Tabellennamen werden nirgends behandelt:** `355 Script`,
+`402 ContinueText`, `405 ShowChoices` und `412 EndBranch`.
 
-**Und ein Name, den weder der Leser noch das Spiel hat, wird
-weiterhin nicht geraten** — **und die Meldung nennt ihn**, weil
-`include Fehlt` ihn braucht.
+**Und `EndBranch` habe ich end to end gemessen, und es laeuft
+durch:** `EndBranch` allein in einer Liste endet mit `Waiting` und
+einer Aktion, **nicht mit `Refused`** -- **und mein erster Test
+bekam `Refused`, weil ich `ShowText` mit den Parametern `"0" "0"
+"1" "0" "1"` gebaut habe, und die bedeuten *Schalter 0*, und der
+Leser sagte *switch 0*, weil der Schalter nicht da ist.** **Der
+Befehl war richtig und mein Test war falsch, und das ist der
+gemessene Befund und nicht ein No-op, das ich wegzaehle.**
 
-Mutationen 4/5. **Die Ueberlebende ist ein No-op:** `BasicObject` hat
-kein `const_missing`, **und dort endet die Suche ohnehin, und ein
-Stopp nach `Object` aendert fuer keinen Namen etwas.**
+**Und die drei anderen (`355`, `402`, `405`) habe ich nicht end to end
+gemessen, und ich melde sie als offen, nicht als fehlend.**
 
 *Ein Ueberleben, das man messen kann, ist eine Angabe und kein, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
