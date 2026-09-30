@@ -318,6 +318,11 @@ public partial class TestRubyInterpreter
         AssertEq(wert.Items[4].Integer, 0,
             "**and an alias is the same class** -- `B = A` binds the same "
                 + "store, and a reader with a table per name gave nil");
+        AssertEq(mit.Diagnostics.Count, 0,
+            "**and nothing was said** -- measured before: *A has no method "
+                + "'instance_variables' on this host*, while "
+                + "`A.new.instance_variables` answered correctly, **and the "
+                + "two disagree about the same class**");
     }
 
     /// <summary>

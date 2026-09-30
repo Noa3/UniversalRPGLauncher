@@ -10071,3 +10071,27 @@ nicht weggeraeumt.**
 
 `All 2066 tests passed`, Mutationen 6/9 mit drei gemessenen
 Ueberlebenden, Validator gruen.
+
+
+## Und der gemessene Fehler ist behoben
+
+**`module M; def x; 7; end; end; M.x` gab 7 und gibt jetzt `nil` mit der
+Diagnose, die den Empfaenger nennt.**
+
+**Die Ursache war eine Reihenfolge.** `EigeneMethode` nimmt fuer ein
+Symbol-Empfaenger `M.Methods["x"]` -- **die Instanzmethode** --
+**und der Typ-Zweig, der die Singleton-Kette nimmt, stand DAHINTER.**
+Er steht jetzt davor, **und `EigeneMethode` bekommt fuer ein Symbol,
+das ein Typ ist, gar nichts.**
+
+**Und `def self.x` gibt weiter 7, und `A.new.x` gibt weiter die
+Instanzmethode, und `Regexp.last_match` gibt weiter den Treffer** --
+**weil die Reihenfolge jetzt passt**: der Typ-Zweig steht hinter den
+eingebauten Namen und vor `EigeneMethode`.
+
+**Und ein Test, der seit Monaten falsch gepusht war:**
+`Ziel.ueber_class_eval` war ein Aufruf auf den Klassennamen einer
+*Instanzmethode* -- **er ist jetzt `Ziel.new.ueber_class_eval`**.
+
+Mutationen 8/12, vier Ueberlebende alle gemessen, `All 2067 tests
+passed`, Validator gruen.

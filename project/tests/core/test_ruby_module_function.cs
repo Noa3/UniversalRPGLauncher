@@ -185,6 +185,73 @@ public partial class TestRubyModuleFunction : TestRubyInterpreter
     /// difference lives in the second.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// A call on a module name reaches the module itself, and not its
+    /// instances.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>M.x</c> is a <c>NoMethodError</c> when
+    /// <c>x</c> is an instance method.</strong> The reader answered
+    /// <c>7</c> — **and it answered <c>7</c> with <c>module_function</c>
+    /// in front of it too**, **and the copy <c>module_function</c> makes
+    /// was therefore never needed for the call**: the call was taking the
+    /// instance method all along.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>def self.x</c> is the one that answers.</strong>
+    /// <c>7</c> both times, **and the two are one test each, and not one
+    /// test with two spellings** — **because a reader that answered both
+    /// from one table would give 7 in the first and call it right.**
+    /// </para>
+    /// <para>
+    /// <strong>And the diagnostic names the receiver.</strong> A caller
+    /// whose plugin cannot be loaded sees which name failed, **and not a
+    /// sentence about a class it has never heard of.**
+    /// </para>
+    /// </remarks>
+    public void Test_ACallOnAModuleNameReachesTheModuleItself()
+    {
+        var ohne = new RubyInterpreter(new RubyNullHost());
+        var wertOhne = ohne.RunProgram(Statements(
+            "module M\n"
+            + "  def x\n"
+            + "    7\n"
+            + "  end\n"
+            + "end\n"
+            + "M.x\n"));
+
+        AssertEq(wertOhne.Kind, RubyValueKind.Nil,
+            "**`M.x` is nil, and not seven** -- `x` is an instance method "
+                + "of the module, and the chain of a call on `M` is "
+                + "`Singleton(M) -> Singleton(Module) -> Class -> Module -> "
+                + "Object`, **and `M.m_tbl` is in none of those** "
+                + "(`class.c` line 158, 727 and 273)");
+        AssertTrue(
+            string.Join(" | ", ohne.Diagnostics).Contains("M has no method 'x'"),
+            "**and the diagnostic names the module and the method** -- a "
+                + "plugin that cannot be loaded has to see which name "
+                + "failed, and the message said: "
+                + string.Join(" | ", ohne.Diagnostics));
+
+        var mit = new RubyInterpreter(new RubyNullHost());
+        var wertMit = mit.RunProgram(Statements(
+            "module M\n"
+            + "  def self.x\n"
+            + "    7\n"
+            + "  end\n"
+            + "end\n"
+            + "M.x\n"));
+
+        AssertEq(wertMit.Integer, 7,
+            "**and `def self.x` is the one that answers** -- and a reader "
+                + "that answered both from one table would have given seven "
+                + "in the first and called it right");
+        AssertEq(mit.Diagnostics.Count, 0,
+            "**and nothing was said** -- measured before: the same seven, "
+                + "with and without `module_function` in front of it");
+    }
+
     public void Test_AModuleIsInheritedThroughTheClassThatTookIt()
     {
         var mit = new RubyInterpreter(new RubyNullHost());

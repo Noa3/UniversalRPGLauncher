@@ -2217,6 +2217,7 @@ public sealed class RubyInterpreter
         }
 
 
+
         // **Und ein Aufruf auf einen Namen geht die Kette nach oben.**
         // `A.x` where `x` is `def self.x` in `A`'s base class is a call
         // that Ruby finds by walking `RCLASS_SUPER`,
@@ -2233,7 +2234,32 @@ public sealed class RubyInterpreter
         // die das Skript geschrieben hat** — **und bei einem Modul, das
         // beides hat, gewinnt die falsche**.
 
-        var eigene = EigeneMethode(empfaenger, methode);
+        // **Und ein Symbol-Empfaenger, das ein Typ ist, ist der Typ
+        // selbst, und nicht eine Instanz von ihm.** `M.x` where `def x`
+        // is an instance method of the module is a `NoMethodError` in
+        // Ruby 1.8.1,
+        // **and `EigeneMethode` takes `M.Methods["x"]` for a symbol
+        // receiver, which is the instance method** -- **and that is why
+        // `module M; def x; 7; end; end; M.x` answered seven, and the
+        // same seven with `module_function` in front of it**, **and the
+        // copy `module_function` makes was never needed for the call.**
+        //
+        // **Belegt in `class.c`:** `rb_make_metaclass` (line 158),
+        // `rb_singleton_class` (line 727), `rb_module_new` sets
+        // `mdl->super = 0` (line 273). The chain of a call on `M` is
+        // `Singleton(M) -> Singleton(Module) -> Class -> Module ->
+        // Object` -- **and `M.m_tbl` is in none of those.**
+        //
+        // **And a name and not a value is the difference** -- a number
+        // and a string are values, and their methods are in their own
+        // class, **and this is why `"b" <=> "c"` is `String#<=>`** and
+        // not the class the line is written in.
+        var eigene = empfaenger.Kind == RubyValueKind.Symbol
+            && empfaenger.Name != null
+            && empfaenger.Name != "self"
+            && _types.ContainsKey(empfaenger.Name)
+            ? null
+            : EigeneMethode(empfaenger, methode);
         if (eigene != null)
         {
             // **Der Name des Empfaengers wandert mit** -- **und genau der
@@ -2335,42 +2361,18 @@ public sealed class RubyInterpreter
         // ohne das eine Meldung ueber eine Konstante, die der Host nicht
         // kennt** -- **und die Meldung nennt den Host, obwohl es der
         // Leser ist, der die Klasse nicht hat.**
-        if (methode == "last_match"
-            && empfaenger.Kind == RubyValueKind.Symbol
-            && empfaenger.Name == "Regexp")
-        {
-            return TrefferAlsWert(_letzterTreffer);
-        }
 
-        // **Und ein Aufruf auf einen Typnamen geht in die
-        // Singleton-Kette, und nicht in die Kette der
-        // Instanzmethoden.** `Erbe.antwort` where `antwort` is an
-        // instance method in the base class is a call that has no
-        // answer,
-        // **and a reader that walked the superclass chain ran the
-        // instance method and answered 42.**
-        //
-        // **Belegt in `class.c` aus Ruby 1.8.1:**
-        // `rb_make_metaclass` schreibt
-        // `RBASIC(klass)->klass = metasuper` (Zeile 158), **und
-        // `rb_singleton_class(obj)` ruft
-        // `rb_make_metaclass(obj, RBASIC(obj)->klass)` (Zeile 727)**,
-        // **also erbt der Singleton eines Moduls von `Module`** --
-        // **und `rb_module_new` setzt `mdl->super = 0` (Zeile 273)**.
-        // Die Kette eines Aufrufs auf `M` ist damit
-        // `Singleton(M) -> Singleton(Module) -> Class -> Module ->
-        // Object` -- **und `M.m_tbl` kommt darin nicht vor.** Eine
-        // Instanzmethode des Moduls ist fuer den Aufruf unsichtbar.
-        //
-        // **Und dieser Zweig steht hinter den eingebauten
-        // Namen**, **und nicht davor** -- `Regexp.last_match` ist ein
-        // eingebauter Klassenaufruf, **und ein Leser, der ihn hier ab
-        // faengt, gibt ihm nil** -- **und genau das ist der Satz, mit
-        // dem jedes Plugin auf einen Treffer zugreift.**
+        // **Und ein Name, den der Leser selbst gibt, laeuft weiter.**
+        // `Regexp.last_match` und `Struct.new` stehen nicht in der
+        // Tabelle des aufgerufenen Typs,
+        // **und ein Zweig, der den Aufruf hier beendete, wuerde ihnen
+        // nil geben** -- **und `Regexp.last_match` ist der Satz, mit dem
+        // jedes Plugin auf einen Treffer zugreift.**
         if (empfaenger.Kind == RubyValueKind.Symbol
             && empfaenger.Name != null
             && empfaenger.Name != "self"
-            && _types.ContainsKey(empfaenger.Name))
+            && _types.ContainsKey(empfaenger.Name)
+            && !EingebauterName(methode))
         {
             var typAntwort = TypBefragt(
                 empfaenger.Name, methode, argumente);
@@ -2403,6 +2405,40 @@ public sealed class RubyInterpreter
                     + "and not about the script");
             return RubyValue.Nil;
         }
+
+        if (methode == "last_match"
+            && empfaenger.Kind == RubyValueKind.Symbol
+            && empfaenger.Name == "Regexp")
+        {
+            return TrefferAlsWert(_letzterTreffer);
+        }
+
+        // **Und ein Aufruf auf einen Typnamen geht in die
+        // Singleton-Kette, und nicht in die Kette der
+        // Instanzmethoden.** `Erbe.antwort` where `antwort` is an
+        // instance method in the base class is a call that has no
+        // answer,
+        // **and a reader that walked the superclass chain ran the
+        // instance method and answered 42.**
+        //
+        // **Belegt in `class.c` aus Ruby 1.8.1:**
+        // `rb_make_metaclass` schreibt
+        // `RBASIC(klass)->klass = metasuper` (Zeile 158), **und
+        // `rb_singleton_class(obj)` ruft
+        // `rb_make_metaclass(obj, RBASIC(obj)->klass)` (Zeile 727)**,
+        // **also erbt der Singleton eines Moduls von `Module`** --
+        // **und `rb_module_new` setzt `mdl->super = 0` (Zeile 273)**.
+        // Die Kette eines Aufrufs auf `M` ist damit
+        // `Singleton(M) -> Singleton(Module) -> Class -> Module ->
+        // Object` -- **und `M.m_tbl` kommt darin nicht vor.** Eine
+        // Instanzmethode des Moduls ist fuer den Aufruf unsichtbar.
+        //
+        // **Und dieser Zweig steht hinter den eingebauten
+        // Namen**, **und nicht davor** -- `Regexp.last_match` ist ein
+        // eingebauter Klassenaufruf, **und ein Leser, der ihn hier ab
+        // faengt, gibt ihm nil** -- **und genau das ist der Satz, mit
+        // dem jedes Plugin auf einen Treffer zugreift.**
+
 
 
         // **Und ein Struct wird wie eine Liste behandelt, und nicht als
@@ -9644,7 +9680,8 @@ public sealed class RubyInterpreter
         // **and the object this runs on is a value of the type, and not
         // the type** — `A.x` must not be `A.new.x`.
         if (!IstFrage(pMethode)
-            && pMethode != "new")
+            && pMethode != "new"
+            && !EingebauterName(pMethode))
         {
             // **Und `new` ist eine Anweisung des Lesers, und keine
             // Methode des Typs.** Ruby 1.8's `rb_class_new_instance`
@@ -9860,6 +9897,26 @@ public sealed class RubyInterpreter
                 }
 
                 return RubyValue.OfBoolean(typ.Name == gesucht);
+
+            case "instance_variable_get":
+            case "instance_variable_set":
+            case "instance_variables":
+            case "instance_variable_defined?":
+            case "remove_instance_variable":
+                {
+                    // **Und die fuenf Fragen ueber die Felder gehen an den
+                    // Speicher des Typs.** `A.instance_variables` nach
+                    // `class A; @n = 0; end` ist `[":@n"]`,
+                    // **und ein Leser, der sie nur an Objekte stellte,
+                    // gab die leere Liste zurueck** -- **und
+                    // `instance_variable_get` ist der Satz, mit dem ein
+                    // Plugin `@ivars` durchsucht**, **und es durchsucht
+                    // sie an `self`, und `self` ist in einem Skript oft
+                    // eine Klasse.**
+                    var typAlsWert = RubyValue.OfSymbol(typ.Name);
+                    typAlsWert.Felder = typ.Felder;
+                    return InstanzVariable(typAlsWert, pMethode, pArgumente);
+                }
 
             case "method_defined?":
             case "private_method_defined?":
@@ -10099,6 +10156,52 @@ public sealed class RubyInterpreter
     /// 'instance_methods'*, **which is the sentence a game sees when
     /// its plugin asks the one question it exists to ask.**
     /// </remarks>
+    /// <summary>
+    /// Whether the name is one the reader answers and not one the script
+    /// wrote.
+    /// </summary>
+    /// <param name="pMethode">The method's name as written.</param>
+    /// <returns>true when the reader has the answer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a name the reader gives every type.</strong>
+    /// <c>Struct.new</c>, <c>instance_variable_get</c>,
+    /// <c>class_eval</c> and <c>last_match</c> are asked of a class name,
+    /// **and they are not in the class's own table** — they are in
+    /// <c>Class.m_tbl</c> and in the reader itself.
+    /// </para>
+    /// <para>
+    /// <strong>And without this list a reader that ends a call on a class
+    /// name when the class has no such method would answer
+    /// <c>Struct.new</c> with nil</c> — **and <c>Struct.new</c> is the
+    /// first line of every XP data class**, and
+    /// <c>RPG::Actor = Struct.new(:id, :name)</c> is how a game begins.
+    /// </para>
+    /// </remarks>
+    private static bool EingebauterName(string pMethode) => pMethode
+        is "new"
+        or "instance_variable_get"
+        or "instance_variable_set"
+        or "instance_variables"
+        or "instance_variable_defined?"
+        or "remove_instance_variable"
+        or "class_eval"
+        or "module_eval"
+        or "instance_eval"
+        or "last_match"
+        or "name"
+        or "superclass"
+        or "ancestors"
+        or "include?"
+        or "included_modules"
+        or "instance_methods"
+        or "instance_method"
+        or "is_a?"
+        or "kind_of?"
+        or "method_defined?"
+        or "module_function"
+        or "to_s";
+
     private static bool IstFrage(string pMethode) => pMethode
         is "name"
         or "superclass"

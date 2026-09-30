@@ -120,12 +120,17 @@ public partial class TestRubyInterpreter
             + "    1\n"
             + "  end\n"
             + "end\n"
-            + "Ziel.ueber_class_eval\n"));
+            + "Ziel.new.ueber_class_eval\n"));
 
         AssertEq(AsInteger(wert), 1,
             "**the method answered one** — `class_eval` is a second name for "
                 + "the same act, and a reader that knew only one would have "
-                + "said no such method for a script the game runs");
+                + "said no such method for a script the game runs. **And the "
+                + "call is on an instance, and not on the class name**: "
+                + "`ueber_class_eval` is an instance method, and a call on "
+                + "the class name goes up the singleton chain, and that "
+                + "chain ends after `Module` — **and this test said "
+                + "`Ziel.ueber_class_eval` and called the one the other.**");
     }
 
     /// <summary>

@@ -392,26 +392,38 @@ wobei `antwort` in `Basis` eine Instanzmethode ist. **Er prueft jetzt
 `Erbe.new.antwort` (42) und `Erbe.selbst_antwort` (43)**, weil das zwei
 verschiedene Aufrufe sind.
 
-**Und drei Mutationen leben, und alle drei sind gemessen, und keine davon
-ist erfunden.**
+**Und der gemessene Fehler ist behoben, und vier Mutationen leben.**
 
-1. **`module_function` schreibt keine Kopie** -- **und `M.x` gibt 7 auch
-   ohne die Kopie**, weil `EigeneMethode` fuer ein Symbol-Empfaenger
-   `M.Methods["x"]` nimmt, **die Instanzmethode**. *Die Kopie ist fuer
-   den Aufruf nicht noetig, solange der Aufruf die Instanzmethode
-   nimmt* -- **und das ist der Fehler**, **und der Zweig, der ihn
-   beheben soll, wird von `M.x` nicht erreicht**, **weil der Aufruf auf
-   einen Modulnamen ueber einen anderen Weg laeuft.**
-   **Gemessen, nicht geraten, und nicht weggeraeumt.**
+**`M.x` gibt jetzt `nil` mit der Diagnose, die den Empfaenger nennt, und
+`def self.x` gibt 7.** `EigeneMethode` nimmt fuer ein Symbol-Empfaenger
+`M.Methods["x"]` -- **die Instanzmethode** -- **und genau dort lief der
+Aufruf vorbei**, **denn der Typ-Zweig stand dahinter**. Er steht jetzt
+davor, **und `EigeneMethode` bekommt fuer ein Symbol, das ein Typ ist,
+gar nichts**, **weil ein Typ der Typ ist und nicht eine Instanz von ihm.**
 
-2. **`require_relative` ist kein Stapel** -- **und `lib/tief/noch/tiefer`
-   laedt `lib/tief/noch/tief/util`**, **was gemessen korrekt ist**,
-   **und die Mutation aendert daran nichts, weil bei einer Ebene
-   `_skriptKette[^1]` und `_skriptKette[0]` dieselbe sind.**
+**Und vier Mutationen leben, und alle vier sind gemessen:**
 
-3. **Der Typ-Zweig laeuft fuer jedes Symbol** -- **und kein Skript
-   schickt ein Symbol, das kein Typ ist und trotzdem dort ankommt**,
-   **also ist der `_types`-Guard eine Vorsicht und kein Verhalten.**
+1. **`module_function` schreibt keine Kopie** -- **und kein Test sieht
+   sie**, **weil `M.x` jetzt `nil` ist und die Kopie ueber
+   `ModulFunktionen` gefunden wuerde, nicht ueber `self.x`** --
+   **und `module M; def x; 7; end; end; M.x` sieben gibt, war der
+   Beweis, dass der Aufruf den falschen Weg nahm.** *Die Kopie ist fuer
+   den Aufruf nicht noetig; sie ist fuer `ModulFunktionen`.*
+
+2. **`require_relative` ist kein Stapel** -- **und bei einer Ebene sind
+   `_skriptKette[^1]` und `_skriptKette[0]` dieselbe**, **und bei zwei
+   Ebenen wird `lib/tief/noch/tief/util` geladen**, **was gemessen
+   korrekt ist.**
+
+3. **Die Felder des Typs sind ein neuer Speicher** -- **und die Bruecke
+   in `TypBefragt` wird nicht betreten**, **weil `Call` vorher schon
+   antwortet** -- **und zwei Wege fuer eine Frage sind zwei Wege, die
+   auseinanderlaufen koennen.**
+
+4. **Ein Typ beantwortet die fuenf Fragen nicht** -- **und gibt `null`
+   zurueck**, **und `Call` laeuft dann weiter in den Objektzweig, der
+   es richtig beantwortet** -- **und derselbe Satz hat damit zwei
+   Wege.**
 
 *Ein Ueberleben, das man messen kann, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
