@@ -474,4 +474,89 @@ public partial class TestRealMzRuntimeRun : TestBase
                 + lauf.PaintedColours + ", and a picture of one colour is "
                 + "a picture whose tileset was not found");
     }
+
+    /// <summary>
+    /// The runtime draws the figures and the player.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is measured, and the start map has no
+    /// figures.</strong> <c>Map002</c> carries eight pages and every
+    /// one of them has an empty <c>characterName</c> — <strong>the map
+    /// the project starts on is a room with nobody in it</strong> —
+    /// <strong>and a test that asked the start map for figures would
+    /// have found none and called the reader broken.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a map that does have figures is used instead.</strong>
+    /// <c>Map017</c> has nine events with a picture page, and one of
+    /// them hangs on a self switch this reader cannot answer, <strong>and
+    /// eight are drawn.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieRuntimeZeichnetFigurenUndDenSpieler()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success,
+            "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.Characters.Count > 0,
+            "**and it read the project's character sheets** -- and they "
+                + "are named MC_Sprite_sheet, SlimeCharacters, !Flame and "
+                + "Vehicle, and Actors.json names them by that word");
+        AssertTrue(lauf.PlayerSheet != null,
+            "**and it read the player's sheet from Actors.json** -- and "
+                + "the player is not in the map's events at all, and a "
+                + "reader that looked for them among the figures put a "
+                + "second player on a map that already had one");
+    }
+
+    /// <summary>
+    /// A map with figures draws them.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the start map is measured to be a room with nobody in
+    /// it</strong>, <strong>so this asks a map that does have
+    /// figures.</strong> <strong>And the assertion is the count, and the
+    /// count comes from the file.</strong>
+    /// </remarks>
+    public void Test_EineKarteMitFigurenZeichnetSie()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        // **Und die Karte wechseln, und neu malen lassen.**
+        AssertTrue(lauf.GoTo(17),
+            "**and map 17 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+        AssertTrue(lauf.Figures.Count > 0,
+            "**and it has figures** -- and map 17 has nine events with a "
+                + "picture page, and map 2, which the game starts on, has "
+                + "none at all");
+        AssertTrue(lauf.FiguresDrawn > 0,
+            "**and they were drawn** -- and a reader that read them and "
+                + "did not draw them has a map with people in its file "
+                + "and nobody on it");
+    }
 }

@@ -37,7 +37,7 @@ public partial class TestMzCharacterRender : TestBase
 
     private static string Fehler;
 
-    private static MzRgbaImage? Blatt()
+    private static MzCharacterSheet? Blatt()
     {
         var system = MzDataFile.ReadText(
             "data/System.json", File.ReadAllText(Projekt + "/data/System.json"));
@@ -54,7 +54,7 @@ public partial class TestMzCharacterRender : TestBase
         // nimmt nur Farbtyp 3** -- **denn die Tilesets eines Projekts
         // und seine Figuren sind von zweierlei Art**: **das Tileset ist
         // eine Palette, die Figur hat echte Farben.**
-        if (MzRgbaImage.TryParse(bild, out var blatt, out var fehler))
+        if (MzCharacterSheet.Read(bild, out var blatt, out var fehler))
         {
             return blatt;
         }

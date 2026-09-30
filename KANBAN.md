@@ -11237,3 +11237,71 @@ und dann eine Farbe zaehlt, zaehlt null.**
 **Test evidence** `test_mz_character_render.cs` (4), **4/4.**
 
 **`All 2174 tests passed`, Validator gruen.**
+
+## Und die Figuren stehen auf der Karte
+
+### Und das Bild einer Figur haengt an der Seite, und nicht am Ereignis
+
+**Gemessen an `Map017.json`:** das Ereignis traegt `id`, `name`, `x` und
+`y` -- **und Figur, Index, Richtung und Schritt stehen in `page.image`.**
+**Ein Leser, der `characterName` am Ereignis suchte, fand nichts, und
+jede Figur im Spiel war unsichtbar.**
+
+**Und der Name ist ein Wort, und keine Zahl.** `MC_Sprite_sheet`,
+`SlimeCharacters`, `!Flame`, `Vehicle` -- **und die Datei ist
+`img/characters/<name>.png_`.**
+
+### Und zwei der beiden Bedingungsarten, gemessen ueber alle 253 Seiten
+
+| Muster | Seiten |
+|---|---|
+| keine Bedingung | **208** |
+| Selbstschalter | 33 |
+| ein Schalter | 11 |
+| zwei Schalter | 1 |
+
+**Schauder, Item, Variable und Uhr kommen nicht vor.** **Und eine Seite
+ohne Bedingung ist sichtbar** -- **ein Leser, der ein nicht gesetztes
+Feld als "nicht erfuellt" las, versteckte jede Seite im Spiel.**
+
+**Und die erste passende Seite gewinnt** -- **das Ereignis 19 an
+`Map017` haengt an einem Selbstschalter, den dieser Leser nicht
+beantworten kann, und es wird weggelassen und gesagt** -- **also sind es
+acht Figuren und nicht neun.** **Die ehrliche Antwort ist hier "nein",
+denn eine im falschen Zustand gezeichnete Figur ist schlimmer als eine
+fehlende.**
+
+### Und ein Figurenblatt ist nicht immer RGBA
+
+**Der eigentliche Befund, und er ist erst beim Messen aller vier
+Blaetter aufgetaucht:**
+
+| Blatt | Farbtyp |
+|---|---|
+| `MC_Sprite_sheet` | **3** (Palette) |
+| `!Flame` | **3** |
+| `Vehicle` | **3** |
+| `SlimeCharacters` | **6** (RGBA) |
+
+**Und `SlimeCharacters` war die einzige, die der erste Leser las** --
+**und er zaehlte dabei die Dateien und nicht die Bilder**, **und meldete
+vier gelesene Blaetter, waehrend er eines hielt.**
+
+**Und die Durchsicht hat in beiden Faellen eine andere Quelle:** **bei
+einer Palette der Index null, bei vier Kanaelen der Alphakanal.**
+**`MzCharacterSheet` traegt beides hinter vier Bytes je Pixel**,
+**deshalb hat der Renderer einen Pfad und nicht zwei.**
+
+### Und noch eine beim Entschlusseln
+
+**Nur die ersten 16 Bytes des Koerpers werden entschlüsselt, und nicht
+der ganze.** **Eine Sonde, die den ganzen Koerper entwandete, kam auf
+`b')5\x9e\x04s...'` und schloss daraus, alle vier Dateien seien
+unlesbar** -- **während der C#-Leser sie las.**
+
+**Test evidence** `test_mz_map_figure.cs` (4), **4/4**;
+`test_real_mz_runtime_run.cs` (6), **6/6**; `test_mz_character_render.cs`
+(4), **4/4**.
+
+**`All 2180 tests passed`, Validator gruen.**
+

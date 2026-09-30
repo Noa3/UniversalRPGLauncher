@@ -10933,3 +10933,33 @@ noch nicht aus den Seiten der Karte gelesen** -- **die Figurenkoordinate
 und die Seite mit dem Bild liegen in `page.image`, und nicht am
 Ereignis**, **das ist gemessen** -- **und die Runtime zeichnet bisher
 nur die Kacheln.**
+
+## Und die Figuren stehen auf der Karte
+
+**`MzMapFigureReader` liest die Figuren aus `page.image`, und nicht aus
+dem Ereignis, und die Position kommt vom Ereignis** -- **und der Name ist
+ein Wort, und die Datei ist `img/characters/<name>.png_`.**
+
+**Und gemessen ueber alle 253 Seiten: 208 ohne Bedingung, 33 am
+Selbstschalter, 11 an einem Schalter, 1 an zwei Schaltern** -- **und
+Schauder, Item, Variable und Uhr kommen gar nicht vor.** **Eine Seite
+ohne Bedingung ist sichtbar.**
+
+**Und die erste passende Seite gewinnt** -- **und eine Seite an einer
+Bedingung, die dieser Leser nicht beantworten kann, wird weggelassen und
+gesagt** -- **das kostet auf `Map017` eine Figur: acht statt neun.**
+
+**Und drei der vier Figurenblaetter sind Paletten und eines ist RGBA** --
+**und der erste Leser las nur das eine und zaehlte die Dateien statt der
+Bilder.** **`MzCharacterSheet` traegt beides hinter vier Bytes je
+Pixel.**
+
+**Und nur die ersten 16 Bytes des Koerpers werden entschlusselt.**
+
+**`All 2180 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **die Figuren werden gemalt, aber sie
+stehen still** -- **das `pattern` sagt, welcher Schritt, und kein Uhrwerk
+treibt sie weiter**, **und die Laufbahn (`moveRoute`) und die
+Richtungswechsel aus den Befehlen fehlen.**
+

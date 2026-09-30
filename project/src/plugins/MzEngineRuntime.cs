@@ -79,6 +79,31 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <summary>The map the run is on, or zero before it starts.</summary>
     public int CurrentMapId { get; private set; }
 
+    /// <summary>
+    /// Moves the run to another map and paints it.
+    /// </summary>
+    /// <param name="pMapId">The project's own map id.</param>
+    /// <returns>Whether the map was read and painted.</returns>
+    /// <remarks>
+    /// <strong>And a caller changes the map through here, and not by
+    /// writing the field.</strong> <c>201 Transfer Player</c> changes it
+    /// during a run, <strong>and a writable field would let a caller put
+    /// the run on a map the project does not have</strong> — **and
+    /// <c>Repaint</c> would then say it painted nothing and why.</strong>
+    /// </remarks>
+    public bool GoTo(int pMapId)
+    {
+        if (!Maps.ContainsKey(pMapId))
+        {
+            PaintReason = $"Map {pMapId} is not among the maps this "
+                + "runtime read.";
+            return false;
+        }
+
+        CurrentMapId = pMapId;
+        return Repaint();
+    }
+
     /// <summary>Whether a choice is waiting for the player.</summary>
     public bool ChoicePending => Facts.ChoicePending;
 
@@ -116,6 +141,22 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </para>
     /// </remarks>
     public Rm2kPixelBuffer? PaintedMap { get; private set; }
+
+    /// <summary>The figures standing on the current map.</summary>
+    /// <remarks>
+    /// <strong>And they are the ones the map's file says, and not the
+    /// ones the runtime would like.</strong> Measured: a figure's image
+    /// is on its <c>page.image</c> — <strong>and the position and the id
+    /// are on the event</strong> — <strong>so a reader that looked for
+    /// <c>characterName</c> on the event found nothing and every figure
+    /// in the game was invisible.</strong>
+    /// </remarks>
+    public IReadOnlyList<MzMapFigure> Figures { get; private set; } =
+        Array.Empty<MzMapFigure>();
+
+    /// <summary>Why a page was not drawn, when one was not.</summary>
+    public IReadOnlyList<string> FigureNotes { get; private set; } =
+        Array.Empty<string>();
 
     /// <summary>How many colours the painted map has.</summary>
     /// <remarks>
@@ -241,6 +282,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         MapCount = gelesen;
         SkippedMaps = verweigert;
         _tilesets = ReadTilesets();
+        ReadCharacters();
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded();
     }
@@ -445,9 +487,102 @@ public sealed class MzEngineRuntime : IEngineRuntime
             return false;
         }
 
+        // **Und die Figuren werden ueber die Kacheln gemalt, und nicht
+        // in sie hinein** -- **denn eine Figur ist 144 Pixel breit und
+        // eine Kachel 48**, **und sie steht mittig auf dreien.**
+        Figures = MzMapFigureReader.Read(
+            karte.Root, _facts, out var notwendig);
+        FigureNotes = notwendig;
+        PaintFigures(pixel);
         PaintedMap = pixel;
         return true;
     }
+
+    /// <summary>
+    /// Draws the figures of the current map over their tiles.
+    /// </summary>
+    /// <param name="pPixels">The painted map.</param>
+    /// <returns>How many figures were drawn.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a figure whose sheet is missing is not drawn, and is
+    /// named.</strong> The measured project has four character sheets
+    /// and three names in use; <strong>a sheet that is not there would
+    /// leave a figure invisible</strong>, <strong>and a reader that
+    /// counted it anyway would report a figure on a map where there is
+    /// none.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the player is drawn last, and not among the
+    /// figures.</strong> It stands on the tile
+    /// <c>System.json</c> names, <strong>and it is not in the map's
+    /// events at all</strong> — <strong>so a reader that looked for it
+    /// among the figures found nobody and put a second player on a map
+    /// that already had one.</strong>
+    /// </para>
+    /// </remarks>
+    public int PaintFigures(Rm2kPixelBuffer pPixels)
+    {
+        if (pPixels == null)
+        {
+            return 0;
+        }
+
+        var gezeichnet = 0;
+        foreach (var figur in Figures)
+        {
+            if (!Characters.TryGetValue(
+                    figur.CharacterName, out var blatt) || blatt == null)
+            {
+                continue;
+            }
+
+            if (MzCharacterRenderer.Draw(
+                blatt, figur.CharacterIndex, figur.Direction, figur.Pattern,
+                figur.X, figur.Y, pPixels))
+            {
+                gezeichnet++;
+            }
+        }
+
+        // **Und der Spieler kommt hinterher** -- **mit dem Blatt, das
+        // `System.json` ihm gibt**, **denn `Actors.json` nennt das Bild
+        // jedes Darstellers.**
+        if (PlayerSheet != null)
+        {
+            if (MzCharacterRenderer.Draw(
+                PlayerSheet, PlayerIndex, PlayerDirection, 1,
+                PlayerX, PlayerY, pPixels))
+            {
+                gezeichnet++;
+            }
+        }
+
+        FiguresDrawn = gezeichnet;
+        return gezeichnet;
+    }
+
+    /// <summary>How many figures the last paint drew.</summary>
+    public int FiguresDrawn { get; private set; }
+
+    /// <summary>Which character sheet belongs to which name.</summary>
+    public Dictionary<string, MzCharacterSheet?> Characters { get; private set; } =
+        new(StringComparer.Ordinal);
+
+    /// <summary>The sheet the player is drawn from, if it was read.</summary>
+    public MzCharacterSheet? PlayerSheet { get; private set; }
+
+    /// <summary>Which character in that sheet the player is.</summary>
+    public int PlayerIndex { get; private set; }
+
+    /// <summary>The tile the player stands on.</summary>
+    public int PlayerX { get; private set; }
+
+    /// <summary>The tile row the player stands on.</summary>
+    public int PlayerY { get; private set; }
+
+    /// <summary>Which way the player faces.</summary>
+    public int PlayerDirection { get; private set; } = 2;
 
     private MzEventRunner? _runner;
 
@@ -589,6 +724,161 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// painted nothing and the log said nothing.</strong>
     /// </remarks>
     public string TilesetProblem { get; private set; } = "";
+
+    /// <summary>
+    /// Reads the project's character sheets, and the player's.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a character's sheet is named after the character, and
+    /// not after a number.</strong> Measured: the files are
+    /// <c>MC_Sprite_sheet.png_</c>, <c>SlimeCharacters.png_</c>,
+    /// <c>!Flame.png_</c> and <c>Vehicle.png_</c>, <strong>and
+    /// <c>Actors.json</c> names them by that word.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the first actor is the one the player is.</strong>
+    /// The engine's own rule, and <strong>the one that matters here,
+    /// because the player is not in the map's events at all</strong> —
+    /// <strong>and a reader that looked for the player among the
+    /// figures put a second one on a map that already had one.</strong>
+    /// </para>
+    /// </remarks>
+    private void ReadCharacters()
+    {
+        var schluessel = EncryptionKey();
+        Characters = new Dictionary<string, MzCharacterSheet?>(
+            StringComparer.Ordinal);
+        foreach (var datei in SafeFiles("characters", ".png_"))
+        {
+            var name = Path.GetFileNameWithoutExtension(
+                Path.GetFileNameWithoutExtension(datei));
+            var bild = MzImageReader.Read(
+                File.ReadAllBytes(datei), schluessel, out var _);
+            if (bild == null)
+            {
+                continue;
+            }
+
+            // **Und ein Figurenblatt ist nicht immer RGBA.** **Gemessen
+            // an den vier Blaettern eines fertigen Spiels**:
+            // **`MC_Sprite_sheet`, `!Flame` und `Vehicle` sind Farbtyp
+            // 3, eine Palette, und `SlimeCharacters` ist Farbtyp 6 mit
+            // vier Kanaelen.** **Und ein Leser, der nur den einen Fall
+            // kannte, zeichnete drei von vier Figurenarten aus dem
+            // Nichts** -- **und zaehlte trotzdem vier gelesene
+            // Blaetter, denn er zaehlte die Dateien und nicht die
+            // Bilder.**
+            //
+            // **Und die Durchsicht hat in beiden Faellen eine
+            // andere Quelle** -- **bei einer Palette der Index null,
+            // und bei echten Farben der Alphakanal.**
+            var farbe = MzCharacterSheet.Read(
+                bild, out var blatt, out var _);
+            if (blatt != null)
+            {
+                Characters[name] = blatt;
+            }
+        }
+
+        // **Und der Spieler kommt aus `Actors.json`.**
+        var pfad = Path.Combine(
+            _game.GameDirectory, "data", "Actors.json");
+        if (!File.Exists(pfad))
+        {
+            return;
+        }
+
+        MzDataFile actors;
+        try
+        {
+            actors = MzDataFile.Read("data/Actors.json", File.ReadAllBytes(pfad));
+        }
+        catch (MzDataException ausnahme)
+        {
+            TilesetProblem = ausnahme.Message;
+            return;
+        }
+
+        MzValue? erste = null;
+        foreach (var darsteller in actors.Root.Items)
+        {
+            if (darsteller.Member("id")?.IntOr(-1) == 1)
+            {
+                erste = darsteller;
+            }
+        }
+
+        var bildName = erste?.Member("characterName")?.StringOr("") ?? "";
+        PlayerIndex = erste?.Member("characterIndex")?.IntOr(0) ?? 0;
+        if (bildName.Length > 0)
+        {
+            if (Characters.TryGetValue(bildName, out var blatt)
+                && blatt != null)
+            {
+                PlayerSheet = blatt;
+            }
+        }
+
+        // **Und wo er steht, sagt `System.json`.**
+        var systemPfad = Path.Combine(
+            _game.GameDirectory, "data", "System.json");
+        if (File.Exists(systemPfad))
+        {
+            try
+            {
+                var system = MzDataFile.Read(
+                    "data/System.json", File.ReadAllBytes(systemPfad));
+                PlayerX = system.Root.Member("startX")?.IntOr(0) ?? 0;
+                PlayerY = system.Root.Member("startY")?.IntOr(0) ?? 0;
+            }
+            catch (MzDataException)
+            {
+                // **Und ein Spiel, dessen System.json kaputt ist, hat
+                // keinen Spieler**, **und das wird beim Malen sichtbar
+                // und nicht hier verschluckt.**
+            }
+        }
+    }
+
+    private string EncryptionKey()
+    {
+        var pfad = Path.Combine(
+            _game.GameDirectory, "data", "System.json");
+        if (!File.Exists(pfad))
+        {
+            return "";
+        }
+
+        try
+        {
+            return MzDataFile.Read("data/System.json", File.ReadAllBytes(pfad))
+                .Root.Member("encryptionKey")?.StringOr("") ?? "";
+        }
+        catch (MzDataException)
+        {
+            return "";
+        }
+    }
+
+    private IEnumerable<string> SafeFiles(string pOrdner, string pEndung)
+    {
+        var ordner = Path.Combine(_game.GameDirectory, "img", pOrdner);
+        if (!Directory.Exists(ordner))
+        {
+            return Array.Empty<string>();
+        }
+
+        var liste = new List<string>();
+        foreach (var datei in Directory.EnumerateFiles(ordner)
+            .Where(pPfad => pPfad.EndsWith(pEndung, StringComparison.Ordinal))
+            .OrderBy(pPfad => pPfad, StringComparer.Ordinal))
+        {
+            liste.Add(datei);
+        }
+
+        return liste;
+    }
 
     private Dictionary<int, List<Rm2kIndexedImage?>> _tilesets = new();
 

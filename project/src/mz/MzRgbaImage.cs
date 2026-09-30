@@ -39,13 +39,13 @@ namespace UniversalRPG.Web;
 public sealed class MzRgbaImage
 {
     /// <summary>How wide the image is.</summary>
-    public int Width { get; private set; }
+    public int Width { get; init; }
 
     /// <summary>How tall the image is.</summary>
-    public int Height { get; private set; }
+    public int Height { get; init; }
 
     /// <summary>Four bytes per pixel: red, green, blue, alpha.</summary>
-    public byte[] Pixels { get; private set; } = Array.Empty<byte>();
+    public byte[] Pixels { get; init; } = Array.Empty<byte>();
 
     /// <summary>
     /// Reads a PNG of colour type 2 or 6.

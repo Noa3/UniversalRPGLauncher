@@ -155,7 +155,7 @@ public sealed class MzCharacterRenderer
     /// </para>
     /// </remarks>
     public static bool Draw(
-        MzRgbaImage pSheet,
+        MzCharacterSheet pSheet,
         int pIndex,
         int pDirection,
         int pStep,
