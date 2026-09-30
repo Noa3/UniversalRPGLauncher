@@ -11128,3 +11128,62 @@ gemessen wurde.**
 `EnginePluginHost.Start` und nicht ueber eine von Hand gebaute
 Runtime** -- **denn die ganze Luecke war, dass die Klasse nicht
 erreichbar war.**
+
+## Und die MZ-Runtime malt: verschluesselte Bilder, neun Blaetter, sechs Zahlen
+
+**Vorher: die Runtime las Karten und fuehrte Befehle aus, und ein
+Spieler konnte nichts davon sehen.**
+
+### Drei Hindernisse, alle gemessen
+
+1. **Die Bilder sind verschluesselt.** **Gemessen: `System.json` sagt
+   `hasEncryptedImages: true`, und alle 81 Bilder heissen `.png_`.** Und
+   der Algorithmus steht **im Spiel selbst**, in `js/rmmz_core.js`,
+   `Utils.decryptArrayBuffer`:
+   **Header `"52,50,47,4d,56,0,0,0,0,3,1,0,0,0,0,0"` pruefen**, **dann
+   `body = source.slice(16)`**, **und die ersten 16 Bytes des Rumpfes
+   mit je zwei Hex-Ziffern des Schluessels verrechnen.**
+
+   **Und zwei Fehler, die ein first reader macht:**
+   - **Den Header entschluesseln statt abschneiden** -- **und dann
+     beginnt die Datei mit `cb0ca26d`, wo ein PNG mit `89504e47`
+     beginnt.**
+   - **Den Schluessel als ASCII lesen statt als Hex** -- **und dann
+     kommt `6b69722e33353230` heraus, und das ist der lesbare Text
+     "kir.3520", und der sieht wie eine Antwort aus und ist keine.**
+
+2. **Ein Tileset ist neun Blaetter, und keines heisst wie das
+   Tileset.** **Gemessen:** `data/Tilesets.json` traegt je
+   `tilesetNames` mit neun Eintraegen --
+   **[World_A1, World_A2, (leer), (leer), (leer), World_B, World_C,
+   (leer), (leer)]** -- **und `img/tilesets/Overworld.png_` gibt es
+   nicht.**
+
+3. **`IntOr` liest den Wert eines Elements, und nicht dessen Feld `id`.**
+   **Ein Objekt hat keine Zahl**, **und deshalb bekam jede der sechs
+   Tileset-Zeilen -1**, **und jedes Tileset wurde uebersprungen**, **und
+   die Karte malte nichts** -- **und der `catch` um das Lesen sagte
+   nichts, weil nichts geworfen wurde.**
+
+**Und derselbe Fehler stand an zwei weiteren Stellen**, **in `MapIdOf`
+und in einem Test** -- **und wurde an allen dreien in derselben Stunde
+gemacht**, **was sagt, dass eine Form, die einmal falsch gelesen wird,
+dreimal falsch gelesen wird.**
+
+**Und der stumme `catch` ist jetzt sprechend:** **`TilesetProblem`
+sagt, woran es lag**, **denn ein leeres Wuerterbuch und ein Projekt
+ohne Tilesets sehen gleich aus**, **und die Karte malte nichts, und
+das Log sagte nichts.**
+
+### Der Beleg
+
+**`blaetter=35` Sheets gelesen**, **und `Map002` gemalt**, **und
+`PaintedColours > 1`** -- **denn eine Karte in einer Farbe ist eine
+Karte ohne Tileset**, **und genau das sah `Map0001` auf dem RM2K-Projekt
+aus, und es ging durch alles, bis ein Test fragte, wie viele Farben es
+gibt.**
+
+**Test evidence** `test_mz_image_reader.cs` (4) und
+`test_mz_map_render.cs` (4).
+
+**`All 2170 tests passed`, Validator gruen.**

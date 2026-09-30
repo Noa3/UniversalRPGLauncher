@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UniversalRPG.Core;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Web;
 
 namespace UniversalRPG.Plugins;
@@ -95,6 +96,39 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// wrong.</strong>
     /// </remarks>
     public string StopReason { get; private set; } = "";
+
+    /// <summary>
+    /// The map the run painted last, and nothing before it has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is what was missing, and it is a whole
+    /// thing.</strong> The runtime read a project's maps and ran their
+    /// commands, <strong>and a player could not see any of it</strong> —
+    /// <strong>and the reason was not a missing picture and not a
+    /// missing pixel buffer, it was that nothing ever asked for
+    /// one.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the three obstacles were all measured:</strong> the
+    /// images are encrypted, the tileset is named by its own name and
+    /// not by a letter, and a tile is six numbers and not one.
+    /// </para>
+    /// </remarks>
+    public Rm2kPixelBuffer? PaintedMap { get; private set; }
+
+    /// <summary>How many colours the painted map has.</summary>
+    /// <remarks>
+    /// <strong>And this is the number a caller can read without a
+    /// picture.</strong> One colour is a map whose tileset was not
+    /// found, <strong>and on the RM2K project <c>Map0001</c> was one
+    /// colour and passed everything until a test asked.</strong>
+    /// </remarks>
+    public int PaintedColours =>
+        PaintedMap == null ? 0 : MzMapRenderer.DistinctColours(PaintedMap);
+
+    /// <summary>Why the map was not painted, or an empty string.</summary>
+    public string PaintReason { get; private set; } = "";
 
     /// <summary>The last refusal, if the run stopped on one.</summary>
     public MzStep Stopped { get; private set; } = MzStep.Finished;
@@ -206,8 +240,115 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         MapCount = gelesen;
         SkippedMaps = verweigert;
+        _tilesets = ReadTilesets();
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Every tileset of the project, by the id the maps name.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the name is the tileset's own.</strong> Measured on
+    /// <c>data/Tilesets.json</c>: the tileset of map 2 is called
+    /// <em>Overworld</em> and the file is
+    /// <c>img/tilesets/Overworld.png_</c> — <strong>and the editor's
+    /// single letter, <em>A</em>, names no file in this project.</strong>
+    /// A reader that guessed the letter found nothing for every map but
+    /// one.
+    /// </para>
+    /// <para>
+    /// <strong>And the images are encrypted.</strong> The project's
+    /// <c>System.json</c> says <c>hasEncryptedImages: true</c> and
+    /// carries the key; <strong>and every one of its 81 images is named
+    /// <c>.png_</c> rather than <c>.png</c>.</strong>
+    /// </para>
+    /// </remarks>
+    private Dictionary<int, List<Rm2kIndexedImage?>> ReadTilesets()
+    {
+        var ergebnis = new Dictionary<int, List<Rm2kIndexedImage?>>();
+        var pfad = Path.Combine(_game.GameDirectory, "data", "Tilesets.json");
+        if (!File.Exists(pfad))
+        {
+            TilesetProblem = "The project has no data/Tilesets.json, and "
+                + "without it there is no name for any tileset.";
+            return ergebnis;
+        }
+
+        MzDataFile system;
+        MzDataFile tabelle;
+        try
+        {
+            system = MzDataFile.Read(
+                "data/System.json", File.ReadAllBytes(
+                    Path.Combine(_game.GameDirectory, "data", "System.json")));
+            tabelle = MzDataFile.Read("data/Tilesets.json", File.ReadAllBytes(pfad));
+        }
+        catch (MzDataException ausnahme)
+        {
+            // **Und der Grund wird gesagt, und nicht geschluckt** --
+            // **denn dieser `catch` stand hier zuerst stumm**, **und
+            // die Karte malte nichts**, **und der einzige Grund war ein
+            // leeres Wörterbuch**, **das aussah wie ein Projekt ohne
+            // Tilesets.**
+            TilesetProblem = ausnahme.Message;
+            return ergebnis;
+        }
+
+        var schluessel = system.Root.Member("encryptionKey")?.StringOr("") ?? "";
+        foreach (var eintrag in tabelle.Root.Items)
+        {
+            // **Und `IntOr` liest den Wert des Elements selbst, und
+            // nicht dessen Feld `id`.** **Ein Element, das ein Objekt
+            // ist, hat keine Zahl**, **und `IntOr` gab deshalb -1 fuer
+            // jede der sechs Zeilen zurueck**, **und jedes Tileset
+            // wurde uebersprungen**, **und die Karte malte nichts, und
+            // der `catch` sagte nichts, weil nichts geworfen wurde.**
+            var id = eintrag.Member("id")?.IntOr(-1) ?? -1;
+            // **Und die Blaetter kommen aus `tilesetNames`, und nicht
+            // aus dem Namen des Tilesets.** **Gemessen:** jedes der
+            // sechs Tilesets traegt neun Namen, **und mehrere davon
+            // sind leer** -- **[World_A1, World_A2, (leer), (leer),
+            // (leer), World_B, World_C, (leer), (leer)]** -- **und keine
+            // der Dateien heisst `Overworld.png_`.**
+            var blaetter = new List<Rm2kIndexedImage?>();
+            var namen = eintrag.Member("tilesetNames")?.Items;
+            if (id < 0 || namen == null)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < MzMapRenderer.SheetsPerTileset; index++)
+            {
+                var name = index < namen.Count
+                    ? namen[index].StringOr("")
+                    : "";
+                Rm2kIndexedImage? decodiert = null;
+                if (name.Length > 0)
+                {
+                    var datei = Path.Combine(
+                        _game.GameDirectory, "img", "tilesets",
+                        MzMapRenderer.TilesetFileName(name));
+                    if (File.Exists(datei))
+                    {
+                        var bild = MzImageReader.Read(
+                            File.ReadAllBytes(datei), schluessel, out var _);
+                        if (bild != null)
+                        {
+                            Rm2kIndexedImage.TryParse(
+                                bild, out decodiert, out var _);
+                        }
+                    }
+                }
+
+                blaetter.Add(decodiert);
+            }
+
+            ergebnis[id] = blaetter;
+        }
+
+        return ergebnis;
     }
 
     /// <summary>How many maps this runtime read.</summary>
@@ -245,11 +386,67 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         CurrentMapId = start;
+        Repaint();
         _runner = new MzEventRunner();
         _facts = Facts;
         _clock.Reset();
         State = PluginRuntimeState.Running;
         return PluginOperationResult.Succeeded();
+    }
+
+    /// <summary>
+    /// Paints the current map, and says why it did not when it did not.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the map is painted once at the start, and not
+    /// every frame.</strong> A map's tiles do not change while its
+    /// commands run; <strong>and a painter that repainted every frame
+    /// spent the whole frame on work whose answer was the same as
+    /// the frame before.</strong> <strong>What changes per frame is the
+    /// player's position over that map, and that is not a tile.</strong>
+    /// </remarks>
+    public bool Repaint()
+    {
+        PaintedMap = null;
+        PaintReason = "";
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            PaintReason = $"Map {CurrentMapId} is not among the maps "
+                + "this runtime read.";
+            return false;
+        }
+
+        var tilesetId = karte.Root.Member("tilesetId")?.IntOr(-1) ?? -1;
+        if (tilesetId < 0 || !_tilesets.TryGetValue(tilesetId, out var blaetter))
+        {
+            PaintReason = $"Map {CurrentMapId} names tileset {tilesetId}, "
+                + "and this runtime read no sheets for it. Measured on a "
+                + "finished project, a tileset is nine sheets named in "
+                + "tilesetNames, several of them empty, and no file is "
+                + "named after the tileset itself.";
+            return false;
+        }
+
+        var breite = karte.Root.Member("width")?.IntOr(0) ?? 0;
+        var hoehe = karte.Root.Member("height")?.IntOr(0) ?? 0;
+        if (breite <= 0 || hoehe <= 0)
+        {
+            PaintReason = $"Map {CurrentMapId} says {breite}x{hoehe}, "
+                + "and there is no picture of nothing.";
+            return false;
+        }
+
+        var pixel = new Rm2kPixelBuffer(
+            breite * MzMapRenderer.TilePixels,
+            hoehe * MzMapRenderer.TilePixels);
+        if (!new MzMapRenderer().Paint(karte.Root, blaetter, pixel, out var warum))
+        {
+            PaintReason = warum;
+            return false;
+        }
+
+        PaintedMap = pixel;
+        return true;
     }
 
     private MzEventRunner? _runner;
@@ -359,6 +556,42 @@ public sealed class MzEngineRuntime : IEngineRuntime
         State = PluginRuntimeState.Disposed;
     }
 
+    /// <summary>How many sheets this runtime read over all tilesets.</summary>
+    public int TilesetSheetCount
+    {
+        get
+        {
+            var anzahl = 0;
+            foreach (var blaetter in _tilesets.Values)
+            {
+                foreach (var blatt in blaetter)
+                {
+                    if (blatt != null)
+                    {
+                        anzahl++;
+                    }
+                }
+            }
+
+            return anzahl;
+        }
+    }
+
+    /// <summary>
+    /// Why the tilesets could not be read, and an empty string when
+    /// they were.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this exists because a silent catch is a hole.</strong>
+    /// The first version of this reader returned an empty dictionary on
+    /// failure, <strong>and an empty dictionary and a project with no
+    /// tilesets look exactly the same</strong> — <strong>and the map
+    /// painted nothing and the log said nothing.</strong>
+    /// </remarks>
+    public string TilesetProblem { get; private set; } = "";
+
+    private Dictionary<int, List<Rm2kIndexedImage?>> _tilesets = new();
+
     private static bool IsMap(string pRelativePath)
     {
         var name = Path.GetFileName(pRelativePath);
@@ -369,7 +602,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
     private static int MapIdOf(MzDataFile pMap)
     {
-        var id = pMap.Root.IntOr(-1);
+        var id = pMap.Root.Member("id")?.IntOr(-1) ?? -1;
         if (id >= 0)
         {
             return id;

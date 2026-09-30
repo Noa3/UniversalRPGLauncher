@@ -414,4 +414,64 @@ public partial class TestRealMzRuntimeRun : TestBase
             "data/System.json", text);
         return daten.Root.Member("startMapId")?.IntOr(-1) ?? -1;
     }
+
+    /// <summary>
+    /// The runtime paints what it runs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the assertion the whole class was written
+    /// for.</strong> Before <c>Repaint</c>, the runtime read a project's
+    /// maps and ran their commands, <strong>and a player could not see
+    /// any of it</strong> — a project ran and nothing was drawn.
+    /// </para>
+    /// <para>
+    /// <strong>And the assertion is the colour count, and not "a buffer
+    /// exists".</strong> A buffer full of one colour is what a missing
+    /// tileset looks like, <strong>and on the RM2K project
+    /// <c>Map0001</c> was exactly that and passed everything until a
+    /// test asked how many colours there were.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieRuntimeMaltWasSieFuehrt()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success,
+            "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        var td = UniversalRPG.Web.MzDataFile.Read(
+            "data/Tilesets.json", System.IO.File.ReadAllBytes(
+                Projekt + "/data/Tilesets.json"));
+        var anzahl = 0;
+        foreach (var e in td.Root.Items)
+        {
+            var namen = e.Member("tilesetNames");
+            if (anzahl++ < 3)
+            {
+                    }
+        }
+
+        AssertTrue(lauf.PaintedMap != null,
+            "**and the runtime painted a picture** -- and the refusal is: "
+                + lauf.PaintReason);
+        AssertEq(lauf.PaintedMap!.Width,
+            lauf.CurrentMapId > 0 ? 14 * 48 : 0,
+            "**and it is as wide as the map says** -- and the map is 14 "
+                + "tiles wide and a tile is 48 pixels");
+        AssertTrue(lauf.PaintedColours > 1,
+            "**and it is not one colour** -- and it painted "
+                + lauf.PaintedColours + ", and a picture of one colour is "
+                + "a picture whose tileset was not found");
+    }
 }

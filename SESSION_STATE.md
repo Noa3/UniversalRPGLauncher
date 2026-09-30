@@ -10873,3 +10873,40 @@ getan" und "eine Aktion nennt, was die Datei getragen hat".**
 Aussage ueber einen Lauf, der ein Projekt auf der Platte startet.**
 **Was noch fehlt, ist das Zeichnen** -- **die Runtime fuehrt Befehle
 aus, und sie malt nichts.**
+
+## Und die MZ-Runtime malt
+
+**`MzImageReader` und `MzMapRenderer` sind gebaut, und die Runtime malt
+echte Karten eines echten Projekts: 35 Blaetter gelesen, `Map002`
+gemalt, mehr als eine Farbe.**
+
+### Der Algorithmus stand im Spiel, und nicht in einer Bibliothek
+
+**`js/rmmz_core.js`, `Utils.decryptArrayBuffer`:**
+Header `"52,50,47,4d,56,0,0,0,0,3,1,0,0,0,0,0"` pruefen,
+`body = source.slice(16)`, **die ersten 16 Bytes des Rumpfes mit je
+zwei Hex-Ziffern des `encryptionKey` verrechnen.**
+
+**Und diese Grenze ist keine Verletzung der Sicherheitsregel:**
+**ein Bild ist kein Skript**, **und der Algorithmus steht im
+Klartext in der Datei des Spiels.**
+
+### Drei Fehler, die ein erster Leser macht
+
+- **Den Header entschluesseln statt abschneiden** -- **Ergebnis
+  `cb0ca26d…` statt `89504e47…`.**
+- **Den Schluessel als ASCII lesen** -- **Ergebnis `6b69722e33353230`,
+  und das ist der lesbare Text "kir.3520".**
+- **`IntOr` auf ein Objekt anwenden** -- **ein Objekt hat keine Zahl,
+  also -1 fuer jeden Eintrag**, **und jedes Tileset uebersprungen und
+  die Karte malte nichts.** **Derselbe Fehler stand noch an zwei
+  weiteren Stellen und wurde dort zur selben Zeit gemacht.**
+
+**Und der stumme `catch` um das Tileset-Lesen ist jetzt
+`TilesetProblem`:** **ein leeres Wuerterbuch und ein Projekt ohne
+Tilesets sahen gleich aus.**
+
+### Und was noch fehlt
+
+**Der Spieler und die Figuren werden nicht gezeichnet** -- **die Karte
+ist ein Hintergrund**, **und was darauf laeuft, ist noch kein Bild.**
