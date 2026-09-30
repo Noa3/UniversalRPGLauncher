@@ -125,6 +125,7 @@ public static class MzCommands
             or MzCommandTable.ShowAnimation
             or MzCommandTable.EraseEvent
             or MzCommandTable.SetEventLocation
+            or MzCommandTable.BattleProcessing
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -819,6 +820,39 @@ public static class MzCommands
                     + (warten ? ", waiting for it to finish" : "")));
                 return !warten;
             }
+
+            case MzCommandTable.BattleProcessing:
+            {
+                // Die Hilfe sagt: *Causes troops to appear and starts a
+                // battle* -- *Troops: Specify the troop against which the
+                // player will fight* -- *Can Escape: When enabled, the
+                // [Escape] command will be enabled during battle* --
+                // *Can Lose: When enabled, there will not be a game over
+                // even if the entire party is defeated.*
+                //
+                // **Und der vierte Parameter ist die Verlustart, und
+                // nicht die Winneart** -- **und gemessen ist er in
+                // diesem Spiel immer `false`.**
+                //
+                // **Und die beiden Bool-Felder kommen als JSON-Boolean
+                // in die Datei**, **und `Flag` liest genau das** --
+                // **siehe `213`, wo derselbe Befund schon stand.**
+                if (pFacts.InBattle)
+                {
+                    pFacts.Notices.Add(
+                        "a battle is already running, and the engine starts "
+                        + "no second one");
+                    return true;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.StartBattle(
+                        At(pCommand, 1),
+                        Flag(pCommand, 2),
+                        Flag(pCommand, 3))));
+                return true;
+            }
+
 
             case MzCommandTable.SetEventLocation:
             {

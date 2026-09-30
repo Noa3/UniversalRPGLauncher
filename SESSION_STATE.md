@@ -10667,3 +10667,29 @@ einen Mutationslauf fahren, und einen Testfehler, der nur neben einem
 anderen Prozess auftaucht, nicht als Befund behandeln.** **Drei
 Volllaeufe sind der Beweis, dass der Test gueltig ist, und die
 Umgebung der Beweis dafuer, dass er zweimal falsch gemeldet wurde.**
+
+## Und 301 Battle Processing
+
+**Und "Can Lose" ist das Feld, dessen Name luegt.** Die Hilfe: *When
+enabled, there will not be a game over even if the entire party is
+defeated* -- **das Kaestchen heisst "Niederlage ist ueberlebbar", und
+nicht "Niederlage ist verboten".**
+
+**Und `InBattle` war `init` und ist jetzt aenderbar** -- **denn `351 Open
+Menu` fragt genau danach.** **Ein Feld, das beim Bauen der Fakten
+gesetzt wurde, konnte nie wahr werden**, **und ein Spiel, das kaempft
+und danach ein Menue oeffnet, hatte sein Menue waehrend des Kampfes
+offen.**
+
+**Drei Tests setzten `InBattle` direkt per Objektinitialisierer** -- **die
+lesen jetzt `EnterBattle()`**, **denn wer den Zustand setzen darf, kann
+ihn auch halb setzen**, **und `StartBattle` ist die einzige Stelle, an der
+die drei Felder gemeinsam gesetzt werden.**
+
+**Neu gemessen: 1720 von 2436 ausfuehrbar** (vorher 1713).
+Mutationen 6/6. `All 2145 tests passed`, Validator gruen.
+
+**Naechster Schritt:** `322 Change Vehicle Image` (6x). **Die Hilfe
+nennt zwei Einstellungen, Fahrzeug und Bild, und `[(None)]` ergibt kein
+Bild** -- **und P0 ist in allen sechs Faellen 1, das ist das Schiff,
+und P2 nimmt 0, 1, 2 und 3 an.**

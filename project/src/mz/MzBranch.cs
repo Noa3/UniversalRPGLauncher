@@ -232,7 +232,104 @@ public sealed class MzBranchFacts
     /// Whether the party is in a battle, which is the one condition
     /// <c>command351</c> asks before it opens the menu.
     /// </summary>
-    public bool InBattle { get; init; }
+    public bool InBattle { get; private set; }
+
+    /// <summary>
+    /// The troop the party is fighting, and the two rules of that fight.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a battle starts, and so this cannot be an
+    /// <c>init</c> field any more.</strong> <c>command351 Open Menu</c>
+    /// asks whether the party is in a battle before it opens anything,
+    /// <strong>and a field that was set when the facts were built could
+    /// never become true</strong>, **so a game that fights and then opens
+    /// a menu had its menu open during a fight.**
+    /// </para>
+    /// <para>
+    /// <strong>And the troop is 0 when there is no fight.</strong> The
+    /// help for <c>301 Battle Processing</c>: *Causes troops to appear and
+    /// starts a battle. Troops — Specify the troop against which the
+    /// player will fight.*
+    /// </para>
+    /// </remarks>
+    public int BattleTroop { get; private set; }
+
+    /// <summary>Whether the player may flee, from <c>301</c>'s second field.</summary>
+    public bool BattleCanEscape { get; private set; }
+
+    /// <summary>
+    /// Whether a defeat ends the game, from <c>301</c>'s third field.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this one is the opposite of what the name
+    /// suggests.</strong> The help: *When enabled, there will not be a
+    /// game over even if the entire party is defeated.* <strong>So the
+    /// field says "losing is allowed", and not "losing is
+    /// forbidden"</strong> — **and a reader that named it
+    /// <c>CanLose</c> and stored the value as it stands had it
+    /// backwards** — **and a game that set the box to survive a defeat
+    /// got a game over instead.**
+    /// </remarks>
+    public bool BattleCanLose { get; private set; }
+
+    /// <summary>
+    /// Starts a fight, from <c>301 Battle Processing</c>.
+    /// </summary>
+    /// <param name="pTroop">Which troop.</param>
+    /// <param name="pCanEscape">Whether the escape command works.</param>
+    /// <param name="pCanLose">Whether losing ends the game.</param>
+    /// <returns>What happened, in a sentence.</returns>
+    /// <summary>
+    /// Puts the party in a fight without naming a troop, which is what a
+    /// test needs when it is not testing the fight.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a door, and the field's setter is not.</strong>
+    /// A caller that may set the state outright can also leave it half
+    /// set; <strong>this only opens the door the tests need</strong>,
+    /// **and every command that starts a fight goes through
+    /// <see cref="StartBattle"/>**, **which is the one place the three
+    /// fields are set together.**
+    /// </remarks>
+    public void EnterBattle() => InBattle = true;
+
+    public string StartBattle(int pTroop, bool pCanEscape, bool pCanLose)
+    {
+        InBattle = true;
+        BattleTroop = pTroop;
+        BattleCanEscape = pCanEscape;
+        BattleCanLose = pCanLose;
+        return $"troop {pTroop}, escape "
+            + (pCanEscape ? "allowed" : "not allowed")
+            + ", and a defeat "
+            + (pCanLose ? "ends the game" : "does not end it");
+    }
+
+    /// <summary>
+    /// Ends a fight, and says how it went, from <c>301</c>'s fourth field.
+    /// </summary>
+    /// <param name="pLost">Whether the party was defeated.</param>
+    public void EndBattle(bool pLost)
+    {
+        InBattle = false;
+        BattleTroop = 0;
+        BattleLost = pLost;
+    }
+
+    /// <summary>
+    /// Whether the last fight was lost, which is what a branch asks.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the help names two branches, not one.</strong> *You
+    /// can also make conditional branches based on [If Player Won] and
+    /// [If Player Escaped]*, *and [If Player Lost]*.
+    /// <strong>So there are three answers, and this field holds
+    /// one</strong>, **and an escaped fight is not a lost one** — **and a
+    /// reader that set this true for both gave a game its defeat branch
+    /// after the player ran away.**
+    /// </remarks>
+    public bool BattleLost { get; private set; }
 
     /// <summary>
     /// The characters this reader knows, by the id the game uses.

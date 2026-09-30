@@ -97,7 +97,10 @@ partial class TestMzMenuAndPlugins : TestBase
             "and it was recorded once, so a caller can see it; there are"
             + $" {actions.Count} actions");
 
-        var inBattle = new MzBranchFacts { InBattle = true };
+        // **Und `EnterBattle` statt eines Setters**, **denn es geht um
+        // `351 Open Menu` und nicht um einen Kampf.**
+        var inBattle = new MzBranchFacts();
+        inBattle.EnterBattle();
         var battleActions = new List<MzAction>();
         var battle = new MzInterpreter(new List<MzCommandEntry>
         {

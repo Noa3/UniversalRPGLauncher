@@ -10786,3 +10786,35 @@ erfunden.**
 Lauf.**
 
 **Neu gemessen: 1713 von 2436 ausfuehrbar** (vorher 1703).
+
+## MZ: 301 Battle Processing
+
+**Die Hilfe ist kurz und genau.** *Causes troops to appear and starts a
+battle. Troops — Specify the troop against which the player will fight.
+Can Escape — When enabled, the [Escape] command will be enabled during
+battle. Can Lose — When enabled, there will not be a game over even if
+the entire party is defeated.*
+
+**Und die gemessene Form ist `[0, 7, false, false]`** -- **vier Werte,
+und die letzten beiden sind echte JSON-Booleans**, **das ist derselbe
+Befund wie bei `213`.**
+
+**Und "Can Lose" ist das Feld, dessen Name luegt.** *When enabled, there
+will not be a game over* -- **das Kaestchen heisst "eine Niederlage ist
+ueberlebbar", und nicht "eine Niederlage ist verboten".** **Ein Leser,
+der es als "verboten" gespeichert hat, machte aus einem Spiel, das eine
+Niederlage ueberlebt, ein Game Over.**
+
+**Und `InBattle` war `init` und ist jetzt aenderbar** -- **denn `351
+Open Menu` fragt genau danach, und ein Feld, das beim Bauen der Fakten
+gesetzt wurde, konnte nie wahr werden.** **Ein Spiel, das kaempft und
+danach ein Menue oeffnet, hatte sein Menue waehrend des Kampfes offen.**
+
+**Und `EnterBattle()` gibt den Tests eine Tuer, und nicht der Setter
+eine** -- **wer den Zustand direkt setzen darf, kann ihn auch halb
+setzen.**
+
+**Test evidence** `test_mz_battle_processing.cs` (4), **4/4 beim ersten
+Lauf.**
+
+**Neu gemessen: 1720 von 2436 ausfuehrbar** (vorher 1713).

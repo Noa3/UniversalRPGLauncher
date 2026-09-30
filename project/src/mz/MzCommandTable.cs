@@ -274,6 +274,32 @@ public static class MzCommandTable
     /// </remarks>
     public const int SetEventLocation = 203;
 
+    /// <summary>Starts a fight, from <c>command301</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the help is short and exact.</strong> *Causes troops
+    /// to appear and starts a battle. Troops — Specify the troop against
+    /// which the player will fight. Can Escape — When enabled, the
+    /// [Escape] command will be enabled during battle. Can Lose — When
+    /// enabled, there will not be a game over even if the entire party is
+    /// defeated.*
+    /// </para>
+    /// <para>
+    /// <strong>And the measured form is
+    /// <c>[0, 7, false, false]</c></strong> — four values, **and the
+    /// last two are real JSON booleans**, **which is the same
+    /// word-not-number finding that <c>213</c> brought.**
+    /// </para>
+    /// <para>
+    /// <strong>And "Can Lose" is the one whose name lies.</strong> *When
+    /// enabled, there will not be a game over* — **so the box says
+    /// losing is survivable, and a reader that stored it as "losing is
+    /// forbidden" turned a game's escape-from-defeat into a game
+    /// over.**
+    /// </para>
+    /// </remarks>
+    public const int BattleProcessing = 301;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>

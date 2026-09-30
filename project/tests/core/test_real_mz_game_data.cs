@@ -219,6 +219,7 @@ public partial class TestRealMzGameData : TestBase
             UniversalRPG.Web.MzCommandTable.ShowAnimation,     // 221
             UniversalRPG.Web.MzCommandTable.EraseEvent,       // 222
             UniversalRPG.Web.MzCommandTable.SetEventLocation,  // 203
+            UniversalRPG.Web.MzCommandTable.BattleProcessing,  // 301
         };
 
         var nicht = vorkommen

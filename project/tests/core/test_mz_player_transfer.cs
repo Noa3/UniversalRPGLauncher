@@ -166,7 +166,8 @@ partial class TestMzPlayerTransfer : TestBase
         // A reader that moved the player anyway would take a player out of a
         // fight and leave an old message running on a new map, and the two
         // halves of that would both be the reader's own doing.
-        var inBattle = new MzBranchFacts { InBattle = true };
+        var inBattle = new MzBranchFacts();
+        inBattle.EnterBattle();
         var battlePlayer = new MzPlayer();
         battlePlayer.StandAt(1, 5, 5);
         inBattle.GetType(); // the facts are built the same way either way
@@ -179,7 +180,8 @@ partial class TestMzPlayerTransfer : TestBase
         });
 
         // The facts carry the player, so build them around it.
-        var battleFacts = new MzBranchFacts { InBattle = true, Player = battlePlayer };
+        var battleFacts = new MzBranchFacts { Player = battlePlayer };
+        battleFacts.EnterBattle();
         battle.Run(battleActions, battleFacts);
 
         AssertEq(
