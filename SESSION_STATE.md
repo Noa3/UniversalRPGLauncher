@@ -10693,3 +10693,28 @@ Mutationen 6/6. `All 2145 tests passed`, Validator gruen.
 nennt zwei Einstellungen, Fahrzeug und Bild, und `[(None)]` ergibt kein
 Bild** -- **und P0 ist in allen sechs Faellen 1, das ist das Schiff,
 und P2 nimmt 0, 1, 2 und 3 an.**
+
+## Und 322 Change Vehicle Image
+
+**Und es gibt kein Feld "auf welchem Fahrzeug sitzt der Spieler", weil
+kein Befehl dieses Lesers das aendert** -- **die Bilder sind ohne das
+hier**, **und ein Leser, der ein Reit-Feld eingefuehrt haette, um ein
+Bild zu halten, eine zweite Antwort auf eine Frage, die niemand stellt.**
+
+**Und `[(None)]` heisst "kein Bild", und nicht "Datei mit diesem
+Namen".**
+
+**Und die drei Fahrzeuge sind 0, 1 und 2** -- **das Boot ist null, und
+das ist eine Grenze, nicht ein Detail.**
+
+**Und eine lebende Regel hat aufgedeckt, dass der erste Test nur "kein
+viertes Fahrzeug" pruefte** -- **und nicht "kein Null"** -- **und minus
+eins ist genau die Zahl, die `213` und `221` fuer den Spieler
+verwenden**, **also haette ein Leser, der diese Gewohnheit hier
+mitgebracht haette, das Schiffsbild auf den Spieler gelegt.**
+
+**Neu gemessen: 1726 von 2436 ausfuehrbar** (vorher 1720).
+
+**Und was danach noch offen ist, gemessen:** **4 Befehle in drei Codes**
+-- `102` (8x, das ist *Show Choice List*, der zweite Teil von `405`),
+`105` (4x) und `225` (2x), `314` (1x).

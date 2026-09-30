@@ -119,6 +119,67 @@ public sealed class MzPlayer
     /// </remarks>
     public bool Erased { get; private set; }
 
+    /// <summary>
+    /// The image each vehicle shows, and an empty one where the game
+    /// asked for <c>[(None)]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And there are three vehicles, and the engine numbers them
+    /// 0, 1 and 2.</strong> The help for <c>322 Change Vehicle Image</c>
+    /// says only *Specify the target vehicle*, <strong>and the editor's
+    /// list is Boat, Ship, Airship in that order</strong>, <strong>and
+    /// measured on a finished project the first value is 1 six times over,
+    /// which is the ship.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this file has no field for "which vehicle the player
+    /// rides", because no command in this reader changes that.</strong>
+    /// The images are here without it, <strong>and a reader that added a
+    /// riding flag to hold an image would have had a second answer to a
+    /// question nothing asks.</strong>
+    /// </para>
+    /// </remarks>
+    public Dictionary<int, string> VehicleImages { get; } = new();
+
+    /// <summary>The boat, the engine's own number.</summary>
+    public const int Boat = 0;
+
+    /// <summary>The ship, the engine's own number.</summary>
+    public const int Ship = 1;
+
+    /// <summary>The airship, the engine's own number.</summary>
+    public const int Airship = 2;
+
+    /// <summary>
+    /// Sets a vehicle's image, from <c>322 Change Vehicle Image</c>.
+    /// </summary>
+    /// <param name="pVehicle">Which vehicle.</param>
+    /// <param name="pFile">The image file, or an empty string.</param>
+    /// <param name="pName">The image name inside it.</param>
+    /// <param name="pIndex">Which frame of it.</param>
+    /// <returns>What happened, in a sentence.</returns>
+    public string SetVehicleImage(
+        int pVehicle, string pFile, string pName, int pIndex)
+    {
+        // **Und `[(None)]` heisst "kein Bild", und nicht ein Dateiname.**
+        var datei = pFile == NoImage ? "" : pFile;
+        VehicleImages[pVehicle] = datei;
+        return datei.Length == 0
+            ? $"vehicle {pVehicle} has no image"
+            : $"vehicle {pVehicle} shows {datei} / {pName} at {pIndex}";
+    }
+
+    /// <summary>What the editor writes when a vehicle shows nothing.</summary>
+    /// <remarks>
+    /// <strong>And this string is the editor's, and not this
+    /// repository's.</strong> It appears in a project's <c>data</c> files
+    /// **as that word, inside brackets**, **and a reader that guessed
+    /// <c>""</c> instead would have kept looking for a file the game
+    /// never named.**
+    /// </remarks>
+    public const string NoImage = "[(None)]";
+
     /// <summary>Hides the player, from <c>222 Erase Event</c>.</summary>
     public void Erase() => Erased = true;
 

@@ -10818,3 +10818,46 @@ setzen.**
 Lauf.**
 
 **Neu gemessen: 1720 von 2436 ausfuehrbar** (vorher 1713).
+
+## MZ: 322 Change Vehicle Image
+
+**Die Hilfe nennt zwei Einstellungen, und die zweite hat einen Wert, der
+keine Datei ist.** *Change the image used for vehicles. These settings
+will remain in effect until updated again by using this event command.
+Vehicle — Specify the target vehicle. Images — Double-click the box to
+specify the image to be displayed. Setting this to `[(None)]` will result
+in no image being displayed.*
+
+**Und die gemessene Form ist
+`[1, "MC_Sprite_sheet", 1, "SlimeActors", 5, "Actor1_1"]`** -- **sechs
+Werte, und das erste ist das Fahrzeug, und es ist 1 in allen sechsen,
+und 1 ist das Schiff.**
+
+**Und es gibt genau drei Fahrzeuge, und der Motor nummeriert sie von
+null:** Boot 0, Schiff 1, Flugzeug 2. **Ein Leser, der bei eins
+anfing, hatte fuer das Boot gar keinen Schluessel** -- **und ein Spiel,
+das das Bild des Bootes aenderte, aenderte niemandens.**
+
+**Und `[(None)]` heisst "kein Bild", und nicht "Datei mit diesem
+Namen".** **Ein Leser, der den String gespeichert hat, zeigte einem
+Fahrzeug ein Bild, dessen Datei es nicht gibt** -- **und auf einer Karte
+mit einem Schiff ist das ein Loch, wo ein Schiff sein sollte.**
+
+**Und es gibt hier kein Feld "auf welchem Fahrzeug sitzt der Spieler",
+weil kein Befehl dieses Lesers das aendert.** **Die Bilder sind ohne
+das hier**, **und ein Leser, der ein Reit-Feld eingefuehrt haette, um
+ein Bild zu halten, eine zweite Antwort auf eine Frage, die niemand
+stellt.**
+
+**Test evidence** `test_mz_vehicle_image.cs` (4), **4/4 beim ersten
+Lauf.**
+
+**Und eine lebende Regel hat aufgedeckt, dass der erste Test nur "kein
+viertes Fahrzeug" pruefte, und nicht "kein Null"** -- **und minus eins
+ist genau die Zahl, die `213` und `221` fuer den Spieler verwenden**,
+**also haette ein Leser, der diese Gewohnheit hier mitgebracht haette,
+das Schiffsbild auf den Spieler gelegt.**
+
+**Test evidence** `test_mz_vehicle_image.cs` (5), **4/4 und dann 5/5.**
+
+**Neu gemessen: 1726 von 2436 ausfuehrbar** (vorher 1720).

@@ -126,6 +126,7 @@ public static class MzCommands
             or MzCommandTable.EraseEvent
             or MzCommandTable.SetEventLocation
             or MzCommandTable.BattleProcessing
+            or MzCommandTable.ChangeVehicleImage
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -820,6 +821,48 @@ public static class MzCommands
                     + (warten ? ", waiting for it to finish" : "")));
                 return !warten;
             }
+
+            case MzCommandTable.ChangeVehicleImage:
+            {
+                // Die Hilfe sagt: *Change the image used for vehicles.
+                // These settings will remain in effect until updated again
+                // by using this event command* -- *Vehicle: Specify the
+                // target vehicle* -- *Images: Double-click the box to
+                // specify the image to be displayed. Setting this to
+                // [(None)] will result in no image being displayed.*
+                //
+                // **Und gemessen: `[1, "MC_Sprite_sheet", 1,
+                // "SlimeActors", 5, "Actor1_1"]`** -- **sechs Werte, und
+                // das erste ist das Fahrzeug, und es ist 1 in allen
+                // sechsen, und 1 ist das Schiff.**
+                //
+                // **Und `[(None)]` ist ein Bild, und kein leerer
+                // Dateiname** -- **und ein Leser, der den Namen
+                // genommen hat, zeigte einem Fahrzeug ein Bild, dessen
+                // Datei es nicht gibt.**
+                var fahrzeug = At(pCommand, 0);
+                if (fahrzeug < MzPlayer.Boat || fahrzeug > MzPlayer.Airship)
+                {
+                    pFacts.Notices.Add(
+                        $"vehicle image asked for vehicle {fahrzeug}, and "
+                        + "there are three: the boat, the ship and the "
+                        + "airship");
+                    return true;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Player.SetVehicleImage(
+                        fahrzeug,
+                        pCommand.Parameters.Count > 1
+                            ? pCommand.Parameters[1]
+                            : "",
+                        pCommand.Parameters.Count > 3
+                            ? pCommand.Parameters[3]
+                            : "",
+                        At(pCommand, 2))));
+                return true;
+            }
+
 
             case MzCommandTable.BattleProcessing:
             {

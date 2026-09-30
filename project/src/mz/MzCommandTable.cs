@@ -300,6 +300,26 @@ public static class MzCommandTable
     /// </remarks>
     public const int BattleProcessing = 301;
 
+    /// <summary>Sets a vehicle's image, from <c>command322</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the help names two settings, and the second has a
+    /// value that is not a file.</strong> *Change the image used for
+    /// vehicles. These settings will remain in effect until updated again
+    /// by using this event command. Vehicle — Specify the target vehicle.
+    /// Images — Double-click the box to specify the image to be displayed.
+    /// Setting this to <c>[(None)]</c> will result in no image being
+    /// displayed.*
+    /// </para>
+    /// <para>
+    /// <strong>And the measured form is
+    /// <c>[1, "MC_Sprite_sheet", 1, "SlimeActors", 5, "Actor1_1"]</c></strong>
+    /// — six values, <strong>and the first is the vehicle, which is 1 in
+    /// all six, and that is the ship.</strong>
+    /// </para>
+    /// </remarks>
+    public const int ChangeVehicleImage = 322;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>
