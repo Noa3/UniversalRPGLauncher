@@ -449,43 +449,43 @@ baut.** Kein Spiel-Host muss etwas bereitstellen.
 `def setup` auf oberster Ebene steht in der zweiten Datei jedes VX-,
 VX-Ace- und XP-Projekts.
 
-**Und `:"..."` und `:name?` sind jetzt ein Symbol.**
+**Und `h[:a] = 1` funktioniert, und das ist der Satz, mit dem jedes
+Menue, jede Option und jeder Speicherplatz beginnt.**
 
-**Gemessen vorher:** `send(:reich?)` warf *")" at offset 52 does not
-begin an expression*, **und `send(:"reich?")` warf *":" at offset 45
-does not begin an expression*.**
+**Gemessen vorher:** nil, `*a value has no method '[]=' on this host*`,
+**und `h.size` war 0.**
 
-**Zwei Fehler, zwei Ursachen, beide belegt:**
+**Die Ursache war nicht der Hash, sondern der Schreibpfad:**
+`h[:a] = 1` ist `[]=(:a, 1)`, **und der Knoten, den eine Zuweisung
+baut, trug den Empfaenger und den Wert und nicht die Argumente des
+`[]`-Aufrufs** -- **der Schluessel ging verloren** -- **und ein Hash,
+der ohne Schluessel geschrieben wird, ist eine Liste.**
 
-1. **`IsSymbolStart` kannte kein Anfuehrungszeichen**, **und
-   `ReadSymbol` behandelte eines** -- **die Regel stand in einem Ort
-   und ihre Bedingung in einem anderen, und der Zweig unter der
-   Bedingung war geschrieben und nicht erreichbar.** Token fuer
-   Token gemessen: `Delimiter text=:` gefolgt von `String text="r?"`;
-jetzt `Symbol text=:"r?" value=r? bytes=2`.
+**Und `RubyValue.Items` war `IReadOnlyList`, obwohl der Wert immer ein
+`List` war** -- **und die anderen Stellen dieses Lesers schrieben
+schon hindurch** -- **und ein Typ, der "nur lesen" sagt, waehrend
+jeder Aufrufer schreibt, ist ein Typ, der luegt.**
 
-2. **Ein Symbol nahm kein Namensende.** `parse.y` Zeile 4314 gilt
-   fuer **jeden** Namen, **und ein Symbol ist ein Name** --
-   `:reich?` und `:ungleich!` sind Symbole, **und
-   `send(:reich?)` ist der Satz, mit dem jedes Plugin eine
-   Praedikatmethode aufruft.**
+**Neu, alle gemessen:** `key?`/`has_key?` (fragt den Schluessel, nicht
+den Inhalt), `fetch` mit Vorgabe, `pop`, `shift`, `unshift` (Reihenfolge
+der Argumente bleibt), `insert`, `a[k] = v` mit Aufwachsen bis zur
+Stelle und `nil` in der Luecke, `zero?`, `nonzero?`, `even?`, `odd?`,
+`abs`, `succ`, `pred`, `pow`, `divmod`, `gcd`, `lcm`, `round`, `floor`,
+`ceil`.
 
-**Und `def x=(v)`, `def x!=(v)` und `def ==(o)` waren nie kaputt**
--- **gemessen: mit allen Aenderungen entfernt bleiben sie fuenf,
-fuenf und true, und nur die zwei Symbol-Tests fallen.** Der Test
-bleibt, **und der Kommentar sagt, dass er kein Fund ist, damit
-die naechste Sitzung nicht nach einem Fehler sucht, den es nicht
-gab.**
+**Und `**` haelt die Art, die Ruby gibt** (`numeric.c` Zeilen 1889,
+1890, 1893, 1895): `2 ** 10` war **immer 1024.0** -- **ein Spiel, das
+das in ein Namensfeld schreibt, zeigt 1024.0, und ein Spiel, das es
+mit `==` gegen eine ganze Zahl vergleicht, bekommt false.** Jetzt ist
+es eine ganze Zahl, `2 ** 0` ist 1, `2 ** 1` ist die Basis, und nur ein
+negativer Exponent gibt eine reelle Zahl.
 
-Mutationen 2/3, und die Ueberlebende ist gemessen ein No-op:
-`ReadWord` nimmt `!` bereits selbst in den Namen, **und ein Leser
-der beides tut, unterscheidet `!` erst dann, wenn ein Skript es
-schreibt -- und `:ungleich!` ist selten genug, dass kein Test
-darueber laeuft.**
+**Und drei Testluecken, die die Mutationen sichtbar gemacht haben:**
+das Aufwachsen einer Liste, die nullte Potenz und die negative. Alle
+drei jetzt getestet. **Mutationen 9/9, davon 8 durch Tests und eine
+per `compile`** (ein Ternär mit Komma im Ausdruck laesst sich nicht
+als gueltiges C# schreiben).
 
-**Und `parse.y:4314` ist die Quelle fuer beides, und `IsIdentifierPart`
-ist bewusst nicht geaendert** -- **ein `!` im Namen waere `x != 1`
-verschluckt, und ein Leser, der das tut, vergleicht nichts.**
 *Ein Ueberleben, das man messen kann, ist eine Angabe und kein, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied

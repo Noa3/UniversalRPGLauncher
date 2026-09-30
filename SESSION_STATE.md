@@ -10166,3 +10166,31 @@ mit dem Vermerk, dass er kein Fund ist.
 
 `All 2078 tests passed`, Mutationen 2/3 (Ueberlebende: `ReadWord`
 nimmt `!` selbst, also ist der Unterschied selten).
+
+
+## Und `h[:a] = 1` funktioniert
+
+**Gemessen vorher:** nil, `*a value has no method '[]=' on this host*,
+**und `h.size` war 0.**
+
+**Ursache:** `h[:a] = 1` ist `[]=(:a, 1)`, und der Knoten, den eine
+Zuweisung baut, trug den Empfaenger und den Wert **und nicht die
+Argumente des `[]`-Aufrufs** — **der Schluessel ging verloren.**
+
+**Und `RubyValue.Items` war `IReadOnlyList`**, obwohl der Wert immer ein
+`List` war und andere Stellen schon hindurch schrieben.
+
+**Neu, alle gemessen:** `key?`/`has_key?`, `fetch` mit Vorgabe, `pop`,
+`shift`, `unshift` (Argumentreihenfolge bleibt), `insert`, `a[k] = v`
+mit Aufwachsen bis zur Stelle und `nil` in der Luecke, `zero?`,
+`nonzero?`, `even?`, `odd?`, `abs`, `succ`, `pred`, `pow`, `divmod`,
+`gcd`, `lcm`, `round`, `floor`, `ceil`.
+
+**Und `**` haelt die Art** (`numeric.c` 1889/1890/1893/1895): `2 ** 10`
+war **immer 1024.0**; jetzt ganzzahlig, `2 ** 0` = 1, `2 ** 1` = Basis,
+nur negativer Exponent gibt eine reelle Zahl.
+
+**Und `-7.abs` ist -7, und das ist richtig**: `parse.y:1106` macht die
+unary minus zu einem `arg`. `(−7).abs` ist 7.
+
+`All 2086 tests passed`, Mutationen 9/9 (8 durch Tests, 1 per compile).

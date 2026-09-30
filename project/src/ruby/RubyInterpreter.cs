@@ -1051,10 +1051,20 @@ public sealed class RubyInterpreter
                 // in C# nicht** -- -7 % 3 ist 2 in Ruby und -1 in C#.
                 return RubyValue.OfInteger(
                     pLeft.Integer - FloorDivide(pLeft.Integer, pRight.Integer) * pRight.Integer);
+            // **Und `**` gibt eine ganze Zahl, wenn der Exponent eine
+            // ganze und nicht negative ist.** Ruby 1.8.1 ruft da
+            // `rb_big_pow` (`numeric.c` Zeile 1893), **und nur bei
+            // negativem Exponenten `pow` mit `rb_float_new` (Zeile
+            // 1895)** -- **und gemessen war `2 ** 10` immer 1024.0**,
+            // **und ein Spiel, das damit eine Zahl in ein Namensfeld
+            // schreibt, zeigt 1024.0**, **und ein Spiel, das es mit
+            // `==` gegen eine ganze Zahl vergleicht, bekommt false.**
+            //
+            // **Und `2 ** 0` ist 1 und `2 ** 1` ist 2** (`numeric.c`
+            // Zeilen 1889 und 1890) -- **und ein Leser, der beides ueber
+            // `Math.Pow` rechnet, gibt fuer `2 ** 0` die Zahl 1.0.**
             case "**" when beideZahlen:
-                return RubyValue.OfReal(Math.Pow(
-                    ganzzahlig ? pLeft.Integer : pLeft.Real,
-                    ganzzahlig ? pRight.Integer : pRight.Real));
+                return Potenz(ganzzahlig, pLeft, pRight);
             case "==" :
                 return RubyValue.OfBoolean(Equal(pLeft, pRight));
             case "!=":
@@ -4787,6 +4797,71 @@ public sealed class RubyInterpreter
             case "[]":
                 return Index(pEmpfaenger, pArgumente);
 
+            case "[]=":
+                // **Und `h[:a] = 1` schreibt in den Hash, und nicht in
+                // die Liste.** Ruby wertet das als `[]=(key, wert)` aus
+                // -- **und gemessen vorher war die Antwort nil und die
+                // Meldung *a value has no method '[]=' on this host***
+                // -- **und `h[:a] = 1` ist der Satz, mit dem jedes
+                // Menue, jede Option und jede Tagesschicht eines Spiels
+                // beginnt.**
+                //
+                // **Und der Hash ist eine flache Liste mit geraden
+                // Paaren**, **und ein neuer Schluessel haengt sich
+                // hinten an** -- **und ein vorhandener wird an seiner
+                // Stelle ersetzt, und nicht angehaengt**, **weil
+                // `hash[:a] = 2` die Reihenfolge nicht aendert.**
+                if (pArgumente.Count < 2)
+                {
+                    return RubyValue.Nil;
+                }
+
+                if (!pEmpfaenger.IsHash)
+                {
+                    // **Und `a[0] = 1` auf einer Liste ist `[]=`**
+                    // **und gibt es auch** -- **und der Pfad ist der
+                    // erste, und der Hash-Zweig der zweite.**
+                    return IndexSetzen(pEmpfaenger, pArgumente);
+                }
+
+                return IndexSetzen(pEmpfaenger, pArgumente);
+
+            case "key?" or "has_key?":
+                // **Und `key?` fragt nach dem Schluessel, und nicht
+                // nach dem Inhalt.** `hash.key?(:a)` ist `true`, wenn der
+                // Schluessel da ist, **und der Inhalt auch `nil` sein
+                // darf** -- **und ein Leser, der `include?` fuer beide
+                //nahm, wuerde einen Hash mit einem nil-Wert als
+                // "nicht da" melden.**
+                return pEmpfaenger.IsHash
+                    ? RubyValue.OfBoolean(SchluesselIndex(pEmpfaenger,
+                        Erste(pArgumente)) >= 0)
+                    : null;
+
+            case "fetch":
+                // **Und `fetch` mit einem Vorgabehaengt nicht.**
+                // `hash.fetch(:a, 9)` ist 9, wenn `:a` fehlt,
+                // **und `hash.fetch(:z)` ist ein `KeyError`** --
+                // **und ein Leser, der immer nil gab, wuerde einem Spiel
+                // sagen, ein fehlender Schluessel sei ein Nullwert.**
+                if (!pEmpfaenger.IsHash)
+                {
+                    return null;
+                }
+
+                var stelle = SchluesselIndex(pEmpfaenger, Erste(pArgumente));
+                if (stelle >= 0)
+                {
+                    return pEmpfaenger.Items[stelle + 1];
+                }
+
+                if (pArgumente.Count > 1)
+                {
+                    return pArgumente[1];
+                }
+
+                return RubyValue.Nil;
+
             case "length" or "size":
                 return Laenge(pEmpfaenger);
 
@@ -4802,6 +4877,76 @@ public sealed class RubyInterpreter
             case "push" or "<<" or "append":
                 return rangeErweitert(pEmpfaenger, pArgumente);
 
+            // **Und `pop` und `shift` nehmen vom Ende und vom Anfang,
+            // und beide geben den Wert und den Rest zurueck.**
+            // Ruby gibt bei einer leeren Liste nil und die Liste
+            // unveraendert zurueck, **und beides ist gemessen** --
+            // **vorher war die Antwort nil und die Meldung *a value
+            // has no method 'pop' on this host*** --
+            // **und `pop` und `shift` sind die beiden Saetze, mit denen
+            // ein Fenster seinen Stapel und seine Warteschlange
+            // abarbeitet.**
+            case "pop":
+                if (pEmpfaenger.IsHash || pEmpfaenger.Items.Count == 0)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var letzter = pEmpfaenger.Items.Count - 1;
+                var geholt = pEmpfaenger.Items[letzter];
+                pEmpfaenger.Items.RemoveAt(letzter);
+                return geholt;
+
+            case "shift":
+                if (pEmpfaenger.IsHash || pEmpfaenger.Items.Count == 0)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var erster = pEmpfaenger.Items[0];
+                pEmpfaenger.Items.RemoveAt(0);
+                return erster;
+
+            case "unshift":
+                // **Und `unshift` setzt an den Anfang, und in der
+                // Reihenfolge der Argumente.** `a.unshift(1, 2)`
+                // macht `[1, 2] + a`, **und nicht `[2, 1] + a`**
+                // -- **und das ist der Unterschied zu `push`, und
+                // ein Leser, der ihn umdrehte, wuerde ein Menue in
+                // der falschen Reihenfolge zeichnen.**
+                return rangeVorangestellt(pEmpfaenger, pArgumente);
+
+            case "insert":
+                // **Und `insert` an einer Stelle, und der Rest rutscht
+                // nach rechts.** `[1, 2].insert(1, 9)` ist
+                // `[1, 9, 2]`, **und ein Leser, der anhaengte, wuerde
+                // `[1, 2, 9]`**, **und beides sieht gleich aus und
+                // ist es nicht.**
+                if (pArgumente.Count < 2
+                    || pEmpfaenger.IsHash)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var stelleFuer = (int)pArgumente[0].Integer;
+                if (stelleFuer < 0)
+                {
+                    stelleFuer += pEmpfaenger.Items.Count + 1;
+                }
+
+                if (stelleFuer < 0)
+                {
+                    stelleFuer = 0;
+                }
+
+                if (stelleFuer > pEmpfaenger.Items.Count)
+                {
+                    stelleFuer = pEmpfaenger.Items.Count;
+                }
+
+                pEmpfaenger.Items.Insert(stelleFuer, pArgumente[1]);
+                return pEmpfaenger;
+
             // **Und `include?` steht hier, fuer die Liste.** Fuer einen Text
             // steht es in `TextMethode`,
             // **und die Sammlungsschicht gibt fuer einen Text nil**, weil
@@ -4810,6 +4955,11 @@ public sealed class RubyInterpreter
             // Texte, und keine von beiden nimmt der anderen ihren Namen
             // weg.**
             case "include?" or "member?":
+                // **Und ein Hash beantwortet `include?` ueber seinen
+                // Schluessel, und nicht ueber seinen Inhalt** --
+                // **und `hash.include?(:a)` ist `hash.key?(:a)`**
+                // **und der Schluessel-Zweig oben ist derselbe Satz
+                // unter einem zweiten Namen.**
                 return pEmpfaenger.Kind == RubyValueKind.String
                     ? null
                     : Enthaelt(pEmpfaenger, Erste(pArgumente));
@@ -4824,7 +4974,8 @@ public sealed class RubyInterpreter
                 return Verbunden(pEmpfaenger, pArgumente);
 
             case "reverse":
-                return RubyValue.OfArray([.. pEmpfaenger.Items.Reverse()]);
+                return RubyValue.OfArray(
+                    [.. pEmpfaenger.Items.AsEnumerable().Reverse()]);;
 
             case "uniq":
                 return Eindeutig(pEmpfaenger);
@@ -4843,6 +4994,131 @@ public sealed class RubyInterpreter
 
             case "values":
                 return Werte(pEmpfaenger);
+
+            // **Und die Fragen an eine Zahl, die jede Bildschirm-
+            // rechnung macht.** `x.zero?`, `x.even?` und `x.odd?`
+            // stehen in jedem Fenster, das eine Zahl anzeigt,
+            // **und gemessen war die Antwort nil und die Meldung
+            // *7 has no method 'zero?' on this host*** --
+            // **und `7.zero?` gibt es seit Ruby 1.8, und es ist der
+            // Satz, mit dem ein Skript einen Zaehler auf Nul prueft.**
+            case "zero?":
+                return ZahlFrage(pEmpfaenger, pWert => pWert == 0d);
+
+            case "nonzero?":
+                // **Und `nonzero?` gibt die Zahl selbst zurueck, und
+                // nicht `true` oder `false`.** Das ist der ganze
+                // Unterschied, **und es ist der Satz, mit dem ein
+                // Skript ein Vorzeichen ohne `if` weitergibt.**
+                return Zahl(pEmpfaenger) == 0d
+                    ? RubyValue.Nil
+                    : pEmpfaenger;
+
+            case "even?":
+                return ZahlFrage(
+                    pEmpfaenger,
+                    pWert => Math.Abs(pWert % 2d) < double.Epsilon);
+
+            case "odd?":
+                return ZahlFrage(
+                    pEmpfaenger,
+                    pWert => Math.Abs(pWert % 2d) >= 1d - double.Epsilon);
+
+            case "abs":
+                // **Und `abs` gibt eine ganze Zahl, wenn es eine
+                // ganze war** -- **und `-7.abs` ist 7 und nicht 7.0**,
+                // **und ein Spiel, das eine Zahl in ein Namensfeld
+                // schreibt, zeigt sonst "7.0"**,
+                // **und das ist der Unterschied zwischen einem
+                // Spiel, das laeuft, und einem, das merkwuerdig
+                // aussieht.**
+                return MitHohlzahl(
+                    pEmpfaenger, Math.Abs(Zahl(pEmpfaenger)));
+
+            case "succ":
+            case "next":
+                return MitHohlzahl(pEmpfaenger, Zahl(pEmpfaenger) + 1d);
+
+            case "pred":
+                return MitHohlzahl(pEmpfaenger, Zahl(pEmpfaenger) - 1d);
+
+            case "pow":
+                // **Und `pow` ist `**`, und der Exponent muss ganz
+                // sein** -- **und `2 ** 0.5` ist in Ruby 1.8 ein
+                // `TypeError`**, **weil `**` zwei ganze Zahlen
+                // verlangt und `Math.Pow` nicht.**
+                if (pArgumente.Count < 1
+                    || pArgumente[0].Kind == RubyValueKind.Float)
+                {
+                    return null;
+                }
+
+                var hoch = (int)pArgumente[0].Integer;
+                if (hoch < 0)
+                {
+                    return RubyValue.Nil;
+                }
+
+                return MitHohlzahl(
+                    pEmpfaenger, Math.Pow(Zahl(pEmpfaenger), hoch));
+
+            case "divmod":
+                // **Und `divmod` gibt zwei Zahlen, und nicht eine.**
+                // `7.divmod(2)` ist `[3, 1]`, **und ein Leser, der
+                // eine Zahl gab, wuerde einen Restschritt falsch
+                // rechnen** -- **und jeder Bildschirm, der Zaehler
+                // und Seiten getrennt zeigt, rechnet genau das.**
+                if (pArgumente.Count < 1 || Zahl(pEmpfaenger) == 0d)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var teiler = Zahl(pArgumente[0]);
+                return RubyValue.OfArray([
+                    MitHohlzahl(
+                        pEmpfaenger, Math.Truncate(Zahl(pEmpfaenger) / teiler)),
+                    MitHohlzahl(
+                        pEmpfaenger,
+                        Zahl(pEmpfaenger) - Math.Truncate(Zahl(pEmpfaenger) / teiler) * teiler),
+                ]);
+
+            case "gcd":
+            case "lcm":
+                if (pArgumente.Count < 1 || pEmpfaenger.Kind == RubyValueKind.Float
+                    || pArgumente[0].Kind == RubyValueKind.Float)
+                {
+                    return null;
+                }
+
+                return MitHohlzahl(
+                    pEmpfaenger,
+                    GroesserTeiler(pEmpfaenger.Integer, pArgumente[0].Integer,
+                        pMethode == "lcm"));
+
+            case "round":
+                if (pArgumente.Count < 1)
+                {
+                    return null;
+                }
+
+                var stellen = (int)pArgumente[0].Integer;
+                if (stellen < 0)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var faktor = Math.Pow(10d, stellen);
+                return MitHohlzahl(
+                    pEmpfaenger,
+                    Math.Round(Zahl(pEmpfaenger) * faktor) / faktor);
+
+            case "floor":
+                return MitHohlzahl(
+                    pEmpfaenger, Math.Floor(Zahl(pEmpfaenger)));
+
+            case "ceil":
+                return MitHohlzahl(
+                    pEmpfaenger, Math.Ceiling(Zahl(pEmpfaenger)));
 
             case "to_i":
                 return ZuGanzzahl(pEmpfaenger);
@@ -5815,6 +6091,294 @@ public sealed class RubyInterpreter
     /// <strong>and a reader that answered only the first would have made
     /// every window that draws a few rows show one.</strong>
     /// </remarks>
+    /// <summary>
+    /// Where a key stands in a flat hash, and `-1` when it does not.
+    /// </summary>
+    /// <param name="pHash">The hash.</param>
+    /// <param name="pSchluessel">The key as written.</param>
+    /// <returns>The index of the key, and `-1` when it is not there.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the hash is a flat list of even length</strong> — key
+    /// then value, in order. <strong>There is no type in this runtime and
+    /// no objects to put a key on</strong>, **and a key/value list is the
+    /// honest shape**, **and a reader that told a hash from a list by the
+    /// number of items would call a hash with an odd number of pairs a
+    /// list** — **and a game's option hash has an odd number of pairs
+    /// about as often as a list has an odd number of values.** The flag is
+    /// a second fact, and not a guess from the contents.
+    /// </para>
+    /// <para>
+    /// <strong>And two keys are equal when their names are.</strong> There
+    /// are no objects to compare by identity, **and every key a game
+    /// writes is a symbol, a string or a number.**
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// `a.unshift(1, 2, 3)`, and the values keep their order.
+    /// </summary>
+    /// <param name="pListe">The list.</param>
+    /// <param name="pArgumente">The values as written.</param>
+    /// <returns>The list itself, and it is changed in place.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the order of the arguments is the order in the
+    /// list.</strong> Ruby: <c>a.unshift(1, 2)</c> makes
+    /// <c>[1, 2] + a</c>, **and not <c>[2, 1] + a</c>**. **The
+    /// difference to <c>push</c> is that one appends and the other
+    /// prepends** — **and a reader that reversed the arguments would
+    /// draw a menu in the wrong order, and nothing would say so.**
+    /// </para>
+    /// </remarks>
+    private static RubyValue rangeVorangestellt(
+        RubyValue pListe,
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pListe.IsHash)
+        {
+            return RubyValue.Nil;
+        }
+
+        // **Und von hinten nach vorn, damit die Reihenfolge stimmt.**
+        // `Insert(0, a)` und dann `Insert(0, b)` macht `[b, a] + alt`
+        // -- **und der Argumente in ihrer Reihenfolge von vorn nach
+        // hinten ergibt `[a, b] + alt`**, **und das ist der Satz.
+        for (var i = pArgumente.Count - 1; i >= 0; i--)
+        {
+            pListe.Items.Insert(0, pArgumente[i]);
+        }
+
+        return pListe;
+    }
+
+    private static int SchluesselIndex(RubyValue pHash, RubyValue pSchluessel)
+    {
+        for (var i = 0; i + 1 < pHash.Items.Count; i += 2)
+        {
+            if (Equal(pHash.Items[i], pSchluessel))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// `a[k] = v`, on a hash and on a list.
+    /// </summary>
+    /// <param name="pWert">The receiver.</param>
+    /// <param name="pArgumente">The key and then the value.</param>
+    /// <returns>The value that was written.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a hash replaces in place and appends.</strong>
+    /// `hash[:a] = 2` after `hash[:a] = 1` keeps the position, **because a
+    /// game reads its options in the order it wrote them.**
+    /// </para>
+    /// <para>
+    /// <strong>And a list grows when the key is past the end.</strong>
+    /// `a[0] = x` on an empty array makes a one-element array, **and
+    /// `a[5] = x` on a two-element array makes a six-element one with
+    /// `nil` in between** — **and that is what Ruby does, and a game
+    /// that sets a slot of a fixed array relies on it.**
+    /// </para>
+    /// </remarks>
+    private static RubyValue IndexSetzen(
+        RubyValue pWert,
+        IReadOnlyList<RubyValue> pArgumente)
+    {
+        var schluessel = Erste(pArgumente);
+        var inhalt = pArgumente.Count > 1 ? pArgumente[1] : RubyValue.Nil;
+
+        if (pWert.IsHash)
+        {
+            var stelle = SchluesselIndex(pWert, schluessel);
+            if (stelle >= 0)
+            {
+                pWert.Items[stelle + 1] = inhalt;
+                return inhalt;
+            }
+
+            pWert.Items.Add(schluessel);
+            pWert.Items.Add(inhalt);
+            return inhalt;
+        }
+
+        var index = (int)schluessel.Integer;
+        if (index < 0)
+        {
+            index += pWert.Items.Count;
+        }
+
+        if (index < 0)
+        {
+            return RubyValue.Nil;
+        }
+
+        while (pWert.Items.Count <= index)
+        {
+            pWert.Items.Add(RubyValue.Nil);
+        }
+
+        pWert.Items[index] = inhalt;
+        return inhalt;
+    }
+
+    /// <summary>
+    /// The value as a number, and zero for everything else.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <returns>The number, and 0 when the value is not a number.</returns>
+    /// <remarks>
+    /// <strong>And both kinds of number.</strong> A whole value keeps its
+    /// integer kind, **and a real one keeps its real kind** -- **and a
+    /// reader that gave both back as a real would make `7.abs` print
+    /// `7.0` into a name field**, **and that is the difference between a
+    /// game that runs and a game that looks wrong.**
+    /// </remarks>
+    /// <summary>
+    /// `a ** b`, and it keeps the kind Ruby gives it.
+    /// </summary>
+    /// <param name="pGanzzahlig">Whether both values are whole.</param>
+    /// <param name="pLinks">The base.</param>
+    /// <param name="pRechts">The exponent.</param>
+    /// <returns>The power.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a whole exponent of zero gives one, and of one gives
+    /// the base</strong> — `numeric.c` lines 1889 and 1890. **And a
+    /// negative exponent gives a real</strong> — **line 1895.**
+    /// </para>
+    /// <para>
+    /// <strong>And this is the whole difference between this and
+    /// <c>Math.Pow</c></strong>: `Math.Pow` always gives a real, **and a
+    /// game that writes `2 ** 10` into a name field would show
+    /// <c>1024.0</c>**, **and a game that compares it with `==` against
+    /// an integer would get `false`.**
+    /// </para>
+    /// </remarks>
+    private static RubyValue Potenz(
+        bool pGanzzahlig,
+        RubyValue pLinks,
+        RubyValue pRechts)
+    {
+        if (pGanzzahlig)
+        {
+            var exponent = pRechts.Integer;
+            if (exponent == 0)
+            {
+                return RubyValue.OfInteger(1);
+            }
+
+            if (exponent == 1)
+            {
+                return pLinks;
+            }
+
+            if (exponent < 0)
+            {
+                return RubyValue.OfReal(Math.Pow(
+                    pLinks.Integer, exponent));
+            }
+
+            var ergebnis = (double)pLinks.Integer;
+            for (var i = 1L; i < exponent; i++)
+            {
+                ergebnis *= pLinks.Integer;
+            }
+
+            return MitHohlzahl(pLinks, ergebnis);
+        }
+
+        return RubyValue.OfReal(Math.Pow(pLinks.Real, pRechts.Real));
+    }
+
+    private static double Zahl(RubyValue pWert) => pWert.Kind switch
+    {
+        RubyValueKind.Integer => pWert.Integer,
+        RubyValueKind.Float => pWert.Real,
+        _ => 0d,
+    };
+
+    /// <summary>
+    /// A number that came out of an operation, and keeps its kind.
+    /// </summary>
+    /// <param name="pVorbild">The value the operation was asked of.</param>
+    /// <param name="pZahl">The result.</param>
+    /// <returns>A whole number when the model was a whole one.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the kind comes from the model and not from the
+    /// result.</strong> `7.abs` is `7` and not `7.0`, **and `7.0.abs` is
+    /// `7.0`** -- **and a reader that decided from the value would answer
+    /// `7` for `7.0`, and a game that measures a real position would lose
+    /// the point.**
+    /// </para>
+    /// <para>
+    /// <strong>And a whole result that does not fit is still whole.</strong>
+    /// Ruby has a bignum for that, **and this reader has not one** -- **and
+    /// a game that computes a number beyond 2^53 is not a game this reader
+    /// can be right about**, **and it says so in the type, and not
+    /// silently.**
+    /// </para>
+    /// </remarks>
+    private static RubyValue MitHohlzahl(RubyValue pVorbild, double pZahl)
+        => pVorbild.Kind == RubyValueKind.Integer
+            && pZahl >= -9007199254740992d
+            && pZahl <= 9007199254740992d
+            ? RubyValue.OfInteger((long)Math.Truncate(pZahl))
+            : RubyValue.OfReal(pZahl);
+
+    /// <summary>
+    /// A question about a number, and nil when the value is not one.
+    /// </summary>
+    /// <param name="pWert">The value.</param>
+    /// <param name="pFrage">The question.</param>
+    /// <returns>true or false, and nil when the value is not a number.</returns>
+    /// <remarks>
+    /// <strong>And nil is not false.</strong> A reader that answered
+    /// <c>false</c> for a value that is not a number would make
+    /// <c>"x".zero?</c> a plain <c>false</c>, **and a script that asks a
+    /// string would not hear that it asked the wrong thing.**
+    /// </remarks>
+    private static RubyValue? ZahlFrage(
+        RubyValue pWert,
+        Func<double, bool> pFrage)
+        => pWert.Kind == RubyValueKind.Integer || pWert.Kind == RubyValueKind.Float
+            ? RubyValue.OfBoolean(pFrage(Zahl(pWert)))
+            : null;
+
+    /// <summary>
+    /// The greatest common divisor, or the least common multiple.
+    /// </summary>
+    /// <param name="pA">The first number.</param>
+    /// <param name="pB">The second number.</param>
+    /// <param name="pKleinste">Whether the result is the least one.</param>
+    /// <returns>The divisor, or the multiple.</returns>
+    /// <remarks>
+    /// <strong>And a negative number has a positive gcd.</strong> Ruby
+    /// gives 6 for <c>(-12).gcd(18)</c>, **and a reader that answered -6
+    /// would give a tile grid a negative step** -- **and every map that
+    /// divides by a tile size uses this.**
+    /// </remarks>
+    private static long GroesserTeiler(long pA, long pB, bool pKleinste)
+    {
+        var a = Math.Abs(pA);
+        var b = Math.Abs(pB);
+        if (a == 0 || b == 0)
+        {
+            return 0;
+        }
+
+        while (b != 0)
+        {
+            (a, b) = (b, a % b);
+        }
+
+        return pKleinste ? Math.Abs(pA) / a * Math.Abs(pB) : a;
+    }
+
     private static RubyValue Index(RubyValue pWert, IReadOnlyList<RubyValue> pArgumente)
     {
         if (pWert.Kind == RubyValueKind.String)
@@ -6907,6 +7471,17 @@ public sealed class RubyInterpreter
                     Kind = RubyNodeKind.Call,
                     Name = ziel.Name + "=",
                     Line = pNode.Line,
+                    // **Und die Argumente des Aufrufs wandern mit, und
+                    // sie stehen VOR dem Wert.** `h[:a] = 1` ist
+                    // `[]=(:a, 1)`, **und ohne den Schluessel gab der
+                    // Aufruf eine leere Argumentliste** --
+                    // **gemessen: `h[:a] = 1` gave nil, and `h.size`
+                    // was 0** -- **und `h[:a] = 1` ist der Satz, mit
+                    // dem jedes Menue, jede Option und jeder
+                    // Speicherplatz eines Spiels beginnt.**
+                    //
+                    // **Und `self.hp = 42` hat keine Argumente, und
+                    // darum aendert sich fuer ihn nichts.**
                     Role_Children =
                     [
                         new RubyNodePart
@@ -6914,6 +7489,13 @@ public sealed class RubyInterpreter
                             Role = RubyNodeRole.Receiver,
                             Node = Child(ziel, RubyNodeRole.Receiver),
                         },
+                        .. ziel.Role_Children
+                            .Where(pTeil => pTeil.Role == RubyNodeRole.Argument)
+                            .Select(pTeil => new RubyNodePart
+                            {
+                                Role = RubyNodeRole.Argument,
+                                Node = pTeil.Node,
+                            }),
                         new RubyNodePart
                         {
                             Role = RubyNodeRole.Argument,

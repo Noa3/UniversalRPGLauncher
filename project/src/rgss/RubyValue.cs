@@ -139,8 +139,25 @@ public sealed class RubyValue : IEquatable<RubyValue>
     /// <summary>Which of the two it is, for a <see cref="RubyValueKind.Boolean"/>.</summary>
     public bool Boolean { get; private init; }
 
-    /// <summary>What is inside, for a list.</summary>
-    public IReadOnlyList<RubyValue> Items { get; private init; } = Array.Empty<RubyValue>();
+    /// <summary>What is inside, for a list and for a hash.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the type is <c>List</c>, and not
+    /// <c>IReadOnlyList</c>.</strong> A hash on this runtime is a flat
+    /// list of key/value pairs, **and <c>h[:a] = 1</c> has to write into
+    /// it** — **and measured: with the read-only type the write did not
+    /// compile, and a reader that could not write a hash could not run
+    /// a menu, an options screen or a save slot.**
+    /// </para>
+    /// <para>
+    /// <strong>And the read-only type is not a guarantee here.</strong> It
+    /// only says what the property hands out; **the value behind it has
+    /// always been a <c>List</c>**, **and the other places in this reader
+    /// already wrote through it** — **and a type that says "read" while
+    /// every caller writes is a type that lies.**
+    /// </para>
+    /// </remarks>
+    public List<RubyValue> Items { get; private init; } = [];
 
     /// <summary>What is inside, for a whole value.</summary>
     /// <remarks>
