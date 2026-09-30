@@ -113,6 +113,44 @@ public sealed class RubyParser
 
     private RubyToken Current => _tokens[Math.Min(_index, _tokens.Count - 1)];
 
+    /// <summary>
+    /// Whether a space came before the current token.
+    /// </summary>
+    /// <returns>true when the two tokens are not neighbours.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>puts [1, 2]</c> is <c>puts([1, 2])</c>.</strong> Ruby
+    /// reads a bracket right after a space as the start of an argument,
+    /// **and a reader that always read it as an index made
+    /// <c>puts [1, 2]</c> into <c>puts[1, 2]</c>** -- **measured: the
+    /// node was <c>Call name=[]</c> with the receiver <c>puts</c>, and
+    /// the host wrote nothing at all.**
+    /// </para>
+    /// <para>
+    /// <strong>And <c>a[1]</c> without a space is still an index</strong>
+    /// -- **and a reader that always read the bracket as an argument
+    /// would break every array and hash in a game** -- **and the
+    /// offset of a token against the one before it is the whole
+    /// difference, and it is measured from what the lexer already
+    /// knows.**
+    /// </para>
+    /// </remarks>
+    private bool AbstandDavor
+    {
+        get
+        {
+            var jetzt = Math.Min(_index, _tokens.Count - 1);
+            if (jetzt <= 0)
+            {
+                return false;
+            }
+
+            var vorher = _tokens[jetzt - 1];
+            var hier = _tokens[jetzt];
+            return hier.Offset - (vorher.Offset + vorher.Text.Length) > 0;
+        }
+    }
+
     private bool AtEnd => Current.Kind == RubyTokenKind.EndOfInput;
 
     private void SkipNewlines()
@@ -507,7 +545,50 @@ public sealed class RubyParser
                 };
                 continue;
             }
-            if (Is("["))
+            // **Und eine Klammerliste nach einem Namen mit Leerzeichen
+            // ist ein Argument, und kein Index.** `puts [1, 2]` ist
+            // `puts([1, 2])` und `a[1]` ist ein Index.
+            if (pNode.Kind == RubyNodeKind.Identifier
+                && Is("[")
+                && AbstandDavor)
+            {
+                _index++;
+                SkipNewlines();
+                var eintraege = new List<RubyNode>();
+                while (!Is("]"))
+                {
+                    eintraege.Add(ParseExpression());
+                    SkipNewlines();
+                    if (Is(","))
+                    {
+                        _index++;
+                        SkipNewlines();
+                    }
+                }
+                Expect("]");
+                var liste = new RubyNode
+                {
+                    Kind = RubyNodeKind.Array,
+                    Line = pNode.Line,
+                    Children = [.. eintraege],
+                };
+                node = new RubyNode
+                {
+                    Kind = RubyNodeKind.SelfCall,
+                    Name = pNode.Name ?? string.Empty,
+                    Line = pNode.Line,
+                    Children = [pNode, liste],
+                    Role_Children = CallParts(pNode, [liste]),
+                };
+                continue;
+            }
+
+            // **Und sonst ist eine Klammer ein Index.** `a[1]` und
+            // `h[:a]` ohne Leerzeichen davor -- **und gemessen war
+            // `puts [1, 2]` ein `Call name=[]` mit dem Empfaenger
+            // `puts`, und der Host schrieb nichts.**
+            if (Is("[") && (pNode.Kind != RubyNodeKind.Identifier
+                || !AbstandDavor))
             {
                 _index++;
                 SkipNewlines();

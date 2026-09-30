@@ -79,6 +79,19 @@ public sealed class RubyInterpreter
     /// Nicht "es gab nie einen" -- **das ist der Unterschied, den ein Skript
     /// nicht sieht**, **und deshalb loescht jeder Lauf, auch der leere.**
     /// </remarks>
+    /// <summary>
+    /// The `catch` marks that are open right now, innermost last.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a stack, and not one slot.</strong> `catch` nests in
+    /// every VX state machine, **and a reader with one slot would let the
+    /// inner catch swallow a throw meant for the outer one** — **and a
+    /// throw walks outwards until it finds its name.**
+    /// </para>
+    /// </remarks>
+    private readonly List<WurfMarke> _wurfMarken = [];
+
     private TrefferDaten? _letzterTreffer;
 
     /// <summary>The pairs `sort_by` gathered, and their measured sizes.</summary>
@@ -2112,6 +2125,23 @@ public sealed class RubyInterpreter
         // zuerst versucht, wuerde `f.call(3)` als "keine Methode call auf 0"
         // melden, **und der Empfangername waere eine Zahl statt eines
         // Blocks**.
+        // **Und `catch` und `tap` und `then` und die Ausgaben sind
+        // Sprache, und nicht Skript.** Sie stehen ohne Receiver in
+        // jedem Skript, das einen Zustandsautomaten oder eine Kette
+        // baut, **und gemessen war fuer alle die Antwort nil und die
+        // Meldung *self has no method 'catch' on this host*** --
+        // **und diese Meldung geht ueber den Host, obwohl es der
+        // Leser ist, der die Sprache nicht gebaut hat.**
+        //
+        // **Und sie kommen vor der Skriptmethode**, **weil ein Spiel
+        // `catch` auch als eigener Name definieren darf und `catch`
+        // ohne Block ein Aufruf mit Block ist, und nicht ein Name.**
+        var kern = KernMethode(empfaenger, methode, argumente, this);
+        if (kern != null)
+        {
+            return kern;
+        }
+
         if (empfaenger.Kind == RubyValueKind.Proc && empfaenger.Block != null
             && (methode == "call" || methode == "()" || methode == "[]"))
         {
@@ -7269,6 +7299,302 @@ public sealed class RubyInterpreter
     /// whenever a game wrote <c>liste.each { return 1 }</c>.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// <summary>
+    /// <summary>
+    /// Write to the host, and give nil back.
+    /// </summary>
+    /// <param name="pArgumente">The values, and a block last.</param>
+    /// <param name="pProZeile">Whether every value gets its own line.</param>
+    /// <returns>nil, and nil is what both names answer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>print</c> joins and <c>puts</c> separates.</strong>
+    /// <c>print 1, 2</c> writes <c>12</c> and <c>puts 1, 2</c> writes
+    /// <c>1</c> and then <c>2</c> — **and a reader that gave both the same
+    /// treatment would make one of the two names wrong, and every
+    /// script writes both.**
+    /// </para>
+    /// <para>
+    /// <strong>And a list is written as its values under <c>puts</c>.</strong>
+    /// <c>puts [1, 2]</c> writes <c>1</c> and <c>2</c> **and not
+    /// <c>[1, 2]</c>** — **and that is what makes a debug line of a
+    /// window readable.**
+    /// </para>
+    /// <para>
+    /// <strong>And the host owns the writing, because a reader that
+    /// wrote to the console would take that away from the game.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyValue Schreibt(
+        IReadOnlyList<RubyValue> pArgumente,
+        bool pProZeile)
+    {
+        foreach (var wert in pArgumente)
+        {
+            if (wert.Kind == RubyValueKind.Proc)
+            {
+                continue;
+            }
+
+            if (pProZeile && wert.IsList && !wert.IsHash)
+            {
+                foreach (var eintrag in wert.Items)
+                {
+                    _host.WriteLine(WertAlsText(eintrag));
+                }
+
+                continue;
+            }
+
+            if (pProZeile)
+            {
+                _host.WriteLine(WertAlsText(wert));
+            }
+            else
+            {
+                _host.Write(WertAlsText(wert));
+            }
+        }
+
+        // **Und `print` bricht keine Zeile um.** `print 1, 2` schreibt
+        // `12` und dann kommt die naechste Anweisung -- **und ein
+        // Leser, der am Ende einen Umbruch schriebe, wuerde aus
+        // `print 1, 2; puts 3` die Zeile `12` und dann `3` machen**,
+        // **und Ruby macht `123` in einer Zeile** -- **und das ist
+        // der Unterschied zwischen den beiden Ausgaben, und nicht
+        // nur ein Leerzeichen.**
+        return RubyValue.Nil;
+    }
+
+    /// A `catch` that is waiting for a `throw` with its own name.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the name is the whole match.</strong> Ruby throws to a
+    /// tag, and a <c>catch</c> with another tag does not see it, **and a
+    /// reader that caught every throw would turn a nested state machine
+    /// into one flat one** -- **and every VX window uses a nested one.**
+    /// </para>
+    /// <para>
+    /// <strong>And a throw walks outwards.</strong> It leaves every block
+    /// between the throw and the catch, **and the value it carries is the
+    /// answer of the catch**, **and a catch whose block was never left
+    /// answers with what the block answered.**
+    /// </para>
+    /// </remarks>
+    private sealed class WurfMarke
+    {
+        public RubyValue Name { get; init; } = RubyValue.Nil;
+
+        public RubyValue Wert { get; set; } = RubyValue.Nil;
+
+        public bool Geworfen { get; set; }
+    }
+
+    /// <summary>
+    /// A block on the receiver, and either the receiver or the answer.
+    /// </summary>
+    /// <param name="pEmpfaenger">The value the block gets.</param>
+    /// <param name="pAntwort">
+    /// The receiver when `tap` wants it, and null when `then` wants the
+    /// answer.
+    /// </param>
+    /// <param name="pArgumente">The arguments, and the block last.</param>
+    /// <returns>The answer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And `tap` and `then` differ in exactly one thing.</strong>
+    /// <c>tap</c> gives the receiver back, **and `then` gives the
+    /// block answer** -- **and a reader that gave the answer for both
+    /// would turn <c>x.tap { setup }</c> into nil**, **and that is the
+    /// line every initialization is written as.**
+    /// </para>
+    /// <para>
+    /// <strong>And the receiver is not the first argument.</strong>
+    /// <c>5.tap { |v| v }</c> has one argument, **and it is the block**
+    /// -- **and a reader that took the first argument as the receiver
+    /// would pass the block to itself and the value nowhere.**
+    /// </para>
+    /// </remarks>
+    private RubyValue BlockAnSender(
+        RubyValue pEmpfaenger,
+        RubyValue? pAntwort,
+        IReadOnlyList<RubyValue> pArgumente,
+        RubyInterpreter pLeser)
+    {
+        var block = pArgumente.Count > 0
+            && pArgumente[^1].Kind == RubyValueKind.Proc
+            ? pArgumente[^1].Block
+            : pLeser._blockKette.Count > 0
+                ? pLeser._blockKette[^1]
+                : null;
+        if (block == null)
+        {
+            return pAntwort ?? RubyValue.Nil;
+        }
+
+        var antwort = BlockAufrufen(block, [pEmpfaenger], pEmpfaenger);
+        return pAntwort ?? antwort;
+    }
+
+    /// A name the language answers itself, and nil for a script name.
+    /// </summary>
+    /// <param name="pMethode">The name as written.</param>
+    /// <param name="pArgumente">The arguments, and the block last.</param>
+    /// <returns>The answer, and null when the name is a script name.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And these are <c>Kernel</c>, and not the host.</strong> The
+    /// reader builds <c>Kernel</c> itself and puts it into every class,
+    /// **and <c>puts</c> and <c>raise</c> are methods of <c>Kernel</c>**
+    /// -- **and measured before this: nil, and the diagnostic *self has
+    /// no method 'catch' on this host*, which names the host for a
+    /// sentence the host never owed.**
+    /// </para>
+    /// <para>
+    /// <strong>And one place answers all of them.</strong> <c>catch</c>,
+    /// <c>throw</c>, <c>tap</c>, <c>then</c>, <c>print</c>, <c>puts</c>
+    /// and <c>p</c> are one list and one <c>switch</c> -- **and seven
+    /// places would be seven places where the list drifts.**
+    /// </para>
+    /// </remarks>
+    private RubyValue? KernMethode(
+        RubyValue pEmpfaenger,
+        string pMethode,
+        IReadOnlyList<RubyValue> pArgumente,
+        RubyInterpreter pLeser)
+    {
+        switch (pMethode)
+        {
+            case "throw":
+                // **Und `throw` ist kein Aufruf, sondern ein Sprung**
+                // -- **und er verlasst jeden Block dazwischen**
+                // -- **und `catch(:a)` faengt nur `:a`**, **und
+                // `throw :b` in `catch(:a)` sucht weiter aussen**
+                // -- **und findet er nichts, ist es ein
+                // `UncaughtThrowError`**, **und nicht ein stiller
+                // `nil`.**
+                if (pArgumente.Count < 1)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var sprung = _wurfMarken.Count > 0
+                    && Equal(_wurfMarken[^1].Name, pArgumente[0])
+                    ? _wurfMarken[^1]
+                    : _wurfMarken.FirstOrDefault(m =>
+                        Equal(m.Name, pArgumente[0]));
+                if (sprung == null)
+                {
+                    return RubyValue.Nil;
+                }
+
+                sprung.Wert = pArgumente.Count > 1
+                    ? pArgumente[1]
+                    : RubyValue.Nil;
+                sprung.Geworfen = true;
+                return RubyValue.Nil;
+
+            case "catch":
+                // **Und `catch` gibt den Wert des Rumpfes zurueck,
+                // wenn nichts geworfen wurde.** `catch(:a) { 1 + 1 }`
+                // ist 2, **und ein Leser, der immer nil gaebe, wuerde
+                // einem Skript sagen, jeder Zustandsautomat sei
+                // fehlgeschlagen.**
+                if (pArgumente.Count < 1)
+                {
+                    return RubyValue.Nil;
+                }
+
+                // **Und der Block kommt von der Kette und nicht aus
+                // den Argumenten.** `catch(:a) do ... end` haengt den
+                // Block an den Aufruf, **und der Aufruf laeuft ueber
+                // `EvaluateBlock`, das ihn auf `_blockKette` legt**
+                // -- **und `5.tap { }` kommt als Argument an, weil
+                // `tap` einen Empfaenger hat** -- **und `catch` hat
+                // keinen, also steht bei ihm der Block nirgends in
+                // der Argumentliste**
+                // -- **gemessen: `catch` gab nil ohne Diagnose.**
+                var block = pArgumente.Count > 0
+                    && pArgumente[^1].Kind == RubyValueKind.Proc
+                    ? pArgumente[^1].Block
+                    : _blockKette.Count > 0
+                        ? _blockKette[^1]
+                        : null;
+
+                // **Und `BlockAufrufen` will den ganzen Block-Knoten,
+                // und nicht den Rumpf** -- **es liest sich selbst
+                // `Children[1]` fuer die Parameter und `Children[2]`
+                // fuer den Rumpf** -- **und ein Leser, der den Rumpf
+                // uebergibt, gibt einen Knoten, der drei Kinder hat
+                // und keiner davon ein Rumpf ist.**
+                if (block == null)
+                {
+                    return RubyValue.Nil;
+                }
+
+                var marke = new WurfMarke { Name = pArgumente[0] };
+                _wurfMarken.Add(marke);
+                RubyValue ergebnis;
+                try
+                {
+                    ergebnis = BlockAufrufen(block, [], RubyValue.OfSymbol("self"));
+                }
+                finally
+                {
+                    _wurfMarken.Remove(marke);
+                }
+
+                return marke.Geworfen ? marke.Wert : ergebnis;
+
+            case "tap":
+                // **Und `tap` gibt den Empfaenger zurueck, und nicht das
+                // Ergebnis des Blocks.** Das ist der ganze Punkt:
+                // `5.tap { |v| v }` ist 5, **und ein Leser, der das
+                // Ergebnis des Blocks gaebe, wuerde aus einer Kette
+                // `x.tap { setup }` ein `nil` machen.**
+                return BlockAnSender(pEmpfaenger, pEmpfaenger, pArgumente, pLeser);
+
+            case "then":
+            case "yield_self":
+                return BlockAnSender(pEmpfaenger, null, pArgumente, pLeser);
+
+            case "print":
+                // **Und `print` schreibt zusammen, ohne Trenner, und
+                // gibt nil zurueck.** `print 1, 2` schreibt `12`
+                // -- **und ein Leser, der die Argumente mit einem
+                // Leerzeichen trennte, wuerde `1 2` schreiben**,
+                // **und das ist der Unterschied zwischen den beiden
+                // Ausgaben, und beide stehen in jedem Skript.**
+                return Schreibt(pArgumente, false);
+
+            case "puts":
+                // **Und `puts` schreibt jede Zeile einzeln und gibt
+                // nil zurueck.** `puts [1, 2]` schreibt `1` und `2`,
+                // **und nicht `[1, 2]`** -- **und ein Leser, der die
+                // Liste als Text schriebe, wuerde bei jeder Debug-Zeile
+                // eines Fensters ein anderes zeigen.**
+                return Schreibt(pArgumente, true);
+
+            case "p":
+                // **Und `p` gibt sein Argument zurueck, und nicht
+                // nil.** Das ist der ganze Unterschied zu `puts`,
+                // **und `p` steht in jedem Skript, das eine Variable
+                // ansehen will, ohne den Wert zu verlieren.**
+                if (pArgumente.Count < 1)
+                {
+                    return RubyValue.Nil;
+                }
+
+                Schreibt(pArgumente, false);
+                return pArgumente[0];
+
+            default:
+                return null;
+        }
+    }
+
     private RubyValue BlockAufrufen(
         RubyNode pBlock, IReadOnlyList<RubyValue> pArgumente, RubyValue pSelbst)
     {
@@ -10868,6 +11194,37 @@ public sealed class RubyInterpreter
         or "instance_variable_defined?"
         or "remove_instance_variable";
 
+    /// <summary>
+    /// Whether the language answers the name itself, and not a script.
+    /// </summary>
+    /// <param name="pName">The name as written.</param>
+    /// <returns>true when the language has it.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a name without brackets has to be found before it is
+    /// called.</strong> `puts 3` and `p 4` are written without brackets,
+    /// **and the parser makes them an <c>Identifier</c>**, **and
+    /// <c>Name()</c> looks for a method** -- **and measured:
+    /// <c>print 1, 2</c> wrote <c>12</c> and then nothing, because
+    /// <c>puts 3</c> and <c>p 4</c> never reached the call at all.**
+    /// </para>
+    /// <para>
+    /// <strong>And the difference from <c>EingebauterName</c> is that
+    /// this one is about the name being callable at all</strong> — **and
+    /// <c>EingebauterName</c> is about a name the reader gives every
+    /// type, like <c>new</c> and <c>instance_variables</c>.
+    /// </para>
+    /// </remarks>
+    private static bool Sprachname(string pName) => pName
+        is "catch" or "throw"
+        or "tap" or "then" or "yield_self"
+        or "print" or "puts" or "p"
+        or "require" or "require_relative" or "load"
+        or "raise" or "loop"
+        or "block_given?" or "iterator?"
+        or "format" or "sprintf" or "printf"
+        or "Integer" or "Float" or "String" or "Array" or "Hash";
+
     private static bool IstFrage(string pMethode) => pMethode
         is "name"
         or "superclass"
@@ -11471,7 +11828,8 @@ public sealed class RubyInterpreter
         // ist der Satz, an dem jede RPG-Maker-Skriptdatei endet.**
         var empfaengerName = _aktuellerTyp?.Name ?? TopLevelName();
         if (empfaengerName != null
-            && FindMethod(empfaengerName, name) != null)        {
+            && (FindMethod(empfaengerName, name) != null
+                || Sprachname(name)))        {
             return Call(new RubyNode
             {
                 Kind = RubyNodeKind.SelfCall,

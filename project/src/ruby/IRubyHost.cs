@@ -185,6 +185,37 @@ public interface IRubyHost
 
     /// <summary>What this host does know, for a diagnostic.</summary>
     IReadOnlyList<string> KnownMethods { get; }
+
+    /// <summary>
+    /// Write text, as `print` and `puts` do.
+    /// </summary>
+    /// <param name="pText">The text as written.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a default member, so no host has to
+    /// implement it.</strong> <c>print</c> and <c>puts</c> are Kernel
+    /// methods and the interpreter answers them itself, **and where the
+    /// text goes is the game's business, and not the reader's** — **and
+    /// a host that wants the text goes here and a host that does not gets
+    /// nothing, which is the honest answer for a debug line.**
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that wrote to the console itself would take
+    /// that away from the game.</strong>
+    /// </para>
+    /// </remarks>
+    void Write(string pText)
+    {
+    }
+
+    /// <summary>
+    /// Write one line, as `puts` does.
+    /// </summary>
+    /// <param name="pText">The text as written.</param>
+    void WriteLine(string pText)
+    {
+        Write(pText + System.Environment.NewLine);
+    }
 }
 
 /// <summary>

@@ -10194,3 +10194,32 @@ nur negativer Exponent gibt eine reelle Zahl.
 unary minus zu einem `arg`. `(−7).abs` ist 7.
 
 `All 2086 tests passed`, Mutationen 9/9 (8 durch Tests, 1 per compile).
+
+
+## Und `catch`, `tap` und die Ausgaben sind jetzt Sprache
+
+**Gemessen vorher:** alles nil mit *self has no method 'catch' on this
+host* — **und die Meldung geht über den Host, obwohl es der Leser ist,
+der die Sprache nicht gebaut hat.**
+
+**Drei Befunde, alle gemessen:**
+1. **Der Block kam aus dem falschen Ort** — er hängt am Aufruf und
+   liegt auf `_blockKette`, **und es ist der ganze Blockknoten, weil
+   `BlockAufrufen` `Children[1]`/`Children[2]` liest**. `5.tap { }`
+   kommt als Argument an, **weil `tap` einen Empfänger hat**.
+2. **Ein Name ohne Klammern erreicht `Call` nur, wenn `FindMethod`
+   etwas findet** — `puts 3` und `p 4` sind Identifier, **und
+   `Name()` sah nur Skriptmethoden**: `print 1, 2` schrieb, danach
+   nichts.
+3. **`puts [1, 2]` war `puts[1, 2]`** — **Ruby liest eine Klammer nach
+   einem Leerzeichen als Argument**, **und der Tokenabstand ist der
+   ganze Unterschied.**
+
+**Und `IRubyHost` hat `Write`/`WriteLine` als Default-Member** — kein
+Host muss sie bauen.
+
+**Und ich hatte bei `throw` 21 erwartet und gemessen wurde 1** — ein
+Wurf verlässt *jeden* Block bis zum `catch`, **und der Leser hatte
+recht; der Test steht jetzt auf dem gemessenen Wert.**
+
+`All 2092 tests passed`, Mutationen 6/7 (Ueberlebende: ein No-op).

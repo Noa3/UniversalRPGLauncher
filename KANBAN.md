@@ -449,42 +449,45 @@ baut.** Kein Spiel-Host muss etwas bereitstellen.
 `def setup` auf oberster Ebene steht in der zweiten Datei jedes VX-,
 VX-Ace- und XP-Projekts.
 
-**Und `h[:a] = 1` funktioniert, und das ist der Satz, mit dem jedes
-Menue, jede Option und jeder Speicherplatz beginnt.**
+**Und `catch`/`throw`, `tap`/`then`, `print`/`puts`/`p` sind jetzt
+Sprache, und nicht Host.**
 
-**Gemessen vorher:** nil, `*a value has no method '[]=' on this host*`,
-**und `h.size` war 0.**
+**Gemessen vorher:** alles nil mit *self has no method 'catch' on this
+host* -- **und diese Meldung geht ueber den Host, obwohl es der
+Leser ist, der die Sprache nicht gebaut hat.**
 
-**Die Ursache war nicht der Hash, sondern der Schreibpfad:**
-`h[:a] = 1` ist `[]=(:a, 1)`, **und der Knoten, den eine Zuweisung
-baut, trug den Empfaenger und den Wert und nicht die Argumente des
-`[]`-Aufrufs** -- **der Schluessel ging verloren** -- **und ein Hash,
-der ohne Schluessel geschrieben wird, ist eine Liste.**
+**Drei Befunde, alle gemessen:**
 
-**Und `RubyValue.Items` war `IReadOnlyList`, obwohl der Wert immer ein
-`List` war** -- **und die anderen Stellen dieses Lesers schrieben
-schon hindurch** -- **und ein Typ, der "nur lesen" sagt, waehrend
-jeder Aufrufer schreibt, ist ein Typ, der luegt.**
+1. **Der Block kam zweimal aus dem falschen Ort.** Er haengt am
+   Aufruf, und `EvaluateBlock` legt ihn auf `_blockKette` -- **und
+   es ist der ganze Blockknoten, und nicht der Rumpf**, **weil
+   `BlockAufrufen` sich selbst `Children[1]` fuer die Parameter und
+   `Children[2]` fuer den Rumpf liest.** Und `5.tap { }` kommt als
+   Argument an, **weil `tap` einen Empfaenger hat und `catch`
+   keinen.**
+2. **Ein Name ohne Klammern erreicht den Aufruf nur, wenn
+   `FindMethod` etwas findet.** `puts 3` und `p 4` sind ohne
+   Klammern, **und der Parser macht daraus einen `Identifier`, und
+   `Name()` sah nur nach einer Skriptmethode** -- **und gemessen
+   schrieb `print 1, 2` und danach nichts.**
+3. **`puts [1, 2]` war `puts[1, 2]`.** Der Indexzweig nahm jede
+   Klammer, **und Ruby liest eine Klammer nach einem Leerzeichen
+   als Argument.** Der Abstand zweier Token ist der ganze
+   Unterschied, **und der Lexer weiss ihn.**
 
-**Neu, alle gemessen:** `key?`/`has_key?` (fragt den Schluessel, nicht
-den Inhalt), `fetch` mit Vorgabe, `pop`, `shift`, `unshift` (Reihenfolge
-der Argumente bleibt), `insert`, `a[k] = v` mit Aufwachsen bis zur
-Stelle und `nil` in der Luecke, `zero?`, `nonzero?`, `even?`, `odd?`,
-`abs`, `succ`, `pred`, `pow`, `divmod`, `gcd`, `lcm`, `round`, `floor`,
-`ceil`.
+**Und `IRubyHost` hat jetzt `Write` und `WriteLine` als
+Default-Member** -- **kein Host muss sie bauen, und ein Leser, der
+selbst auf die Konsole schriebe, wuerde das dem Spiel wegnehmen.**
 
-**Und `**` haelt die Art, die Ruby gibt** (`numeric.c` Zeilen 1889,
-1890, 1893, 1895): `2 ** 10` war **immer 1024.0** -- **ein Spiel, das
-das in ein Namensfeld schreibt, zeigt 1024.0, und ein Spiel, das es
-mit `==` gegen eine ganze Zahl vergleicht, bekommt false.** Jetzt ist
-es eine ganze Zahl, `2 ** 0` ist 1, `2 ** 1` ist die Basis, und nur ein
-negativer Exponent gibt eine reelle Zahl.
+**Und ich hatte bei `throw` 21 erwartet und gemessen wurde 1** --
+**und der Leser hatte recht:** ein Wurf verlaesst *jeden* Block bis
+zum `catch`, **und der Test steht jetzt auf dem gemessenen Wert
+und nicht auf dem erwarteten.**
 
-**Und drei Testluecken, die die Mutationen sichtbar gemacht haben:**
-das Aufwachsen einer Liste, die nullte Potenz und die negative. Alle
-drei jetzt getestet. **Mutationen 9/9, davon 8 durch Tests und eine
-per `compile`** (ein Ternär mit Komma im Ausdruck laesst sich nicht
-als gueltiges C# schreiben).
+Mutationen 6/7, **und die Ueberlebende ist ein No-op:** `p` steht
+auch im Objektweg, **und ein Leser, der es an zwei Orten beantwortet,
+antwortet es an beiden gleich** -- **und die Liste ist damit eine
+Beschreibung und keine Regel.**
 
 *Ein Ueberleben, das man messen kann, ist eine Angabe und kein, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
