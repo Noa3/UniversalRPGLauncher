@@ -10988,3 +10988,29 @@ die Runtime liest die Route einer Seite nicht** -- **und `isMoving()`
 bleibt immer `false`, weil die Figur ihre Kachel nie verlaesst** --
 **die Laufbahnbewegung und die Wegefuehrung fehlen beide.**
 
+## Und die Laufbahn-Konstanten waren falsch
+
+**`MzMoveRoute` trug fuer 20 bis 28 RM-Zahlen unter MZ-Namen** --
+**20 war als "ein Schritt" notiert, und gemessen ist es
+`ROUTE_TURN_90D_R`.** **Es gibt keinen Schrittcode bei diesen Nummern.**
+
+**Und keine dieser Zahlen wurde irgendwo benutzt**, **deshalb fiel der
+Fehler erst beim Messen auf und nicht durch einen Test.**
+
+**Und `turnRight90` ist eine Tabelle, keine Zahlendrehung:** **unten wird
+links, links wird oben, oben wird rechts, rechts wird unten.**
+
+**Und `numCommands = list.length - 1` aus `advanceMoveRouteIndex` ist der
+Sprungpunkt einer wiederholenden Laufbahn, nicht das Listenende** -- **der
+Endpunkt wird ausgefuehrt.** **Ich hatte das falsch gelesen, meine Regel
+liess jede Laufbahn einen Schritt zu kurz laufen, und der bestehende Test
+hat es sofort gemerkt. Zurueckgenommen.**
+
+**`All 2188 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **die Runtime liest die `moveRoute` einer
+Seite noch nicht ein** -- **`MzMoveRoute` kann eine Liste aus
+Parametern lesen und abarbeitet sie, aber nichts verbindet es mit den
+Karten dieses Projekts** -- **und `isMoving()` bleibt `false`, weil keine
+Figur ihre Kachel verlaesst.**
+

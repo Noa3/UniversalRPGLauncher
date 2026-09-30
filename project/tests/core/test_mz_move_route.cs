@@ -540,4 +540,138 @@ partial class TestMzMoveRoute : TestBase
             + " code a game never writes is not one this reader has to act on"
             + $" or refuse; the codes are {string.Join(",", codes.OrderBy(c => c))}");
     }
+
+    /// <summary>
+    /// Twenty is a quarter turn and not a walk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this class carried wrong numbers for 20 to 28 until
+    /// they were measured.</strong> The list here said 20 was a walk, 21 a
+    /// random step, 22 to 25 "face a way" and 26 to 28 a quarter turn.
+    /// <strong>Measured in <c>js/rmmz_objects.js</c>, none of that is
+    /// true</strong> — <strong>20 and 21 turn a figure a quarter, 22
+    /// turns it about, and 23 turns it a quarter either way.</strong>
+    /// <strong>There is no walk code and no face code.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the wrong numbers sat there unused</strong>, which is
+    /// why nothing caught them: <strong>no code in the project referred to
+    /// them</strong>. <strong>A wrong constant that nothing reads is not
+    /// harmless — it is a wrong constant waiting for the first reader.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_ZwanzigIstEineVierteldrehungUndKeinSchritt()
+    {
+        AssertEq(MzMoveRoute.Turn90DegreeRight, 20,
+            "**and 20 turns a figure a quarter to the right**");
+        AssertEq(MzMoveRoute.Turn90DegreeLeft, 21,
+            "**and 21 turns a quarter to the left**");
+        AssertEq(MzMoveRoute.Turn180Degree, 22,
+            "**and 22 turns a figure about**");
+        AssertEq(MzMoveRoute.Turn90DegreeRightOrLeft, 23,
+            "**and 23 turns a quarter either way**");
+        AssertEq(MzMoveRoute.TurnDown, 16,
+            "**and 16 turns down, and a walk down is 1**");
+        AssertEq(MzMoveRoute.MoveDown, 1,
+            "**and moving down is 1, and not 20**");
+    }
+
+    /// <summary>
+    /// A quarter turn follows the engine's own table.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the table is not the one a reader would guess.</strong>
+    /// Measured: <c>turnRight90</c> turns down into left, left into up,
+    /// up into right, and right into down.
+    /// </para>
+    /// <para>
+    /// <strong>And "right" here means right as seen looking down at a
+    /// figure from above</strong>, <strong>which is not what the word
+    /// means on a compass</strong> — <strong>and a reader that rotated
+    /// the numbers instead of following the table turned every figure the
+    /// wrong way while looking exactly right.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_EineVierteldrehungFolgtDerTabelleDesMotors()
+    {
+        // **Und die Tabelle des Motors, woertlich.**
+        AssertEq(MzRouteCode.QuarterRight(MzCharacter.Down), MzCharacter.Left,
+            "**and down becomes left when turning a quarter right**");
+        AssertEq(MzRouteCode.QuarterRight(MzCharacter.Left), MzCharacter.Up,
+            "**and left becomes up**");
+        AssertEq(MzRouteCode.QuarterRight(MzCharacter.Up), MzCharacter.Right,
+            "**and up becomes right**");
+        AssertEq(MzRouteCode.QuarterRight(MzCharacter.Right), MzCharacter.Down,
+            "**and right becomes down**");
+
+        // **Und viermal rechts ist wieder unten, und zweimal ist oben.**
+        var richtung = MzCharacter.Down;
+        for (var mal = 0; mal < 4; mal++)
+        {
+            richtung = MzRouteCode.QuarterRight(richtung);
+        }
+
+        AssertEq(richtung, MzCharacter.Down,
+            "**and four quarter turns come back to where it started**");
+        AssertEq(
+            MzRouteCode.QuarterLeft(MzRouteCode.QuarterLeft(MzCharacter.Down)),
+            MzCharacter.Up,
+            "**and two quarter turns turn a figure about**");
+    }
+
+    /// <summary>
+    /// A route of turns does what the project's own routes do.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the project's measured route, verbatim.</strong>
+    /// Seven pages carry <c>18, 16, 17, 19</c> and then the end — right,
+    /// down, left, up — <strong>and nothing else.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the figure ends facing up, and it never left its
+    /// tile.</strong> <strong>A reader that read 16 as a move walked it off
+    /// the map.</strong> <strong>So the assertion is both halves at once:
+    /// the facing, and the tile.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieLaufbahnDiesesSpielsDrehtUndGehtNicht()
+    {
+        var map = Map.Open();
+        var character = new MzCharacter(5, 5);
+        var route = MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":18,\"parameters\":[],\"indent\":null},"
+            + "{\"code\":16,\"parameters\":[],\"indent\":null},"
+            + "{\"code\":17,\"parameters\":[],\"indent\":null},"
+            + "{\"code\":19,\"parameters\":[],\"indent\":null},"
+            + "{\"code\":0,\"parameters\":[],\"indent\":null}],"
+            + "\"repeat\":false,\"skippable\":false,\"wait\":true}");
+
+        character.Route.Force(route);
+        AssertEq(character.Direction, MzCharacter.Down,
+            "**and it starts facing down**");
+
+        // **Und jeder Schritt kommt in einem eigenen Bild, und der letzte
+        // Eintrag wird auch ausgefuehrt.**
+        character.Route.Step(character, map);
+        AssertEq(character.Direction, MzCharacter.Right,
+            "**and 18 turns it right**");
+        character.Route.Step(character, map);
+        AssertEq(character.Direction, MzCharacter.Down,
+            "**and 16 turns it down**");
+        character.Route.Step(character, map);
+        AssertEq(character.Direction, MzCharacter.Left,
+            "**and 17 turns it left**");
+        character.Route.Step(character, map);
+        AssertEq(character.Direction, MzCharacter.Up,
+            "**and 19 turns it up**");
+
+        AssertEq(character.X, 5,
+            "**and it never left its tile** -- and 18, 16, 17 and 19 are "
+                + "ROUTE_TURN_RIGHT, DOWN, LEFT and UP, and a reader that "
+                + "read 16 as a move walked this figure off the map");
+        AssertEq(character.Y, 5, "**and its row is untouched as well**");
+    }
 }

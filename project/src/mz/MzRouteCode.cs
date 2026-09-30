@@ -25,6 +25,18 @@ public static class MzRouteCode
     /// <summary>The route is finished.</summary>
     public const int End = 0;
 
+    /// <summary>Facing down, which is the engine's own number.</summary>
+    public const int DirectionDown = 2;
+
+    /// <summary>Facing left.</summary>
+    public const int DirectionLeft = 4;
+
+    /// <summary>Facing right.</summary>
+    public const int DirectionRight = 6;
+
+    /// <summary>Facing up.</summary>
+    public const int DirectionUp = 8;
+
     /// <summary>Move one tile down.</summary>
     public const int MoveDown = 1;
 
@@ -51,6 +63,25 @@ public static class MzRouteCode
 
     /// <summary>Turn to face up, and stay put.</summary>
     public const int TurnUp = 19;
+
+    /// <summary>Turn a quarter to the right.</summary>
+    /// <remarks>
+    /// <strong>And this is measured too</strong>, and it was the first
+    /// thing a reader would miss after 16 to 19: <strong>the engine has
+    /// four more turns between 19 and 24</strong>, <strong>and a reader
+    /// that treated 20 and 21 as something else turned a figure the
+    /// wrong quarter.</strong>
+    /// </remarks>
+    public const int TurnQuarterRight = 20;
+
+    /// <summary>Turn a quarter to the left.</summary>
+    public const int TurnQuarterLeft = 21;
+
+    /// <summary>Turn about.</summary>
+    public const int TurnAbout = 22;
+
+    /// <summary>Turn a quarter to the right or to the left.</summary>
+    public const int TurnQuarterRightOrLeft = 23;
 
     /// <summary>Turn to face a random way.</summary>
     public const int TurnRandom = 24;
@@ -114,6 +145,50 @@ public static class MzRouteCode
 
     /// <summary>Play a sound.</summary>
     public const int PlaySe = 44;
+
+    /// <summary>
+    /// Turns a figure a quarter to the right, as the engine does.
+    /// </summary>
+    /// <param name="pDirection">The direction it faces now.</param>
+    /// <returns>The direction it faces afterwards.</returns>
+    /// <remarks>
+    /// <strong>And the engine's own table, verbatim:</strong> down
+    /// becomes left, left becomes up, up becomes right, right becomes
+    /// down. <strong>And that is not what "right" means on a
+    /// compass</strong> — <strong>it is what it means looking at a
+    /// figure from above in a top-down world</strong> — <strong>and a
+    /// reader that rotated the numbers instead of following this table
+    /// turned every figure the wrong way while looking exactly
+    /// right.</strong>
+    /// </remarks>
+    public static int QuarterRight(int pDirection)
+    {
+        return pDirection switch
+        {
+            2 => 4,
+            4 => 8,
+            8 => 6,
+            6 => 2,
+            _ => pDirection,
+        };
+    }
+
+    /// <summary>
+    /// Turns a figure a quarter to the left, as the engine does.
+    /// </summary>
+    /// <param name="pDirection">The direction it faces now.</param>
+    /// <returns>The direction it faces afterwards.</returns>
+    public static int QuarterLeft(int pDirection)
+    {
+        return pDirection switch
+        {
+            2 => 6,
+            6 => 8,
+            8 => 4,
+            4 => 2,
+            _ => pDirection,
+        };
+    }
 
     /// <summary>
     /// Whether a code is one that changes a direction without moving.

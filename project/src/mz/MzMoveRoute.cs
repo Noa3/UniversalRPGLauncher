@@ -68,24 +68,40 @@ public sealed class MzMoveRoute
     public const int TurnLeft = 17;
     public const int TurnRight = 18;
     public const int TurnUp = 19;
-    public const int Walk = 20;
-    public const int StepRandom = 21;
-    public const int FaceUp = 22;
-    public const int FaceRight = 23;
-    public const int FaceDown = 24;
-    public const int FaceLeft = 25;
-    public const int Turn90DegreeRight = 26;
-    public const int Turn90DegreeLeft = 27;
-    public const int Turn180Degree = 28;
+    // **Und 20 bis 28 waren hier vorher etwas anderes.** **Eine erste
+    // Fassung dieser Liste nannte 20 einen Schritt, 21 einen
+    // Zufallsschritt und 22 bis 25 ein Umsehen, und 26 bis 28 eine
+    // Vierteldrehung.** **Gemessen an `js/rmmz_objects.js` des
+    // fertigen Spiels sind sie das nicht**: **20 und 21 drehen eine
+    // Figur um 90 Grad, 22 dreht sie um 180, und 23 dreht sie um 90
+    // Grad nach rechts oder links.** **Ein Schritt und ein Umsehen gibt
+    // es nicht.** **Und weil keine dieser Zahlen irgendwo benutzt
+    // wurde, fiel der Fehler erst beim Messen auf.**
+    public const int Turn90DegreeRight = 20;
+    public const int Turn90DegreeLeft = 21;
+    public const int Turn180Degree = 22;
+    public const int Turn90DegreeRightOrLeft = 23;
+    public const int TurnRandom = 24;
+    public const int TurnToward = 25;
+    public const int TurnAway = 26;
+    public const int SwitchOn = 27;
+    public const int SwitchOff = 28;
     public const int ChangeSpeed = 29;
     public const int ChangeFrequency = 30;
-    public const int ChangePriorityType = 31;
-    public const int ChangeImage = 32;
+    public const int WalkAnimeOn = 31;
+    public const int WalkAnimeOff = 32;
     public const int StepAnimeOn = 33;
     public const int StepAnimeOff = 34;
-    public const int StepAnimeForce = 35;
+    public const int DirectionFixOn = 35;
+    public const int DirectionFixOff = 36;
+    public const int ThroughOn = 37;
+    public const int ThroughOff = 38;
     public const int TransparentOn = 39;
     public const int TransparentOff = 40;
+    public const int ChangeImage = 41;
+    public const int ChangeOpacity = 42;
+    public const int ChangeBlendMode = 43;
+    public const int PlaySe = 44;
 
     private MzRouteStep.Route _route;
     private bool _forced;
@@ -182,6 +198,33 @@ public sealed class MzMoveRoute
                 + $" {pCharacter.Y} and the step {_index} waits for it";
         }
 
+        // **Und der Endpunkt wird sehr wohl ausgefuehrt, und das ist
+        // der Punkt, an dem sich ein Leser geirrt hat.**
+        //
+        // **`updateRoutineMove` liest `list[_moveRouteIndex]` und ruft,
+        // wenn es einen Eintrag gibt, `processMoveCommand` und danach
+        // `advanceMoveRouteIndex`** -- **gemessen in
+        // `js/rmmz_objects.js`.** **Der Endpunkt ist also ein ganz
+        // gewoehnlicher Eintrag, und `processRouteEnd` ist der Zweig,
+        // der ihn behandelt.**
+        //
+        // **Und das `numCommands = list.length - 1` aus
+        // `advanceMoveRouteIndex` ist nicht das Ende der Liste, sondern
+        // die Stelle, ab der eine wiederholende Laufbahn zurueck auf
+        // null springt.** **Ein Leser, der das fuer das Listenende
+        // hielt, liess jede Laufbahn einen Schritt zu kurz laufen** --
+        // **und der Test dieses Projekts hat es sofort gemerkt, weil
+        // eine aus fuenf Schritten gemachte Figur nur vier Kacheln
+        // weiterkam.**
+        //
+        // **Und `processRouteEnd` macht zweierlei, was zusammen den
+        // Unterschied ergibt:** **bei `repeat` setzt es den Index auf
+        // minus eins, damit der Sprung auf null greift**, **und ohne
+        // `repeat` nimmt es die erzwungene Laufbahn zurueck und setzt
+        // `setMovementSuccess(false)`** -- **und weil die
+        // Erfolgsmeldung nun falsch ist und `skippable` nicht gesetzt
+        // ist, bleibt der Index stehen, und `IsDone` stimmt.**
+
         var step = _route.List[_index];
         _index++;
         return Run(pCharacter, step, pMap);
@@ -253,6 +296,39 @@ public sealed class MzMoveRoute
             case TurnUp:
                 pCharacter.TurnTo(MzCharacter.Up);
                 return "the character turns up";
+
+            case Turn90DegreeRight:
+                // **`turnRight90`**, and its own table: **unten wird
+                // links, links wird oben, oben wird rechts, rechts wird
+                // unten.** **Und das ist nicht das, was "rechts" auf
+                // einem Kompass meint** -- **es ist das, was es meint,
+                // wenn man von oben auf eine Figur sieht** -- **und ein
+                // Leser, der die Zahlen drehte statt dieser Tabelle zu
+                // folgen, drehte jede Figur falsch herum und sah genau
+                // richtig aus.**
+                pCharacter.TurnTo(MzRouteCode.QuarterRight(pCharacter.Direction));
+                return $"the character turns a quarter right, to"
+                    + $" {pCharacter.Direction}";
+
+            case Turn90DegreeLeft:
+                pCharacter.TurnTo(MzRouteCode.QuarterLeft(pCharacter.Direction));
+                return $"the character turns a quarter left, to"
+                    + $" {pCharacter.Direction}";
+
+            case Turn180Degree:
+                pCharacter.TurnTo(
+                    MzRouteCode.QuarterLeft(
+                        MzRouteCode.QuarterLeft(pCharacter.Direction)));
+                return $"the character turns about, to"
+                    + $" {pCharacter.Direction}";
+
+            case WalkAnimeOn:
+                return "the route asks for a walk animation, and this reader"
+                    + " has no renderer to show it, so the number is kept";
+
+            case WalkAnimeOff:
+                return "the route turns the walk animation off, and this"
+                    + " reader has no renderer to show it";
 
             case ChangeSpeed:
                 // **The parameter is a number the game wrote, and this reader

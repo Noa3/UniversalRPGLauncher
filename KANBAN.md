@@ -11369,3 +11369,58 @@ im Frame stehen blieb.**
 
 **`All 2185 tests passed`, Validator gruen.**
 
+## Und die Laufbahn-Konstanten waren falsch, und niemand benutzte sie
+
+### Der Befund
+
+**`MzMoveRoute` trug RM-Zahlen unter MZ-Namen.** Die Liste nannte:
+
+| Zahl | Bis jetzt behauptet | Gemessen |
+|---|---|---|
+| 20 | ein Schritt | **Vierteldrehung rechts** |
+| 21 | ein Zufallsschritt | **Vierteldrehung links** |
+| 22 | umsehen | **um 180 Grad drehen** |
+| 23 | umsehen | **Vierteldrehung rechts oder links** |
+| 24 | umsehen | **zufaellig drehen** |
+| 25 | umsehen | **zum Spieler drehen** |
+| 26 | Vierteldrehung rechts | **vom Spieler weg drehen** |
+| 27 | Vierteldrehung links | **Schalter einschalten** |
+| 28 | um 180 Grad | **Schalter ausschalten** |
+
+**Und gemessen ist das an `js/rmmz_objects.js` des fertigen Spiels.**
+**Es gibt keinen Schrittcode und keinen Umsehcode bei diesen Nummern.**
+
+### Und sieben dieser Zahlen wurden nirgends benutzt
+
+**Der Fehler fiel nur beim Messen auf, und nicht durch einen Test** --
+**denn kein Code im Projekt verwies auf sie.** **Eine falsche Konstante,
+die niemand liest, ist nicht harmlos -- sie ist eine falsche Konstante,
+die auf den ersten Leser wartet.**
+
+### Und die Vierteldrehung folgt einer Tabelle, die man nicht rät
+
+**Gemessen an `turnRight90`: unten wird links, links wird oben, oben
+wird rechts, rechts wird unten.**
+
+**Und "rechts" heisst hier rechts, wenn man von oben auf eine Figur
+sieht** -- **und nicht das, was das Wort auf einem Kompass meint.**
+**Ein Leser, der die Zahlen drehte statt dieser Tabelle zu folgen,
+drehte jede Figur falsch herum und sah genau richtig aus.**
+
+### Und eine Regel, die ich falsch las und dann liegen liess
+
+**Ich habe `advanceMoveRouteIndex` gelesen und `numCommands =
+list.length - 1` fuer das Listenende gehalten.** **Es ist der Punkt, ab
+dem eine wiederholende Laufbahn auf null zurueckspringt.** **Der
+Endpunkt wird sehr wohl ausgefuehrt** -- **`processRouteEnd` ist der
+Zweig, der ihn behandelt.**
+
+**Meine Regel liess jede Laufbahn einen Schritt zu kurz laufen, und der
+bestehende Test dieses Projekts hat es sofort gemerkt**: **eine Figur
+aus fuenf Schritten kam nur vier Kacheln weiter.** **Ich habe sie
+zurueckgenommen, weil der Test recht hatte und nicht mein Kommentar.**
+
+**Test evidence** `test_mz_move_route.cs` (10), **10/10**.
+
+**`All 2188 tests passed`, Validator gruen.**
+
