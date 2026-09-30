@@ -10315,3 +10315,45 @@ Datei ist.** Derselbe Text als Datei parst.
 
 **Und `| ` bindet in Ruby schwacher als `==`** — mein Test schrieb
 `a == b | a == b`, **und der Leser hat recht, und Ruby auch.**
+
+
+## Und `||` gab `true` statt des Operanden zurueck
+
+**Das ist der schwerste Fund dieser Sitzung, und er kam aus dem
+Skriptlisten-Test, und nicht aus dem Leser.**
+
+**Vorher (Zeile 892): `a || 0` gab `true` zurueck — fuer `a = nil`,
+`a = false`, `a = 1` und `a = 0` gleichermassen.** Und damit war
+`(nil || 0) + 1` ein `NoMethodError: undefined operator '+' for a
+Boolean and a Integer`.
+
+**Und `@n = @n || 0` ist der Zaehler, den man schreibt, wenn man keinen
+hat** — **und damit ist jedes Skript eines VX-Projekts aus dieser Zeit
+an seiner ersten Zeile gescheitert**, **und die Liste lief weiter, und
+das Spiel hatte keine Klassen und keinen Fehler ueber der ersten
+Zeile.**
+
+**Jetzt: `nil || 0` ist 0, `false || 0` ist 0, `1 || 0` ist 1, `0 || 0`
+ist 0.** Und `&&` hat dieselbe Form, **und ist nicht getestet** — **und
+ich melde es als offen, denn `nil` und `false` sind beide falsch, und
+in einer Bedingung ist das dasselbe, und das ist ein Satz und keine
+Messung.**
+
+## Und `RunScripts(IReadOnlyList<string>)` ist die Tuer, die gefehlt hat
+
+**`SkriptLaden` (Zeile 8669) kann alles — Bytes lesen, CP932 dekodieren,
+parsen, auswerten, die Kette fuehren — und war `private`,** und
+oeffentlich gab es nur `RunProgram(IReadOnlyList<RubyNode>)`.
+
+**Und noch eine Luecke kam dazu:** `RunScripts` akzeptierte `"  "`
+(Leerzeichen) als Dateinamen, **und der Host bekam die Frage und die
+Antwort war eine Diagnose ueber eine Datei, die nie jemand
+geschrieben hat** — **jetzt `IsNullOrWhiteSpace`.**
+
+Mutationen 5/5, alle durch Tests. `All 2113 tests passed`.
+
+**Und die vierte Regel lebt, und das ist ehrlich:** der Syntaxfehler
+traegt den Dateinamen in der Ausnahme selbst (`in 'kaputt.rb': ...`),
+**und der Aufrufer setzt ihn noch einmal davor, und ein Test kann nicht
+unterscheiden, welcher der beiden der Grund ist** — **und ich habe die
+tote Regel durch die Regel ersetzt, die den `||`-Fehler toetet.**

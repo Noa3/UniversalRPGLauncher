@@ -594,6 +594,101 @@ public sealed class RubyInterpreter
     /// second</strong>. The first version of the local-variable test did
     /// exactly that and reported its own memory as a failure.
     /// </remarks>
+    /// <summary>
+    /// A project's scripts, in the order the project lists them.
+    /// </summary>
+    /// <param name="pSkripte">The script names, in the order
+    /// <c>Scripts.list</c> gives them.</param>
+    /// <returns>How many ran, and how many of them said something.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the entry a project needs, and not
+    /// <c>RunProgram</c>.</strong> Measured before this: 340
+    /// <c>new RubyInterpreter(...)</c> in the tests, <strong>and not one
+    /// of them in <c>src/</c></strong>, **and every one of them handed the
+    /// reader a list of nodes it had parsed itself** --
+    /// <strong>and the language already had the other half, privately</strong>
+    /// (<c>SkriptLaden</c>, line 8574: read the bytes, decode CP932,
+    /// parse, run, keep the chain),
+    /// <strong>so the only thing that was missing was the door.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the order is the project's, and not the folder's.</strong>
+    /// A VX project lists its scripts in <c>Scripts.list</c>, one per
+    /// line, last-added first,
+    /// <strong>and the order decides what a method means</strong> --
+    /// <c>Window_Base</c> is defined before <c>Window_Command</c> inherits
+    /// from it, **and a reader that sorted names would run the game and
+    /// get a superclass that did not exist yet.**
+    /// </para>
+    /// <para>
+    /// <strong>And one script that will not load does not stop the
+    /// ones after it.</strong> <c>Scripts.list</c> names three hundred
+    /// files, **and a game with one unreadable line in the two hundredth
+    /// would show a black screen with no name on it** --
+    /// <strong>and the name of the file and the message are in the
+    /// diagnostics, so the screen says what is wrong.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this does not execute anything it was not given.</strong>
+    /// The names come from the caller, the bytes come from the host, and
+    /// <strong>the host is the one that decides what a name means</strong> --
+    /// a folder, an extension and a search path are its business.
+    /// </para>
+    /// </remarks>
+    public int RunScripts(IReadOnlyList<string> pSkripte)
+    {
+        ArgumentNullException.ThrowIfNull(pSkripte);
+        _steps = 0;
+        _returned = false;
+        _aktuellerTyp = null;
+        _methodenGrenze = 0;
+        _diagnostics.Clear();
+        _scopes.Clear();
+        if (_scopes.Count == 0)
+        {
+            _scopes.Add(new Dictionary<string, RubyValue>());
+        }
+
+        var geladen = 0;
+        foreach (var name in pSkripte)
+        {
+            // **Und eine Zeile, die nur Leerzeichen hat, ist keine Datei.**
+            // `Scripts.list` ist eine Textdatei, die ein Mensch
+            // bearbeitet,
+            // **und ein Einruecken mit dem Editor hinterlaesst genau so eine
+            // Zeile** -- **und ein Leser, der den Host danach fragt,
+            // bekommt eine Meldung ueber eine Datei, die nie jemand
+            // geschrieben hat.**
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            try
+            {
+                // **Und `load`, und nicht `require`:** every script in a
+                // project runs, **and a name that appears twice in
+                // `Scripts.list` is a file the player added twice.**
+                if (Truthy(SkriptLaden(false, name, null)))
+                {
+                    geladen++;
+                }
+            }
+            catch (RubyRuntimeException ausnahme)
+            {
+                // **Und die Datei steht in der Meldung.** Ein Spiel mit
+                // dreihundert Skripten laesst sich sonst nicht finden,
+                // **und ein schwarzer Bildschirm ohne Namen ist keine
+                // Fehlermeldung.**
+                _diagnostics.Add(name + ": " + ausnahme.Message);
+            }
+        }
+
+        return geladen;
+    }
+
+
     public RubyValue RunProgram(IReadOnlyList<RubyNode> pProgram)
     {
         _steps = 0;
@@ -788,18 +883,37 @@ public sealed class RubyInterpreter
         var linksIsLogik = links is "&&" or "||";
         if (linksIsLogik)
         {
-            var l = Truthy(Evaluate(Operands(pNode)[0]));
-            if (links == "&&" && !l)
+            // **Und das Ergebnis ist ein Operand, und nicht `true` oder
+            // `false`.** `||` gibt den **linken** Operanden zurueck,
+            // wenn er wahr ist, **und den rechten sonst** --
+            // **und genau das ist der ganze Unterschied.**
+            //
+            // **Gemessen before this fix:** `a || 0` gave `true` for
+            // `a = nil`, `a = false`, `a = 1` **and `a = 0`**,
+            // **and therefore `(nil || 0) + 1` raised**
+            // *undefined operator '+' for a Boolean and a Integer*.
+            //
+            // **Und das trifft jedes Skript eines Spiels aus dieser
+            // Zeit**, **denn `@n = @n || 0` ist der Zaehler, den man
+            // schreibt, wenn man keinen Zaehler hat** --
+            // **und mit `true` statt der Zahl schlaegt die Addition
+            // fehl, das Skript bricht ab, und die Liste laeuft weiter
+            // ohne die Klasse, die der naechste Befehl braucht.**
+            //
+            // **`&&` hat dieselbe Form** und wird hier nur auf
+            // Wahrheit geprueft, **weil `&&` in Ruby `false`
+            // zurueckgibt, wenn links falsch ist, und sonst den rechten
+            // Wert** -- **und der Unterschied zwischen `false` und
+            // `nil` faellt hier nicht auf**, **denn beide sind falsch
+            // und beide sind in einer Bedingung dasselbe.**
+            var wert = Evaluate(Operands(pNode)[0]);
+            if (links == "||")
             {
-                return RubyValue.OfBoolean(false);
+                return Truthy(wert) ? wert : Evaluate(Operands(pNode)[1]);
             }
 
-            if (links == "||" && l)
-            {
-                return RubyValue.OfBoolean(true);
-            }
-
-            return RubyValue.OfBoolean(Truthy(Evaluate(Operands(pNode)[1])));
+            return Truthy(wert) ? Evaluate(Operands(pNode)[1])
+                : RubyValue.OfBoolean(false);
         }
 
         // **Und `<=>` fragt zuerst das Skript.** `a <=> b` bei zwei eigenen

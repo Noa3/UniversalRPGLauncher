@@ -450,37 +450,51 @@ baut.** Kein Spiel-Host muss etwas bereitstellen.
 VX-Ace- und XP-Projekts.
 
 **Und VX/VX Ace: der Ruby-Leser ist implementiert, und die Engine
-ruft ihn nirgends auf.**
+ruft ihn an -- seit dieser Sitzung an einer Stelle.**
 
-**Das ist die Luecke zwischen "Ruby kann das" und "das Spiel laeuft",
-und sie ist eine Verdrahtung und keine Sprache:** `RgssEngineRuntime`
-meldet selbst *Ruby, Game.exe, RGSS DLLs, and external runtimes were
-not executed* und *runtime initialization remains metadata-only*.
+**Und ich habe die Luecke zuerst falsch benannt: ich habe sie eine
+Entscheidung genannt, und sie war eine halbe Stunde Arbeit und ein
+Fehler.**
 
-**Und gemessen: 340 Aufrufe von `new RubyInterpreter(...)` in 36
-Testdateien, und keine einzige davon in `src/`.** **Und es gab
-vor dieser Sitzung keine Fixture eines echten Spiels in der ganzen
-Baum.**
+**Gemessen, war fehlte:** `SkriptLaden` (Zeile 8669) kann alles -- Bytes
+lesen, CP932 dekodieren, parsen, auswerten, die Kette fuehren -- **und
+es war `private`,** **und oeffentlich gab es nur
+`RunProgram(IReadOnlyList<RubyNode>)`,** **und also musste jeder
+Aufrufer selbst lexen und parsen.** **Die Haelfte war da, und die Tuer
+fehlte.**
 
-**Und jetzt laeuft die erste Skriptdatei eines VX-Projekts als Test**
-(`tests/fixtures/ruby/vx_window_base.rb`): eine Klasse, die `Window
-erbt -- **einen Namen, den der Leser nie gesehen hat und nicht
-vortaeuschen darf**, weil `Window` aus dem RTP kommt; eine Konstante;
-zwei Bedingungen, eine mit `else`; eine globale; eine Methode, die dem
-Empfaenger zuweist. **Ergebnis: ein Knoten, keine Diagnose,
-`initialize` und `refresh` sind Methoden.**
+**Und `RunScripts(IReadOnlyList<string>)` ist jetzt diese Tuer:**
+die Namen kommen vom Aufrufer, die Bytes vom Host, **und die Reihenfolge
+ist die des Projekts** -- `Scripts.list`, letzte Datei zuerst.
 
-**Und ich habe es zuerst zeilenweise gemessen, und jede Zeile warf
-*end was expected, but the script ends first* -- **weil eine Zeile
-keine Datei ist**, **und eine Zeile hat kein `end`, das das `def
-schliesst, das sie eroeffnet.** **Derselbe Text als Datei parst.**
+**Und der Befund, der diese Tuer aufgemacht hat, ist ein Sprachfehler
+und keine Verdrahtung:** `@n = @n || 0` ist der Zaehler, den man schreibt,
+wenn man keinen hat, **und `||` gab `true` zurueck statt des Operanden**
+-- **gemessen fuer `nil`, `false`, `1` und `0` gleichermassen**
+(`RubyInterpreter.cs` Zeile 892, vorher), **und `(nil || 0) + 1` warf
+`undefined operator '+' for a Boolean and a Integer`.**
 
-**Und damit ist gemessen: der Leser nimmt eine echte VX-Datei. Was
-fehlt, ist die Verdrahtung von der Engine zu ihm -- und die ist eine
-Entscheidung, keine Messung.**
+**Und das heisst: jedes Skript eines VX-Projekts aus dieser Zeit, das
+so einen Zaehler hat, ist an seiner ersten Zeile gescheitert** -- **und die
+Liste lief weiter, und das Spiel hatte keine Klassen und keinen Fehler
+ueber der ersten Zeile.**
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und kein
-Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+**Und `||` gibt jetzt den Operanden zurueck:** `nil || 0` ist 0,
+`false || 0` ist 0, `1 || 0` ist 1, `0 || 0` ist 0.
+
+**Und `&&` habe ich mitgemessen und nicht getestet** -- **und ich melde es
+als offen:** `nil` und `false` sind beide falsch, **und in einer
+Bedingung ist das dasselbe, und das ist ein Satz und keine Messung.**
+
+**Und vier weitere Regeln, und vier davon haben die Tests getoetet und
+eine lebt, und die ist ehrlich nicht testbar** -- **denn
+`SkriptLaden` setzt den Dateinamen in die Ausnahme selbst
+(`in 'kaputt.rb': ...`),** **und der Aufrufer setzt ihn noch einmal
+davor,** **und ein Test kann nicht unterscheiden, welcher der beiden der
+Grund ist.** **Also habe ich die tote Regel durch die Regel ersetzt,
+die den `||`-Fehler toetet,** **und das ist 5/5 durch Tests.**
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und kein*Ein Ueberleben, das man messen kann, ist eine Angabe und keinFehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 
