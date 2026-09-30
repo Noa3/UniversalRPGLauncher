@@ -10095,3 +10095,24 @@ eingebauten Namen und vor `EigeneMethode`.
 
 Mutationen 8/12, vier Ueberlebende alle gemessen, `All 2067 tests
 passed`, Validator gruen.
+
+
+## Und dieselbe Regel stand an zwei Orten
+
+**Die fuenf Feldfragen beantworteten `WertMethode` (1703) und
+`TypBefragt` (9891) — mit demselben Code und demselben Kommentar.**
+`Call` ruft `WertMethode` zuerst, **und die Kopie war nie der Weg.**
+
+**Gemessen: `return null` in der Kopie aendert nichts** — alle sechs
+Saetze identisch, `All 2069 tests passed` — **und eine Mutation, die
+diesen Ort ausschaltet, lebt, weil nichts einen Zweig sehen kann, der
+nie laeuft.** Die Kopie ist jetzt fort.
+
+**Und `FeldFrage` haelt die Bruecke zurueck und aendert nichts**
+(gemessen) — **der Grund fuer ihre Existenz ist die entfernte Kopie.**
+
+**Und `M.include?` und `A.instance_methods` brauchen den eingebundenen
+Modul-Walk**: als ich die Bruecke ganz entfernt habe, antwortete dieser
+Ort `false` (32 Fehler, gemessen). Sie bleibt fuer diese Fragen.
+
+Mutationen 6/8 mit gueltigem C#, `All 2068 tests passed`.

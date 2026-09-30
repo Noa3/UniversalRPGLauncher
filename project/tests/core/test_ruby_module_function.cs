@@ -186,6 +186,72 @@ public partial class TestRubyModuleFunction : TestRubyInterpreter
     /// </para>
     /// </remarks>
     /// <summary>
+    /// The five field questions are answered in one place.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And they stood in two.</strong> <c>WertMethode</c> (line
+    /// 1703) and <c>TypBefragt</c> (line 9891) each answered
+    /// <c>instance_variable_get</c>, <c>instance_variable_set</c>,
+    /// <c>instance_variables</c>, <c>instance_variable_defined?</c> and
+    /// <c>remove_instance_variable</c> — **with the same code and the
+    /// same comment** — **and <c>WertMethode</c> stood in <c>Call</c>
+    /// further up and answered first**, **and the copy in
+    /// <c>TypBefragt</c> was never reached**.
+    /// </para>
+    /// <para>
+    /// <strong>And measured, the copy is a no-op.</strong> Replacing its
+    /// body with <c>return null</c> left all six sentences identical and
+    /// the suite at <c>All 2069 tests passed</c> — **and a mutation that
+    /// switches that body off survives**, **because nothing can see a
+    /// branch that never runs.**
+    /// </para>
+    /// <para>
+    /// <strong>And the same sentence in two places is a sentence with two
+    /// answers</strong>, **and two answers can drift apart** — **and the
+    /// drift is invisible until a test reaches the branch that is not
+    /// the one being read.**
+    /// </para>
+    /// </remarks>
+    public void Test_TheFiveFieldQuestionsHaveOneAnsweringPlace()
+    {
+        // **And the five questions, side by side, on the class and on an
+        // object of it.** A class body writes to the class:
+        var m = new RubyInterpreter(new RubyNullHost());
+        m.RunProgram(Statements(
+            "class A\n"
+            + "  @n = 0\n"
+            + "end\n"));
+        var amTyp = m.RunProgram(Statements(
+            "[A.instance_variable_get(:@n), A.instance_variables,"
+            + " A.instance_variable_defined?(:@n)]\n"));
+        var amObjekt = m.RunProgram(Statements(
+            "[A.new.instance_variable_get(:@n), A.new.instance_variables,"
+            + " A.new.instance_variable_defined?(:@n)]\n"));
+
+        AssertTrue(amTyp.Items[0].Integer == 0,
+            "**the class holds the field** -- `class A; @n = 0; end`");
+        AssertTrue(amTyp.Items[1].IsList && amTyp.Items[1].Items.Count == 1,
+            "**and it names it** -- measured `[Integer 0, Nil]` and "
+                + "`[Integer 1]` and `[]` on the two paths");
+        AssertTrue(amTyp.Items[2].Boolean,
+            "**and it is there** -- and a question that answered false "
+                + "here would tell every plugin that walks `@ivars` that "
+                + "the class has no state");
+        AssertTrue(amObjekt.Items[0].Kind == RubyValueKind.Nil,
+            "**and the object has nothing** -- an instance does not see "
+                + "the class's fields, and a reader that shared one store "
+                + "would answer 0 here as well");
+        AssertTrue(amObjekt.Items[1].IsList
+            && amObjekt.Items[1].Items.Count == 0,
+            "**and its list is empty, and not the class's** -- the two "
+                + "answers to the same sentence are two answers");
+        AssertEq(m.Diagnostics.Count, 0,
+            "**and nothing was said** -- the sentence is read, and not "
+                + "guessed");
+    }
+
+    /// <summary>
     /// A call on a module name reaches the module itself, and not its
     /// instances.
     /// </summary>

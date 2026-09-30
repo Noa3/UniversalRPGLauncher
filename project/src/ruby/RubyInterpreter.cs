@@ -1997,18 +1997,11 @@ public sealed class RubyInterpreter
         // entstehen:** die eingebundenen Module stehen in `Eingebunden`,
         // **und die Methoden stehen in `Methods`**, **und ein Leser, der
         // nur die eine liest, antwortet bei der anderen falsch.**
-        if ((methode == "instance_methods" || methode == "instance_method"
-            || methode == "include?" || methode == "included_modules"
-            || methode == "ancestors" || methode == "name"
-            || methode == "superclass" || methode == "to_s"
-            || methode == "is_a?" || methode == "kind_of?"
-            || methode == "method_defined?"
-            || methode == "private_method_defined?"
-            || methode == "public_method_defined?"
-            || methode == "protected_method_defined?"
-            || methode == "module_function")
+        if ((IstFrage(methode) || (EingebauterName(methode)
+                && !FeldFrage(methode)))
             && empfaenger.Kind == RubyValueKind.Symbol
-            && _types.ContainsKey(empfaenger.Name ?? string.Empty))
+            && empfaenger.Name != null
+            && _types.ContainsKey(empfaenger.Name))
         {
             var typAntwort = TypBefragt(
                 empfaenger.Name!, methode, argumente);
@@ -2364,10 +2357,21 @@ public sealed class RubyInterpreter
 
         // **Und ein Name, den der Leser selbst gibt, laeuft weiter.**
         // `Regexp.last_match` und `Struct.new` stehen nicht in der
-        // Tabelle des aufgerufenen Typs,
-        // **und ein Zweig, der den Aufruf hier beendete, wuerde ihnen
-        // nil geben** -- **und `Regexp.last_match` ist der Satz, mit dem
-        // jedes Plugin auf einen Treffer zugreift.**
+        // Tabelle des aufgerufenen Typs, **und ein Zweig, der den
+        // Aufruf hier beendete, wuerde ihnen nil geben** --
+        // **und `Regexp.last_match` ist der Satz, mit dem jedes
+        // Plugin auf einen Treffer zugreift.**
+        //
+        // **Und der Zweig stand einmal hinter `EigeneMethode`, und
+        // `EigeneMethode` nimmt fuer ein Symbol-Empfaenger
+        // `M.Methods["x"]`, also die Instanzmethode** -- **und `M.x`
+        // gab 7, weil es diese Instanzmethode war, und nicht weil
+        // der Zweig fehlte. Eine ganze Sitzung lang habe ich eine
+        // Diagnose in diesem Zweig gesucht, und sie druckte nichts,
+        // und ich las das als "der Zweig wird nicht erreicht"** --
+        // **und er wird, ganz oben, fuer jede Frage. Eine Sonde auf
+        // dem Empfaenger hat es entschieden, und nicht die
+        // Diagnose im Zweig.**
         if (empfaenger.Kind == RubyValueKind.Symbol
             && empfaenger.Name != null
             && empfaenger.Name != "self"
@@ -2390,14 +2394,7 @@ public sealed class RubyInterpreter
             // `M.x` eine Instanzmethode auf dem Modul**, **und genau
             // das ist es nicht.**
             //
-            // **Und gemessen ist ausserdem: dieser Zweig wird von
-            // `M.x` nicht erreicht** (`module M; def x; 7; end; end;
-            // M.x` gibt 7 und keine Diagnose), **weil der Aufruf auf
-            // einen Modulnamen ueber einen anderen Weg laeuft**. Der
-            // Zweig steht trotzdem hier, **denn er ist die richtige
-            // Regel fuer `def self.x`**, und **ein gemessener Fehler
-            // wird nicht weggeraeumt, indem man die Regel loescht, die
-            // ihn beheben soll.**
+
             _diagnostics.Add(
                 $"{empfaenger.Name} has no method '{methode}' on this "
                     + "host; the interpreter does not guess, and a method "
@@ -9679,9 +9676,7 @@ public sealed class RubyInterpreter
         // self.x` in a base class is a class method of the subclass,
         // **and the object this runs on is a value of the type, and not
         // the type** — `A.x` must not be `A.new.x`.
-        if (!IstFrage(pMethode)
-            && pMethode != "new"
-            && !EingebauterName(pMethode))
+        if (!IstFrage(pMethode) && !EingebauterName(pMethode))
         {
             // **Und `new` ist eine Anweisung des Lesers, und keine
             // Methode des Typs.** Ruby 1.8's `rb_class_new_instance`
@@ -9898,26 +9893,20 @@ public sealed class RubyInterpreter
 
                 return RubyValue.OfBoolean(typ.Name == gesucht);
 
-            case "instance_variable_get":
-            case "instance_variable_set":
-            case "instance_variables":
-            case "instance_variable_defined?":
-            case "remove_instance_variable":
-                {
-                    // **Und die fuenf Fragen ueber die Felder gehen an den
-                    // Speicher des Typs.** `A.instance_variables` nach
-                    // `class A; @n = 0; end` ist `[":@n"]`,
-                    // **und ein Leser, der sie nur an Objekte stellte,
-                    // gab die leere Liste zurueck** -- **und
-                    // `instance_variable_get` ist der Satz, mit dem ein
-                    // Plugin `@ivars` durchsucht**, **und es durchsucht
-                    // sie an `self`, und `self` ist in einem Skript oft
-                    // eine Klasse.**
-                    var typAlsWert = RubyValue.OfSymbol(typ.Name);
-                    typAlsWert.Felder = typ.Felder;
-                    return InstanzVariable(typAlsWert, pMethode, pArgumente);
-                }
-
+            // **Und die fuenf Fragen ueber die Felder beantwortet
+            // `WertMethode`, und nicht dieser Ort.** Sie standen hier
+            // auch, **mit demselben Kommentar und demselben Code**
+            // (Zeile 1703) — **und `WertMethode` steht in `Call`
+            // und antwortet, **und die Kopie hier war nie der Weg.**
+            //
+            // **Gemessen: mit `return null` hier antworten alle sechs
+            // Saetze genau gleich, und `All 2069 tests passed`** —
+            // **und eine Mutation, die diesen Ort ausschaltet, lebt.**
+            // **Dieselbe Regel an zwei Orten ist eine Regel mit zwei
+            // Antworten, und zwei Antworten laufen auseinander.**
+            //
+            // **`A.instance_variables` geht damit ueber einen Ort, und
+            // ein Ort kann sich nicht selbst widersprechen.**
             case "method_defined?":
             case "private_method_defined?":
             case "public_method_defined?":
@@ -10201,6 +10190,34 @@ public sealed class RubyInterpreter
         or "method_defined?"
         or "module_function"
         or "to_s";
+
+    /// <summary>
+    /// Whether the question is about the fields of the receiver.
+    /// </summary>
+    /// <param name="pMethode">The method's name as written.</param>
+    /// <returns>true for the five field questions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And these five are answered by <c>WertMethode</c>.</strong>
+    /// It stands in <c>Call</c> above the type bridge and gives them the
+    /// type's own field store — **and the copy in <c>TypBefragt</c>
+    /// answered them a second time, with the same code and the same
+    /// comment.**
+    /// </para>
+    /// <para>
+    /// <strong>And measured, the copy was a no-op</strong> — replacing its
+    /// body with <c>return null</c> left all six sentences identical and
+    /// the suite at <c>All 2069 tests passed</c> — **and a mutation that
+    /// switches it off survives**, because nothing can see a branch that
+    /// never runs.
+    /// </para>
+    /// </remarks>
+    private static bool FeldFrage(string pMethode) => pMethode
+        is "instance_variable_get"
+        or "instance_variable_set"
+        or "instance_variables"
+        or "instance_variable_defined?"
+        or "remove_instance_variable";
 
     private static bool IstFrage(string pMethode) => pMethode
         is "name"

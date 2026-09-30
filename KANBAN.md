@@ -401,31 +401,36 @@ Aufruf vorbei**, **denn der Typ-Zweig stand dahinter**. Er steht jetzt
 davor, **und `EigeneMethode` bekommt fuer ein Symbol, das ein Typ ist,
 gar nichts**, **weil ein Typ der Typ ist und nicht eine Instanz von ihm.**
 
-**Und vier Mutationen leben, und alle vier sind gemessen:**
+**Und dieselbe Regel stand an zwei Orten, und ist jetzt an einem.**
 
-1. **`module_function` schreibt keine Kopie** -- **und kein Test sieht
-   sie**, **weil `M.x` jetzt `nil` ist und die Kopie ueber
-   `ModulFunktionen` gefunden wuerde, nicht ueber `self.x`** --
-   **und `module M; def x; 7; end; end; M.x` sieben gibt, war der
-   Beweis, dass der Aufruf den falschen Weg nahm.** *Die Kopie ist fuer
-   den Aufruf nicht noetig; sie ist fuer `ModulFunktionen`.*
+**Die fuenf Feldfragen beantworteten `WertMethode` (Zeile 1703) und
+`TypBefragt` (Zeile 9891) — mit demselben Code und demselben
+Kommentar.** `Call` ruft `WertMethode` zuerst, **und die Kopie war
+nie der Weg** — **und gemessen: mit `return null` dort bleiben alle
+sechs Saetze identisch und die Suite bei `All 2069 tests passed`.**
 
-2. **`require_relative` ist kein Stapel** -- **und bei einer Ebene sind
-   `_skriptKette[^1]` und `_skriptKette[0]` dieselbe**, **und bei zwei
-   Ebenen wird `lib/tief/noch/tief/util` geladen**, **was gemessen
-   korrekt ist.**
+**Und dieselbe Frage an zwei Orten ist eine Frage mit zwei Antworten,
+und zwei Antworten laufen auseinander — **und die Drift ist unsichtbar,
+bis ein Test den Zweig erreicht, den man nicht liest.**
 
-3. **Die Felder des Typs sind ein neuer Speicher** -- **und die Bruecke
-   in `TypBefragt` wird nicht betreten**, **weil `Call` vorher schon
-   antwortet** -- **und zwei Wege fuer eine Frage sind zwei Wege, die
-   auseinanderlaufen koennen.**
+**Und `FeldFrage` haelt die Bruecke zurueck und aendert nichts**
+(gemessen: `All 2068 tests passed` mit und ohne den Guard) — **und
+der Grund fuer ihre Existenz ist die entfernte Kopie, und der ist
+gemessen.**
 
-4. **Ein Typ beantwortet die fuenf Fragen nicht** -- **und gibt `null`
-   zurueck**, **und `Call` laeuft dann weiter in den Objektzweig, der
-   es richtig beantwortet** -- **und derselbe Satz hat damit zwei
-   Wege.**
+**Und `M.include?(N)` und `A.instance_methods` brauchen den
+eingebundenen Modul-Walk**, **und als die Bruecke ganz entfernt war
+antwortete dieser Ort `false`** (32 Fehler, gemessen) — **und die
+Bruecke bleibt fuer die Fragen, die ihn brauchen, und nicht fuer
+die fuenf.**
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und kein
+**Mutationen 6/8 mit gueltigem C#, zwei Ueberlebende, und die sind
+beide `FeldFrage`** — **und eine dritte Regel schliesst per
+`compile`, weil C# kein zweites `out var` in derselben Bedingung
+zulässt** — **und das ist eine Eigenschaft der Sprache und kein
+Testfehler.**
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und kein, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
