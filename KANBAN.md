@@ -11187,3 +11187,53 @@ gibt.**
 `test_mz_map_render.cs` (4).
 
 **`All 2170 tests passed`, Validator gruen.**
+
+## Und die Figuren werden gezeichnet: RGBA statt Palette
+
+**Zwei Arten von Bildern in einem einzigen Projekt, und gemessen.**
+
+| Datei | Farbtyp | Bedeutung |
+|---|---|---|
+| `img/tilesets/World_A1.png_` | **3** | Palette |
+| `img/characters/SlimeCharacters.png_` | **6** | RGBA |
+
+**Und der vorhandene Chipsatz-Leser nimmt nur Farbtyp 3** --
+**also hatte ein Spiel, dessen Figuren echte Farben haben, ueberhaupt
+keinen Leser.** **`MzRgbaImage` liest 2 und 6, mit denselben Chunk-,
+Laengen-, Inflate- und Filterregeln** -- **und der Unterschied ist nur,
+was aus den Zeilen kommt: ein Index je Pixel gegen vier Bytes.**
+
+**Und die Filter sind der Teil, an dem ein handgeschriebener Decoder
+scheitert:** **die vier Filter der Spezifikation -- none, sub, up,
+average, Paeth -- sagen jede, wie sich die Zeile zur Zeile darueber
+verhaelt**, **und ein Decoder, der die Zeilen als Rohbytes liest, malt
+ein Bild mit ungefaehr richtigen Farben an ungefaehr richtigen Stellen
+und es ist nicht das Bild.**
+
+### Und das Raster der Figuren, gemessen
+
+**576 × 384 waere zwei Figuren hoch, und nur die ersten 192 Pixel
+tragen etwas.** **Die zweiten 192 sind leer** -- **und ein Leser, der
+die vier Richtungen auf zwei Zeilen verteilt, zeichnet die Haelfte
+aller Figuren aus dem Leeren.**
+
+**Und die vier Richtungen liegen nebeneinander in der ersten Reihe, und
+nicht uebereinander:** **die Spalten 0 bis 3 sind unten, links, rechts,
+oben** -- **und das sind die Zahlen 2, 4, 6 und 8 des Motors, in genau
+dieser Reihenfolge.**
+
+**Und die Figur ist 144 breit, und eine Kachel ist 48, also steht sie
+mittig auf drei Kacheln** -- **das ist der Grund, warum der Motor sie
+mittig setzt**, **und eine Figur an der linken Kachelkante sieht
+falsch aus.**
+
+### Und noch ein Befund beim Testbauen
+
+**`Clear()` setzt den Alphakanal auf 0, und `DistinctColours` zaehlt
+nur, was Alpha hat.** **Ein Hintergrund aus vier Nullen ist kein
+Hintergrund, sondern ein Loch**, **und ein Test, der einen aufbaut
+und dann eine Farbe zaehlt, zaehlt null.**
+
+**Test evidence** `test_mz_character_render.cs` (4), **4/4.**
+
+**`All 2174 tests passed`, Validator gruen.**

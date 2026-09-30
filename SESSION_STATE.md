@@ -10910,3 +10910,26 @@ Tilesets sahen gleich aus.**
 
 **Der Spieler und die Figuren werden nicht gezeichnet** -- **die Karte
 ist ein Hintergrund**, **und was darauf laeuft, ist noch kein Bild.**
+
+## Und die Figuren werden gezeichnet
+
+**`MzRgbaImage` liest Farbtyp 2 und 6; der vorhandene Chipsatz-Leser
+nahm nur 3.** **Gemessen: `World_A1.png_` ist 3, `SlimeCharacters.png_`
+ist 6** -- **also hatte ein Spiel mit echten Figurenfarben keinen
+Leser.**
+
+**Und das Figurenblatt ist 576 × 384, und nur die ersten 192 Pixel
+tragen etwas** -- **die vier Richtungen liegen nebeneinander in der
+ersten Reihe, und nicht uebereinander in zwei.**
+
+**Und `Clear()` setzt Alpha auf 0** -- **ein Hintergrund aus vier
+Nullen ist ein Loch, und ein Test, der eine Farbe zaehlt, zaehlt
+null.**
+
+**`All 2174 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **der Spieler und die Ereignisse werden
+noch nicht aus den Seiten der Karte gelesen** -- **die Figurenkoordinate
+und die Seite mit dem Bild liegen in `page.image`, und nicht am
+Ereignis**, **das ist gemessen** -- **und die Runtime zeichnet bisher
+nur die Kacheln.**
