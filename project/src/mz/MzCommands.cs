@@ -112,6 +112,13 @@ public static class MzCommands
             or MzCommandTable.ShowPicture
             or MzCommandTable.MovePicture
             or MzCommandTable.ErasePicture
+            or MzCommandTable.PlayBgm
+            or MzCommandTable.FadeOutBgm
+            or MzCommandTable.PlayBgs
+            or MzCommandTable.FadeOutBgs
+            or MzCommandTable.PlayMe
+            or MzCommandTable.PlaySe
+            or MzCommandTable.StopSe
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -624,6 +631,64 @@ public static class MzCommands
                 return false;
             }
 
+            case MzCommandTable.PlayBgm:
+            case MzCommandTable.PlayBgs:
+            case MzCommandTable.PlayMe:
+            case MzCommandTable.PlaySe:
+            {
+                // `command241` is
+                //   $gameSystem.playBgm(params[0].name, params[0].volume,
+                //                          params[0].pitch, params[0].pan)
+                // **und der Parameter ist ein Objekt, und nicht vier
+                // Zahlen.** Gemessen an einem fertigen Projekt:
+                // `241 [{"name":"Scene8","volume":40,"pitch":80,"pan":0}]`
+                // **und XP schreibt denselben Befehl als 11510 mit vier
+                // Bitfeldern.**
+                //
+                // **Und `MzJson.Write` hat das Objekt als Text
+                // zurueckgegeben** (Zeile 58 in `MzCommandEntry.From`),
+                // **und `MzJson.TryParse` ist derselbe Parser, der es
+                // geschrieben hat** -- **ein Leser, der die
+                // Textform nicht wieder einliest, haette einen Kanal
+                // namens `{"name"` mit Lautstaerke 0.**
+                var kanal = pCommand.Code switch
+                {
+                    MzCommandTable.PlayBgm => pFacts.Screen.Bgm,
+                    MzCommandTable.PlayBgs => pFacts.Screen.Bgs,
+                    MzCommandTable.PlayMe => pFacts.Screen.Me,
+                    _ => pFacts.Screen.Se,
+                };
+                var (name, volume, pitch, pan) = AudioOf(pCommand);
+                var said = pFacts.Screen.Play(kanal, name, volume, pitch, pan);
+                pActions.Add(new MzAction(pCommand, said));
+                return true;
+            }
+
+            case MzCommandTable.FadeOutBgm:
+            case MzCommandTable.FadeOutBgs:
+            case MzCommandTable.StopSe:
+            {
+                // `command242` is `$gameSystem.fadeOutBgm(params[0])`, und
+                // `command251` ist `$gameSystem.stopSe()`.
+                //
+                // **Und `stopSe` hat keinen Parameter** -- **und dieser
+                // Zweig liest trotzdem `parameters[0]`, und bei 251 ist
+                // die Liste leer, und `At` gibt dann 0 zurueck**, **und
+                // 0 Bilder ist "jetzt".**
+                var aus = pCommand.Code == MzCommandTable.StopSe
+                    ? pFacts.Screen.Se
+                    : pCommand.Code == MzCommandTable.FadeOutBgm
+                        ? pFacts.Screen.Bgm
+                        : pFacts.Screen.Bgs;
+                var frames = pCommand.Code == MzCommandTable.StopSe
+                    ? 0
+                    : At(pCommand, 0);
+                var gesagt = pFacts.Screen.FadeOut(aus, frames);
+                pActions.Add(new MzAction(pCommand, gesagt));
+                return true;
+            }
+
+
             case MzCommandTable.ControlSwitches:
             {
                 // for (let i = params[0]; i <= params[1]; i++) — inclusive, and
@@ -881,6 +946,57 @@ public static class MzCommands
     /// Every number from the first to the last, both ends in, which is what the
     /// engine's own loop over a range does.
     /// </summary>
+    /// <summary>
+    /// The four numbers an audio command carries, as an object in its
+    /// first parameter.
+    /// </summary>
+    /// <param name="pCommand">The command.</param>
+    /// <returns>Name, volume, pitch and pan.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the object comes back as text, and is read again
+    /// here.</strong> <c>MzCommandEntry.From</c> writes a nested object
+    /// with <c>MzJson.Write</c> so that nothing is thrown away, and
+    /// this reads it with <c>MzJson.TryParse</c> — **the same parser
+    /// that wrote it**, **and not a second one that could disagree with
+    /// the first.**
+    /// </para>
+    /// <para>
+    /// <strong>And a parameter that is not an object falls back to the
+    /// XP form</strong>, which is four numbers, **because XP writes
+    /// `11510` and MZ writes `241` and a reader that only knew one of
+    /// them refused half the engines it claims.**
+    /// </para>
+    /// <para>
+    /// <strong>And a parameter that is neither gets an empty name</strong>,
+    /// **and `Play` accepts an empty name**, because that is what the
+    /// editor writes when a person cleared the field: **a command that
+    /// names nothing is a stop, and refusing it would leave the old
+    /// track playing.**
+    /// </para>
+    /// </remarks>
+    private static (string Name, int Volume, int Pitch, int Pan) AudioOf(
+        MzCommandEntry pCommand)
+    {
+        if (pCommand.Parameters.Count > 0
+            && MzJson.TryParse(
+                pCommand.Parameters[0], out var wert, out _)
+            && wert.Kind == MzKind.Object)
+        {
+            return (wert.Member("name")?.Text ?? "",
+                wert.Member("volume")?.IntOr(0) ?? 0,
+                wert.Member("pitch")?.IntOr(0) ?? 0,
+                wert.Member("pan")?.IntOr(0) ?? 0);
+        }
+
+        // **Und die XP-Form: vier Zahlen und kein Name.**
+        return ("",
+            pCommand.Parameters.Count > 0 ? At(pCommand, 0) : 0,
+            pCommand.Parameters.Count > 1 ? At(pCommand, 1) : 0,
+            pCommand.Parameters.Count > 2 ? At(pCommand, 2) : 0);
+    }
+
+
     internal static IEnumerable<int> Range(int pFrom, int pTo)
     {
         for (var i = pFrom; i <= pTo; i++)

@@ -158,6 +158,40 @@ public static class MzCommandTable
     /// has no frames to count is waiting, not finished.</summary>
     public const int Wait = 230;
 
+    /// <summary>Plays a background music file, from
+    /// <c>command241</c>.</summary>
+    /// <remarks>
+    /// <strong>And the parameter is an object, and not four numbers.</strong>
+    /// Measured on a finished project:
+    /// <c>241 [{"name":"Scene8","volume":40,"pitch":80,"pan":0}]</c> —
+    /// <strong>and XP writes the same command as 11510 with four bit
+    /// fields, and a reader that read one of the two forms into the
+    /// other produced a track at volume 0 named
+    /// <c>{"name"</c>.</strong>
+    /// </remarks>
+    public const int PlayBgm = 241;
+
+    /// <summary>Fades the background music out, from
+    /// <c>command242</c>.</summary>
+    public const int FadeOutBgm = 242;
+
+    /// <summary>Plays a background sound, from <c>command245</c>.</summary>
+    public const int PlayBgs = 245;
+
+    /// <summary>Fades the background sound out, from
+    /// <c>command246</c>.</summary>
+    public const int FadeOutBgs = 246;
+
+    /// <summary>Plays a music that plays alone, from
+    /// <c>command249</c>.</summary>
+    public const int PlayMe = 249;
+
+    /// <summary>Plays a sound effect, from <c>command250</c>.</summary>
+    public const int PlaySe = 250;
+
+    /// <summary>Stops the sound effect, from <c>command251</c>.</summary>
+    public const int StopSe = 251;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>

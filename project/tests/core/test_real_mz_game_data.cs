@@ -206,6 +206,13 @@ public partial class TestRealMzGameData : TestBase
             UniversalRPG.Web.MzCommandTable.PluginCommand,    // 357
             UniversalRPG.Web.MzCommandTable.ChangeItems,      // 126
             UniversalRPG.Web.MzCommandTable.Wait,             // 350
+            UniversalRPG.Web.MzCommandTable.PlayBgm,           // 241
+            UniversalRPG.Web.MzCommandTable.FadeOutBgm,        // 242
+            UniversalRPG.Web.MzCommandTable.PlayBgs,           // 245
+            UniversalRPG.Web.MzCommandTable.FadeOutBgs,        // 246
+            UniversalRPG.Web.MzCommandTable.PlayMe,            // 249
+            UniversalRPG.Web.MzCommandTable.PlaySe,            // 250
+            UniversalRPG.Web.MzCommandTable.StopSe,            // 251
         };
 
         var nicht = vorkommen

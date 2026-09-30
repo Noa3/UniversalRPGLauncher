@@ -10497,3 +10497,21 @@ unterscheiden.** Der Test zaehlt jetzt die JSON-Struktur.
 
 **Und die Tabelle: 114 Namen, 27 C#-Felder, 22 dispatcht, 93 tun
 nichts.** `All 2121 tests passed`.
+
+
+## Und die erste Loesung fuer Kriterium 7: sieben Audio-Befehle
+
+**Die Form ist die Ueberraschung:** `241 [{"name":"Scene8",
+"volume":40,"pitch":80,"pan":0}]` -- **ein Objekt als erster Parameter,
+und nicht vier Zahlen**, **und XP schreibt 11510 mit vier Bitfeldern.**
+
+**Und `MzCommandEntry.From` gibt ein Objekt als Text zurueck
+(`MzJson.Write`), und `MzJson.TryParse` ist derselbe Parser** -- ohne
+das hatte jeder Kanal den Namen `{"name"` und Lautstaerke 0.
+
+**Vier Kanaele** (Bgm/Bgs/Me/Se), `251` ohne Parameter, **ein
+Ausblenden von 0 Bildern ist ein Stopp** (das Feld ist leer, wenn
+niemand es angefasst hat).
+
+**Neu gemessen: 1570 von 2436 ausfuehrbar** (vorher 1548).
+Mutationen 4/4. `All 2125 tests passed`.

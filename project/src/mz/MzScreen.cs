@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace UniversalRPG.Web;
@@ -152,6 +153,201 @@ public sealed class MzScreen
     private readonly Dictionary<int, Picture> _pictures = new();
 
     /// <summary>Something a command asked for and could not do, in order.</summary>
+    /// <summary>
+    /// One audio channel, and the state a command left it in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a channel is a state and not a sound.</strong> Nothing
+    /// here plays anything: a game of this generation ships its music as
+    /// <c>.ogg</c> files and this reader does not open one. What a
+    /// command does is name a file and three numbers,
+    /// <strong>and a channel that knows what it was told and never
+    /// carried a player is a fact about the command and not a claim.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the four numbers are the ones MZ writes.</strong>
+    /// Measured on a finished project:
+    /// <c>241 [{"name":"Scene8","volume":40,"pitch":80,"pan":0}]</c> and
+    /// <c>250 [{"name":"Thunder4","volume":60,"pitch":120,"pan":0}]</c>
+    /// — **an object in the parameter list, and not the four integers
+    /// XP writes.**
+    /// </para>
+    /// </remarks>
+    public sealed class Audio
+    {
+        /// <summary>The file name, or empty when the channel is
+        /// silent.</summary>
+        public string Name { get; internal set; } = "";
+
+        /// <summary>Volume in percent, from <c>parameters[0].volume</c>.
+        /// </summary>
+        public int Volume { get; internal set; }
+
+        /// <summary>Pitch in percent, from <c>parameters[0].pitch</c>.</summary>
+        public int Pitch { get; internal set; }
+
+        /// <summary>Pan from -100 to 100, from
+        /// <c>parameters[0].pan</c>.</summary>
+        public int Pan { get; internal set; }
+
+        /// <summary>Frames the channel has left to fade out over.</summary>
+        public int FadeFramesLeft { get; internal set; }
+
+        /// <summary>Whether the channel is silent.</summary>
+        public bool IsSilent => Name.Length == 0;
+
+        public override string ToString()
+        {
+            if (IsSilent)
+            {
+                return "silence";
+            }
+
+            return FadeFramesLeft > 0
+                ? $"{Name} volume {Volume} pitch {Pitch} pan {Pan}, "
+                    + $"fading out over {FadeFramesLeft} frames"
+                : $"{Name} volume {Volume} pitch {Pitch} pan {Pan}";
+        }
+    }
+
+    /// <summary>The background music, from <c>241</c> and <c>242</c>.
+    /// </summary>
+    public Audio Bgm { get; } = new();
+
+    /// <summary>The background sound, from <c>245</c> and <c>246</c>.
+    /// </summary>
+    public Audio Bgs { get; } = new();
+
+    /// <summary>The music that plays alone, from <c>249</c>.
+    /// </summary>
+    public Audio Me { get; } = new();
+
+    /// <summary>The last sound effect, from <c>250</c> and <c>251</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And one, and not a list.</strong> <c>250</c> plays a
+    /// sound and <c>251</c> stops it, and both name no slot —
+    /// **so a game that plays two sounds and then stops one has stopped
+    /// the one that is here, and that is what the reference does.**
+    /// </remarks>
+    public Audio Se { get; } = new();
+
+    /// <summary>
+    /// Names a file on a channel, from <c>241</c>, <c>245</c> and
+    /// <c>249</c>.
+    /// </summary>
+    /// <param name="pChannel">The channel.</param>
+    /// <param name="pName">The file name, without its extension.</param>
+    /// <param name="pVolume">Volume in percent.</param>
+    /// <param name="pPitch">Pitch in percent.</param>
+    /// <param name="pPan">Pan from -100 to 100.</param>
+    /// <returns>What the channel now is.</returns>
+    /// <remarks>
+    /// <strong>And a play cancels a fade, and not the other way round.</strong>
+    /// The reference's <c>playBgm</c> stops whatever was playing and
+    /// starts the new file at the fade-in the command carries,
+    /// **and a command that arrives mid-fade replaces it rather than
+    /// queueing behind it** — a second <c>241</c> in a row is the second
+    /// track, not the first one twice.
+    /// </remarks>
+    public string Play(Audio pChannel, string pName, int pVolume,
+        int pPitch, int pPan)
+    {
+        ArgumentNullException.ThrowIfNull(pChannel);
+        pChannel.Name = pName;
+        pChannel.Volume = Math.Clamp(pVolume, 0, MaxAudioVolumePercent);
+        pChannel.Pitch = Math.Clamp(pPitch, 0, MaxAudioPitchPercent);
+        pChannel.Pan = Math.Clamp(pPan, -MaxAudioPan, MaxAudioPan);
+        pChannel.FadeFramesLeft = 0;
+        return pChannel.ToString();
+    }
+
+    /// <summary>
+    /// Fades a channel out over a number of frames, from <c>242</c> and
+    /// <c>246</c>.
+    /// </summary>
+    /// <param name="pChannel">The channel.</param>
+    /// <param name="pFrames">How long the fade takes.</param>
+    /// <returns>What the channel now is.</returns>
+    /// <remarks>
+    /// <strong>And a fade of zero is a stop, and not a fade.</strong> The
+    /// reference's <c>fadeOutBgm</c> takes the frames and asks the
+    /// player for them; **a game that wrote zero because the field was
+    /// empty means "now"**, **and a reader that refused it would leave
+    /// the music playing for ever.**
+    /// </remarks>
+    public string FadeOut(Audio pChannel, int pFrames)
+    {
+        ArgumentNullException.ThrowIfNull(pChannel);
+        var frames = Math.Clamp(pFrames, 0, MaxAudioFadeFrames);
+        if (pChannel.IsSilent)
+        {
+            return "nothing is playing, so there is nothing to fade out";
+        }
+
+        if (frames == 0)
+        {
+            var name = pChannel.Name;
+            pChannel.Name = "";
+            pChannel.FadeFramesLeft = 0;
+            return $"{name} stopped";
+        }
+
+        pChannel.FadeFramesLeft = frames;
+        return pChannel.ToString();
+    }
+
+    /// <summary>The highest volume and pitch in percent, from the editor's
+    /// own range.</summary>
+    public const int MaxAudioVolumePercent = 100;
+
+    /// <summary>The highest pitch in percent, from the editor's own
+    /// range.</summary>
+    public const int MaxAudioPitchPercent = 200;
+
+    /// <summary>The pan's reach on each side, from the editor's own
+    /// range.</summary>
+    public const int MaxAudioPan = 100;
+
+    /// <summary>
+    /// The longest fade in frames, ten seconds at sixty frames a second.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A bound and not a rule.</strong> A game that wrote a fade of
+    /// a minute would get a minute here, **and the number this reader can
+    /// hold is the number it says it can hold** — a fade of four million
+    /// frames is a file that says something else.
+    /// </remarks>
+    public const int MaxAudioFadeFrames = 3600;
+
+    /// <summary>
+    /// Advances a fade by a frame, and silences the channel when it ends.
+    /// </summary>
+    /// <remarks>
+    /// <strong>On the same tick as the picture moves, and for the same
+    /// reason.</strong> A fade that ran on a different clock would end at
+    /// a different moment than a picture that was told to finish with it.
+    /// </remarks>
+    public void TickAudio()
+    {
+        foreach (var channel in new[] { Bgm, Bgs, Me, Se })
+        {
+            if (channel.FadeFramesLeft <= 0)
+            {
+                continue;
+            }
+
+            channel.FadeFramesLeft--;
+            if (channel.FadeFramesLeft <= 0)
+            {
+                channel.FadeFramesLeft = 0;
+                channel.Name = "";
+            }
+        }
+    }
+
+
     private readonly List<string> _notices = new();
 
     public MzScreen(int pMaxPictures = 100, bool pInBattle = false)
@@ -299,6 +495,12 @@ public sealed class MzScreen
     /// </summary>
     public void PassFrame()
     {
+        // **Und die Audio-Fades laufen auf demselben Bild wie die
+        // Bilder** -- **denn ein Befehl, der ein Bild dreht und
+        // gleichzeitig die Musik ausblaendet, hat beide mit derselben
+        // Zahl gestartet, und ein Leser, der nur eines davon
+        // fortschreibt, laesst das andere laenger laufen.**
+        TickAudio();
         foreach (var picture in _pictures.Values)
         {
             if (picture.Duration <= 0)

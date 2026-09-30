@@ -755,7 +755,39 @@ die JSON-Struktur.**
 **Und die Tabelle hat 114 Namen, 27 davon sind C#-Felder, und 22
 werden dispatcht** -- **und 93 der 114 tun nichts.**
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und keinlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+**Und die erste Loesung fuer Kriterium 7: sieben Audio-Befehle.**
+
+**Die Form ist die Ueberraschung, und nicht der Befehl.** Gemessen an
+`CamelliaCoronation`:
+
+```
+241 [{"name":"Scene8","volume":40,"pitch":80,"pan":0}]
+250 [{"name":"Thunder4","volume":60,"pitch":120,"pan":0}]
+```
+
+**Ein Objekt als erster Parameter, und nicht vier Zahlen** -- **und XP
+schreibt denselben Befehl als 11510 mit vier Bitfeldern.**
+
+**Und `MzCommandEntry.From` gibt ein Objekt als Text zurueck**
+(`MzJson.Write`, Zeile 58), **und `MzJson.TryParse` ist derselbe
+Parser** -- **also wird er benutzt, und nicht ein zweiter, der sich
+vom ersten unterscheiden koennte.** **Ohne das hatte jeder Kanal den
+Namen `{"name"` und die Lautstaerke 0.**
+
+**Und vier Kanaele:** BGM (241/242), BGS (245/246), ME (249) und SE
+(250/251). **Und 251 traegt keinen Parameter**, **und ein Ausblenden
+von null Bildern ist ein Stopp** -- **denn das Feld ist leer, wenn
+niemand es angefasst hat, und ein Leser, der null als "noch nicht"
+las, haette Musik fuer immer laufen lassen.**
+
+**Und ein Spiel loescht ein laufendes Ausblenden** -- **ein zweites
+241 hintereinander ist das zweite Stueck, und nicht das erste
+zweimal.**
+
+**Neu gemessen: 1570 von 2436 ausfuehrbar, 866 nicht** -- **vorher
+waren es 1548 und 888.**
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und keinag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 
