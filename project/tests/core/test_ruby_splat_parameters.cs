@@ -47,7 +47,7 @@ public partial class TestRubyInterpreter
             + "    [a, rest]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1, 2, 3)\n"));
+            + "A.new.m(1, 2, 3)\n"));
 
         AssertEq(wert.Items.Count, 2,
             "**two values came back**");
@@ -79,7 +79,7 @@ public partial class TestRubyInterpreter
             + "    rest\n"
             + "  end\n"
             + "end\n"
-            + "A.m()\n"));
+            + "A.new.m()\n"));
 
         AssertEq(wert.Kind, RubyValueKind.Object,
             "**the splat is a list and not nil** — a game writes "
@@ -107,7 +107,7 @@ public partial class TestRubyInterpreter
             + "    [a, rest]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(7)\n"));
+            + "A.new.m(7)\n"));
 
         AssertEq(AsInteger(wert.Items[0]), 7,
             "**the named parameter has the seven**");
@@ -134,7 +134,7 @@ public partial class TestRubyInterpreter
             + "    [a, b, rest]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1, 2, 3, 4)\n"));
+            + "A.new.m(1, 2, 3, 4)\n"));
 
         AssertEq(AsInteger(wert.Items[0]), 1,
             "**the first is one**");
@@ -166,7 +166,7 @@ public partial class TestRubyInterpreter
             + "    [a, opts]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1, 2)\n"));
+            + "A.new.m(1, 2)\n"));
 
         var methode = mit.FindMethod("A", "m");
         AssertEq(methode?.OptionenParameter, "opts",
@@ -197,7 +197,7 @@ public partial class TestRubyInterpreter
             + "    1\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1, 2, 3)\n"));
+            + "A.new.m(1, 2, 3)\n"));
 
         var methode = mit.FindMethod("A", "m");
         AssertTrue(methode?.SammelParameter == null,
@@ -235,7 +235,7 @@ public partial class TestRubyInterpreter
             + "    [teile, letzte]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1, 2, 3)\n"));
+            + "A.new.m(1, 2, 3)\n"));
 
         AssertEq(wert.Items.Count, 2,
             "**two values came back**");
@@ -281,7 +281,7 @@ public partial class TestRubyInterpreter
             + "    opts\n"
             + "  end\n"
             + "end\n"
-            + "A.m(k: 3)\n"));
+            + "A.new.m(k: 3)\n"));
 
         AssertTrue(wert.Kind == RubyValueKind.Object,
             "**the options came back and not nil** — a reader that answered "
@@ -331,7 +331,7 @@ public partial class TestRubyInterpreter
             + "    [a, opts]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1, k: 3)\n"));
+            + "A.new.m(1, k: 3)\n"));
 
         AssertEq(AsInteger(wert.Items[0]), 1,
             "**the parameter has the one** — a value goes to a named "
@@ -360,7 +360,7 @@ public partial class TestRubyInterpreter
             + "    opts\n"
             + "  end\n"
             + "end\n"
-            + "A.m()\n"));
+            + "A.new.m()\n"));
 
         AssertTrue(wert.Kind == RubyValueKind.Object,
             "**the options are a value and not nil** — a game writes "

@@ -502,6 +502,30 @@ public sealed class RubyType
     /// included it.**
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The instance variables the type itself carries, for what a class
+    /// body writes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the type has a store of its own, and not the
+    /// objects'.</strong> `class A; @n = 0; end` sets it on the class,
+    /// **and every `A.new` starts with nothing** —
+    /// **and a reader that filed `@n` under the class's <em>instances</em>
+    /// would give every object the class's value**, and
+    /// `A.new.n` would be the number the class body wrote.
+    /// </para>
+    /// <para>
+    /// <strong>And it is per type, and not per name.</strong> Two classes
+    /// with the same name in two files get two stores,
+    /// **and a reader with one table would have let the second class see
+    /// the first one's counters** — which is the same reason the methods
+    /// are cleared on redefinition and this is not.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, RubyValue> Felder { get; } =
+        new(StringComparer.Ordinal);
+
     public bool AlsModulFunktion { get; set; }
 
     /// <summary>

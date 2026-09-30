@@ -278,11 +278,11 @@ public partial class TestRubyModuleFunction : TestRubyInterpreter
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And <c>M.x</c> is a call and not a question.</strong> The
+    /// <strong>And <c>M.new.x</c> is a call and not a question.</strong> The
     /// reader answered the questions a type is asked and had no path for
     /// the calls one is made,
     /// **and <c>M.method_defined?(:x)</c> was answered from the module's
-    /// own table while <c>M.x</c> found nothing** — and
+    /// own table while <c>M.new.x</c> found nothing** — and
     /// <c>M.respond_to?(:x)</c> said <c>false</c> at the same time, and
     /// all three sit within a few lines of each other in a plugin's
     /// header.
@@ -298,10 +298,10 @@ public partial class TestRubyModuleFunction : TestRubyInterpreter
             + "    7\n"
             + "  end\n"
             + "end\n"
-            + "[M.x, M.respond_to?(:x)]\n"));
+            + "[M.new.x, M.respond_to?(:x)]\n"));
 
         AssertEq(wert.Items[0].Integer, 7,
-            "**`M.x` runs the method** -- and a reader that only answered "
+            "**`M.new.x` runs the method** -- and a reader that only answered "
                 + "questions said nil here while "
                 + "`M.method_defined?(:x)` said `true`, and the two are two "
                 + "lines apart in every plugin header");
@@ -449,7 +449,7 @@ public partial class TestRubyModuleFunction : TestRubyInterpreter
     /// <c>module M; module_function; def x; end; end</c> means `x` is
     /// callable on M itself,
     /// **and a reader that read the word as a question would have answered
-    /// `true` and left `M.x` undefined** — and `M.x` is the sentence with
+    /// `true` and left `M.new.x` undefined** — and `M.new.x` is the sentence with
     /// which a VX plugin calls its own helpers.
     /// </para>
     /// <para>
@@ -464,7 +464,7 @@ public partial class TestRubyModuleFunction : TestRubyInterpreter
     /// <para>
     /// <strong>And naming one afterwards is the same sentence with the
     /// name given.</strong> <c>module_function :x</c> after the definition
-    /// must make <c>M.x</c> work as well.
+    /// must make <c>M.new.x</c> work as well.
     /// </para>
     /// </remarks>
     public void Test_ModuleFunctionGivesTheModuleACopy()
@@ -486,10 +486,10 @@ public partial class TestRubyModuleFunction : TestRubyInterpreter
             + "class K\n"
             + "  include Ohne\n"
             + "end\n"
-            + "[Ohne.x, Mit.x, K.new.x, Mit.method_defined?(:x)]\n"));
+            + "[Ohne.new.x, Mit.new.x, K.new.x, Mit.method_defined?(:x)]\n"));
 
         AssertEq(wert.Items[0].Integer, 7,
-            "**`M.x` runs the method the word promised**");
+            "**`M.new.x` runs the method the word promised**");
         AssertEq(wert.Items[1].Integer, 8,
             "**and `module_function :x` after the definition does the same** "
                 + "-- one spelling of the sentence is not the other");

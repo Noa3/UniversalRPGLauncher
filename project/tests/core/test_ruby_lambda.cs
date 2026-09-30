@@ -291,7 +291,7 @@ public partial class TestRubyInterpreter
             + "    [x, g]\n"
             + "  end\n"
             + "end\n"
-            + "A.aussen\n"));
+            + "A.new.aussen\n"));
 
         AssertEq(wert.Items.Count, 2,
             "**the method answered two values**");
@@ -356,7 +356,7 @@ public partial class TestRubyInterpreter
             + "    [x, innen.call, innen.call]\n"
             + "  end\n"
             + "end\n"
-            + "A.aussen\n"));
+            + "A.new.aussen\n"));
 
         AssertEq(wert.Items.Count, 3,
             "**the method answered three values**");
@@ -415,7 +415,7 @@ public partial class TestRubyInterpreter
             + "    [f.call, f.call]\n"
             + "  end\n"
             + "end\n"
-            + "A.aussen\n"));
+            + "A.new.aussen\n"));
 
         AssertEq(wert.Items.Count, 2,
             "**the method answered two values**");
@@ -471,7 +471,7 @@ public partial class TestRubyInterpreter
             + "    f.call\n"
             + "  end\n"
             + "end\n"
-            + "A.aussen\n"));
+            + "A.new.aussen\n"));
 
         AssertEq(wert.Items.Count, 2,
             "**the block answered two things** — the question and the value, "

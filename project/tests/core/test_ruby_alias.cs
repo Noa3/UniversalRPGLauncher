@@ -32,7 +32,7 @@ public partial class TestRubyInterpreter
             + "  alias neu alt\n"
             + "end\n"));
 
-        var alt = mit.RunProgram(Statements("A.alt\n"));
+        var alt = mit.RunProgram(Statements("A.new.alt\n"));
         var neu = new RubyInterpreter(new RubyNullHost());
         var neuwert = neu.RunProgram(Statements(
             "class A\n"
@@ -41,7 +41,7 @@ public partial class TestRubyInterpreter
             + "  end\n"
             + "  alias neu alt\n"
             + "end\n"
-            + "A.neu\n"));
+            + "A.new.neu\n"));
 
         AssertEq(AsInteger(alt), 7, "**the old name answers seven**");
         AssertEq(AsInteger(neuwert), 7,
@@ -88,7 +88,7 @@ public partial class TestRubyInterpreter
             + "    2\n"
             + "  end\n"
             + "end\n"
-            + "A.neu\n"));
+            + "A.new.neu\n"));
 
         AssertEq(AsInteger(wert), 1,
             "**the new name still answers one** — the alias holds the method "
@@ -117,7 +117,7 @@ public partial class TestRubyInterpreter
             + "  alias zwei eins\n"
             + "  alias drei zwei\n"
             + "end\n"
-            + "A.drei\n"));
+            + "A.new.drei\n"));
 
         AssertEq(AsInteger(wert), 5,
             "**the third name answers five** — each alias resolved the one "
@@ -145,7 +145,7 @@ public partial class TestRubyInterpreter
             + "  end\n"
             + "  alias :neu :alt\n"
             + "end\n"
-            + "A.neu\n"));
+            + "A.new.neu\n"));
 
         AssertEq(AsInteger(wert), 9,
             "**the new name answers nine** — the colons are not part of the "
@@ -261,7 +261,7 @@ public partial class TestRubyInterpreter
             + "class Erbe < Basis\n"
             + "  alias rechnen_alt rechnen\n"
             + "end\n"
-            + "Erbe.rechnen_alt(21)\n"));
+            + "Erbe.new.rechnen_alt(21)\n"));
 
         AssertEq(AsInteger(wert), 42,
             "**the alias reaches the base's method** — the subclass's own table "

@@ -49,7 +49,7 @@ public partial class TestRubyInterpreter
             + "    end\n"
             + "  end\n"
             + "end\n"
-            + "Ziel.gebaut\n"));
+            + "Ziel.new.gebaut\n"));
 
         AssertTrue(wert.Kind == RubyValueKind.String,
             "**the method answered and the call found it** — it landed in the "
@@ -203,7 +203,7 @@ public partial class TestRubyInterpreter
             + "    end\n"
             + "  end\n"
             + "end\n"
-            + "A.drinnen\n"));
+            + "A.new.drinnen\n"));
 
         AssertEq(AsInteger(wert), 5,
             "**the method answered five** — with no receiver the class the "

@@ -82,7 +82,7 @@ public partial class TestRubyInterpreter
             + "    self.hp = 30\n"
             + "  end\n"
             + "end\n"
-            + "Held.setzen\n"));
+            + "Held.new.setzen\n"));
 
         // **Ruby gibt den Wert einer Zuweisung zurueck**, und `self.hp =
         // 30` ist der letzte Satz der Methode — **also 30**. Die erste
@@ -105,7 +105,7 @@ public partial class TestRubyInterpreter
             + "    hp\n"
             + "  end\n"
             + "end\n"
-            + "B.w\n"));
+            + "B.new.w\n"));
 
         AssertEq(AsInteger(gelesen), 42,
             "**the reader answered forty-two after the writer wrote it** — "
@@ -295,7 +295,7 @@ public partial class TestRubyInterpreter
             + "class Held\n"
             + "  include Beweglich\n"
             + "end\n"
-            + "Held.gehen\n"));
+            + "Held.new.gehen\n"));
 
         AssertEq(AsInteger(wert), 7,
             "**the module's method answered seven through the class** — the "

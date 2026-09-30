@@ -119,7 +119,7 @@ public partial class TestRubyInterpreter
             + "    3\n"
             + "  end\n"
             + "end\n"
-            + "A.m\n"));
+            + "A.new.m\n"));
 
         AssertEq(AsInteger(wert), 3,
             "**the method defined after the undef answers three** — the mark "
@@ -184,7 +184,7 @@ public partial class TestRubyInterpreter
             "**the instance method is out**");
         AssertTrue(mit.FindMethod("A", "self.m") == null,
             "**and so is the class method** — a reader that removed only the "
-                + "plain name would have left `A.m` answering two, and a "
+                + "plain name would have left `A.new.m` answering two, and a "
                 + "reader that removed both under either name would have made "
                 + "`undef` take a method the class never wrote");
     }

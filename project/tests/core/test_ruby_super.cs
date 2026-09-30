@@ -34,7 +34,7 @@ public partial class TestRubyInterpreter
             + "    super\n"
             + "  end\n"
             + "end\n"
-            + "Erbe.anzeige(4, 2)\n"));
+            + "Erbe.new.anzeige(4, 2)\n"));
 
         AssertEq(AsInteger(wert), 42,
             "**the base got four and two** — a reader that passed an empty "
@@ -65,7 +65,7 @@ public partial class TestRubyInterpreter
             + "    super(a * 2)\n"
             + "  end\n"
             + "end\n"
-            + "Erbe.anzeige(21)\n"));
+            + "Erbe.new.anzeige(21)\n"));
 
         AssertEq(AsInteger(wert), 42,
             "**the base got forty-two and not twenty-one** — the written "
@@ -102,7 +102,7 @@ public partial class TestRubyInterpreter
             + "    super + 100\n"
             + "  end\n"
             + "end\n"
-            + "Unten.anzahl\n"));
+            + "Unten.new.anzahl\n"));
 
         AssertEq(AsInteger(wert), 111,
             "**one hundred and eleven** — the call went Unten, then Mitte, then "
@@ -134,7 +134,7 @@ public partial class TestRubyInterpreter
             + "    super\n"
             + "  end\n"
             + "end\n"
-            + "Allein.anzahl\n"));
+            + "Allein.new.anzahl\n"));
 
         AssertTrue(wert.IsNil,
             "**nothing came back** — the reference would raise, and a reader "
@@ -187,7 +187,7 @@ public partial class TestRubyInterpreter
             + "    super\n"
             + "  end\n"
             + "end\n"
-            + "Erbe.fehlt\n"));
+            + "Erbe.new.fehlt\n"));
 
         var gesagt = false;
         foreach (var d in mit.Diagnostics)

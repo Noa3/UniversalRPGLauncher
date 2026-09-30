@@ -48,7 +48,7 @@ public partial class TestRubyInterpreter
             + "    1\n"
             + "  end\n"
             + "end\n"
-            + "defined? A.m\n"));
+            + "defined? A.new.m\n"));
 
         AssertTrue(wert.Kind == RubyValueKind.Symbol,
             "**the answer is a symbol** — a string in Ruby 1.8.1, and a "

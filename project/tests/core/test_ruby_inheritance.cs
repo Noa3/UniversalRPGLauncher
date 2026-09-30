@@ -60,15 +60,33 @@ public partial class TestRubyInterpreter
     }
 
     /// <summary>
-    /// An inherited method is callable on the subclass.
+    /// An inherited method is callable on an instance of the subclass, and
+    /// the inherited class method on the class name.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <strong>The chain has to reach the call, and not only the
     /// lookup.</strong> A reader that recorded the superclass in the tree but
     /// not in the table would have found the method in a diagnostic and not in
     /// an answer.
+    /// </para>
+    /// <para>
+    /// <strong>And <em>an instance</em>, and not the class name.</strong>
+    /// This test said <c>Erbe.antwort</c> and expected 42, **and that is
+    /// a <c>NoMethodError</c> in Ruby 1.8.1** —
+    /// <c>rb_singleton_class(Erbe)</c> is the metaclass,
+    /// <c>rb_make_metaclass</c> gives it
+    /// <c>RBASIC(super)->klass</c> as its super
+    /// (**class.c line 158**), **and the chain of a call on a class name is
+    /// <c>Singleton(Erbe) -&gt; Singleton(Basis) -&gt; Class -&gt; Module
+    /// -&gt; Object</c>** — **and <c>Basis.m_tbl</c> is in none of those.**
+    /// </para>
+    /// <para>
+    /// **And a test that holds a wrong number is worse than no test**,
+    /// because it is checked on every run and reads as a proof.
+    /// </para>
     /// </remarks>
-    public void Test_AnInheritedMethodIsCallableOnTheSubclass()
+    public void Test_AnInheritedMethodIsCallableOnAnInstance()
     {
         var mit = new RubyInterpreter(new RubyNullHost());
         var wert = mit.RunProgram(Statements(
@@ -76,16 +94,25 @@ public partial class TestRubyInterpreter
             + "  def antwort\n"
             + "    42\n"
             + "  end\n"
+            + "  def self.selbst_antwort\n"
+            + "    43\n"
+            + "  end\n"
             + "end\n"
             + "class Erbe < Basis\n"
             + "end\n"
-            + "Erbe.antwort\n"));
+            + "[Erbe.new.antwort, Erbe.selbst_antwort]\n"));
 
-        AssertEq(AsInteger(wert), 42,
-            "**the subclass called the base's method and got forty-two** — the "
+        AssertEq(wert.Items[0].Integer, 42,
+            "**an instance of the subclass calls the base's method** — the "
                 + "chain reaches the call, and a reader that kept the "
                 + "superclass in the tree but not in the table would have "
                 + "found it in a diagnostic and not in an answer");
+        AssertEq(wert.Items[1].Integer, 43,
+            "**and the class name calls the base's class method** — that is "
+                + "the call on a class name, and it walks the singleton "
+                + "chain, and the instance method beside it is invisible to "
+                + "it, **and a reader that answered both from one table "
+                + "would have given 42 here and called it right**");
     }
 
     /// <summary>

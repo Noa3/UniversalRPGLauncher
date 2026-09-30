@@ -51,7 +51,7 @@ public partial class TestRubyInterpreter
             + "    [a, b]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1)\n"));
+            + "A.new.m(1)\n"));
 
         AssertEq(wert.Items.Count, 2, "**two values came back**");
         AssertEq(AsInteger(wert.Items[0]), 1, "**the first is the one it was given**");
@@ -83,7 +83,7 @@ public partial class TestRubyInterpreter
             + "    [a, b]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1, 3)\n"));
+            + "A.new.m(1, 3)\n"));
 
         AssertEq(wert.Items.Count, 2, "**two values came back**");
         AssertEq(AsInteger(wert.Items[0]), 1, "**the first is the one it was given**");
@@ -116,7 +116,7 @@ public partial class TestRubyInterpreter
             + "    [a, b]\n"
             + "  end\n"
             + "end\n"
-            + "[A.m(1), A.m(1, 2)]\n"));
+            + "[A.new.m(1), A.new.m(1, 2)]\n"));
 
         AssertEq(wert.Items.Count, 2, "**two calls came back**");
         AssertEq(
@@ -159,7 +159,7 @@ public partial class TestRubyInterpreter
             + "    [a, b]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1)\n"));
+            + "A.new.m(1)\n"));
 
         AssertEq(wert.Items.Count, 2, "**two values came back**");
         AssertEq(AsInteger(wert.Items[0]), 1, "**the first is the one it was given**");
@@ -189,7 +189,7 @@ public partial class TestRubyInterpreter
             + "    [a, b]\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1)\n"));
+            + "A.new.m(1)\n"));
 
         AssertEq(wert.Items.Count, 2, "**two values came back**");
         AssertEq(AsInteger(wert.Items[0]), 1, "**the first is the one it was given**");
@@ -222,8 +222,8 @@ public partial class TestRubyInterpreter
             + "    a\n"
             + "  end\n"
             + "end\n"
-            + "A.m(1)\n"
-            + "A.m(1)\n"));
+            + "A.new.m(1)\n"
+            + "A.new.m(1)\n"));
 
         var aufrufe = 0;
         foreach (var a in host.Aufrufe)
@@ -250,7 +250,7 @@ public partial class TestRubyInterpreter
     /// <para>
     /// <strong>Measured on 2026-09-29 and still wrong.</strong> A method whose
     /// body reads a parameter answers <c>Symbol:A</c> when called with
-    /// <c>A.m()</c> -- <strong>the receiver, not the body</strong> -- and the
+    /// <c>A.new.m()</c> -- <strong>the receiver, not the body</strong> -- and the
     /// same method with a fixed body, or with an argument in the call, answers
     /// correctly. <strong>So the fault is narrow and it is in the
     /// zero-argument path.</strong>
@@ -280,7 +280,7 @@ public partial class TestRubyInterpreter
             + "    x\n"
             + "  end\n"
             + "end\n"
-            + "A.m()\n"));
+            + "A.new.m()\n"));
 
         AssertEq(
             AsInteger(wert),

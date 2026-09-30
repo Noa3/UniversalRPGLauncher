@@ -976,7 +976,7 @@ public partial class TestRubyInterpreter : TestBase
             + "    6 * 7\n"
             + "  end\n"
             + "end\n"
-            + "A.rechnung\n"));
+            + "A.new.rechnung\n"));
 
         AssertEq(AsInteger(wert), 42,
             "**the call answered forty-two** — the method ran, and a reader "

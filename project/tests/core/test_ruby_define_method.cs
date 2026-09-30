@@ -43,7 +43,7 @@ public partial class TestRubyInterpreter
             "class A\n"
             + "  define_method(:doppelt) { |x| x * 2 }\n"
             + "end\n"
-            + "A.doppelt(4)\n"));
+            + "A.new.doppelt(4)\n"));
 
         AssertEq(AsInteger(wert), 8,
             "**the method answers eight** — it was built from a block and the "
@@ -68,7 +68,7 @@ public partial class TestRubyInterpreter
             "class A\n"
             + "  define_method(:summe) { |x, y| x + y }\n"
             + "end\n"
-            + "A.summe(3, 4)\n"));
+            + "A.new.summe(3, 4)\n"));
 
         AssertEq(AsInteger(wert), 7,
             "**both arguments arrived** — the block's parameters are the "
@@ -92,7 +92,7 @@ public partial class TestRubyInterpreter
             "class A\n"
             + "  define_method(:vielleicht) { |x, y| [x, y] }\n"
             + "end\n"
-            + "A.vielleicht(1)\n"));
+            + "A.new.vielleicht(1)\n"));
 
         AssertEq(wert.Items.Count, 2,
             "**the method answered two values**");
@@ -124,7 +124,7 @@ public partial class TestRubyInterpreter
             + "end\n"
             + "class Erbe < Basis\n"
             + "end\n"
-            + "Erbe.gruss(\"a\")\n"));
+            + "Erbe.new.gruss(\"a\")\n"));
 
         AssertTrue(wert.Kind == RubyValueKind.String,
             "**the subclass answers** — the method was filed on the base and "
@@ -182,7 +182,7 @@ public partial class TestRubyInterpreter
             + "  undef m\n"
             + "  define_method(:m) { 5 }\n"
             + "end\n"
-            + "A.m\n"));
+            + "A.new.m\n"));
 
         AssertEq(AsInteger(wert), 5,
             "**the name is alive again** — `define_method` writes the method "
@@ -211,7 +211,7 @@ public partial class TestRubyInterpreter
             + "    2\n"
             + "  end\n"
             + "end\n"
-            + "A.m\n"));
+            + "A.new.m\n"));
 
         AssertEq(AsInteger(wert), 2,
             "**the `def` that came second answers two** — both spellings "
@@ -233,16 +233,18 @@ public partial class TestRubyInterpreter
         var mit = new RubyInterpreter(new RubyNullHost());
         var wert = mit.RunProgram(Statements(
             "class A\n"
-            + "  @n = 0\n"
+            + "  def initialize\n"
+            + "    @n = 0\n"
+            + "  end\n"
             + "  define_method(:tick) { @n = @n + 1 }\n"
             + "  def stand\n"
             + "    @n\n"
             + "  end\n"
-            + "  tick\n"
-            + "  tick\n"
-            + "  stand\n"
             + "end\n"
-            + "A.stand\n"));
+            + "held = A.new\n"
+            + "held.tick\n"
+            + "held.tick\n"
+            + "held.stand\n"));
 
         AssertEq(AsInteger(wert), 2,
             "**the method has no parameters, it did not mind the argument, "
@@ -250,7 +252,12 @@ public partial class TestRubyInterpreter
                 + "name for the empty list would have had the method read a "
                 + "variable the game never named, and one that dropped the "
                 + "call's argument would have complained about a parameter "
-                + "count that is zero here and one there");
+                + "count that is zero here and one there. **And the counter "
+                + "lives on the object, and not on the class**: "
+                + "`class A; @n = 0; end` sets it on the class itself, and "
+                + "`A.new` would then read nothing — **and the earlier "
+                + "spelling of this test put the two in the class body and "
+                + "expected the object's answer.**");
     }
 
     /// <summary>
@@ -345,8 +352,8 @@ public partial class TestRubyInterpreter
             + "    x * 2\n"
             + "  end\n"
             + "end\n"
-            + "A.aussen(1)\n"
-            + "A.innen(3)\n"));
+            + "A.new.aussen(1)\n"
+            + "A.new.innen(3)\n"));
 
         AssertEq(AsInteger(wert), 300,
             "**the inner method has the inner block** — a reader that took "
@@ -461,8 +468,8 @@ public partial class TestRubyInterpreter
             + "    0\n"
             + "  end\n"
             + "end\n"
-            + "A.mach\n"
-            + "A.innen(3)\n"));
+            + "A.new.mach\n"
+            + "A.new.innen(3)\n"));
 
         AssertEq(AsInteger(wert), 300,
             "**the inner method answers three hundred** — it took its own "

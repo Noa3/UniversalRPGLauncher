@@ -2213,22 +2213,6 @@ public sealed class RubyInterpreter
         // die Kopie finden, die `module_function` macht, und nicht die,
         // die das Skript geschrieben hat** — **und bei einem Modul, das
         // beides hat, gewinnt die falsche**.
-        if (empfaenger.Kind == RubyValueKind.Symbol
-            && empfaenger.Name != null
-            && empfaenger.Name != "self"
-            && _types.ContainsKey(empfaenger.Name)
-            && (_types[empfaenger.Name].Methods
-                    .ContainsKey("self." + methode)
-                || !_types[empfaenger.Name].Methods.ContainsKey(methode)))
-        {
-            var typAntwort = TypBefragt(
-                empfaenger.Name, methode, argumente);
-            if (typAntwort != null)
-            {
-                return typAntwort;
-            }
-        }
-
 
         var eigene = EigeneMethode(empfaenger, methode);
         if (eigene != null)
@@ -2338,6 +2322,45 @@ public sealed class RubyInterpreter
         {
             return TrefferAlsWert(_letzterTreffer);
         }
+
+        // **Und ein Aufruf auf einen Typnamen geht in die
+        // Singleton-Kette, und nicht in die Kette der
+        // Instanzmethoden.** `Erbe.antwort` where `antwort` is an
+        // instance method in the base class is a call that has no
+        // answer,
+        // **and a reader that walked the superclass chain ran the
+        // instance method and answered 42.**
+        //
+        // **Belegt in `class.c` aus Ruby 1.8.1:**
+        // `rb_make_metaclass` schreibt
+        // `RBASIC(klass)->klass = metasuper` (Zeile 158), **und
+        // `rb_singleton_class(obj)` ruft
+        // `rb_make_metaclass(obj, RBASIC(obj)->klass)` (Zeile 727)**,
+        // **also erbt der Singleton eines Moduls von `Module`** --
+        // **und `rb_module_new` setzt `mdl->super = 0` (Zeile 273)**.
+        // Die Kette eines Aufrufs auf `M` ist damit
+        // `Singleton(M) -> Singleton(Module) -> Class -> Module ->
+        // Object` -- **und `M.m_tbl` kommt darin nicht vor.** Eine
+        // Instanzmethode des Moduls ist fuer den Aufruf unsichtbar.
+        //
+        // **Und dieser Zweig steht hinter den eingebauten
+        // Namen**, **und nicht davor** -- `Regexp.last_match` ist ein
+        // eingebauter Klassenaufruf, **und ein Leser, der ihn hier ab
+        // faengt, gibt ihm nil** -- **und genau das ist der Satz, mit
+        // dem jedes Plugin auf einen Treffer zugreift.**
+        if (empfaenger.Kind == RubyValueKind.Symbol
+            && empfaenger.Name != null
+            && empfaenger.Name != "self"
+            && _types.ContainsKey(empfaenger.Name))
+        {
+            var typAntwort = TypBefragt(
+                empfaenger.Name, methode, argumente);
+            if (typAntwort != null)
+            {
+                return typAntwort;
+            }
+        }
+
 
         // **Und ein Struct wird wie eine Liste behandelt, und nicht als
         // eine Klasse mit Feldern.** `p[0]`, `p.to_a` und `p.each` sind
@@ -8613,11 +8636,39 @@ public sealed class RubyInterpreter
 
         var tiefe = _scopes.Count;
         var vorher = _aktuellerTyp;
+        var vorherSelbst = _self;
+        var vorherFelder = _instanceVariables;
         _aktuellerTyp = typ;
+
+        // **Und `self` im Rumpf ist der Typ, und nicht `nil`.**
+        // `class A; @n = 0; end` haengt `@n` an das Klassenobjekt,
+        // **und `A.n` liest es danach** -- **und ein Leser, der den
+        // Rumpf ohne `self` laufen liess, schrieb `@n` in keinen
+        // Speicher**, **und `A.new.stand` gab nil, und `A.stand` auch.**
+        // Das ist kein Randfall: `class Game_Character; @id = 0; end`
+        // **ist der erste Satz von fast jedem VX-Skript**, und der Wert
+        // gehoert dem Typ und nicht dem Objekt.
+        // **Und der Empfaenger traegt den Speicher des Typs bei
+        // sich.** `RubyValue.Felder` ist der Ort, an dem `@x` landet,
+        // **und ein `Symbol` ohne diesen Speicher schrieb `@n` in
+        // einen, den niemand liest** -- **und `A.instance_variables`
+        // kam dann leer zurueck**, **und beide Zeilen stehen drei
+        // Zeilen auseinander in einem Plugin, das den Rumpf liest.**
+        _self = RubyValue.OfSymbol(name);
+        _self.Felder = typ.Felder;
+        _instanceVariables = typ.Felder;
         _scopes.Add(new Dictionary<string, RubyValue>());
-        foreach (var teil in Statements(pNode))
+        try
         {
-            Evaluate(teil);
+            foreach (var teil in Statements(pNode))
+            {
+                Evaluate(teil);
+            }
+        }
+        finally
+        {
+            _self = vorherSelbst;
+            _instanceVariables = vorherFelder;
         }
 
         // **Und der aeussere Typ steht wieder, wenn der innere fertig
@@ -9548,8 +9599,39 @@ public sealed class RubyInterpreter
         // self.x` in a base class is a class method of the subclass,
         // **and the object this runs on is a value of the type, and not
         // the type** — `A.x` must not be `A.new.x`.
-        if (!IstFrage(pMethode) && !typ.Methods.ContainsKey(pMethode))
+        if (!IstFrage(pMethode)
+            && pMethode != "new")
         {
+            // **Und `new` ist eine Anweisung des Lesers, und keine
+            // Methode des Typs.** Ruby 1.8's `rb_class_new_instance`
+            // laeuft ueber den C-Opcode, **und `Klasse.new` geht in
+            // Ruby an `rb_define_method(rb_cClass, "new", ...)`** --
+            // **das heisst: es steht in `Class.m_tbl` und nicht in der
+            // Singleton-Kette des aufgerufenen Typs**, **und ein Leser,
+            // der hier `new` wie jeden anderen Namen behandelte, wuerde
+            // `Klasse.new` mit nil beantworten** -- **und `new` ist der
+            // Satz, mit dem jedes Spiel seine Figuren baut.**
+            // **Und ein Aufruf auf einen Typnamen geht in die
+            // Singleton-Kette, und nicht in die Kette der
+            // Instanzmethoden.** `Erbe.antwort` where `antwort` is an
+            // instance method in the base class is a call that has no
+            // answer,
+            // **and a reader that walked the superclass chain ran the
+            // instance method and answered 42** --
+            // **and a test that said 42 was pushed with that number in
+            // it and called it the truth.**
+            //
+            // **Belegt in `class.c` aus Ruby 1.8.1:**
+            // `rb_make_metaclass` schreibt
+            // `RBASIC(klass)->klass = metasuper` (Zeile 162), **und
+            // `rb_singleton_class(obj)` ruft
+            // `rb_make_metaclass(obj, RBASIC(obj)->klass)` (Zeile 727)**,
+            // **also erbt der Singleton eines Moduls von `Module`** --
+            // **und `rb_module_new` setzt `mdl->super = 0` (Zeile 273)**.
+            // Die Kette eines Aufrufs auf `M` ist damit
+            // `Singleton(M) -> Singleton(Module) -> Class -> Module ->
+            // Object` -- **und `M.m_tbl` kommt darin nicht vor.** Eine
+            // Instanzmethode des Moduls ist fuer den Aufruf unsichtbar.
             var klassenMethode = TypHatSingleton(typ, pMethode)
                 ? SucheSingleton(typ, pMethode)
                 : null;
@@ -9561,6 +9643,18 @@ public sealed class RubyInterpreter
                     typ.Name,
                     RubyValue.OfSymbol(typ.Name));
             }
+
+            // **Und der Aufruf endet hier, wenn die Singleton-Kette
+            // nichts hat.** `M.x` where `def x` is an instance method
+            // of the module is a `NoMethodError` in Ruby,
+            // **und ein Leser, der auf die Instanzkette weiterlief, hat
+            // die Methode ausgefuehrt und 7 gesagt.**
+            _diagnostics.Add(
+                $"{typ.Name} has no method '{pMethode}' on this host; the "
+                    + "interpreter does not guess, and a method that is "
+                    + "not implemented is a fact about the host and not "
+                    + "about the script");
+            return RubyValue.Nil;
         }
 
 

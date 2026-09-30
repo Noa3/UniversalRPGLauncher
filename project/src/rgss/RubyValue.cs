@@ -186,7 +186,7 @@ public sealed class RubyValue : IEquatable<RubyValue>
     /// search every time.</strong>
     /// </para>
     /// </remarks>
-    public Dictionary<string, RubyValue> Felder { get; private init; } =
+    public Dictionary<string, RubyValue> Felder { get; set; } =
         new(StringComparer.Ordinal);
 
     /// <summary>
