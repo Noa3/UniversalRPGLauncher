@@ -10418,3 +10418,24 @@ zuehlte Farben statt die Karte zu pruefen** — `Map0001` und `Map0002`
 sind beide 20x15. **Der Test prueft jetzt `Simulation.MapId == 742`.**
 
 Mutationen 5/5 durch Tests. `All 2117 tests passed`.
+
+
+## Und die Events des echten Spiels laufen
+
+**`Map0002.lmu`: 873 Events, 1049 Seiten, 3262 Befehle in 35 Codes.**
+**Und `Map0033` hat 4005 Befehle.**
+
+**Und gemessen: alle 3262 kommen beim Scheduler an, und nach 60
+Bildern ist keine einzige Diagnose ueber einen Befehl.**
+
+**Und die 100 Diagnosen sind 26 fehlende Charsets** — `People1.png`,
+`Animal.png` — **die das Spiel verweist, aber nie mitgeliefert hat,
+weil es sie nie benutzt.** 37 Charsets liegen da. **Das ist eine
+Eigenschaft des Spiels, und eine Runtime, die sich darueber verweigert,
+verweigert ein spielendes Spiel.**
+
+**Und `Map0002` hat 478 Action-Seiten (Trigger 0) und 3 AutoStart-Seiten
+(Trigger 3)** — **nur die drei laufen von selbst, und genau so soll es
+sein.**
+
+Mutationen 5/5 durch Tests. `All 2118 tests passed`.

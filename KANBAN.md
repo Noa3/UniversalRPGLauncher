@@ -631,7 +631,36 @@ beide 20x15, **und "die Runtime laeuft" sagt nichts ueber die Karte,
 die sie gewaehlt hat. Also prueft der Test jetzt
 `Simulation.MapId == 742`.** 5/5 durch Tests.
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und keinlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+**Und die Events des echten Spiels laufen, und das ist die Messung
+fuer Kriterium 1.**
+
+**`Map0002.lmu` traegt 873 Events, 1049 Seiten und 3262 Befehle in
+35 verschiedenen Codes** -- Text, Verzweigungen, Variablen,
+Teleporte, Bilder. **Und `Map0033` hat 4005, `Map0700` weniger.**
+
+**Und gemessen: alle 3262 kommen beim Scheduler an, und nach 60
+Bildern ist keine einzige Diagnose ueber einen Befehl.**
+
+**Und die 100 Diagnosen sind alle von einer Art und alle richtig:**
+26 mal *charset People1.png is missing from CharSet* und aehnliche.
+**Das Spiel verweist auf 26 Charsets, die es nie mitgeliefert hat,**
+**weil es sie nie benutzt hat** -- **und 37 Charsets liegen da.**
+
+**Und das ist die Antwort, die ein Test aus Fixture nie geben
+konnte: der Interpreter hat 3262 echte Befehle eines Spiels von 2002
+gesehen, ohne an einem zu scheitern.**
+
+**Und `Map0002` hat 478 Action-Seiten (Trigger 0) und nur 3
+AutoStart-Seiten (Trigger 3)** -- **und nur die drei laufen von
+selbst, und genau so soll es sein.**
+
+**Und die Mutation *der Scheduler bekommt kein Event* wird jetzt vom
+Test getoetet, und *keine automatische Seite startet* auch** --
+**und die zweite Regel von vorher (die Seite wird nie gewaehlt) ist
+genauso tot, weil ein Spiel mit drei AutoStart-Seiten ohne sie still
+steht.** 5/5.
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und keinschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 

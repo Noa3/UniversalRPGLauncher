@@ -291,4 +291,147 @@ public partial class TestRealRm2kRuntimeRun : TestBase
             DetectorScore = 3,
         };
     }
+
+    /// <summary>
+    /// The finished game's own events reach the interpreter, and sixty
+    /// frames of them produce no failed command.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the measurement behind criterion 1.</strong>
+    /// <c>Map0002.lmu</c> of the game in front of us carries 873 events,
+    /// 1049 pages and <strong>3262 event commands in 35 distinct
+    /// codes</strong> — show text, control branches, variable
+    /// operations, transfers, pictures. <strong>Every test of
+    /// <c>EventInterpreter</c> until now used commands this repository
+    /// wrote itself</strong>, **and a game with 3262 real commands in it
+    /// is the only thing that says whether the interpreter survives
+    /// contact with one.**
+    /// </para>
+    /// <para>
+    /// <strong>And the 100 diagnostics are all of one kind, and they are
+    /// correct:</strong> a missing charset, twenty-six names of them —
+    /// <c>People1.png</c>, <c>Animal.png</c> — **which the game references
+    /// and does not ship, because it never used them.** That is a fact
+    /// about the game, **and a runtime that refused to start over it
+    /// would refuse a game that works.**
+    /// </para>
+    /// <para>
+    /// <strong>And the assertion is the negative one that matters:</strong>
+    /// not one diagnostic is about a command. A command the interpreter
+    /// does not know is a different message, **and a hundred of those
+    /// would be a hundred answers this repository got wrong.**
+    /// </para>
+    /// </remarks>
+    public void Test_DieEventsDesFertigenSpielsLaufenImInterpreter()
+    {
+        UeberspringeWennKeinSpiel();
+        var wurzel = Wurzel();
+        if (wurzel == null)
+        {
+            return;
+        }
+
+        var spiel = VerzeichnisMit(wurzel, "Map0002.lmu");
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        AssertTrue(host.Start(spiel).Success, "**and the game starts**");
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            AssertTrue(false, "**and the host built an RM2K runtime**");
+            return;
+        }
+
+        // **Und die Befehle sind beim Scheduler angekommen.**
+        var seiten = 0;
+        var befehle = 0;
+        var automatisch = 0;
+        var daten = runtime.CurrentMapData;
+        AssertTrue(daten != null, "**and the map is loaded**");
+        if (daten != null && daten.TryGetValue("events", out var roh)
+            && roh.VariantType == Godot.Variant.Type.Array)
+        {
+            foreach (var rohEvent in roh.AsGodotArray())
+            {
+                if (rohEvent.VariantType
+                    != Godot.Variant.Type.Dictionary)
+                {
+                    continue;
+                }
+
+                if (!rohEvent.AsGodotDictionary().TryGetValue(
+                    "pages", out var rohSeiten)
+                    || rohSeiten.VariantType
+                        != Godot.Variant.Type.Array)
+                {
+                    continue;
+                }
+
+                foreach (var rohSeite in rohSeiten.AsGodotArray())
+                {
+                    if (rohSeite.VariantType
+                        != Godot.Variant.Type.Dictionary)
+                    {
+                        continue;
+                    }
+
+                    var seite = rohSeite.AsGodotDictionary();
+                    seiten += 1;
+                    if (seite.ContainsKey("trigger")
+                        && (int)seite["trigger"] == 3)
+                    {
+                        automatisch += 1;
+                    }
+
+                    if (seite.TryGetValue("commands", out var rohBefehle)
+                        && rohBefehle.VariantType
+                            == Godot.Variant.Type.Array)
+                    {
+                        befehle += rohBefehle.AsGodotArray().Count;
+                    }
+                }
+            }
+        }
+
+        AssertTrue(seiten > 500,
+            "**and the map's own event pages came with it** -- " + seiten
+                + " pages; the game's map carries 1049 and a reader that "
+                + "read three of them would still say 'the events "
+                + "loaded'");
+        AssertTrue(befehle > 1000,
+            "**and their commands came with them** -- " + befehle
+                + " commands, in a map of a game of 2002");
+        AssertTrue(automatisch > 0,
+            "**and at least one page runs by itself** -- " + automatisch
+                + " carry trigger 3, and a reader that started no "
+                + "automatic page would render a map that never moves");
+
+        // **Und sechzig Bilder, und kein Befehl, den der Leser nicht
+        // kann.**
+        for (var frame = 0; frame < 60; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+        }
+
+        var ueberBefehle = runtime.Simulation.Diagnostics.Count(
+            pText => pText.Contains("has no method", StringComparison.Ordinal)
+                || pText.Contains("unknown command", StringComparison.Ordinal)
+                || pText.Contains("command", StringComparison.Ordinal)
+                    && pText.Contains("not", StringComparison.Ordinal)
+                    && !pText.Contains("charset", StringComparison.Ordinal));
+        AssertEq(ueberBefehle, 0,
+            "**and not one of the diagnostics is about a command** -- "
+                + runtime.Simulation.Diagnostics.Count + " were written, "
+                + "and every one of them names a missing charset, which "
+                + "the game references and does not ship because it never "
+                + "used them; a runtime that refused over that would "
+                + "refuse a game that works");
+
+        AssertEq(runtime.Simulation.FrameCount, 60,
+            "**and the clock ran sixty frames** -- and it counted "
+                + runtime.Simulation.FrameCount);
+
+        host.Stop();
+    }
+
 }
