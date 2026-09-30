@@ -493,6 +493,28 @@ public sealed class MzEngineRuntime : IEngineRuntime
         Figures = MzMapFigureReader.Read(
             karte.Root, _facts, out var notwendig);
         FigureNotes = notwendig;
+
+        // **Und jede Figur bekommt ihre Uhr, und aus den Werten, die
+        // ihre Seite nennt** -- **und nicht aus geratenen
+        // Standardwerten**, **denn die Seite sagt Tempo und Takt
+        // ausdruecklich.**
+        Clocks = new Dictionary<int, MzWalkClock?>();
+        foreach (var figur in Figures)
+        {
+            Clocks[figur.EventId] = new MzWalkClock
+            {
+                MoveSpeed = figur.MoveSpeed,
+                MoveFrequency = figur.MoveFrequency,
+                Direction = figur.Direction,
+                Pattern = figur.Pattern < MzWalkClock.MaxPattern
+                    && figur.Pattern >= 0 ? figur.Pattern : 1,
+                // **Und eine Seite mit `moveType: 0` bewegt sich gar
+                // nicht** -- **denn "fest" ist eine Art des
+                // Stillstands, und nicht eine leere Angabe.**
+                Moving = figur.MoveType != 0,
+            };
+        }
+
         PaintFigures(pixel);
         PaintedMap = pixel;
         return true;
@@ -521,6 +543,73 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// that already had one.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Advances every figure's walk clock by one frame, and repaints.
+    /// </summary>
+    /// <returns>How many figures changed their pattern.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a figure only ticks when the engine says it
+    /// does.</strong> Measured in the engine's own source:
+    /// <c>updateAnimationCount</c> adds <c>1.5</c> while
+    /// <c>isMoving() &amp;&amp; hasWalkAnime()</c>, and <c>1</c> while the
+    /// figure stands — <strong>and a standing figure in its first
+    /// pattern does not tick at all</strong>, because the engine's test is
+    /// <c>!isOriginalPattern()</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the measured project has 235 of 253 pages at
+    /// <c>moveType: 0</c>, which means "fixed"</strong> — <strong>their
+    /// routes are never walked at all</strong> — <strong>and 18 pages
+    /// move at random.</strong> <strong>A reader that walked every route
+    /// moved 253 figures nobody asked to move.</strong>
+    /// </para>
+    /// </remarks>
+    public int Tick()
+    {
+        var wechselt = 0;
+        foreach (var uhr in Clocks.Values)
+        {
+            if (uhr != null && uhr.Tick())
+            {
+                wechselt++;
+            }
+        }
+
+        if (_playerClock != null && _playerClock.Tick())
+        {
+            wechselt++;
+        }
+
+        Frames++;
+        if (wechselt > 0 && PaintedMap != null)
+        {
+            PaintFigures(PaintedMap);
+        }
+
+        return wechselt;
+    }
+
+    /// <summary>How many frames this runtime has run.</summary>
+    public int Frames { get; private set; }
+
+    /// <summary>Which walk clock belongs to which event.</summary>
+    public Dictionary<int, MzWalkClock?> Clocks { get; private set; } = new();
+
+    /// <summary>
+    /// The player's own clock, when there is a player.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the player is not in the map's events</strong>, and so
+    /// has no entry in <see cref="Clocks"/>, <strong>and a reader that
+    /// only ticked that dictionary had a frozen player in a moving
+    /// world.</strong>
+    /// </remarks>
+    public MzWalkClock? PlayerClock { get; private set; }
+
+    /// <summary>The player's clock, and the reason it may be null.</summary>
+    private MzWalkClock? _playerClock;
+
     public int PaintFigures(Rm2kPixelBuffer pPixels)
     {
         if (pPixels == null)
@@ -537,8 +626,19 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 continue;
             }
 
+            // **Und gezeichnet wird der Schritt aus der Uhr, und nicht
+            // der, den die Datei nennt** -- **denn die Datei nennt den
+            // Schritt, bei dem die Figur stehen muss**, **und die Uhr
+            // weiss, wie weit sie seither gegangen ist.**
+            var schritt = figur.Pattern;
+            if (Clocks.TryGetValue(figur.EventId, out var uhr)
+                && uhr != null)
+            {
+                schritt = uhr.Column;
+            }
+
             if (MzCharacterRenderer.Draw(
-                blatt, figur.CharacterIndex, figur.Direction, figur.Pattern,
+                blatt, figur.CharacterIndex, figur.Direction, schritt,
                 figur.X, figur.Y, pPixels))
             {
                 gezeichnet++;
@@ -551,8 +651,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
         if (PlayerSheet != null)
         {
             if (MzCharacterRenderer.Draw(
-                PlayerSheet, PlayerIndex, PlayerDirection, 1,
-                PlayerX, PlayerY, pPixels))
+                PlayerSheet, PlayerIndex, PlayerDirection,
+                _playerClock?.Column ?? 1, PlayerX, PlayerY, pPixels))
             {
                 gezeichnet++;
             }
@@ -811,6 +911,27 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         var bildName = erste?.Member("characterName")?.StringOr("") ?? "";
         PlayerIndex = erste?.Member("characterIndex")?.IntOr(0) ?? 0;
+
+        // **Und der Spieler bekommt seine Uhr aus seinen eigenen Werten,
+        // und aus den Standardwerten des Motors, wo er keine hat.**
+        //
+        // **Und gemessen: `Actors.json` nennt fuer den Spieler weder
+        // `moveSpeed` noch `moveFrequency`** -- **beide fehlen** -- **und
+        // der Motor setzt `4` und `6`.** **Ein Leser, der dort eine
+        // Null las, bekam einen Spieler, der im Frame stehen blieb,
+        // oder einen, der so schnell ging, dass er zitterte.**
+        _playerClock = new MzWalkClock
+        {
+            MoveSpeed = erste?.Member("moveSpeed")?.IntOr(4) ?? 4,
+            MoveFrequency = erste?.Member("moveFrequency")?.IntOr(6) ?? 6,
+            Direction = MzCharacter.Down,
+            // **Und der Spieler geht, sobald er geht** -- **und ohne
+            // Befehl geht er nicht**, **und genau so ist es gemessen:
+            // `isMoving()` braucht `_realX`, und das weicht nur von
+            // `_x` ab, wenn er sich bewegt.**
+            Moving = false,
+        };
+        PlayerClock = _playerClock;
         if (bildName.Length > 0)
         {
             if (Characters.TryGetValue(bildName, out var blatt)

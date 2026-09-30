@@ -559,4 +559,86 @@ public partial class TestRealMzRuntimeRun : TestBase
                 + "did not draw them has a map with people in its file "
                 + "and nobody on it");
     }
+
+    /// <summary>
+    /// The runtime's figures move, and only those that should.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the distinction that matters, and it is
+    /// measured.</strong> Of the 253 pages of the project, <strong>235
+    /// are <c>moveType: 0</c></strong> — <strong>which means "fixed", and
+    /// their routes are never walked at all</strong> — <strong>and 18
+    /// move at random.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a runtime that walked every route moved 253 figures
+    /// nobody asked to move</strong>, <strong>and one that walked none of
+    /// them had a room of statues.</strong> <strong>So the assertion is
+    /// about both halves at once.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieUhrLaufetUndNurBeiDenFigurenDieSichBewegen()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(17),
+            "**and map 17 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+        AssertTrue(lauf.Clocks.Count > 0,
+            "**and every figure got a clock** -- and the clock is built "
+                + "from the page's own moveSpeed and moveFrequency, and "
+                + "not from guessed defaults");
+
+        // **Und eine ruhende Figur bleibt ruhend.**
+        var ruhend = 0;
+        var gehend = 0;
+        foreach (var figur in lauf.Figures)
+        {
+            if (figur.MoveType == 0)
+            {
+                ruhend++;
+            }
+            else
+            {
+                gehend++;
+            }
+        }
+
+        AssertEq(lauf.Clocks.Count, lauf.Figures.Count,
+            "**and one clock per figure**");
+        AssertTrue(ruehendeBleibenRuhig(lauf),
+            "**and the fixed figures stay fixed** -- and moveType 0 means "
+                + "fixed and not an empty setting, and a runtime "
+                + "that walked every route moved every figure in the game");
+    }
+
+    private static bool ruehendeBleibenRuhig(MzEngineRuntime pLauf)
+    {
+        for (var frame = 0; frame < 240; frame++)
+        {
+            pLauf.Tick();
+            foreach (var uhr in pLauf.Clocks.Values)
+            {
+                if (uhr != null && uhr.Moving && uhr.Pattern != 1)
+                {
+                    // **Eine gehende Figur darf wechseln.**
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 }

@@ -10963,3 +10963,28 @@ stehen still** -- **das `pattern` sagt, welcher Schritt, und kein Uhrwerk
 treibt sie weiter**, **und die Laufbahn (`moveRoute`) und die
 Richtungswechsel aus den Befehlen fehlen.**
 
+## Und die Figuren bewegen sich
+
+**`MzWalkClock` traegt die Formeln des Motors, aus
+`js/rmmz_objects.js` gelesen**: **Wartezeit `(9 − realMoveSpeed) × 3`,
+Zaehler +1.5 gehend und +1 stehend, `maxPattern() = 4`, und gezeichnet
+wird `_pattern < 3 ? _pattern : 1`.**
+
+**Und 16 bis 19 sind `ROUTE_TURN_*`, und 1 bis 4 sind `ROUTE_MOVE_*` --
+sechzehn ist eine Drehung.** **Das Projekt benutzt nur die Drehungen,
+sieben Seiten.**
+
+**Und 235 von 253 Seiten stehen auf `moveType: 0`, und das heisst fest,
+ihre Laufbahn wird nie abgearbeitet** -- **18 bewegen sich zufaellig.**
+
+**Und `Actors.json` nennt dem Spieler weder `moveSpeed` noch
+`moveFrequency`** -- **beide fehlen, und der Motor setzt 4 und 6.**
+
+**`All 2185 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **die Drehungen aus der Laufbahn
+werden noch nicht abgearbeitet** -- **`MzWalkClock.Turn` ist da, aber
+die Runtime liest die Route einer Seite nicht** -- **und `isMoving()`
+bleibt immer `false`, weil die Figur ihre Kachel nie verlaesst** --
+**die Laufbahnbewegung und die Wegefuehrung fehlen beide.**
+

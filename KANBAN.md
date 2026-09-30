@@ -11305,3 +11305,67 @@ unlesbar** -- **während der C#-Leser sie las.**
 
 **`All 2180 tests passed`, Validator gruen.**
 
+## Und die Figuren bewegen sich: die Uhr aus dem Spiel selbst
+
+**Und jede Formel wurde aus `js/rmmz_objects.js` des fertigen Spiels
+gelesen, und nicht erfunden.**
+
+| Was | Die Formel des Motors |
+|---|---|
+| Wartezeit je Schritt | `(9 − realMoveSpeed) × 3` |
+| Zaehler, gehend | `+1.5` |
+| Zaehler, stehend | `+1` |
+| Musterzahl | `maxPattern() = 4` |
+| Gezeichnete Spalte | `_pattern < 3 ? _pattern : 1` |
+
+**Und die Wartezeit laeuft rueckwaerts** -- **Tempo 1 wartet 24
+Schritte, Tempo 6 wartet 9** -- **und ein Leser, der das Tempo selbst
+als Bildzahl nahm, liess die langsamsten Figuren am schnellsten gehen.**
+
+### Und sechzehn ist eine Drehung, und kein Schritt
+
+**Der teuerste Befund dieser Runde, und der Grund fuer die ganze
+Messung.**
+
+| Code | Der Motor nennt es |
+|---|---|
+| 1, 2, 3, 4 | `ROUTE_MOVE_DOWN/LEFT/RIGHT/UP` |
+| **16, 17, 18, 19** | **`ROUTE_TURN_DOWN/LEFT/RIGHT/UP`** |
+| 15 | `ROUTE_WAIT` |
+
+**Sechzehn ist keine Richtung und kein Schritt -- es dreht eine
+Figur.** **Und genau diese vier benutzt das Projekt, sieben Seiten,
+sonst nichts.**
+
+**Ein Leser, der 16 als Schritt las, schob sieben Figuren von ihrer
+Kachel. Ein Leser, der 16 als "unten" las, weil es das Erste von vier
+ist, drehte sie falsch herum.**
+
+### Und gemessen: fast keine Figur bewegt sich ueberhaupt
+
+| `moveType` | Seiten |
+|---|---|
+| **0 -- fest** | **235** |
+| 3 -- zufaellig | 18 |
+
+**Und 0 ist nicht "keine Angabe", sondern "die Laufbahn wird nie
+abgearbeitet".** **Ein Leser, der jede Laufbahn abarbeitete, bewegte 253
+Figuren, die niemand gebeten hat zu bewegen** -- **und einer, der keine
+abarbeitete, hatte einen Raum von Statuen.**
+
+**Und gezeichnet wird der Schritt aus der Uhr, und nicht der aus der
+Datei** -- **denn die Datei nennt den Schritt, bei dem die Figur stehen
+muss.**
+
+### Und der Spieler hat weder Tempo noch Takt
+
+**Gemessen: `Actors.json` nennt fuer den Spieler weder `moveSpeed`
+noch `moveFrequency`** -- **beide fehlen** -- **und der Motor setzt `4`
+und `6`.** **Ein Leser, der dort eine Null las, bekam einen Spieler, der
+im Frame stehen blieb.**
+
+**Test evidence** `test_mz_walk_clock.cs` (4), **4/4**;
+`test_real_mz_runtime_run.cs` (7), **7/7**.
+
+**`All 2185 tests passed`, Validator gruen.**
+

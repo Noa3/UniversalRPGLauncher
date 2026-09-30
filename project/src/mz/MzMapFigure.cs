@@ -58,6 +58,31 @@ public sealed class MzMapFigure
     /// </remarks>
     public int Pattern { get; init; } = 1;
 
+    /// <summary>How the page's figure moves: 0 fixed, 3 random.</summary>
+    /// <remarks>
+    /// <strong>And zero is not "no movement", it is "do not walk the
+    /// route".</strong> Measured across the project: 235 of 253 pages are
+    /// <c>moveType: 0</c> and 18 are <c>moveType: 3</c>, and
+    /// <strong>the engine only walks a route for the types 2 and 3</strong>
+    /// — <strong>so a reader that walked every route moved 253 figures
+    /// that nobody asked to move.</strong>
+    /// </remarks>
+    public int MoveType { get; init; }
+
+    /// <summary>How fast the figure moves, 1 to 6.</summary>
+    /// <remarks>
+    /// <strong>And the measured project says 5 on every page that says
+    /// anything</strong>, and the engine's own default is 4.
+    /// </remarks>
+    public int MoveSpeed { get; init; } = 4;
+
+    /// <summary>How fast the pattern advances.</summary>
+    /// <remarks>
+    /// <strong>And the measured project says 3</strong>, and the engine's
+    /// own default is 6.
+    /// </remarks>
+    public int MoveFrequency { get; init; } = 6;
+
     /// <summary>Whether this page's conditions are met.</summary>
     /// <remarks>
     /// <strong>And a page with no condition is visible, and that is
@@ -171,6 +196,9 @@ public static class MzMapFigureReader
                     X = x,
                     Y = y,
                     Visible = true,
+                    MoveType = seite.Member("moveType")?.IntOr(0) ?? 0,
+                    MoveSpeed = seite.Member("moveSpeed")?.IntOr(4) ?? 4,
+                    MoveFrequency = seite.Member("moveFrequency")?.IntOr(6) ?? 6,
                 });
 
                 // **Und die erste passende Seite gewinnt** -- **denn ab
