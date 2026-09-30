@@ -10807,3 +10807,34 @@ geklaert hat.**
 **Naechster Schritt fuer MZ:** **die `404` und `412` des Choice-Blocks
 ausfuehren** -- **`404` hat keinen Namen in `MzCommandTable`, und
 `412 EndBranch` ist verdrahtet fuer den `411`-Zweig.**
+
+## Und die Antwort auf "sind die Ziele erreicht": nein, und jetzt gemessen
+
+**`CreateRuntime` ist in genau drei Plugins ueberschrieben:**
+`RpgMaker2000Plugin`, `RpgMaker2003Plugin` (beide ueber `LcfPlugin`) und
+`WolfRpgPlugin`. **Nicht in `RpgMakerXpPlugin`,
+`RpgMakerVxPlugin`, `RpgMakerVxAcePlugin`, `RpgMakerMvPlugin` und
+`RpgMakerMzPlugin`.**
+
+**Und `WebRpgPlugin` sagt es im Konstruktor selbst:** *"Detection-only
+{pName} boundary until an embedded JavaScript..."* -- **MV und MZ sind
+eine absichtlich gesetzte Grenze, kein Versehen.**
+
+**Und `RgssEngineRuntime.Update` macht genau eines:**
+`_clock.ProcessFrame(pDeltaSeconds)`. **Kein Ruby, keine Szene, kein
+Ereignis.** **Der Interpreter ist getestet (284 Tests in 38 Dateien),
+wird aber von keiner Runtime aufgerufen.**
+
+**Und lokal gibt es fuenf Spiele, und keines ist MV, VX oder VX Ace:**
+MZ (`CamelliaCoronation-Win`), RM2K (`Dragon Destiny`), XP
+(`MicroQuest - Beneath Brimestone 1.0`, verschluesselte Skripte), und
+zwei WOLF (`dungeon5min`, `Kaiju Girlfriend`).
+
+**Fuer Kriterium 3 (MV), 5 (VX) und 6 (VX Ace) gibt es kein Spiel zum
+Messen, und fuer Kriterium 4 (XP) gibt es genau eines, dessen Skripte
+nach `AGENTS.md` und `BuiltInEnginePlugins.cs:424` nicht entschluesselt
+werden.**
+
+**Also: Kriterium 1 und 2 (RM2K) sind weitgehend belegt, 7 (MZ) ist im
+Dispatch bei 1750 von 2436 Befehlen, und 3, 4, 5 und 6 sind
+Erkennungsgrenzen.**

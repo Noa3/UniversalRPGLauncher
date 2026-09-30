@@ -10985,3 +10985,71 @@ und warum es keine Seite hat, weiss ich nicht.**
 Optionen stehen vollstaendig in `params[0]`** -- **also ist `405` dort
 eine Dublette.** **Im Dialog-Block ist es etwas anderes, und diese
 Messung hat das nicht geklaert.**
+
+## Und was die sechs Kriterien 3 bis 7 wirklich bedeuten: gemessen, nicht behauptet
+
+**Alle sechs Engines sind *erkennbar*. Keine davon ist *laufbar*,
+ausser RM2K, WOLF und MZ.** **Das steht so in den Klassenamen und in
+den Faehigkeiten, und ich habe es jetzt nachgezaehlt statt behauptet.**
+
+**`CreateRuntime` ist in genau drei Plugins ueberschrieben:**
+
+| Plugin | Klasse | hat `CreateRuntime` | was es zurueckgibt |
+|---|---|---|---|
+| `RpgMaker2000Plugin` | `LcfPlugin` | **ja** | `Rm2kEngineRuntime` |
+| `RpgMaker2003Plugin` | `LcfPlugin` | **ja** | `Rm2kEngineRuntime` |
+| `WolfRpgPlugin` | `BuiltInEnginePlugin` | **ja** | `WolfEngineRuntime` |
+| `RpgMakerXpPlugin` | `RgssPlugin` | nein | -- |
+| `RpgMakerVxPlugin` | `RgssPlugin` | nein | -- |
+| `RpgMakerVxAcePlugin` | `RgssPlugin` | nein | -- |
+| `RpgMakerMvPlugin` | `WebRpgPlugin` | nein | -- |
+| `RpgMakerMzPlugin` | `WebRpgPlugin` | nein | -- |
+
+**Und der Quellcode sagt es selbst.** `WebRpgPlugin` laeuft im
+Konstruktor mit: *"Detection-only {pName} boundary until an embedded
+JavaScript…"* -- **das ist MV und MZ, und es ist eine Grenze, die
+absichtlich gesetzt wurde.**
+
+### Was XP, VX und VX Ace wirklich haben
+
+**`RgssEngineRuntime` ist 335 Zeilen lang, und `Update` macht genau
+eines:**
+
+```csharp
+public PluginOperationResult Update(double pDeltaSeconds)
+{
+    ...
+    _clock.ProcessFrame(pDeltaSeconds);
+    return PluginOperationResult.Succeeded();
+}
+```
+
+**Kein Ruby, keine Szene, kein Ereignis, kein Interpreter.** **Der
+Interpreter existiert** (`RubyInterpreter.cs`, 12 708 Zeilen),
+**hat 284 Tests in 38 Dateien, und wird von keiner Runtime
+aufgerufen.** **284 Tests fuer ein Programm, das kein Spiel
+ausfuehrt** -- **und die sind nicht umsonst, denn sie sind der
+Nachweis, dass der Sprachkern traegt, sobald jemand ihn verdrahtet.** **Und die
+getestet, aber er wird von keiner Runtime aufgerufen.** **Und die
+Skripte eines XP-Spiels sind verschluesselt** -- **das ist eine
+Sicherheitsgrenze aus `AGENTS.md` und `BuiltInEnginePlugins.cs:424`,
+und sie wird nicht aufgehoben.**
+
+### Und was es lokal gibt
+
+**Fuenf Spiele, und keines davon ist MV, VX oder VX Ace:**
+
+| Spiel | Dateien | Engine |
+|---|---|---|
+| `CamelliaCoronation-Win` | `Data/`, `js/` | MZ |
+| `Dragon Destiny` | `RPG_RT.exe` | RM2K |
+| `MicroQuest - Beneath Brimestone 1.0` | `Data/`, `RGSS104E.dll` | XP |
+| `dungeon5min` | `Data.wolf`, `GuruguruSMF4.dll` | WOLF |
+| `Kaiju Girlfriend` | `Data.wolf`, `GuruguruSMF4.dll` | WOLF |
+
+**Also: fuer Kriterium 3 (MV), 5 (VX) und 6 (VX Ace) gibt es kein Spiel
+zum Messen, und fuer Kriterium 4 (XP) gibt es genau eines, dessen
+Skripte verschluesselt sind.**
+
+**Das ist kein Fortschrittsbericht, das ist die Grenze, und sie ist
+gemessen.**
