@@ -9974,3 +9974,73 @@ Sie sind umgestellt.
 Behauptung und kein Beleg.*
 
 `All 1804 tests passed`, Validator gruen.
+
+
+## Und fuenf Fragen, die der erste Satz eines Plugins stellt
+
+**`method_defined?`, `private_method_defined?`,
+`public_method_defined?`, `protected_method_defined?` und
+`module_function` fehlten alle, und `require_relative` auch.** Jede
+gemessen, jede einzelne `nil` mit der Meldung *has no method ... on this
+host; the interpreter does not guess*.
+
+**Und `method_defined?` war die schlimmste, weil sie `true` sagte.**
+`A.method_defined?(:gibtsnicht)` war `true`, **weil der Leser fragte, ob
+der Name ein `self.`-Name ist, und nicht, ob es die Methode gibt** --
+**und `if !A.method_defined?(:update)` haette nie ausgeloest, und genau
+das ist der Zweck des Satzes.**
+
+**Und `undef_method` ist ein Aufruf auf dem Modul, und kein
+Schluesselwort.** `undef` ist das Schluesselwort,
+**und `Module#undef_method` nimmt Symbole** -- **und der Leser kannte nur
+`undef`.**
+
+**Und `A.new.respond_to?(:zeichne)` war `false`, und
+`A.method_defined?(:zeichne)` war `true`.** Der Empfänger eines Objekts
+traegt seinen Klassennamen bei sich, **und der Leser hielt den Namen des
+Empfaengers fuer den Klassennamen** -- **und `respond_to?` lief nur die
+Basisklassen, und nicht die Module**, **und `include` ist der Satz, mit dem
+ein VX-Grundsystem seine Zeichenmethoden weitergibt.**
+
+**Und `module_function` ist eine Reihenfolge, und keine Frage.** Rubys
+`rb_mod_modfunc` schreibt die Methode **ein zweites Mal** auf den
+Singleton, **und ein Leser, der sie verschob statt kopierte, haette
+jedem Fenster die Zeichenmethode genommen.**
+
+**Und `A.x` fand die Klassenmethode der Basis nicht**, **während
+`A.respond_to?(:x)` `true` sagte** -- **und die Wache und der Aufruf
+stehen zwei Zeilen auseinander.**
+
+**Und `require_relative` braucht den Ordner des Aufrufers, und der Leser
+weiss ihn nicht** -- **und `require_relative` bekam den Namen von `load`,
+und laedt daher jede Zeile dieselbe Datei noch einmal.** Das war der
+schlimmste Fund dieses Batches: **es laedt den Klassenrumpf mehrfach,
+und die zweite Definition gewinnt.**
+
+`All 2062 tests passed`.
+
+
+## Und vier Mutationen leben, und eine davon ist ein Widerspruch
+
+**Drei waren toter Code.** Die beiden `foreach`-Schleifen ueber
+`Eingebunden` in `HatMethode` und `TypHatMethode` sagten dasselbe wie
+die Tabelle darueber, **weil `include` die Modulmethoden nach `Methods`
+kopiert** -- `Eingemischt` macht genau das. Beide entfernt.
+
+**Die vierte ist kein toter Code, sondern ein Widerspruch im Selbst.**
+Gemessen: `module M; def x; 7; end; end; M.x` gibt `7`, **und Ruby
+1.8.1 sagt `NoMethodError`**, denn `x` ist eine *Instanzmethode* des
+Moduls.
+
+**Der Versuch, das zu richten, hat 182 Tests gebrochen.** Der Grund ist
+ein seit Monaten gepushter Test: `Erbe.antwort` sei 42, **wobei
+`antwort` in `Basis` eine Instanzmethode ist** -- **und dieselbe Form
+bei einem Modul gibt 7.**
+
+*Bei einer Klasse geht der Aufruf auf den Klassennamen in die
+Basiskette, bei einem Modul nicht. **Ruby macht beides richtig, und
+dieser Leser kann es nicht, ohne eine der beiden Formen zu verlieren.***
+
+**Der Versuch ist zurueckgenommen, der Widerspruch steht als Dokument.**
+
+`All 2064 tests passed`, Sonde entfernt, keine Mutationsreste im Baum.

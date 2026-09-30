@@ -515,7 +515,7 @@ public partial class TestRubyInterpreter : TestBase
     /// <summary>
     /// A parsed program, as the parser produces it.
     /// </summary>
-    private static List<RubyNode> Statements(string pSource)
+    internal static List<RubyNode> Statements(string pSource)
     {
         return new RubyParser(new RubyLexer(pSource).Tokenize()).ParseProgram();
     }

@@ -270,6 +270,127 @@ Ergebnis weglegt.**
 
 **Und `dup` gab denselben Wert noch einmal zurück.**
 
+**Und fuenf Fragen, die der erste Satz eines Ruby-Plugins stellt, fehlten
+alle.** `method_defined?`, `private_method_defined?`,
+`public_method_defined?`, `protected_method_defined?` und `module_function`
+**-- und `require_relative`**, **das jedes VX-Plugin in einem Ordner
+braucht.** Gemessen vorher, jede einzelne:
+
+| Satz | Gemessen | Meldung |
+| --- | --- | --- |
+| `M.method_defined?(:x)` | `nil` | *M has no method 'method_defined?' on this host* |
+| `A.method_defined?(:gibtsnicht)` | `nil` | *A has no method ...* |
+| `M.module_function` | `nil` | *M has no method 'module_function' ...* |
+| `M.x` nach `module_function` | `nil` | **keine Meldung, einfach nichts** |
+| `require_relative "util"` | `nil` | *self has no method 'require_relative' ...* |
+| `undef_method :x` | `nil` | *self has no method 'undef_method' ...* |
+
+*Und keine davon hat einen Namen im Code. **Die Liste der abgelehnten
+Methoden ist die Liste der Dinge, die der Leser nicht kann**, und sie
+stand nirgends.*
+
+**Und `method_defined?` war die schlimmste, weil sie `true` sagte.**
+`A.method_defined?(:gibtsnicht)` **und** `A.method_defined?(:update)`
+waren beide `true`, **weil der Leser fragte, ob der Name ein `self.`-Name
+ist, und nicht, ob es die Methode gibt** -- **und `if !A.method_defined?
+(:update)` haette nie ausgeloest, und genau das ist der Zweck des Satzes.**
+
+**Und `undef_method` ist ein Aufruf auf dem Modul, und kein
+Schluesselwort.** `undef` ist das Schluesselwort und verlangt einen
+Bezeichner, **und `Module#undef_method` nimmt Symbole** -- **und der Leser
+kannte nur `undef`**, **und die Meldung sprach von einem Host, der nie
+gefragt wurde.**
+
+**Und `A.new.respond_to?(:zeichne)` war `false`, und
+`A.method_defined?(:zeichne)` war `true`.** Der Empfänger eines Objekts
+trägt seinen Klassennamen bei sich, **und der Leser hielt den Namen des
+Empfängers für den Klassennamen und fragte die Klasse, in der die Frage
+geschrieben wurde** -- **und die beiden Zeilen stehen zwei Zeilen
+auseinander in jedem Plugin.**
+
+**Und `respond_to?` lief nur die Basisklassen, und nicht die Module.**
+`HatMethode` ging `Superclass` hoch, **und `include` steht in
+`Eingebunden`** -- **und `include` ist der Satz, mit dem ein VX-Grundsystem
+seine Zeichenmethoden an eine Fensterklasse gibt**, **also war
+`respond_to?(:draw)` `false` fuer genau die Methoden, die es gibt.**
+
+**Und `module_function` ist eine Reihenfolge, und keine Frage.** `module M;
+module_function; def x; end; end` **heisst, dass `x` auf M selbst
+gerufen werden kann**, **und ein Leser, der das Wort als Frage las, sagte
+`true` und liess `M.x` undefiniert** -- **und `M.x` ist der Satz, mit dem
+ein VX-Plugin seine eigenen Hilfsmethoden aufruft.** Rubys `rb_mod_modfunc`
+schreibt die Methode **ein zweites Mal** auf den Singleton, **und der Name
+allein wird gemerkt** -- **ein Leser, der sie verschob statt kopierte,
+haette jedem Fenster die Zeichenmethode genommen.**
+
+**Und `A.x` fand die Klassenmethode der Basis nicht.** `A.respond_to?(:x)`
+sagte `true` und `A.x` sagte `nil`, **und die Wache und der Aufruf stehen
+zwei Zeilen auseinander** -- **und der Leser sah nur die Wache und glaubte
+sie.**
+
+**Und `require_relative` braucht den Ordner des Aufrufers, und der Leser
+weiss ihn nicht.** `lib/a.rb` schreibt `require_relative "util"` und meint
+`lib/util`, **und `lib/tief/b.rb` meint `lib/tief/util`** -- **und ein Leser,
+der den Namen durchliess, laedt `util` von oben fuer beide, und das Spiel
+bekommt einen seiner beiden Helfer und kein Wort ueber den anderen.**
+
+**Und die Liste der geladenen Namen traegt den aufgeloesten Namen.**
+Zwei Dateien, die `"util"` aus demselben Ordner anfordern, sind eine Datei,
+**und ein Leser, der den geschriebenen Namen notierte, laedt denselben
+Klassenrumpf zweimal** -- **und so bekommt ein Spiel zwei
+`Window_Base`-Definitionen, und eine davon ist nicht die, die ihr eigenes
+`super` findet.**
+
+**Und die Liste der abgelehnten Methoden ist die Liste der Dinge, die der
+Leser nicht kann, und sie stand nirgends.** Jede dieser sechs Fehlstellen
+war ein `nil` mit der Meldung *has no method '...' on this host; the
+interpreter does not guess* -- **und `M.x` nach `module_function` hatte
+sogar keine Meldung, und das ist das Schlimmste an der ganzen Liste, weil
+ein stilles `nil` wie ein `false` aussieht und der Spieler den Unterschied
+erst sieht, wenn das Menue nicht aufgeht.**
+
+*Und vier der sechs kamen in **gemessenen** Werten zusammen: `M.x` war
+`nil` mit leerer Diagnose, waehrend `M.method_defined?(:x)` `true` war --
+**und die beiden stehen drei Zeilen auseinander in jedem Plugin, das sich
+in einem Ordner aufteilt.**
+
+**Und der Stapel, und nicht ein Name.** Eine Datei laedt eine zweite, und
+die eine dritte, **und ein Leser mit einem einzigen Namen wuerde alle drei
+relativ zur aeussersten fragen** -- **und ein Helfer in einem Unterordner
+wuerde einen Ordner zu hoch suchen.**
+
+**Und vier Mutationen leben, und drei davon sind toter Code.**
+Die beiden `foreach`-Schleifen ueber `Eingebunden` in `HatMethode` und
+`TypHatMethode` **sagten dasselbe wie die Tabelle direkt darueber**,
+**weil `include` die Modulmethoden nach `Methods` kopiert** --
+`Eingemischt` macht genau das. Sie sind entfernt, **und ein Leser, der
+beides haelt, kann auseinanderlaufen**: ein Modul, das nach dem
+`include` noch eine Methode bekommt, steht in der einen Liste und nicht
+in der anderen.
+
+*Und ein zweiter Weg ueber dieselbe Frage ist nicht "harmlos", auch wenn
+er heute dasselbe sagt.*
+
+**Und der vierte ist kein toter Code, sondern ein Widerspruch im
+Selbst.**
+Gemessen: `module M; def x; 7; end; end; M.x` gibt **`7`** -- **und
+Ruby 1.8.1 sagt `NoMethodError`**, denn `x` ist eine *Instanzmethode*
+des Moduls, und `M.respond_to?(:x)` ist `false`.
+
+**Der Versuch, das zu richten, hat 182 Tests gebrochen** -- **und der
+Grund ist ein Test, der seit Monaten gepusht ist:**
+`Test_AnInheritedMethodIsCallableOnTheSubclass` behauptet
+`Erbe.antwort` sei 42, **wobei `antwort` in `Basis` eine
+Instanzmethode ist** -- **und dieselbe Form bei einem Modul gibt 7.**
+
+*Zwei Leser, eine Regel: bei einer Klasse geht der Aufruf auf den
+Klassennamen in die Basiskette, bei einem Modul nicht. Ruby macht
+beides richtig, **und dieser Leser kann es nicht, ohne eine der beiden
+Formen zu verlieren.***
+
+**Der Versuch ist zurueckgenommen. Der Widerspruch steht als
+Dokument, nicht als Behauptung.**
+
 **Und vier Tests hielten eine Abweichung fest, und die Abweichung tat nichts.**
 `Local` und `SetLocal` fingen bei der Blockebene an, **und der Kommentar,
 der das begründete, nannte `3.times { |i| g.push(i) }` als den Fall, für den

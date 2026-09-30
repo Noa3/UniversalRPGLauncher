@@ -432,6 +432,21 @@ public sealed class RubyInterpreter
     private bool _returned;
 
     /// <summary>
+    /// The name of the script that is running, so `require_relative` knows
+    /// where "next to me" is.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a stack and not a single name.</strong> A file requires
+    /// another, and that one requires a third,
+    /// **and a reader that kept one name would have asked the host for a
+    /// path relative to the outermost file for all three** --
+    /// **and a game whose helpers live in a folder next to their users
+    /// would look one folder too high.** Empty at the top, **because the
+    /// script the host started is the host's business and not ours.**
+    /// </remarks>
+    private readonly List<string> _skriptKette = [];
+
+    /// <summary>
     /// Whether a <c>break</c> has been seen, which stops the loop around it.
     /// </summary>
     /// <remarks>
@@ -1923,13 +1938,36 @@ public sealed class RubyInterpreter
         // **Ohne diese drei war `require` eine Ablehnung ueber den Host**
         // -- **und damit waere jedes VX- und VX-Ace-Skript unlesbar,
         // denn die laden ihr halbes System nach.**
-        if ((methode == "require" || methode == "load")
+
+        // **Und `require_relative` fragt nach einem Namen, der neben dem
+        // laufenden Skript liegt.** `require` fragt nach dem Namen, wie er
+        // geschrieben ist,
+        // **und `require_relative "util"` fragt nach `util` neben der Datei,
+        // die es schreibt** -- **und die Datei, die es schreibt, weiss nur
+        // der Aufrufer.**
+        if ((methode == "require" || methode == "load"
+            || methode == "require_relative")
             && empfaenger.Name == "self"
             && argumente.Count == 1
             && argumente[0].Kind == RubyValueKind.String)
         {
-            return SkriptLaden(methode == "require",
-                System.Text.Encoding.UTF8.GetString(argumente[0].Bytes));
+            // **Und `require_relative` ist ein `require`.** Beide merken
+            // sich, was sie geladen haben, **und nur `load` vergisst** --
+            // **und ein Leser, der `methode == "require"` schrieb, gab
+            // `require_relative` den Namen von `load`**, **und dann
+            // laedt jede Zeile dieselbe Datei noch einmal**, **und jedes
+            // Mal laeuft der Klassenrumpf noch einmal** -- **und so
+            // bekommt ein Spiel zwei `Window_Base`-Definitionen, und die,
+            // die sein eigenes `super` findet, ist nicht die, die der
+            // Spieler sieht.**
+            return SkriptLaden(
+                methode != "load",
+                System.Text.Encoding.UTF8.GetString(argumente[0].Bytes),
+                methode == "require_relative"
+                    ? _skriptKette.Count > 0
+                        ? _skriptKette[^1]
+                        : null
+                    : null);
         }
 
         // **Und ein Typ ist ein Name und wird befragt.** `M.include?(N)`,
@@ -1945,6 +1983,10 @@ public sealed class RubyInterpreter
             || methode == "ancestors" || methode == "name"
             || methode == "superclass" || methode == "to_s"
             || methode == "is_a?" || methode == "kind_of?"
+            || methode == "method_defined?"
+            || methode == "private_method_defined?"
+            || methode == "public_method_defined?"
+            || methode == "protected_method_defined?"
             || methode == "module_function")
             && empfaenger.Kind == RubyValueKind.Symbol
             && _types.ContainsKey(empfaenger.Name ?? string.Empty))
@@ -2026,7 +2068,9 @@ public sealed class RubyInterpreter
                 || methode == "include"
                 || methode == "extend"
                 || methode == "define_method"
-                || methode == "define_singleton_method"))
+                || methode == "define_singleton_method"
+                || methode == "undef_method"
+                || methode == "module_function"))
         {
             if (Eingebaut(_aktuellerTyp, methode, argumente))
             {
@@ -2150,6 +2194,38 @@ public sealed class RubyInterpreter
             if (fehlend != null)
             {
                 return AufrufenMitName(fehlend, argumente, klasse, methode);
+            }
+        }
+
+
+        // **Und ein Aufruf auf einen Namen geht die Kette nach oben.**
+        // `A.x` where `x` is `def self.x` in `A`'s base class is a call
+        // that Ruby finds by walking `RCLASS_SUPER`,
+        // **and a reader that only looked at the class itself answered
+        // nil** — **and `A.respond_to?(:x)` said `true` at the same
+        // time**, so a plugin's `unless A.respond_to?(:x)` guard would
+        // skip the write and the call would then fail.
+        //
+        // **Und `def self.x` im Typ selbst geht vor, und nicht der
+        // `TypBefragt`-Umweg.** `M.x` where M wrote `def self.x` is a
+        // method the type has for itself,
+        // **und ein Leser, der hier immer `TypBefragt` befragte, wuerde
+        // die Kopie finden, die `module_function` macht, und nicht die,
+        // die das Skript geschrieben hat** — **und bei einem Modul, das
+        // beides hat, gewinnt die falsche**.
+        if (empfaenger.Kind == RubyValueKind.Symbol
+            && empfaenger.Name != null
+            && empfaenger.Name != "self"
+            && _types.ContainsKey(empfaenger.Name)
+            && (_types[empfaenger.Name].Methods
+                    .ContainsKey("self." + methode)
+                || !_types[empfaenger.Name].Methods.ContainsKey(methode)))
+        {
+            var typAntwort = TypBefragt(
+                empfaenger.Name, methode, argumente);
+            if (typAntwort != null)
+            {
+                return typAntwort;
             }
         }
 
@@ -6201,6 +6277,7 @@ public sealed class RubyInterpreter
         else if (pReceiver.Kind == RubyValueKind.Symbol)
         {
             name = pReceiver.Name == "self" ? _aktuellerTyp?.Name : pReceiver.Name;
+
         }
         else if (pReceiver.Kind == RubyValueKind.Object)
         {
@@ -7365,7 +7442,8 @@ public sealed class RubyInterpreter
     /// <c>Sprite_Picture &lt; Sprite</c> would have no `Sprite`.
     /// </para>
     /// </remarks>
-    private RubyValue SkriptLaden(bool pEinmal, string pName)
+    private RubyValue SkriptLaden(
+        bool pEinmal, string pName, string? pAufrufend)
     {
         if (pName.Length == 0)
         {
@@ -7375,12 +7453,24 @@ public sealed class RubyInterpreter
         }
 
         // **Und ein Name, der schon da ist, wird nicht wieder gelesen.**
-        if (pEinmal && _geladeneSkripte.Contains(pName))
+        // **Und bei `require_relative` zaehlt der aufgeloeste Name, und
+        // nicht der geschriebene** -- `require_relative "util"` aus
+        // `lib/a.rb` und `require_relative "util"` aus `lib/b.rb` sind
+        // dieselbe Datei, **und ein Leser, der den geschriebenen Namen
+        // in seine Liste schreibt, laedt sie zweimal**,
+        // **weil er `a_util` und `b_util` fuer zwei Dateien haelt.**
+        var vollstaendig = pAufrufend == null
+            ? pName
+            : _host.ResolveScriptName(pAufrufend, pName) ?? pName;
+
+        if (pEinmal && _geladeneSkripte.Contains(vollstaendig))
         {
             return RubyValue.OfBoolean(false);
         }
 
-        var quelle = _host.ReadScript(pName, pEinmal);
+        var quelle = pAufrufend == null
+            ? _host.ReadScript(pName, pEinmal)
+            : _host.ReadScriptRelative(pAufrufend, pName, pEinmal);
         if (quelle == null)
         {
             // **Und der Name steht in der Meldung, weil eine Diagnose ohne
@@ -7396,7 +7486,7 @@ public sealed class RubyInterpreter
 
         if (pEinmal)
         {
-            _geladeneSkripte.Add(pName);
+            _geladeneSkripte.Add(vollstaendig);
         }
 
         // **Und CP932, wenn die Datei so kodiert ist.** Rubys `require`
@@ -7421,14 +7511,26 @@ public sealed class RubyInterpreter
                 "in '" + pName + "': " + ausnahme.Message);
         }
 
-        foreach (var anweisung in anweisungen)
+        // **Und waehrend die Datei laeuft, ist sie die, um die es geht.**
+        // Ein `require_relative` in ihr muss sie selbst als Nachbarin
+        // nennen, **und nicht die Datei, die sie geladen hat** --
+        // **sonst sucht jede Datei in der Ordnerstruktur der ersten.**
+        _skriptKette.Add(vollstaendig);
+        try
         {
-            Evaluate(anweisung);
-            if (_returned)
+            foreach (var anweisung in anweisungen)
             {
-                _returned = false;
-                break;
+                Evaluate(anweisung);
+                if (_returned)
+                {
+                    _returned = false;
+                    break;
+                }
             }
+        }
+        finally
+        {
+            _skriptKette.RemoveAt(_skriptKette.Count - 1);
         }
 
         return RubyValue.OfBoolean(true);
@@ -8645,6 +8747,27 @@ public sealed class RubyInterpreter
                 Body = rumpf!,
             };
 
+        // **Und `def` unter einem wartenden `module_function` schreibt
+        // zweimal.** Ruby 1.8's `rb_mod_modfunc` defines the method a
+        // second time on the singleton,
+        // **und ein Leser, der nur die eine Liste fuellt, laesst `M.x`
+        // ungerufen** — **und `M.x` ist der Satz, mit dem ein VX-Plugin
+        // seine Hilfsmethoden aufruft.**
+        if (typ.AlsModulFunktion && !pAufSelbst)
+        {
+            typ.Methods["self." + name] = new RubyMethod
+            {
+                Name = name,
+                IsOnSelf = true,
+                Parameters = namen,
+                Vorgaben = vorgaben,
+                SammelParameter = sammelName.Length > 0 ? sammelName : null,
+                SammelAb = sammelAb,
+                OptionenParameter = optionenName.Length > 0 ? optionenName : null,
+                Body = rumpf!,
+            };
+        }
+
         // **Der Rumpf laeuft nicht.** Ruby fuehrt ihn bei der Definition
         // aus, weil die Defaultargumente Ausdruecke sind -- **und dieser
         // Parser liefert fuer die Parameter eine Liste von Namen und keine
@@ -8809,11 +8932,24 @@ public sealed class RubyInterpreter
                 return true;
             }
 
+            // **Und hier steht nichts ueber Module, und das ist
+            // richtig.** `include` kopiert die Modulmethoden nach
+            // `Methods`,
+            // **und dieser Leser laeuft die Basisklassen hoch und sieht
+            // sie dort** -- **ein Aufruf geht genau so, und `include` ist
+            // genau das, was `Eingemischt` tut.**
+            // **Ein zweiter Weg ueber `Eingebunden` waere eine zweite
+            // Antwort auf eine Frage, die schon beantwortet ist** --
+            // **und sie kann auseinanderlaufen**, weil ein Modul, das
+            // nach dem `include` noch eine Methode bekommt, in der einen
+            // Liste steht und in der anderen nicht.
+
             name = typ.Superclass;
         }
 
         return false;
     }
+
     /// <summary>
     /// Runs a block with `self` set to the class it was written against.
     /// </summary>
@@ -8991,11 +9127,23 @@ public sealed class RubyInterpreter
         }
 
         // **Und dann das Skript, ueber die Kette, und ueber `self.` mit.**
+        // **Und ein Objekt traegt seinen Klassennamen bei sich.** `A.new`
+        // ist ein Objekt der Klasse `A`,
+        // **und ein Leser, der den Empfangernamen fuer den Klassennamen
+        // hielt, fragte die Klasse, in der die Frage geschrieben
+        // wurde** -- **und `A.new.respond_to?(:zeichne)` war dann `false`
+        // und `true` zur selben Zeit**, je nachdem, wo das stand:
+        // `module_defined?` sagte ja und `respond_to?` nein, und beide
+        // Zeilen stehen zwei Zeilen auseinander in einem Plugin.
         var klasse = pEmpfaenger.Kind == RubyValueKind.Symbol
             && pEmpfaenger.Name != "self"
             && _types.ContainsKey(pEmpfaenger.Name)
             ? pEmpfaenger.Name
-            : _aktuellerTyp?.Name;
+            : pEmpfaenger.Kind == RubyValueKind.Object
+                && pEmpfaenger.ClassName != null
+                && _types.ContainsKey(pEmpfaenger.ClassName)
+                ? pEmpfaenger.ClassName
+                : _aktuellerTyp?.Name;
         if (klasse == null)
         {
             return false;
@@ -9389,6 +9537,33 @@ public sealed class RubyInterpreter
             return null;
         }
 
+        // **Und eine Frage ist nicht die einzige Sache, die ein Name
+        // beantwortet.** `A.x` is a call, and the call has to run,
+        // **and a reader that only answered questions would answer
+        // `A.method_defined?(:x)` correctly and `A.x` with nil** --
+        // **and the two sit two lines apart in a plugin, so the guard
+        // passes and the call fails.**
+        //
+        // **And the method comes from the whole chain, upwards.** `def
+        // self.x` in a base class is a class method of the subclass,
+        // **and the object this runs on is a value of the type, and not
+        // the type** — `A.x` must not be `A.new.x`.
+        if (!IstFrage(pMethode) && !typ.Methods.ContainsKey(pMethode))
+        {
+            var klassenMethode = TypHatSingleton(typ, pMethode)
+                ? SucheSingleton(typ, pMethode)
+                : null;
+            if (klassenMethode != null)
+            {
+                return Aufrufen(
+                    klassenMethode,
+                    pArgumente,
+                    typ.Name,
+                    RubyValue.OfSymbol(typ.Name));
+            }
+        }
+
+
         switch (pMethode)
         {
             case "name":
@@ -9548,6 +9723,80 @@ public sealed class RubyInterpreter
 
                 return RubyValue.OfBoolean(typ.Name == gesucht);
 
+            case "method_defined?":
+            case "private_method_defined?":
+            case "public_method_defined?":
+            case "protected_method_defined?":
+                {
+                    // **Und die Frage geht an den ganzen Weg nach oben,
+                    // und nicht nur an den Typ selbst.** Ruby 1.8's
+                    // `rb_mod_method_defined` walks `RCLASS_SUPER`,
+                    // **und ein Leser, der nur `typ.Methods` laesst, sagt
+                    // `false` fuer jede geerbte Methode** --
+                    // **und `if !mod.method_defined?(:initialize)` ist der
+                    // erste Satz eines Ruby-Plugins**, und er wuerde bei
+                    // jedem Typ `initialize` erneut schreiben.
+                    //
+                    // **Und `module_function` schreibt eine `self.`-Kopie,
+                    // und die zaehlt fuer die Frage nicht.** Ruby
+                    // `rb_mod_method_defined` walks the *instance* chain,
+                    // **und ein Leser, der beide Listen mischt, wuerde
+                    // sagen, ein Modul habe `x` als eigene Methode,
+                    // obwohl `M.x` es nur ueber `module_function`
+                    // bekommen hat** --
+                    // **und `if !M.method_defined?(:x)` wuerde dann das
+                    // Schreiben ueberspringen, das der Spieler sieht.**
+                    if (pArgumente.Count == 0)
+                    {
+                        return null;
+                    }
+
+                    var gefragt = TypNameAus(pArgumente[0]);
+                    if (gefragt == null)
+                    {
+                        return null;
+                    }
+
+                    return RubyValue.OfBoolean(
+                        gefragt.StartsWith("self.", StringComparison.Ordinal)
+                            ? TypHatSingleton(typ, gefragt[5..])
+                            : TypHatMethode(typ, gefragt));
+
+                }
+
+            case "module_function":
+                {
+                    // **Und `module_function` ohne Namen nimmt die
+                    // folgenden Definitionen und macht sie zugleich
+                    // statisch.** Ruby 1.8's `rb_mod_modfunc` sets
+                    // `MFLAG_MODFUNC` and defines a singleton copy,
+                    // **und ein Leser, der es als Abfrage las, wuerde
+                    // `true` sagen und das Wort fuer eine Tatsache
+                    // halten.**
+                    //
+                    // **Und mit Namen ist es eine Anweisung an die
+                    // Methodenliste, und keine Anfrage.**
+                    if (pArgumente.Count == 0)
+                    {
+                        typ.AlsModulFunktion = true;
+                        return RubyValue.OfBoolean(true);
+                    }
+
+                    foreach (var argument in pArgumente)
+                    {
+                        var gesuchte = TypNameAus(argument);
+                        if (gesuchte != null
+                            && gesuchte.Length > 0
+                            && typ.Methods.ContainsKey(gesuchte))
+                        {
+                            typ.ModulFunktionen.Add(gesuchte);
+                        }
+                    }
+
+                    return RubyValue.OfBoolean(true);
+
+                }
+
             case "instance_methods":
             case "instance_method":
                 {
@@ -9666,6 +9915,202 @@ public sealed class RubyInterpreter
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Whether the type itself has the method, as opposed to the objects
+    /// that include it.
+    /// </summary>
+    /// <param name="pTyp">The type asked about.</param>
+    /// <param name="pName">The method's name as written.</param>
+    /// <returns>true when the type can be asked for it.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And two ways to be one.</strong> Ruby 1.8 has a real
+    /// singleton class per class, and `def self.x` writes into it, while
+    /// `module_function` copies the instance method across and records the
+    /// name in <c>RBASIC_SET_CLASS_IV_TBL</c>,
+    /// **so this interpreter keeps the copies in <c>Methods</c> under a
+    /// <c>self.</c> prefix and the names <c>module_function</c> was given
+    /// in a second list** — and one list alone would answer half the
+    /// cases.
+    /// </para>
+    /// <para>
+    /// <strong>And it walks upward.</strong> A class method written in a
+    /// base class is a class method of the subclass,
+    /// **and a reader that stopped at the type itself would say
+    /// <c>false</c> to <c>B.selbst_aus_der_basis</c>** —
+    /// and a plugin's `unless A.respond_to?(:x)` guard would then write a
+    /// method the base already provided, and the base's version would be
+    /// gone.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Whether the word is a question a type is asked, and not a method a
+    /// type is called with.
+    /// </summary>
+    /// <param name="pMethode">The method's name as written.</param>
+    /// <returns>true when the name is one of the questions.</returns>
+    /// <remarks>
+    /// <strong>And the list and not "anything with a question mark".</strong>
+    /// <c>respond_to?</c> and <c>is_a?</c> ask,
+    /// **and <c>instance_methods</c> asks without a mark**,
+    /// **and a reader that looked for <c>?</c> would have treated
+    /// <c>instance_methods</c> as a call** — and then tried to run a
+    /// method the type does not have, and said *A has no method
+    /// 'instance_methods'*, **which is the sentence a game sees when
+    /// its plugin asks the one question it exists to ask.**
+    /// </remarks>
+    private static bool IstFrage(string pMethode) => pMethode
+        is "name"
+        or "superclass"
+        or "ancestors"
+        or "include?"
+        or "included_modules"
+        or "instance_methods"
+        or "instance_method"
+        or "is_a?"
+        or "kind_of?"
+        or "method_defined?"
+        or "private_method_defined?"
+        or "public_method_defined?"
+        or "protected_method_defined?"
+        or "module_function"
+        or "to_s";
+
+    /// <summary>
+    /// The type's own method, found the way a call finds it.
+    /// </summary>
+    /// <param name="pTyp">The type asked of.</param>
+    /// <param name="pName">The method's name as written.</param>
+    /// <returns>The method, or null when there is none.</returns>
+    /// <remarks>
+    /// <strong>And it goes up, and it stops at the first one.</strong>
+    /// **And <c>module_function</c>'s copy counts, because that is the
+    /// copy the module was told to make.**
+    /// <strong>And a tombstone stops the walk, not skips one name.**
+    /// </remarks>
+    private RubyMethod? SucheSingleton(RubyType pTyp, string pName)
+    {
+        var lauf = pTyp;
+        while (lauf != null)
+        {
+            if (lauf.Undefiniert.Contains("self." + pName))
+            {
+                return null;
+            }
+
+            if (lauf.Methods.TryGetValue("self." + pName, out var gefunden))
+            {
+                return gefunden;
+            }
+
+            if (lauf.ModulFunktionen.Contains(pName)
+                && lauf.Methods.TryGetValue(pName, out var alsGanzes))
+            {
+                // **Und die Kopie laeuft mit dem Empfang des Moduls,
+                // und nicht mit dem der Klasse, die sie einbindet.**
+                var kopie = new RubyMethod
+                {
+                    Name = alsGanzes.Name,
+                    IsOnSelf = true,
+                    Parameters = alsGanzes.Parameters,
+                    Vorgaben = alsGanzes.Vorgaben,
+                    SammelParameter = alsGanzes.SammelParameter,
+                    SammelAb = alsGanzes.SammelAb,
+                    OptionenParameter = alsGanzes.OptionenParameter,
+                    Body = alsGanzes.Body,
+                };
+                return kopie;
+            }
+
+            lauf = lauf.Superclass == null
+                || !_types.TryGetValue(lauf.Superclass, out var oben)
+                ? null
+                : oben;
+        }
+
+        return null;
+    }
+
+    private bool TypHatSingleton(RubyType pTyp, string pName)
+    {
+        var lauf = pTyp;
+        while (lauf != null)
+        {
+            if (lauf.Methods.ContainsKey("self." + pName)
+                || lauf.ModulFunktionen.Contains(pName))
+            {
+                return true;
+            }
+
+            lauf = lauf.Superclass == null
+                || !_types.TryGetValue(lauf.Superclass, out var oben)
+                ? null
+                : oben;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether objects of the type can be sent the method, following the
+    /// base classes and the modules it took in.
+    /// </summary>
+    /// <param name="pTyp">The type asked about.</param>
+    /// <param name="pName">The method's name as written.</param>
+    /// <returns>true when a call would find it.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a search and not a name test.</strong> Ruby 1.8's
+    /// <c>rb_mod_method_defined</c> walks <c>RCLASS_SUPER</c> and then
+    /// <c>RMODULE_INCLUDED</c> and returns the answer to "could a call
+    /// reach it",
+    /// **and a reader that only asked "is this name free of a
+    /// <c>self.</c> prefix" would say <c>true</c> for every name in the
+    /// world** — and then
+    /// <c>if !A.method_defined?(:update)</c> would never fire, and a
+    /// plugin's whole purpose is that it fires.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>undef_method</c> is a tombstone that answers
+    /// <c>false</c>.</strong> The name is in <c>Undefiniert</c> and not in
+    /// <c>Methods</c>,
+    /// **and a search that stopped at the first base class with the name
+    /// would report a method a class explicitly said it does not have** —
+    /// and then <c>super</c> would find it anyway, and the <c>undef</c>
+    /// would be the only thing in the game that did nothing.
+    /// </para>
+    /// </remarks>
+    private bool TypHatMethode(RubyType pTyp, string pName)
+    {
+        var lauf = pTyp;
+        while (lauf != null)
+        {
+            if (lauf.Undefiniert.Contains(pName))
+            {
+                return false;
+            }
+
+            if (lauf.Methods.ContainsKey(pName)
+                || lauf.Methods.ContainsKey("self." + pName))
+            {
+                return true;
+            }
+
+            // **Und auch hier nichts ueber Module.** `include` hat die
+            // Methoden längst nach `Methods` geschrieben,
+            // **und `A.method_defined?(:draw)` sieht sie dort** --
+            // **und genau darum hat `Eingemischt` sie dorthin
+            // geschrieben und nicht bloss vermerkt.**
+
+            lauf = lauf.Superclass == null
+                || !_types.TryGetValue(lauf.Superclass, out var oben)
+                ? null
+                : oben;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -9796,6 +10241,68 @@ public sealed class RubyInterpreter
         if (pMethode is "include" or "extend" or "prepend")
         {
             return Eingemischt(pTyp, pMethode, pArgumente);
+        }
+
+        if (pMethode == "undef_method")
+        {
+            // **Und `undef_method` ist ein Aufruf auf dem Modul, und kein
+            // Schluesselwort.** `undef` ist das Schluesselwort,
+            // **und `Module#undef_method` nimmt Symbole** --
+            // **und ein Leser, der es ablehnte, liesse jedes Skript
+            // scheitern, das es schreibt** -- **und die Meldung sprach
+            // von einem Host, der nie gefragt wurde.**
+            //
+            // **Und die Marke sitzt am Namen, damit eine geerbte Methode
+            // nicht wieder durchkommt.** `undef` entfernt nur aus der
+            // eigenen Tabelle, **und `undef_method` nimmt auch das
+            // Erbe weg** -- das ist der Unterschied, und ein Leser, der
+            // beides gleich machte, haette `undef` in einer Unterklasse
+            // wirkungslos.
+            foreach (var argument in pArgumente)
+            {
+                var name = argument.Kind == RubyValueKind.Symbol
+                    ? argument.Name
+                    : argument.Kind == RubyValueKind.String
+                        ? System.Text.Encoding.UTF8.GetString(argument.Bytes)
+                        : null;
+                if (name == null)
+                {
+                    continue;
+                }
+
+                pTyp.Methods.Remove(name);
+                pTyp.Methods.Remove("self." + name);
+                pTyp.Undefiniert.Add(name);
+                pTyp.Undefiniert.Add("self." + name);
+            }
+
+            return true;
+        }
+
+        if (pMethode == "module_function")
+        {
+            // **Und im Rumpf ist das Wort eine Anweisung an das, was
+            // danach kommt.** `module M; module_function; def x; end; end`
+            // **und ein Leser, der es als Abfrage las, wuerde `true`
+            // zurueckgeben und das Wort fuer eine Tatsache halten** --
+            // **und `M.x` waere nicht definiert, obwohl der Spieler es
+            // aufruft.**
+            if (pArgumente.Count == 0)
+            {
+                pTyp.AlsModulFunktion = true;
+                return true;
+            }
+
+            foreach (var argument in pArgumente)
+            {
+                if (argument.Kind == RubyValueKind.Symbol
+                    && argument.Name != null)
+                {
+                    pTyp.ModulFunktionen.Add(argument.Name);
+                }
+            }
+
+            return true;
         }
 
         if (pMethode is "define_method" or "define_singleton_method")

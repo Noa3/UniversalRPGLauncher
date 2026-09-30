@@ -75,6 +75,66 @@ public interface IRubyHost
     byte[]? ReadScript(string pName, bool pEinmal) => null;
 
     /// <summary>
+    /// Reads a script named relative to the one that is running.
+    /// </summary>
+    /// <param name="pAufrufend">The name of the script doing the reading.</param>
+    /// <param name="pName">The name as written, with its own folders.</param>
+    /// <param name="pEinmal">true for <c>require</c>, false for <c>load</c>.</param>
+    /// <returns>The bytes, or null when the host has no such file.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the running script's name is an argument and not
+    /// something the reader remembers.</strong> <c>require_relative
+    /// "util"</c> means <em>next to me</em>,
+    /// **and which file is "me" is a fact only the caller has** —
+    /// a reader that guessed a folder would hard-code one host's layout
+    /// into a language runtime,
+    /// **and a game whose scripts live in <c>lib/</c> would look in the
+    /// wrong place and every <c>require_relative</c> in it would fail.**
+    /// </para>
+    /// <para>
+    /// <strong>And the default is <c>ReadScript</c>, not null.</strong>
+    /// A host that reads scripts has <c>require_relative</c> for free if
+    /// the names happen to be the same,
+    /// **and a host that has no files does not have to write a second
+    /// method.**
+    /// </para>
+    /// </remarks>
+    byte[]? ReadScriptRelative(
+        string pAufrufend, string pName, bool pEinmal)
+        => ReadScript(pName, pEinmal);
+
+    /// <summary>
+    /// Puts a name that was written next to a script's name onto the same
+    /// footing, so a file is loaded once and not once per writer.
+    /// </summary>
+    /// <param name="pAufrufend">The name of the script doing the reading.</param>
+    /// <param name="pName">The name as written, with its own folders.</param>
+    /// <returns>
+    /// The one name both writers would agree on, or null when the host
+    /// does not resolve names.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>require_relative "util"</c> from two files is one
+    /// file and not two.</strong> In <c>lib/a.rb</c> and in <c>lib/b.rb</c>
+    /// it means <c>lib/util</c> both times,
+    /// **and a reader that remembered the written name would see
+    /// <c>util</c> and <c>util</c> and think it had loaded it twice** --
+    /// **and it would load the same class body a second time**, which is
+    /// how a game ends up with two <c>Window_Base</c> definitions and
+    /// one of them is not the one its own <c>super</c> finds.
+    /// </para>
+    /// <para>
+    /// <strong>And the default is null, which means "the written name".</strong>
+    /// **A host that resolves nothing must still be able to run scripts,
+    /// and a reader that treated null as an error would have refused a
+    /// host that was working.**
+    /// </para>
+    /// </remarks>
+    string? ResolveScriptName(string pAufrufend, string pName) => null;
+
+    /// <summary>
     /// Calls a method on a value.
     /// </summary>
     /// <param name="pReceiver">The receiver, which the host may be nil for.</param>
@@ -418,6 +478,44 @@ public sealed class RubyType
     /// </para>
     /// </remarks>
     public HashSet<string> Undefiniert { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Whether every method defined from here on is also a method of the
+    /// module itself, which is what `module_function` without a name says.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a flag and not a list, because the name has nothing to do
+    /// with it.</strong> In
+    /// <c>module M; module_function; def x; end; end</c> the word stands
+    /// alone,
+    /// **and a reader that read it as "the method `x` becomes static" would
+    /// have nothing to write it on** — the method is written after the
+    /// word, and the word has to be waiting.
+    /// </para>
+    /// <para>
+    /// **And this is the difference between <c>module_function</c> and
+    /// <c>extend</c>.** <c>extend</c> adds to one object, this adds to the
+    /// module for every object that includes it,
+    /// **and a game that wrote <c>extend self</c> in a module by mistake
+    /// would have its utility methods hidden from the classes that
+    /// included it.**
+    /// </para>
+    /// </remarks>
+    public bool AlsModulFunktion { get; set; }
+
+    /// <summary>
+    /// The methods `module_function` was given by name, and which are
+    /// therefore callable on the module itself.
+    /// </summary>
+    /// <remarks>
+    /// **And a set, because naming one twice is one method.** Ruby 1.8
+    /// redefines the singleton each time,
+    /// **and a list would let a game see the same method twice in
+    /// <c>M.methods</c>** — and a plugin that counts them to decide
+    /// whether to override would be off by one.
+    /// </remarks>
+    public HashSet<string> ModulFunktionen { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// The fields, when `Struct` built this class, and null when a script
