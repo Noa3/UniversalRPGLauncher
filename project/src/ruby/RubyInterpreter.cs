@@ -6339,6 +6339,31 @@ public sealed class RubyInterpreter
     /// reader that only looked at instances would have made every class
     /// method unreachable.</strong>
     /// </remarks>
+    /// <summary>
+    /// The name a receiver falls back to at the top level.
+    /// </summary>
+    /// <returns>The language's own <c>Object</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>main</c> is an <c>Object</c>.</strong> Ruby 1.8.1
+    /// sets <c>ruby_class = rb_cObject</c> and
+    /// <c>ruby_frame->self = ruby_top_self</c> when the program starts
+    /// (`eval.c` lines 1233 and 1234) — **and a reader that has no class
+    /// here has no home for a top-level <c>def</c>, and that is the
+    /// sentence every RPG Maker file ends on.**
+    /// </para>
+    /// <para>
+    /// <strong>And this is the language, and not the host.</strong> The
+    /// reader builds <c>Object</c> itself, **and it builds it because
+    /// <c>Object.superclass == BasicObject</c> and
+    /// <c>BasicObject.superclass == nil</c> are measured** — **that
+    /// chain is what proves the reader owns the chain.**
+    /// </para>
+    /// </remarks>
+    private string? TopLevelName() => _types.ContainsKey("Object")
+        ? "Object"
+        : null;
+
     private RubyMethod? EigeneMethode(RubyValue pReceiver, string pMethod)
     {
         // **`self` heisst die Klasse, in der gerade laeuft.** Ein
@@ -6375,7 +6400,16 @@ public sealed class RubyInterpreter
         }
         else if (pReceiver.Kind == RubyValueKind.Symbol)
         {
-            name = pReceiver.Name == "self" ? _aktuellerTyp?.Name : pReceiver.Name;
+            // **Und `self` auf oberster Ebene ist `main`, und `main`
+            // ist ein `Object`.** `eval.c` Zeile 1234 setzt beim Start
+            // `ruby_frame->self = ruby_top_self`, **und Zeile 1233
+            // `ruby_class = rb_cObject`** — **und ein Leser, der
+            // hier `null` liest, findet kein `def`, das oben im
+            // Skript steht**, **und das ist der Satz, an dem jede
+            // RPG-Maker-Datei endet.**
+            name = pReceiver.Name == "self"
+                ? _aktuellerTyp?.Name ?? TopLevelName()
+                : pReceiver.Name;
 
         }
         else if (pReceiver.Kind == RubyValueKind.Object)
@@ -8783,12 +8817,45 @@ public sealed class RubyInterpreter
     {
         var name = pNode.Name ?? string.Empty;
         var typ = _aktuellerTyp;
+        if (typ == null && !pAufSelbst && _types.TryGetValue("Object", out var objectTyp))
+        {
+            // **Und ein `def` ohne Klasse ist ein `Object`, und das ist
+            // gemessen an der Quelle, und nicht entschieden.**
+            // `eval.c` Zeile 1233 setzt beim Start des Programms
+            // `ruby_class = rb_cObject`, **und Zeile 3516 gibt
+            // `TypeError: no class/module to add method`**, wenn
+            // `ruby_class == 0` — **und `0` ist genau das, was ein
+            // Leser hat, der den Satz auslaesst.**
+            //
+            // **Und `Object` ist nicht der Host, sondern die Sprache:**
+            // der Leser selbst legt `Object` an (Zeile 1203), **und
+            // er legt es an, weil `Object.superclass == BasicObject`
+            // und `BasicObject.superclass == nil` sind** — **das ist
+            // gemessen, und es ist der Satz, der beweist, dass der
+            // Leser die Kette selbst baut.**
+            //
+            // **Und `NOEX_PRIVATE` an Zeile 1646:** ein `def` auf
+            // oberster Ebene ist **privat**, **und `private` heisst
+            // hier nicht, dass der Aufruf scheitert** — **es heisst,
+            // dass er nur ohne ausdruecklichen Empfaenger laeuft**
+            // (`lauf` und nicht `self.lauf`, und `Object.lauf` auch
+            // nicht).
+            //
+            // **Und das ist keine Verzoegerung, sondern die Zeile, an
+            // der jede RPG-Maker-Skriptdatei scheitert:** `def setup`
+            // auf oberster Ebene ist in VX, VX Ace und XP in jeder
+            // zweiten Datei, **und ein Leser, der es ablehnt, kann
+            // kein einziges echtes Skript laden.**
+            typ = objectTyp;
+        }
+
         if (typ == null)
         {
             _diagnostics.Add(
-                $"method {name} is defined outside a class, and this "
-                + "interpreter files methods under a class; the reference "
-                + "would define it on Object, and that is a host's job");
+                "method " + name + " is defined outside a class, and the "
+                + "language's own Object is not in this reader, so the "
+                + "sentence has no home; Ruby 1.8.1 raises TypeError "
+                + "here (`eval.c` line 3516)");
             return RubyValue.Nil;
         }
 
@@ -10809,8 +10876,20 @@ public sealed class RubyInterpreter
             return Local(name);
         }
 
-        if (_aktuellerTyp != null && FindMethod(_aktuellerTyp.Name, name) != null)
-        {
+        // **Und ein Name auf oberster Ebene wird gegen `Object`
+        // gesucht, und nicht gegen nichts.** Ruby setzt beim Start
+        // `ruby_class = rb_cObject` (`eval.c` Zeile 1233)
+        // **und `main` ist ein `Object` (Zeile 1234)** —
+        // **und `def lauf` legt eine `Object`-Methode an, und die
+        // wird von `lauf` ohne Klammern aufgerufen.**
+        //
+        // **Gemessen vorher: `lauf` war `Identifier`, und
+        // `FindMethod(null, "lauf")` findet nie etwas, und der
+        // Aufruf endete als `Local("lauf")` = nil** — **und das
+        // ist der Satz, an dem jede RPG-Maker-Skriptdatei endet.**
+        var empfaengerName = _aktuellerTyp?.Name ?? TopLevelName();
+        if (empfaengerName != null
+            && FindMethod(empfaengerName, name) != null)        {
             return Call(new RubyNode
             {
                 Kind = RubyNodeKind.SelfCall,

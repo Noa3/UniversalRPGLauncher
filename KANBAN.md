@@ -424,7 +424,36 @@ antwortete dieser Ort `false`** (32 Fehler, gemessen) — **und die
 Bruecke bleibt fuer die Fragen, die ihn brauchen, und nicht fuer
 die fuenf.**
 
-**Mutationen 6/8 mit gueltigem C#, zwei Ueberlebende, und die sind
+**Und ein `def` auf oberster Ebene ist jetzt ein `Object`, und nicht
+langer eine Weigerung.**
+
+**Gemessen vorher: `def lauf; 7; end; lauf` gab `nil` mit der Meldung
+*method lauf is defined outside a class*, und `self.lauf` gab 7** —
+**und `lauf` war ein `Identifier`, und `Name()` suchte in
+`FindMethod(null, name)`, und null ist kein Name, und der Satz endete
+als `Local("lauf")`**.
+
+**Belegt an der Quelle, und nicht entschieden:** `eval.c` Zeile 1233
+setzt beim Start `ruby_class = rb_cObject`, Zeile 1234 setzt
+`ruby_frame->self = ruby_top_self`, **und Zeile 3516 gibt
+`TypeError: no class/module to add method`, wenn `ruby_class` 0 ist** —
+**und 0 ist genau das, was ein Leser hat, der den Satz auslaesst.**
+
+**Und `Object` ist die Sprache, und nicht der Host:** der Leser legt
+es selbst an, **und er legt es an, weil `Object.superclass ==
+BasicObject` und `BasicObject.superclass == nil` gemessen sind** —
+**das ist der Satz, der beweist, dass der Leser die Kette selbst
+baut.** Kein Spiel-Host muss etwas bereitstellen.
+
+**Und das ist der Satz, an dem jede RPG-Maker-Datei endet:**
+`def setup` auf oberster Ebene steht in der zweiten Datei jedes VX-,
+VX-Ace- und XP-Projekts.
+
+**Mutationen 3/4, und die eine Ueberlebende ist gemessen ein No-op:**
+sie verhindert nur die *zweite* Definition derselben Methode auf
+`Object` (`!objectTyp.Methods.ContainsKey(name)` ist beim ersten `def`
+wahr), **und ein Test, der das prueft, prueft eine Zweitdefinition,
+und nicht die Regel.**
 beide `FeldFrage`** — **und eine dritte Regel schliesst per
 `compile`, weil C# kein zweites `out var` in derselben Bedingung
 zulässt** — **und das ist eine Eigenschaft der Sprache und kein

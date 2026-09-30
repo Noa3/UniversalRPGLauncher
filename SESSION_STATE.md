@@ -10116,3 +10116,31 @@ Modul-Walk**: als ich die Bruecke ganz entfernt habe, antwortete dieser
 Ort `false` (32 Fehler, gemessen). Sie bleibt fuer diese Fragen.
 
 Mutationen 6/8 mit gueltigem C#, `All 2068 tests passed`.
+
+
+## Und ein `def` auf oberster Ebene ist jetzt ein `Object`
+
+**Gemessen vorher:** `def lauf; 7; end; lauf` gab `nil` mit *method lauf
+is defined outside a class*, **und `self.lauf` gab 7.**
+
+**Belegt an der Quelle, und nicht entschieden:**
+- `eval.c` Zeile 1233: `ruby_class = rb_cObject` beim Programmstart
+- `eval.c` Zeile 1234: `ruby_frame->self = ruby_top_self`
+- `eval.c` Zeile 3516: `TypeError: no class/module to add method`, wenn
+  `ruby_class == 0` — **und 0 ist, was ein Leser ohne die Regel hat**
+- `parse.y` Zeile 1646: `NOEX_PRIVATE` — ein Top-Level-`def` ist privat
+
+**Und `Object` ist spracheigner Besitz** (`Object.superclass ==
+BasicObject`, `BasicObject.superclass == nil`, gemessen) — **kein Host
+muss etwas bereitstellen.**
+
+**Zwei Fehler behoben, beide gemessen:**
+1. `DefineMethod` legte nichts an, wenn `_aktuellerTyp == null`
+2. `EigeneMethode` und `Name()` fielen nicht auf `Object` zurueck
+
+**Und der dritte Befund aus derselben Messung:** ein klammerloser
+Aufruf ist ein `Identifier`, **und nicht `SelfCall`** — der Parser
+erzeugt `SelfCall` nur fuer geschweifte und runde Klammern.
+
+`All 2068 tests passed`, Mutationen 3/4 (die Ueberlebende ist ein
+gemessener No-op: sie betrifft nur die Zweitdefinition).

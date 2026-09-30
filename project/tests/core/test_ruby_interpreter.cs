@@ -1041,36 +1041,77 @@ public partial class TestRubyInterpreter : TestBase
     }
 
     /// <summary>
-    /// A `def` outside a class is a diagnostic and not a method.
+    /// <summary>
+    /// A `def` outside a class lands on `Object`, as Ruby does it.
     /// </summary>
     /// <remarks>
-    /// <strong>Ruby would define it on <c>Object</c></strong> — and this
-    /// interpreter files methods under a class, so it says which thing would
-    /// have to provide that. <strong>A reader that invented a root class
-    /// would have made every game's top-level method land in a place no game
-    /// ever asks for.</strong>
+    /// <para>
+    /// <strong>And this is the reference, and not a decision.</strong> Ruby
+    /// 1.8.1 sets <c>ruby_class = rb_cObject</c> when the program starts
+    /// (<c>eval.c</c> line 1233) and <c>ruby_frame->self = ruby_top_self</c>
+    /// (line 1234) -- **and line 3516 raises
+    /// <c>TypeError: no class/module to add method</c> when
+    /// <c>ruby_class</c> is 0**, **which is what a reader that leaves the
+    /// sentence out has.**
+    /// </para>
+    /// <para>
+    /// <strong>And <c>Object</c> is the language, and not the host.</strong>
+    /// This reader builds it itself, **and it builds it because
+    /// <c>Object.superclass == BasicObject</c> and
+    /// <c>BasicObject.superclass == nil</c> are measured** -- that chain is
+    /// what proves the reader owns the chain. **No game host has to
+    /// provide anything.**
+    /// </para>
+    /// <para>
+    /// <strong>And this is the sentence every RPG Maker file ends on.</strong>
+    /// <c>def setup</c> at the top level is in the second file of every VX,
+    /// VX Ace and XP project, **and measured before this:
+    /// <c>lauf</c> without brackets answered <c>nil</c> with the diagnostic
+    /// <i>method lauf is defined outside a class</i>, and
+    /// <c>self.lauf</c> answered 7** -- **and the reason the second one
+    /// worked and the first did not is that the second names the
+    /// receiver and the first did not, and the first had nothing to
+    /// look in.**
+    /// </para>
     /// </remarks>
-    public void Test_ADefOutsideAClassIsADiagnostic()
+    public void Test_ADefAtTheTopLevelLandsOnObject()
     {
         var mit = new RubyInterpreter(new RubyNullHost());
-        mit.RunProgram(Statements("def allein\n 1\nend\n"));
+        mit.RunProgram(Statements(
+            "def allein\n 1\nend\n"));
 
         AssertEq(mit.DefinedTypes.Count, 0,
-            "**no class was invented** — a reader that created a root would "
-                + "have put a game's top-level method in a place no game asks "
-                + "for");
-        var gesagt = false;
-        foreach (var d in mit.Diagnostics)
-        {
-            if (d.Contains("outside a class"))
-            {
-                gesagt = true;
-            }
-        }
+            "**no class was invented** -- `Object` is the language own "
+                + "and it is not counted as a script definition");
+        AssertTrue(mit.FindMethod("Object", "allein") != null,
+            "**and the method is on `Object`** -- Ruby 1.8.1, "
+                + "`eval.c` line 1233: a top-level `def` is an "
+                + "`Object` method");
 
-        AssertTrue(gesagt, "**and it says which thing would have to provide "
-            + "it** — the diagnostics were: "
-            + string.Join(" | ", mit.Diagnostics));
+        // **Und der Aufruf ohne Klammern ist der Satz, den jedes
+        // Skript schreibt.**
+        var gerufen = new RubyInterpreter(new RubyNullHost());
+        var sieben = gerufen.RunProgram(Statements(
+            "def lauf\n 7\nend\nlauf\n"));
+
+        AssertEq(sieben.Integer, 7,
+            "**`lauf` is seven** -- measured before this: nil, and the "
+                + "diagnostic said the method was defined outside a class. "
+                + "A bare call is an `Identifier`, and `Name()` looked in "
+                + "`FindMethod(null, name)`, and null is not a name, and "
+                + "the sentence ended as `Local(name)` = nil");
+        AssertEq(gerufen.Diagnostics.Count, 0,
+            "**and nothing was said** -- `lauf` is the most ordinary line "
+                + "in a Ruby program");
+
+        // **Und `main` ist ein `Object`, und nicht nichts.**
+        var mitSelf = new RubyInterpreter(new RubyNullHost());
+        var ueberSelf = mitSelf.RunProgram(Statements(
+            "def lauf\n 7\nend\nself.lauf\n"));
+        AssertEq(ueberSelf.Integer, 7,
+            "**and `self.lauf` is the same seven** -- the two spellings "
+                + "are one sentence, and a reader that made them differ "
+                + "would fail on whichever one a game happened to use");
     }
 
     /// <summary>
