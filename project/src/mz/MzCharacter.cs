@@ -126,6 +126,102 @@ public sealed class MzCharacter
     public int BalloonIcon { get; private set; } = NoBalloon;
 
     /// <summary>
+    /// The animation over this figure, and how long it has left.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And an animation is a second field, and not the
+    /// balloon.</strong> The official help gives <c>221 Show
+    /// Animation</c> and <c>213 Show Balloon Icon</c> the same three
+    /// settings, **and the two commands are separate codes in every
+    /// finished project**, **and one field for both would have let a
+    /// game's balloon overwrite its animation and neither would have
+    /// been visible for long enough to see.**
+    /// </para>
+    /// <para>
+    /// <strong>And both fields carry the same three numbers</strong>,
+    /// **and they are written out twice here rather than shared**,
+    /// **because a shared field is the exact bug above.**
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Whether <c>222 Erase Event</c> has hidden this figure.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And "erased" is not "gone", and not "transparent".</strong>
+    /// The official help: *Temporarily removes the event currently being
+    /// run.* <strong>The event is still on the map and still has its
+    /// commands**; **it just is not drawn**, **and a reader that removed
+    /// it from the dictionary made every later command that named it fail
+    /// with "no such character"** — and a game's own event erases
+    /// itself and then runs four more commands.
+    /// </para>
+    /// <para>
+    /// <strong>And it ends at a map change, and not on its own.</strong>
+    /// *The event will remain erased until the party moves to another
+    /// map.* <strong>Nothing here clears it</strong>, **and a reader
+    /// that ticked it off after N frames brought the event back while the
+    /// player was looking straight at the place where it had been.**
+    /// </para>
+    /// </remarks>
+    /// <summary>Hides this figure, from <c>222 Erase Event</c>.</summary>
+    public void Erase() => Erased = true;
+
+
+    public bool Erased { get; private set; }
+
+
+    public int Animation { get; private set; } = NoAnimation;
+
+    /// <summary>Whether an animation is playing over this figure.</summary>
+    public bool HasAnimation => Animation != NoAnimation;
+
+    /// <summary>Frames the animation has left.</summary>
+    public int AnimationFramesLeft { get; private set; }
+
+    /// <summary>What "no animation" is, and not zero.</summary>
+    /// <remarks>
+    /// <strong>And zero is the editor's first animation</strong>, **and a
+    /// figure that started there would answer "yes, one is playing"**
+    /// **before the map's first frame was drawn.**
+    /// </remarks>
+    public const int NoAnimation = -1;
+
+    /// <summary>Plays an animation over this figure, from <c>221</c>.</summary>
+    /// <param name="pAnimation">Which one, from the game's own list.</param>
+    /// <param name="pFrames">How long it plays.</param>
+    public void ShowAnimation(int pAnimation, int pFrames)
+    {
+        Animation = pAnimation;
+        AnimationFramesLeft = pFrames;
+    }
+
+    /// <summary>Stops the animation at once.</summary>
+    public void ClearAnimation()
+    {
+        Animation = NoAnimation;
+        AnimationFramesLeft = 0;
+    }
+
+    /// <summary>Counts the animation's clock down.</summary>
+    /// <param name="pFrames">How many frames passed.</param>
+    public void TickAnimation(int pFrames)
+    {
+        if (AnimationFramesLeft <= 0)
+        {
+            return;
+        }
+
+        AnimationFramesLeft -= pFrames;
+        if (AnimationFramesLeft <= 0)
+        {
+            AnimationFramesLeft = 0;
+            Animation = NoAnimation;
+        }
+    }
+
+    /// <summary>
     /// Whether an icon is showing over this figure.
     /// </summary>
     public bool HasBalloon => BalloonIcon != NoBalloon;

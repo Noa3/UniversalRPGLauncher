@@ -96,6 +96,74 @@ public sealed class MzPlayer
     /// </remarks>
     public int BalloonIcon { get; private set; } = MzCharacter.NoBalloon;
 
+    /// <summary>
+    /// The animation over the player, and how long it has left.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the player's animation is its own field, and the same
+    /// numbers as the figure's.</strong> The help says the display
+    /// location is *based on the position of the player or event*,
+    /// **and that is the choice the first parameter makes** — **and
+    /// measured on a finished project, <c>221</c> comes with the same
+    /// minus one that <c>213</c> does.**
+    /// </remarks>
+    /// <summary>
+    /// Whether the running event is the player, and has erased it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the player is a character for this too.</strong>
+    /// *Temporarily removes the event currently being run* — **and a
+    /// map event whose page runs under the player is the player's own
+    /// case**, **and a reader that only had a flag on map events had
+    /// nowhere to put it for a command running as the player.**
+    /// </remarks>
+    public bool Erased { get; private set; }
+
+    /// <summary>Hides the player, from <c>222 Erase Event</c>.</summary>
+    public void Erase() => Erased = true;
+
+
+    public int Animation { get; private set; } = MzCharacter.NoAnimation;
+
+    /// <summary>Whether an animation is playing over the player.</summary>
+    public bool HasAnimation => Animation != MzCharacter.NoAnimation;
+
+    /// <summary>Frames the animation has left.</summary>
+    public int AnimationFramesLeft { get; private set; }
+
+    /// <summary>Plays an animation over the player, from <c>221</c>.</summary>
+    /// <param name="pAnimation">Which one.</param>
+    /// <param name="pFrames">How long it plays.</param>
+    public void ShowAnimation(int pAnimation, int pFrames)
+    {
+        Animation = pAnimation;
+        AnimationFramesLeft = pFrames;
+    }
+
+    /// <summary>Stops the animation at once.</summary>
+    public void ClearAnimation()
+    {
+        Animation = MzCharacter.NoAnimation;
+        AnimationFramesLeft = 0;
+    }
+
+    /// <summary>Counts the animation's clock down.</summary>
+    /// <param name="pFrames">How many frames passed.</param>
+    public void TickAnimation(int pFrames)
+    {
+        if (AnimationFramesLeft <= 0)
+        {
+            return;
+        }
+
+        AnimationFramesLeft -= pFrames;
+        if (AnimationFramesLeft <= 0)
+        {
+            AnimationFramesLeft = 0;
+            Animation = MzCharacter.NoAnimation;
+        }
+    }
+
     /// <summary>Whether an icon is showing over the player.</summary>
     public bool HasBalloon => BalloonIcon != MzCharacter.NoBalloon;
 

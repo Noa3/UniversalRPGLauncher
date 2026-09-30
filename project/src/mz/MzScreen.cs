@@ -349,6 +349,27 @@ public sealed class MzScreen
     /// </remarks>
     public const int MaxBalloonFrames = 60;
 
+    /// <summary>
+    /// How long an animation stays when the command did not say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the same choice as the balloon's, and the
+    /// code admits it the same way.</strong> The official help for
+    /// <c>221 Show Animation</c> names the character, the animation and
+    /// whether to wait, <strong>and no duration, and no duration
+    /// anywhere in the command.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And an animation is not a balloon.</strong> A balloon is
+    /// an icon over a head; <strong>an animation is a short picture that
+    /// plays once</strong>, **and one second is long enough to read one
+    /// and short enough that a game's map does not sit still for it.**
+    /// </para>
+    /// </para>
+    /// </remarks>
+    public const int MaxAnimationFrames = 60;
+
 
     /// <summary>
     /// Advances a fade by a frame, and silences the channel when it ends.

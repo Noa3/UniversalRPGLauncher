@@ -10655,3 +10655,93 @@ als alle drei anderen.**
 nur ein Test ueber den Runner findet: **der Ballon ohne Takt**, **die Figur
 mit Icon 0 von Anfang an**, **das `return false` ohne Warten**, **und der
 Selbstschalter, der alle vier Buchstaben auf A legt.**
+
+## MZ: 221 Show Animation und 222 Erase Event
+
+**Die Quelle ist wieder die offizielle Hilfe, und die ist hier
+ungewoehnlich klar.** `222 Erase Event`: *Temporarily removes the event
+currently being run. **There are no parameters to set.** The event will
+remain erased until the party moves to another map.* `221 Show Animation`:
+*Character — The display location will be based on the position of the
+player or event. Animations — Specify the animation to display. Wait for
+Completion — When enabled, the event will be paused until the animation
+being displayed has finished.*
+
+**Und beide gemessenen Formen sind leer:** `221 []` sechzehn mal, `222 []`
+vierzehn mal.
+
+**Und die Hilfe gibt 221 und 213 dieselben drei Saetze.** Das ist kein
+Zufall, **und es heisst nicht, dass man sie zusammenlegt:** sie sind zwei
+Codes in jedem fertigen Spiel, **und ein Feld fuer beide haette den
+Ballon eines Ereignisses ueber die Animation einer Figur geschrieben.**
+
+**Drei Befunde.**
+
+1. **"Geloescht" ist nicht "weg."** *Temporarily removes the event
+   currently being run* -- **das Ereignis hat danach weiter seine
+   Befehle**, **und ein Leser, der es aus der Karte nahm, liess jeden
+   spaeteren Befehl, der es nennt, mit "kein solches Ereignis" enden** --
+   **und ein Spiel loescht sein eigenes Ereignis und laeuft danach noch
+   vier Befehle weiter.**
+2. **Nichts loescht das Flag wieder.** *The event will remain erased
+   until the party moves to another map* -- **und ein Leser, der es nach
+   N Bildern zuruecksetzte, holte das Ereignis zurueck, waehrend der
+   Spieler gerade auf die Stelle sah.**
+3. **Die Animationsdauer ist wieder eine Zahl, die dieses Repository
+   gewaehlt hat** (`MaxAnimationFrames = 60`), **und die Konstante sagt
+   es**, **denn die Hilfe nennt keine Dauer, und ohne eine waere *wait
+   for the animation being displayed has finished* eine Wartezeit, die
+   nie endet.**
+
+**Und der `return !warten`-Fehler aus dem vorigen Schritt steht hier
+genauso** -- **und das ist der Grund, warum er dort gesucht werden
+musste:** **beide Befehle haben dieselbe Form, und ein Leser, der den
+Fehler einmal macht, macht ihn zweimal.**
+
+**Und `221` braucht wie `213` ein eigenes Feld, plus Anfangswert -1** --
+**denn null ist das erste Icon der Editorliste und die erste Animation.**
+
+**Test evidence** `test_mz_animation_and_erase.cs` (3), **3/3 beim ersten
+Lauf.**
+
+**Neu gemessen: 1703 von 2436 ausfuehrbar** (vorher 1673, und davor 1570).
+
+## Und ein Befund, den erst ein echtes Projekt zeigt: der dritte Parameter ist ein Wort
+
+**Gemessen an `CamelliaCoronation-Win`, und die Formen widersprechen sich.**
+
+| Befehl | gemessene Form | Laenge |
+|---|---|---|
+| `121 Control Switches` | `"0"` | 3 |
+| `123 Control Self Switch` | `"0"`, `"1"` | 2 |
+| `129 Change Party Members` | `"0"`, `"1"` | 3 |
+| `122 Change Variables` | `"3"` an Position 3 | 6 |
+| **`213 Show Balloon Icon`** | **JSON-`false` / JSON-`true`** | 3 |
+| `221 Show Animation` | **leer** | 0 |
+
+**Und was `MzCommandEntry.From` daraus macht, ist Text, und zwar
+`"true"` oder `"false"`** (`MzCommandEntry.cs:47`) -- **denn ein
+Parameter ist eine Zeichenkette, und ein JSON-Boolean muss in eine
+Zeichenkette.** **`At(pCommand, 2)` parst aber nur Zahlen**, und
+`"true"` wurde also 0,
+**und `0 == 1` ist false** -- **und damit war die Wartefunktion von
+`213` und `221` in jedem echten Spiel tot.** Die Tests waren gruen,
+**weil die Tests die Zahlen selbst geschrieben haben**: ein Test, der
+seine eigene Eingabe schreibt, misst die Datei nicht.
+
+**Und `221` traegt eine leere Liste, und ein fehlender Parameter ist
+"nein"** -- **sonst haette der Leser bei der ersten Animation
+ueberhaupt eingefroren**, denn es gibt dort nichts zu warten.
+
+**Der Leser heisst jetzt `Flag`** und nimmt `1`, `"true"` und `"on"`
+(ohne Rücksicht auf Gross- und Kleinschreibung) als ja; `0`,
+`"false"` und ein fehlender Parameter sind nein. **Die drei
+numerischen Befehle `121`, `123`, `129` lesen unveraendert ueber
+`At`** -- **gemessen sind ihre Werte `"0"` und `"1"`, und ein Leser,
+der dort `Flag` benutzt, hat nichts gewonnen und eine zweite
+Wahrheitsform eingefuehrt.**
+
+**Und die Regel, die daraus folgt: die Testdaten kommen aus dem
+Projekt.** **Drei von sechs Bool-Parametern in diesem Dispatch waren
+falsch gelesen, und kein Test der Welt haette das gefunden, weil alle
+drei die Zahl selbst gesetzt hatten.**

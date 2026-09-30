@@ -278,6 +278,15 @@ public sealed class MzBranchFacts
     /// icon on the map for the rest of the game.</strong>
     /// </para>
     /// </remarks>
+    public void TickAnimations(int pFrames)
+    {
+        Player.TickAnimation(pFrames);
+        foreach (var character in Characters.Values)
+        {
+            character?.TickAnimation(pFrames);
+        }
+    }
+
     public void TickBalloons(int pFrames)
     {
         Player.TickBalloon(pFrames);

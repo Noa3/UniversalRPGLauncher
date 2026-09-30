@@ -217,6 +217,44 @@ public static class MzCommandTable
     /// </remarks>
     public const int ShowBalloonIcon = 213;
 
+    /// <summary>Shows an animation over a character, from
+    /// <c>command221</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>213</c> with a different name.</strong> The
+    /// official help for both says the same three sentences: *Character —
+    /// The display location will be based on the position of the player or
+    /// event. … Wait for Completion — When enabled, the event will be
+    /// paused until the … being displayed has …*.
+    /// </para>
+    /// <para>
+    /// <strong>And so it carries the same state and the same
+    /// limits</strong>, **and the help names no duration here either**,
+    /// **which is the second place a reader has to make a choice and say
+    /// which.**
+    /// </para>
+    /// </remarks>
+    public const int ShowAnimation = 221;
+
+    /// <summary>Erases the running event, from <c>command222</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this command has no parameters at all.</strong> The
+    /// official help: *Temporarily removes the event currently being run.
+    /// There are no parameters to set. The event will remain erased until
+    /// the party moves to another map.* Measured on a finished project:
+    /// sixteen of them, every one with an empty list.
+    /// </para>
+    /// <para>
+    /// <strong>And "until the party moves to another map" is the part a
+    /// reader gets wrong.</strong> It is not for ever, and it is not until
+    /// something else erases it — **it ends at a map change**, and a
+    /// reader that set the flag to false again on the next frame brought
+    /// the event back while the player was still looking at it.
+    /// </para>
+    /// </remarks>
+    public const int EraseEvent = 222;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>

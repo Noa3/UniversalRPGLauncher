@@ -216,6 +216,8 @@ public partial class TestRealMzGameData : TestBase
             UniversalRPG.Web.MzCommandTable.ControlSelfSwitch,  // 123
             UniversalRPG.Web.MzCommandTable.ChangePartyMember,  // 129
             UniversalRPG.Web.MzCommandTable.ShowBalloonIcon,    // 213
+            UniversalRPG.Web.MzCommandTable.ShowAnimation,     // 221
+            UniversalRPG.Web.MzCommandTable.EraseEvent,       // 222
         };
 
         var nicht = vorkommen

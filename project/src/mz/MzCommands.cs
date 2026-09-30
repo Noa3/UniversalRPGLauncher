@@ -122,6 +122,8 @@ public static class MzCommands
             or MzCommandTable.ControlSelfSwitch
             or MzCommandTable.ChangePartyMember
             or MzCommandTable.ShowBalloonIcon
+            or MzCommandTable.ShowAnimation
+            or MzCommandTable.EraseEvent
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -765,6 +767,84 @@ public static class MzCommands
                 return true;
             }
 
+            case MzCommandTable.ShowAnimation:
+            {
+                // Die Hilfe zu `221 Show Animation` sagt dieselben drei
+                // Saetze wie zu `213 Show Balloon Icon`: *Character — The
+                // display location will be based on the position of the
+                // player or event. Animations — Specify the animation to
+                // display. Wait for Completion — When enabled, the event
+                // will be paused until the animation being displayed has
+                // finished.*
+                //
+                // **Und minus eins ist hier auch der Spieler**,
+                // **denn es ist derselbe erste Parameter und dieselbe
+                // Hilfe.**
+                var ziel = At(pCommand, 0);
+                var warten = Flag(pCommand, 2);
+                if (ziel < 0)
+                {
+                    pFacts.Player.ShowAnimation(
+                        At(pCommand, 1), MzScreen.MaxAnimationFrames);
+                }
+                else if (pFacts.Characters.TryGetValue(ziel, out var figur)
+                    && figur != null)
+                {
+                    figur.ShowAnimation(
+                        At(pCommand, 1), MzScreen.MaxAnimationFrames);
+                }
+                else
+                {
+                    pFacts.Notices.Add(
+                        $"animation asked for character {ziel}, and this "
+                        + "map has no such character");
+                    return true;
+                }
+
+                // **Und wie beim Ballon wartet der Befehl ueber
+                // `Wait`, und der Rueckgabewert sagt, ob die Liste
+                // weitergeht** -- **und die beiden sind nicht
+                // dasselbe**, **und ein `return false` ohne zu warten
+                // las den Befehl im naechsten Bild noch einmal und
+                // setzte die Uhr bei jedem Durchgang neu.**
+                if (warten)
+                {
+                    pInterpreter.Wait(MzScreen.MaxAnimationFrames);
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"animation {At(pCommand, 1)} over "
+                    + (ziel < 0 ? "the player" : $"character {ziel}")
+                    + (warten ? ", waiting for it to finish" : "")));
+                return !warten;
+            }
+
+            case MzCommandTable.EraseEvent:
+            {
+                // Die Hilfe zu `222 Erase Event` sagt woertlich:
+                // *Temporarily removes the event currently being run.
+                // There are no parameters to set. The event will remain
+                // erased until the party moves to another map.*
+                //
+                // **Und "es gibt keine Parameter" ist eine Aussage ueber
+                // die Datei, und nicht ueber den Code** -- **der Befehl
+                // kann traeger sein und ist dann kein Zaehler, und ein
+                // Test, der ihm drei Parameter gibt, hat einen anderen
+                // Befehl gebaut.**
+                var ereignis = pInterpreter.EventId;
+                if (pFacts.Characters.TryGetValue(ereignis, out var laeuft)
+                    && laeuft != null)
+                {
+                    laeuft.Erase();
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"event {ereignis} erased until the party moves to "
+                    + "another map"));
+                return true;
+            }
+
+
             case MzCommandTable.ShowBalloonIcon:
             {
                 // Die Hilfe zu `213 Show Balloon Icon` sagt: *Character —
@@ -810,7 +890,7 @@ public static class MzCommands
                 // einen Ballon, den sie selbst nicht beendet.**
                 if (ziel < 0)
                 {
-                    var warten = At(pCommand, 2) == 1;
+                var warten = Flag(pCommand, 2);
                     pFacts.Player.ShowBalloon(
                         At(pCommand, 1), MzScreen.MaxBalloonFrames);
                     if (warten)
@@ -833,7 +913,7 @@ public static class MzCommands
                     return true;
                 }
 
-                var warte = At(pCommand, 2) == 1;
+                var warte = Flag(pCommand, 2);
                 figur.ShowBalloon(
                     At(pCommand, 1), MzScreen.MaxBalloonFrames);
                 if (warte)
@@ -1090,6 +1170,65 @@ public static class MzCommands
     /// </summary>
     private static string Text(MzCommandEntry pCommand, int pIndex) =>
         pIndex < pCommand.Parameters.Count ? pCommand.Parameters[pIndex] : "";
+
+    /// <summary>
+    /// Whether a parameter says yes, and it may say it as a number or as
+    /// a word.
+    /// </summary>
+    /// <param name="pCommand">The command.</param>
+    /// <param name="pIndex">Which parameter.</param>
+    /// <returns>
+    /// True for <c>1</c> and for <c>"true"</c> in any case, false for
+    /// <c>0</c>, for <c>"false"</c> and for a parameter that is not
+    /// there.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a finished MZ project writes both forms, and not
+    /// interchangeably.</strong> Measured on <c>CamelliaCoronation</c>:
+    /// <c>213</c> carries <c>["-1", "2", "False"]</c> and
+    /// <c>["-1", "8", "True"]</c> -- <strong>words</strong> -- and
+    /// <c>221</c> carries an <em>empty</em> list, and <c>122</c> carries
+    /// <c>["1", "1", "0", "3", "0", "2"]</c> -- <strong>numbers</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that only parsed numbers got
+    /// <c>At(...)</c> to return 0 for <c>"True"</c></strong>, **and
+    /// <c>0 == 1</c> is false, <strong>and so the waiting setting of a
+    /// balloon or an animation was dead in every real game.</strong> The
+    /// tests all passed, <strong>because the tests wrote the numbers
+    /// themselves.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a parameter that is not there is "no".</strong> The
+    /// engine's own parameters always have a value,
+    /// <strong>and a missing one is a file this reader cannot answer,
+    /// and saying "no" keeps the list running rather than waiting on
+    /// nothing.</strong>
+    /// </para>
+    /// </remarks>
+    private static bool Flag(MzCommandEntry pCommand, int pIndex)
+    {
+        if (pIndex >= pCommand.Parameters.Count)
+        {
+            return false;
+        }
+
+        var roh = pCommand.Parameters[pIndex];
+        if (int.TryParse(
+            roh,
+            System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out var zahl))
+        {
+            return zahl != 0;
+        }
+
+        return string.Equals(
+            roh, "true", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                roh, "on", System.StringComparison.OrdinalIgnoreCase);
+    }
+
 
     private static int At(MzCommandEntry pCommand, int pIndex) =>
         pIndex < pCommand.Parameters.Count

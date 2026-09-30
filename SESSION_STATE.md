@@ -10567,3 +10567,47 @@ untersucht** -- **und das ist eine offene Luecke, keine Entwarnung.**
 
 **Naechster Schritt fuer MZ:** `221 Erase Picture` und `222 Erase Event`
 (beide **null Parameter**, 16x und 14x) und `203 Change Image` (10 Formen).
+
+## 221 Show Animation, 222 Erase Event, und der Wort-Befund
+
+**Die offizielle Hilfe sagt fuer 222 woertlich *There are no parameters
+to set*, und das Spiel traegt 16x bzw. 14x eine leere Liste.**
+
+**Und 221 ist 213 mit anderem Namen** -- **dieselben drei Saetze der
+Hilfe, gleicher erster Parameter, gleiches Minus eins fuer den Spieler**
+-- **und trotzdem zwei Felder**, **denn ein gemeinsames Feld haette den
+Ballon eines Ereignisses ueber die Animation einer Figur geschrieben.**
+
+**"Geloescht" heisst nicht "weg":** das Ereignis hat danach weiter seine
+Befehle, **und nichts loescht das Flag bis zum Kartenwechsel.**
+
+**Und dann der Fund, der drei von sechs Bool-Parametern in diesem
+Dispatch betraf und den kein Test der Welt haette finden koennen.**
+
+Gemessen: `213` schreibt **JSON-Booleans** (`bool`, nicht Text), `121`,
+`123` und `129` schreiben `"0"` und `"1"`, und `221` traegt eine leere
+Liste. **Und `MzCommandEntry.From` macht aus einem JSON-Boolean den Text
+`"true"` oder `"false"`** (`MzCommandEntry.cs:47`) -- **denn ein
+Parameter ist eine Zeichenkette.** **`At` parst nur Zahlen**, **und so
+war die Wartefunktion von `213` und `221` in jedem echten Spiel tot.**
+
+**Die Tests waren gruen, weil die Tests die Zahlen selbst geschrieben
+haben.** **Ein Test, der seine eigene Eingabe schreibt, misst die Datei
+nicht.**
+
+**Neu: `Flag(pCommand, i)`** -- ja bei `1`, `"true"` und `"on"` ohne
+Rücksicht auf die Schreibweise, nein bei `0`, `"false"` und bei einem
+fehlenden Parameter. **`121`, `123` und `129` lesen unveraendert ueber
+`At`**, **denn ihre Werte sind gemessen Zahlen, und ein Leser, der dort
+`Flag` benutzt, haette nichts gewonnen und eine zweite Wahrheitsform
+eingefuehrt.**
+
+**Neu gemessen: 1703 von 2436 ausfuehrbar** (vorher 1673).
+Mutationen 7/7. `All 2136 tests passed`, Validator gruen.
+
+**Und eine Unregelmaessigkeit, offen und nicht erklaert:** ein Volllauf
+zeigte `Test_EinAlsWortGeschriebenerSchalterWirdAlsWortGelesen` als
+fehlgeschlagen und meldete `2/2136 tests failed`, **obwohl nur eine
+Fehlermeldung im Log stand und `1/7`**. **Der Lauf davor und der
+danach waren gruen, und die Suite allein ist gruen.** **Nicht
+reproduziert.**

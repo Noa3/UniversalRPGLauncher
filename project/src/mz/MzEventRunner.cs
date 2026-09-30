@@ -265,6 +265,7 @@ public sealed class MzEventRunner
             // Icon herunter, und ein Ereignis, das auf eines wartet,
             // kommt nie zurueck.**
             pBranchFacts.TickBalloons(1);
+            pBranchFacts.TickAnimations(1);
             pBranchFacts.Screen.PassFrame();
             frame.Interpreter.ExecuteOne(actions, pBranchFacts);
             taken++;
