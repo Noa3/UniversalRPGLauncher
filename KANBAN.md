@@ -482,9 +482,41 @@ ueber der ersten Zeile.**
 **Und `||` gibt jetzt den Operanden zurueck:** `nil || 0` ist 0,
 `false || 0` ist 0, `1 || 0` ist 1, `0 || 0` ist 0.
 
-**Und `&&` habe ich mitgemessen und nicht getestet** -- **und ich melde es
-als offen:** `nil` und `false` sind beide falsch, **und in einer
-Bedingung ist das dasselbe, und das ist ein Satz und keine Messung.**
+**Und `&&` gab auch `false` statt des Operanden zurueck**, **und das
+habe ich in derselben Stunde gemessen, in der ich es als offen
+markiert hatte** -- **und mein Satz *nil und false sind in einer
+Bedingung dasselbe* war falsch**, **denn `&&` gibt den Operanden
+zurueck und nicht die Wahrheit.**
+
+**Der Beleg ist Ruby 1.8.1 `eval.c` Zeile 2946, und nicht meine
+Erinnerung:**
+
+```
+case NODE_AND:
+    result = rb_eval(self, node->nd_1st);
+    if (!RTEST(result)) break;
+    node = node->nd_2nd;
+    goto again;
+
+case NODE_OR:
+    result = rb_eval(self, node->nd_1st);
+    if (RTEST(result)) break;
+    node = node->nd_2nd;
+    goto again;
+```
+
+**Der `break` verlaesst die Schleife mit `result` als Wert des
+Ausdrucks, und `result` ist der linke Operand.**
+
+**Und gemessen jetzt:** `nil && 7` ist nil, `false && 7` ist false,
+`1 && 7` ist 7, `0 && 7` ist 7, `(nil && 7) || 3` ist 3,
+`(1 && 7) || 3` ist 7.
+
+**Und der Unterschied ist nicht kosmetisch:** `x.nil?` ist fuer nil
+`true` und fuer false `false` -- **und ein Spiel, das
+`return a && b` aus einer Methode zurueckgibt, gibt nil zurueck, wenn
+`a` nil war, und ein Leser, der false zurueckgibt, gibt dem Spiel mit
+`if result.nil?` einen anderen Weg.**
 
 **Und vier weitere Regeln, und vier davon haben die Tests getoetet und
 eine lebt, und die ist ehrlich nicht testbar** -- **denn

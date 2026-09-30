@@ -10334,10 +10334,19 @@ das Spiel hatte keine Klassen und keinen Fehler ueber der ersten
 Zeile.**
 
 **Jetzt: `nil || 0` ist 0, `false || 0` ist 0, `1 || 0` ist 1, `0 || 0`
-ist 0.** Und `&&` hat dieselbe Form, **und ist nicht getestet** — **und
-ich melde es als offen, denn `nil` und `false` sind beide falsch, und
-in einer Bedingung ist das dasselbe, und das ist ein Satz und keine
-Messung.**
+ist 0.**
+
+**Und `&&` gab auch `false` statt des Operanden zurueck, und mein Satz
+*dass nil und false in einer Bedingung dasselbe sind* war falsch.**
+Gemessen jetzt: `nil && 7` ist nil, `false && 7` ist false, `1 && 7` ist
+7, `0 && 7` ist 7, `(nil && 7) || 3` ist 3, `(1 && 7) || 3` ist 7.
+
+**Der Beleg ist Ruby 1.8.1 `eval.c` Zeile 2946:** `case NODE_AND:
+result = rb_eval(self, node->nd_1st); if (!RTEST(result)) break;` — **der
+`break` verlaesst die Schleife mit `result`, und `result` ist der linke
+Operand.** (Hinweis: Ruby 1.8.1 hat **kein `insns.def`** — die Datei gibt
+es erst ab 1.9; `curl` liefert 404, und die Instruktionen stehen in
+`eval.c` selbst.)
 
 ## Und `RunScripts(IReadOnlyList<string>)` ist die Tuer, die gefehlt hat
 

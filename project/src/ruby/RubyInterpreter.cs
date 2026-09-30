@@ -900,20 +900,44 @@ public sealed class RubyInterpreter
             // fehl, das Skript bricht ab, und die Liste laeuft weiter
             // ohne die Klasse, die der naechste Befehl braucht.**
             //
-            // **`&&` hat dieselbe Form** und wird hier nur auf
-            // Wahrheit geprueft, **weil `&&` in Ruby `false`
-            // zurueckgibt, wenn links falsch ist, und sonst den rechten
-            // Wert** -- **und der Unterschied zwischen `false` und
-            // `nil` faellt hier nicht auf**, **denn beide sind falsch
-            // und beide sind in einer Bedingung dasselbe.**
+            // **`&&` gibt ebenfalls den linken Operanden zurueck,**
+            // **und der Beleg dafuer ist Ruby 1.8.1 `eval.c` Zeile
+            // 2946, und nicht meine Erinnerung:**
+            //
+            // ```
+            // case NODE_AND:
+            //     result = rb_eval(self, node->nd_1st);
+            //     if (!RTEST(result)) break;
+            //     node = node->nd_2nd;
+            //     goto again;
+            //
+            // case NODE_OR:
+            //     result = rb_eval(self, node->nd_1st);
+            //     if (RTEST(result)) break;
+            //     node = node->nd_2nd;
+            //     goto again;
+            // ```
+            //
+            // **Der `break` verlaesst die Schleife mit `result` als dem
+            // Wert des Ausdrucks** -- **und `result` ist der linke
+            // Operand, und nicht `Qfalse`.**
+            //
+            // **Gemessen before this fix:** `nil && 7` gave
+            // **Boolean false** instead of **nil**.
+            //
+            // **Und der Unterschied ist nicht kosmetisch.**
+            // `x.nil?` ist `true` fuer nil und `false` fuer false,
+            // **und ein Spiel, das `return a && b` aus einer Methode
+            // zurueckgibt, gibt nil zurueck, wenn a nil war** --
+            // **und ein Leser, der false zurueckgibt, gibt einem Spiel
+            // mit `if result.nil?` einen anderen Weg.**
             var wert = Evaluate(Operands(pNode)[0]);
             if (links == "||")
             {
                 return Truthy(wert) ? wert : Evaluate(Operands(pNode)[1]);
             }
 
-            return Truthy(wert) ? Evaluate(Operands(pNode)[1])
-                : RubyValue.OfBoolean(false);
+            return Truthy(wert) ? Evaluate(Operands(pNode)[1]) : wert;
         }
 
         // **Und `<=>` fragt zuerst das Skript.** `a <=> b` bei zwei eigenen

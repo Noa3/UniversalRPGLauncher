@@ -531,6 +531,52 @@ public partial class TestRubyInterpreter
                 + "which is the exact error a VX script gets on its first "
                 + "line of every counter it has");
 
+        // **Und `&&` gibt denselben Operanden zurueck**, **und der
+        // Beleg dafuer ist Ruby 1.8.1 `eval.c` Zeile 2946:**
+        // `case NODE_AND: result = rb_eval(self, node->nd_1st);
+        // if (!RTEST(result)) break;` -- **und der `break` verlaesst die
+        // Schleife mit `result`, und `result` ist der linke Operand.**
+        //
+        // **Gemessen vorher: `nil && 7` gab `Boolean false`** --
+        // **und das ist nicht dasselbe**, **denn `x.nil?` ist fuer nil
+        // `true` und fuer false `false`.**
+        AssertTrue(
+            m.RunProgram(Statements("a = nil; return a && 7;")).IsNil,
+            "**and `nil && 7` is nil, and not false** -- and a method that "
+                + "returns `a && b` gives nil back when `a` was nil, and a "
+                + "game that asks `result.nil?` takes another way");
+        AssertTrue(
+            m.RunProgram(Statements("a = false; return a && 7;")).Boolean
+                == false
+                && !m.RunProgram(Statements("a = false; return a && 7;"))
+                    .IsNil,
+            "**and `false && 7` is false, and not nil** -- and the two "
+                + "are the same truth and different values, which is the "
+                + "whole content of that branch in `eval.c`");
+
+        // **Und `&&` gibt den rechten zurueck, wenn links wahr ist.**
+        AssertEq(m.RunProgram(Statements("a = 1; return a && 7;")).Integer, 7,
+            "**and `1 && 7` is 7**");
+        AssertEq(
+            m.RunProgram(Statements("a = 0; return a && 7;")).Integer, 7,
+            "**and `0 && 7` is 7 too** -- and only a language in which "
+                + "is false would say otherwise, and Ruby is not that "
+                + "one");
+
+        // **Und `&&` und `||` zusammen, so wie es in Skripten steht.**
+        AssertEq(
+            m.RunProgram(Statements("a = nil; return (a && 7) || 3;"))
+                .Integer,
+            3,
+            "**and `(nil && 7) || 3` is 3** -- and it is 3 through `||` "
+                + "and not through `&&`, and that is the difference "
+                + "between the two");
+        AssertEq(
+            m.RunProgram(Statements("a = 1; return (a && 7) || 3;")).Integer,
+            7,
+            "**and `(1 && 7) || 3` is 7** -- and `||` did not run, "
+                + "because 7 is true");
+
         // **Und die Form, die in einem Skript steht.**
         AssertEq(
             m.RunProgram(Statements("@z = nil; @z = @z || 7; return @z;"))
