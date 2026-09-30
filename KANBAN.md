@@ -11424,3 +11424,65 @@ zurueckgenommen, weil der Test recht hatte und nicht mein Kommentar.**
 
 **`All 2188 tests passed`, Validator gruen.**
 
+## Und die Laufbahn haengt an `moveType 3`, und das Spiel hat keine
+
+### Die Regel, gemessen an `updateSelfMovement`
+
+| `moveType` | Was der Motor tut |
+|---|---|
+| **0** | **nichts -- in keinem Zweig** |
+| 1 | zufaellig gehen |
+| 2 | zum Spieler gehen |
+| **3** | **die eigene Laufbahn der Seite laufen lassen** |
+
+**Und `moveType` sagt, ob die Figur von sich aus losgeht, und nicht ob
+sie gerade geht.**
+
+### Und es gibt eine Wartezeit, die man nicht raten darf
+
+**Gemessen an `stopCountThreshold`: `30 * (5 - moveFrequency)`.**
+
+**Fuer dieses Projekt sind das 60 Bilder, denn `moveFrequency` ist
+ueberall 3.** **Ein Leser, der die Schwelle ausliess, liess die Figuren
+sofort losrennen** -- **und einer, der die Frequenz als Framezahl nahm,
+wartete 150.**
+
+**Und bei der Standardfrequenz des Motors, 6, ist die Zahl negativ, und
+keine Figur kommt je dort hin.**
+
+### Und die beiden Mengen sind disjunkt
+
+| | Seiten | hat Schritte |
+|---|---|---|
+| `moveType: 0` | 235 | **7** |
+| `moveType: 3` | 18 | **0** |
+
+**Die 18 Seiten mit `moveType 3` liegen auf `Map007`, `Map008`,
+`Map012` und `Map015`, und alle vier sind `!Flame`.** **Und keine davon
+traegt Schritte -- ihre Laufbahn besteht aus genau einem Endpunkt.**
+
+**Und das ist kein Fehler des Projekts, sondern die Regel des Motors:**
+**eine eigene Laufbahn laeuft nur bei `moveType: 3`.**
+
+### Und ein Fehler, den erst eine Sonde fand
+
+**Ich hatte `Moving = moveType != 0` gesetzt.** **Der Motor prueft
+`isMoving()`, und das ist `_realX !== _x || _realY !== _y`** -- **und
+die beiden weichen nur ab, wenn die Figur gerade einen Schritt geht.**
+
+**Gemessen auf `Map015`: neun Figuren, alle mit `moving=true` und alle
+auf ihrer Kachel.** **Ein Leser, der `moveType` fuer "geht gerade"
+haelt, stellt einen ganzen Raum mitten im Schritt dar, in dem niemand
+einen Schritt geht.**
+
+### Und was eine leere Laufbahn tut
+
+**Nichts, und das ist richtig.** **Der Motor ruft `moveTypeCustom` auf,
+`updateRoutineMove` findet genau einen Endpunkt und tut nichts.**
+**Eine Runtime, die hier etwas bewegte, erfaende Bewegung, von der das
+Spiel nichts weiss.**
+
+**Test evidence** `test_real_mz_runtime_run.cs` (8), **8/8**.
+
+**`All 2189 tests passed`, Validator gruen.**
+

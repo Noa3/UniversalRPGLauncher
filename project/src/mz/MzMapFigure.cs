@@ -83,6 +83,43 @@ public sealed class MzMapFigure
     /// </remarks>
     public int MoveFrequency { get; init; } = 6;
 
+    /// <summary>Whether the route runs on its own.</summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own gate, and it is not whether
+    /// the route exists.</strong> Measured in
+    /// <c>Game_Event.prototype.updateSelfMovement</c>:
+    /// <c>moveType 1</c> walks at random, <c>2</c> toward the player,
+    /// and <c>3</c> runs the page's own route.
+    ///
+    /// <para>
+    /// <strong>And before any of that the figure must have stood still
+    /// long enough.</strong> Measured: <c>stopCountThreshold</c> is
+    /// <c>30 * (5 - moveFrequency)</c>, <strong>which for this
+    /// project's <c>moveFrequency: 3</c> is sixty frames</strong>,
+    /// <strong>and for the engine's own default of 6 it is a negative
+    /// number that no figure ever reaches.</strong>
+    /// </para>
+    public bool RunsOwnRoute => MoveType == 3;
+
+    /// <summary>How many still frames the route waits for.</summary>
+    /// <remarks>
+    /// <strong>And this goes up as the pattern goes faster</strong>, and
+    /// <strong>that is backwards from what the name suggests</strong> —
+    /// a figure whose pattern advances fast stands longer before it sets
+    /// off, <strong>and for the engine's own default frequency the number
+    /// is negative and no figure ever leaves.</strong>
+    /// </remarks>
+    public int StopCountThreshold => 30 * (5 - MoveFrequency);
+
+    /// <summary>The page's own route, as its file names it.</summary>
+    /// <remarks>
+    /// <strong>And a route with no list is not a route.</strong>
+    /// 253 of 253 pages carry a <c>moveRoute</c> object and only seven
+    /// of them carry steps, <strong>and the other 246 carry a single
+    /// entry that is the end</strong>.
+    /// </remarks>
+    public MzRouteStep.Route? Route { get; init; }
+
     /// <summary>Whether this page's conditions are met.</summary>
     /// <remarks>
     /// <strong>And a page with no condition is visible, and that is
@@ -199,6 +236,7 @@ public static class MzMapFigureReader
                     MoveType = seite.Member("moveType")?.IntOr(0) ?? 0,
                     MoveSpeed = seite.Member("moveSpeed")?.IntOr(4) ?? 4,
                     MoveFrequency = seite.Member("moveFrequency")?.IntOr(6) ?? 6,
+                    Route = ReadRoute(seite.Member("moveRoute")),
                 });
 
                 // **Und die erste passende Seite gewinnt** -- **denn ab
@@ -281,6 +319,96 @@ public static class MzMapFigureReader
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Reads a page's own move route out of its file.
+    /// </summary>
+    /// <param name="pWert">The page's <c>moveRoute</c>.</param>
+    /// <returns>The route, or nothing when the page has none.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a route is a list plus three flags, and all four come
+    /// from the file.</strong> Measured: every one of this project's 253
+    /// pages carries <c>list</c>, <c>repeat</c>, <c>skippable</c> and
+    /// <c>wait</c>, <strong>and only seven carry steps</strong> — the
+    /// other 246 carry a single entry, and that entry is the end.
+    /// </para>
+    /// <para>
+    /// <strong>And a route whose steps are all the end is no route.</strong>
+    /// <strong>A reader that treated 246 empty routes as routes had 246
+    /// figures each holding a one-step route that turns them nowhere.</strong>
+    /// </para>
+    /// </remarks>
+    private static MzRouteStep.Route? ReadRoute(MzValue? pWert)
+    {
+        if (pWert == null || pWert.Kind != MzKind.Object)
+        {
+            return null;
+        }
+
+        var liste = pWert.Member("list");
+        var schritte = new List<MzRouteStep>();
+        if (liste != null && liste.Kind == MzKind.Array)
+        {
+            foreach (var eintrag in liste.Items)
+            {
+                if (eintrag == null || eintrag.Kind != MzKind.Object)
+                {
+                    continue;
+                }
+
+                var code = eintrag.Member("code")?.IntOr(0) ?? 0;
+                var parameter = new List<string>();
+                var werte = eintrag.Member("parameters");
+                if (werte != null && werte.Kind == MzKind.Array)
+                {
+                    foreach (var wert in werte.Items)
+                    {
+                        parameter.Add(wert == null
+                            ? "" : wert.Kind == MzKind.Number
+                                ? wert.Number.ToString(System.Globalization
+                                    .CultureInfo.InvariantCulture)
+                                : wert.Text);
+                    }
+                }
+
+                schritte.Add(new MzRouteStep
+                {
+                    Code = code,
+                    Parameters = parameter,
+                });
+            }
+        }
+
+        // **Und eine Liste, in der nur der Endpunkt steht, ist keine
+        // Laufbahn.**
+        var echt = 0;
+        foreach (var schritt in schritte)
+        {
+            if (schritt.Code != MzRouteCode.End)
+            {
+                echt++;
+            }
+        }
+
+        if (echt == 0)
+        {
+            return null;
+        }
+
+        return new MzRouteStep.Route(
+            schritte,
+            Flag(pWert, "repeat"),
+            Flag(pWert, "skippable"),
+            Flag(pWert, "wait"));
+    }
+
+    private static bool Flag(MzValue pObject, string pName)
+    {
+        var wert = pObject.Member(pName);
+        return wert != null
+            && (wert.Kind == MzKind.Bool ? wert.Boolean : wert.Text == "true");
     }
 
     private static bool Gilt(MzValue pConditions, string pName)

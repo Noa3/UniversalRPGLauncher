@@ -499,6 +499,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // Standardwerten**, **denn die Seite sagt Tempo und Takt
         // ausdruecklich.**
         Clocks = new Dictionary<int, MzWalkClock?>();
+        Routes = new Dictionary<int, MzMoveRoute?>();
+        _standing = new Dictionary<int, int>();
         foreach (var figur in Figures)
         {
             Clocks[figur.EventId] = new MzWalkClock
@@ -508,10 +510,22 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 Direction = figur.Direction,
                 Pattern = figur.Pattern < MzWalkClock.MaxPattern
                     && figur.Pattern >= 0 ? figur.Pattern : 1,
-                // **Und eine Seite mit `moveType: 0` bewegt sich gar
-                // nicht** -- **denn "fest" ist eine Art des
-                // Stillstands, und nicht eine leere Angabe.**
-                Moving = figur.MoveType != 0,
+                // **Und keine Figur bewegt sich, weil sie nicht
+                // gelaufen ist.**
+                //
+                // **Der Motor prueft `isMoving()`, und das ist
+                // `_realX !== _x || _realY !== _y`** -- **und diese
+                // beiden weichen nur voneinander ab, wenn die Figur
+                // gerade einen Schritt geht oder gesprungen ist.**
+                //
+                // **`moveType` sagt, ob die Figur von sich aus losgeht,
+                // und nicht ob sie gerade geht.** **Ein Leser, der
+                // `Moving = moveType != 0` setzte, liess jede Figur
+                // eines Raumes mitten im Schritt stehen, obwohl keine
+                // von ihnen auch nur eine Kachel verlassen hat** --
+                // **und gemessen war das an `Map015`: neun Figuren,
+                // alle mit `moving=True` und alle auf ihrer Kachel.**
+                Moving = false,
             };
         }
 
@@ -576,6 +590,77 @@ public sealed class MzEngineRuntime : IEngineRuntime
             }
         }
 
+        // **Und die Laufbahnen laufen, und nur die, die laufen sollen.**
+        //
+        // **Gemessen an `Game_Event.prototype.updateSelfMovement`:** **die
+        // Laufbahn laeuft nur bei `moveType 3`, und `moveType 0` ist in
+        // keinem Zweig** -- **und vor allen Dingen muss die Figur erst
+        // stillstehen**, **`stopCountThreshold` Bilder lang, und das ist
+        // `30 * (5 - moveFrequency)`.**
+        //
+        // **Fuer dieses Projekt sind das 60 Bilder, denn `moveFrequency`
+        // ist ueberall 3.** **Ein Leser, der die Schwelle ausgelassen
+        // hat, liess die Figuren sofort losrennen, und einer, der die
+        // Frequenz als Framezahl genommen hat, liess sie nach 150 Bildern
+        // gehen.**
+        foreach (var figur in Figures)
+        {
+            if (!figur.RunsOwnRoute || figur.Route == null)
+            {
+                continue;
+            }
+
+            var route = Routes.TryGetValue(figur.EventId, out var lauf)
+                ? lauf : null;
+            if (route == null)
+            {
+                route = new MzMoveRoute();
+                route.Force(figur.Route.Value);
+                Routes[figur.EventId] = route;
+            }
+
+            if (_standing.TryGetValue(figur.EventId, out var stand))
+            {
+                stand++;
+            }
+            else
+            {
+                _standing[figur.EventId] = 1;
+            }
+
+            if (stand < figur.StopCountThreshold || route.IsDone)
+            {
+                continue;
+            }
+
+            // **Und die Figur, auf der die Laufbahn spricht.**
+            if (Characters.TryGetValue(
+                    figur.CharacterName, out var blatt) && blatt != null)
+            {
+                routeCharacter = new MzCharacter(figur.X, figur.Y);
+                routeCharacter.TurnTo(
+                    Clocks.TryGetValue(figur.EventId, out var u) && u != null
+                        ? u.Direction : figur.Direction);
+            }
+
+            if (route.Step(routeCharacter, null) != "")
+            {
+                // **Und die Drehung kommt bei der Uhr an, denn die Uhr
+                // ist es, die die Figur zeichnet** -- **und ohne das
+                // zeichnete die Runtime eine Figur, die sich umdreht,
+                // immer noch in ihrer alten Richtung.**
+                if (routeCharacter != null
+                    && Clocks.TryGetValue(figur.EventId, out var uhr)
+                    && uhr != null)
+                {
+                    uhr.Direction = routeCharacter.Direction;
+                    uhr.Moving = !routeCharacter.IsStopping;
+                }
+
+                wechselt++;
+            }
+        }
+
         if (_playerClock != null && _playerClock.Tick())
         {
             wechselt++;
@@ -592,6 +677,34 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
     /// <summary>How many frames this runtime has run.</summary>
     public int Frames { get; private set; }
+
+    /// <summary>Which route belongs to which event.</summary>
+    public Dictionary<int, MzMoveRoute?> Routes { get; private set; } = new();
+
+    /// <summary>How many frames a figure has stood still.</summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own <c>_stopCount</c>.</strong>
+    /// Measured: <c>checkStop(threshold)</c> is
+    /// <c>_stopCount &gt; threshold</c>, and the threshold is
+    /// <c>30 * (5 - moveFrequency)</c> — <strong>so a figure waits that
+    /// many frames before its route runs</strong>, <strong>and a reader
+    /// that skipped it sent every moving figure off on its first
+    /// frame.</strong>
+    /// </remarks>
+    private Dictionary<int, int> _standing = new();
+
+    /// <summary>
+    /// The figure the route is carried out on.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a route acts on a character, and not on a
+    /// number.</strong> <c>processMoveCommand</c> calls
+    /// <c>moveStraight</c>, <c>setDirection</c> and friends on the
+    /// character, <strong>and the clock this runtime keeps is only the
+    /// pattern</strong>, <strong>so the route needs a character to
+    /// speak to.</strong>
+    /// </remarks>
+    private MzCharacter? routeCharacter;
 
     /// <summary>Which walk clock belongs to which event.</summary>
     public Dictionary<int, MzWalkClock?> Clocks { get; private set; } = new();

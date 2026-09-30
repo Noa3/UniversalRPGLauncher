@@ -11014,3 +11014,33 @@ Parametern lesen und abarbeitet sie, aber nichts verbindet es mit den
 Karten dieses Projekts** -- **und `isMoving()` bleibt `false`, weil keine
 Figur ihre Kachel verlaesst.**
 
+## Und die Laufbahn haengt an `moveType 3`
+
+**`updateSelfMovement` hat Faelle fuer 1 (zufaellig), 2 (zum Spieler)
+und 3 (eigene Laufbahn) -- und `moveType 0` ist in keinem.** **Und
+`moveType` sagt, ob die Figur von sich aus losgeht, und nicht ob sie
+gerade geht.**
+
+**Und die Wartezeit ist `30 * (5 - moveFrequency)` = 60 Bilder bei
+`moveFrequency: 3`.** **Bei der Standardfrequenz 6 waere sie negativ.**
+
+**Und gemessen: die beiden Mengen sind disjunkt** -- **235 Seiten auf
+`moveType 0`, davon 7 mit Schritten; 18 Seiten auf `moveType 3`, davon
+0 mit Schritten.** **Die 18 liegen auf Map007, Map008, Map012, Map015,
+alle `!Flame`.**
+
+**Und ein Fehler, den erst eine Sonde fand:** **ich hatte
+`Moving = moveType != 0` gesetzt** -- **der Motor prueft `isMoving()`,
+also `_realX !== _x`** -- **und neun Figuren auf `Map015` standen mit
+`moving=true` auf ihrer Kachel.** **Jetzt ist `Moving` nur dann wahr,
+wenn die Figur wirklich einen Schritt geht.**
+
+**`All 2189 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **eine Figur, die wirklich vom Platz
+geht, gibt es in diesem Spiel nicht** -- **alle sieben Routen sind reine
+Drehungen auf `moveType: 0`** -- **also muss der Weg, den eine Figur
+ueber Kacheln geht, an den Befehlen (`201 Transfer Player`,
+`212 Show Balloon` und die Bewegung per Befehl) geprueft werden, und
+nicht an den Routen.**
+

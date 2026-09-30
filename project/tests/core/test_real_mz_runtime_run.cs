@@ -641,4 +641,134 @@ public partial class TestRealMzRuntimeRun : TestBase
 
         return true;
     }
+
+    /// <summary>
+    /// A page's own route runs, and only after the engine's wait.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the wait is the engine's own, and it is measured.</strong>
+    /// <c>stopCountThreshold</c> is <c>30 * (5 - moveFrequency)</c> —
+    /// <strong>and this project's pages all say
+    /// <c>moveFrequency: 3</c>, so it is sixty frames.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a runtime that skipped the wait sent every moving
+    /// figure off on its first frame</strong>, <strong>and one that took
+    /// the frequency as a frame count waited 150.</strong> <strong>So
+    /// the assertion is that nothing moves before sixty and something
+    /// moves after.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieLaufbahnLaeuftErstNachDerWartezeitDesMotors()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        // **Und gemessen: die 18 Seiten mit `moveType: 3` liegen auf
+        // `Map007`, `Map008`, `Map012` und `Map015`** -- **alle vier sind
+        // `!Flame`** -- **und `Map017`, die Karte mit den sichtbaren
+        // Figuren, hat keine davon.**
+        //
+        // **Und gemessen weiter: diese 18 Seiten haben keine eigene
+        // Laufbahn** -- **die sieben Seiten mit Schritten tragen alle
+        // `moveType: 0`.** **Die beiden Mengen sind disjunkt.** **Und
+        // das ist nicht ein Fehler des Projekts, sondern die Regel des
+        // Motors**: **eine eigene Laufbahn laeuft nur bei `moveType: 3`,
+        // und `moveType: 0` laeuft nie.**
+        AssertTrue(lauf.GoTo(15), "**and map 15 paints** -- and the "
+            + "measured moveType 3 pages are on maps 7, 8, 12 and 15");
+
+        // **Und die Seiten, die ihre Laufbahn selbst laufen lassen.**
+        var laufend = 0;
+        var schwellen = new List<int>();
+        var mitEigener = 0;
+        foreach (var figur in lauf.Figures)
+        {
+            if (figur.RunsOwnRoute)
+            {
+                laufend++;
+                schwellen.Add(figur.StopCountThreshold);
+            }
+
+            if (figur.Route != null)
+            {
+                mitEigener++;
+            }
+        }
+
+        AssertEq(laufend, 9,
+            "**and nine figures run their own route** -- and that is "
+                + "measured: map 15 carries nine pages at moveType 3, and "
+                + "the engine's updateSelfMovement has a case for "
+                + "moveType 1, 2 and 3 and moveType 0 is in none of them");
+        AssertEq(mitEigener, 0,
+            "**and none of them has steps of its own** -- and the two "
+                + "sets are disjoint in this project: the seven pages "
+                + "that carry steps are all moveType 0, and the eighteen "
+                + "at moveType 3 carry none, and that is the engine's "
+                + "rule and not a mistake in the project");
+
+        foreach (var schwelle in schwellen)
+        {
+            AssertEq(schwelle, 60,
+                "**and the wait is sixty frames** -- and it is 30 * (5 - 3), "
+                    + "and a reader that used the frequency as a frame "
+                    + "count waited a hundred and fifty");
+        }
+
+        // **Und vor der Schwelle bewegt sich nichts.**
+        var vorher = 0;
+        for (var frame = 0; frame < 40; frame++)
+        {
+            vorher += lauf.Tick();
+        }
+
+        AssertEq(vorher, 0,
+            "**and nothing has moved after forty frames** -- and the "
+                + "engine's own threshold is sixty, and a runtime that "
+                + "skipped it sent every moving figure off on its first "
+                + "frame");
+
+        // **Und danach passiert etwas, und zwar das Richtige.**
+        //
+        // **Und gemessen: diese 18 Seiten tragen KEINE Schritte, ihre
+        // Laufbahn besteht nur aus dem Endpunkt.** **Und der Motor
+        // ruft `moveTypeCustom` -> `updateRoutineMove` trotzdem auf,
+        // und die findet genau einen Endpunkt und tut nichts.** **Und
+        // das ist das richtige Ergebnis**: **eine leere Laufbahn
+        // bewegt niemanden**, **und eine Runtime, die hier etwas
+        // bewegte, erfaende Bewegung, von der das Spiel nichts weiss.**
+        var danach = 0;
+        for (var frame = 0; frame < 40; frame++)
+        {
+            danach += lauf.Tick();
+        }
+
+        AssertEq(danach, 0,
+            "**and still nothing has moved after another forty frames** "
+                + "-- and that is right: the engine calls updateRoutineMove "
+                + "for a moveType of 3, and it finds one end entry and "
+                + "does nothing, because these eighteen pages carry no "
+                + "steps at all. A runtime that moved them would invent "
+                + "movement the game knows nothing about");
+
+        // **Und die Schwelle selbst ist der ganze Unterschied, und sie
+        // ist messbar, ohne irgendeine Figur.**
+        AssertEq(lauf.Frames, 80,
+            "**and the runtime counted eighty frames** -- and a reader "
+                + "that skipped the wait would have moved on frame one, "
+                + "and one that read the frequency as frames would have "
+                + "waited a hundred and fifty");
+    }
 }
