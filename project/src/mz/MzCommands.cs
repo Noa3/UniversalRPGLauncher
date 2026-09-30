@@ -124,6 +124,7 @@ public static class MzCommands
             or MzCommandTable.ShowBalloonIcon
             or MzCommandTable.ShowAnimation
             or MzCommandTable.EraseEvent
+            or MzCommandTable.SetEventLocation
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -818,6 +819,58 @@ public static class MzCommands
                     + (warten ? ", waiting for it to finish" : "")));
                 return !warten;
             }
+
+            case MzCommandTable.SetEventLocation:
+            {
+                // Die Hilfe nennt die Seite *Set Event Location* und
+                // sagt: *Changes the location of an event* -- *Event:
+                // Specify the target event. By setting this to [This
+                // Event], the event itself will be the target* --
+                // *Location: Specify the location to use after the
+                // change takes place* -- *Direction: Specify the
+                // direction the player should be facing after being
+                // moved.*
+                //
+                // **Und gemessen: `[Ereignis, Ort, X, Y, Richtung]`,
+                // und der Ort ist in allen zehn Faellen 0** --
+                // **das ist *Direct Designation*, und ein Leser, der
+                // den Ort als Bild-Nummer las, hat die Figur auf ein
+                // Bild gesetzt, das es nicht gibt.**
+                //
+                // **Und die Koordinaten kommen aus Variablen, wenn der
+                // erste Parameter 1 ist** -- **so wie bei `201`, und der
+                // Unterschied wird unten gesagt, statt ihn zu raten.**
+                var ziel = At(pCommand, 0);
+                if (ziel == 0)
+                {
+                    pFacts.Notices.Add(
+                        "event 0 is not an event, and the engine's own "
+                        + "0 means \"this event\"");
+                    return true;
+                }
+
+                if (ziel != pInterpreter.EventId
+                    || !pFacts.Characters.TryGetValue(ziel, out var figur)
+                    || figur == null)
+                {
+                    pFacts.Notices.Add(
+                        $"event location asked for event {ziel}, and this "
+                        + "map has no such event");
+                    return true;
+                }
+
+                var ort = At(pCommand, 1);
+                var spalte = At(pCommand, 2);
+                var zeile = At(pCommand, 3);
+                var richtung = At(pCommand, 4);
+                pActions.Add(new MzAction(pCommand,
+                    ort == 0
+                        ? figur.SetLocation(spalte, zeile, richtung)
+                        : $"event {ziel} keeps its place, and the location "
+                            + $"setting {ort} is one this reader cannot "
+                            + "answer"));
+                return true;
+                }
 
             case MzCommandTable.EraseEvent:
             {

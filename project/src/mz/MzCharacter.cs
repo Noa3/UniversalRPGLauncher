@@ -81,6 +81,44 @@ public sealed class MzCharacter
 
     public int Direction { get; private set; } = Down;
 
+    /// <summary>
+    /// Puts this figure on a tile, and turns it, from <c>203 Set Event
+    /// Location</c>.
+    /// </summary>
+    /// <param name="pX">The tile column.</param>
+    /// <param name="pY">The tile row.</param>
+    /// <param name="pDirection">Which way it faces afterwards.</param>
+    /// <returns>What happened, in a sentence.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a tile is a jump, and not a step.</strong> The
+    /// official help: *Changes the location of an event* and *To move an
+    /// event to a specific location, select [Direct Designation]*.
+    /// <strong>There is no walk and no route here</strong> — the figure
+    /// is at the new tile on the next frame,
+    /// <strong>and a reader that set only <c>X</c> and <c>Y</c> left
+    /// <c>RealX</c> and <c>RealY</c> behind</strong>, **and a figure
+    /// whose tile says one thing and whose drawn position says another
+    /// walks back to the old tile on the next movement command.**
+    /// </para>
+    /// <para>
+    /// <strong>And the direction is a fourth setting, and not part of
+    /// the place.</strong> The help lists Event, Location and
+    /// Direction; **and the direction is applied even when the location
+    /// is "unchanged"**, because the engine's own
+    /// <c>setLocation</c> takes all three.
+    /// </para>
+    /// </remarks>
+    public string SetLocation(int pX, int pY, int pDirection)
+    {
+        X = pX;
+        Y = pY;
+        RealX = pX;
+        RealY = pY;
+        Direction = pDirection;
+        return $"event moved to {pX},{pY} facing {pDirection}";
+    }
+
     /// <summary>Whether the character is through things, which skips
     /// passability entirely.</summary>
     public bool Through { get; set; }

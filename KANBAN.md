@@ -10745,3 +10745,44 @@ Wahrheitsform eingefuehrt.**
 Projekt.** **Drei von sechs Bool-Parametern in diesem Dispatch waren
 falsch gelesen, und kein Test der Welt haette das gefunden, weil alle
 drei die Zahl selbst gesetzt hatten.**
+
+## MZ: 203 Set Event Location
+
+**Und die Hilfe hat keine Seite unter diesem Namen.** Das Handbuch
+nennt die Seite *Set Event Location* und sagt *Changes the location of an
+event* -- **und die Zahl in der Datei ist 203.** **Also traegt die
+Konstante das Wort des Handbuchs und die Zahl der Datei**, **und ein
+Leser, der den Namen nachgeschlagen und nichts gefunden haette, haette
+einen Befehl uebersprungen, den das Spiel zehnmal benutzt.**
+
+**Und die gemessene Form ist `[Ereignis, Ort, X, Y, Richtung]`** -- **und
+der Ort ist in allen zehn Faellen 0**, **das ist *Direct
+Designation*.**
+
+**Drei Befunde.**
+
+1. **Eine Kachel ist ein Sprung, und kein Schritt.** *Changes the
+   location of an event* -- **es gibt hier keinen Weg und keine Route.**
+2. **`RealX` und `RealY` gehoeren mit.** Die Figur wird zwischen zwei
+   Kacheln gezeichnet, **und ein Leser, der nur `X` und `Y` setzte,
+   liess die Zeichnung auf der alten Kachel** -- **und der naechste
+   Bewegungsbefehl ging zurueck an den Ort, von dem die Figur gerade
+   weggesetzt worden war**, **und das ist genau das, was ein
+   Ortswechsel erreichen sollte.**
+3. **Die Richtung wird auch gesetzt, wenn sich sonst nichts aendert.**
+   Die Hilfe nennt Event, Location und Direction, **und
+   `setLocation` des Motors nimmt alle drei.**
+
+**Und ein Ort, den dieser Leser nicht beantworten kann, wird gesagt und
+nicht geraten.** Gemessen ist der Ort immer 0, **und ein Leser, der das
+immer annahm, haette beim ersten handgeschriebenen Ereignis mit dem
+anderen Ort eine Figur auf eine Kachel gesetzt, die das Spiel nie
+genannt hat.**
+
+**Und ein Ereignis, das diese Karte nicht hat, wird benannt und nicht
+erfunden.**
+
+**Test evidence** `test_mz_set_event_location.cs` (3), **3/3 beim ersten
+Lauf.**
+
+**Neu gemessen: 1713 von 2436 ausfuehrbar** (vorher 1703).

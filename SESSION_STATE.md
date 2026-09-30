@@ -10611,3 +10611,59 @@ fehlgeschlagen und meldete `2/2136 tests failed`, **obwohl nur eine
 Fehlermeldung im Log stand und `1/7`**. **Der Lauf davor und der
 danach waren gruen, und die Suite allein ist gruen.** **Nicht
 reproduziert.**
+
+## Und 203 Set Event Location
+
+**Die Hilfe hat keine Seite unter diesem Namen.** Das Handbuch sagt
+*Set Event Location* und *Changes the location of an event* -- **und die
+Zahl in der Datei ist 203.**
+
+**Und die gemessene Form ist `[Ereignis, Ort, X, Y, Richtung]`, und der
+Ort ist in allen zehn Faellen 0** -- **das ist *Direct Designation*.**
+
+**`RealX` und `RealY` gehoeren mit `X` und `Y`:** **ein Leser, der nur
+die Kachel setzte, liess die Zeichnung zurueck, und der naechste
+Bewegungsbefehl ging an den Ort zurueck, von dem die Figur gerade
+weggesetzt worden war.**
+
+**Und ein Ereignis darf kein anderes verschieben:** **der Motor ruft
+`setLocation` auf dem Ereignis auf, das laeuft**, **und nie auf dem, das
+die Zahl nennt** -- **das stand nicht in der Hilfe, es stand in `201` und
+wurde hierher getragen.**
+
+**Und eine Lektion, die eine lebende Regel gefunden hat:** der erste Test
+pruefte `Direction == Down`, **und Down ist der Anfangswert des Feldes**,
+**und die Regel `Direction = Down` hat deshalb ueberlebt.** **Ein Test,
+der einen Wert gegen seinen eigenen Anfangswert prueft, prueft nichts.**
+
+**Neu gemessen: 1713 von 2436 ausfuehrbar** (vorher 1703).
+
+**Und was danach noch offen ist, gemessen:** **28 Befehle in 6 Codes** --
+`301` (7x), `322` (6x), `102` (8x), `105` (4x), `225` (2x), `314` (1x).
+**Und `102` ist *Show Choice List***, **der zweite Teil von `405`, und
+`405` selbst ist der dokumentierte No-op** -- **also ist die naechste
+Aufgabe nicht `102`, sondern `301`.**
+
+## Und dieselbe Sache zum zweiten Mal: Testfehler nur neben einem laufenden Mutationslauf
+
+**Ein Volllauf meldete `Test_EinKachelwechselIstSprungUndNichtSchritt`
+als fehlgeschlagen** (`3/2141 tests failed`, `TestMzSetEventLocation:
+4/5`), **und `scripts/validate.sh` im selben Moment: `All 2141 tests
+passed`.** **Drei weitere Volllaeufe hintereinander: alle gruen, und
+die Werte in einer Sonde waren jedesmal `x=5 y=7 rx=5 ry=7`.**
+
+**Und beide Fehlfaelle -- dieser und der `Internal CLR error
+(0x80131506)` von vorhin -- traten ausschliesslich auf, waehrend im
+Hintergrund ein Mutationslauf lief**, **und beide sind damit nicht
+zwei Fehler, sondern eine Umgebung.**
+
+**Was das ist, weiss ich nicht.** **Zwei Godot-Prozesse auf demselben
+Projektverzeichnis teilen `.godot/`**, **und der Mutationslauf baut
+waehrend der Testlauf laeuft** -- **das ist eine Vermutung, keine
+Messung.**
+
+**Die Regel daraus ist praktisch: nie gleichzeitig einen Volllauf und
+einen Mutationslauf fahren, und einen Testfehler, der nur neben einem
+anderen Prozess auftaucht, nicht als Befund behandeln.** **Drei
+Volllaeufe sind der Beweis, dass der Test gueltig ist, und die
+Umgebung der Beweis dafuer, dass er zweimal falsch gemeldet wurde.**

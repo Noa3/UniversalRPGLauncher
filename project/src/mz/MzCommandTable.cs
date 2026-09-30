@@ -255,6 +255,25 @@ public static class MzCommandTable
     /// </remarks>
     public const int EraseEvent = 222;
 
+    /// <summary>Moves an event to a tile, from <c>command203</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this has no page in the official help under that
+    /// name, and the help has the page under
+    /// <em>Set Event Location</em> instead</strong>, **and the number
+    /// in the file is 203.**
+    /// </para>
+    /// <para>
+    /// <strong>And the measured form is
+    /// <c>[Event, Place, X, Y, Direction]</c></strong> — ten times in a
+    /// finished project, <strong>and <em>Place</em> is 0 in every one of
+    /// them</strong>, **which is *Direct Designation*.** The help:
+    /// *To move an event to a specific location, select [Direct
+    /// Designation], then click [...].*
+    /// </para>
+    /// </remarks>
+    public const int SetEventLocation = 203;
+
     private static readonly Dictionary<int, string> Names = BuildNames();
 
     /// <summary>The owner of each data number, measured from the engine.</summary>
