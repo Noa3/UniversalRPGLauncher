@@ -449,58 +449,35 @@ baut.** Kein Spiel-Host muss etwas bereitstellen.
 `def setup` auf oberster Ebene steht in der zweiten Datei jedes VX-,
 VX-Ace- und XP-Projekts.
 
-**Und MZ ist gemessen: 114 Befehle benannt, 21 ausführbar.**
+**Und VX/VX Ace: der Ruby-Leser ist implementiert, und die Engine
+ruft ihn nirgends auf.**
 
-**Das ist der Unterschied zwischen "das Geraet erkannt" und "das Spiel
-laeuft", und er ist in Zahlen festgehalten:** `MzCommandTable.Count` ist
-114 (gemessen, und der Test sagt es), **und in `MzCommands.TryExecute`
-stehen 13 Faelle und in `MzControlFlow.TryExecute` 8** -- **also 21
-von 114 Befehlen fuehren etwas aus.**
+**Das ist die Luecke zwischen "Ruby kann das" und "das Spiel laeuft",
+und sie ist eine Verdrahtung und keine Sprache:** `RgssEngineRuntime`
+meldet selbst *Ruby, Game.exe, RGSS DLLs, and external runtimes were
+not executed* und *runtime initialization remains metadata-only*.
 
-**Und die 204 Befehle in den echten Fixtures dieser Engine benutzen 22
-Nummern** -- **und 20 davon sind behandelt, und die zwei Ausnahmen sind
-Numern, die die Engine als Daten eines Befehls liest, nicht als
-Befehl.** `655` (Plugin-Kommando, 67 mal) und `657` (Plugin-Kommando
-mit Text) sind genau das.
+**Und gemessen: 340 Aufrufe von `new RubyInterpreter(...)` in 36
+Testdateien, und keine einzige davon in `src/`.** **Und es gab
+vor dieser Sitzung keine Fixture eines echten Spiels in der ganzen
+Baum.**
 
-**Und vier Tabellennamen werden nirgends behandelt:** `355 Script`,
-`402 ContinueText`, `405 ShowChoices` und `412 EndBranch`.
+**Und jetzt laeuft die erste Skriptdatei eines VX-Projekts als Test**
+(`tests/fixtures/ruby/vx_window_base.rb`): eine Klasse, die `Window
+erbt -- **einen Namen, den der Leser nie gesehen hat und nicht
+vortaeuschen darf**, weil `Window` aus dem RTP kommt; eine Konstante;
+zwei Bedingungen, eine mit `else`; eine globale; eine Methode, die dem
+Empfaenger zuweist. **Ergebnis: ein Knoten, keine Diagnose,
+`initialize` und `refresh` sind Methoden.**
 
-**Und alle vier habe ich end to end gemessen, und alle vier laufen
-sauber durch:** eine Liste, die nur aus einem davon besteht, endet mit
-`Finished` und **null Aktionen** -- **und das ist genau das Verhalten
-der Engine**, **denn sie fragt, ob es eine Methode fuer die Nummer
-gibt, und wenn nicht, geht sie trotzdem weiter** (`MzInterpreter`
-Zeile 265: *"A command the engine has no method for is stepped over"*).
+**Und ich habe es zuerst zeilenweise gemessen, und jede Zeile warf
+*end was expected, but the script ends first* -- **weil eine Zeile
+keine Datei ist**, **und eine Zeile hat kein `end`, das das `def
+schliesst, das sie eroeffnet.** **Derselbe Text als Datei parst.**
 
-**Und ich habe sie zuerst als fehlend gemeldet, und das war falsch.** Ich
-hatte nur in den Dispatch-Zweigen gesucht **und nicht in dem Pfad, der
-sie abfaengt** -- **und ein Befehl, den die Engine ueberspringt, ist
-implementiert.**
-
-**Und `ClearBranch` hat keinen Aufrufer (gemessen: eine Suche ueber das
-ganze Projekt findet nur die Definition)** -- **und ich habe es
-geloescht, statt eine tote Regel zu dokumentieren.**
-
-**Mutationen 3/3, alle drei durch Tests** -- **und die dritte war vorher
-per `compile` geschlossen, und `compile` ist kein Test, und ich habe sie
-als gueltiges C# geschrieben.**
-
-**Und `EndBranch` habe ich end to end gemessen, und es laeuft
-durch:** `EndBranch` allein in einer Liste endet mit `Waiting` und
-einer Aktion, **nicht mit `Refused`** -- **und mein erster Test
-bekam `Refused`, weil ich `ShowText` mit den Parametern `"0" "0"
-"1" "0" "1"` gebaut habe, und die bedeuten *Schalter 0*, und der
-Leser sagte *switch 0*, weil der Schalter nicht da ist.** **Der
-Befehl war richtig und mein Test war falsch, und das ist der
-gemessene Befund und nicht ein No-op, das ich wegzaehle.**
-
-**Und `355`, `402` und `405` habe ich jetzt end to end gemessen, und
-sie sind keine Luecken** -- **und `EndBranch` habe ich zweimal
-gemessen, weil mein erster Test die falschen Parameter fuer
-`ShowText` gebaut hat** -- **und der Unterschied zwischen "nicht
-behandelt" und "nicht ausgefuehrt" ist der Unterschied zwischen einem
-Befehl ohne Wirkung und einem Befehl, den es nicht gibt.**
+**Und damit ist gemessen: der Leser nimmt eine echte VX-Datei. Was
+fehlt, ist die Verdrahtung von der Engine zu ihm -- und die ist eine
+Entscheidung, keine Messung.**
 
 *Ein Ueberleben, das man messen kann, ist eine Angabe und kein
 Fehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein

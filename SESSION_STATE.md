@@ -10291,3 +10291,27 @@ falsch.**
 es geloescht, statt eine tote Regel zu dokumentieren.**
 
 Mutationen 3/3, alle durch Tests. `All 2097 tests passed`.
+
+
+## Und VX: der Leser laeuft eine ganze Datei, die Engine ruft ihn nicht
+
+**Die Luecke zwischen "Ruby kann das" und "das Spiel laeuft" ist eine
+Verdrahtung, und keine Sprache:** `RgssEngineRuntime` meldet selbst
+*Ruby, Game.exe, RGSS DLLs, and external runtimes were not executed*.
+
+**Und gemessen: 340 `new RubyInterpreter(...)` in 36 Testdateien, keine
+in `src/` — und es gab keine Fixture eines echten Spiels im Baum.**
+
+**Und jetzt laeuft die erste VX-Skriptdatei als Test**
+(`tests/fixtures/ruby/vx_window_base.rb`) — **eine Klasse, die `Window`
+erbt, einen Namen, den der Leser nie gesehen hat**; eine Konstante;
+zwei Bedingungen, eine mit `else`; eine globale; eine Methode, die dem
+Empfaenger zuweist. **Ergebnis: ein Knoten, keine Diagnose, `initialize`
+und `refresh` sind Methoden.**
+
+**Und ich habe es zuerst zeilenweise gemessen, und jede Zeile warf
+*end was expected, but the script ends first* — weil eine Zeile keine
+Datei ist.** Derselbe Text als Datei parst.
+
+**Und `| ` bindet in Ruby schwacher als `==`** — mein Test schrieb
+`a == b | a == b`, **und der Leser hat recht, und Ruby auch.**
