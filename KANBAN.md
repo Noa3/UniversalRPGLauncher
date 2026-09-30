@@ -586,7 +586,52 @@ eine zweite Registrierung im Marshal-Leser ist eine Zeile, die man
 abhaengig von der Reihenfolge braucht** -- **also habe ich sie
 geloescht, statt eine tote Regel zu dokumentieren.** 3/3.
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und keinhlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+**Und RM2K laeuft jetzt gegen ein fertiges Spiel, und zwei Fehler
+dabei gefunden.**
+
+**Auf dieser Maschine liegt `Dragon Destiny`: 743 Karten, 416 kB
+Datenbank, echte Chipsets. Und `TestRealRm2kGameData` beweist, dass
+Karten, Datenbank und Chipsets gelesen werden.**
+
+**Und jetzt laeuft es: `TestRealRm2kRuntimeRun` startet das fertige
+Spiel ueber `EnginePluginHost`, tickt 100 Bilder ohne eine einzige
+Verweigerung und zeichnet eine Karte mit Inhalt.**
+
+**Fehler 1: die Runtime nahm die erste Datei alphabetisch.**
+
+**Zeile 89 war `Directory.EnumerateFiles(...).FirstOrDefault()`**
+**und `Map0001.lmu` eines Spiels von 2002 ist die leere
+Startkarte des Editors: 1227 Bytes vom 30. April 2002, ein Chip in
+allen 300 Feldern.**
+
+**Gemessen: diese Karte rendert eine Farbe, und `Map0002.lmu` --
+478 kB desselben Spiels -- rendert 64.**
+
+**Und die Startkarte steht in `RPG_RT.lmt`: `party_map_id = 742`.**
+**Und 742 ist ebenfalls eine leere Editor-Karte (2266 Bytes)**
+**-- das Spiel wurde also unfertig exportiert, und das ist eine
+Eigenschaft des Spiels und keine des Lesers.**
+
+**Also nimmt `PickStartMap` jetzt die Karte, die der MapTree nennt,
+mit Rueckfall auf die erste** -- **und der Rueckfall bleibt, weil
+ein MapTree aus einem gespeicherten Projekt eine geloeschte Karte
+nennen kann, und eine Runtime, die sich daran verweigert, zeigt
+statt des Spiels eine Ablehnung.**
+
+**Fehler 2: ein leerer Frame sagte nichts.** 76800 mal
+`0x00000000` und eine leere Diagnose -- **und ein Spieler sieht
+einen schwarzen Bildschirm und hat nichts, was er melden kann.**
+**Bei einer leeren Editor-Karte ist der schwarze Frame richtig, und
+richtig ohne ein Wort ist er ein Fehler, der sich als Erfolg
+verkleidet.**
+
+**Und zwei Mutationen ueberlebten zuerst, weil mein Test die
+*Entscheidung* nicht geprueft hat:** `Map0001` und `Map0002` sind
+beide 20x15, **und "die Runtime laeuft" sagt nichts ueber die Karte,
+die sie gewaehlt hat. Also prueft der Test jetzt
+`Simulation.MapId == 742`.** 5/5 durch Tests.
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und keinlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 

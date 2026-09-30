@@ -10389,3 +10389,32 @@ habe ich meine eigene Registrierung geloescht, statt eine tote Regel zu
 dokumentieren.** 3/3 durch Tests.
 
 `All 2115 tests passed`.
+
+
+## Und RM2K laeuft jetzt gegen ein fertiges Spiel
+
+**`Dragon Destiny` liegt auf dieser Maschine: 743 Karten, 416 kB
+Datenbank, echte Chipsets.** Und `TestRealRm2kRuntimeRun` startet es
+ueber `EnginePluginHost`, tickt 100 Bilder ohne eine Verweigerung und
+zeichnet eine Karte mit Inhalt. **2/2.**
+
+**Fehler 1: `Rm2kEngineRuntime` Zeile 89 nahm die erste Datei
+alphabetisch.** Und `Map0001.lmu` eines Spiels von 2002 ist die leere
+Startkarte des Editors — 1227 Bytes, ein Chip in allen 300 Feldern.
+**Gemessen: eine Farbe; `Map0002.lmu` (478 kB): 64 Farben.** Und der
+MapTree sagt `party_map_id = 742`. **Jetzt: `PickStartMap` nimmt die
+Karte aus dem MapTree, mit Rueckfall auf die erste.**
+
+**Und 742 ist auch eine leere Karte (2266 Bytes) — das Spiel wurde
+unfertig exportiert, und das ist eine Eigenschaft des Spiels.**
+
+**Fehler 2: ein leerer Frame sagte nichts.** 76800 mal `0x00000000`
+und eine leere Diagnose. **Bei einer leeren Karte ist der schwarze
+Frame richtig — und richtig ohne ein Wort ist er ein Fehler, der sich
+als Erfolg verkleidet.**
+
+**Und zwei Mutationen ueberlebten zuerst, weil mein Test nur
+zuehlte Farben statt die Karte zu pruefen** — `Map0001` und `Map0002`
+sind beide 20x15. **Der Test prueft jetzt `Simulation.MapId == 742`.**
+
+Mutationen 5/5 durch Tests. `All 2117 tests passed`.

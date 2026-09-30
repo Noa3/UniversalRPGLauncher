@@ -86,9 +86,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
 
         Godot.Collections.Dictionary? currentMap = null;
-        var mapPath = Directory.EnumerateFiles(root, "*.lmu", SearchOption.TopDirectoryOnly)
-            .OrderBy(pPath => Path.GetFileName(pPath), StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
+        var mapPath = PickStartMap(root, mapTree.Data);
         if (mapPath != null)
         {
             var map = _parser.ParseMap(mapPath);
@@ -973,6 +971,67 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         Simulation.MapY = Math.Clamp(mapY, 0, height - 1);
         Simulation.AddDiagnostic("RM2K chipset passability is unavailable; movement remains fail-closed.");    }
 
+    /// <summary>
+    /// The map a game starts on, and not the first one alphabetically.
+    /// </summary>
+    /// <param name="pRoot">The game directory.</param>
+    /// <param name="pMapTree">The parsed <c>RPG_RT.lmt</c>.</param>
+    /// <returns>The path, or null when the directory has no map.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the bug this fix closes, measured on a
+    /// finished game.</strong> The runtime took the first
+    /// <c>*.lmu</c> by name, **and <c>Map0001.lmu</c> in a game of
+    /// 2002 is the editor's empty start map** — 1227 bytes, dated the
+    /// day the project was made, filled with chip 5089.
+    /// <strong>Measured: that map rendered one colour, and
+    /// <c>Map0002.lmu</c> — a real map of the same game, 478 kB —
+    /// rendered 64.</strong> A player would have seen a black screen and
+    /// a game that ticks and never draws.
+    /// </para>
+    /// <para>
+    /// <strong>And the start map is written down</strong>, in
+    /// <c>RPG_RT.lmt</c>, as <c>start.party_map_id</c>.
+    /// <strong>A reader that ignores it is guessing, and the guess is
+    /// wrong in the one case that matters — the first thing anybody
+    /// sees.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a game whose map tree names a map it does not have
+    /// falls back to the first one</strong> — **because a map tree from
+    /// a saved project can name a map the player deleted, and a runtime
+    /// that refuses to start over that shows a refusal instead of a
+    /// game.**
+    /// </para>
+    /// </remarks>
+    private static string? PickStartMap(
+        string pRoot, Godot.Collections.Dictionary pMapTree)
+    {
+        var erste = Directory.EnumerateFiles(pRoot, "*.lmu",
+                SearchOption.TopDirectoryOnly)
+            .OrderBy(pPath => Path.GetFileName(pPath),
+                StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (pMapTree.TryGetValue("start", out var rawStart)
+            && rawStart.VariantType == Godot.Variant.Type.Dictionary)
+        {
+            var start = rawStart.AsGodotDictionary();
+            if (TryReadInt(start, "party_map_id", out var startMapId)
+                && startMapId > 0)
+            {
+                var datei = Path.Combine(pRoot,
+                    "Map" + startMapId.ToString("D4") + ".lmu");
+                if (File.Exists(datei))
+                {
+                    return datei;
+                }
+            }
+        }
+
+        return erste;
+    }
+
+
     private static int ParseMapId(string? pMapPath)
     {
         if (string.IsNullOrWhiteSpace(pMapPath)) return 0;
@@ -1675,6 +1734,55 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
         }
         RenderedMap = frame;
+
+        // **Und ein Frame, in dem kein einziges Byte gesetzt ist, sagt
+        // es jetzt.**
+        //
+        // **Gemessen an einem fertigen Spiel:** die Runtime lud eine
+        // Karte, die der Renderer nicht zeichnen konnte, und der
+        // Frame war 76800 mal `0x00000000` -- **und die Diagnose war
+        // leer.** Ein Spieler sieht einen schwarzen Bildschirm und
+        // **hat nichts, was er melden kann.**
+        //
+        // **Und die Karte, um die es hier geht, ist eine leere
+        // Editor-Karte eines Spiels von 2002:** 2266 Bytes, ein Chip
+        // in allen 300 Feldern. **Bei ihr ist ein schwarzer Frame
+        // richtig** -- **und richtig, ohne ein Wort, ist er ein Fehler
+        // der sich als Erfolg verkleidet.**
+        if (RenderDiagnostic.Length == 0 && IsEmpty(frame))
+        {
+            RenderDiagnostic =
+                "RM2K rendered nothing: the map named by the game's "
+                + "map tree has no drawable tile in any of its fields. "
+                + "A map with one chip repeated in every field is an "
+                + "editor's empty map, and a game that starts on one "
+                + "was exported without being finished";
+        }
+    }
+
+    /// <summary>
+    /// Whether a frame has nothing in it at all.
+    /// </summary>
+    /// <param name="pFrame">The composed frame.</param>
+    /// <returns>True when not one of the four channels is set.</returns>
+    /// <remarks>
+    /// <strong>And all four, and not only the alpha.</strong> A frame
+    /// whose alpha is zero everywhere is empty; **a frame whose alpha
+    /// is set everywhere and whose colour is black is not**, **and a
+    /// check that looked at one channel alone would call a black
+    /// screen empty and a black screen drawn.**
+    /// </remarks>
+    private static bool IsEmpty(Rm2kPixelBuffer pFrame)
+    {
+        for (var index = 0; index < pFrame.Pixels.Length; index++)
+        {
+            if (pFrame.Pixels[index] != 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
