@@ -434,4 +434,87 @@ public partial class TestRealRm2kRuntimeRun : TestBase
         host.Stop();
     }
 
+
+    /// <summary>
+    /// The finished game's own commands change the game's state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And "the events arrived" is not "the events did
+    /// something".</strong> The previous test proved that 3262 commands
+    /// reached the scheduler and that sixty frames produced no command
+    /// error — **and a test that only counts arrivals would have been
+    /// satisfied by an interpreter that read every command and executed
+    /// none.**
+    /// </para>
+    /// <para>
+    /// <strong>So this asks the next question.</strong> The three
+    /// AutoStart pages of <c>Map0002</c> carry 308, 89 and 8 commands,
+    /// among them <c>10210 Control switches</c> and
+    /// <c>10220 Control variables</c> — and every page's conditions are
+    /// all <c>false</c>, which means every page is unconditional and must
+    /// run.
+    /// <strong>Measured: <c>Switches.Count</c> goes from 0 to 1847
+    /// within thirty frames.</strong> One <c>Control switches</c> command
+    /// grows the list to the id it writes, **and 1847 is an id the game's
+    /// own file names.**
+    /// </para>
+    /// <para>
+    /// <strong>And this is the assertion that cannot be faked</strong> —
+    /// a reader that dropped the commands would leave the list at zero,
+    /// and a reader that ran them twice would leave a different number.
+    /// </para>
+    /// </remarks>
+    public void Test_DieBefehleDesFertigenSpielsAendernDenZustand()
+    {
+        UeberspringeWennKeinSpiel();
+        var wurzel = Wurzel();
+        if (wurzel == null)
+        {
+            return;
+        }
+
+        var spiel = VerzeichnisMit(wurzel, "Map0002.lmu");
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        AssertTrue(host.Start(spiel).Success, "**and the game starts**");
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            AssertTrue(false, "**and the host built an RM2K runtime**");
+            return;
+        }
+
+        AssertEq(runtime.Simulation.Switches.Count, 0,
+            "**and the game's own switches start empty** -- and a reader "
+                + "that pre-filled them would answer the next assertion "
+                + "with a number it made up");
+
+        for (var frame = 0; frame < 30; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+        }
+
+        AssertTrue(runtime.Simulation.Switches.Count > 1000,
+            "**and thirty frames of the game's own commands wrote its "
+                + "switches** -- "
+                + runtime.Simulation.Switches.Count + " of them, and a "
+                + "reader that read every command and executed none would "
+                + "say 0");
+
+        // **Und die Nummer ist keine Zufallszahl:** sie ist eine Schalter-
+        // id, die das Spiel selbst nennt (`10210 [0,1847,1847,1]` in
+        // der Seite). Ein Leser, der eine beliebige Zahl erwaehlt,
+        // waere an dieser Stelle nicht widerlegt.
+        AssertEq(runtime.Simulation.Switches.Count, 1847,
+            "**and the count is the id the game's file names** -- "
+                + "`10210 [0,1847,1847,1]` in the AutoStart page; a reader "
+                + "that grew the list to a number of its own choosing "
+                + "would pass the assertion above and fail this one");
+
+        AssertEq(runtime.Simulation.FrameCount, 30,
+            "**and the clock ran thirty frames**");
+
+        host.Stop();
+    }
+
 }

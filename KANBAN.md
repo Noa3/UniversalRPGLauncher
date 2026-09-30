@@ -660,7 +660,32 @@ Test getoetet, und *keine automatische Seite startet* auch** --
 genauso tot, weil ein Spiel mit drei AutoStart-Seiten ohne sie still
 steht.** 5/5.
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und keinschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+**Und die Befehle des Spiels aendern den Zustand, und das ist die
+zweite Haelfte von Kriterium 1.**
+
+**"Die Events sind angekommen" ist nicht "die Events haben etwas
+getan."** Und ein Test, der nur Ankuenfte zaehlt, waere von einem
+Leser befriedigt, der jeden Befehl liest und keinen ausfuehrt.
+
+**Gemessen, auf `Map0002`:** die drei AutoStart-Seiten tragen 308, 89
+und 8 Befehle, darunter `10210 Control switches` und `10220 Control
+variables` -- **und alle Bedingungen jeder Seite sind `false`, also
+unbedingt, also muessen sie laufen.**
+
+**Und nach 30 Bildern ist `Switches.Count` von 0 auf 1847
+1847. Und 1847 ist eine Schalter-Id, die die Datei des Spiels selbst
+nennt** (`10210 [0,1847,1847,1]`).
+
+**Und der Test fragt genau diese Zahl, und nicht nur "grosse als
+1000":** **ein Leser, der die Liste auf eine Zahl eigener Wahl
+waechst, besteht die erste Behauptung und faellt an der zweiten.**
+
+**Und meine erste Sonde an dieser Stelle sagte `Switches.Count == 0`**
+**nach 120 Bildern** -- **und sie hatte die falsche Datei gemessen**
+**und die falsche Property gelesen**, **und die Sonde lief 120
+Bilder in einer Runtime, die keine Befehle bekommen hat.** 5/5.
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und keinchlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 

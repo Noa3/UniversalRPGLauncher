@@ -10439,3 +10439,19 @@ verweigert ein spielendes Spiel.**
 sein.**
 
 Mutationen 5/5 durch Tests. `All 2118 tests passed`.
+
+
+## Und die Befehle des Spiels aendern den Zustand
+
+**"Die Events sind angekommen" ist nicht "die Events haben etwas
+getan."** `Map0002` hat drei AutoStart-Seiten mit 308, 89 und 8
+Befehlen, darunter `10210 Control switches` — **und alle Bedingungen
+sind false, also unbedingt.**
+
+**Gemessen: `Switches.Count` geht von 0 auf 1847 in 30 Bildern. Und
+1847 ist eine Schalter-Id, die die Datei des Spiels selbst nennt**
+(`10210 [0,1847,1847,1]`). **Der Test fragt genau diese Zahl.**
+
+**Und meine erste Sonde sagte 0 nach 120 Bildern** — **weil sie die
+falsche Datei und die falsche Property gemessen hat.** 5/5 durch
+Tests. `All 2119 tests passed`.
