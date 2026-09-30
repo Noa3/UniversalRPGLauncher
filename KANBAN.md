@@ -11486,3 +11486,62 @@ Spiel nichts weiss.**
 
 **`All 2189 tests passed`, Validator gruen.**
 
+## Und die Figur geht wirklich: 205 und die Regel fuer minus eins
+
+### Und `205` war verdrahtet, aber die Figuren hatten keinen Namen
+
+**`MzCommands` hatte den Zweig, und `Facts.Characters` war leer.**
+**Ein `205` fand also nie eine Figur und tat nichts -- bei allen 96
+Routen dieses Spiels.**
+
+### Und die Regel hat drei Teile, alle gemessen
+
+**An `Game_Interpreter.prototype.character`:**
+
+| `params[0]` | Wen der Motor meint |
+|---|---|
+| im Kampf | **nichts, was auch immer die Zahl ist** |
+| **unter null** | **den Spieler** |
+| **null** | **das eigene Ereignis dieser Seite** |
+| positiv | das Ereignis mit dieser Nummer |
+
+**Und 46 der 96 Routen dieses Spiels sagen minus eins** -- **also
+bewegt fast die Haelfte aller Routen den Spieler.**
+
+**Und die Null ist der billigste Fehler hier:** **sie sieht aus wie
+"keine Figur", und sie heisst "ich selbst"** -- **und ein Leser, der
+sie als keine las, liess eine Seite, die ihr eigenes Ereignis
+herumfuehrt, stillstehen.**
+
+### Und die kuerzeste Route des Spiels, woertlich
+
+**`Map001.json`, Ereignis 4:**
+
+```
+101 ["", 0, 0, 2, "Camellia"]
+401 ["This scout trail leads further along the cliff to one of"]
+401 ["their main lookouts. I have no need to go this way."]
+205 [-1, {list: [{code: 3}, {code: 0}], wait: true}]
+505 [{code: 3}]
+```
+
+**Der Spieler geht eine Kachel nach rechts, die Seite wartet, und
+`505` folgt.** **`code 3` ist `ROUTE_MOVE_RIGHT`, und es ist der einzige
+Schritt dieser Route.**
+
+### Und was ich unterwegs zerstoert habe
+
+**Beim Einfuegen des Tests sind vier Testmethoden in
+`project/src/mz/MzBranch.cs` gelandet, und die Datei war danach nicht
+mehr die, die in Git lag.** **Ich habe sie aus Git wiederhergestellt
+und die drei echten Stuecke (`WithCharacters` und `TryNameCharacter`)
+neu eingefuegt** -- **und die Tests gehoeren nach
+`test_mz_move_route.cs`, wo sie jetzt sind.**
+
+**Ein Test, der in einer Quelldatei landet, ist kein Test, und eine
+Quelldatei, die Tests enthaelt, ist kein Quellcode.**
+
+**Test evidence** `test_mz_move_route.cs` (11), **11/11**.
+
+**`All 2190 tests passed`, Validator gruen.**
+

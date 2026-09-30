@@ -413,10 +413,27 @@ public static class MzCommands
                 // would stop the page on a character it simply does not have,
                 // and a game that moves event 9 in a map this reader has
                 // read half of would stall for ever.
+                // **Und `character(param)` hat drei Faelle, und alle drei
+                // sind gemessen** -- **an
+                // `Game_Interpreter.prototype.character`:**
+                //
+                // **Im Kampf ist es nichts, was auch immer die Zahl
+                // ist. Unten null ist es der Spieler, und diese Seite
+                // nennt ihn minus eins, vierundvierzigmal. Und eine
+                // positive Zahl ist das Ereignis mit dieser Nummer.**
+                //
+                // **Und die Null ist der billigste Fehler, den man hier
+                // machen kann:** **sie sieht aus wie "keine Figur"** --
+                // **und sie heisst "ich selbst"** -- **und ein Leser, der
+                // sie als keine las, liess eine Seite, die ihr eigenes
+                // Ereignis herumfuehrt, stillstehen.**
                 var id = At(pCommand, 0);
-                var character = pFacts.Characters.TryGetValue(id, out var c)
-                    ? c
-                    : null;
+                // **Und die eigene Ereignisnummer steht am Interpreter,
+                // und nicht am Befehl** -- **denn der Motor liest sie aus
+                // `this._eventId`, und ein Befehl weiss nichts davon.**
+                var ownId = pInterpreter.EventId;
+                var character = pFacts.TryNameCharacter(
+                    id, ownId, out var gefunden) ? gefunden : null;
                 if (character == null)
                 {
                     pActions.Add(new MzAction(

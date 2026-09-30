@@ -674,4 +674,50 @@ partial class TestMzMoveRoute : TestBase
                 + "read 16 as a move walked this figure off the map");
         AssertEq(character.Y, 5, "**and its row is untouched as well**");
     }
+
+    /// <summary>
+    /// Minus one names the player, and it moves him a tile.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the project's own command, verbatim.</strong>
+    /// Measured at <c>Map001.json</c>, event 4:
+    /// <c>205 [-1, {list: [{code: 3}, {code: 0}], wait: true}]</c>
+    /// followed by <c>505 [{code: 3}]</c> — <strong>the player walks one
+    /// tile to the right, and the page waits for him.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And forty-six of this project's ninety-six routes say minus
+    /// one</strong>, <strong>so nearly half of them move the player, and
+    /// a reader that read minus one as "no character" moved nothing at
+    /// all.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_MinusEinsHeisstDerSpielerUndErGehtEineKachel()
+    {
+        var map = Map.Open();
+        var player = new MzPlayer();
+        player.StandAt(1, 5, 7, MzCharacter.Right);
+
+        var spieler = player.BuildFigure();
+        AssertTrue(spieler != null,
+            "**and the player has a figure** -- and the engine gives the player for every negative number, and this project says minus one forty-six times");
+        AssertEq(spieler!.X, 5,
+            "**and it stands where the player stands**");
+        AssertEq(spieler.Y, 7,
+            "**and on the row the player stands on**");
+
+        spieler.Route.Force(MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":3,\"parameters\":[],\"indent\":null},{\"code\":0,\"parameters\":[],\"indent\":null}],\"repeat\":false,\"skippable\":false,\"wait\":true}"));
+
+        var first = spieler.Route.Step(spieler, map);
+        AssertTrue(!first.Contains("refused"),
+            "**and the step goes through, because the way is clear; it says " + first + "**");
+        AssertEq(spieler.X, 6,
+            "**and the player has walked one tile to the right** -- and code 3 is ROUTE_MOVE_RIGHT**");
+        AssertEq(spieler.Direction, MzCharacter.Right,
+            "**and he faces the way he went**");
+        AssertTrue(spieler.Route.IsHoldingThePage,
+            "**and the page waits for the route** -- and the engine sets the wait mode to route only when the route says wait, and this project says wait**");
+    }
 }

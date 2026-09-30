@@ -498,6 +498,27 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // ihre Seite nennt** -- **und nicht aus geratenen
         // Standardwerten**, **denn die Seite sagt Tempo und Takt
         // ausdruecklich.**
+        // **Und jetzt bekommen die Figuren Namen, unter denen ein Befehl
+        // sie finden kann.**
+        //
+        // **Und das ist gemessen:** **die Seiten dieses Spiels nennen
+        // ihre Figuren in 96 Befehlen, und 46 davon mit minus eins** --
+        // **das ist der Spieler** -- **und der Rest mit der Nummer des
+        // Ereignisses.**
+        //
+        // **Und ohne diese Namen sagt jeder `205` "diese Figur habe ich
+        // nicht"**, **und 96 Routen tun gar nichts.**
+        var figuren = new Dictionary<int, MzCharacter>();
+        foreach (var figur in Figures)
+        {
+            var held = new MzCharacter(figur.X, figur.Y);
+            held.TurnTo(figur.Direction);
+            figuren[figur.EventId] = held;
+        }
+
+        Facts = Facts.WithCharacters(figuren, Facts.Player);
+        Facts.Player.BuildFigure();
+
         Clocks = new Dictionary<int, MzWalkClock?>();
         Routes = new Dictionary<int, MzMoveRoute?>();
         _standing = new Dictionary<int, int>();

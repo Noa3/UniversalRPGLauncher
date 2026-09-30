@@ -11044,3 +11044,29 @@ ueber Kacheln geht, an den Befehlen (`201 Transfer Player`,
 `212 Show Balloon` und die Bewegung per Befehl) geprueft werden, und
 nicht an den Routen.**
 
+## Und die Figur geht wirklich
+
+**`205` war verdrahtet, aber `Facts.Characters` war leer** -- **alle 96
+Routen des Spiels fanden keine Figur.**
+
+**Die Regel ist gemessen an `Game_Interpreter.prototype.character`:**
+**im Kampf nichts, unter null der Spieler, null das eigene Ereignis,
+positiv das Ereignis mit dieser Nummer.** **46 der 96 Routen sagen
+minus eins.**
+
+**Und die kuerzeste Route, woertlich aus `Map001.json`, Ereignis 4:**
+**`205 [-1, {list: [{code: 3}, {code: 0}], wait: true}]` -- **der
+Spieler geht eine Kachel nach rechts.**
+
+**Und beim Einfuegen des Tests sind vier Testmethoden in
+`MzBranch.cs` gelandet** -- **die Datei ist aus Git wiederhergestellt,
+die echten Stuecke neu eingefuegt, und die Tests stehen jetzt in
+`test_mz_move_route.cs` (11/11).**
+
+**`All 2190 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **der Spieler geht eine Kachel, aber
+der Lauf zwischen zwei Kacheln wird nicht gezeichnet** -- **die Figur
+springt von Kachel zu Kachel statt zu gehen** -- **und `SyncFigure`
+haengt noch nicht am Lauf, also folgt `Facts.Player` der Figur nicht.**
+

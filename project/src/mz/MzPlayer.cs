@@ -142,6 +142,71 @@ public sealed class MzPlayer
     /// </remarks>
     public Dictionary<int, string> VehicleImages { get; } = new();
 
+    /// <summary>
+    /// The player as a figure a route can act on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the player is a figure, and it is named in forty-six of
+    /// this project's routes as minus one.</strong> Measured:
+    /// <c>Game_Interpreter.prototype.character</c> returns
+    /// <c>$gamePlayer</c> for every negative number, <strong>and this
+    /// project's pages say minus one forty-six times</strong> —
+    /// <strong>so nearly half of all its routes move the player.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a route needs a figure with a position and a
+    /// direction</strong>, <strong>and the player keeps its own of
+    /// both</strong> — <strong>and this is the same
+    /// <c>MzCharacter</c> an event route acts on</strong>,
+    /// <strong>which is why the two can share one type.</strong>
+    /// </para>
+    /// </remarks>
+    public MzCharacter? Figur { get; private set; }
+
+    /// <summary>
+    /// Builds the player's figure, from where the player stands.
+    /// </summary>
+    /// <returns>The figure, or nothing when there is no player.</returns>
+    public MzCharacter? BuildFigure()
+    {
+        if (MapId <= 0)
+        {
+            return null;
+        }
+
+        Figur = new MzCharacter(X, Y);
+        Figur.TurnTo(Direction);
+        return Figur;
+    }
+
+    /// <summary>
+    /// Copies the player's position onto its figure, and the other way
+    /// round.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a figure that walked off while the player stayed still
+    /// would be a figure on a tile where nobody is.</strong> <strong>So
+    /// the two are made to agree after every route step.</strong>
+    /// </remarks>
+    public void SyncFigure()
+    {
+        if (Figur == null)
+        {
+            return;
+        }
+
+        if (Figur.X != X || Figur.Y != Y)
+        {
+            StandAt(MapId, Figur.X, Figur.Y);
+        }
+
+        if (Figur.Direction != Direction)
+        {
+            StandAt(MapId, X, Y, Figur.Direction);
+        }
+    }
+
     /// <summary>The boat, the engine's own number.</summary>
     public const int Boat = 0;
 

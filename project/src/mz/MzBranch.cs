@@ -427,6 +427,105 @@ public sealed class MzBranchFacts
     public Dictionary<int, MzCharacter> Characters { get; init; } = new();
 
     /// <summary>
+    /// The same facts, with figures named under their event numbers.
+    /// </summary>
+    /// <param name="pCharacters">The figures, by event.</param>
+    /// <param name="pPlayer">The player, which is kept.</param>
+    /// <returns>The facts with the figures in them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the figures are named when a map is read, and not when a
+    /// route arrives.</strong> <strong>A <c>205</c> arrives after its page
+    /// has already been running for some frames</strong>, <strong>and a
+    /// reader that named figures then would miss the first route of every
+    /// page.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And everything else is carried over, because a route must
+    /// not lose the switches and variables the page has already
+    /// written.</strong>
+    /// </para>
+    /// </remarks>
+    public MzBranchFacts WithCharacters(
+        IReadOnlyDictionary<int, MzCharacter> pCharacters, MzPlayer pPlayer)
+    {
+        return new MzBranchFacts
+        {
+            Characters = new Dictionary<int, MzCharacter>(pCharacters),
+            Player = pPlayer,
+            Switches = Switches,
+            Variables = Variables,
+            SelfSwitches = SelfSwitches,
+            Gold = Gold,
+            PartyMembers = PartyMembers,
+            Items = Items,
+            KnownItems = KnownItems,
+            Screen = Screen,
+        };
+    }
+
+    /// <summary>
+    /// Which event a <c>205</c>'s first parameter names, as the engine's own
+    /// <c>character(param)</c> decides it.
+    /// </summary>
+    /// <param name="pId">The parameter as the game wrote it.</param>
+    /// <param name="pEigenes">The event this page belongs to.</param>
+    /// <param name="pFigur">The character the engine would pick, or
+    /// nothing.</param>
+    /// <returns>Whether a character was named.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the rule has three parts, and all three were
+    /// measured.</strong> <c>Game_Interpreter.prototype.character</c> is
+    /// verbatim:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// In a battle it is <strong>nothing</strong>, whatever the number.
+    /// </description></item>
+    /// <item><description>
+    /// Below zero it is <strong>the player</strong> — <strong>and the
+    /// measured project says minus one forty-six times</strong>, <strong>so
+    /// nearly half of all its routes move the player.</strong>
+    /// </description></item>
+    /// <item><description>
+    /// Zero is <strong>the event the page belongs to</strong>, and a
+    /// positive number is the event with that id.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// <strong>And zero is the part a reader gets wrong most cheaply.</strong>
+    /// It looks like "no character", <strong>and it means "me"</strong> —
+    /// <strong>and a reader that treated it as none left a page that walks
+    /// its own event standing still.</strong>
+    /// </para>
+    /// </remarks>
+    public bool TryNameCharacter(
+        int pId, int pEigenes, out MzCharacter? pFigur)
+    {
+        pFigur = null;
+        if (InBattle)
+        {
+            return false;
+        }
+
+        if (pId < 0)
+        {
+            pFigur = Player.Figur;
+            return pFigur != null;
+        }
+
+        var gesucht = pId > 0 ? pId : pEigenes;
+        if (Characters.TryGetValue(gesucht, out var treffer))
+        {
+            pFigur = treffer;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Where the player is, and whether a transfer is still on its way.
     /// </summary>
     public MzPlayer Player { get; init; } = new();
