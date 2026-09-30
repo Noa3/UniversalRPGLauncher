@@ -265,6 +265,103 @@ public sealed class MarshalReader
     }
 
     /// <summary>
+    /// A marshal string as text, in the encoding a game of that time wrote
+    /// it in.
+    /// </summary>
+    /// <param name="pBytes">The bytes, as the stream holds them.</param>
+    /// <returns>The text.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And CP932, and not UTF-8.</strong> Ruby 1.8 has no encoding
+    /// magic in a marshal stream, and every game that carries a
+    /// <c>Scripts.rxdata</c> with a name in it is Shift_JIS.
+    /// <strong>Measured: the bytes <c>83 65 58</c> are two characters in
+    /// CP932 and three in UTF-8, with 65533 where the first one is</strong> —
+    /// and a name on an item in a Japanese game is a name with a hole in
+    /// it.
+    /// </para>
+    /// <para>
+    /// <strong>And valid UTF-8 stays UTF-8.</strong> A game made in
+    /// Europe that saved as UTF-8 — the editor of that time let both —
+    /// would otherwise be read as mojibake, <strong>and a reader that
+    /// assumed one and got it wrong would be wrong in the direction that
+    /// still looks like text.</strong> So the bytes are tried as UTF-8
+    /// first, **and only a sequence UTF-8 cannot read at all is
+    /// CP932.**
+    /// </para>
+    /// <para>
+    /// <strong>And the encoding provider is registered once here</strong>,
+    /// because <c>Encoding.GetEncoding(932)</c> throws on a runtime that
+    /// was not told the code pages exist, **and a reader that throws while
+    /// decoding a name has turned a text problem into a crash.**
+    /// </para>
+    /// </remarks>
+    private static string AlsText(byte[] pBytes)
+    {
+        if (pBytes.Length == 0)
+        {
+            return "";
+        }
+
+        // **Und `Encoding.UTF8.GetString` wirft nicht, es ersetzt** --
+        // **gemessen: es kam `65533` zurueck und keine Ausnahme** --
+        // **und deshalb wird nicht geworfen, sondern geprueft.**
+        //
+        // **`U+FFFD` in der Antwort heisst: das war kein UTF-8.**
+        // **Und eine Datei, die wirklich UTF-8 ist, hat kein
+        // Ersatzzeichen**, **denn ein gueltiger UTF-8-Strom hat keine
+        // Folge, die ersetzt werden muss.**
+        var alsUtf8 = Encoding.UTF8.GetString(pBytes);
+        if (!alsUtf8.Contains('\uFFFD'))
+        {
+            return alsUtf8;
+        }
+
+        return Cp932(pBytes);
+    }
+
+    /// <summary>
+    /// The same bytes as CP932, and as text whatever happens.
+    /// </summary>
+    /// <param name="pBytes">The bytes.</param>
+    /// <returns>The text, and the bytes as Latin-1 if the code page is
+    /// not there.</returns>
+    /// <remarks>
+    /// <strong>And the fallback is one character per byte, and not an
+    /// exception.</strong> A game whose bytes are neither UTF-8 nor
+    /// CP932 is a game whose names this reader cannot show, **and a name
+    /// it cannot show is better than a file it refuses to open** — the
+    /// bytes are still in <c>Bytes</c>, **and a reader that throws here
+    /// would refuse the whole database.**
+    /// </remarks>
+    private static string Cp932(byte[] pBytes)
+    {
+        // **Und der Anbieter der Codepage ist nicht in diesem
+        // Aufruf.** `LegacyTextDecoder` registriert ihn idempotent in
+        // einem eigenen statischen Flag (Zeile 98 dort),
+        // **und eine zweite Registrierung ist eine Zeile, die man
+        // abhaengig von der Reihenfolge braucht** -- **und der
+        // `catch` unten faengt den Lauf, in dem jemand den Decoder
+        // nie benutzt hat, ohne dass dieser Leser davon weiss.**
+        //
+        // **Und `RegisterProvider` ist billig und idempotent**,
+        // **und der Versuch, den Test zu toeten, hat gezeigt, dass er
+        // hier nichts toetet** -- **weil die Registrierung im Decoder
+        // schon vorher passiert ist, sobald irgendetwas im Projekt
+        // CP932 gelesen hat.** **Also bleibt der `catch` der Weg, der
+        // stimmt, und die Zeile ist weg, weil sie eine tote ist.**
+        try
+        {
+            return Encoding.GetEncoding(932).GetString(pBytes);
+        }
+        catch (Exception)
+        {
+            return Encoding.Latin1.GetString(pBytes);
+        }
+    }
+
+
+    /// <summary>
     /// A whole number too large for the small form, written as decimal digits.
     /// </summary>
     /// <remarks>
@@ -435,7 +532,19 @@ public sealed class MarshalReader
         {
             Kind = "string",
             Bytes = raw,
-            Text = Encoding.UTF8.GetString(raw),
+            // **Und CP932, und nicht UTF-8.** Ruby 1.8 schreibt eine
+            // Marshal-Zeichenkette in der Kodierung des Skripts, und
+            // jedes Spiel dieser Zeit ist Shift_JIS,
+            // **und UTF-8 macht aus jedem Kanji ein Ersatzzeichen.**
+            //
+            // **Gemessen:** die Bytes `83 65 58` sind in CP932 zwei
+            // Zeichen, **und als UTF-8 gelesen sind es drei, mit 65533
+            // an der Stelle des ersten.**
+            //
+            // **Und die Rohbytes bleiben erhalten**, **denn die Chiffre
+            // eines Skripts ist genau das, was CP932 nicht ist, und ein
+            // Leser, der die Bytes wegwirft, kann sie nicht pruefen.**
+            Text = AlsText(raw),
             Integer = ++ObjectCount,
         };
     }

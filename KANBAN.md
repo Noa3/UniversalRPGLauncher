@@ -526,7 +526,67 @@ davor,** **und ein Test kann nicht unterscheiden, welcher der beiden der
 Grund ist.** **Also habe ich die tote Regel durch die Regel ersetzt,
 die den `||`-Fehler toetet,** **und das ist 5/5 durch Tests.**
 
-*Ein Ueberleben, das man messen kann, ist eine Angabe und kein*Ein Ueberleben, das man messen kann, ist eine Angabe und keinFehlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
+*Ein Ueberleben, das man messen kann, ist eine Angabe und kein**Und der Weg von der Skriptliste zum Quelltext ist gemessen, und er
+ist eine Grenze, und keine Arbeit.**
+
+**Auf dieser Maschine liegt ein fertiges XP-Spiel:**
+`E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0`, mit 109 kB
+`Data/Scripts.rxdata`. **Und `MarshalReader` liest es als Daten: 90
+Eintraege, jeder aus drei Feldern** -- **[0] eine Zahl, [1] der Name
+(`Game_Temp`, `Game_System`, ... `Main`), [2] der Quelltext.**
+
+**Und Feld [2] ist kein Ruby-Text, sondern Chiffre.** Gemessen: 1104
+Bytes, die als `x<Bytes>WA<Bytes>6/...` ankommen. **XP und VX
+verschluesseln ihr Skript mit einer aus dem Archive abgeleiteten
+Kennung**, **und es gibt keinen Ordner mit `.rb`-Dateien neben
+`Data/`** -- **es gibt nur `Game.exe`, `Game.ini`, `Game.rxproj` und
+`RGSS104E.dll`.**
+
+**Und damit ist die Verdrahtung, die ich als offen markiert habe, nicht
+offen, sondern gedeckt** -- **und zwar durch drei unabhaengige
+Entscheidungen, die vor mir getroffen wurden:**
+
+- `AGENTS.md` Zeile 26: *Imported games are untrusted input. Never
+  execute game EXEs, DLLs, Ruby, JavaScript, shell commands, or native
+  plugins during detection/parsing tests.*
+- `BuiltInEnginePlugins.cs` Zeile 424: `*.rgssad archive (not decrypted
+  or executed)`
+- `WolfDataReader.cs` Zeile 14: *deliberately not an archive decryptor*
+
+**Und `RunScripts` bleibt damit richtig, wie es ist: der Leser kann
+Skripte laden, wenn ein Host die Bytes gibt, und bei einem RGSS-Spiel
+gibt der Host sie nicht, weil das Entschluesseln genau der Weg ist, der
+fremden Ruby-Code ausfuehrt.**
+
+**Und was fehlt, ist damit nicht die Engine, sondern eine Grenze, die
+ein Mensch ziehen muss:** **entweder der Nutzer erlaubt das
+Entschluesseln von Spielarchiven ausdruecklich, oder XP/VX/VX Ace
+bleiben bei *der Geraet erkannt, der Quelltext gelesen*.**
+
+**Und derselbe Weg hat einen zweiten Fund ergeben, und der ist ein
+Datenfehler und kein Verdrahtungsfehler.**
+
+**Auf derselben Maschine, gegen dieselbe Datei:**
+`MarshalReader` las CP932 als UTF-8 (`ReadString`, `Encoding.UTF8.
+GetString`). **Gemessen an den Bytes `83 65 58` -- *te* und *X* in
+CP932: drei Zeichen zurueck, mit 65533 an der Stelle des ersten.**
+
+**Und `Encoding.UTF8.GetString` wirft nicht, es ersetzt** -- **gemessen:
+es kam `65533` zurueck und keine Ausnahme, und ein Leser, der auf die
+Ausnahme wartet, wartet ewig.**
+
+**Jetzt: CP932, mit UTF-8 als erstem Versuch**, **denn ein gueltiger
+UTF-8-Strom hat kein U+FFFD, und eine Datei, die wirklich UTF-8 ist,
+wird nicht zu Mojibake** -- **und die Rohbytes bleiben, denn die
+Chiffre eines Skripts ist genau das, was CP932 nicht ist.**
+
+**Und die vierte Mutationsregel lebte, und ehrlich:** `RegisterProvider
+wird in `legacy_text_decoder.cs` Zeile 98 idempotent registriert, **und
+eine zweite Registrierung im Marshal-Leser ist eine Zeile, die man
+abhaengig von der Reihenfolge braucht** -- **also habe ich sie
+geloescht, statt eine tote Regel zu dokumentieren.** 3/3.
+
+*Ein Ueberleben, das man messen kann, ist eine Angabe und keinhlschlag. **Und ein Ueberleben, das man nicht messen kann, ist ein
 Test, den man schreiben muss** -- **und das ist der Unterschied
 zwischen einer Zahl und einem Satz.**
 

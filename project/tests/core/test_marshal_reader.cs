@@ -1094,4 +1094,89 @@ public partial class TestMarshalReader : TestBase
 
         return taken;
     }
+    /// <summary>
+    /// A marshal string is read in the encoding the game wrote it in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the second real bug this suite found, and the
+    /// first one that only a Japanese game would ever show.</strong>
+    /// Measured before the fix: the bytes <c>83 65 58</c> — <em>te</em>
+    /// and <em>X</em> in CP932 — came back as three characters, with
+    /// <c>65533</c> where the first one is. <strong>Every kanji in a
+    /// game's data became a replacement character.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>Encoding.UTF8.GetString</c> does not throw on bytes
+    /// it cannot read</strong> — measured, it returned <c>65533</c> and no
+    /// exception, **and a reader that waits for the exception waits
+    /// forever.** So the test here is not <c>AssertThrows</c>: it is the
+    /// length, **and the length is the whole difference** — two characters
+    /// or three.
+    /// </para>
+    /// <para>
+    /// <strong>And valid UTF-8 stays UTF-8.</strong> A game saved as UTF-8
+    /// is read as UTF-8, **and that is measured too** — a reader that
+    /// assumed Shift_JIS for everything would turn a European name into
+    /// mojibake, **and would do it in the direction that still looks like
+    /// text.**
+    /// </para>
+    /// </remarks>
+    public void Test_EineZeichenketteWirdInDerKodierungGelesenInDerSieGeschriebenWurde()
+    {
+        // **Und CP932: die Bytes eines ganzen Zeichens, gefolgt von
+        // einem ASCII-Zeichen.**
+        var cp932 = Part();
+        cp932.Add(0x22);
+        AddLong(cp932, 3);
+        cp932.AddRange([0x83, 0x65, 0x58]);
+        var wert = new MarshalReader(Stream(cp932)).Read();
+
+        AssertEq(wert.Text?.Length ?? -1, 2,
+            "**and three CP932 bytes are two characters** -- and as UTF-8 "
+                + "they were three, with 65533 where the first one is, and "
+                + "a name on an item in a Japanese game is a name with a "
+                + "hole in it");
+
+        AssertTrue(wert.Text != null && !wert.Text.Contains('\uFFFD'),
+            "**and no replacement character came in** -- and U+FFFD is the "
+                + "only sign a reader gets that it guessed the wrong "
+                + "encoding");
+
+        AssertEq(System.Text.Encoding.GetEncoding(932)
+            .GetString(wert.Bytes ?? []), wert.Text ?? "?",
+            "**and the text is the CP932 reading of the same bytes** -- and "
+                + "the raw bytes are still there, so a reader can check "
+                + "them and a cipher can be recognised as one");
+
+        // **Und UTF-8 bleibt UTF-8.**
+        var utf8Text = "日本語";
+        var utf8 = Part();
+        utf8.Add(0x22);
+        var roh = System.Text.Encoding.UTF8.GetBytes(utf8Text);
+        AddLong(utf8, roh.Length);
+        utf8.AddRange(roh);
+        var wert2 = new MarshalReader(Stream(utf8)).Read();
+
+        AssertEq(wert2.Text ?? "", utf8Text,
+            "**and valid UTF-8 is still UTF-8** -- and a reader that read "
+                + "everything as Shift_JIS would turn a European name into "
+                + "mojibake, and would do it in the direction that still "
+                + "looks like text");
+
+        // **Und eine reine ASCII-Zeichenkette ist in beiden Kodierungen
+        // gleich** — **und das ist der Grund, warum 90 Skriptnamen eines
+        // englischen Spiels ohne Fehler gelesen wurden.**
+        var ascii = Part();
+        ascii.Add(0x22);
+        AddLong(ascii, 5);
+        ascii.AddRange(System.Text.Encoding.ASCII.GetBytes("ASCII"));
+        var wert3 = new MarshalReader(Stream(ascii)).Read();
+
+        AssertEq(wert3.Text ?? "", "ASCII",
+            "**and ASCII is ASCII either way** -- and this is exactly why "
+                + "an English game hides this bug and a Japanese one does "
+                + "not");
+    }
+
 }

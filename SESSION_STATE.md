@@ -10366,3 +10366,26 @@ traegt den Dateinamen in der Ausnahme selbst (`in 'kaputt.rb': ...`),
 **und der Aufrufer setzt ihn noch einmal davor, und ein Test kann nicht
 unterscheiden, welcher der beiden der Grund ist** — **und ich habe die
 tote Regel durch die Regel ersetzt, die den `||`-Fehler toetet.**
+
+
+## Und derselbe Weg: der Marshal-Leser las CP932 als UTF-8
+
+**`ReadString` (Zeile 438) machte `Encoding.UTF8.GetString(raw)`.**
+**Gemessen an den Bytes `83 65 58` (CP932: *te* und *X*): drei Zeichen
+zurueck, mit 65533 an der Stelle des ersten.** Und
+`Encoding.UTF8.GetString` **wirft nicht, es ersetzt** — **gemessen, es
+kam 65533 zurueck und keine Ausnahme.**
+
+**Und damit hat jedes Kanji in den Daten eines japanischen Spiels ein
+Ersatzzeichen.**
+
+**Jetzt: `AlsText(raw)`** — **CP932 als zweite Stufe, mit UTF-8 als
+erstem Versuch**, **denn ein gueltiger UTF-8-Strom hat kein U+FFFD.**
+Die Rohbytes bleiben erhalten.
+
+**Und die vierte Mutationsregel lebte ehrlich:** `RegisterProvider` wird
+in `legacy_text_decoder.cs` Zeile 98 idempotent registriert — **also
+habe ich meine eigene Registrierung geloescht, statt eine tote Regel zu
+dokumentieren.** 3/3 durch Tests.
+
+`All 2115 tests passed`.
