@@ -1556,7 +1556,30 @@ public sealed class RubyParser
     /// </remarks>
     private bool StartsAKeyAndThenAColon()
     {
-        if (Current.Kind is not (RubyTokenKind.Identifier or RubyTokenKind.Constant))
+        // **Und der Lexer liefert einen Schluessel als EIN Symbol mit
+        // einem Doppelpunkt am Ende, und das ist gemessen:**
+        //
+        // ```text
+        // f(a ? b : c)   Identifier'b' | Delimiter':' | Identifier'c'
+        // f(Sprite: 1)   Symbol'Sprite:'
+        // ```
+        //
+        // **Und `f(a ? b : c)` ist ein Dreiwert und kein Paar** --
+        // **und genau das sagt ein Test im Bestand:**
+        //
+        // ```
+        // Test_ANameIsAKeyOnlyWhenAColonSaysSo: a conditional is a ternary
+        //     and not a pair
+        // ```
+        if (Current.Kind == RubyTokenKind.Symbol
+            && Current.Text.Length > 1
+            && Current.Text[^1] == ':')
+        {
+            return true;
+        }
+
+        if (Current.Kind is not (RubyTokenKind.Identifier
+            or RubyTokenKind.Constant))
         {
             return false;
         }
@@ -1603,19 +1626,30 @@ public sealed class RubyParser
             if (StartsAKeyAndThenAColon())
             {
                 var schluessel = Take();
-                _index++;
+
+                // **Und der Doppelpunkt ist Teil des Symbols, seit der
+                // Lexer ihn mit dem Namen zusammen liest** -- **und ein
+                // Leser, der ihn zusaetzlich springt, laesst den ersten
+                // Wert des Paares ungeparst** -- **und das ist gemessen an
+                // `f(Sprite: 1)`, das ohne das Symbol ein Name und ein
+                // Doppelpunkt war und jetzt eines ist.**
+                if (schluessel.Kind != RubyTokenKind.Symbol)
+                {
+                    _index++;
+                }
+
                 SkipNewlines();
                 arguments.Add(new RubyNode
                 {
                     Kind = RubyNodeKind.Binary,
                     Operator = "=>",
-                    Name = schluessel.Text,
+                    Name = schluessel.Value ?? schluessel.Text,
                     Line = schluessel.Line,
                     Children =
                     [
                         Literal(
-                            RubyNodeKind.Symbol, schluessel.Line, null, null,
-                            null, schluessel.Text),
+                            RubyNodeKind.Symbol, schluessel.Line, null,
+                            null, schluessel.Value ?? schluessel.Text),
                         ParseExpression(),
                     ],
                 });

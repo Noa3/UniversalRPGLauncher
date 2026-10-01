@@ -976,6 +976,59 @@ public sealed class RubyLexer
             _offset++;
         }
         var text = _text[pStart.._offset];
+
+        // **Und ein Name mit einem Doppelpunkt direkt dahinter ist ein
+        // Schluessel, und das ist gemessen an 1.9.2 bei 4745:**
+        //
+        // ```text
+        // assoc : arg_value tASSOC arg_value
+        //       | tLABEL arg_value
+        //           {
+        //               $$ = list_append(NEW_LIST(NEW_LIT(
+        //                   ID2SYM($1))), $2);
+        //           }
+        // ```
+        //
+        // **Und der Lexer unterscheidet die beiden nicht an der
+        // Syntax, sondern am Wort danach** -- **und `{ name: text }`
+        // aus einem VX-Ace-Spiel auf dieser Maschine kam so:**
+        //
+        // ```
+        // RubyParseException ':' at offset 10 does not begin an
+        //     expression.
+        // ```
+        //
+        // **Und ein `::` ist kein Schluessel, und ein `? :` auch nicht,
+        // und darum muss der Doppelpunkt direkt am Namen stehen**
+        // **-- und genau so steht es in `parse.y`, wo `tLABEL` aus
+        // `fname` und dem Doppelpunkt entsteht und kein Leerzeichen
+        // dazwischen sein kann.**
+        if (!AtEnd && Current == ':' && Peek(1) != ':')
+        {
+            _offset++;
+            return new RubyToken
+            {
+                Kind = RubyTokenKind.Symbol,
+                Text = _text[pStart.._offset],
+                Offset = pStart,
+                Line = pStartLine,
+
+                // **Und der Wert ist der Name ohne den Doppelpunkt, und
+                // das ist gemessen an einem Test im Bestand:**
+                //
+                // ```text
+                // Test_ANamedArgumentReachesTheOptionsAsAPair:
+                //     **and it is named k**
+                // ```
+                //
+                // **Und `k: 3` bedeutet `:k => 3`, und ein Spiel liest
+                // `opts[:k]`** -- **und ein Leser, der den Doppelpunkt im
+                // Namen liest, gibt ein Hash mit einem Schluessel, den
+                // niemand schreibt, und der Aufruf sieht aus, als
+                // haette er funktioniert.**
+                Value = text,
+            };
+        }
         // An identifier that begins with an upper case letter is a constant.
         // This is the rule the whole language hangs on, because a constant
         // resolves differently from a method call.

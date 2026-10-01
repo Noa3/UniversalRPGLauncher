@@ -13330,3 +13330,93 @@ one of them is green, and the one that fails is the four real files.**
 
 **And the first three of those are the Ruby 1.9.2 hash syntax, and 1.8.1 has
 it not, and that is the next thing to measure.**
+
+
+## A name with a colon behind it is a key, and the lexer has to read it as one
+
+**And this is Ruby 1.9.2's hash syntax, and 1.8.1 does not have it, and three
+files of the VX Ace game write it.**
+
+### And the grammar, measured
+
+```text
+4737 assoc : arg_value tASSOC arg_value
+4745       | tLABEL arg_value
+                {
+                    $$ = list_append(NEW_LIST(NEW_LIT(ID2SYM($1))), $2);
+                }
+```
+
+**And `tLABEL` is one token, and it is the name and the colon together, and
+that is measured at 7744:**
+
+```c
+if ((lex_state == EXPR_BEG && !cmd_state) || IS_ARG()) {
+    if (peek(':') && !(lex_p + 1 < lex_pend && lex_p[1] == ':')) {
+        lex_state = EXPR_BEG;
+        nextc();
+        set_yylval_name(TOK_INTERN(!ENC_SINGLE(mb)));
+        return tLABEL;
+    }
+}
+```
+
+**And the reader had no `tLABEL` at all**, **and so `{ name: text }` came out
+as `{`, `name`, `:`, `text`, `}`:**
+
+```text
+RubyParseException ':' at offset 10 does not begin an expression.
+```
+
+### And three places had to agree, and only one did at a time
+
+**The lexer now reads the label.** **The parser's `StartsAKeyAndThenAColon()`
+asks whether the next token is a colon, and with the label in one token there
+is no next token.** **And the argument reader stepped over the colon
+separately, and with the label in one token it would have stepped over the
+first value instead.**
+
+**And the third change was the one two tests in the suite caught:**
+
+```text
+Test_ANameIsAKeyOnlyWhenAColonSaysSo: ')' was expected at offset 10,
+    but '1' is there.
+Test_ANamedArgumentReachesTheOptionsAsAPair: **and it is named k**
+```
+
+**And both said the same thing from two sides: `k: 3` means `:k => 3`, and the
+name in the pair is `k` and not `k:`.** **And a reader that kept the colon
+would have given a game a hash with a key it never writes, and the call would
+have looked like it had worked.**
+
+### And a shape I invented was wrong, and it is removed rather than fixed
+
+**I wrote `{ a.length: 1 }` as a shape to measure, and `parse.y` 7744 says it
+is not a label at all**, because after a dot `lex_state == EXPR_DOT`, **and
+that is neither `EXPR_BEG` nor `IS_ARG()`.** **So the shape was removed
+instead of made to pass** -- **and a reader that is stricter than Ruby is the
+right direction to err in, because a false negative fails to parse and a
+false positive reads wrongly.**
+
+### Evidence
+
+**`TestRubyParser192`: nine of ninety-three, and it was eleven.**
+
+**`TestRubyParser: 55/56`, and the shape list is ninety files and every one of
+them is green, and ten of those ninety are the label forms.**
+
+**Full suite `6/2217`, and the six are the same six.**
+
+### And the nine that remain, named
+
+```text
+1x  return a, b, c                     a return with several values
+1x  desc.gsub "\\n", "\n"           an escape inside a percent literal
+1x  load_script($m.get_resource "u", "s.rb")
+1x  $mod_load_script["Data/Scripts/Frames/121_Dialog_Control_System.rb"] =
+1x  (mod_id.is_a? Integer) ? @a[mod_id] : @b[mod_id]
+1x  #end                               a commented-out end
+```
+
+**And the first is the largest of them, and `parse.y` measures it twice:**
+`return a, b, c` is `kRETURN call_args`, **and `call_args` is a list.**
