@@ -13661,3 +13661,119 @@ files and every one of them is green.**
 **And the third of those is the next one, and it is one grammar line:
 `bodystmt : compstmt opt_rescue opt_else opt_ensure`, and this reader takes
 `opt_rescue` only after an explicit `begin`.**
+
+
+## A class body carries the same arms as a method body, and one question this round
+## could not answer
+
+**And the fix is one grammar line, and the open question is named rather than
+guessed at.**
+
+### And `bodystmt` is what `class`, `module` and `def` all use
+
+**Measured at 353, 1581, 1619:**
+
+```text
+353  bodystmt   : compstmt opt_rescue opt_else opt_ensure
+1581 kCLASS cpath superclass { ... } bodystmt kEND
+1619 kMODULE cpath { ... } bodystmt kEND
+```
+
+**And the reader had `ArmeSammeln` for `def` and for `begin`, and the
+`class`/`module` branch knew only `end`:**
+
+```text
+RubyParseException 'rescue' at offset 13 does not begin an expression.
+```
+
+**And that is the same construct in three places again, and the third one was
+missing** -- **and the rule that closes it is not "the `def` branch is right"
+but "one reader, three callers"**, **and the same lesson as the modifier two
+rounds ago.**
+
+### And the question this round could not answer, stated rather than guessed
+
+**One file of the ninety-three writes this:**
+
+```ruby
+temp_id_bon = (text.slice!(/^\[[^\[\]]+\]/)[/[^\[\]]+/].strip).split(%r{,\s*})
+```
+
+**And the reader stops at it, because there is no space between the bracket
+and the `%`:**
+
+```text
+RubySyntaxException '\' is not a character this Ruby lexer knows, at offset 73.
+```
+
+**And the grammar says the reader is right.** Measured at 7390 and 4170:
+
+```text
+7390 case '(':
+     ...
+     lex_state = EXPR_BEG;
+4170 if (IS_ARG() && space_seen && !ISSPACE(c)) {
+     goto quotation;
+     }
+3288 #define IS_ARG() (lex_state == EXPR_ARG || lex_state == EXPR_CMDARG)
+```
+
+**And `EXPR_BEG` is neither `EXPR_ARG` nor `EXPR_CMDARG`, so `split(%r{...})`
+is a modulus in Ruby 1.8.1 and in Ruby 1.9.2** -- **and a game that runs does
+not write a modulus where it means a regexp.**
+
+**And there is no Ruby on this machine to settle it:**
+
+```text
+where ruby: (nothing)
+ruby -v: Der Befehl "ruby" ist entweder falsch geschrieben oder
+    konnte nicht gefunden werden
+```
+
+**And so the answer is that this one line is UNSETTLED and it is left
+unsettled**: **either a rule exists that this reader has not found, or that
+mod's author wrote a line that breaks under their own engine.** **And a third
+possibility is the honest one: the mod is loaded by a patched engine, and the
+game carries patches** -- **and `GameMods.ini` and `ModScripts/` are exactly
+that, and this repository does not run the delivered game, so it cannot
+settle it by running it either.**
+
+**And what is settled is the narrower half, and it is measured:**
+
+```text
+x = %r{a\sb}          parses          a space after the =
+x.split( %r{a,\sb} )  parses          a space after the bracket
+x.split(%r{a,\sb})    a modulus       no space, and the reader says so
+```
+
+### And three fixtures I wrote were wrong, and they are gone
+
+**`x.split(%r{abc})` is not valid Ruby** -- **the `abc` behind a modulus is
+no name** -- **and the reader refuses it, correctly.**
+**And `x = 1 =begin` is not a document** -- **`was_bol()` says so** -- **and
+the reader refuses it, correctly.** **And `{ a.length: 1 }` is not a label** --
+**the same rule as before.** **Three of my own measuring shapes were wrong,
+and in every case the reader was right and the shape was removed rather than
+made to pass.**
+
+### Evidence
+
+**`TestRubyParser192`: three of ninety-three, unchanged in number and changed
+in kind** -- **one of the three is the unsettled line above, and one is a
+commented-out `end`.**
+
+**`TestRubyParser: 55/56`, and the shape list is one hundred and twenty-one
+files and every one of them is green.**
+
+**Full suite `6/2216`.**
+
+### And the three that remain
+
+```text
+1x  #end                                  a commented-out end
+1x  the %r line above                     UNSETTLED, and named as unsettled
+1x  Unused_0_O_FakeSprite_And_colorHook    parses, and to what is unmeasured
+```
+
+**And the last of those is worth measuring next: a file that parses is not
+necessarily read correctly, and this test only asks that it parses.**

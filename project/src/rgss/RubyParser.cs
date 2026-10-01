@@ -3456,14 +3456,47 @@ public sealed class RubyParser
                     superclass = ReadConstantPath();
                 }
                 SkipNewlines();
+
+                // **Und ein Rumpf einer Klasse oder eines Moduls traegt
+                // dieselben Arme wie ein Rumpf einer Methode, und das ist
+                // gemessen an `parse.y` 1619 und 353:**
+                //
+                // ```text
+                // 1619 kMODULE cpath { ... } bodystmt kEND
+                // 1581 kCLASS cpath superclass { ... } bodystmt kEND
+                //  353 bodystmt : compstmt opt_rescue opt_else opt_ensure
+                // ```
+                //
+                // **Und ein Leser, der hier nur `end` kannte:**
+                //
+                // ```
+                // RubyParseException 'rescue' at offset 13 does not begin
+                //     an expression.
+                // ```
+                //
+                // **Und `ArmeSammeln` ist der Leser, den `def` und `begin`
+                // benutzen** -- **und dieselbe Sache an drei Stellen zu bauen
+                // ist der Grund, warum der `def`-Zweig sie hatte und dieser
+                // nicht.**
                 if (Is("end"))
                 {
                     _index++;
                 }
                 else
                 {
-                    body = [.. ReadBody("end").Children];
+                    var koerper = ParseStatements(
+                        "rescue", "else", "ensure", "end");
+                    if (IsKeyword("rescue") || IsKeyword("ensure")
+                        || IsKeyword("else"))
+                    {
+                        body = [.. ArmeSammeln(koerper, pToken.Line).Children];
+                    }
+                    else
+                    {
+                        body = [.. RumpfAus(koerper, pToken.Line).Children];
+                    }
                 }
+
                 return new RubyNode
                 {
                     Kind = pToken.Text == "class" ? RubyNodeKind.Class : RubyNodeKind.Module,
