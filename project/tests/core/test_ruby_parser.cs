@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Godot;
 using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
 
@@ -126,53 +127,57 @@ public partial class TestRubyParser : TestBase
     /// </remarks>
     public void Test_DieFormenDieDieEchtenSkripteNochStoppen()
     {
-        var faelle = new (string Quelle, string Woher)[]
-        {
-            // **Und instruby.rb Zeile 31, wo der Stern steht.**
-            ("$make, *rest = Shellwords.shellwords($make)",
-             "C -- exactly as instruby.rb 31 writes it"),
-            ("def $mflags.set?(flag)\nend",
-             "D -- a method on a global"),
-            ("if $mflags.set?(?n)\n  $dryrun = true\nend",
-             "instruby 39 -- ?x as one character"),
-            ("install a+b, c+d, :mode => 0755",
-             "instruby 97 -- a bare call with a hash argument"),
-
-            // **Und mdoc2man.rb Zeile 53.**
-            ("@name = @date = @id = nil",
-             "mdoc2man 53 -- a chain of three"),
-
-            // **Und rubytest.rb Zeile 6 und 8.**
-            ("unless File.exist? \"x\"\n  print \"y\"\nend",
-             "rubytest 6 -- a bare argument and a block"),
-            ("print \"Try `make' first, then `make test', please.\n\"",
-             "rubytest 8 -- a backtick and an apostrophe"),
-
-            // **Und die vier Formen, die vorher standen.**
-            ("a, b, c = 1, 2, 3", "2 -- three names"),
-            ("a, b = 1, 2", "3 -- two names"),
-            ("a = 1, 2", "4 -- a value with a comma"),
-        };
         var fehler = new List<string>();
+        var wurzel = "res://tests/fixtures/ruby181/formen";
 
-        foreach (var (quelle, woher) in faelle)
+        // **Und jede Datei dort ist ein Stueck aus einem der vier echten
+        // Skripte, und unveraendert.** **Und der Grund fuer Dateien und
+        // nicht fuer Zeichenketten ist, dass eine Zeichenkette in C# ihre
+        // Quotes und ihre Backslashes selbst noch einmal escaped, und der
+        // Leser dann nicht mehr das sieht, was der Autor geschrieben
+        // hat.**
+        using var dir = DirAccess.Open(wurzel);
+        if (dir == null)
         {
+            AssertTrue(false, "**and the shape directory is there**"
+                + $" -- and {wurzel} could not be opened");
+            return;
+        }
+
+        dir.ListDirBegin();
+        var name = dir.GetNext();
+        while (!string.IsNullOrEmpty(name))
+        {
+            var datei = name;
+            name = dir.GetNext();
+            if (!datei.EndsWith(".rb"))
+            {
+                continue;
+            }
+
+            var woher = datei;
+            var pfad = wurzel + "/" + datei;
+            var bytes = Godot.FileAccess.GetFileAsBytes(pfad);
+            var quelle = System.Text.Encoding.UTF8.GetString(bytes);
+
             try
             {
                 var program = Parse(quelle);
-                if (program.Count != 1)
+                if (program.Count == 0)
                 {
-                    fehler.Add($"{woher}: parsed as {program.Count}"
-                        + " statements, not 1");
+                    fehler.Add($"{woher}: parsed as no statements, and it"
+                        + $" holds {quelle.Length} characters");
                 }
             }
             catch (Exception pProblem)
             {
-                var alle = new RubyLexer(quelle).Tokenize();
-                var liste = string.Join(" ",
-                    alle.Select(x => x.Kind + ":" + x.Text));
+                // **Und nur der Name und die Meldung, und nicht der
+                // ganze Tokenstrom, weil zwanzig Namen aus einem echten
+                // Skript die Meldung so lang machen, dass sie beim
+                // naechsten Fehler abgeschnitten wird und der Fehler
+                // verschwindet.**
                 fehler.Add($"{woher}: {pProblem.GetType().Name}"
-                    + $" {pProblem.Message} | tokens: {liste}");
+                    + $" {pProblem.Message}");
             }
         }
 

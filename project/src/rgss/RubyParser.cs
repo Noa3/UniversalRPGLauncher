@@ -1836,7 +1836,35 @@ public sealed class RubyParser
         var when = Take().Text;
         SkipNewlines();
         var werte = new List<RubyNode>();
-        while (!IsKeyword("then"))
+        // **Und die Liste der Werte endet am Zeilenumbruch, oder an einem
+        // Komma, oder an `then`, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`:
+        //
+        // ```c
+        // case_body  : kWHEN when_args then compstmt cases
+        // when_args  : args
+        // args       : arg_value
+        // arg_value  : arg
+        // arg        : lhs asgn | ... | primary
+        // ```
+        //
+        // **Und `arg` endet an einem `tNL`, weil der Lexer ein
+        // `tNL` nur dort erzeugt, wo ein Ausdruck nicht weitergehen
+        // kann** -- **und der Lexer weiss nicht, ob er gerade in den
+        // Werten eines `when` steht oder schon im Rumpf, und diese
+        // Grenze kann er auch nicht wissen.**
+        //
+        // **Und ein Leser, der nur auf `then` wartet, liest den Rumpf
+        // als Werte**, **und dann steht der Index hinter dem Rumpf, und
+        // das `when` hinter ihm wird als Anweisung gelesen:**
+        //
+        // ```
+        // 'when' at offset 33 does not begin an expression
+        // ```
+        while (!IsKeyword("then") && Current.Kind != RubyTokenKind.Newline
+            && Current.Kind != RubyTokenKind.Semicolon
+            && !Is("}") && !AtEnd)
         {
             werte.Add(ParseExpression());
             SkipNewlines();
@@ -1851,6 +1879,45 @@ public sealed class RubyParser
         }
 
         SkipThen();
+        // **Und ein Rumpf eines `when` laeuft nie bis zum `end` des
+        // `case`, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`:
+        //
+        // ```c
+        // case_body : kWHEN when_args then compstmt cases
+        // cases     : opt_else | case_body
+        // compstmt   : stmts opt_terms
+        // stmts     : none | stmt | stmts terms stmt
+        // ```
+        //
+        // **Und alle drei sind Closers, und `end` ist der letzte von
+        // ihnen, und nicht der einzige, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`:
+        //
+        // ```c
+        // case_body  : kWHEN when_args then compstmt cases
+        // cases      : opt_else | case_body
+        // opt_else   : none | kELSE compstmt
+        // compstmt   : stmts opt_terms
+        // stmts     : none | stmt | stmts terms stmt
+        // ```
+        //
+        // **Und ein `stmt` ist nach der Grammatik nie ein `end`**, **und
+        // `cases` hat kein `kEND`**, **und `opt_else` auch nicht** -- **und
+        // das `kEND` des `case` steht in `primary`, ganz am Ende:**
+        //
+        // ```c
+        // primary : kCASE expr_value opt_terms case_body kEND
+        //          | kCASE opt_terms case_body kEND
+        // ```
+        //
+        // **Und `end` ist ein Closer fuer einen `when`-Rumpf**, **und
+        // `when` und `else` auch**, **und ein Leser, der nur `end`
+        // kennt, frisst die `when`-Zweige hinter ihm** -- **und dann
+        // steht der Index hinter dem letzten Zweig, und der `case` ist zu
+        // Ende, bevor er vollstaendig gelesen ist.**
         var body = ReadBodyUntil("when", "else", "end");
         var children = new List<RubyNode>();
         children.AddRange(werte);
@@ -2101,12 +2168,35 @@ public sealed class RubyParser
                         && (token.Text is ("attr_accessor" or "attr_reader"
                             or "attr_writer" or "include"))))
                 {
-                    // **Erst hier wird der Zeilenumbruch uebersprungen, und
-                    // nur fuer die Form ohne Argumente.** `attr_accessor`
-                    // allein steht am Zeilenende, **und ohne dieses
-                    // `SkipNewlines` waere der Zweig nie erreicht**, weil
-                    // `Current` dann schon das `end` der naechsten Zeile
-                    // waere.
+                    // **Und nur die Form ohne Argumente ueberspringt hier
+                    // den Zeilenumbruch, und das ist gemessen.**
+                    //
+                    // `attr_accessor` allein steht am Zeilenende, und
+                    // `Current` waere dann schon das `end` der naechsten
+                    // Zeile.
+                    //
+                    // **Und eine Form MIT Argumenten tut das nicht, und
+                    // das ist auch gemessen:**
+                    //
+                    // ```c
+                    // command_args : { CMDARG_PUSH(1); } open_args
+                    // open_args    : call_args | ...
+                    // call_args    : command | args opt_block_arg | ...
+                    // paren_args   : '(' call_args opt_nl ')' | ...
+                    // ```
+                    //
+                    // **Und ein `opt_nl` steht nur bei `paren_args`, also
+                    // bei Klammern, und nirgends sonst.** **Also nach einem
+                    // Namen ohne Klammern folgt nie ein Zeilenumbruch, und
+                    // `case word` gefolgt von einem `when` in der naechsten
+                    // Zeile ist KEIN Aufruf mit einem Argument.** **Und ein
+                    // Leser, der hier `SkipNewlines` macht, frisst die
+                    // Zeilengrenze und liest das `when` als Argument, und
+                    // dann:**
+                    //
+                    // ```
+                    // 'when' at offset 33 does not begin an expression
+                    // ```
                     SkipNewlines();
                     var argumente = new List<RubyNode>();
                     while (true)
@@ -2373,20 +2463,49 @@ public sealed class RubyParser
                 // Form, die ein Spiel schreibt**, kein Tippfehler.
                 var wert = StartsAValue() ? ParseExpression() : null;
                 SkipNewlines();
-                var whenRuest = ReadBodyUntil("when", "else", "end");
+                // **Und die Kinder sind zuerst der Wert, und danach einer
+                // je Zweig, und das ist die Reihenfolge, die `parse.y`
+                // mit `NEW_CASE($2, $4)` auch hat.**
                 var children = new List<RubyNode>();
                 if (wert != null)
                 {
                     children.Add(wert);
                 }
 
+                var whenRuest = ReadBodyUntil("when", "else", "end");
                 children.Add(whenRuest);
                 RubyNode elseBlock = null;
                 if (IsKeyword("else"))
                 {
                     _index++;
                     SkipNewlines();
-                    elseBlock = ReadBody("end");
+                    // **Und ein `else` eines `case` endet am `end` des
+                    // `case`, und nicht an einem eigenen, und das ist
+                    // gemessen.**
+                    //
+                    // Ruby 1.8.1's own `parse.y`:
+                    //
+                    // ```c
+                    // opt_else : none | kELSE compstmt
+                    // compstmt : stmts opt_terms
+                    // stmts   : none | stmt | stmts terms stmt
+                    // primary : kCASE expr_value opt_terms case_body kEND
+                    //          | kCASE opt_terms case_body kEND
+                    // ```
+                    //
+                    // **Und ein `kEND` steht nur EINE MAL in diesen
+                    // Zeilen, und das ist das des `case`.** **Und ein
+                    // `stmt` ist nach der Grammatik nie ein `end`, und
+                    // `opt_else` hat auch kein `kEND`.**
+                    //
+                    // **Und `ReadBody` frisst seinen Closer, und
+                    // `ReadBodyUntil` laesst ihn stehen** -- **und ein
+                    // Leser, der `ReadBody("end")` fuer das `else`
+                    // nimmt, frisst damit das `end` des `case`, und dann
+                    // steht der Index auf dem `when` oder `else` hinter
+                    // dem `case`, und das kommt als
+                    // `'end' does not begin an expression'.**
+                    elseBlock = ReadBodyUntil("end");
                 }
                 else if (IsKeyword("when"))
                 {
@@ -2398,12 +2517,11 @@ public sealed class RubyParser
                         children.Add(ParseWhen());
                         SkipNewlines();
                     }
-
                     if (IsKeyword("else"))
                     {
                         _index++;
                         SkipNewlines();
-                        elseBlock = ReadBody("end");
+                        elseBlock = ReadBodyUntil("end");
                     }
                 }
 

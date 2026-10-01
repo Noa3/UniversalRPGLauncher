@@ -1,0 +1,1 @@
+    @name = @date = @id = nil
