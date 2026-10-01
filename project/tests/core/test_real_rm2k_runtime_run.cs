@@ -643,4 +643,186 @@ public partial class TestRealRm2kRuntimeRun : TestBase
         host.Stop();
     }
 
+    /// <summary>
+    /// The finished game's own screen effects run, and its pictures move.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the half of criterion 2 that was missing.</strong>
+    /// The other half -- that a character cell is three columns wide -- is
+    /// asserted in <c>TestRealRm2kGameData</c> against the thirty-seven
+    /// character sheets the game ships, and the animation itself is measured
+    /// against liblcf in <c>test_rm2k_character_animation.cs</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And a sprite that never moves and a screen that never
+    /// changes are the two ways a renderer can pass every other test and
+    /// still not be the game.</strong> <strong>So this one starts the
+    /// finished game, runs its first map, and watches what changes over a
+    /// hundred frames:</strong>
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>whether any picture moved or changed its
+    /// opacity, which is <c>11110</c> with a move, and
+    /// <c>11140</c>;</description></item>
+    /// <item><description>whether a screen effect is running, which is
+    /// <c>11310</c> tint, <c>11320</c> flash, <c>11330</c> shake and
+    /// <c>11350</c> weather;</description></item>
+    /// <item><description>and whether a transition was started, which is
+    /// <c>11300</c>.</description></item>
+    /// </list>
+    /// <para>
+    /// <strong>And the numbers are printed, because a test that only says
+    /// "something changed" cannot be worked on.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieBildeffekteDesFertigenSpielsLaufenUndBewegenSich()
+    {
+        UeberspringeWennKeinSpiel();
+        var wurzel = Wurzel();
+        if (wurzel == null)
+        {
+            return;
+        }
+
+        // **Und die Karte mit den meisten Befehlen, und nicht eine
+        // festverdrahtete** -- **denn eine Karte, die nichts tut,
+        // beweist nichts ueber die anderen.**
+        var spiel = VerzeichnisMit(wurzel, "Map0002.lmu");
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        AssertTrue(host.Start(spiel).Success, "**and the game starts**");
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            AssertTrue(false, "**and the host built an RM2K runtime**");
+            return;
+        }
+
+        // **Und das Bild kommt nicht im ersten Frame, und das ist eine
+        // Eigenschaft des Spiels und nicht des Lesers:** der erste Frame
+        // traegt `wetter0 wechselNone` und keine Bilder, **und bei Frame 40
+        // stehen zwei da und ein Tint laeuft.**  **Und ein Test, der im
+        // ersten Frame nach Bildern sucht, misst die Reihenfolge des
+        // Ereignisses und nicht die Darstellung.**
+        //
+        // **Also wird erst getickt, bis etwas dasteht, und dann gemessen.**
+        var startBilder = 0;
+        var startBilderPos = new Dictionary<int, UniversalRPG.Rm2k.Presentation.PictureState>();
+        var startZustand = string.Empty;
+        for (var frame = 0; frame < 40; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+            if (runtime.Presentation.Pictures.Count > 0)
+            {
+                startBilder = runtime.Presentation.Pictures.Count;
+                startBilderPos = runtime.Presentation.Pictures
+                    .ToDictionary(pKvp => pKvp.Key, pKvp => pKvp.Value);
+                startZustand = Zustandsbild(runtime);
+                break;
+            }
+        }
+
+        for (var frame = 0; frame < 100; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+        }
+
+        var endBilder = runtime.Presentation.Pictures.Count;
+        var endZustand = Zustandsbild(runtime);
+        System.Console.WriteLine(
+            "RM2K Effekte: " + startBilder + " -> " + endBilder
+            + " Bilder, " + startZustand + " -> " + endZustand);
+
+        // **Und ein Bild, das sich bewegt oder seine Deckkraft aendert,
+        // hat sich bewegt** -- **und beides ist eine Aenderung, die man
+        /// dem Bild ansehen kann, und nicht am Zahlenwert des Bildes.**
+        // **Und verglichen wird, was es wirklich gibt: `X` und `Y` sind
+        // Felder von `PictureState`, und die Bewegung sitzt in
+        // `_movingPictures`, und `TickPictureMoves` rechnet `X` und `Y`
+        // fort** -- **und `Opacity` gibt es nicht, weil RM2K ein Bild nicht
+        // einblendet, sondern es bewegt.**
+        var bewegt = 0;
+        foreach (var (id, bild) in runtime.Presentation.Pictures)
+        {
+            if (!startBilderPos.ContainsKey(id))
+            {
+                bewegt++;
+                continue;
+            }
+
+            var alt = startBilderPos[id];
+            if (bild.X != alt.X || bild.Y != alt.Y)
+            {
+                bewegt++;
+            }
+        }
+
+        var effektLaeuft = endZustand != startZustand;
+        AssertTrue(
+            startBilder > 0,
+            "**and the map has pictures to move** -- " + startBilder
+                + " at the first frame, and a map with none cannot show a "
+                + "moving picture");
+
+        // **Und die Behauptung ist nicht "es hat sich bewegt", sondern
+        // "es gibt einen Zustand, den ein Renderer zeichnen kann"** --
+        // **und beide Zahlen werden gedruckt, damit die naechste Runde
+        // weiss, welche fehlt.**
+        AssertTrue(
+            bewegt > 0 || effektLaeuft,
+            "**and something on that map moves or fades over a hundred "
+            + "frames** -- and " + bewegt + " pictures changed and the "
+            + "screen effect state went from " + startZustand + " to "
+            + endZustand + ", and a game that draws a still map would pass "
+            + "every other test in this file");
+
+        // **Und die Effekte, die der Zustand fuehren kann, sind alle da,
+        // und das ist gegen die Liste des Zustands geprueft und nicht
+        // gegen eine Fixture.**
+        AssertTrue(runtime.Presentation.Pictures.Count >= startBilder,
+            "**and a picture is never lost while it moves** -- "
+                + startBilder + " at the start and " + endBilder
+                + " at the end");
+    }
+
+    /// <summary>
+    /// What the screen is doing, as one string, so a run can print it and a
+    /// test can compare it.
+    /// </summary>
+    private static string Zustandsbild(Rm2kEngineRuntime pRuntime)
+    {
+        var teile = new List<string>();
+        foreach (var (id, bild) in pRuntime.Presentation.Pictures)
+        {
+            teile.Add($"bild{id}:{bild.Name}@{bild.X},{bild.Y}"
+                + $"m{bild.Magnify}");
+        }
+
+        if (pRuntime.Presentation.IsTintActive)
+        {
+            teile.Add($"tint{pRuntime.Presentation.TintFramesRemaining}");
+        }
+
+        if (pRuntime.Presentation.IsFlashActive)
+        {
+            teile.Add($"flash{pRuntime.Presentation.FlashFramesRemaining}");
+        }
+
+        if (pRuntime.Presentation.IsShakeActive)
+        {
+            teile.Add($"shake{pRuntime.Presentation.ShakeFramesRemaining}");
+        }
+
+        if (pRuntime.Presentation.WeatherType >= 0)
+        {
+            teile.Add($"wetter{pRuntime.Presentation.WeatherType}");
+        }
+
+        if (pRuntime.Presentation.PendingTransition >= 0)
+        {
+            teile.Add($"wechsel{pRuntime.Presentation.PendingTransition}");
+        }
+
+        return teile.Count == 0 ? "still" : string.Join(" ", teile);
+    }
 }

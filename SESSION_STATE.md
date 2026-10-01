@@ -14644,3 +14644,62 @@ against the real files and not against a fixture.**
 **`TestRealRm2kGameData`: 5/5, and it prints the measured line.**
 
 **Full suite: `All 2217 tests passed`.**
+
+
+## The finished game runs, and its own effects run, and the first frame is not
+## the frame that shows them
+
+**And this is criterion 2's other half, and it was measured against the
+game and not against a fixture for the first time.**
+
+### And what the run does
+
+```text
+TestRealRm2kRuntimeRun: 6/6
+RM2K Effekte: 1 -> 2 Bilder
+   bild1:halfblack@80,120m100  wetter0  wechselNone
+   -> bild1:halfblack@80,120m100  bild2:end_logo@80,46m100  tint203  wetter0  wechselNone
+```
+
+**And that line is a finished RPG_RT game on this machine: one picture is
+already on the screen, a second one arrives, a tint runs for 203 frames, and
+the weather and the transition stand still.** **A renderer that drew a still
+map would pass every other test in this file.**
+
+### And the two mistakes this round made, both of them measurement errors
+
+**The first was asking for fields that do not exist.** The test asked
+`PictureState` for `Opacity`, `TotalFrames` and `FramesLeft`, and those are
+not on it. **RM2K does not fade a picture, it moves it** -- and the move
+lives in `_movingPictures` as a `PictureMove` with `StartX`, `TargetX`,
+`TotalFrames` and `FramesLeft`, and `TickPictureMoves` walks it. **A test
+that guessed the field names would not have compiled, and that was the
+cheapest way to find out.**
+
+**The second was looking in the first frame.** The map's first frame carries
+`wetter0 wechselNone` and no picture at all, **and the first `11110` runs
+later.** **So the first version of the test asserted "the map has pictures to
+move" against a frame in which the game had not yet drawn any** -- **and a
+test that measures the order of an event rather than the rendering of it is
+the same mistake as a regex that counts a parameter as a command.**
+
+**And the fix is one loop: tick until something is there, and measure from
+there.**
+
+### And the four lines, all from one run, and all five criteria that can be
+
+```text
+MZ  gemessen: 2436 Befehle, 1757 ausfuehrbar, 679 nicht
+MZ  echte Luecke: keine -- alle fuenf sind Codes ohne Engine-Methode
+RM2K gemessen: 37 CharSets, 288px breit (37x), 256px hoch (37x)
+RM2K Effekte: 1 -> 2 Bilder, ... tint203 ...
+XP  gemessen: 90 Skripte, 90 lesbar, 538798 Bytes Ruby
+TestRubyParser192: 1/1
+All 2218 tests passed
+```
+
+### Evidence
+
+**`TestRealRm2kRuntimeRun`: 6/6, and it prints the line.**
+
+**Full suite: `All 2218 tests passed`.**
