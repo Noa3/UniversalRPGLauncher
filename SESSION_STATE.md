@@ -14591,3 +14591,56 @@ the two would drift.**
 
 **And criterion 4 now has a number: 90 of 90, 538798 bytes of Ruby, out of
 a finished game on this machine.**
+
+
+## Four engines on this machine, and three of them now have a number
+
+**And the number is printed by the test run and not written down beside
+it, which is the rule this repository learned the hard way.**
+
+### And what is actually here, measured
+
+```text
+E:/RPGMakerGames/CamelliaCoronation-Win              MZ
+E:/RPGMakerGames/MicroQuest - Beneath Brimestone  XP
+E:/RPGMakerGames/Dragon Destiny                   RM2K  (.ldb/.lmu, no .lcf)
+E:/RPGMakerGames/dungeon5min                       WOLF (Data.wolf)
+E:/RPGMakerGames/Kaiju Girlfriend                  WOLF (Data.wolf)
+```
+
+**And only one of the five was measured, and the other four were not
+missing data -- they were measurements nobody had made.**
+
+### And the four lines, all from one run
+
+```text
+MZ  gemessen: 2436 Befehle, 1757 ausfuehrbar, 679 nicht
+MZ  echte Luecke: keine -- alle fuenf sind Codes ohne Engine-Methode
+RM2K gemessen: 37 CharSets, 288px breit (37x), 256px hoch (37x)
+XP  gemessen: 90 Skripte, 90 lesbar, 538798 Bytes Ruby
+TestRubyParser192: 1/1
+All 2217 tests passed
+```
+
+### And what criterion 2 was missing, named
+
+**The animation is implemented and measured against liblcf in nine tests --
+the speed tables, the four-value frame rotation, the pause and jump reset --
+and not one of them looked at an image the game ships.**
+
+**And the rule an image has to satisfy is one line of the format: a character
+cell is three columns wide, and the fourth value the rotation reaches is
+drawn as the middle.** **And all thirty-seven character sheets of a
+finished game are 288 pixels wide, and 288 divides by three, and their
+heights divide by two for the two rows the format draws.**
+
+**And a game whose sheets were not 288 wide would not fit the rule**, **and
+a renderer that sliced every sheet at 288 regardless would draw a character
+three quarters of the way across its cell** -- **and that is now asserted
+against the real files and not against a fixture.**
+
+### Evidence
+
+**`TestRealRm2kGameData`: 5/5, and it prints the measured line.**
+
+**Full suite: `All 2217 tests passed`.**

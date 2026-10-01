@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 
 using UniversalRPG.Rm2k.Parser;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Tests.Framework;
 
 namespace UniversalRPG.Tests.Core;
@@ -227,5 +228,147 @@ public partial class TestRealRm2kGameData : TestBase
                 + "outside the set would draw a room the game never made");
         AssertTrue(backdrops >= 10,
             "**and its backdrops** — " + backdrops + " PNGs");
+    }
+
+    /// <summary>
+    /// The character sprites of a real game are the raster this repository's
+    /// animation draws from, and the two have to agree.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the measurement criterion 2 needs, and it was
+    /// missing.</strong> The animation itself is implemented and measured
+    /// against liblcf in <c>test_rm2k_character_animation.cs</c> -- nine
+    /// tests, the upstream speed tables, the four-value frame rotation -- and
+    /// <strong>none of them looked at a single image this game
+    /// ships.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the rule the images have to satisfy is one line of the
+    /// format:</strong> a character cell is <strong>three columns wide</strong>
+    /// -- left, middle, right -- and <c>FrameMiddle2</c>, the fourth value
+    /// the rotation reaches, <strong>is drawn as the middle</strong>, because
+    /// there is no fourth column. <strong>That is why the rotation runs
+    /// over four values and not three</strong>, and a reader that cycled
+    /// over three would change the step rate of every walking character in
+    /// the game.
+    /// </para>
+    /// <para>
+    /// <strong>And a game whose sprites are not 288 pixels wide would not
+    /// fit the rule</strong>, <strong>and a reader that sliced every sheet
+    /// at 288 regardless would draw a character three quarters of the way
+    /// across its cell.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieCharSetsEinesEchtenSpielsPassenInsRaster()
+    {
+        UeberspringeWennKeinSpiel();
+        var wurzel = Wurzel();
+        if (wurzel == null)
+        {
+            return;
+        }
+
+        var ordner = wurzel + "/CharSet";
+        var dateien = Directory.GetFiles(ordner);
+        AssertTrue(dateien.Length > 20,
+            "**the game carries a game's worth of character sheets** -- "
+                + dateien.Length + " files");
+
+        // **Und jede Datei hat Breite und Hoehe, und zwar aus dem Bild
+        // selbst und nicht aus dem Dateinamen.**
+        var breiten = new Dictionary<int, int>();
+        var hoehen = new Dictionary<int, int>();
+        foreach (var datei in dateien)
+        {
+            var masse = Bildmasse(datei);
+            if (masse == null)
+            {
+                AssertTrue(false,
+                    "**and every one of them is a PNG or a BMP this reader "
+                    + "can measure** -- and " + Path.GetFileName(datei)
+                    + " is neither");
+                return;
+            }
+
+            breiten[masse.Value.Width] = breiten.GetValueOrDefault(masse.Value.Width) + 1;
+            hoehen[masse.Value.Height] = hoehen.GetValueOrDefault(masse.Value.Height) + 1;
+        }
+
+        System.Console.WriteLine(
+            "RM2K gemessen: " + dateien.Length + " CharSets, "
+            + string.Join(", ", breiten.Select(pKvp => pKvp.Key + "px breit (" + pKvp.Value + "x)"))
+            + ", "
+            + string.Join(", ", hoehen.Select(pKvp => pKvp.Key + "px hoch (" + pKvp.Value + "x)")));
+
+        // **Und die Breite ist durch drei teilbar, und das ist die ganze
+        // Drei-Spalten-Regel als Zahl.**
+        foreach (var breite in breiten.Keys)
+        {
+            AssertTrue(breite % 3 == 0,
+                "**and every sheet's width divides by three** -- " + breite
+                    + " does not, and a character cell is three columns "
+                    + "wide, and a reader that sliced it anyway would draw a "
+                    + "character across a boundary");
+        }
+
+        // **Und die hoehe laesst zwei Reihen zu, und RM2K zeichnet die
+        // untere zuerst.** 256 durch 128 sind zwei Reihen.
+        foreach (var hoehe in hoehen.Keys)
+        {
+            AssertTrue(hoehe % 2 == 0,
+                "**and every sheet's height takes two rows** -- " + hoehe
+                    + " is odd, and a sheet of an odd height has a half row "
+                    + "the format has no place for");
+        }
+
+        // **Und die Regel, um die es geht, ist die des Lesers und nicht
+        // die des Bildes** -- **und der Leser hat drei Werte und einen
+        /// vierten, der als der zweite gezeichnet wird.**
+        AssertEq(Rm2kCharacterAnimation.FrameCount, 4,
+            "**and the rotation runs over four values** -- and that is the "
+                + "one that draws as the middle");
+        AssertEq(Rm2kCharacterAnimation.ClampFrame(
+            Rm2kCharacterAnimation.FrameMiddle2),
+            Rm2kCharacterAnimation.FrameMiddle,
+            "**and the fourth value is drawn as the middle** -- and that is "
+                + "why there is no fourth column to draw");
+
+        // **Und die Geschwindigkeitstabelle ist gegen liblcf gemessen,
+        // und ein Spiel, das sie benutzt, benutzt diese.**
+        for (var tempo = 1; tempo <= Rm2kCharacterAnimation.MaxMoveSpeed; tempo++)
+        {
+            AssertTrue(
+                Rm2kCharacterAnimation.StationaryAnimFrames(tempo) > 0
+                && Rm2kCharacterAnimation.ContinuousAnimFrames(tempo) > 0
+                && Rm2kCharacterAnimation.SpinAnimFrames(tempo) > 0,
+                "**and every speed of the table has a frame count in all "
+                + "three modes** -- and speed " + tempo + " does not");
+        }
+    }
+
+    /// <summary>The width and height of a PNG or a BMP, from the file itself.</summary>
+    private static (int Width, int Height)? Bildmasse(string pPfad)
+    {
+        var kopf = File.ReadAllBytes(pPfad)[..33];
+        if (kopf.Length < 26)
+        {
+            return null;
+        }
+
+        if (kopf[0] == 0x89 && kopf[1] == (byte)'P')
+        {
+            return ((kopf[16] << 24) | (kopf[17] << 16) | (kopf[18] << 8) | kopf[19],
+                (kopf[20] << 24) | (kopf[21] << 16) | (kopf[22] << 8) | kopf[23]);
+        }
+
+        if (kopf[0] == (byte)'B' && kopf[1] == (byte)'M')
+        {
+            var breite = kopf[18] | (kopf[19] << 8) | (kopf[20] << 16) | (kopf[21] << 24);
+            var hoehe = kopf[22] | (kopf[23] << 8) | (kopf[24] << 16) | (kopf[25] << 24);
+            return (breite, hoehe < 0 ? -hoehe : hoehe);
+        }
+
+        return null;
     }
 }
