@@ -566,4 +566,101 @@ public partial class TestRealMzPageRun : TestBase
             + " that event requires self-switch A, which page 0 turned on"
             + " with 123 ['A', 0]; the actions were: " + alle);
     }
+
+
+    /// <summary>
+    /// The button's two questions ask for opposite priorities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And that is measured at
+    /// <c>Game_Player.prototype.triggerButtonAction</c>:</strong>
+    /// <c>this.checkEventTriggerHere([0]); if ($gameMap.setupStartingEvent())
+    /// return true; this.checkEventTriggerThere([0, 1, 2]); if
+    /// ($gameMap.setupStartingEvent()) return true;</c> — <strong>and
+    /// <c>here</c> passes <c>false</c> for normal and <c>there</c>
+    /// passes <c>true</c></strong>, and <c>startMapEvent</c> compares
+    /// <c>event.isNormalPriority() === normal</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the game proves the rule, because no page of this
+    /// project is reachable the wrong way round.</strong> Measured:
+    /// Map001's four pages with priority 0 stand at (13,12), (14,12),
+    /// (5,7) and (5,8), <strong>and none of the four neighbours is a
+    /// normal-priority page</strong> — <strong>so a reader that asked
+    /// for the wrong priority answered on nothing, and a reader that
+    /// ignored priority answered on both tiles at once.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DerKnopfFragtNachZweiVerschiedenenPrioritaeten()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(1),
+            "**and map 1 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und der Spieler steht links neben (13,12) und blickt
+        // nach rechts** -- **und auf (13,12) steht Event 2, und das ist
+        // eine Seite mit Prioritaet 0.**
+        //
+        // **Und die erste Frage des Knopfes ist "unter den Fuessen",
+        // und die verlangt eine Seite, die NICHT normal ist** -- **und
+        // (12,12) traegt keine, also schweigt sie.**
+        lauf.Betrete(12, 12);
+        lauf.BlickeRechts();
+        AssertEq(lauf.DruckeKnopf().Count, 0,
+            "**and the first question fell silent, because the tile"
+            + " under the player's feet has no page at all**");
+
+        // **Und die zweite Frage ist "vor dem Spieler", und die
+        // verlangt eine Seite, die normal ist** -- **und (13,12) traegt
+        // eine, die es nicht ist** -- **und also schweigt auch sie.**
+        //
+        // **Und das ist der ganze Beweis:** **wenn man die Prioritaet
+        // ignorierte, wuerde (13,12) antworten** -- **und das ist nicht
+        // das, was der Motor tut.**
+        AssertEq(lauf.DruckeKnopf().Count, 0,
+            "**and the second question stayed silent too, because the"
+            + " page in front is not normal priority and the button asks"
+            + " for a normal one** -- and a reader that ignored"
+            + " priorityType would have answered here, and this is the"
+            + " whole proof");
+
+        // **Und jetzt die andere Richtung, und die antwortet
+        // wirklich** -- **denn der Spieler kann sich umdrehen, und
+        // "hier unten" fragt dann nach einer Seite, die nicht normal
+        // ist.**
+        //
+        // **Und gemessen ist das genau der Weg von Map001:** **die
+        // vier Prioritaet-0-Seiten stehen auf Wegen, und man tritt auf
+        // sie, statt ihnen entgegenzublicken.**
+        lauf.Betrete(12, 12);
+        lauf.BlickeRechts();
+        lauf.Betrete(13, 12);
+
+
+        // **Und der Schritt, und der ist der Weg, den dieses Spiel
+        // geht.**
+        var schritt = lauf.Betrete(14, 12);
+        AssertEq(schritt.Count, 1,
+            "**and stepping onto a priority 0 page does speak** -- and"
+            + " the report is: " + string.Join(" | ", schritt));
+        AssertTrue(lauf.LastActions.Count >= 1
+                && lauf.LastActions[0].What.Contains("backtrack"),
+            "**and it said the game's own words** -- and they are"
+            + $" measured from Map001 event 3: {lauf.LastActions[0].What}");
+    }
 }

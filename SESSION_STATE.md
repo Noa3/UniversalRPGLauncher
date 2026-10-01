@@ -11432,3 +11432,55 @@ an einer gueltigen Stelle erreichbar** -- **und die vier Trigger-1-Seiten
 warten auf Beruehrung** -- **und `startMapEvent` vergleicht noch
 `isNormalPriority()`, was dieser Leser nicht prueft.**
 
+## Und der Aktionsknopf fragt zweimal, und beidemal nach der anderen Prioritaet
+
+**Gemessen an `Game_Player.prototype.triggerButtonAction`:**
+
+```js
+this.checkEventTriggerHere([0]);
+if ($gameMap.setupStartingEvent()) return true;
+this.checkEventTriggerThere([0, 1, 2]);
+if ($gameMap.setupStartingEvent()) return true;
+```
+
+**Und `checkEventTriggerHere` ruft `startMapEvent(this.x, this.y,
+triggers, false)`**, **und `checkEventTriggerThere` ruft
+`startMapEvent(x2, y2, triggers, true)`** -- **und `startMapEvent`
+vergleicht `event.isNormalPriority() === normal`**, **und
+`isNormalPriority` ist `this._priorityType === 1`.**
+
+**Also fragt die Kachel unter den Fuessen nach einer Seite, die NICHT
+normal ist, und die Kachel davor nach einer, die normal ist.**
+
+**Und gemessen sind 85 der 253 Seiten dieses Spiels nicht normal:**
+
+| Prioritaet | Ausloeser | Seiten |
+|---|---|---|
+| 0 | 0 (Knopf) | 28 |
+| 0 | 1 (Beruehrung) | 52 |
+| 0 | 2 (Treffer) | 2 |
+| 0 | 3 (parallel) | 3 |
+| 1 | 0 (Knopf) | 168 |
+
+**Und gemessen sind die vier Prioritaet-0-Kacheln von Map001 -- (13,12),
+(14,12), (5,7) und (5,8) -- und keine davon hat einen normalen
+Nachbarn** -- **also gibt es in diesem Spiel keine Stelle, an der ein
+Leser, der die Prioritaet ignoriert, richtig antworten kann.**
+
+**Und `DruckeKnopf` fragt jetzt in dieser Reihenfolge**, **und
+`SucheStartende` nimmt von hinten die erste passende Seite**, **wie
+`findProperPageIndex` es tut.**
+
+**Und `Betrete` bleibt getrennt davon**, **denn ein Betreten ist kein
+Knopfdruck** -- **und das Spiel geht die Prioritaet-0-Seiten an, indem
+es auf sie tritt** -- **gemessen: der Schritt auf (14,12) sagt
+woertlich "No need to backtrack yet."**
+
+**`All 2202 tests passed`, Validator gruen.**
+
+**Und als naechstes fehlt:** **die 52 Beruehrungsseiten (Ausloeser 1)
+haben einen eigenen Weg** -- **`checkEventTriggerTouch` ist in
+`Game_CharacterBase` leer und wird von `Game_Player` gefuellt** -- **und
+`triggerTouchAction` schaut auf `$gameTemp.isDestinationValid()`** --
+**und gemessen sind alle 52 Seiten nicht normal.**
+

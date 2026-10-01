@@ -1124,6 +1124,185 @@ public sealed class MzEngineRuntime : IEngineRuntime
         return bericht;
     }
 
+    /// <summary>Turns the player to face a direction.</summary>
+    /// <param name="pDirection">The direction to look.</param>
+    /// <remarks>
+    /// <strong>And the direction is the engine's own numbering</strong> —
+    /// <c>Game_Character.DOWN</c> is <c>2</c> and <c>RIGHT</c> is
+    /// <c>4</c>, and <c>checkEventTriggerThere</c> asks
+    /// <c>roundXWithDirection</c> and <c>roundYWithDirection</c> with it.
+    /// </strong> <strong>And this is here because a button press asks
+    /// about the tile in front, and that tile is the one the player is
+    /// looking at.</strong>
+    /// </remarks>
+    public void Blicke(int pDirection) => PlayerDirection = pDirection;
+
+    /// <summary>Turns the player to face the right-hand side.</summary>
+    /// <remarks>
+    /// <strong>And the engine's <c>RIGHT</c> is <c>4</c></strong>, which
+    /// is <c>MzCharacter.Right</c> here.
+    /// </remarks>
+    public void BlickeRechts() => Blicke(MzCharacter.Right);
+
+    /// <summary>Presses the action button where the player is standing.
+    /// </summary>
+    /// <returns>One line per page the press started, and nothing if none.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the button asks two questions in this order, and both
+    /// are measured.</strong> At
+    /// <c>Game_Player.prototype.triggerButtonAction</c>:
+    /// <c>this.checkEventTriggerHere([0]); if ($gameMap.setupStartingEvent())
+    /// return true; this.checkEventTriggerThere([0, 1, 2]); if
+    /// ($gameMap.setupStartingEvent()) return true;</c>
+    /// </para>
+    /// <para>
+    /// <strong>And "here" and "there" differ in the priority they ask
+    /// for.</strong> <c>checkEventTriggerHere</c> calls
+    /// <c>this.startMapEvent(this.x, this.y, triggers, false)</c> and
+    /// <c>checkEventTriggerThere</c> calls <c>this.startMapEvent(x2, y2,
+    /// triggers, true)</c> — <strong>and
+    /// <c>startMapEvent</c> compares <c>event.isNormalPriority() ===
+    /// normal</c>, and <c>isNormalPriority</c> is
+    /// <c>this._priorityType === 1</c>.
+    /// </para>
+    /// <para>
+    /// <strong>So the tile you stand on answers only if it is NOT normal
+    /// priority, and the tile you face answers only if it IS.</strong>
+    /// <strong>And measured, 85 of this project's 253 pages are not
+    /// normal</strong> — <strong>which means a reader that asked only
+    /// for normal priority could never reach 28 of its button pages,
+    /// and a reader that asked for both at once answered on the wrong
+    /// tile.</strong>
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> DruckeKnopf()
+    {
+        var bericht = new List<string>();
+        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false))
+        {
+            bericht.Add(zeile);
+        }
+
+        if (bericht.Count == 0)
+        {
+            var vorne = (PlayerX + SchrittX(PlayerDirection),
+                PlayerY + SchrittY(PlayerDirection));
+            foreach (var zeile in SucheStartende(vorne, true))
+            {
+                bericht.Add(zeile);
+            }
+        }
+
+        return bericht;
+    }
+
+    /// <summary>The tile the player faces, by direction.</summary>
+    /// <param name="pDirection">The direction the player looks.</param>
+    /// <returns>The column to look at.</returns>
+    /// <remarks>
+    /// <strong>And this is the engine's own arithmetic, measured at
+    /// <c>roundXWithDirection</c> and <c>roundYWithDirection</c>.</strong>
+    /// </remarks>
+    private static int SchrittX(int pDirection) => pDirection switch
+    {
+        MzCharacter.Left => -1,
+        MzCharacter.Right => 1,
+        _ => 0,
+    };
+
+    /// <summary>The tile row the player faces.</summary>
+    /// <param name="pDirection">The direction the player looks.</param>
+    /// <returns>The row to look at.</returns>
+    /// <remarks>
+    /// <strong>And the row goes down and not up, and that is measured at
+    /// <c>Game_Map.prototype.roundYWithDirection</c>:</strong>
+    /// <c>case Game_Character.DOWN: return y + 1;</c>
+    /// </remarks>
+    private static int SchrittY(int pDirection) => pDirection switch
+    {
+        MzCharacter.Up => -1,
+        MzCharacter.Down => 1,
+        _ => 0,
+    };
+
+    /// <summary>Finds the one page a button press starts on a tile.</summary>
+    /// <param name="pTile">The tile to look at.</param>
+    /// <param name="pNormal">Whether a normal-priority page answers.</param>
+    /// <returns>One line, or nothing when no page answers there.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine starts every match and stops the search at
+    /// the first match that runs, measured at
+    /// <c>triggerButtonAction</c>:** it calls <c>setupStartingEvent()</c>
+    /// between the two lookups and returns when that is true.
+    /// </para>
+    /// <para>
+    /// <strong>And this loop keeps looking after a match, which is
+    /// measured too:</strong> <c>startMapEvent</c> has no break — <strong>and
+    /// <c>startMapEvent</c> is itself guarded by <c>if
+    /// (!$gameMap.isEventRunning())</c>, which is checked once before the
+    /// loop and not per event.</strong> <strong>So two events on one
+    /// tile both get started, and only the first is run.</strong>
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<string> SucheStartende(
+        (int X, int Y) pTile,
+        bool pNormal)
+    {
+        var bericht = new List<string>();
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            bericht.Add(
+                $"map {CurrentMapId} is not among the maps this runtime read,"
+                    + " so nothing on it can be pressed");
+            return bericht;
+        }
+
+        foreach (var ereignis in karte.Root.Member("events")?.Items
+            ?? new List<MzValue>())
+        {
+            if (ereignis.Member("x")?.IntOr(-1) != pTile.X
+                || ereignis.Member("y")?.IntOr(-1) != pTile.Y)
+            {
+                continue;
+            }
+
+            var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
+            var seiten = ereignis.Member("pages")?.Items
+                ?? new List<MzValue>();
+            for (var index = seiten.Count - 1; index >= 0; index--)
+            {
+                var seite = seiten[index];
+                var ausloeser = seite.Member("trigger")?.IntOr(0) ?? 0;
+                if (ausloeser != 0 && ausloeser != 1 && ausloeser != 2)
+                {
+                    continue;
+                }
+
+                // **Und die Prioritaet entscheidet, und das ist
+                // gemessen an `isNormalPriority`, das
+                // `this._priorityType === 1` ist.**
+                var normal = (seite.Member("priorityType")?.IntOr(1) ?? 1) == 1;
+                if (normal != pNormal)
+                {
+                    continue;
+                }
+
+                if (!MzMapFigureReader.Meets(
+                    seite.Member("conditions"), Facts, CurrentMapId, id))
+                {
+                    continue;
+                }
+
+                bericht.Add(RunPageEvent(id, seite, false));
+                break;
+            }
+        }
+
+        return bericht;
+    }
+
     /// <summary>Steps the player onto a tile and starts what stands there.
     /// </summary>
     /// <param name="pX">The tile column.</param>
