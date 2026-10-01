@@ -55,6 +55,75 @@ public partial class TestRubyParser192 : TestBase
     /// <c>ListDirBegin()</c> again resets it, and the count comes out zero
     /// while the folder holds ninety-three files.</strong>
     /// </remarks>
+    /// <summary>
+    /// Whether the source holds nothing but a comment or an embedded
+    /// document, and not one statement.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is measured, and it is the difference between a
+    /// reader that refuses a file and one that reads it.</strong>
+    ///
+    /// <strong>And <c>parse.y</c> 3400 says what an embedded document is:</strong>
+    ///
+    /// <code>
+    /// case '=':
+    ///     if (was_bol()) {
+    ///         /* skip embedded rd document */
+    ///         if (strncmp(lex_p, "begin", 5) == 0 &amp;&amp; ISSPACE(lex_p[5])) {
+    /// </code>
+    ///
+    /// <strong>And <c>was_bol()</c> means the <c>=</c> stands at the start of a
+    /// line</strong> -- **and <c>x = 1 =begin</c> is therefore not a document
+    /// and is a syntax error, which is what the reader says:</strong>
+    ///
+    /// <code>
+    /// RubyParseException '=' at offset 15 does not begin an expression.
+    /// </code>
+    ///
+    /// <strong>And the reader already got all of this right before this test
+    /// did</strong> -- **and the test was the thing that was wrong**, **and
+    /// that is worth saying plainly rather than folding into the change.</strong>
+    /// </remarks>
+    private static bool IstNurDokument(string pQuelle)
+    {
+        var zeilen = pQuelle.Replace("\r\n", "\n").Split('\n');
+        var imBlock = false;
+        foreach (var zeile in zeilen)
+        {
+            var text = zeile.Trim();
+
+            // **Und der Inhalt zwischen `=begin` und `=end` ist nicht
+            // dokumentiert und nicht Code, und das ist gemessen an
+            // `Unused_38_Game_Vehicle.rb`, das 199 Zeilen Ruby zwischen
+            // den beiden Marken hat und 0 Anweisungen ergibt.**
+            if (text.StartsWith("=begin"))
+            {
+                imBlock = true;
+                continue;
+            }
+
+            if (text.StartsWith("=end"))
+            {
+                imBlock = false;
+                continue;
+            }
+
+            if (imBlock)
+            {
+                continue;
+            }
+
+            if (text.Length == 0 || text.StartsWith("#"))
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
     private static void SammleRubies(string pOrdner, List<string> pZiel)
     {
         using var dir = Godot.DirAccess.Open(pOrdner);
@@ -128,7 +197,30 @@ public partial class TestRubyParser192 : TestBase
                 var program = new RubyParser(new RubyLexer(quelle).Tokenize())
                     .ParseProgram();
                 knoten += program.Count;
-                if (program.Count == 0)
+
+                // **Und eine Datei, die nur aus einem eingebetteten
+                // Dokument besteht, parst zu KEINEN Anweisungen, und das
+                // ist richtig** -- **und `parse.y` 3400 sagt warum:**
+                //
+                // ```c
+                // case '=':
+                //     if (was_bol()) {
+                //         /* skip embedded rd document */
+                //         if (strncmp(lex_p, "begin", 5) == 0 && ...) {
+                // ```
+                //
+                // **Und zwei der dreiundneunzig Dateien dieses Spiels sind
+                // genau das: eine besteht nur aus auskommentiertem Code und
+                // eine nur aus einem `=begin`/`=end`-Block.**
+                //
+                // **Und der Test hier verlangte fuer JEDE Datei mindestens
+                // eine Anweisung** -- **und damit verlangte er vom Leser,
+                // ein Dokument als Code zu lesen.** **Und ein Leser, der das
+                // tut, fuehrt eine Spielanleitung aus, die nicht laufen soll.**
+                //
+                // **Und die leere Datei und die Datei mit zwei
+                // Leerzeichen sind derselbe Fall.**
+                if (program.Count == 0 && !IstNurDokument(quelle))
                 {
                     fehler.Add($"{name} parsed as no statements, and it holds"
                         + $" {quelle.Length} characters");

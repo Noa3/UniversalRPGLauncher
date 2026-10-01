@@ -13588,3 +13588,76 @@ bracketless-command forms.**
 **And the first of those is worth measuring before anything else: a file that
 parses to no statements is a reader that returned an empty program, and that
 is a different failure from one that refused.**
+
+
+## A file that is nothing but a document parses to no statements, and that is right
+
+**And this is the one where the reader was right and the test was wrong, and
+it is worth saying that plainly rather than folding into the change.**
+
+### And the measurement
+
+```text
+z1_nur_kommentare.rb            parsed as no statements
+z2_begin_end_block.rb          parsed as no statements
+z5_leere_datei.rb              parsed as no statements
+z6_nur_leerzeichen.rb          parsed as no statements
+z3_begin_mit_code_davor.rb     parses
+z4 x = 1 =begin                RubyParseException '=' at offset 15
+```
+
+**And the reader was right on all six, and the test was wrong on four of them.**
+
+### And `parse.y` 3400 says what an embedded document is
+
+```c
+case '=':
+    if (was_bol()) {
+        /* skip embedded rd document */
+        if (strncmp(lex_p, "begin", 5) == 0 && ISSPACE(lex_p[5])) {
+```
+
+**And `was_bol()` means the `=` stands at the start of a line** -- **and
+`x = 1 =begin` is therefore not a document and is a syntax error**, **which is
+what the reader already said.**
+
+**And two files of the ninety-three are exactly this:**
+
+```text
+Unused_0_O_OptimizedLabel.rb    40 lines, every one of them a comment
+Unused_38_Game_Vehicle.rb     201 lines, 199 of them between =begin and =end
+```
+
+### And the test had been asking the reader to run a manual
+
+**And both the shape list and the ninety-three test demanded at least one
+statement from every file** -- **and that demand meant the reader had to read a
+document as code**, **and a reader that does that executes a manual nobody
+meant to run.**
+
+**And a shape that is *refused* on purpose is not a shape**, **and that is why
+`z4` was removed rather than made to pass** -- **the same rule the
+`{ a.length: 1 }` label went through two rounds ago.**
+
+### Evidence
+
+**`TestRubyParser192`: three of ninety-three, and it was five.**
+
+**`TestRubyParser: 55/56`, and the shape list is one hundred and thirteen
+files and every one of them is green.**
+
+**Full suite `6/2216`, and no reader code changed in this round at all** --
+**the whole change is in two tests.**
+
+### And the three that remain, named
+
+```text
+1x  #end                              a commented-out end
+1x  (text.slice!(/…/)[/…/].strip).split(%r{,\s*})
+1x  rescue => e                        a rescue in a def body with no begin,
+                                       and the reader expects one
+```
+
+**And the third of those is the next one, and it is one grammar line:
+`bodystmt : compstmt opt_rescue opt_else opt_ensure`, and this reader takes
+`opt_rescue` only after an explicit `begin`.**

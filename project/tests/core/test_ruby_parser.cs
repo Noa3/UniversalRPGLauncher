@@ -18,6 +18,68 @@ namespace UniversalRPG.Tests.Core;
 /// </remarks>
 public partial class TestRubyParser : TestBase
 {
+    /// <summary>
+    /// Whether the source holds nothing but a comment or an embedded
+    /// document, and not one statement.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a file of comments is not an empty program the reader got
+    /// wrong</strong> -- **it is an empty program the reader got right**, and
+    /// two files of the VX Ace game on this machine are exactly that.
+    ///
+    /// <strong>And <c>parse.y</c> 3400:</strong>
+    ///
+    /// <code>
+    /// case '=':
+    ///     if (was_bol()) {
+    ///         /* skip embedded rd document */
+    ///         if (strncmp(lex_p, "begin", 5) == 0 &amp;&amp; ISSPACE(lex_p[5])) {
+    /// </code>
+    ///
+    /// <strong>And <c>was_bol()</c> means the <c>=</c> stands at the start of a
+    /// line</strong>, **and <c>x = 1 =begin</c> is therefore a syntax error,
+    /// which is what the reader already said.**
+    /// </remarks>
+    private static bool IstNurDokument(string pQuelle)
+    {
+        var zeilen = pQuelle.Replace("\r\n", "\n").Split('\n');
+        var imBlock = false;
+        foreach (var zeile in zeilen)
+        {
+            var text = zeile.Trim();
+
+            // **Und der Inhalt zwischen `=begin` und `=end` ist nicht
+            // dokumentiert und nicht Code, und das ist gemessen an
+            // `Unused_38_Game_Vehicle.rb`, das 199 Zeilen Ruby zwischen
+            // den beiden Marken hat und 0 Anweisungen ergibt.**
+            if (text.StartsWith("=begin"))
+            {
+                imBlock = true;
+                continue;
+            }
+
+            if (text.StartsWith("=end"))
+            {
+                imBlock = false;
+                continue;
+            }
+
+            if (imBlock)
+            {
+                continue;
+            }
+
+            if (text.Length == 0 || text.StartsWith("#"))
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
     private static List<RubyNode> Parse(string pSource)
     {
         return new RubyParser(new RubyLexer(pSource).Tokenize()).ParseProgram();
@@ -163,7 +225,22 @@ public partial class TestRubyParser : TestBase
             try
             {
                 var program = Parse(quelle);
-                if (program.Count == 0)
+
+                // **Und eine Datei, die nur aus einem eingebetteten
+                // Dokument besteht, parst zu KEINEN Anweisungen, und das
+                // ist richtig** -- **und `parse.y` 3400 sagt warum:**
+                //
+                // ```c
+                // case '=':
+                //     if (was_bol()) {
+                //         /* skip embedded rd document */
+                // ```
+                //
+                // **Und der Test verlangte hier fuer jede Datei mindestens
+                // eine Anweisung, und damit verlangte er vom Leser, ein
+                // Dokument als Code zu lesen** -- **und ein Leser, der das
+                // tut, fuehrt eine Spielanleitung aus, die nicht laufen soll.**
+                if (program.Count == 0 && !IstNurDokument(quelle))
                 {
                     fehler.Add($"{woher}: parsed as no statements, and it"
                         + $" holds {quelle.Length} characters");
