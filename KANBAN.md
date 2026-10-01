@@ -11607,3 +11607,74 @@ hat.**
 
 **`All 2190 tests passed`, Validator gruen.**
 
+## Und das Figurenblatt war um den Faktor drei daneben
+
+### Der Befund
+
+**Ich hatte die Zelle mit 144 mal 192 Pixeln gerechnet. Sie ist 48 mal
+48.** **Und das steht woertlich in `js/rmmz_sprites.js`:**
+
+| Was | Die Formel des Motors | Fuer 576 x 384 |
+|---|---|---|
+| `patternWidth` | `bitmap.width / 12` | **48** |
+| `patternHeight` | `bitmap.height / 8` | **48** |
+
+**Also hat ein Figurenblatt zwölf Zellen nebeneinander und acht
+untereinander, und nicht vier mal zwei.**
+
+### Und eine Figur ist drei Zellen breit und vier hoch
+
+```
+sx = (characterBlockX() + characterPatternX()) * pw
+sy = (characterBlockY() + characterPatternY()) * ph
+
+characterBlockX = (index % 4) * 3
+characterBlockY = Math.floor(index / 4) * 4
+characterPatternX = pattern()
+characterPatternY = Math.floor((direction + 2) / 4) % 4
+```
+
+**Die Richtung ist die Zeile, und der Index und der Schritt sind die
+Spalten.** **Und `characterPatternY` ist genau die Reihenfolge unten,
+links, rechts, oben.**
+
+### Und gemessen, Zelle fuer Zelle
+
+**Alle 96 Zellen des gemessenen Blatts durchgezaehlt:**
+
+| Zeile | Belegung der 12 Zellen |
+|---|---|
+| 0 | 649 666 648 674 736 668 628 690 628 598 612 597 |
+| 1 | 575 494 573 640 539 636 632 546 627 537 456 535 |
+| 2 | 575 494 573 640 539 636 632 546 627 537 456 535 |
+| 3 | 654 666 662 715 754 715 678 710 668 604 616 612 |
+| **4 bis 7** | **alle null** |
+
+**Und die Zeilen 1 und 2 sind gleich, und 0 und 3 auch** -- **das ist die
+Sprungfolge: die Reihen laeuft und kommt zurueck.**
+
+### Und was mein Fehler angerichtet hat
+
+**Ein `characterIndex` von 3 wurde vier Bildbreiten rechts vom Blatt
+gezeichnet -- also gar nichts -- und der Zeichner gab `true` zurueck
+und tat so, als haette er gearbeitet.**
+
+**Ein Zeichner, der `true` sagt und nichts malt, ist schlimmer als
+einer, der `false` sagt**, **denn der erste sieht aus wie Erfolg.**
+
+### Und noch ein Befund aus dem Testbauen
+
+**Eine Figur, die auf Kachel 7 steht und auf Kachel 6 gezeichnet wird,
+ist dieselbe Figur eine Kachel links.** **Und ein Test, der nur eine
+Kachel vergleicht, vergleicht den Streifen, auf dem sie steht, und sonst
+nichts** -- **und genau deshalb meldete er zwei verschiedene Bilder als
+gleich.**
+
+**Und `RealX` ist 6,0 und nicht 6,25** -- **denn die Luecke schliesst
+sich erst in `PassFrame`, und der erste Schritt hat sie noch nicht
+geschlossen.**
+
+**Test evidence** `test_mz_character_render.cs` (5), **5/5**.
+
+**`All 2191 tests passed`, Validator gruen.**
+

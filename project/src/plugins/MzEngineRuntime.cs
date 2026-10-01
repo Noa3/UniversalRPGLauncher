@@ -512,8 +512,17 @@ public sealed class MzEngineRuntime : IEngineRuntime
         EventFigures = new Dictionary<int, MzCharacter?>();
         foreach (var figur in Figures)
         {
+            // **Und die Figur traegt ihr Bild und ihren Index.**
+            //
+            // **Gemessen an `Game_Player.prototype.refresh`:** **es ruft
+            // `setImage(actor.characterName(), actor.characterIndex())`,
+            // und beide.** **Und `Game_CharacterBase.setImage` setzt drei
+            // Dinge** -- **die Kachelnummer, den Namen und den Index.**
+            // **Ein Leser, der nur den Namen behielt, zeichnete jeden
+            // Ereignis als die erste Figur seines Blattes.**
             var held = new MzCharacter(figur.X, figur.Y);
             held.TurnTo(figur.Direction);
+            held.SetImage(figur.CharacterName, figur.CharacterIndex);
             figuren[figur.EventId] = held;
             EventFigures[figur.EventId] = held;
         }
@@ -829,14 +838,36 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // Schritt, bei dem die Figur stehen muss**, **und die Uhr
             // weiss, wie weit sie seither gegangen ist.**
             var schritt = figur.Pattern;
+            var richtung = figur.Direction;
             if (Clocks.TryGetValue(figur.EventId, out var uhr)
                 && uhr != null)
             {
                 schritt = uhr.Column;
+                richtung = uhr.Direction;
             }
 
-            if (MzCharacterRenderer.Draw(
-                blatt, figur.CharacterIndex, figur.Direction, schritt,
+            // **Und gezeichnet wird die lebende Figur, und nicht die
+            // Datei, und an ihrer Zwischenposition.**
+            //
+            // **Und das ist derselbe Fehler, den der Spieler gerade
+            // hatte:** **eine Figur auf ihrer Kachel springt, und sie
+            // geht nicht.** **Und `EventFigures` traegt die Figuren, die
+            // die Befehle bewegen** -- **denn `character.forceMoveRoute`
+            // spricht mit genau diesem Objekt** -- **und eine Datei
+            // ist kein Objekt, das jemand bewegen kann.**
+            var lebend = EventFigures.TryGetValue(figur.EventId, out var da)
+                ? da : null;
+            if (lebend != null)
+            {
+                if (MzCharacterRenderer.Draw(
+                    blatt, lebend, schritt, MzMapRenderer.TilePixels,
+                    MzMapRenderer.TilePixels, pPixels))
+                {
+                    gezeichnet++;
+                }
+            }
+            else if (MzCharacterRenderer.Draw(
+                blatt, figur.CharacterIndex, richtung, schritt,
                 figur.X, figur.Y, pPixels))
             {
                 gezeichnet++;

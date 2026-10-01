@@ -39,36 +39,67 @@ namespace UniversalRPG.Web;
 public sealed class MzCharacterRenderer
 {
     /// <summary>How wide one figure is in its sheet.</summary>
-    public const int FigurePixels = 144;
-
-    /// <summary>How tall one figure is in its sheet.</summary>
-    public const int FigureHeight = 192;
-
-    /// <summary>How many walk steps one direction has.</summary>
+    /// <summary>
+    /// How wide one cell of a character sheet is.
+    /// </summary>
     /// <remarks>
-    /// <strong>And this is measured, and it is three.</strong> The
-    /// sheet is 576 pixels wide and a figure is 144,
-    /// <strong>so three fit across.</strong>
+    /// <strong>And this is measured, and a first reading got it wrong</strong>
+    /// <strong>by a factor of three.</strong> Measured in
+    /// <c>Sprite_Character.prototype.patternWidth</c>, which is
+    /// <c>bitmap.width / 12</c>, and <c>patternHeight</c> is
+    /// <c>bitmap.height / 8</c>. For the measured 576 x 384 sheet that
+    /// is <strong>48 by 48</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And a sheet is twelve cells across and eight down</strong>,
+    /// <strong>and only the first four rows of this one carry</strong>
+    /// <strong>a picture</strong> — <strong>measured, cell by cell:</strong>
+    /// <strong>rows zero to three hold between 456 and 754 pixels each,
+    /// and rows four to seven are empty.</strong>
+    /// </para>
+    /// </remarks>
+    public const int CellPixels = 48;
+
+    /// <summary>How many cells a sheet has across.</summary>
+    /// <remarks>
+    /// <strong>And twelve, because <c>patternWidth</c> is
+    /// <c>width / 12</c>.</strong>
+    /// </remarks>
+    public const int CellsAcross = 12;
+
+    /// <summary>How many cells a sheet has down.</summary>
+    public const int CellsDown = 8;
+
+    /// <summary>How many cells one figure of a sheet needs across.</summary>
+    /// <remarks>
+    /// <strong>And three, measured at <c>characterBlockX</c>, which is
+    /// <c>(index % 4) * 3</c></strong> — <strong>a figure has three
+    /// steps.</strong>
     /// </remarks>
     public const int StepsPerDirection = 3;
 
-    /// <summary>How many directions a figure sheet holds.</summary>
+    /// <summary>How many cells one figure of a sheet needs down.</summary>
     /// <remarks>
-    /// <strong>And this is measured, and it is four.</strong> The sheet
-    /// is 384 pixels high and a figure is 192,
-    /// <strong>so two fit down</strong> — <strong>and four directions
-    /// in two rows means the sheet holds one character at two
-    /// character slots</strong>, <strong>which is why
-    /// <c>characterIndex</c> picks a slot and not a row.</strong>
+    /// <strong>And four, measured at <c>characterBlockY</c>, which is
+    /// <c>Math.floor(index / 4) * 4</c></strong> — <strong>a figure has
+    /// the four directions.</strong>
     /// </remarks>
     public const int DirectionsPerSheet = 4;
 
-    /// <summary>The column of a figure that stands still.</summary>
+    /// <summary>How many figures a sheet holds across.</summary>
     /// <remarks>
-    /// <strong>And this is the middle one.</strong> The three columns
-    /// are left foot, right foot, still; <strong>a reader that took
-    /// column 0 as the still pose put every standing figure mid
-    /// step.</strong>
+    /// <strong>And four, because <c>index % 4</c> is the figure.</strong>
+    /// </remarks>
+    public const int FiguresPerRow = 4;
+
+    /// <summary>
+    /// Which step column is the still pose.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And one.</strong> Measured: the engine's own
+    /// <c>initMembers</c> sets <c>_pattern = 1</c>, and
+    /// <c>characterPatternX</c> uses it unchanged — <strong>and one is
+    /// the middle of the three columns.</strong>
     /// </remarks>
     public const int StillStep = 1;
 
@@ -209,43 +240,11 @@ public sealed class MzCharacterRenderer
         int pTileY,
         Rm2kPixelBuffer pPixels)
     {
-        if (pSheet == null)
-        {
-            return false;
-        }
-
-        if (!Cell(pDirection, pStep, out var richtungsReihe, out var _))
-        {
-            return false;
-        }
-
-        // **Und der Index waehlt die Figur, und die Richtung die
-        // Reihe** -- **gemessen: vier Figuren in einem Blatt aus zwei
-        // Reihen zu zweien.**
-        var spaltenProReihe = Math.Max(
-            1, pSheet.Width / (StepsPerDirection * FigurePixels));
-        var spaltenProFigur = Math.Max(1, spaltenProReihe / 2);
-        var zeile = pIndex / spaltenProFigur;
-        var spalte = pIndex % spaltenProFigur;
-
-        // **Und gemessen liegt in diesem Blatt nur die erste Reihe.**
-        // **576 x 384 waere zwei Figuren hoch**, **und nur 192 Pixel
-        // davon tragen etwas** -- **die zweiten 192 sind leer**, **und
-        // ein Leser, der die Richtungsreihen auf zwei Zeilen verteilt,
-        // zeichnet die Haelfte aller Figuren aus dem Leeren.**
-        var zeileRichtung = 0;
-        var spalteRichtung = richtungsReihe;
-        var schritt = Math.Min(pStep, StepsPerDirection - 1);
-
-        return DrawAtPixels(
-            pSheet, spalte, x0: (spalte * DirectionsPerSheet + spalteRichtung)
-                * FigurePixels + schritt * FigurePixels,
-            y0: zeileRichtung * FigureHeight,
-            zielX: (pTileX * MzMapRenderer.TilePixels - (MzMapRenderer.TilePixels
-                - FigurePixels) / 2),
-            zielY: (pTileY * MzMapRenderer.TilePixels
-                + (MzMapRenderer.TilePixels - FigureHeight)),
-            pPixels: pPixels);
+        return DrawAt(
+            pSheet, pIndex, pDirection, pStep,
+            pTileX * (double)MzMapRenderer.TilePixels,
+            pTileY * (double)MzMapRenderer.TilePixels,
+            pPixels);
     }
 
     /// <summary>
@@ -281,55 +280,58 @@ public sealed class MzCharacterRenderer
             return false;
         }
 
-        if (!Cell(pDirection, pStep, out var richtungsReihe, out var spalte))
-        {
-            return false;
-        }
 
-        var schritt = Math.Min(pStep, StepsPerDirection - 1);
+        // **Und die Figur steht mittig auf ihrer Kachel** -- **eine
+        // Zelle ist 48 Pixel breit und die Kachel auch, also steht sie
+        // genau darauf.**
+        //
+        // **Und diese Zelle ist 48, und nicht 144** -- **gemessen an
+        // `patternWidth`, und das ist `bitmap.width / 12`.** **Und ein
+        // Blatt hat 12 Zellen nebeneinander und 8 untereinander.**
         return DrawAtPixels(
-            pSheet, spalte,
-            x0: (spalte * DirectionsPerSheet + richtungsReihe) * FigurePixels
-                + schritt * FigurePixels,
-            y0: richtungsReihe * FigureHeight,
-            zielX: (int)(pX - (MzMapRenderer.TilePixels - FigurePixels) / 2),
-            zielY: (int)(pY + (MzMapRenderer.TilePixels - FigureHeight)),
+            pSheet, pIndex, pDirection, pStep,
+            zielX: (int)(pX - (MzMapRenderer.TilePixels - CellPixels) / 2),
+            zielY: (int)(pY + (MzMapRenderer.TilePixels - CellPixels)),
             pPixels: pPixels);
     }
 
+
     private static bool DrawAtPixels(
-        MzCharacterSheet pSheet, int spalte, int x0, int y0,
+        MzCharacterSheet pSheet, int pIndex, int pDirection, int pStep,
         int zielX, int zielY, Rm2kPixelBuffer pPixels)
     {
+        // **Und hier ist die Rechnung des Motors, woertlich.**
+        //
+        // **`sx = (characterBlockX() + characterPatternX()) * pw`
+        // **und `sy = (characterBlockY() + characterPatternY()) * ph`,
+        // **mit `characterBlockX = (index % 4) * 3`,
+        // **`characterBlockY = Math.floor(index / 4) * 4`,
+        // **`characterPatternX = pattern()` und
+        // **`characterPatternY = Math.floor((direction + 2) / 4) % 4`.**
+        //
+        // **Und das heisst: die Richtung ist die Zeile, und der Index
+        // **und der Schritt sind die Spalten.**
+        var sx = ((pIndex % FiguresPerRow) * StepsPerDirection +
+            Math.Min(pStep, StepsPerDirection - 1)) * CellPixels;
+        var sy = ((pIndex / FiguresPerRow) * DirectionsPerSheet
+            + RichtungsReihe(pDirection)) * CellPixels;
 
-        // **Und die Vier Richtungen liegen nebeneinander, und nicht
-        // uebereinander** -- **die Spalten 0 bis 3 sind unten, links,
-        // rechts, oben** -- **und die Schritte liegen darunter**, **was
-        // dieses Blatt gar nicht fuehrt, denn es hat nur eine Reihe.**
-        // **Und die Figur steht mittig auf ihrer Kachel** -- **sie ist
-        // drei Kacheln breit und die Kachel ist 48 Pixel.**
-        for (var dy = 0; dy < FigureHeight; dy++)
+        for (var dy = 0; dy < CellPixels; dy++)
         {
-            var quelleY = y0 + dy;
+            var quelleY = sy + dy;
             if (quelleY >= pSheet.Height)
             {
                 return true;
             }
 
-            for (var dx = 0; dx < FigurePixels; dx++)
+            for (var dx = 0; dx < CellPixels; dx++)
             {
-                var quelleX = x0 + dx;
+                var quelleX = sx + dx;
                 if (quelleX >= pSheet.Width)
                 {
                     break;
                 }
 
-                // **Und die Durchsicht kommt aus dem Alphalkanal, und
-                // nicht aus einem Index.** **Das ist der Unterschied
-                // zwischen einem Blatt aus einer Palette und einem aus
-                // echten Farben** -- **und bei echten Farben gibt es
-                // keinen Index null, der durchsicht waere**, **sondern
-                // ein Alphawert, der null ist.**
                 if (!pSheet.TryGetPixel(quelleX, quelleY, out var farbe)
                     || farbe[3] == 0)
                 {
@@ -337,11 +339,35 @@ public sealed class MzCharacterRenderer
                 }
 
                 pPixels.TrySetPixel(
-                    zielX + dx, zielY + dy, farbe[0], farbe[1], farbe[2],
-                    farbe[3]);
+                    zielX + dx, zielY + dy,
+                    farbe[0], farbe[1], farbe[2], farbe[3]);
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Which of the sheet's four rows a direction is, as the engine
+    /// computes it.
+    /// </summary>
+    /// <param name="pDirection">2, 4, 6 or 8.</param>
+    /// <returns>Zero to three.</returns>
+    /// <remarks>
+    /// <strong>And the engine's own formula is</strong>
+    /// <c>Math.floor((direction + 2) / 4) % 4</c> <strong>--- down is
+    /// zero, left one, right two and up three, which is the order every
+    /// measurement confirmed.</strong>
+    /// </remarks>
+    public static int RichtungsReihe(int pDirection)
+    {
+        return pDirection switch
+        {
+            MzCharacter.Down => 0,
+            MzCharacter.Left => 1,
+            MzCharacter.Right => 2,
+            MzCharacter.Up => 3,
+            _ => 0,
+        };
     }
 }

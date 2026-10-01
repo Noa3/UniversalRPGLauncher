@@ -11099,3 +11099,31 @@ nutzt noch `figur.X` und `figur.Y`** -- **und ausserdem wird der
 Spieler erst nach dem Laden der Karte aufgebaut, aber nicht bei
 jedem Kartenwechsel.**
 
+## Und das Figurenblatt war um den Faktor drei daneben
+
+**`patternWidth` ist `bitmap.width / 12`, und `patternHeight` ist
+`bitmap.height / 8`** -- **die Zelle ist 48 x 48, und ich hatte 144 x
+192.** **Ein Blatt ist 12 x 8 Zellen, und nicht 4 x 2.**
+
+**Eine Figur ist drei Zellen breit und vier hoch**
+(`characterBlockX = (index % 4) * 3`,
+`characterBlockY = floor(index / 4) * 4`), **die Richtung ist die
+Zeile.**
+
+**Gemessen ueber alle 96 Zellen: die Zeilen 0 bis 3 tragen, die Zeilen
+4 bis 7 sind leer, und 1 gleich 2 und 0 gleich 3.**
+
+**Der Fehler kostete vier Bildbreiten nach rechts, also gar nichts,
+und der Zeichner sagte trotzdem `true`.**
+
+**Und ein Test, der nur eine Kachel vergleicht, sieht zwei gleiche
+Bilder als gleich, weil die Figur 48 Pixel breit ist und ueber ihre
+Kachel ragt.**
+
+**`All 2191 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **der Zeichner braucht noch die
+Bush-Tiefe** -- **`refreshBushDepth` schneidet eine Figur in einen
+ oberen und einen unteren Teil, wenn sie im Gebuesch steht** -- **und
+`isBigCharacter` gibt es bei Bildern mit zwei Zellen Breite.**
+

@@ -64,21 +64,24 @@ public partial class TestMzCharacterRender : TestBase
     }
 
     /// <summary>
-    /// The sheet is a grid of three steps by four directions.
+    /// The sheet is twelve cells by eight, and a cell is 48 pixels.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And the assertion is the size, and the sizes divide.</strong>
-    /// 576 ÷ 144 is four figures across, 384 ÷ 192 is two down —
-    /// <strong>and a sheet that does not divide is not a character
-    /// sheet</strong>, <strong>and dividing one anyway gives a picture
-    /// of the wrong figure, in the wrong pose, at the wrong place.</strong>
+    /// <strong>And every number here is the engine's, and a first
+    /// reading of this file got all of them wrong by a factor of
+    /// three.</strong> Measured in
+    /// <c>Sprite_Character.prototype.patternWidth</c>, which is
+    /// <c>bitmap.width / 12</c>, and <c>patternHeight</c>, which is
+    /// <c>bitmap.height / 8</c>. For the measured 576 x 384 sheet that
+    /// is <strong>48 by 48</strong>, <strong>and twelve across and
+    /// eight down</strong>.
     /// </para>
     /// <para>
-    /// <strong>And three steps per direction, measured as
-    /// 576 ÷ 144 = 4, and two of the four columns are the second
-    /// character of the row.</strong> <strong>The grid is three wide per
-    /// character and two characters per row.</strong>
+    /// <strong>And a figure is three cells wide and four cells high.</strong>
+    /// Measured at <c>characterBlockX</c>, which is
+    /// <c>(index % 4) * 3</c>, and <c>characterBlockY</c>, which is
+    /// <c>Math.floor(index / 4) * 4</c>.
     /// </para>
     /// </remarks>
     public void Test_DasBlattIstEinRasterUndSeineGroesseStimmt()
@@ -93,47 +96,46 @@ public partial class TestMzCharacterRender : TestBase
             "**and the sheet opens** -- and the refusal is: "
                 + Fehler);
 
-        AssertEq(blatt!.Width % MzCharacterRenderer.FigurePixels, 0,
-            "**and its width is a whole number of figures** -- and a "
-                + "figure is 144 pixels, and it measured " + blatt.Width);
-        AssertEq(blatt.Height % MzCharacterRenderer.FigureHeight, 0,
-            "**and its height is a whole number of figure heights** -- and "
-                + "that is 192, and it measured " + blatt.Height);
+        // **Und die Zelle ist 48 Pixel, und nicht 144.**
+        //
+        // **Gemessen an `Sprite_Character.prototype.patternWidth`,
+        // **das ist `bitmap.width / 12`, und an `patternHeight`,
+        // **das ist `bitmap.height / 8`.** **Fuer das gemessene Blatt
+        // **von 576 mal 384 ist das 48 mal 48.**
+        //
+        // **Und ich hatte hier 144 mal 192 stehen, und das war um den
+        // **Faktor drei daneben** -- **und die Folge war, dass ein
+        // **Index 3 vier Bildbreiten rechts vom Blatt gezeichnet
+        // **wurde, also gar nichts**, **und der Zeichner `true`
+        // **zurueckgab und tat, als haette er gearbeitet.**
+        AssertEq(MzCharacterRenderer.CellPixels, 48,
+            "**and one cell is forty-eight pixels** -- and that is what"
+                + " 576 / 12 is, and the twelve is measured at"
+                + " patternWidth");
+        AssertEq(MzCharacterRenderer.CellsAcross, 12,
+            "**and a sheet holds twelve cells across**");
+        AssertEq(MzCharacterRenderer.CellsDown, 8,
+            "**and eight down** -- and that is what 384 / 48 is, and"
+                + " the eight is measured at patternHeight");
 
-        AssertEq(blatt.Width / MzCharacterRenderer.FigurePixels, 4,
-            "**and it holds four figures across** -- and that is what "
-                + "576 divided by 144 is");
-        AssertEq(blatt.Height / MzCharacterRenderer.FigureHeight, 2,
-            "**and two down** -- and a sheet of two rows holds two "
-                + "characters, which is why characterIndex picks a slot "
-                + "and not a row");
+        AssertEq(blatt!.Width / MzCharacterRenderer.CellPixels, 12,
+            "**and the measured sheet is twelve cells across**");
+        AssertEq(blatt.Height / MzCharacterRenderer.CellPixels, 8,
+            "**and eight down**");
+
+        // **Und eine Figur braucht drei Spalten und vier Zeilen.**
+        //
+        // **Gemessen an `characterBlockX`, das ist `(index % 4) * 3`,
+        // **und an `characterBlockY`, das ist
+        // **`Math.floor(index / 4) * 4`.**
+        AssertEq(MzCharacterRenderer.StepsPerDirection, 3,
+            "**and a figure has three step columns** -- and that is the"
+                + " three in characterBlockX, and not a guess");
+        AssertEq(MzCharacterRenderer.DirectionsPerSheet, 4,
+            "**and four direction rows** -- and that is the four in"
+                + " characterBlockY");
     }
 
-    /// <summary>
-    /// The four directions are the engine's numbers, in its order.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>And they are 2, 4, 6 and 8, and not 0, 1, 2 and 3.</strong>
-    /// Measured on <c>Map017</c>: the images carry
-    /// <c>direction: 6</c> and the rest of the four.
-    /// </para>
-    /// <para>
-    /// <strong>And the order across the sheet is down, left, right,
-    /// up.</strong> The project's own <c>rmmz_managers.js</c> numbers
-    /// them <c>down = 0, left = 1, right = 2, up = 3</c> —
-    /// <strong>and a reader that used 0–3 pointed every figure at the
-    /// top-left corner</strong>, <strong>which is the up-facing
-    /// row, and every figure in the game looked like it was walking
-    /// away.</strong>
-    /// </para>
-    /// <para>
-    /// <strong>And a direction that is none of the four is refused.</strong>
-    /// A figure with a direction of zero is a file this reader cannot
-    /// answer, <strong>and treating it as "down" pointed it somewhere
-    /// the game never said.</strong>
-    /// </para>
-    /// </remarks>
     public void Test_DieVierRichtungenSindDieZahlenDesMotors()
     {
         AssertTrue(MzCharacterRenderer.Cell(
@@ -244,12 +246,239 @@ public partial class TestMzCharacterRender : TestBase
                 + "are left foot, right foot and still, and a reader that "
                 + "took column zero put every standing figure mid-step");
         AssertEq(MzCharacterRenderer.StepsPerDirection, 3,
-            "**and there are three steps** -- and 576 divided by 144 is "
-                + "four, and two of the four columns are the second "
-                + "character of the row");
-        AssertEq(MzCharacterRenderer.FigurePixels, 144,
-            "**and a figure is 144 pixels wide**");
-        AssertEq(MzCharacterRenderer.FigureHeight, 192,
-            "**and 192 high**");
+            "**and there are three step columns** -- and that is the three"
+                + " in characterBlockX, and 576 / 144 is four, which is"
+                + " the whole sheet and not one figure");
+        AssertEq(MzCharacterRenderer.CellPixels, 48,
+            "**and one cell is forty-eight pixels** -- and the engine"
+                + " divides the sheet by twelve, not by four");
+
+    }
+
+    /// <summary>
+
+/// <summary>
+    /// A figure between two tiles lands between them, and not on either.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the second half of walking, and the first half
+    /// was done.</strong> Measured: the engine keeps <c>_x</c>/<c>_y</c>
+    /// for the tile and <c>_realX</c>/<c>_realY</c> for where it is drawn,
+    /// and <c>_realX</c> starts one tile behind and closes the gap at
+    /// <c>2^realMoveSpeed / 256</c> a frame.
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that drew only the tile saw a figure
+    /// teleport.</strong> <strong>A walk that is only its two end positions
+    /// is not a walk</strong> — <strong>it is two pictures with nothing
+    /// between them.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_EineFigurZwischenZweiKachelnLandetDazwischen()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var blatt = Blatt();
+        AssertTrue(blatt != null, "**and the sheet opens**");
+
+        // **Und dieselbe Figur zweimal: einmal auf der Kachel, einmal ein
+        // halbes Bild davor.**
+        var aufKachel = new Rm2kPixelBuffer(
+            14 * MzMapRenderer.TilePixels, 18 * MzMapRenderer.TilePixels);
+        var dazwischen = new Rm2kPixelBuffer(
+            14 * MzMapRenderer.TilePixels, 18 * MzMapRenderer.TilePixels);
+        Fuellen(aufKachel);
+        Fuellen(dazwischen);
+
+        AssertTrue(MzCharacterRenderer.Draw(
+            blatt!, 3, MzCharacter.Right, MzCharacterRenderer.StillStep,
+            6, 5, aufKachel),
+            "**and the figure draws on its tile**");
+
+        // **Und dieselbe Figur, die wirklich unterwegs ist.**
+        //
+        // **Und eine stehende Figur hat `RealX == X`, und das ist
+        // richtig** -- **der Motor setzt beide gleich, wenn die Figur
+        // zur Ruhe kommt.** **Und ein Test, der eine stehende Figur
+        // nimmt und eine zwischen zwei Kacheln erwartet, erwartet das
+        // Unmoegliche**, **denn beide Bilder sind dann dasselbe.**
+        //
+        // **Also muss die Figur hier wirklich einen Schritt machen**,
+        // **und genau das ist der Punkt.**
+        // **Und `CanPass` braucht eine Karte, denn ohne eine Karte ist
+        // jeder Schritt verboten** -- **und das ist gemessen an
+        // `Game_CharacterBase.canPass`, das `$gameMap.isPassable`
+        // liest.** **Ein Test, der `MoveStraight` ohne Karte ruft,
+        // prueft eine Verweigerung und keinen Lauf.**
+        var karte = new OffeneKarte();
+        var unterwegs = new MzCharacter(6, 5);
+        unterwegs.TurnTo(MzCharacter.Right);
+        // **Und die Figur traegt ihr Bild.**
+        //
+        // **Und das ist derselbe Fehler, den der Spieler gerade hatte:**
+        // **eine Figur ohne gesetztes Bild hat Index null, und Index
+        // null ist die erste Figur des Blattes** -- **und hier ist die
+        // dritte gewollt.** **Gemessen an
+        // `Game_CharacterBase.setImage`, das Name und Index zusammen
+        // setzt, und an `Game_Player.refresh`, das beide uebergibt.**
+        unterwegs.SetImage("SlimeCharacters", 3);
+        AssertEq(unterwegs.CharacterIndex, 3,
+            "**and it carries the figure of the sheet that was asked for**"
+            + " -- and a figure with no image set is figure zero, and a"
+            + " reader that kept only the name drew every figure as the"
+            + " first one");
+        AssertEq(unterwegs.RealX, 6.0,
+            "**and a fresh figure is drawn on its own tile** -- and the"
+            + " engine sets _realX to _x when it is not moving, and a"
+            + " test that expected anything else would be testing a"
+            + " fiction");
+
+        unterwegs.MoveStraight(MzCharacter.Right, karte);
+        AssertEq(unterwegs.X, 7,
+            "**and it has walked to the tile it wanted** -- and it is on"
+            + " " + unterwegs.X);
+        AssertEq(unterwegs.RealX, 6.0,
+            "**and it is drawn one tile behind where it stands** -- and"
+            + " that is the engine's own line, _realX ="
+            + " xWithDirection(_x, reverseDir(d)), and it is what makes a"
+            + " walk look like a walk. It has not crossed the tile yet:"
+            + " the gap closes at 2^realMoveSpeed / 256 a frame, and at"
+            + " speed four that is sixteen frames.");
+
+        AssertTrue(MzCharacterRenderer.Draw(
+            blatt, unterwegs, MzCharacterRenderer.StillStep,
+            MzMapRenderer.TilePixels, MzMapRenderer.TilePixels,
+            dazwischen),
+            "**and it draws between two tiles** -- and this is the call"
+            + " that takes the figure and not the tile");
+
+        AssertEq(MzMapRenderer.DistinctColours(dazwischen),
+            MzMapRenderer.DistinctColours(aufKachel),
+            "**and it is the same picture either way** -- and the same"
+            + " colours, because it is one figure in one pose and only"
+            + " the place is different");
+
+        // **Und die beiden Figuren stehen nicht uebereinander.**
+        // **Und die beiden Bilder sind nicht gleich, und nicht nur an
+        // einer Kachel.**
+        //
+        // **Und meine erste Fassung verglich nur eine Kachel, und das
+        // war zu wenig** -- **eine Figur ist 48 Pixel breit, und sie
+        // steht mittig auf ihrer Kachel, also ragt sie in die
+        // Nachbarn** -- **und wenn man genau die eine Kachel
+        // vergleicht, in der sie steht, ist dort nur der unterste
+        // Streifen.**
+        //
+        // **Und eine Figur, die auf ihrer Kachel springt, ist ein
+        // anderes Bild als dieselbe Figur eine Kachel zurueck.** Also
+        // wird das ganze Bild verglichen.
+        // **Und die Rechnung, die zaehlt.**
+        //
+        // **Und das hier ist der Punkt, und es ist nicht der
+        // Bildinhalt:** **eine Figur, die auf Kachel 7 steht und auf
+        // Kachel 6 gezeichnet wird, ist genau eine Kachel links von
+        // der, die auf ihrer Kachel gezeichnet waere.** **Und dieselbe
+        // Figur, ein halbes Bild spaeter, ist ein halbes Bild weiter.**
+        //
+        // **Und die Folge war, dass `RealX` sofort nach dem Schritt 6
+        // ist und nicht 6,25** -- **denn der Motor schliesst die Luecke
+        // erst in `PassFrame`, und der erste Schritt hat sie noch
+        // nicht geschlossen.**
+        var ziel = (int)(unterwegs.RealX * MzMapRenderer.TilePixels);
+        AssertEq(ziel, 6 * MzMapRenderer.TilePixels,
+            "**and it is drawn one tile to the left of its own tile**"
+            + " -- and that is what RealX is, and it is 6.0 and not 6.25"
+            + " because the engine closes the gap in PassFrame and the"
+            + " first step has not closed it yet. It is drawn at pixel "
+            + ziel + " and its tile starts at "
+            + (unterwegs.X * MzMapRenderer.TilePixels));
+
+        // **Und jetzt geht es weiter, und das Bild rueckt nach.**
+        var vorherX = unterwegs.RealX;
+        unterwegs.PassFrame();
+        AssertTrue(unterwegs.RealX > vorherX,
+            "**and one frame later it has moved further right** -- and"
+            + " that is the walk, and a reader that drew only the tile"
+            + " showed a figure that never moved within its tile");
+
+        AssertTrue(MzCharacterRenderer.Draw(
+            blatt, unterwegs, MzCharacterRenderer.StillStep,
+            MzMapRenderer.TilePixels, MzMapRenderer.TilePixels,
+            dazwischen),
+            "**and it draws again from the new position**");
+
+        AssertTrue(!Gleich(aufKachel, dazwischen),
+            "**and the two pictures are now different** -- and a figure"
+            + " drawn on its tile and again a sixteenth of a tile"
+            + " further along is two pictures where there is one, and a"
+            + " reader that drew only the tile had one that teleported");
+    }
+
+    /// <summary>
+    /// A map with no walls at all, which is all a step needs.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this exists because <c>CanPass</c> asks the
+    /// map.</strong> Measured:
+    /// <c>Game_CharacterBase.prototype.canPass</c> reads
+    /// <c>$gameMap.isPassable</c>, <strong>and a step given no map is
+    /// refused</strong> — <strong>so a test that calls
+    /// <c>MoveStraight</c> without one is testing a refusal and calling
+    /// it a walk.</strong>
+    /// </remarks>
+    private sealed class OffeneKarte : IMzMapPassable
+    {
+        public bool IsValid(int pX, int pY) => pX >= 0 && pY >= 0;
+
+        public bool IsPassable(int pX, int pY, int pDir) => IsValid(pX, pY);
+
+        public bool IsClearOfCharacters(int pX, int pY) => true;
+    }
+
+    private static void Fuellen(Rm2kPixelBuffer pPixels)
+    {
+        for (var index = 0; index + 3 < pPixels.Pixels.Length; index += 4)
+        {
+            pPixels.Pixels[index] = 10;
+            pPixels.Pixels[index + 1] = 20;
+            pPixels.Pixels[index + 2] = 30;
+            pPixels.Pixels[index + 3] = 255;
+        }
+    }
+
+    /// <summary>
+    /// Whether two pictures carry the same pixels throughout.
+    /// </summary>
+    /// <param name="pA">The first.</param>
+    /// <param name="pB">The second.</param>
+    /// <returns>Whether they are identical.</returns>
+    /// <remarks>
+    /// <strong>And the whole picture, and not one tile.</strong>
+    /// <strong>A figure is 48 pixels wide and stands centred on its
+    /// tile</strong> &#8212; <strong>so it reaches into its neighbours,
+    /// and comparing only the tile it stands on compares the strip it
+    /// occupies and nothing else</strong> &#8212; <strong>which is how
+    /// two pictures of the same figure a tile apart came back
+    /// equal.</strong>
+    /// </remarks>
+    private static bool Gleich(Rm2kPixelBuffer pA, Rm2kPixelBuffer pB)
+    {
+        var laenge = Math.Min(pA.Pixels.Length, pB.Pixels.Length);
+        for (var index = 0; index + 3 < laenge; index += 4)
+        {
+            if (pA.Pixels[index] != pB.Pixels[index]
+                || pA.Pixels[index + 1] != pB.Pixels[index + 1]
+                || pA.Pixels[index + 2] != pB.Pixels[index + 2]
+                || pA.Pixels[index + 3] != pB.Pixels[index + 3])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
