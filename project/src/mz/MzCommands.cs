@@ -759,10 +759,32 @@ public static class MzCommands
                 }
 
                 var an = At(pCommand, 1) == 0;
-                pFacts.SelfSwitches[SelfSwitchName(schalter)] = an;
+
+                // **Und der Schalter gehoert einem Ereignis auf einer
+                // Karte, und nicht dem Spiel.**
+                //
+                // **Gemessen an `command123`: `if (this._eventId > 0)
+                // { const key = [this._mapId, this._eventId, params[0]];
+                // $gameSelfSwitches.setValue(key, params[1] === 0); }`**
+                // -- **drei Zahlen, und die ersten zwei sagen, wessen
+                // Schalter es ist.**
+                //
+                // **Und ein Schalter ohne Ereignis wird vom Motor
+                // verworfen** -- **und genau daran haengt, warum eine
+                // parallele Seite der Karte keinen setzen kann.**
+                var schluessel = SelfSwitchKey(
+                    pInterpreter.MapId, pInterpreter.EventId, schalter);
+                if (schluessel.Length > 0)
+                {
+                    pFacts.SelfSwitches[schluessel] = an;
+                }
+
                 pActions.Add(new MzAction(pCommand,
                     $"self switch {SelfSwitchName(schalter)} "
-                    + (an ? "on" : "off")));
+                    + (an ? "on" : "off")
+                    + (schluessel.Length > 0
+                        ? $" on event {pInterpreter.EventId}"
+                        : " is dropped, because it belongs to no event")));
                 return true;
             }
 
@@ -1519,6 +1541,34 @@ public static class MzCommands
         return -1;
     }
 
+
+    /// <summary>The key an event's self switch is stored under.</summary>
+    /// <param name="pMapId">The map the event stands on.</param>
+    /// <param name="pEventId">The event, and zero or less for none.</param>
+    /// <param name="pIndex">The letter, A to D.</param>
+    /// <returns>The key, and nothing when there is no event.</returns>
+    /// <remarks>
+    /// <strong>And the engine's key is three numbers, measured:</strong>
+    /// <c>const key = [this._mapId, this._eventId, params[0]]</c> at
+    /// <c>command123</c> — <strong>and it drops the whole write when
+    /// <c>this._eventId &lt;= 0</c>.</strong>
+    /// <para>
+    /// <strong>And this is why a dictionary keyed by the letter alone
+    /// answers wrongly.</strong> Measured at Map004: event 9 page 1 asks
+    /// for switch 3 and event 10 page 1 asks for switch 3, and a reader
+    /// that keyed by letter alone let whichever ran last answer for
+    /// both.
+    /// </para>
+    /// </remarks>
+    internal static string SelfSwitchKey(
+        int pMapId,
+        int pEventId,
+        int pIndex)
+    {
+        return pEventId > 0
+            ? $"{pMapId}_{pEventId}_{SelfSwitchName(pIndex)}"
+            : "";
+    }
 
     internal static string SelfSwitchName(int pIndex) =>
         pIndex >= 0 && pIndex < SelfSwitchLetters.Length

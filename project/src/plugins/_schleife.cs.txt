@@ -1,0 +1,78 @@
+    /// <summary>
+    /// Runs a page as far as it goes, answering its waits as they come.
+    /// </summary>
+    /// <param name="pCommands">The page's commands.</param>
+    /// <param name="pId">The event the page belongs to.</param>
+    /// <returns>Every action the page carried out, and where it stopped.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the loop the engine runs, and it is one
+    /// command per frame with a wait answered between each.</strong>
+    /// Measured at <c>Game_Interpreter.prototype.update</c> — <c>while
+    /// (this.isRunning() &amp;&amp; !this._waitMode) { ... this.command101(this._parameters);
+    /// ... }</c> and <c>if (!this.isRunning()) return; this.updateWaitMode();</c>
+    /// </para>
+    /// <para>
+    /// <strong>And the key press is what answers a dialogue, measured:</strong>
+    /// <c>Window_Message.isTriggered</c> is
+    /// <c>Input.isRepeated("ok") || Input.isRepeated("cancel")</c> — and
+    /// <c>onEndOfText</c> calls <c>terminateMessage</c>, which calls
+    /// <c>$gameMessage.clear()</c>, and without that clear
+    /// <c>isBusy</c> stays true and the page waits for a dialogue that is
+    /// gone.
+    /// </para>
+    /// <para>
+    /// <strong>And this loop is why a self-switch page needs it.</strong>
+    /// Measured at Map004 event 15: page 0 reads
+    /// <c>101 ["HumanActors", 2, 0, 2, "Mary"], 401 ["Do you find staring
+    /// at an old lady to be a productive use of your time, queen?"], …,
+    /// 123 ["A", 0]</c>. <strong>A reader that ran one command and
+    /// stopped carried out only the self switch and never said the
+    /// words</strong> — <strong>and switched A, which means the next
+    /// step onto that tile answered with the wrong page.</strong>
+    /// </para>
+    /// </remarks>
+    private MzEventResult FühreAus(
+        List<MzCommandEntry> pCommands,
+        int pId)
+    {
+        var alle = new List<MzAction>();
+        var ergebnis = _runner.Run(
+            pCommands, Facts, CurrentMapId, pId, Random);
+        var weiter = true;
+
+        // **Und hoechstens so oft, wie Befehle da sind**
+        // **-- denn eine Seite, die endet, endet.** **Und ein
+        // Fortschrittsschutz, weil eine Schleife ohne einen sich selbst
+        // haengen laesst: ein Aufruf ohne neuen Fortschritt beendet
+        // sie.**
+        for (var mal = 0; weiter && mal <= pCommands.Count; mal++)
+        {
+            if (ergebnis.Stopped == MzStep.Finished)
+            {
+                weiter = false;
+                break;
+            }
+
+            Facts.MessageBusy = false;
+            _keys.Ok();
+
+            var antwort = ergebnis.Interpreter?.PassFrame(WaitBeantwortet)
+                ?? false;
+            if (!antwort)
+            {
+                weiter = false;
+                break;
+            }
+
+            var naechste = _runner.Run(
+                pCommands, Facts, CurrentMapId, pId, Random,
+                ergebnis.Interpreter);
+            alle.AddRange(naechste.Actions);
+            ergebnis = naechste;
+        }
+
+        _keys.FrameEnde();
+        alle.AddRange(ergebnis.Actions);
+        return ergebnis;
+    }

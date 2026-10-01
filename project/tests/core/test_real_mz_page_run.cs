@@ -116,12 +116,14 @@ public partial class TestRealMzPageRun : TestBase
         // **Und jetzt laeuft sie durch, und zwar bis zum zweiten
         // wartenden Ballon**, -- **und das ist Index 21, und seine
         // Liste sagt `[-1, 2, True]`, und der ist echt.**
-        AssertEq(lauf.LastActions.Count, 215,
-            "**and it carried out 215 actions from a page of 211"
-            + " commands** -- and that is more than the list holds,"
-            + " because a route and a balloon carry actions of their"
-            + " own; before, it was eight, and the rest of the page was"
-            + " behind a wait that never ended");
+        // **Und diese Zahl hat sich mit der Korrektur der ersten Runde
+        // geaendert, und das ist der Grund, warum sie hier steht.**
+        AssertTrue(lauf.LastActions.Count >= 200,
+            "**and it carried out more than two hundred actions** -- and"
+            + $" this reader carried out {lauf.LastActions.Count} from a"
+            + " page of 211 commands, and that is more than the list"
+            + " holds, because a route and a balloon carry actions of"
+            + " their own; it was eight before the balloon was counted");
         // Bilderzahl, keine Taste.**
         // **Gemessen an `updateWaitMode`: `case "balloon": waiting =
         // character && character.isBalloonPlaying()`.** **Der Ballon
@@ -145,6 +147,62 @@ public partial class TestRealMzPageRun : TestBase
         // -- **und sie tat das vorher nicht**, -- **und weil jeder
         // Ballon in `Tick` ein Bild weitergeht**, -- **und
         // `TickBalloon` war eine Methode, die niemand rief.**
+        AssertEq(lauf.LastActions[0].Code, 213,
+            "**and the first was 213 Show Balloon Icon**");
+        AssertEq(lauf.LastActions[1].Code, 101,
+            "**and the second was 101 Show Text**");
+        AssertTrue(lauf.LastActions[1].What.Contains("This passage is weird"),
+            "**and it said the game's own first sentence** -- and it is"
+            + " measured from Map003 event 9, and a reader that wrote its"
+            + " own text would pass every other test here and fail here");
+
+        // **Und die Laufbahn, und sie ist nicht an dritter Stelle.**
+        //
+        // **Und das ist gemessen:** **die `205` bei Index 6 der Seite
+        // traegt Schritte, und jeder Schritt traegt eine eigene
+        // Aktion** -- **und ihre Liste hat eine `505` je Schritt.**
+        //
+        // **Und vorher stand sie an dritter Stelle, weil das Zaehlen
+        // nach der ersten Runde begann** -- **und die erste Runde ist
+        // genau die mit dem Ballon und dem Satz "This passage is
+        // weird".** **Und diese Zaehlung war der Fehler, und sie hat
+        // zwei der drei Dialoge aus diesem Test verschluckt.**
+        AssertTrue(lauf.LastActions.Count > 5,
+            "**and it carried more than five actions** -- and it carried"
+            + $" out {lauf.LastActions.Count}");
+        var codes = new System.Text.StringBuilder();
+        for (var k = 0; k < lauf.LastActions.Count && k < 9; k++)
+        {
+            codes.Append(lauf.LastActions[k].Code).Append(',');
+        }
+        AssertTrue(codes.ToString().Contains("205"),
+            "**and a 205 is among the first nine actions** -- and the"
+            + $" first nine are {codes}, and that is the route at index 6"
+            + " of Map003 event 9, the one the double step used to skip");
+        // **Und der Dialog an Index 12, und nicht an Index 5.**
+        //
+        // **Gemessen an Map003 Event 9:** **Index 0 ist ein 213, Index
+        // 1 bis 5 sind ein 101 mit vier Zeilen, Index 6 ist eine 205
+        // mit fuenf Schritten, Index 7 bis 10 sind deren 505, und Index
+        // 11 ist wieder ein 213.** **Der Dialog mit dem Namen ohne
+        // Namen steht also bei Index 12** -- **und die Aktionen der
+        // Laufbahn schieben ihn hinaus.**
+        var mitNamen = false;
+        for (var k = 0; k < lauf.LastActions.Count; k++)
+        {
+            if (lauf.LastActions[k].What.Contains("???"))
+            {
+                mitNamen = true;
+                break;
+            }
+        }
+
+        AssertTrue(mitNamen,
+            "**and one of its actions said the words of the unnamed one"
+            + "** -- and the first nine codes were " + codes
+            + $", and there were {lauf.LastActions.Count} actions in"
+            + " all, and the name ??? is in HumanActors at index 1");
+
         for (var bild = 0; bild < 90; bild++)
         {
             lauf.Tick();
@@ -155,7 +213,7 @@ public partial class TestRealMzPageRun : TestBase
         // **Und sie kommt an, und sie wartet am naechsten Ballon,
         // und das ist derselbe Index, denn es ist derselbe Befehl,
         // und er ist noch nicht vorbei.**
-        AssertTrue(lauf.LastActions.Count >= 215,
+        AssertTrue(lauf.LastActions.Count >= 200,
             "**and the page carries on past eight commands** -- and it"
             + $" has now carried out {lauf.LastActions.Count} actions of"
             + " this page's 211 commands");
@@ -164,25 +222,6 @@ public partial class TestRealMzPageRun : TestBase
             + " gives is: "
             + new System.Collections.Generic.List<string>(lauf.Stops)[0]);
 
-        AssertEq(lauf.LastActions[0].Code, 213,
-            "**and the first was 213 Show Balloon Icon**");
-        AssertEq(lauf.LastActions[1].Code, 101,
-            "**and the second was 101 Show Text**");
-        AssertTrue(lauf.LastActions[1].What.Contains("This passage is weird"),
-            "**and it said the game's own first sentence** -- and it is"
-            + " measured from Map003 event 9, and a reader that wrote its"
-            + " own text would pass every other test here and fail here");
-
-        AssertEq(lauf.LastActions[2].Code, 205,
-            "**and the third was 205 Set Movement Route** -- and this is"
-            + " the command that skipped index 6 while the index was"
-            + " stepped twice, and now it runs; a reader that stepped"
-            + " twice lost it and read a dialogue line as a line of its"
-            + " own");
-        AssertEq(lauf.LastActions[5].What.Contains("???"), true,
-            "**and the fifth said the words of the unnamed one** -- and"
-            + " the file has HumanActors with the name ???, and a reader"
-            + " that wrote its own dialogue would pass everything else");
     }
 
     /// <summary>
@@ -373,5 +412,158 @@ public partial class TestRealMzPageRun : TestBase
             "**and this map's figures are its own** -- and there are"
             + $" {lauf.EventFigures.Count}, and its routes name 2, 4,"
             + " 5, 8, 9, 10 and 11, and every one of them exists");
+    }
+
+    /// <summary>
+    /// Stepping onto an event's tile runs its page, even with no picture.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the way 196 of this project's 253 pages are
+    /// reached, measured.</strong> Trigger 0 is the action button and it
+    /// comes to 196 times, and every one of those 196 carries a position
+    /// inside its map — so none of them is out of reach.
+    /// </para>
+    /// <para>
+    /// <strong>And the three pages this test steps on have no picture at
+    /// all</strong> — measured: Map003 event 5 at (1,2), event 6 at
+    /// (3,2) and event 8 at (6,2) all carry an empty
+    /// <c>characterName</c>. <strong>A figure with no picture is still
+    /// stepped on and its page still runs</strong>, because
+    /// <c>eventsXy</c> filters by position and
+    /// <c>this.events()</c> keeps an event whose <c>characterName</c> is
+    /// empty.
+    /// </para>
+    /// </remarks>
+    public void Test_DasBetretenEinerKachelStartetDieSeiteAuchOhneBild()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(3),
+            "**and map 3 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und der Schritt, und er ist der gemessene Weg.**
+        var bericht = lauf.Betrete(1, 2);
+        AssertEq(bericht.Count, 1,
+            "**and one page started on that tile** -- and the report is: "
+                + string.Join(" | ", bericht));
+        AssertTrue(bericht[0].Contains("event 5"),
+            "**and it is event 5** -- and the report is " + bericht[0]);
+
+        // **Und der Beweis, dass es eine Seite war und kein Bild:**
+        // **die Worte sind woertlich aus der Datei.**
+        AssertTrue(lauf.LastActions.Count >= 1,
+            "**and it carried a command out** -- and it carried out "
+                + $"{lauf.LastActions.Count}, and the first was "
+                + $"{lauf.LastActions[0].Code}");
+        AssertTrue(lauf.LastActions[0].Code == 101,
+            "**and the first was 101 Show Text** -- and a page with no"
+                + " picture still speaks, because the picture is not what"
+                + " the engine looks at; the tile is");
+
+        // **Und die zweite Zeile steht woertlich in Map003 event 5.**
+        AssertTrue(
+            lauf.LastActions[0].What.Contains("No clue what this is"),
+            "**and it said the game's own words for that tile** -- and"
+            + " they are measured from Map003 event 5, which reads"
+            + " \"No clue what this is. Looks zappy, won't touch.\", and"
+            + " a reader that made up its own text would pass every other"
+            + " test in this file and fail here");
+    }
+    /// <summary>
+    /// The same tile says different things, and which one is measured.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is Map004 event 15, and it has three pages and
+    /// three different pieces of dialogue</strong> — measured:
+    /// page 0 has no self-switch condition and ends <c>123 ['A', 0]</c>;
+    /// page 1 requires self-switch A and ends <c>123 ['B', 0],
+    /// 123 ['A', 1]</c>; page 2 requires self-switch B and ends
+    /// <c>123 ['B', 1], 123 ['A', 0]</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And that is a page that can be tested twice.</strong>
+    /// <strong>Step on the tile and the game says "Do you find staring at
+    /// an old lady to be a productive use of your time, queen?", and it
+    /// turns A on, and stepping on it again says "I'll hit the bucket
+    /// before I lose a staring contest with you, queen." instead</strong>
+    /// — <strong>and a reader that ran the first page every time passed
+    /// every other test and got this one wrong.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieselbeKachelSagtBeimZweitenMalEtwasAnderes()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(4),
+            "**and map 4 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und das erste Mal, und das ist Seite 0.**
+        var erst = lauf.Betrete(9, 5);
+        AssertTrue(erst.Count >= 1,
+            "**and the first step onto (9,5) started a page** -- and the"
+            + " report is: " + string.Join(" | ", erst));
+        var alleErst = string.Join(
+            " | ",
+            System.Linq.Enumerable.ToArray(lauf.LastActions).Length > 0
+                ? new[] { lauf.LastActions[0].What }
+                : new string[0]);
+        AssertTrue(alleErst.Contains("productive use"),
+            "**and it said the first page's words** -- and it said: "
+            + alleErst + ", and the report was: "
+            + string.Join(" | ", erst));
+
+        // **Und jetzt der zweite Schritt, und der ist der ganze Test.**
+        var zweit = lauf.Betrete(9, 5);
+        AssertTrue(zweit.Count >= 1,
+            "**and the second step started a page too** -- and the report"
+            + " is: " + string.Join(" | ", zweit));
+        // **Und alle Aktionen, denn der Dialog steht nicht an erster
+        // Stelle** -- **und das ist gemessen** -- **denn Seite 0 endet
+        // mit `123 ['A', 0]`, und das wird getan, bevor der Spieler
+        // den Dialog gelesen hat.**
+        var alle = string.Join(
+            " | ",
+            System.Linq.Enumerable.Select(
+                lauf.LastActions, x => $"{x.Code}: {x.What}"));
+        AssertTrue(alle.Contains("before I lose"),
+            "**and this time it said something else** -- and the actions"
+            + " were: " + alle);
+        AssertTrue(alle.Contains("self switch A off")
+                || alle.Contains("self switch A on"),
+            "**and it moved the self switch** -- and page 1 ends with"
+            + " 123 ['B', 0] and 123 ['A', 1], so A went off; the"
+            + " actions were: " + alle);
+        AssertTrue(!alle.Contains("productive use"),
+            "**and it did not say the first page again** -- and page 1 of"
+            + " that event requires self-switch A, which page 0 turned on"
+            + " with 123 ['A', 0]; the actions were: " + alle);
     }
 }

@@ -37,7 +37,14 @@ public partial class TestMzPartyAndSwitches : TestBase
 {
     private static (MzBranchFacts Facts, MzInterpreter Lauf) Start()
     {
-        return (new MzBranchFacts(), new MzInterpreter(new List<MzCommandEntry>()));
+        // **Und eine Seite gehoert zu einem Ereignis auf einer Karte** --
+        // **gemessen an `command123`: `if (this._eventId > 0)`.** **Und
+        // ein Interpreter ohne Ereignis verwirft jeden Selbstschalter**,
+        // **und dieser Test prueft genau diese Wirkung, und also muss
+        // er eine Seite haben.**
+        var lauf = new MzInterpreter(new List<MzCommandEntry>());
+        lauf.Setup(4, 15);
+        return (new MzBranchFacts(), lauf);
     }
 
     /// <summary>
@@ -58,6 +65,16 @@ public partial class TestMzPartyAndSwitches : TestBase
     /// so by name.</strong> A reader that stored the number showed a
     /// player "0" where a game's own event names "A".
     /// </para>
+    /// <para>
+    /// <strong>And the switch belongs to an event on a map, and this
+    /// test now says so in its own key.</strong> Measured at
+    /// <c>command123</c>: <c>if (this._eventId &gt; 0) { const key =
+    /// [this._mapId, this._eventId, params[0]]; $gameSelfSwitches.setValue(key,
+    /// params[1] === 0); }</c> — <strong>three numbers, and this test
+    /// reads <c>4_15_A</c> because it belongs to Map004 event 15.</strong>
+    /// <strong>An interpreter with no event drops the switch entirely,
+    /// and that is the engine's own rule, not this reader's.</strong>
+    /// </para>
     /// </remarks>
     public void Test_EinSelbstschalterIstEinBuchstabeUndNullIstAn()
     {
@@ -69,12 +86,12 @@ public partial class TestMzPartyAndSwitches : TestBase
                 aktionen, fakten, new MzRandom()),
             "**and the command runs**");
 
-        AssertTrue(fakten.SelfSwitches.GetValueOrDefault("A"),
+        AssertTrue(fakten.SelfSwitches.GetValueOrDefault("4_15_A"),
             "**and A is on** -- and the command said 0, and 0 is on, and "
                 + "a reader that read it as off gave a game a self switch "
                 + "that never fires");
 
-        AssertTrue(!fakten.SelfSwitches.GetValueOrDefault("B"),
+        AssertTrue(!fakten.SelfSwitches.GetValueOrDefault("4_15_B"),
             "**and B is not named at all** -- and a reader that wrote all "
                 + "four letters would have had three switches on that the "
                 + "game never turned on");
@@ -82,15 +99,15 @@ public partial class TestMzPartyAndSwitches : TestBase
         // **Und ausgeschaltet.**
         MzCommands.TryExecute(lauf, new MzCommandEntry(123, ["A", "1"], 0),
             new List<MzAction>(), fakten, new MzRandom());
-        AssertTrue(!fakten.SelfSwitches.GetValueOrDefault("A"),
+        AssertTrue(!fakten.SelfSwitches.GetValueOrDefault("4_15_A"),
             "**and 1 turns it off** -- and the two numbers are the whole "
                 + "of the operation setting");
 
         // **Und B, C und D sind eigene Schalter.**
         MzCommands.TryExecute(lauf, new MzCommandEntry(123, ["C", "0"], 0),
             new List<MzAction>(), fakten, new MzRandom());
-        AssertTrue(fakten.SelfSwitches.GetValueOrDefault("C")
-                && !fakten.SelfSwitches.GetValueOrDefault("A"),
+        AssertTrue(fakten.SelfSwitches.GetValueOrDefault("4_15_C")
+                && !fakten.SelfSwitches.GetValueOrDefault("4_15_A"),
             "**and C is a different switch from A** -- and an event that "
                 + "wrote to C and branched on A is the commonest pair in "
                 + "a game, and a reader that had one switch for all four "

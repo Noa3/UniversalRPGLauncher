@@ -170,6 +170,28 @@ public sealed class MzBranchFacts
 {
     public Dictionary<int, bool> Switches { get; init; } = new();
     public Dictionary<int, int> Variables { get; init; } = new();
+    /// <summary>The self switches, and where each one belongs.</summary>
+    /// <remarks>
+    /// <strong>And a self switch belongs to an event on a map, and not
+    /// to the game.</strong> Measured at
+    /// <c>Game_Interpreter.prototype.command123</c>:
+    /// <c>if (this._eventId > 0) { const key = [this._mapId, this._eventId,
+    /// params[0]]; $gameSelfSwitches.setValue(key, params[1] === 0); }</c>
+    /// — <strong>three numbers, and the first two say whose switch it
+    /// is.</strong>
+    /// <para>
+    /// <strong>And that is why a dictionary keyed by the letter alone
+    /// cannot answer a page's condition.</strong> Measured at Map004:
+    /// event 9's page 1 asks for switch 3 and event 14 asks for switch 3
+    /// too, and both would have been answered by whichever of them ran
+    /// last.
+    /// </para>
+    /// <para>
+    /// <strong>And a switch with <c>_eventId &lt;= 0</c> is dropped by
+    /// the engine itself</strong> — <strong>which is how a parallel page
+    /// of the map, whose event id is zero, cannot set one.</strong>
+    /// </para>
+    /// </remarks>
     public Dictionary<string, bool> SelfSwitches { get; init; } = new();
     public int Gold { get; init; }
 

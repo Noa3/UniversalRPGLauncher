@@ -306,7 +306,11 @@ public static class MzMapFigureReader
     /// showed pages a game switched away from.</strong>
     /// </para>
     /// </remarks>
-    public static bool Meets(MzValue? pConditions, MzBranchFacts? pFacts)
+    public static bool Meets(
+        MzValue? pConditions,
+        MzBranchFacts? pFacts,
+        int pMapId = 0,
+        int pEventId = 0)
     {
         if (pConditions == null || pConditions.Kind != MzKind.Object)
         {
@@ -333,15 +337,38 @@ public static class MzMapFigureReader
 
         if (Gilt(pConditions, "selfSwitchValid"))
         {
-            // **Und ein Selbstschalter gehoert zu dem Ereignis, und
-            // nicht zur Karte** -- **und die Seite traegt, welcher es
-            // ist**, **also kann dieser Leser es hier nicht wissen.**
+            // **Und ein Selbstschalter gehoert einem Ereignis auf einer
+            // Karte, und nicht dem Spiel.**
             //
-            // **Und die ehrliche Antwort ist "nein".** **Eine Seite, die
-            // an einem Selbstschalter haengt, wird nicht gezeichnet**,
-            // **und das ist besser, als sie zu zeichnen, weil ihr
-            // Selbstschalter unbekannt ist.**
-            return false;
+            // **Gemessen an `command123`: `if (this._eventId > 0) { const
+            // key = [this._mapId, this._eventId, params[0]];
+            // $gameSelfSwitches.setValue(key, params[1] === 0); }`** --
+            // **drei Zahlen, und die ersten beiden sagen, wessen Schalter
+            // es ist.**
+            //
+            // **Und die Seite weiss ihren Buchstaben, aber nicht ihre
+            // Ereignisnummer ohne das Ereignis** -- **und darum
+            // braucht `Meets` die Nummer, und nicht nur die Seite.**
+            //
+            // **Und die alte Antwort war hier "nein, immer",** **und
+            // damit war jede Seite an einem Selbstschalter fuer immer
+            // unerreichbar** -- **und gemessen sind das 21 der 253
+            // Seiten dieses Spiels**, **und darunter Map004 Event 15,
+            // dessen drei Seiten drei verschiedene Dialoge tragen.**
+            if (pEventId <= 0 || pFacts == null)
+            {
+                return false;
+            }
+
+            var ch = (pConditions.Member("selfSwitchCh")?.StringOr("") ?? "")
+                .Trim();
+            if (ch.Length == 0)
+            {
+                return false;
+            }
+
+            return pFacts.SelfSwitches.TryGetValue(
+                $"{pMapId}_{pEventId}_{ch[0]}", out var an) && an;
         }
 
         // **Und die Felder, die dieses Projekt nicht setzt.**

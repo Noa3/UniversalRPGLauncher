@@ -11366,3 +11366,69 @@ den Aktionsknopf, und gemessen sind 196 von 253 Seiten genau das** --
 Bedingungen: Schalter, Held beruehrt die Figur, oder der Schalter
 daneben** -- **und das Spiel hat viele davon.**
 
+## Und eine Kachel antwortet jetzt anders, wenn man sie zweimal betritt
+
+**Vier Fehler, und jeder allein haette den zweiten Schritt verhindert:**
+
+- **`Betrete` lief alle passenden Seiten einer Kachel.**
+  **Gemessen an `findProperPageIndex`: `for (let i = pages.length - 1;
+  i >= 0; i--)` -- und `page()` gibt `pages[findProperPageIndex()]`
+  zurueck.** **Ein Ereignis hat genau eine Seite**, **und gemessen
+  liefen auf Map004 Event 15 alle drei.** **Und jede mit einem Befehl,
+  weil die Liste einer Seite, die nur den Ballon traegt, einmal durch
+  den Lauf geht.**
+
+- **`Betrete` fuhr keine Wartezeiten.** **`RunPage` tat es, `Betrete`
+  nicht** -- **und die Seite sprach nie** -- **und schaltete trotzdem
+  um** -- **und damit war beim zweiten Schritt die falsche Seite dran.**
+
+- **Die erste Runde wurde nicht gezaehlt.** **`alle` begann leer, und
+  die erste `Run` traug die Aktionen, die niemand sonst zaehlte** --
+  **und danach wurde jede Runde noch einmal gezaehlt, weil
+  `ergebnis` am Schleifenende bereits `naechste` war.** **Zwei
+  Selbstschalter statt einer, und drei Dialoge statt einer.**
+
+- **`Meets` lehnte jeden Selbstschalter ab.** **Die alte Antwort war
+  "nein, immer", mit der Begruendung, der Leser kenne den Schalter des
+  Ereignisses nicht** -- **und gemessen sind das 21 der 253 Seiten
+  dieses Spiels**, **und darunter Map004 Event 15 mit seinen drei
+  Dialogen.**
+
+**Und die gemessene Regel, die alles davon loest:**
+
+```js
+// Game_Interpreter.prototype.command123
+if (this._eventId > 0) {
+    const key = [this._mapId, this._eventId, params[0]];
+    $gameSelfSwitches.setValue(key, params[1] === 0);
+}
+```
+
+**Drei Zahlen, und die ersten beiden sagen, wessen Schalter es ist.**
+**Ein Schalter ohne Ereignis wird vom Motor verworfen** -- **und genau
+daran haengt, warum eine parallele Seite der Karte keinen setzen
+kann.**
+
+**Und der Beweis:** **der Spieler tritt auf (9,5) von Map004, Mary sagt
+"Do you find staring at an old lady to be a productive use of your time,
+queen?", schaltet `A` an** -- **und beim zweiten Schritt sagt dieselbe
+Kachel "I'll hit the bucket before I lose a staring contest with you,
+queen."**
+
+**Und die Schluessel sind jetzt `{karte}_{ereignis}_{buchstabe}`** --
+**und ein Ereignis, das nach Schalter 3 fragt, und ein anderes, das
+nach Schalter 3 fragt, sind zwei verschiedene Schalter**, **und die
+alten Tests, die nach dem Buchstaben allein fragten, sind auf die
+gemessene Form umgestellt** -- **und einer davon musste erst eine
+echte Seite bekommen**, **denn ohne Ereignis verwirft der Motor jeden
+Selbstschalter.**
+
+**`All 2201 tests passed`, Validator gruen.**
+
+**Und als naechstes fehlt:** **`Betrete` nimmt die Seite von hinten,
+aber es fragt den Spieler nicht, ob er die Kachel wirklich betreten
+kann** -- **und gemessen sind alle 196 Trigger-0-Seiten dieses Spiels
+an einer gueltigen Stelle erreichbar** -- **und die vier Trigger-1-Seiten
+warten auf Beruehrung** -- **und `startMapEvent` vergleicht noch
+`isNormalPriority()`, was dieser Leser nicht prueft.**
+

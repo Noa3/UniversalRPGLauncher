@@ -736,7 +736,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 }
 
                 if (!MzMapFigureReader.Meets(
-                    seite.Member("conditions"), Facts))
+                    seite.Member("conditions"), Facts, CurrentMapId, id))
                 {
                     return $"event {id} page {index} is the page the engine"
                         + " would run, and its conditions this reader cannot"
@@ -820,47 +820,29 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // Fassung lief bis `alle.Count == befehle.Count`, und
                 // wenn ein Lauf keine Aktionen zurueckgibt, waechst die
                 // Zahl nicht, und die Schleife kam nie heraus.** **Ein
-                // Aufruf ohne neuen Fortschritt beendet sie.**
-                for (var mal = 0; weiter && mal <= befehle.Count; mal++)
+                // **Und die Seite laeuft so weit, wie sie kommt,
+                // und die Wartezeiten werden unterwegs beantwortet.**
+                //
+                // **Und das ist die Schleife, die `RunPageEvent` auch
+                // benutzt** -- **denn eine Seite, die nur einen Befehl
+                // traegt, redet nie, und schaltet nie etwas um.**
+                // **Und auch hier wird die erste Runde gezaehlt** --
+                // **denn sie traegt die Aktionen, die niemand sonst
+                // zaehlt.**
+                alle.AddRange(ergebnis.Actions);
+                for (var mal = 0; mal <= befehle.Count; mal++)
                 {
                     if (ergebnis.Stopped == MzStep.Finished)
                     {
-                        weiter = false;
                         break;
                     }
 
-                    // **Und die Wartezeit wird mit einem Tastendruck
-                    // beantwortet, und mit nichts anderem.**
-                    // **Und ein Tastendruck nimmt den Dialog weg, und
-                    // das ist gemessen:** **`onEndOfText` ruft
-                    // `terminateMessage`, und das ruft
-                    // `$gameMessage.clear()`** -- **und ohne dieses
-                    // `clear` bleibt `isBusy` wahr, und die Seite
-                    // wartet auf einen Dialog, den es nicht mehr
-                    // gibt.**
-                    //
-                    // **Und `MessageBusy` ist es, worauf `101` selbst
-                    // prueft** -- **gemessen in `MzCommands`:** **ein
-                    // zweiter Satz, während der erste noch steht, wird
-                    // abgelehnt**, **und das ist die Regel des Motors
-                    // fuer `$gameMessage.isBusy()`.**
                     Facts.MessageBusy = false;
                     _keys.Ok();
 
-                    // **Und die Seite laeuft weiter, und nicht eine neue
-                    // Seite von vorn** -- **denn der Interpreter steht
-                    // da, wo er stehengeblieben ist, und der Motor
-                    // macht genau das: er ruft `update` erneut auf, und
-                    // der Index ist weiter.**
-                    //
-                    // **Und `PassFrame` ist der Motorweg fuer eine
-                    // Wartezeit** -- **gemessen an `updateWaitMode`:
-                    // **eine Bedingung wird abgefragt, und nicht
-                    // heruntergezaehlt.**
-                    var antwort = ergebnis.Interpreter?.PassFrame(WaitBeantwortet) ?? false;
-                    if (!antwort)
+                    if (ergebnis.Interpreter?.PassFrame(
+                        WaitBeantwortet) != true)
                     {
-                        weiter = false;
                         break;
                     }
 
@@ -1140,6 +1122,209 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         return bericht;
+    }
+
+    /// <summary>Steps the player onto a tile and starts what stands there.
+    /// </summary>
+    /// <param name="pX">The tile column.</param>
+    /// <param name="pY">The tile row.</param>
+    /// <returns>One line per page the step started, and nothing if none.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the way 196 of this project's 253 pages are
+    /// reached, and measured:</strong> trigger 0 is the action button,
+    /// and it comes to 196 times, and every one of those 196 carries a
+    /// position inside its map.
+    /// </para>
+    /// <para>
+    /// <strong>And the engine's rule, measured:</strong>
+    /// <c>startMapEvent(x, y, triggers, normal)</c> is
+    /// <c>if (!$gameMap.isEventRunning()) for (const event of
+    /// $gameMap.eventsXy(x, y)) if (event.isTriggerIn(triggers) &amp;&amp;
+    /// event.isNormalPriority() === normal) event.start();</c>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>eventsXy</c> filters by position alone</strong> —
+    /// <c>this.events().filter(event =&gt; event.pos(x, y))</c> — <strong>and
+    /// <c>this.events()</c> is <c>this._events.filter(event =&gt; !!event)</c>,
+    /// which keeps an event whose <c>characterName</c> is empty.</strong>
+    /// <strong>A figure with no picture is still stepped on, and its page
+    /// still runs, and a reader that only kept the figures with a
+    /// picture found 4 of Map005's 11 events and stopped there.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the engine starts <em>every</em> match, and does not
+    /// take the first.</strong> <strong>And then
+    /// <c>setupStartingEvent</c> hands only one of them to the map's
+    /// interpreter, in event order</strong> — <strong>so the others stay
+    /// <c>_starting</c> until their turn, which is why a page with a
+    /// second button press behind the first still runs.</strong>
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> Betrete(int pX, int pY)
+    {
+        var bericht = new List<string>();
+        PlayerX = pX;
+        PlayerY = pY;
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            bericht.Add(
+                $"map {CurrentMapId} is not among the maps this runtime read,"
+                    + " so nothing on it can be stepped on");
+            return bericht;
+        }
+
+        foreach (var ereignis in karte.Root.Member("events")?.Items
+            ?? new List<MzValue>())
+        {
+            if (ereignis.Member("x")?.IntOr(-1) != pX
+                || ereignis.Member("y")?.IntOr(-1) != pY)
+            {
+                continue;
+            }
+
+            var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
+            var seiten = ereignis.Member("pages")?.Items
+                ?? new List<MzValue>();
+
+            // **Und von hinten, und nur eine Seite.**
+            //
+            // **Gemessen an `Game_Character.prototype.findProperPageIndex`:
+            // `for (let i = pages.length - 1; i >= 0; i--)`** -- **und
+            // `page()` gibt `pages[findProperPageIndex()]` zurueck.**
+            // **Ein Ereignis hat genau eine Seite, und ein Leser, der
+            // alle passenden laufen laesst, redet dreimal auf derselben
+            // Kachel.**
+            for (var index = seiten.Count - 1; index >= 0; index--)
+            {
+                var seite = seiten[index];
+                if ((seite.Member("trigger")?.IntOr(0) ?? 0) != 0)
+                {
+                    continue;
+                }
+
+                // **Und die Bedingung der Seite gilt, und das ist
+                // gemessen an `Game_Character.isTriggerIn` und
+                // `Game_Interpreter.setupStartingMapEvent`.**
+                //
+                // **Und ein Schalter, ein Gegenstand, eine Variable und
+                // ein eigener Schalter koennen eine Seite sperren** --
+                // **und `switch1Id: 1` ohne `switch1Valid` sperrt
+                // nichts**, **denn das ist der Wert des Editors, und
+                // nicht eine Forderung.** **Gemessen: 10 der 253 Seiten
+                // dieses Spiels tragen eine solche Forderung.**
+                if (!MzMapFigureReader.Meets(
+                    seite.Member("conditions"), Facts, CurrentMapId, id))
+                {
+                    continue;
+                }
+
+                bericht.Add(RunPageEvent(id, seite, false));
+                break;
+            }
+        }
+
+        return bericht;
+    }
+
+    /// <summary>Runs one page of one event, and says what it did.</summary>
+    /// <param name="pId">The event.</param>
+    /// <param name="pPage">The page itself.</param>
+    /// <param name="pAutorun">Whether this is an autorun page.</param>
+    /// <returns>One line about what the page did.</returns>
+    private string RunPageEvent(int pId, MzValue pPage, bool pAutorun)
+    {
+        var befehle = new List<MzCommandEntry>();
+        foreach (var eintrag in pPage.Member("list")?.Items
+            ?? new List<MzValue>())
+        {
+            befehle.Add(MzCommandEntry.From(eintrag));
+        }
+
+        if (befehle.Count <= 1)
+        {
+            return $"event {pId}: its list holds only the end, and"
+                + " Game_Event.start says `if (list && list.length > 1)`,"
+                + " so it does not start";
+        }
+
+        var ergebnis = Laeufer.TryGetValue(pId, out var alt)
+            && alt != null && alt.Stopped == MzStep.Waiting
+            ? _runner.Run(befehle, Facts, CurrentMapId, pId, Random, alt)
+            : _runner.Run(befehle, Facts, CurrentMapId, pId, Random);
+
+        // **Und die Seite laeuft so weit, wie sie kommt** -- **denn ein
+        // Schritt auf eine Kachel ist ein Tastendruck, und der Spieler
+        // liest den Dialog, und der Dialog gibt den naechsten Befehl
+        // frei.**
+        //
+        // **Gemessen an Map004 Event 15:** **Seite 0 sagt drei Zeilen
+        // und schaltet dann `123 ['A', 0]`** -- **und ein Leser, der
+        // einen Befehl trug, schaltete um, ohne zu reden** -- **und
+        // damit war beim zweiten Betreten die falsche Seite dran.**
+        var alle = new List<MzAction>();
+
+        // **Und die erste Runde wird auch gezaehlt** -- **denn sie
+        // trug die Aktionen, die niemand sonst zaehlt** -- **und ohne
+        // das began jede Seite mit einer leeren Liste**, **und der
+        // Dialog, der vor dem Selbstschalter kommt, war weg.**
+        alle.AddRange(ergebnis.Actions);
+        for (var mal = 0; mal <= befehle.Count; mal++)
+        {
+            if (ergebnis.Stopped == MzStep.Finished)
+            {
+                break;
+            }
+
+            Facts.MessageBusy = false;
+            _keys.Ok();
+            if (ergebnis.Interpreter?.PassFrame(WaitBeantwortet) != true)
+            {
+                break;
+            }
+
+            var naechste = _runner.Run(
+                befehle, Facts, CurrentMapId, pId, Random,
+                ergebnis.Interpreter);
+
+            // **Und jede Runde traegt ihre Aktionen selbst** --
+            // **die erste wurde oben gezaehlt, und ab hier kommt
+            // jede Runde genau einmal dazu.**
+            alle.AddRange(naechste.Actions);
+            ergebnis = naechste;
+        }
+
+        // **Und die Aktionen kommen ausserhalb der Schleife**
+        // **zusammen** -- **denn `ergebnis` traegt am Ende nur noch
+        // den Zustand, und die Liste traegt die Summe.**
+        ergebnis = new MzEventRunner.Result
+        {
+            Stopped = ergebnis.Stopped,
+            Interpreter = ergebnis.Interpreter,
+            Child = ergebnis.Child,
+            Reason = ergebnis.Reason,
+            Malformed = ergebnis.Malformed,
+            Actions = alle,
+            WaitingCode = ergebnis.WaitingCode,
+            WaitingFrames = ergebnis.WaitingFrames,
+            MissingCommonEvent = ergebnis.MissingCommonEvent,
+        };
+
+        if (ergebnis.Interpreter != null && ergebnis.Stopped == MzStep.Waiting)
+        {
+            Laeufer[pId] = ergebnis.Interpreter;
+        }
+        else
+        {
+            Laeufer.Remove(pId);
+        }
+
+        PagesRun++;
+        LastPage = pId;
+        LastActions = ergebnis.Actions;
+        LastPageStop = ergebnis.Stopped;
+        Stops = new List<string> { ergebnis.Reason, ergebnis.Describe() };
+        return $"event {pId}: {ergebnis.Describe()}";
     }
 
     /// <summary>The pages still waiting, and where each one stopped.</summary>
