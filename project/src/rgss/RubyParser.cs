@@ -113,10 +113,48 @@ public sealed class RubyParser
     /// </remarks>
     private bool AfterACondition { get; set; }
 
+    /// <summary>
+    /// Creates a parser, and reads the trace switch out of the environment.
+    /// </summary>
+    /// <param name="pTokens">The tokens to read.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the switch is <c>URPG_TRACE</c>, and it takes a part of a
+    /// file name, and it is off when it is unset.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is here, in the constructor, and not around the one
+    /// call site that needed it</strong>, <strong>because the eleven rounds
+    /// it is here for all began with a temporary probe beside a method, and
+    /// that probe was gone by the round after the one that found the
+    /// answer</strong> -- <strong>and the answer could not be
+    /// reproduced.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the cost when it is off is one string comparison per
+    /// closer check, and the checks are per statement and not per
+    /// token.</strong>
+    /// </para>
+    /// </remarks>
     public RubyParser(IReadOnlyList<RubyToken> pTokens)
     {
         _tokens = pTokens as List<RubyToken> ?? [.. pTokens];
+        var schalter = System.Environment.GetEnvironmentVariable("URPG_TRACE");
+        if (!string.IsNullOrEmpty(schalter))
+        {
+            foreach (var token in _tokens)
+            {
+                if (token.Text.Contains(schalter, StringComparison.Ordinal))
+                {
+                    _spur = schalter;
+                    break;
+                }
+            }
+        }
     }
+
+    /// <summary>The trace switch for this parser, and null when it is off.</summary>
+    private readonly string? _spur;
 
     /// <summary>Where the parser has reached.</summary>
     public int Position => _index;
@@ -220,6 +258,31 @@ public sealed class RubyParser
     /// </remarks>
     private List<RubyNode> ParseStatements(params string[] pClosers)
     {
+        // **Und die Closer, vor denen dieser Aufruf steht, sind der
+        // ganze Unterschied zwischen zwei Lesern, die sich sonst
+        // gleich verhalten** -- **und elf Runden dieses Repositories hat
+        // genau das gekostet.**
+        //
+        // **Und der Grund ist, dass ein Leser, der den Rumpf an einem
+        // `else` beendet, den Fehler an einer Stelle meldet, an der er
+        // nicht ist:** `ParseStatements("rescue", "else", "ensure",
+        // "end")` **kann ein `else`, das zu einem `if` gehoert, nicht von
+        // einem unterscheiden, das zum `begin` selbst gehoert**, **und der
+        // Meldestand war dann der `end` des `if` und nicht das `rescue`
+        // des `begin`.**
+        //
+        // **Und dieser Aufruf ist deshalb der Ort, an dem eine Spur
+        // hingehoert, und nicht irgendein Wegwerf-Instrument neben
+        // ihm** -- **und sie ist ueber eine Umgebungsvariable
+        // einschaltbar, damit sie im Normalfall nichts kostet.**
+        //
+        // **Der Schalter ist `URPG_TRACE`, und er nimmt einen Teil des
+        // Dateinamens, und die Ausgabe geht nach stderr:**
+        //
+        // ```text
+        // URPG_TRACE=ModManager  <godot ...> --headless ...
+        // CLOSER Zeile 31 @803 'rescue' -> [rescue, else, ensure, end]
+        // ```
         var statements = new List<RubyNode>();
         while (true)
         {
@@ -245,6 +308,14 @@ public sealed class RubyParser
             {
                 if (Is(closer))
                 {
+                    if (_spur != null)
+                    {
+                        System.Console.Error.WriteLine(
+                            $"CLOSER Zeile {Current.Line} @{Current.Offset}"
+                            + $" '{Current.Text}' -> [{string.Join(", ", pClosers)}]"
+                            + $" koerper={statements.Count}");
+                    }
+
                     return statements;
                 }
             }
@@ -884,6 +955,58 @@ public sealed class RubyParser
             // `lhs '=' arg` sein**, **und `%right '=' tOP_ASGN` gibt dem
             // `=` die lockerste Bindung von allen.**
             var right = ReadWertListe();
+
+            // **Und `lhs '=' arg kRESCUE_MOD arg` haengt an der *rechten*
+            // Seite und nicht am ganzen Satz, und das ist gemessen an
+            // `parse.y` 956:**
+            //
+            // ```text
+            // 952  arg : lhs '=' arg
+            // 956      | lhs '=' arg kRESCUE_MOD arg
+            // ```
+            //
+            // **Und `x = a rescue b` ist damit ein `arg` und kein `stmt`,
+            // und der Modifier sitzt zwischen den beiden `arg`n.**
+            //
+            // **Und die vier anderen haengen am Satz, und das ist
+            // `parse.y` 419:**
+            //
+            // ```text
+            // 419  | stmt kIF_MOD expr_value
+            // ```
+            //
+            // **Und das ist der Unterschied zwischen den fuenf
+            // Woertern, und er ist eine Zeile in der Grammatik und keine
+            // in der Implementierung.**
+            if (Current.Kind == RubyTokenKind.Keyword
+                && Current.Text == "rescue"
+                && Current.RescueIstModifier)
+            {
+                _index++;
+                var gerettet = ReadWertListe();
+                right = new RubyNode
+                {
+                    Kind = RubyNodeKind.Begin,
+                    Name = "rescue",
+                    Line = right.Line,
+                    Children =
+                    [
+                        right,
+                        new RubyNode
+                        {
+                            Kind = RubyNodeKind.Block,
+                            Name = "rescue",
+                            Line = right.Line,
+                            Children = [gerettet],
+                        },
+                    ],
+                    Role_Children =
+                    [
+                        new() { Role = RubyNodeRole.Body, Node = right },
+                        new() { Role = RubyNodeRole.Condition, Node = gerettet },
+                    ],
+                };
+            }
 
             while (Is("=") || Is("=>"))
             {
@@ -1898,7 +2021,20 @@ public sealed class RubyParser
     /// </remarks>
     private RubyNode ReadBegin(int pLine)
     {
+        if (_spur != null)
+        {
+            System.Console.Error.WriteLine(
+                $"BEGIN-ZWEIG Zeile {pLine} @Current@{Current.Offset}");
+        }
+
         var koerper = ParseStatements("rescue", "else", "ensure", "end");
+        if (_spur != null)
+        {
+            System.Console.Error.WriteLine(
+                $"BEGIN-FERTIG @Current@{Current.Offset} '{Current.Text}'"
+                + $" Zeile {Current.Line} koerper={koerper.Count}");
+        }
+
         return ArmeSammeln(koerper, pLine);
     }
 
@@ -4294,13 +4430,109 @@ public sealed class RubyParser
 
     private RubyNode MitModifier(int pLine, RubyNode pAnweisung)
     {
-        if (!(Current.Kind == RubyTokenKind.Keyword
-            && (Current.Text is "if" or "unless" or "while" or "until")))
+        // **Und die Frage ist nicht mehr "ist das eines der vier
+        // Woerter", sondern "hat der Lexer es zum Modifier gemacht"** --
+        // **und das ist gemessen an `lex.c` 96 in Rubys eigenem Baum:**
+        //
+        // ```c
+        // {"if", {kIF, kIF_MOD}, EXPR_BEG},
+        // ```
+        //
+        // **Und gewaehlt wird an `parse.y` 4380:**
+        //
+        // ```c
+        // 4380  if (state == EXPR_BEG)
+        // 4381      return kw->id[0];
+        // 4382  else {
+        // 4383      if (kw->id[0] != kw->id[1])
+        // 4384          lex_state = EXPR_BEG;
+        // 4385      return kw->id[1];
+        // ```
+        //
+        // **Und es gibt fuer `if` zwei Token, und der Lexer entscheidet,
+        // und der Parser ratet nicht** -- **und dieser Aufruf hat elf
+        // Runden lang geraten, und das war die Ursache jedes einzelnen
+        // dieser Fehler.**
+        //
+        // **Und `stmt kIF_MOD expr_value` bei `parse.y` 419 sagt `stmt` und
+        // nicht `arg`,** **und `m = a.b 1` gefolgt von einem `if c` auf
+        // der naechsten Zeile ist kein Modifier, weil 3349 den Zustand auf
+        // `EXPR_BEG` setzt und 4380 damit `kIF` liefert.**
+        if (!RubyRolle.IstModifier(Current))
         {
             return pAnweisung;
         }
 
         var schluesselwort = Take();
+
+        // **Und `rescue` ist kein Modifier im Sinne dieser vier Worte,
+        // und das ist gemessen an `parse.y` 461:**
+        //
+        // ```text
+        // 419  | stmt kIF_MOD expr_value
+        // 461  | stmt kRESCUE_MOD stmt
+        // ```
+        //
+        // **Und die beiden unterscheiden sich in *zwei* Dingen: der eine
+        // nimmt einen Ausdruck, der andere einen ganzen Satz, und der
+        // eine baut ein `if`, der andere ein `rescue`.**
+        //
+        // **Und `x = a rescue b` ist ein Ausdruck, und der Ausdruckleser
+        // baute daraus eine `Until`-Schleife**, **weil `_ => Until` der
+        // vierte Zweig des Schalters war und `rescue` dort landete** --
+        // **und ein `rescue`, der eine Schleife ist, ist kein Ruby und
+        // kein Halbschritt, sondern ein Fehler mit einer Meldung, die
+        // von einem anderen Wort spricht.**
+        if (schluesselwort.Text == "rescue")
+        {
+            // **Und der Modifier traegt keinen Namen, und das ist
+            // gemessen an `parse.y` 461: `stmt kRESCUE_MOD stmt` hat kein
+            // `=> e` und kein `end`.**
+            //
+            // ```ruby
+            // x = a rescue b     ein Modifier,  und der zweite Teil ist
+            //                     ein ganzer Satz
+            // begin
+            //   a
+            // rescue => e        ein Rumpf,     und der traegt einen Namen
+            //   b
+            // end
+            // ```
+            //
+            // **Und die Form ist dieselbe, die `ArmeSammeln` fuer den
+            // Rumpf baut** -- **und das ist der Grund fuer den
+            // gemeinsamen Leser**, **und sie ist ein `Begin` mit einem
+            // `Block` namens `rescue` darin und nicht eine eigene
+            // Knotenart.**
+            //
+            // **Und `RubyNodeKind` hat kein `Rescue`, und das ist
+            // richtig**, **weil der Interpretierer denselben Rescuer
+            // sieht und nicht noch einmal unterscheidet.**
+            var gerettet = ParseStatement();
+            return new RubyNode
+            {
+                Kind = RubyNodeKind.Begin,
+                Name = "rescue",
+                Line = pLine,
+                Children =
+                [
+                    pAnweisung,
+                    new RubyNode
+                    {
+                        Kind = RubyNodeKind.Block,
+                        Name = "rescue",
+                        Line = pLine,
+                        Children = [gerettet],
+                    },
+                ],
+                Role_Children =
+                [
+                    new() { Role = RubyNodeRole.Body, Node = pAnweisung },
+                    new() { Role = RubyNodeRole.Condition, Node = gerettet },
+                ],
+            };
+        }
+
         SkipNewlines();
         var bedingung = ParseExpression();
         return new RubyNode

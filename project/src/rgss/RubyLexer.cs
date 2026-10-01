@@ -118,6 +118,179 @@ public sealed class RubyLexer
         while (true)
         {
             var token = Next();
+
+            // **Und ein `tNL` ist die ganze Entscheidung, und das ist
+            // gemessen an `parse.y` 3348ff:**
+            //
+            // ```c
+            // 3338  case '\n':
+            // 3340    case EXPR_BEG:
+            // 3341    case EXPR_FNAME:
+            // 3342    case EXPR_DOT:
+            // 3343    case EXPR_CLASS:
+            // 3344      goto retry;
+            // 3345    default:
+            // 3346      break;
+            // 3348  command_start = Qtrue;
+            // 3349  lex_state = EXPR_BEG;
+            // ```
+            //
+            // **Und 3349 setzt `EXPR_BEG`, und `EXPR_BEG` ist an 4380 der
+            // einzige Zustand, der aus `if` ein `kIF` macht statt eines
+            // `kIF_MOD`** -- **und `lex.c` 96 fuehrt beide Token, und
+            // 4381/4385 waehlt zwischen ihnen:**
+            //
+            // ```c
+            // 4380  if (state == EXPR_BEG)
+            // 4381      return kw->id[0];
+            // 4382  else {
+            // 4383      if (kw->id[0] != kw->id[1])
+            // 4384          lex_state = EXPR_BEG;
+            // 4385      return kw->id[1];
+            // ```
+            //
+            // **Und das ist der Grund, warum `z = 1 if c` ein Modifier ist
+            // und `d = a.b 1` gefolgt von einem `if c` auf der naechsten
+            // Zeile eine Anweisung** -- **und es ist die ganze Erklaerung
+            // fuer elf Runden, in denen der Parser hinterher geraten hat.**
+            //
+            // **Und das Bit heisst nicht "es stand ein Umbruch davor",
+            // sondern "es steht keiner davor",** **und das ist der
+            // Unterschied, den `!pToken.NewlineVorher` in `RubyRolle`
+            // traegt.**
+            if (token.Kind == RubyTokenKind.Newline)
+            {
+                // **Und ein Umbruch beendet einen Wert und einen nicht, und
+                // das ist der ganze Unterschied, und es ist gemessen an
+                // `parse.y` 4391ff:**
+                //
+                // ```c
+                // 4391  if (lex_state == EXPR_BEG ||
+                // 4392      lex_state == EXPR_MID ||
+                // 4393      lex_state == EXPR_DOT ||
+                // 4394      lex_state == EXPR_ARG ||
+                // 4395      lex_state == EXPR_CMDARG) {
+                // 4396      if (cmd_state) {
+                // 4397          lex_state = EXPR_CMDARG;
+                // 4398      }
+                // 4399      else {
+                // 4400          lex_state = EXPR_ARG;
+                // 4401      }
+                // 4402  }
+                // 4403  else {
+                // 4404      lex_state = EXPR_END;
+                // 4405  }
+                // ```
+                //
+                // **Und `cmd_state` ist genau "ein Argument ohne Klammern
+                // wurde gelesen"** -- **und 3348 setzt es hinter jedem
+                // `tNL`:**
+                //
+                // ```c
+                // 3348  command_start = Qtrue;
+                // ```
+                //
+                // **Und `m = a.b 1` endet mit einem Argument ohne Klammern,
+                // und der Umbruch danach laesst `EXPR_ARG` stehen, und
+                // `EXPR_ARG` ist nicht `EXPR_END`** -- **und deshalb ist das
+                // `rescue` in der naechsten Zeile ein Modifier und nicht
+                // ein Rumpf.**
+                //
+                // **Und ohne diese Regel war `m = a.b 1` gefolgt von
+                // `rescue b` ungueltig**, **und `df5` und `dg4` sind
+                // genau diese Form.**
+                _newlineVorher = true;
+                _nachArgument = true;
+            }
+            else
+            {
+                // **Und `rescue` ist der Sonderfall, und das ist gemessen
+                // an `lex.c` 86:** `{"if", {kIF, kIF_MOD}, EXPR_BEG}` und
+                // `{"rescue", {kRESCUE, kRESCUE_MOD}, EXPR_MID}`.  **Die
+                // vier anderen sind `kIF_MOD` in jedem Zustand ausser
+                // `EXPR_BEG`,** **und `rescue` ist `kRESCUE_MOD` nur, wenn
+                // ein Wert davor steht und kein Umbruch dazwischen ist.**
+                //
+                // **Und der Umbruch ist auch hier die Grenze, und das ist
+                // `parse.y` 3349:** `lex_state = EXPR_BEG` hinter jedem
+                // `tNL`, **und `EXPR_BEG` heisst `kRESCUE` und nicht
+                // `kRESCUE_MOD`.**
+                //
+                // ```ruby
+                // x = a rescue b     Modifier
+                // begin
+                //   a
+                // rescue => e        Rumpf,  und das ist StatsEdit.rb Zeile 87
+                // end
+                // ```
+                if (token.Kind == RubyTokenKind.Keyword
+                    && (token.Text == "rescue"
+                        || (_newlineVorher
+                            && token.Text is "if" or "unless" or "while" or "until")))
+                {
+                    // **Und das Bit heisst hier `true`, weil ein Umbruch
+                    // davorstand, und `RubyRolle.IstModifier` fragt nach
+                    // `!NewlineVorher`** -- **und die Voreinstellung des
+                    // Bits ist `false`, und das ist der Modifier-Fall.**
+                    //
+                    // **Und deshalb wird nur dieser eine Fall umgebaut:
+                    // ein Umbruch davor ist der Fall, den die Voreinstellung
+                    // nicht schon trifft.**
+                    token = new RubyToken
+                    {
+                        Kind = token.Kind,
+                        Text = token.Text,
+                        Offset = token.Offset,
+                        Line = token.Line,
+                        Integer = token.Integer,
+                        Real = token.Real,
+                        Bytes = token.Bytes,
+                        Value = token.Value,
+                        Parts = token.Parts,
+                        Options = token.Options,
+                        NewlineVorher = _newlineVorher,
+                        // **Und der Modifier ist dann wahr, wenn ein
+                        // Argument ohne Klammern offen war, und das ist
+                        // `EXPR_CMDARG` aus 4396ff, und nicht "kein
+                        // Umbruch".**
+                        //
+                        // ```ruby
+                        // m = a.b 1
+                        // rescue b     EXPR_CMDARG,  und das ist kRESCUE_MOD
+                        // m = 1
+                        // rescue b     EXPR_BEG,     und das ist kRESCUE
+                        // ```
+                        RescueIstModifier = token.Text == "rescue"
+                            && _nachArgument,
+                    };
+                }
+
+                _newlineVorher = false;
+
+                // **Und `_nachArgument` heisst "der Wert, der gerade
+                // endete, kann ein Argument ohne Klammern sein"** --
+                // **und das ist bei jedem Wert der Fall, der kein
+                // Klammeraufruf war** -- **und der Lexer weiss das
+                // **Und der Lexer weiss das nicht, weil er nicht weiss,
+                // ob ein Aufruf Klammern hatte** -- **und darum ist es
+                // keine Eigenschaft des Tokens, sondern eine des Lesers,
+                // der den Aufruf gelesen hat.**
+                _nachArgument = token.Kind
+                    is RubyTokenKind.Integer or RubyTokenKind.Float
+                    or RubyTokenKind.String or RubyTokenKind.Symbol
+                    or RubyTokenKind.Regexp or RubyTokenKind.Identifier
+                    or RubyTokenKind.Constant
+                    or RubyTokenKind.InstanceVariable
+                    or RubyTokenKind.GlobalVariable
+                    or RubyTokenKind.Delimiter or RubyTokenKind.Operator;
+            }
+
+            // **Und erst jetzt kommt der Token in die Liste, und das ist
+            // der Grund fuer die Reihenfolge:** `tokens.Add` stand vorher
+            // hier, **und damit bekam die Liste das Token ohne das Bit**,
+            // **und der Parser sah `NewlineVorher == false` fuer ein `if`,
+            // dem ein Umbruch vorausging** -- **und `RubyRolle` nannte es
+            // zum Modifier, und `df1` blieb rot.**
             tokens.Add(token);
             _previousKind = token.Kind;
             _previousText = token.Text;
@@ -612,6 +785,49 @@ public sealed class RubyLexer
     /// </para>
     /// </remarks>
     private readonly List<RubyHeredoc> _heredocs = [];
+
+    /// <summary>
+    /// That the last token was a newline, and that is the whole of the
+    /// modifier decision.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is set in <c>Tokenize</c> and not in
+    /// <c>Next</c></strong>, because <c>Next</c> returns the token and
+    /// <c>Tokenize</c> is the one that knows what came before it.
+    /// </remarks>
+    private bool _newlineVorher;
+
+    /// <summary>
+    /// That the token before the last one ended a bare command argument, which
+    /// is what keeps a keyword in an argument state across a newline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>command_start</c>, and it is measured at
+    /// <c>parse.y</c> 3348 and 4391.</strong> 3348 sets it behind every
+    /// <c>tNL</c>, and 4391 turns <c>EXPR_DOT</c>, <c>EXPR_ARG</c> and
+    /// <c>EXPR_CMDARG</c> into <c>EXPR_CMDARG</c> when it is set -- **and
+    /// <c>EXPR_CMDARG</c> is the state in which a keyword is a
+    /// <c>kRESCUE_MOD</c> and not a <c>kRESCUE</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the shape it decides, and both sides are in real files:</strong>
+    /// </para>
+    /// <code>
+    /// m = a.b 1
+    /// rescue b          the argument kept the state,  so this is kRESCUE_MOD
+    /// m = 1
+    /// rescue b          no argument,  so the state is EXPR_BEG and this is not
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And this is the eleventh round's answer and not the
+    /// tenth's.</strong> The tenth said "a newline means a statement"; **this
+    /// says "a newline means a statement, unless an argument without brackets
+    /// is still open".**
+    /// </para>
+    /// </remarks>
+    private bool _nachArgument;
 
     /// <summary>
     /// That the previous token was a name directly behind a <c>class</c> or

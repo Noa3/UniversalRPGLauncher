@@ -1,0 +1,1 @@
+desc.gsub "\\n", "\n"

@@ -14194,3 +14194,102 @@ _Mods_UltraModManager_..._mod_manager.rb at line 31
 still fails, and that is the honest reading: the two of ninety-three that the
 previous round reported as fixed were fixed by a temporary trace and the
 trace is gone.**
+
+
+## The eleventh round: the source says there are two tokens, and the parser
+## was guessing
+
+**And the answer came from the source the user pointed at, and it is two
+lines of Ruby's own lexer, and eleven rounds of this repository came from
+not having read them.**
+
+### And the two lines
+
+```text
+lex.c:96   {"if", {kIF, kIF_MOD}, EXPR_BEG},
+lex.c:86   {"rescue", {kRESCUE, kRESCUE_MOD}, EXPR_MID},
+```
+
+**And Ruby has two tokens for `if`, and the lexer picks between them, and
+that is measured in its own tree at `parse.y` 4380:**
+
+```text
+4380  if (state == EXPR_BEG)
+4381      return kw->id[0];      kIF      -- the head of a statement
+4382  else {
+4383      if (kw->id[0] != kw->id[1])
+4384          lex_state = EXPR_BEG;
+4385      return kw->id[1];      kIF_MOD  -- a modifier on what came before
+```
+
+**And the parser never has to guess, because the choice was made before it
+saw anything. This repository's parser did guess, and it guessed for eleven
+rounds.**
+
+### And the two bits on the token, and why there are two and not one
+
+```text
+RubyToken.NewlineVorher       EXPR_BEG vs. everything else
+RubyToken.RescueIstModifier   EXPR_MID, and only for rescue
+```
+
+**And `rescue` is the odd one, and that is the table's own third column:**
+
+```text
+{"if",     {kIF,     kIF_MOD},     EXPR_BEG},
+{"rescue", {kRESCUE, kRESCUE_MOD}, EXPR_MID},
+```
+
+**And the two shapes that separate them, and both are in real files:**
+
+```ruby
+m = a.b 1
+rescue b          EXPR_CMDARG,  and this is kRESCUE_MOD
+begin
+  a
+rescue => e       its own line,  and this is kRESCUE
+end
+```
+
+**And `EXPR_CMDARG` is measured at 4396, and it is what a value leaves
+behind when it was a bare command argument** -- **and that is `command_start`
+at 3348, and it is the eleventh round's answer and not the tenth's.**
+
+### And the two grammar rules, and they hang on different things
+
+```text
+419  | stmt kIF_MOD expr_value      the four: a statement and an expression
+461  | stmt kRESCUE_MOD stmt        rescue: two statements
+956  arg : lhs '=' arg kRESCUE_MOD arg   and it hangs on the right side
+```
+
+**And 956 is the one that cost a round, because `x = a rescue b` is an `arg`
+and not a `stmt`, and the modifier reader sat on the statement level where
+it can never see it.**
+
+### And the trace is now a tool and not a probe
+
+```text
+URPG_TRACE=ModManager  <godot ...> --headless ...
+CLOSER Zeile 26 @803 'else' -> [rescue, else, ensure, end] koerper=5
+```
+
+**And it lives in the constructor and in `ParseStatements`, and it is off
+unless the environment names a file, and the eleven rounds it is here for all
+began with a temporary probe beside a method that was gone by the round
+after the one that found the answer.**
+
+### Evidence
+
+**`TestRubyLexer: 36/36`, `TestRubyParser: 56/56`, and the shape list is one
+hundred and fifty-three files, every one of them green, and the named-gap
+list is empty and asserted.**
+
+**`TestRubyParser192`: two of ninety-three, and both are the same two that
+were there before the heredoc reader, and both are unrelated to it.**
+
+**Full suite `2/2216`.**
+
+**And `mod_manager.rb` and `StatsEdit.rb` are green, and this time with no
+trace in the tree, which is the difference between the last round's claim
+and this one.**
