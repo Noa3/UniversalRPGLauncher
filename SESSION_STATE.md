@@ -13420,3 +13420,98 @@ them is green, and ten of those ninety are the label forms.**
 
 **And the first is the largest of them, and `parse.y` measures it twice:**
 `return a, b, c` is `kRETURN call_args`, **and `call_args` is a list.**
+
+
+## A `return` takes a list, and the list is the same one an assignment takes
+
+**And this is the second grammar line the ninety-three files needed, and it
+came out of one of them.**
+
+### And `kRETURN call_args`, and `call_args` is a list
+
+**Measured at 627 and 1264:**
+
+```text
+command_call : kRETURN call_args
+call_args    : args opt_block_arg
+args         : args ',' arg_value
+args         : arg_value
+call_args    : args ',' tSTAR arg_value opt_block_arg
+            | assocs ',' tSTAR arg_value opt_block_arg
+```
+
+**And the reader read one expression behind `return`,** **and one file of the
+VX Ace game on this machine returns three values:**
+
+```ruby
+return num_large_gems, num_common_gems, num_tiny_gems
+```
+
+```text
+RubyParseException ',' at offset 24 does not begin an expression.
+```
+
+**And `ReadWertListe()` is the reader the right side of an assignment uses,
+and `mrhs` is a list too** -- **so the two are the same list and they now go
+through the same reader.** 9 to 8.
+
+### And `return(a, b)` with brackets is a call, and `return (x if a)` is not
+
+**And both start with a bracket, and both are legal, and the difference is
+whether a modifier keyword stands inside the bracket:**
+
+```text
+return (x if a)  Keyword'return' | Delimiter'(' | Identifier'x' |
+                 Keyword'if' | Identifier'a' | Delimiter')'
+return(a, b)    Keyword'return' | Delimiter'(' | Identifier'a' |
+                 Delimiter',' | Identifier'b' | Delimiter')'
+```
+
+**And a reader that sent every bracketed form to the argument reader got the
+first one wrong:**
+
+```text
+RubyParseException ')' was expected at offset 8, but ',' is there.
+```
+
+**And two measurements about the lookahead itself are worth naming, because
+both were wrong first: the depth starts at one and not at zero, because the
+caller has already taken the opening bracket** -- **and with zero the closing
+bracket never reached level zero and the answer was always false.**
+
+### And `*` behind `return` is a splat, and the predicate did not know it
+
+**And `StartetAbbruchWert()` held `-`, `!` and `~`, and not `*`** -- **and
+`return *a, b` came out as:**
+
+```text
+RubyParseException ',' at offset 11 does not begin an expression.
+```
+
+**And `call_args` has `tSTAR` in three of its seven forms**, **and `&blk`
+behind a `return` is how a game hands a block to another method.**
+
+### Evidence
+
+**`TestRubyParser192`: eight of ninety-three, and it was nine.**
+
+**`TestRubyParser: 55/56`, and the shape list is ninety-nine files and every
+one of them is green, and nine of those ninety-nine are the return forms.**
+
+**Full suite `6/2216`.**
+
+### And the eight that remain, named
+
+```text
+1x  #end                      a commented-out end
+1x  desc.gsub "\\n", "\n"  an escape inside a percent literal
+1x  load_script($m.get_resource "umm", "scripts/text_update.rb")
+1x  $mod_load_script["Data/Scripts/Frames/121_Dialog_Control_System.rb"] =
+1x  (mod_id.is_a? Integer) ? @load_order[mod_id] : @mods[mod_id]
+1x  text.slice!(/^\[[^\[\]]+\]/)[/[^\[\]]+/].strip
+```
+
+**And the second and the last two of those are the same question: a percent
+literal and a regexp next to brackets and escapes.** **And three are
+`call_args` again** -- **a command without brackets with several arguments,
+which is `command : operation command_args` and `command_args` is a list.**

@@ -3011,12 +3011,58 @@ public sealed class RubyParser
                 // ```
                 if (StartetAbbruchWert())
                 {
-                    var value = ParseExpression();
+                    // **Und der Wert ist eine LISTE, und das ist gemessen
+                    // an `parse.y` 627 und 1264:**
+                    //
+                    // ```text
+                    // command_call : kRETURN call_args
+                    // call_args    : args opt_block_arg
+                    // args         : args ',' arg_value
+                    // ```
+                    //
+                    // **Und `return a, b, c` ist drei Werte und nicht
+                    // einer, und das kam aus einem VX-Ace-Spiel auf
+                    // dieser Maschine:**
+                    //
+                    // ```ruby
+                    // return num_large_gems, num_common_gems,
+                    //        num_tiny_gems
+                    // ```
+                    //
+                    // ```
+                    // RubyParseException ',' at offset 24 does not begin
+                    //     an expression.
+                    // ```
+                    //
+                    // **Und `ReadWertListe` ist der Leser, der auch die
+                    // rechte Seite einer Zuweisung liest, und dort gilt
+                    // `mrhs`, und beides ist eine Liste.**
+                    // **Und `return(a, b)` mit Klammern ist ein
+                    // Argumentaufruf, und keine Wertliste** -- **und das
+                    // ist derselbe Zweig, den ein Aufruf nimmt.**
+                    //
+                    // ```
+                    // RubyParseException ')' was expected at offset 8,
+                    //     but ',' is there.
+                    // ```
+                    List<RubyNode> werte;
+                    if (Is("(") && !KlammerTraegtDenModifier())
+                    {
+                        werte = ReadArguments();
+                    }
+                    else
+                    {
+                        var liste = ReadWertListe();
+                        werte = liste.Kind == RubyNodeKind.Array
+                            ? [.. liste.Children]
+                            : [liste];
+                    }
+
                     return MitModifier(pToken.Line, new RubyNode
                     {
                         Kind = RubyNodeKind.Return,
                         Line = pToken.Line,
-                        Children = [value],
+                        Children = werte,
                     });
                 }
 
@@ -3048,7 +3094,34 @@ public sealed class RubyParser
                 var wert = new List<RubyNode>();
                 if (StartetAbbruchWert())
                 {
-                    wert.Add(ParseExpression());
+                    // **Und auch `break` und `next` nehmen eine Liste, und
+                    // das ist gemessen an derselben Stelle wie bei
+                    // `return`:**
+                    //
+                    // ```text
+                    // command_call : kRETURN call_args
+                    //             | kBREAK call_args
+                    //             | kNEXT call_args
+                    // ```
+                    //
+                    // **Und `call_args` ist `args opt_block_arg`, und
+                    // `args` ist eine Liste.**
+                    if (Is("("))
+                    {
+                        wert.AddRange(ReadArguments());
+                    }
+                    else
+                    {
+                        var liste = ReadWertListe();
+                        if (liste.Kind == RubyNodeKind.Array)
+                        {
+                            wert.AddRange(liste.Children);
+                        }
+                        else
+                        {
+                            wert.Add(liste);
+                        }
+                    }
                 }
 
                 return MitModifier(pToken.Line, new RubyNode
@@ -3929,6 +4002,95 @@ public sealed class RubyParser
     /// because that is what the modifier means</strong> -- **and
     /// <c>return if a</c> is <c>if a then return end</c>, and nothing else.**
     /// </remarks>
+    /// <summary>
+    /// Whether the bracket after a keyword holds a bracketed statement rather
+    /// than an argument list, and the difference is one token.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And both forms are legal and both start with <c>(</c>:</strong>
+    ///
+    /// ```ruby
+    /// return(a, b)     a call, and the parentheses are the call's
+    /// return (x if a)  a bracketed statement, and the parenthesis wraps
+    ///                  a whole statement with its modifier
+    /// ```
+    ///
+    /// <strong>And a reader that reads a bracket after <c>return</c> always as
+    /// arguments got the second one wrong:</strong>
+    ///
+    /// <code>
+    /// RubyParseException ')' was expected at offset 8, but ',' is there.
+    /// </code>
+    ///
+    /// <strong>And the question is answerable from the token stream, and it is
+    /// this: does a modifier keyword stand between the bracket and a comma,
+    /// or between the bracket and the closing bracket?</strong>
+    ///
+    /// <strong>And this is measured and not guessed</strong> -- **and the
+    /// cost of guessing the other way is named here:** **a reader that sent
+    /// every bracketed form to the argument reader would refuse
+    /// <c>return (x if a)</c>, and that is a form a game writes when it
+    /// returns early from inside parentheses.**
+    /// </remarks>
+    private bool KlammerTraegtDenModifier()
+    {
+        // **Und `_index` steht noch auf dem Schluesselwort, und nicht auf
+        // der Klammer** -- **und der Aufrufer fragt, BEVOR er die Klammer
+        // genommen hat**, **und `_index + 1` waere dann das erste Zeichen
+        // des Wertes** -- **und das ist gemessen:**
+        //
+        // ```text
+        // return (x if a)  Keyword'return' | Delimiter'(' | Identifier'x' |
+        //                  Keyword'if' | Identifier'a' | Delimiter')'
+        // ```
+        // **Und die Frage ist nicht das Token direkt nach der Klammer,
+        // sondern irgendein Modifier INNERHALB der Klammer**, **und das
+        // ist gemessen:**
+        //
+        // ```text
+        // return (x if a)  Keyword'return' | Delimiter'(' |
+        //                  Identifier'x' | Keyword'if' | Identifier'a' |
+        //                  Delimiter')'
+        // ```
+        //
+        // **Und `(x)` ohne Modifier ist ein geklammerter Wert und
+        // `return(x)` ohne Komma ist ein Aufruf** -- **und beide sind
+        // gueltig**, **und der Unterschied steht tiefer im Strom und nicht
+        // an der Klammer.**
+        // **Und `_index` steht auf der OFFENEN Klammer, weil der
+        // Aufrufer sie schon genommen hat** -- **und darum beginnt die
+        // Tiefe bei eins und nicht bei null**, **und mit null fand die
+        // schliessende Klammer nie ihre Ebene und die Frage blieb immer
+        /// `false`.**
+        var tiefe = 1;
+        for (var k = _index + 1; k < _tokens.Count; k++)
+        {
+            if (_tokens[k].Kind == RubyTokenKind.Delimiter)
+            {
+                if (_tokens[k].Text == "(")
+                {
+                    tiefe++;
+                }
+                else if (_tokens[k].Text == ")")
+                {
+                    tiefe--;
+                    if (tiefe == 0)
+                    {
+                        return false;
+                    }
+                }
+            }
+            else if (tiefe > 0 && _tokens[k].Kind == RubyTokenKind.Keyword
+                && (_tokens[k].Text is "if" or "unless" or "while"
+                    or "until"))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private RubyNode MitModifier(int pLine, RubyNode pAnweisung)
     {
         if (!(Current.Kind == RubyTokenKind.Keyword
@@ -3974,7 +4136,31 @@ public sealed class RubyParser
             RubyTokenKind.Identifier => true,
             RubyTokenKind.Constant => true,
             RubyTokenKind.Delimiter => Current.Text is "(" or "[",
-            RubyTokenKind.Operator => Current.Text is "-" or "!" or "~",
+
+            // **Und `*` und `&`, und das ist gemessen an
+            // `return *a, b`:**
+            //
+            // ```ruby
+            // return *a, b
+            // ```
+            //
+            // ```
+            // RubyParseException ',' at offset 11 does not begin an
+            //     expression.
+            // ```
+            //
+            // **Und `parse.y` 1268 hat beides als `call_args`:**
+            //
+            // ```text
+            // call_args : args ',' tSTAR arg_value opt_block_arg
+            //            | assocs ',' tSTAR arg_value opt_block_arg
+            // ```
+            //
+            // **Und `&` ist ein Blockpass und `&blk` steht hinter
+            // `return` in jedem Spiel, das eine Methode an eine andere
+            // weitergibt.**
+            RubyTokenKind.Operator => Current.Text is "-" or "!" or "~"
+                or "*" or "&",
             _ => false,
         };
     }
