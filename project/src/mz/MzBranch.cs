@@ -508,7 +508,7 @@ public sealed class MzBranchFacts
     public MzBranchFacts WithCharacters(
         IReadOnlyDictionary<int, MzCharacter> pCharacters, MzPlayer pPlayer)
     {
-        return new MzBranchFacts
+        var kopie = new MzBranchFacts
         {
             Characters = new Dictionary<int, MzCharacter>(pCharacters),
             Player = pPlayer,
@@ -520,7 +520,48 @@ public sealed class MzBranchFacts
             Items = Items,
             KnownItems = KnownItems,
             Screen = Screen,
+
+            // **Und der Zustand, der eine Seite geschrieben hat und der
+            // eine andere noch liest, wird mitgenommen.**
+            //
+            // **Und gemessen ist, dass `WithCharacters` neun Felder
+            // mitnahm und alles andere fallen liess** -- **und
+            // `Repaint` ruft es bei jedem Kartenwechsel** -- **und
+            // also war `ScrollLines` nach dem Umzug leer, obwohl die
+            // Seite es fuenf Befehle vorher gefuellt hatte.**
+            //
+            // **Und das ist kein Zufall: `ScrollLines` ist eine
+            // veraenderliche Liste mit `set`, und eine
+            // Initialisierer-Zuweisung traegt den alten Inhalt nicht.**
+            ScrollSpeed = ScrollSpeed,
+            ScrollLines = ScrollLines,
+
+            // **Und die Wartebedingungen des Bildschirms** -- **denn
+            // `MessageBusy` und `InBattle` entscheiden, ob `201`
+            // ueberhaupt umzieht.**
+            MessageBusy = MessageBusy,
+            InBattle = InBattle,
+            BattleCanEscape = BattleCanEscape,
+            BattleCanLose = BattleCanLose,
+            BattleLost = BattleLost,
+            BattleTroop = BattleTroop,
+            Menu = Menu,
+            ChoiceResult = ChoiceResult,
+            OpenChoice = OpenChoice,
+            LastPrompt = LastPrompt,
+            TimerSeconds = TimerSeconds,
         };
+
+        // **Und die geheilten Darsteller kommen mit** -- **denn das ist
+        // eine nur-lesende Menge, und eine Kopie, die sie nicht
+        // befuellt, verliert genau das, worauf ein spaeterer `314`
+        // prueft.**
+        foreach (var darsteller in Recovered)
+        {
+            kopie.Recovered.Add(darsteller);
+        }
+
+        return kopie;
     }
 
     /// <summary>

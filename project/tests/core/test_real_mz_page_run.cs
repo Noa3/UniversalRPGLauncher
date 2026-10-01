@@ -910,16 +910,67 @@ public partial class TestRealMzPageRun : TestBase
         // nicht ausgefuehrt wurde**, **und dass die Seite vorher
         // stehen blieb.** **Und gemessen ist Index 21 ein wartender
         // Ballon, und der braucht 60 Bilder.**
-        // **Und gemessen wartet die Seite bei Index 19, und das ist
-        // `201 Transfer Player Position`** -- **denn Befehl 19 seiner
-        // Liste ist `[0, 9, 2, 2, 2, 2]`, und der Spieler steht nicht
-        // mehr auf der Kachel, aus der er kam.** **Also ist der
-        // Transfer nicht ausgefuehrt, und die Seite wartet darauf, und
-        // das ist richtig.**
-        AssertEq(lauf.LastPageStop, MzStep.Waiting,
-            "**and the page waits at a transfer it cannot carry out**"
-            + " -- and the reason is: "
+        // **Und jetzt der Umzug, und das ist der ganze Ertrag dieser
+        // Zeile.**
+        //
+        // **Gemessen an Map006 Event 7: Befehl 19 ist
+        // `201 [0, 9, 2, 2, 2, 2]`** -- **ein Umzug auf Karte 9 nach
+        // 2,2, Richtung 2, ohne Aufblenden.** **Und `command201` ruft
+        // nur `reserveTransfer`**, **und der Umzug passiert spaeter in
+        // `Scene_Map.prototype.onMapLoaded`.**
+        //
+        // **Und vor dieser Aenderung wartete die Seite bei Index 19 auf
+        // einen Umzug, den niemand vollzog** -- **und alles hinter 19
+        // blieb ungelesen**, -- **und das war der letzte Befehl der
+        // Seite, denn sie hat 26 und davon ist einer das Ende.**
+        AssertTrue(lauf.LastTransfer.Length > 0,
+            "**and a transfer was carried out** -- and it said: "
+            + lauf.LastTransfer);
+        AssertEq(lauf.CurrentMapId, 9,
+            "**and the player is on map 9** -- and Map006 event 7 asks"
+            + " for exactly that, and this reader said: "
+            + lauf.LastTransfer);
+        AssertEq(lauf.PlayerX, 2,
+            "**and stands at x 2** -- and the command says [0, 9, 2, 2,"
+            + " 2, 2], so the tile is 2,2");
+        AssertTrue(lauf.LastPageStop == MzStep.Finished
+                || lauf.LastPageStop == MzStep.Waiting,
+            "**and the page got past the transfer** -- and it stopped as"
+            + $" {lauf.LastPageStop} at x {lauf.PlayerX}, y"
+            + $" {lauf.PlayerY} on map {lauf.CurrentMapId}, and it said:"
+            + " " + new System.Collections.Generic.List<string>(
+                lauf.Stops)[0]);
+
+        // **Und jetzt die Zahl, und sie ist nicht die des Befehls.**
+        //
+        // **Und gemessen: Befehl 19 sagt `[0, 9, 2, 2, 2, 2]`, und die
+        // vierte Zahl ist die y-Kachel, und die ist 2.** **Und der
+        // Leser hat sie anders gesetzt, und das ist der Grund, warum
+        // dieser Block hier steht.**
+        //
+        // **Und ich weiss noch nicht, warum** -- **und ich rate nicht,
+        // und ich schreibe keine Erwartung, die das verdeckt.**
+        AssertTrue(lauf.PlayerY == 2,
+            "**and y is the command's y** -- and the command says 2,"
+            + $" and this reader put the player at {lauf.PlayerY} on"
+            + $" map {lauf.CurrentMapId} at x {lauf.PlayerX}, and it"
+            + " said: " + lauf.LastTransfer);
+
+        AssertEq(lauf.LastPageStop, MzStep.Finished,
+            "**and the page ran to its end** -- and it stopped as"
+            + $" {lauf.LastPageStop} with the reason: "
             + new System.Collections.Generic.List<string>(lauf.Stops)[0]);
+
+        // **Und jetzt die Reihenfolge, denn die ist der ganze Punkt.**
+        //
+        // **Und die Reihenfolge des Motors ist: Befehl 5 ist der 105,
+        // Befehl 19 ist der 201, und dazwischen liegen die Zeilen.**
+        // **Also muss der Leser den Lauftext GELESEN haben, BEVOR er
+        // die Karte wechselt** -- **und ein Leser, der den Umzug vor
+        // dem Befehl 5 vollzieht, hat den Text nie gesehen.**
+        AssertTrue(lauf.LastTransfer.Length > 0,
+            "**and a transfer happened at some point** -- and it said: "
+            + lauf.LastTransfer);
 
         AssertTrue(lauf.ScrollLines.Count > 0,
             "**and the scroll text has lines** -- and it has"

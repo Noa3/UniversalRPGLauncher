@@ -11695,3 +11695,155 @@ Absturz davor ist kein gruener Lauf** -- **und ich habe es jetzt
 **ein Lauf mit Segfault nach gruenem Lauf, ein Lauf ohne Segfault,
 und ein Validator mit derselben Meldung, der dann exit 0 gab.**
 
+## Und ein Umzug, den niemand vollzog, und eine Testluecke von 27 Befehlen
+
+**Und zuerst die Zaehlung, die den naechsten Schritt ergab. Gemessen
+an der eigenen Quelle:** **41 Befehle haben Wirkung, alle 41 haben
+einen `case`-Zweig** -- **und nur 15 davon haben eine eigene
+Testabdeckung.** **27 haben keine.** **Und davon benutzt dieses Spiel
+17, unter ihnen `401` (938 mal), `101` (414 mal), `205` (96 mal) und
+`201` (33 mal).**
+
+**Und die Luecke, die ich zuerst schliessen musste, war `201`**, **weil
+es am Ende einer Seite steht und alles dahinter unerreichbar macht.**
+
+**Und der Befehl ist nicht falsch implementiert.** **Gemessen an
+`command201`:**
+
+```js
+if ($gameParty.inBattle() || $gameMessage.isBusy()) return false;
+$gamePlayer.reserveTransfer(mapId, x, y, params[4], params[5]);
+this.setWaitMode("transfer");
+```
+
+**Der Befehl reserviert nur.** **Und der Umzug passiert woanders und
+spaeter:**
+
+```js
+// Scene_Map.prototype.onMapLoaded
+if (this._transfer) { $gamePlayer.performTransfer(); }
+```
+
+**Und `performTransfer` macht drei Dinge:**
+`$gameMap.setup(this._newMapId)`, `this.locate(this._newX, this._newY)`
+und `this.clearTransferInfo()`.**
+
+**Und `WaitBeantwortet` pruefte nur, ob der Spieler auf der Karte ist,
+auf der er schon war** -- **und also war die Bedingung sofort wahr,
+und der Umzug fand nie statt** -- **und `Facts.Player.Erased` war die
+einzige echte Bedingung, und die ist fast nie wahr.**
+
+**Und gemessen ist die Folge, an Map006 Event 7: Befehl 19 ist
+`201 [0, 9, 2, 2, 2, 2]`** -- **ein Umzug auf Karte 9 nach 2,2** --
+**und die Seite hat 26 Befehle, und 19 ist der letzte ausfuehrende.**
+**Und davor blieb sie stehen, und alles dahinter war ungelesen.**
+
+**Und jetzt fuehrt `FuehreTransferAus` den Umzug aus**, **bevor die
+Bedingung antwortet** -- **und `LastTransfer` sagt in Worten, was
+geschah**, **damit ein Test es liest statt zu raten.**
+
+**Und der Beweis:** **der Spieler steht danach auf Karte 9 bei x 2, und
+die Seite laeuft zu Ende.**
+
+**Und der Nebenbefund war kein Testfehler, sondern ein echter Fehler
+zweiter Art, und meine Notiz dazu war zuerst falsch.** **Ich schrieb
+"der Leser hat die Zahl richtig gesetzt, und mein Test hatte die
+falsche Stelle im Blick"** -- **und das war geraten.** **Gemessen ist:
+`LastTransfer` sagte "the player is now on map 9 at 2,2", und
+`PlayerY` sagte 12, im selben Test und im selben Lauf.**
+
+**Und der Grund ist, dass `PlayerX` und `PlayerY` Felder des Runtime
+waren und `Facts.Player` eine eigene Position hatte** -- **zwei Stellen
+fuer eine Zahl** -- **und ein Umzug bewegte die zweite und nicht die
+erste.** **Und gemessen an `Game_Character.prototype.locate` haelt der
+Motor nur eine.** **Jetzt sind `PlayerX` und `PlayerY` Ausdruecke ueber
+`Facts.Player`, und es gibt nur noch eine.**
+
+**Und ein dritter Fehler, und der war der schwerste: `Repaint` ruft
+`Facts = Facts.WithCharacters(...)`** -- **und `WithCharacters` nahm
+neun Felder mit und liess alles andere auf einer frischen Liste.**
+
+| Feld | nachgehalten | Folge |
+|---|---|---|
+| `ScrollLines` | nein | **der Lauftext war nach dem Umzug leer** |
+| `ScrollSpeed` | nein | die Geschwindigkeit war weg |
+| `Recovered` | nein | wer geheilt war, war es nicht mehr |
+| `MessageBusy` | nein | **`201` zog um, auch mit belegtem Bildschirm** |
+| `InBattle` | nein | **`201` zog im Kampf um** |
+| `BattleCanEscape` | nein | die Kampfwaechter waren falsch |
+
+**Und gemessen ist, dass `Repaint` es bei jedem Kartenwechsel ruft**
+-- **und ein Umzug ist genau ein Kartenwechsel** -- **und also verlor
+jede Seite ihren Zustand im Moment, in dem sie ihn am brauchtesten
+Stelle brauchte.**
+
+**Und jetzt werden alle getragen**, **und `Recovered` wird zusaetzlich
+elementweise kopiert, weil es eine nur-lesende Menge ist.**
+
+**Und `SchalteEin` hat sich in diesem Lauf als noetig erwiesen:**
+**Map006 Event 7 verlangt Schalter 6, und ohne ihn startet die Seite
+nicht, und das ist richtig.**
+
+**`All 2205 tests passed`, Validator gruen mit exit 0 und ohne
+Segfault.**
+
+**Und als naechstes fehlt, und das ist jetzt gemessen statt geraten:**
+**die zehn Befehle, die dieses Spiel gar nicht benutzt** (113, 115, 118,
+119, 235, 246, 249, 351, 357, 413)** -- **und die sieben, die es
+benutzt und die keine eigene Testabdeckung haben** (111, 112, 122, 126,
+230, 231, 232)** -- **und `401` mit 938 Vorkommen ist der haeufigste
+Befehl des Spiels ueberhaupt, und er wird ueber die Position innerhalb
+eines `101` gelesen, und nicht ueber einen eigenen Zweig.**
+
+## Und wie viele Befehle ueberhaupt getestet sind: 15 von 41
+
+**Und das ist die Zaehlung, die den Schritt ergab, und sie ist
+gemessen an der eigenen Quelle statt geraten:**
+
+| | |
+|---|---|
+| Befehle mit Wirkung (`HasEffect`) | 41 |
+| davon mit `case`-Zweig | 41 |
+| **davon mit eigener Testabdeckung** | **15** |
+| **ohne eigene Testabdeckung** | **27** |
+
+**Und von den 27 benutzt dieses Spiel 17** -- **`401` mit 938
+Vorkommen, `101` mit 414, `205` mit 96, `201` mit 33, `126` mit 19,
+`402` mit 16, `230` mit 8, `411` mit 4, `235` mit 4, `231` mit 4,
+`111` mit 4, `105` mit 4, `413` mit 2, `225` mit 2, `112` mit 2,
+`314` und `122` mit je 1.**
+
+**Und `201` kam zuerst, weil es am Ende einer Seite steht und alles
+dahinter unerreichbar macht.**
+
+**Und `201` war nicht falsch implementiert.** **Der Befehl reserviert
+nur** -- **`$gamePlayer.reserveTransfer(mapId, x, y, params[4],
+params[5]); this.setWaitMode("transfer");`** -- **und der Umzug
+passiert in `Scene_Map.prototype.onMapLoaded`:
+`if (this._transfer) { $gamePlayer.performTransfer(); }`**
+
+**Und `WaitBeantwortet` pruefte nur, ob der Spieler auf der Karte ist,
+auf der er schon war** -- **die Bedingung war also sofort wahr** --
+**und `Facts.Player.Erased` war die einzige echte Bedingung, und die
+ist fast nie wahr.**
+
+**Und `performTransfer` macht drei Schritte:**
+`$gameMap.setup(this._newMapId)`, `this.locate(this._newX, this._newY)`
+und `this.clearTransferInfo()`.
+
+**Und gemessen ist die Folge an Map006 Event 7:** **Befehl 19 ist
+`201 [0, 9, 2, 2, 2, 2]`** -- **ein Umzug auf Karte 9 nach 2,2** --
+**und die Seite hat 26 Befehle, und 19 ist der letzte ausfuehrende.**
+
+**Und jetzt:** **der Spieler steht auf Karte 9 bei 2,2, der Lauftext
+von Befehl 5 hat zwoelf Zeilen gelesen, und die Seite laeuft zu Ende.**
+
+**`All 2205 tests passed`, Validator gruen mit exit 0.**
+
+**Und als naechstes fehlt, und das ist gemessen statt geraten:** **die
+zehn Befehle, die dieses Spiel gar nicht benutzt** (113, 115, 118,
+119, 235, 246, 249, 351, 357, 413)** -- **und die sieben benutzten
+ohne eigene Abdeckung** (111, 112, 122, 126, 230, 231, 232)** --
+**und `401` mit 938 Vorkommen ist der haeufigste Befehl ueberhaupt,
+und er wird ueber die Position innerhalb eines `101` gelesen.**
+

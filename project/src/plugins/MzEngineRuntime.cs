@@ -501,6 +501,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // **Und die Figuren werden ueber die Kacheln gemalt, und nicht
         // in sie hinein** -- **denn eine Figur ist 144 Pixel breit und
         // eine Kachel 48**, **und sie steht mittig auf dreien.**
+        GemalteKarte = CurrentMapId;
         MapWidth = karte.Root.Member("width")?.IntOr(0) ?? 0;
         MapHeight = karte.Root.Member("height")?.IntOr(0) ?? 0;
 
@@ -1547,8 +1548,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public IReadOnlyList<string> Betrete(int pX, int pY)
     {
         var bericht = new List<string>();
-        PlayerX = pX;
-        PlayerY = pY;
+        Facts.Player.StandAt(CurrentMapId, pX, pY);
 
         // **Und das Betreten ist mehr als ein Schritt** -- **denn
         // `updateNonmoving` fragt beim Ankommen, und zwar mit `[1, 2]`
@@ -1835,6 +1835,87 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
     }
 
+    /// <summary>Carries out a reserved transfer, and says whether it went.
+    /// </summary>
+    /// <returns>True once the player is on the new map.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own order, measured:</strong>
+    /// <c>command201</c> only reserves — <c>$gamePlayer.reserveTransfer(mapId,
+    /// x, y, params[4], params[5]); this.setWaitMode("transfer");</c> — and
+    /// <c>Scene_Map.prototype.onMapLoaded</c> carries it out:
+    /// <c>if (this._transfer) { $gamePlayer.performTransfer(); }</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>performTransfer</c> is three steps:</strong>
+    /// <c>$gameMap.setup(this._newMapId)</c> when the map changed or a
+    /// reload is needed, <c>this.locate(this._newX, this._newY)</c>
+    /// always, and <c>this.clearTransferInfo()</c> at the end.
+    /// </para>
+    /// <para>
+    /// <strong>And the map must be loaded before the move</strong> —
+    /// <strong>and a reader that moved the player onto a map it never
+    /// read would put him somewhere this runtime cannot show.</strong>
+    /// </para>
+    /// </remarks>
+    private bool FuehreTransferAus()
+    {
+        if (Facts.Player.Erased)
+        {
+            return false;
+        }
+
+        var bericht = Facts.Player.PerformTransfer(Maps.Keys);
+        LastTransfer = bericht;
+        if (!Facts.Player.IsTransferring)
+        {
+            CurrentMapId = Facts.Player.MapId;
+
+            // **Und die neue Karte wird gezeichnet, und das setzt den
+            // Spieler auf ihre Startposition** -- **und
+            // `Game_Map.setup` macht im Motor dasselbe, und erst danach
+            // ruft `Scene_Map.onMapLoaded` das `performTransfer` auf.**
+            //
+            // **Und gemessen war das der Fehler: `Repaint` stellte den
+            // Spieler auf 2,12 statt auf 2,2, und `LastTransfer` sagte
+            // trotzdem "the player is now on map 9 at 2,2", denn der
+            // Satz entsteht in `MzPlayer`, bevor `Repaint` laeuft.**
+            if (GemalteKarte != Facts.Player.MapId && !Repaint())
+            {
+                LastTransfer += ", but the new map did not paint, and the"
+                    + " refusal is: " + PaintReason;
+                return false;
+            }
+
+            // **Und der Umzug wird ein zweites Mal gesetzt**, **denn
+            // das Neuzeichnen hat ihn ueberschrieben.**
+            LastTransfer += "; and now the position is set again on the"
+                + $" painted map, which stands at {Facts.Player.X},"
+                + $"{Facts.Player.Y}";
+            Facts.Player.PerformTransfer(Maps.Keys);
+        }
+
+        return Facts.Player.MapId == CurrentMapId
+            && GemalteKarte == CurrentMapId;
+    }
+
+    /// <summary>The last transfer this runtime carried out, in words.</summary>
+    /// <remarks>
+    /// <strong>And this is here so a test can read what happened instead
+    /// of guessing</strong>, <strong>because the engine says it in the log
+    /// and not on the screen.</strong>
+    /// </remarks>
+    public string LastTransfer { get; private set; } = "";
+
+    /// <summary>Which map the last paint drew, by number.</summary>
+    /// <remarks>
+    /// <strong>And this is here because <c>PaintedMap</c> is the pixel
+    /// buffer and not the number</strong>, <strong>and a reader that
+    /// compared a map number to a buffer could not tell a repaint from a
+    /// change of map.</strong>
+    /// </remarks>
+    public int GemalteKarte { get; private set; } = -1;
+
     private bool WaitBeantwortet(MzWaitMode pMode)
     {
         // **Und `MzWaitMode` kennt genau vier Zustaende, und alle vier
@@ -1852,8 +1933,40 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // nicht weiter, und 209 von 211 Befehlen bleiben ungelesen.**
         return pMode switch
         {
-            MzWaitMode.Transfer => !Facts.Player.Erased
-                && Facts.Player.MapId == CurrentMapId,
+            // **Und der Transfer wird ausgefuehrt, und nicht nur
+            // geprueft.**
+            //
+            // **Gemessen an der Reihenfolge des Motors:** **`command201`
+            // ruft nur `$gamePlayer.reserveTransfer(mapId, x, y,
+            // params[4], params[5])` und `this.setWaitMode("transfer")`**,
+            // **und der eigentliche Umzug passiert spaeter und an einer
+            // ganz anderen Stelle:**
+            //
+            // ```js
+            // // Scene_Map.prototype.onMapLoaded
+            // if (this._transfer) { $gamePlayer.performTransfer(); }
+            // ```
+            //
+            // **Und `Game_Player.prototype.performTransfer` macht
+            // `$gameMap.setup(this._newMapId)`, `this.locate(this._newX,
+            // this._newY)` und `this.clearTransferInfo()`.**
+            //
+            // **Also reserviert der Befehl, und `Scene_Map` fuehrt aus.**
+            // **Ein Leser, der nur `reserveTransfer` kann, wartet auf
+            // einen Umzug, den niemand vollzieht** -- **und das war
+            // gemessen der Grund, warum Map006 Event 7 bei Index 19
+            // stehen blieb**, **und dort ist `201 [0, 9, 2, 2, 2, 2]`,
+            // also ein Umzug auf Karte 9 nach 2,2.**
+            // **Und der Umzug braucht zweimal eine Antwort**, **denn
+            // die erste liefert die neue Karte**, **und die zweite
+            // braucht, damit die Seite weiterlaeuft.**
+            //
+            // **Und gemessen ist, dass `Repaint` den Spieler auf die
+            // Startposition der neuen Karte setzt** -- **und
+            // `performTransfer` hat ihn vorher auf 2,2 gesetzt**, --
+            // **und also muss der Umzug nach dem Neuzeichnen noch
+            // einmal geschehen.**
+            MzWaitMode.Transfer => FuehreTransferAus(),
             // **Und die Route wartet, solange sie erzwungen wird, und
             // nicht solange sie Schritte hat.**
             //
@@ -2335,10 +2448,32 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public int PlayerIndex { get; private set; }
 
     /// <summary>The tile the player stands on.</summary>
-    public int PlayerX { get; private set; }
+    /// <summary>The tile the player stands on, and where he really is.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And these three are the player's own tile and not a copy
+    /// of it.</strong> Measured at <c>Game_Character.prototype.locate</c>
+    /// — <c>this._x = x; this._y = y; this._realX = x + 0.5; this._realY
+    /// = y + 0.5;</c> — <strong>and the engine keeps no second place.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this reader kept one, and it was wrong twice:</strong>
+    /// <c>PlayerX</c> and <c>PlayerY</c> were their own numbers next to
+    /// <c>Facts.Player</c>, <strong>and a transfer moved the second and
+    /// not the first</strong>, <strong>so after Map006 event 7 moved the
+    /// player to map 9 at 2,2 the runtime still reported 2,12 while
+    /// <c>LastTransfer</c> said 2,2</strong> — <strong>and both were
+    /// printed in the same test, which is how the contradiction showed
+    /// up.</strong>
+    /// </para>
+    /// </remarks>
+    public int PlayerX => Facts.Player.X;
 
     /// <summary>The tile row the player stands on.</summary>
-    public int PlayerY { get; private set; }
+    public int PlayerY => Facts.Player.Y;
+
+    /// <summary>The tile row the player stands on.</summary>
+
 
     /// <summary>Which way the player faces.</summary>
     public int PlayerDirection { get; private set; } = 2;
@@ -2610,8 +2745,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
             {
                 var system = MzDataFile.Read(
                     "data/System.json", File.ReadAllBytes(systemPfad));
-                PlayerX = system.Root.Member("startX")?.IntOr(0) ?? 0;
-                PlayerY = system.Root.Member("startY")?.IntOr(0) ?? 0;
+                var startX = system.Root.Member("startX")?.IntOr(0) ?? 0;
+                var startY = system.Root.Member("startY")?.IntOr(0) ?? 0;
 
                 // **Und der Spieler wird auch dorthin gestellt.**
                 //
@@ -2625,7 +2760,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // Sache ist genau der Fehler, den der Motor nicht
                 // machen kann, weil er nur einen hat.**
                 Facts.Player.StandAt(
-                    CurrentMapId > 0 ? CurrentMapId : 1, PlayerX, PlayerY);
+                    CurrentMapId > 0 ? CurrentMapId : 1, startX, startY);
             }
             catch (MzDataException)
             {
