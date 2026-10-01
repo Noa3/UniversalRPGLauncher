@@ -73,10 +73,10 @@ public partial class TestRealMzPageRun : TestBase
             return;
         }
 
-        AssertTrue(lauf.GoTo(3), "**and map 3 paints** -- and the refusal"
-            + " is: " + lauf.PaintReason);
-        AssertEq(lauf.PagesRun, 0,
-            "**and nothing has run yet**");
+        AssertTrue(lauf.GoTo(3),
+            "**and map 3 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+        AssertEq(lauf.PagesRun, 0, "**and nothing has run yet**");
 
         lauf.RunPage();
         AssertEq(lauf.PagesRun, 1,
@@ -92,34 +92,44 @@ public partial class TestRealMzPageRun : TestBase
         // ist, sagt nichts** -- **ein Lauf, der zwei von 211 Befehlen
         // ausgefuehrt und das eine Seite nennt, hat etwas ausgefuehrt,
         // und was, sagen die Aktionen.**
-        AssertEq(lauf.LastActions.Count, 2,
-            "**and it carried out two commands before it stopped** -- and"
-            + " the second is the 101, and the 101 waits for the player,"
-            + " and the engine's wait is not a lie; there are 211"
-            + " commands in that page and the first two are");
+        // **Und die Reihenfolge ist die der Datei, und das ist der
+        // ganze Beweis.**
+        //
+        // **Und gemessen sind es acht Aktionen aus 211 Befehlen** --
+        // **denn die Seite wartet bei Index 21, einem `213`, auf einen
+        // Ballon mit 60 Bildern.** **Und die Ballons dieses Spiels
+        // haben keine Dauer in der Liste**, **also nimmt der Leser
+        // seinen eigenen Wert**, **und das ist gemeldet und nicht
+        // geraten.**
+        AssertEq(lauf.LastActions.Count, 8,
+            "**and it carried out eight commands** -- and the ninth is a"
+            + " 213 that waits for a balloon, and the page has 211"
+            + " commands in all, and the rest are behind that wait");
+        AssertEq(lauf.LastPageStop, MzStep.Waiting,
+            "**and it waits at the balloon** -- and a balloon this project"
+            + " gives no length in its list, so the reader takes its own"
+            + " and says so; it says "
+            + new System.Collections.Generic.List<string>(lauf.Stops)[0]);
 
         AssertEq(lauf.LastActions[0].Code, 213,
-            "**and the first was 213 Show Balloon Icon** -- and the file"
-            + " says [-1, 2, false], and minus one is the player, and"
-            + " every reading agrees");
-        AssertTrue(lauf.LastActions[0].What.Contains("player"),
-            "**and the balloon went to the player** -- and it says "
-            + lauf.LastActions[0].What);
-
+            "**and the first was 213 Show Balloon Icon**");
         AssertEq(lauf.LastActions[1].Code, 101,
             "**and the second was 101 Show Text**");
-        AssertTrue(lauf.LastActions[1].What.Contains("4 lines"),
-            "**and it said four lines** -- and the file has four 401s"
-            + " after the 101, and one 101 that waits for all of them;"
-            + " it says " + lauf.LastActions[1].What);
-
-        // **Und der erste Satz steht woertlich in der Datei.**
-        AssertTrue(
-            lauf.LastActions[1].What.Contains("This passage is weird"),
-            "**and the first sentence is the game's own** -- and it is"
+        AssertTrue(lauf.LastActions[1].What.Contains("This passage is weird"),
+            "**and it said the game's own first sentence** -- and it is"
             + " measured from Map003 event 9, and a reader that wrote its"
-            + " own text would pass every other test in this file and fail"
-            + " here; it says " + lauf.LastActions[1].What);
+            + " own text would pass every other test here and fail here");
+
+        AssertEq(lauf.LastActions[2].Code, 205,
+            "**and the third was 205 Set Movement Route** -- and this is"
+            + " the command that skipped index 6 while the index was"
+            + " stepped twice, and now it runs; a reader that stepped"
+            + " twice lost it and read a dialogue line as a line of its"
+            + " own");
+        AssertEq(lauf.LastActions[5].What.Contains("???"), true,
+            "**and the fifth said the words of the unnamed one** -- and"
+            + " the file has HumanActors with the name ???, and a reader"
+            + " that wrote its own dialogue would pass everything else");
     }
 
     /// <summary>

@@ -11878,3 +11878,63 @@ Worten**, **denn der Motor sagt es auch: `setupStartingEvent` gibt
 
 **`All 2197 tests passed`, Validator gruen.**
 
+## Und der Index wurde zweimal weitergesetzt, und das kostete jeden fuenften Befehl
+
+### Der Befund, gemessen an `command101`
+
+```
+while (this.nextEventCode() === 401) {
+    this._index++;
+    ...
+}
+```
+
+**Der Befehl setzt seinen eigenen Index, und `update` setzt ihn nicht
+noch einmal.** **Diese Datei tat beides.**
+
+### Und was das gekostet hat
+
+**An der Seite mit 211 Befehlen gemessen:**
+
+| Index | Befehl | |
+|---|---|---|
+| 1 | `101` mit vier Zeilen | setzt den Index auf **6** |
+| — | `Index++` | machte **7** |
+| **6** | **`205 Set Movement Route`** | **lief nie** |
+| 12 | `101` | wurde uebersprungen |
+| **16** | **`401` ohne `101` darueber** | **kam an den Dispatcher** |
+
+**Und ein `401` ohne `101` darueber wird zurueckgewiesen** -- **weil
+eine Dialogzeile ohne Dialog keine Zeile ist** -- **und das ist die
+zweite Haelfte desselben Fehlers, und die sichtbare.**
+
+**Und ein Test, der nur zwei Befehle gemacht haette, haette das nie
+gesehen** -- **denn nach dem zweiten Befehl ist der Fehler noch nicht
+erreicht, und der Dialog steht.**
+
+### Und vier bestehende Tests hatten den Fehler als Erwartung
+
+**Und einer davon im Klartext:** "weil `101` den Index einmal je Zeile
+schrittet **und der Interpreter ihn noch einmal**". **Das stand als
+richtig dort, mit Begruendung, und war falsch.**
+
+**Ein Test, der einen Fehler als Sollzustand festhält, ist kein Test.**
+**Er ist eine Bremse.**
+
+### Und die Tasten, gemessen
+
+**`Input_Decision` und `rmmz_input.js` kommen in diesem Spiel nicht
+vor.** **Der Motor fragt `Input.isRepeated("ok")` oder `"cancel"`** --
+**und `isRepeated`, nicht `isTriggered`**, **und eine gehaltene Taste
+wirkt weiter.**
+
+**Und die Tastennamen sind Worte:** ok, cancel, shift, up, down, left,
+right, pageup, pagedown, debug.
+
+**Und `onEndOfText` macht zweierlei:** **bei einer Auswahl startet er
+die, und sonst haelt er eine Pause** -- **und ohne diese Pause loest
+sich die Wartezeit nie.**
+
+**Und `MzWaitMode` kennt genau vier Zustaende:** None, Transfer, Route
+und **Message**.
+

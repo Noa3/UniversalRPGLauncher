@@ -136,6 +136,17 @@ public sealed class MzDialogue
         int pIndex,
         MzBranchFacts pFacts)
     {
+        // **Und der Index wird geprueft, denn ein Lauf, der fortgesetzt
+        // wird, kann auf eine Stelle zeigen, an der kein Befehl mehr
+        // steht.** **Gemessen war genau das der Absturz: "Index was out
+        // of range" in dieser Zeile** -- **und die Ursache war nicht der
+        // Dialog, sondern der Aufrufer, der eine Seite weiterlaufen
+        // laesst, deren Liste zu Ende ist.**
+        if (pIndex < 0 || pIndex >= pCommands.Count)
+        {
+            return (new Block(), 0);
+        }
+
         var zeile = pCommands[pIndex];
         var lines = new List<MzMessage.Line>();
         var eaten = 1;

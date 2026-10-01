@@ -146,6 +146,19 @@ public sealed class MzEventRunner
         /// <summary>Every command the whole run recorded, in order.</summary>
         public List<MzAction> Actions { get; init; } = new();
 
+    /// <summary>The interpreter the run stopped in, so a caller can
+    /// go on.</summary>
+    /// <remarks>
+    /// <strong>And this is what makes a dialogue finishable.</strong>
+    /// Measured at <c>updateInterpreter</c>: the engine calls
+    /// <c>this._interpreter.update()</c> again and again, <strong>and it
+    /// is the same interpreter, so its index stands where it
+    /// stopped.</strong> <strong>A reader that threw the interpreter away
+    /// at a wait had to start the page over</strong>, <strong>which is
+    /// not the same page.</strong>
+    /// </remarks>
+    public MzInterpreter? Interpreter { get; init; }
+
         /// <summary>One line, for a caller writing a log.</summary>
         public string Describe() => Stopped switch
         {
@@ -183,14 +196,33 @@ public sealed class MzEventRunner
         MzBranchFacts pBranchFacts,
         int pMapId = 0,
         int pEventId = 0,
-        MzRandom pRandom = null)
+        MzRandom pRandom = null,
+        MzInterpreter pWieder = null)
     {
         var actions = new List<MzAction>();
         var random = pRandom ?? new MzRandom();
         var frames = new Stack<Frame>();
 
-        var top = new MzInterpreter(pCommands) { Random = random, Depth = 0 };
-        top.Setup(pMapId, pEventId);
+        // **Und ein zweiter Aufruf setzt dort fort, wo der erste
+        // stehengeblieben ist.**
+        //
+        // **Der Motor macht genau das:** `updateInterpreter` ruft
+        // `this._interpreter.update()` in einer Schleife auf, **und der
+        // Index des Interpreters steht weiter, weil es derselbe
+        // Interpreter ist.** **Ein Leser, der bei jeder Wartezeit eine
+        // neue Seite von vorn liest, laesst eine Seite endlos neu
+        // beginnen** -- **und einer, der gar nicht weiterliest, laesst
+        // 209 von 211 Befehlen ungelesen.**
+        //
+        // **Und `pWieder` traegt auch den Tastendruck mit**, **denn
+        // `_keys` haengt am Lauf und nicht am Befehl.**
+        var top = pWieder ?? new MzInterpreter(pCommands)
+            { Random = random, Depth = 0 };
+        if (pWieder == null)
+        {
+            top.Setup(pMapId, pEventId);
+        }
+
         frames.Push(new Frame(top));
 
         var taken = 0;
@@ -218,6 +250,7 @@ public sealed class MzEventRunner
                         Stopped = MzStep.Finished,
                         Child = deepest.Depth > 0 ? deepest : null,
                         Actions = actions,
+                        Interpreter = frame.Interpreter,
                     };
                 }
                 continue;
@@ -238,6 +271,22 @@ public sealed class MzEventRunner
             }
 
             var at = frame.Interpreter.Index;
+            if (at < 0 || at >= frame.Interpreter.Commands.Count)
+            {
+                // **Und ein Index ausserhalb der Liste ist ein Lauf, der
+                // fertig ist** -- **und der Motor fragt genau das mit
+                // `isRunning`, das ist `Index < list.length`.** **Ein
+                // Leser, der den Index direkt benutzt, stuerzt auf den
+                // letzten Befehl eines Spiels.**
+                return new Result
+                {
+                    Stopped = MzStep.Finished,
+                    Child = deepest.Depth > 0 ? deepest : null,
+                    Actions = actions,
+                    Interpreter = frame.Interpreter,
+                };
+            }
+
             var command = frame.Interpreter.Commands[at];
             var before = frame.Interpreter.Index;
 
@@ -282,6 +331,7 @@ public sealed class MzEventRunner
                         Reason = frame.Interpreter.Reason,
                         Malformed = frame.Interpreter.Malformed,
                         Actions = actions,
+                        Interpreter = frame.Interpreter,
                     };
 
                 case MzStep.Waiting:
@@ -293,10 +343,21 @@ public sealed class MzEventRunner
                     {
                         Stopped = MzStep.Waiting,
                         Child = deepest.Depth > 0 ? deepest : null,
-                        WaitingCode = frame.Interpreter.Commands[before].Code,
+                        // **Und `before` wird geprueft, denn ein Lauf,
+                        // der fortgesetzt wird, kann bei null
+                        // stehen** -- **und gemessen war genau das der
+                        // Absturz: "Index was out of range" in dieser
+                        // Zeile**, **und ein Index von minus eins ist
+                        // keine Seite von diesem Spiel**, **sondern ein
+                        // weiterlaufender Zaehler.**
+                        WaitingCode = before >= 0
+                            && before < frame.Interpreter.Commands.Count
+                            ? frame.Interpreter.Commands[before].Code
+                            : 0,
                         WaitingFrames = frame.Interpreter.WaitFrames,
                         Reason = frame.Interpreter.Reason,
                         Actions = actions,
+                        Interpreter = frame.Interpreter,
                     };
             }
         }
@@ -306,6 +367,7 @@ public sealed class MzEventRunner
             Stopped = MzStep.Finished,
             Child = deepest.Depth > 0 ? deepest : null,
             Actions = actions,
+            Interpreter = deepest,
         };
     }
 

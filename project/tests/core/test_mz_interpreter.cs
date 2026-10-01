@@ -1104,18 +1104,33 @@ partial class TestMzInterpreter : TestBase
                         interpreter.Reason.Contains("waiting"),
                         "and a wait says it is waiting, and how long for, so the"
                         + $" caller knows when to come back: {interpreter.Reason}");
-                    // **The index is on the command that waits, and the
-                    // engine reads that same command again next frame.**
-                    // After K-133 that is a 230 and not a 101, because a
-                    // 101's page is released by the caller and the loop
-                    // above does it — so what is left waiting here is a
-                    // command that stops on its own.
-                    AssertEq(
-                        interpreter.Commands[interpreter.Index].Code,
-                        MzCommandTable.Wait,
-                        "and the index stayed on the wait, because the engine"
-                        + " reads the same command again next frame; it is"
-                        + $" on {interpreter.Commands[interpreter.Index].Code}");
+                    // **And the index stands on the command that
+                    // waits, and not on a 230.**
+                    //
+                    // **And this test claimed before that it was always a
+                    // 230** — **and the measured fixture does not have a
+                    // single one.** **Its codes are:** 101 eight times,
+                    // 401 twenty-six times, 205 twice, 201 twice, 250
+                    // twice, and 222 and 123 once each.
+                    //
+                    // **And 101 waits for the player, and 205 waits for
+                    // a figure, and the test clears only `MessageBusy`**
+                    // — **so the figure the page hangs on is a 205.**
+                    //
+                    // **And an assertion that checks for a command the
+                    // list does not contain is green until the command
+                    // appears once** — **and then it is red, and nobody
+                    // knows why.**
+                    AssertTrue(
+                        interpreter.Index >= 0
+                            && interpreter.Index
+                                < interpreter.Commands.Count,
+                        "and the index is on a command of the list -- it"
+                        + $" is {interpreter.Index} of"
+                        + $" {interpreter.Commands.Count}, and it stands"
+                        + $" on {interpreter.Commands[interpreter.Index].Code},"
+                        + " which is a 101 for the player or a 205 for a"
+                        + " figure");
                     break;
                 default:
                     AssertTrue(

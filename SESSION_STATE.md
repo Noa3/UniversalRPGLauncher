@@ -11225,3 +11225,51 @@ nichts drueckt die Aktionstaste** -- **also laufen die uebrigen 209
 Befehle nie** -- **und die Parallel-Seiten (Ausloeser 3, drei im
 Spiel) bekommen gar keinen eigenen Interpreter.**
 
+## Und der Index wurde zweimal weitergesetzt
+
+**Gemessen an `command101`:** **es liest seine Zeilen mit
+`while (this.nextEventCode() === 401) { this._index++; ... }` und
+laeuft mit dem Index auf dem Befehl hinter der letzten Zeile zurueck**
+-- **und `update` setzt ihn nicht noch einmal.**
+
+**Diese Datei tat beides.** **An der Seite mit 211 Befehlen gemessen:**
+**`101` bei Index 1 mit vier Zeilen setzte den Index auf 6, `Index++`
+machte 7** -- **und damit lief `205` bei Index 6 nie, `101` bei 12
+wurde uebersprungen, und `401` bei 16 kam ohne Dialog an den
+Dispatcher**, **der zurueckweist, weil eine Zeile ohne `101` darueber
+keine Zeile ist.**
+
+**Und jetzt laeuft die Seite durch: 8 Aktionen aus 211 Befehlen, in der
+Reihenfolge der Datei** -- **213, 101, 205, 213, 101, 101, 101, 213**
+-- **und der erste Satz ist woertlich "This passage is weird".**
+
+**Und vier bestehende Tests hatten den Fehler als Erwartung**, **einer
+im Klartext:** "weil `101` den Index einmal je Zeile schrittet **und
+der Interpreter ihn noch einmal**". **Ein Test, der einen Fehler als
+Sollzustand festhält, ist eine Bremse.**
+
+**Und die Tasten, gemessen:** **`Input_Decision` und `rmmz_input.js`
+kommen in diesem Spiel nicht vor.** **Der Motor fragt
+`Input.isRepeated("ok")` oder `"cancel"`** -- **`isRepeated`, nicht
+`isTriggered`** -- **und `onEndOfText` macht `terminateMessage` nur bei
+`_pauseSkip`.** **Und `MzWaitMode` kennt vier Zustaende: None,
+Transfer, Route, Message.**
+
+**Und noch zwei Befunde aus dieser Arbeit:**
+
+- **`sagt` als Bezeichner liest C# in diesem Kontext nicht auf.**
+  **Der Compiler sagte `CS0103`, und die Datei war korrekt.**
+- **Ein verwaister `AssertEq(` aus einer früheren Zeilen-Operation
+  blieb liegen** -- **und der Compiler meldete einen Fehler vierzig
+  Zeilen weiter unten, an völlig korrektem Code.**
+
+**`All 2197 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **die Seite wartet bei einem `213`,
+weil die Ballons dieses Spiels keine Dauer in der Liste tragen, und
+der Leser nimmt seinen eigenen Wert (60 Bilder)** -- **und die drei
+Parallel-Seiten (Ausloeser 3) bekommen gar keinen eigenen
+Interpreter** -- **und die Figuren bewegen sich nur ueber `205`, und
+eine Seite, die bei einer `205` wartet, braucht eine Figur, die
+geht.**
+

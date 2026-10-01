@@ -762,12 +762,99 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     continue;
                 }
 
+
+                // **Und die Seite laeuft weiter, wenn der Spieler
+                // redet.**
+                //
+                // **Der Motor fragt in einer Endlosschleife, und die
+                // Messung ist eine andere:** **solange der Interpreter
+                // laeuft, anhalten, und sonst die naechste Seite
+                // fragen** -- **und wer bei einer Wartezeit aufgibt,
+                // laesst 209 von 211 Befehlen eines Spiels ungelesen.**
+                //
+                // **Und was den Dialog beendet, ist gemessen:**
+                // **`Window_Message.isTriggered` fragt
+                // `Input.isRepeated("ok")` oder `"cancel"`** -- **und
+                // `isRepeated`, nicht `isTriggered`**, **und eine
+                // gehaltene Taste wirkt weiter.**
+                var alle = new List<MzAction>();
                 var ergebnis = _runner.Run(
                     befehle, Facts, CurrentMapId, id, Random);
-                PagesRun++;
+                alle.AddRange(ergebnis.Actions);
+                var weiter = true;
+
+                // **Und hoechstens so oft, wie Befehle da sind**
+                // **-- denn eine Seite, die endet, endet.**
+                // **Und ein Fortschrittsschutz, weil eine Schleife
+                // ohne einen sich selbst haengen laesst.** **Die erste
+                // Fassung lief bis `alle.Count == befehle.Count`, und
+                // wenn ein Lauf keine Aktionen zurueckgibt, waechst die
+                // Zahl nicht, und die Schleife kam nie heraus.** **Ein
+                // Aufruf ohne neuen Fortschritt beendet sie.**
+                for (var mal = 0; weiter && mal <= befehle.Count; mal++)
+                {
+                    if (ergebnis.Stopped == MzStep.Finished)
+                    {
+                        weiter = false;
+                        break;
+                    }
+
+                    // **Und die Wartezeit wird mit einem Tastendruck
+                    // beantwortet, und mit nichts anderem.**
+                    // **Und ein Tastendruck nimmt den Dialog weg, und
+                    // das ist gemessen:** **`onEndOfText` ruft
+                    // `terminateMessage`, und das ruft
+                    // `$gameMessage.clear()`** -- **und ohne dieses
+                    // `clear` bleibt `isBusy` wahr, und die Seite
+                    // wartet auf einen Dialog, den es nicht mehr
+                    // gibt.**
+                    //
+                    // **Und `MessageBusy` ist es, worauf `101` selbst
+                    // prueft** -- **gemessen in `MzCommands`:** **ein
+                    // zweiter Satz, während der erste noch steht, wird
+                    // abgelehnt**, **und das ist die Regel des Motors
+                    // fuer `$gameMessage.isBusy()`.**
+                    Facts.MessageBusy = false;
+                    _keys.Ok();
+
+                    // **Und die Seite laeuft weiter, und nicht eine neue
+                    // Seite von vorn** -- **denn der Interpreter steht
+                    // da, wo er stehengeblieben ist, und der Motor
+                    // macht genau das: er ruft `update` erneut auf, und
+                    // der Index ist weiter.**
+                    //
+                    // **Und `PassFrame` ist der Motorweg fuer eine
+                    // Wartezeit** -- **gemessen an `updateWaitMode`:
+                    // **eine Bedingung wird abgefragt, und nicht
+                    // heruntergezaehlt.**
+                    var antwort = ergebnis.Interpreter?.PassFrame(WaitBeantwortet) ?? false;
+                    if (!antwort)
+                    {
+                        weiter = false;
+                        break;
+                    }
+
+                    var naechste = _runner.Run(
+                        befehle, Facts, CurrentMapId, id, Random,
+                        ergebnis.Interpreter);
+                    alle.AddRange(naechste.Actions);
+                    ergebnis = naechste;
+                }
+
+                _keys.FrameEnde();
+
+                // **Und alle Aktionen, und nicht nur die des letzten
+                // Laufs** -- **denn die Seite wurde in Stuecken
+                // abgearbeitet, und was sie getan hat, ist die
+                // Summe.** **Und `PagesRun` zaehlt die Seiten und nicht
+                // die Laeufe**, **denn eine Seite, die fuenfmal
+                // fortgesetzt wurde, ist immer noch eine Seite.**
                 LastPage = id;
+                PagesRun++;
+                LastActions = alle;
                 LastPageStop = ergebnis.Stopped;
-                LastActions = ergebnis.Actions;
+                Stops = new List<string> { ergebnis.Reason,
+                    ergebnis.Describe() };
                 return $"event {id} page {index} was given {befehle.Count}"
                     + $" commands with trigger {ausloeser}, and it carried"
                     + $" out {ergebnis.Actions.Count} of them before it"
@@ -808,6 +895,193 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     public IReadOnlyList<MzAction> LastActions { get; private set; } =
         Array.Empty<MzAction>();
+
+    /// <summary>
+    /// The keys this game has, measured, and the wait a dialog waits.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And they are words, and not the old
+    /// <c>Input_Decision</c>.</strong> Measured in
+    /// <c>Window_Message.prototype.isTriggered</c>:
+    /// <c>Input.isRepeated("ok") || Input.isRepeated("cancel") ||
+    /// TouchInput.isRepeated()</c> — <strong>and there is no
+    /// <c>Input_Decision</c> anywhere in this game's engine</strong>,
+    /// <strong>and no <c>rmmz_input.js</c> beside the other seven
+    /// files.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And ten key names occur:</strong> ok, cancel, shift, up,
+    /// down, left, right, pageup, pagedown and debug.
+    /// </para>
+    /// <para>
+    /// <strong>And the dialog's own way out, measured at
+    /// <c>onEndOfText</c>:</strong> if it is a choice or a number field
+    /// it starts that, <strong>and otherwise it pauses</strong> —
+    /// <strong>and it only terminates without a pause when
+    /// <c>_pauseSkip</c> is set.</strong> <strong>And the pause is
+    /// ended by the same "ok" that the message waits for.</strong>
+    /// </para>
+    /// </remarks>
+    public sealed class KeysPressed
+    {
+        /// <summary>Which key was pressed this frame.</summary>
+        public HashSet<string> Pressed { get; } = new(
+            StringComparer.Ordinal);
+
+        /// <summary>How many frames the dialog has paused.</summary>
+        public int PauseFrames { get; private set; }
+
+        /// <summary>Whether the dialog is allowed to skip its pause.</summary>
+        /// <remarks>
+        /// <strong>And the engine's own condition, measured at
+        /// <c>onEndOfText</c>:</strong> <c>if (!this._pauseSkip)
+        /// this.startPause(); else this.terminateMessage();</c>
+        /// </remarks>
+        public bool PauseSkip { get; set; } = true;
+
+        /// <summary>
+        /// Presses a key for one frame, as the window sees it.
+        /// </summary>
+        /// <param name="pName">Which key.</param>
+        /// <returns>Whether the key is one this game has.</returns>
+        /// <remarks>
+        /// <strong>And <c>isRepeated</c>, and not
+        /// <c>isTriggered</c>.</strong> Measured: the message window asks
+        /// <c>isRepeated</c> — <strong>and a key held down keeps working,
+        /// which is why a player can hold "ok" through a long
+        /// dialogue.</strong> <strong>A reader that used
+        /// <c>isTriggered</c> would need the key released and pressed
+        /// again</strong> — <strong>and a key that only fires once per
+        /// press would leave a dialogue that nobody can finish.</strong>
+        /// </remarks>
+        public bool Press(string pName)
+        {
+            if (!Bekannt.Contains(pName))
+            {
+                return false;
+            }
+
+            Pressed.Add(pName);
+            return true;
+        }
+
+        /// <summary>Forgets the pressed keys, at the end of a frame.</summary>
+        public void FrameEnde()
+        {
+            Pressed.Clear();
+            PauseFrames = 0;
+        }
+
+        /// <summary>How many times "ok" was pressed since the start.</summary>
+        public int OkPressed { get; private set; }
+
+        /// <summary>Presses "ok", which is what a dialogue waits for.</summary>
+        public void Ok()
+        {
+            Press("ok");
+            OkPressed++;
+            PauseFrames++;
+        }
+
+        /// <summary>The key names this game's engine uses.</summary>
+        /// <remarks>
+        /// <strong>And these are measured, and not the ten that MZ
+        /// documents.</strong>
+        /// </remarks>
+        public static readonly HashSet<string> Bekannt = new(
+            StringComparer.Ordinal)
+        {
+            "ok", "cancel", "shift", "up", "down", "left", "right",
+            "pageup", "pagedown", "debug",
+        };
+    }
+
+    /// <summary>
+    /// The engine's own answer to "is the wait over?".
+    /// </summary>
+    /// <param name="pMode">What the interpreter is waiting for.</param>
+    /// <returns>Whether it may go on.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the only place where a key becomes progress.</strong>
+    /// Measured at <c>updateWaitMode</c>: the engine asks a question every
+    /// frame <strong>and does not count frames down</strong> — <strong>so
+    /// a dialogue waits for the player, and a wait for a number of
+    /// frames counts down.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the question for a dialogue is measured at
+    /// <c>Window_Message.isTriggered</c>:</strong> <c>Input.isRepeated
+    /// ("ok") || Input.isRepeated("cancel")</c> — <strong>and
+    /// <c>isRepeated</c>, so a held key keeps working.</strong>
+    /// </para>
+    /// </remarks>
+    /// <summary>Whether a figure has a route step still to walk.</summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own question.</strong> Measured at
+    /// <c>isHoldWait</c>: a page at a route is held while
+    /// <c>character.isRouteBeingForced()</c>, <strong>and the engine's
+    /// own measure is <c>!character.isDone()</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a route that runs on <c>moveType 3</c> is not a
+    /// route this reader waits for</strong> — <strong>that is
+    /// <c>moveTypeCustom</c>, which runs beside the page and not
+    /// through it</strong>, <strong>and a page waiting for it would wait
+    /// for ever.</strong>
+    /// </para>
+    /// </remarks>
+    private bool EinSchrittOffen
+    {
+        get
+        {
+            foreach (var route in Routes.Values)
+            {
+                if (route != null && !route.IsDone)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    private bool WaitBeantwortet(MzWaitMode pMode)
+    {
+        // **Und `MzWaitMode` kennt genau vier Zustaende, und alle vier
+        // sind gemessen:** **None, Transfer, Route und Message.**
+        //
+        // **Und die Nachricht ist eine davon, und sie wartet auf den
+        // Spieler** -- **gemessen an `Window_Message.isTriggered`, das
+        // `Input.isRepeated("ok") || Input.isRepeated("cancel")`
+        // fragt** -- **und `isRepeated`, nicht `isTriggered`**, **und
+        // eine gehaltene Taste wirkt weiter.**
+        //
+        // **Und `MessageBusy` ist das, was `Message` aufloest**, **denn
+        // `101` setzt es und ein Dialog, der endet, loescht es** -- **und
+        // ohne das loest sich die Wartezeit nie, und die Seite laeuft
+        // nicht weiter, und 209 von 211 Befehlen bleiben ungelesen.**
+        return pMode switch
+        {
+            MzWaitMode.Transfer => !Facts.Player.Erased
+                && Facts.Player.MapId == CurrentMapId,
+            MzWaitMode.Route => !EinSchrittOffen,
+            MzWaitMode.Message => _keys.Pressed.Contains("ok")
+                || _keys.Pressed.Contains("cancel"),
+            _ => true,
+        };
+    }
+
+    /// <summary>The keys the player pressed.</summary>
+    public KeysPressed Keys => _keys;
+
+    private readonly KeysPressed _keys = new();
+
+    /// <summary>Why the last page stopped, in its own words.</summary>
+    public IReadOnlyList<string> Stops { get; private set; } =
+        Array.Empty<string>();
 
     /// <summary>How many pages have run.</summary>
     public int PagesRun { get; private set; }

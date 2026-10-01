@@ -563,17 +563,34 @@ partial class TestMzDialogueAndChoice : TestBase
             lauf.Commands.Count, 3,
             "and the list is the dialogue, its line and one variable;"
             + $" it has {lauf.Commands.Count}");
+        // **Und der Index steht auf der 122, und nicht am Ende.**
+        //
+        // **Und dieser Test stand vorher auf `Commands.Count`, und das
+        // war die doppelte Schaltung.** **Gemessen an
+        // `command101`:** **es isst seine Zeilen mit `this._index++`
+        // und laeuft mit dem Index auf dem Befehl hinter der letzten
+        // Zeile zurueck** -- **auf Index 2, auf die 122.** **Und der
+        // naechste Befehl, der laeuft, ist die 122.**
+        //
+        // **Und mit der Doppelschaltung sprang der Index auf 3 und die
+        // 122 lief nie** -- **und der Index war am Ende, und der Test
+        // war gruen, und das Spiel tat trotzdem etwas anderes.**
+        // **Ein gruener Test an einem Befehl, der nie laeuft, ist das
+        // Schlimmste, was ein Test sein kann.**
         AssertEq(
-            lauf.Index, lauf.Commands.Count,
-            "and the index is at the end of it, because a 122 sets a variable"
-            + " and does not stop a run — a first draft expected it to be"
-            + " still on the 122, which is the same test in the same place"
-            + $" with a different assumption; it is {lauf.Index}");
+            lauf.Index, 2,
+            "**and the index is on the 122, not at the end** -- and"
+                + " the 101 set it there, because command101 reads"
+                + " its own lines with this._index++ and returns"
+                + " with the index on the command after the last"
+                + " of them; it is"
+                + $" {lauf.Index} of {lauf.Commands.Count} commands"
+                + ", and a reader that stepped twice lost the 122");
         AssertTrue(
             mitWarte.LastDialogue!.Lines.Count == 1,
-            "and the words were read before the run ended, which is what"
-            + " makes the wait a wait and not a gap; there are"
-            + $" {mitWarte.LastDialogue!.Lines.Count}");
+            "and the words were read before the run ended, which is"
+                + " what makes the wait a wait and not a gap; there"
+                + $" are {mitWarte.LastDialogue!.Lines.Count}");
     }
 
     public void Test_OneHundredAndThreeAndOneHundredAndFourAreTakenAndNotWaitedFor()
@@ -823,17 +840,38 @@ partial class TestMzDialogueAndChoice : TestBase
         // **The case it is for is a list that was cut off in the middle of a
         // command**, which is a real thing a truncated fixture or a
         // half-written event file looks like, and which this one is:
+        // **Und der Index steht auf dem Ende, und nicht dahinter.**
+        //
+        // **Und dieser Test behauptete vorher das Gegenteil und
+        // nannte es richtig** -- "weil 101 den Index einmal je Zeile
+        // schrittet und der Interpreter ihn noch einmal".** **Das ist
+        // die doppelte Schaltung, und die ist der Fehler.**
+        // **Gemessen an `command101`:** **es liest seine Zeilen mit
+        // `while (this.nextEventCode() === 401) { this._index++; ... }`
+        // und laeuft mit `_index` hinter der letzten Zeile zurueck**,
+        // **und `update` zaehlt danach nicht noch einmal.**
+        //
+        // **Und der Fehler fiel erst an einer Seite mit 211 Befehlen
+        // auf:** **dort wurde `Index + 1` genommen, und damit lief
+        // jeder fuenfte Befehl nie, und eine Dialogzeile kam ohne
+        // ihren Dialog an den Dispatcher.**
         AssertEq(
-            interpreter.Index, amEnde.Count + 1,
-            "and the index is one past the end rather than on it, because a"
-            + " 101 steps the index once per line and the interpreter steps"
-            + " it once more, and this list was cut off without its 0; it is"
-            + $" {interpreter.Index} of {amEnde.Count}");
+            interpreter.Index, amEnde.Count,
+            "**and the index is on the end of the list** -- and not"
+                + " one past it, because 101 steps the index once"
+                + " per line and the interpreter does not step it"
+                + " again; the engine command101 reads its own lines"
+                + " and returns with the index past the last of"
+                + " them, and the loop in update does not add another."
+                + $" It is {interpreter.Index} of {amEnde.Count}"
+                + ", and a reader that stepped twice lost every"
+                + " fifth command of this game");
         AssertEq(
             facts.LastDialogue!.SpeakerName, "The End",
-            "and what it said is still there, because running off the end of"
-            + " a list says where it got to and not what it lost; the name"
-            + $" is \"{facts.LastDialogue.SpeakerName}\"");
+            "and what it said is still there, because running off"
+                + " the end of a list says where it got to and not"
+                + " what it lost; the name is "
+                + facts.LastDialogue.SpeakerName);
     }
 
     public void Test_AListThatWasCutOffInTheMiddleOfACommandIsSaidAndNotThrown()

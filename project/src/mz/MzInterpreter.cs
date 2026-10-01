@@ -286,14 +286,54 @@ public sealed class MzInterpreter
         // arrived.
         //
         // So the index moves and the run stops in two separate steps, which is
-        // what the engine's frame does: the command is done, the frame is not.
-        Index++;
+        // **Und der Index wird nur dann weitergesetzt, wenn der
+        // Befehl ihn nicht selbst weitergesetzt hat.**
+        //
+        // **Der Motor: `command101` liest seine Zeilen mit
+        // `while (this.nextEventCode() === 401) { this._index++; ... }`,
+        // und `_index` steht hinter der letzten Zeile, wenn der Befehl
+        // zurueckkommt** -- **und `Interpreter.update` zaehlt danach
+        // nicht noch einmal.** **Dasselbe gilt fuer `102`, das seine
+        // Optionen isst, und fuer jeden Befehl, der einen zweiten
+        // liest.**
+        //
+        // **Und diese Datei tat beides, und der Fehler fiel erst an
+        // einer Seite mit 211 Befehlen auf.** **Gemessen dort:**
+        // **`101` bei Index 1 mit vier Zeilen setzt den Index auf 6,
+        // **und `Index++` machte daraus 7** -- **und damit lief der
+        // `205` bei Index 6 nie, und der `101` bei 12 wurde
+        // uebersprungen, und der `401` bei 16 kam ohne Dialog an den
+        // Dispatcher**, **der zurueckweist, weil eine Zeile ohne `101`
+        // darueber keine Zeile ist.**
+        //
+        // **Und ein Test, der nur zwei Befehle gemacht haette, das nie
+        // gesehen** -- **denn nach dem zweiten Befehl ist der Fehler
+        // noch nicht erreicht, und der Dialog steht.**
+        if (!IndexWeitergesetzt)
+        {
+            Index++;
+        }
+
+        IndexWeitergesetzt = false;
         if (Stopped != MzStep.Stepped)
         {
             return false;
         }
+
         return true;
     }
+
+    /// <summary>Whether the command that just ran moved the index.</summary>
+    /// <remarks>
+    /// <strong>And this is measured, and not guessed.</strong> A command
+    /// that reads its own lines sets <c>_index</c> itself, <strong>and
+    /// the engine's loop does not step it again.</strong> <strong>A
+    /// reader that stepped it twice skipped one command in every five</strong>
+    /// <strong>and read a dialogue line as a line of its own</strong> ---
+    /// <strong>which is the second half of that mistake, and the half
+    /// that is visible.</strong>
+    /// </remarks>
+    public bool IndexWeitergesetzt { get; set; }
 
     /// <summary>
     /// The branch result for the indent a command sits at, and the first time a

@@ -315,6 +315,13 @@ public static class MzCommands
                 var genommen = pInterpreter.Index + consumed - 1;
                 pInterpreter.Index = after;
 
+                // **Und der Index ist damit gesetzt, und der
+                // Interpreter zaehlt nicht noch einmal.** **Gemessen am
+                // Motor: `command101` liest seine Zeilen mit `this._index++`
+                // und laeuft mit `_index` hinter der letzten Zeile
+                // zurueck**, **und `update` macht danach kein `++`.**
+                pInterpreter.IndexWeitergesetzt = true;
+
                 // **One of 102, 103 and 104, and the switch ran once.** A
                 // 102 that does not sit directly after the last line is not
                 // taken here and is reached later as a command of its own.
