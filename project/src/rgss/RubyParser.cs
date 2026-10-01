@@ -705,18 +705,18 @@ public sealed class RubyParser
     /// </remarks>
     private RubyNode ReadWertListe()
     {
-        var werte = new List<RubyNode> { ParseTernary() };
+        var werte = new List<RubyNode> { ReadEinWert() };
 
         while (Is(","))
         {
             Take();
             SkipNewlines();
-            if (!StartsAValue())
+            if (!StartsAValue() && !Is("*"))
             {
                 break;
             }
 
-            werte.Add(ParseTernary());
+            werte.Add(ReadEinWert());
             SkipNewlines();
         }
 
@@ -738,6 +738,51 @@ public sealed class RubyParser
     /// <strong>And a single name is not wrapped</strong>, <strong>so the
     /// shape a game writes stays the shape the tree has.</strong>
     /// </remarks>
+    /// <summary>
+    /// One value, and behind a `*` it is a splat and not a value.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the right side of an `=` is an <c>mrhs</c> and not a plain
+    /// expression, and that is measured at <c>parse.y</c> 581 and 1404:</strong>
+    ///
+    /// <code>
+    /// 581  | lhs '=' mrhs
+    /// 1404 mrhs : args ',' arg_value
+    /// 1408       | args ',' tSTAR arg_value
+    /// 1412       | tSTAR arg_value
+    /// </code>
+    ///
+    /// <strong>And so <c>numbers = *args</c> and <c>numbers = *(0..max)</c> are
+    /// both legal Ruby 1.8.1, and one file of the VX Ace game on this machine
+    /// writes the second of them</strong> -- **and without the <c>*</c> here
+    /// both came out as:</strong>
+    ///
+    /// <code>
+    /// RubyParseException '*' at offset 10 does not begin an expression.
+    /// </code>
+    ///
+    /// <strong>And <c>*</c> is only the splat here and not an operator on the
+    /// right of an assignment</strong> -- **and <c>a * b</c> never reaches this
+    /// reader, because that is a binary expression and not a
+    /// <c>mrhs</c>.**
+    /// </remarks>
+    private RubyNode ReadEinWert()
+    {
+        if (Is("*") && !Is("**"))
+        {
+            _index++;
+            SkipNewlines();
+            return new RubyNode
+            {
+                Kind = RubyNodeKind.Splat,
+                Line = Current.Line,
+                Children = [ParseTernary()],
+            };
+        }
+
+        return ParseTernary();
+    }
+
     private static RubyNode Masgn(List<RubyNode> pNames) => new()
     {
         Kind = RubyNodeKind.Assignment,
@@ -1431,7 +1476,12 @@ public sealed class RubyParser
         if (Current.Kind is not (RubyTokenKind.Identifier
             or RubyTokenKind.Constant or RubyTokenKind.Keyword)
             && !(Current.Kind == RubyTokenKind.Operator
-                && Current.Text is "<=>" or "==" or "===" or "<<" or ">>"))
+                && IsOperationAsAMethodName(Current.Text))
+            && !(Current.Kind == RubyTokenKind.Delimiter
+                && Current.Text == "["
+                && _index + 1 < _tokens.Count
+                && _tokens[_index + 1].Kind == RubyTokenKind.Delimiter
+                && _tokens[_index + 1].Text == "]"))
         {
             return null;
         }

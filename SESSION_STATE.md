@@ -13029,3 +13029,93 @@ four real 1.8.1 files.**
 
 **`TestRubyParser192: 0/1`, and it is the new one, and it fails on 29 of 93
 rather than on 47.**
+
+
+## A splat is legal on the right of an assignment, and `def` takes any operator as a
+## setter name too
+
+**And both are one grammar line each, and both came out of the same
+ninety-three files.**
+
+### And the right side of an `=` is an `mrhs`, and an `mrhs` can be a splat
+
+**Measured at `parse.y` 581 and 1404:**
+
+```
+581  | lhs '=' mrhs
+1404 mrhs : args ',' arg_value
+1408       | args ',' tSTAR arg_value
+1412       | tSTAR arg_value
+```
+
+**And both of those `tSTAR` forms sit under `mrhs`, and `mrhs` is the right
+side of an assignment** -- **and one file of the VX Ace game on this machine
+writes the second of them:**
+
+```ruby
+numbers = *(0..max_number)
+```
+
+**And without it:**
+
+```
+RubyParseException '*' at offset 10 does not begin an expression.
+```
+
+**And `*` is only the splat there and not an operator** -- **and `a * b` never
+reaches this reader, because that is a binary expression and not an `mrhs`.**
+
+### And a setter is the same name, and the name list was a copy
+
+**And `def []=(key, value)` came from the same game, and `LeseSchreiberName()`
+had its own list of four operators** -- **`<=>`, `==`, `===`, `<<`, `>>`** --
+**and that list was a second copy of a rule that already existed one method
+above in `ReadMemberName`.** **And a setter is `def name=(...)`, and the name
+is the same name, so the two lists should never have been separate:**
+
+```
+RubyParseException '=' at offset 6 does not begin an expression.
+```
+
+**And both now go through `IsOperationAsAMethodName`, which is one list with
+the grammar's `fname : … | op` behind it.**
+
+### And the halving cost forty tool calls and taught the thing I should have known
+
+**And `2_LonaBitmapChanger.rb` was the file I bisected, and the first bisect
+cut it into eight arbitrary line ranges, and every one of the six upper ones
+failed** -- **because a range that starts inside a `def` has an `end` with no
+opener, and that is not a bug.**
+
+```text
+r300_praefix300.rb: RubyParseException '}' was expected, but the script ends first.
+r400_praefix400.rb: RubyParseException 'rescue' was expected, but the script ends first.
+```
+
+**And I then bisected by prefixes, and `s200` was the last green and `s210`
+the first red, and lines 203 to 220 are a block that passes on its own** --
+**because `s210` is also a fragment, and a fragment is not a shape.**
+
+**And it took nineteen method-shaped cuts to find that eighteen of the
+nineteen methods are green, and that the red one is a fragment without its
+`class`.** **And the final measurement is the one that matters:**
+
+```text
+b3_zwei_end_allein.rb: RubyParseException 'end' at offset 0
+                      does not begin an expression.
+```
+
+**And that is correct** -- **and it proves the remaining `end` complaints in
+the ninety-three are fragments of a bisection and not parser faults.**
+
+**And the shapes that came out of it are eight files, and all eight are
+green**, **and they are the shapes the ninety-three needed.**
+
+### Evidence
+
+**Full suite `7/2216`.** **`TestRubyParser: 54/56`, and the two that fail are
+the form list and the four real files.** **`TestRubyParser192: 0/1`, and it is
+on twenty-nine of ninety-three.**
+
+**And the two red shapes are the same two as before this round, and both are
+the multi-line `%[...]` block:**

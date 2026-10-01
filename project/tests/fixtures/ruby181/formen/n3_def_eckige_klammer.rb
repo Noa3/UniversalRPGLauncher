@@ -1,0 +1,3 @@
+def [](key)
+	y
+end
