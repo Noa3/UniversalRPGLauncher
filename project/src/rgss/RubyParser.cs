@@ -2411,57 +2411,104 @@ public sealed class RubyParser
                 }
 
                 RubyNode whenFalse = null;
+                // **Und eine Kette von `elsif` hat beliebig viele Glieder,
+                // und das ist gemessen.**
+                //
+                // Ruby 1.8.1's own `parse.y`:
+                //
+                // ```c
+                // if_tail : opt_else
+                //         | kELSIF expr_value then compstmt if_tail
+                // ```
+                //
+                // **Und `if_tail` steht rechts in sich selbst**, **und ein
+                // Leser, der nur einen `elsif` liest, verliest bei
+                // `mkconfig.rb` Zeile 41, 55 und 57 den zweiten und den
+                // dritten** -- **und dann kam der dritte als Anweisung:**
+                //
+                // ```
+                // 'elsif' at offset 715 does not begin an expression
+                // ```
                 if (IsKeyword("elsif"))
                 {
-                    // **elsif ist ein else, dessen Bedingung ein if ist** --
-                    // und genau darum ruft es sich hier auf und liegt nicht
-                    // in einer Schleife.
-                    _index++;
-                    SkipNewlines();
-                    var elsifCondition = ParseExpression();
-                    SkipNewlines();
-                    SkipThen();
-                    var elsifTrue = ReadBodyUntil("else", "elsif", "end");
-                    whenFalse = new RubyNode
+                    while (IsKeyword("elsif"))
                     {
-                        Kind = RubyNodeKind.If,
-                        Name = "if",
-                        Line = elsifCondition.Line,
-                        Children = [elsifCondition, elsifTrue],
-                        Role_Children =
-                        [
-                            new() { Role = RubyNodeRole.Condition, Node = elsifCondition },
-                            new() { Role = RubyNodeRole.WhenTrue, Node = elsifTrue },
-                        ],
-                    };
+                        _index++;
+                        SkipNewlines();
+                        var elsifCondition = ParseExpression();
+                        SkipNewlines();
+                        SkipThen();
+                        var elsifTrue = ReadBodyUntil(
+                            "else", "elsif", "end");
+                        whenFalse = new RubyNode
+                        {
+                            Kind = RubyNodeKind.If,
+                            Name = "elsif",
+                            Line = elsifCondition.Line,
+                            Children = [elsifCondition, elsifTrue],
+                            Role_Children =
+                            [
+                                new()
+                                {
+                                    Role = RubyNodeRole.Condition,
+                                    Node = elsifCondition,
+                                },
+                                new()
+                                {
+                                    Role = RubyNodeRole.WhenTrue,
+                                    Node = elsifTrue,
+                                },
+                            ],
+                        };
+                        SkipNewlines();
+                    }
                 }
                 else if (IsKeyword("else"))
                 {
                     _index++;
                     SkipNewlines();
-                    whenFalse = ReadBody("end");
+                    // **Und das `end` hinter diesem `else` ist das des
+                    // `if`, und `ReadBodyUntil` laesst es stehen.**
+                    whenFalse = ReadBodyUntil("end");
                 }
 
-                // **Nur der Zweig ohne else schuldet noch ein `end`.** Der
-                // `else`-Arm hat es ueber `ReadBody("end")` schon genommen,
-                // und ein `elsif`-Zweig ist ein vollstaendiges `if`, das
-                // seines selbst genommen hat -- **eine Pruefung, die in
-                // beiden Faellen noch einmal nach `end` sieht, wuerde bei
-                // jedem vollstaendigen `if ... else ... end` fehlschlagen.**
-                var endGenommen = whenFalse != null;
-                if (!endGenommen)
+                // **Und das `end` hinter diesem `if` wird genau einmal
+                // gefressen, und das ist gemessen.**
+                //
+                // Ruby 1.8.1's own `parse.y`:
+                //
+                // ```c
+                // primary : kIF expr_value then compstmt if_tail kEND
+                // if_tail : opt_else
+                //         | kELSIF expr_value then compstmt if_tail
+                // opt_else: none
+                //         | kELSE compstmt
+                // ```
+                //
+                // **Und ein `kEND` steht einmal, in `primary`, und hinter
+                // `if_tail`.** **Und `opt_else` und `kELSIF` haben keines.**
+                // **Und `compstmt` ist ein `stmts opt_terms`, und ein
+                // `stmt` ist nie ein `end`.**
+                //
+                // **Und beide Wege lassen das `end` hier stehen** -- **und
+                // `ReadBodyUntil` laesst seinen Closer stehen, und
+                // `ReadBody` frisst ihn** -- **und deshalb ist der Zweig
+                // mit `else` hier genauso schuldig wie der ohne:**
+                //
+                // ```
+                // 'end' at offset 76 does not begin an expression
+                // 'end' was expected at offset 670, but 'has_version' is there.
+                // ```
+                if (IsKeyword("end"))
                 {
-                    if (IsKeyword("end"))
-                    {
-                        _index++;
-                    }
-                    else
-                    {
-                        throw new RubyParseException(
-                            $"'end' was expected at offset {Current.Offset}, "
-                                + $"but '{Current.Text}' is there.",
-                            Current.Line);
-                    }
+                    _index++;
+                }
+                else
+                {
+                    throw new RubyParseException(
+                        $"'end' was expected at offset {Current.Offset}"
+                            + $"but '{Current.Text}' is there.",
+                        Current.Line);
                 }
 
                 var children = new List<RubyNode> { condition, whenTrue };

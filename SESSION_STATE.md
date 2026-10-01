@@ -12560,3 +12560,60 @@ existed before is green.**
 
 **And `mkconfig.rb` stopped at line 30 and now stops at line 55**, which
 is an `elsif` with a regexp. **And `mdoc2man.rb` parses.**
+
+
+## A chain of elsif has any number of arms, and the end is the if's own
+
+**Measured at `parse.y`, and the chain in `mkconfig.rb` is the proof.**
+
+```c
+primary : kIF expr_value then compstmt if_tail kEND
+if_tail : opt_else
+        | kELSIF expr_value then compstmt if_tail
+opt_else: none
+        | kELSE compstmt
+compstmt: stmts opt_terms
+stmts   : none | stmt | stmts terms stmt
+```
+
+**And `if_tail` stands at the right in itself**, **so a chain has any
+number of `elsif`, and not one of them has an `end` of its own.**
+
+**And a `kEND` stands once, in `primary`, behind `if_tail`.**
+
+### And the same shape as the case, and the same mistake twice
+
+**An `if`'s end is eaten by a guard that read `whenFalse != null` as "the
+end is already taken"** -- **and the `elsif` arm reads its body with
+`ReadBodyUntil`, because behind it another `elsif`, an `else` or the `if`'s
+own `end` can come**, **and `ReadBodyUntil` leaves its closer standing.**
+
+**So both ways owe an `end` here, and only the way that used `ReadBody`
+had eaten it.** **And then the surrounding block saw an `end` that was not
+its own:**
+
+```
+'end' at offset 76 does not begin an expression
+'end' was expected at offset 670, but 'has_version' is there.
+```
+
+**And this is the second time this repository made that same mistake with
+a closer that two paths share** -- **the first was the `case`'s `end` with
+its `else`, and the fix is the same shape: every path owes the same
+`_index++` and there is exactly one of it.**
+
+### And a first attempt made it worse, and the measurement showed where
+
+**A reader that took `endGenommen = false` for `if ... elsif ... end` left
+the `end` of an `if` inside the arm standing** -- **and `mkconfig.rb` has an
+`if` with an `else` inside an `elsif` arm, at lines 13 to 17** -- **and that
+is the second message above.** **So the guard had to go entirely rather
+than be set to a constant.**
+
+### Evidence
+
+**The shape list is twenty-eight files and every one of them is green.**
+**`TestRubyParser: 1/56 failed` -- and that one is the test that reads the
+four real files.** **Full suite `3/2213`.**
+
+**And `mkconfig.rb` stopped at line 30, then 55, and now 88.**
