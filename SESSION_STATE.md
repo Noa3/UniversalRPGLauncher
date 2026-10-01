@@ -11177,3 +11177,28 @@ einzige Seite dieses Spiels**, **weil die Startkarte `Map002` acht
 Ereignisse hat und keine davon ein `205` traegt** -- **also ist noch
 nichts davon am laufen.**
 
+## Und die LETZTE passende Seite gewinnt
+
+**`findProperPageIndex` laeuft von hinten** --
+**`for (let i = pages.length - 1; i >= 0; i--)`** -- **und mein Leser
+nahm die erste von vorn.** **Bei zwei Seiten ist das genau die falsche
+Seite**, **und zwei Seiten sind der haeufigste Fall: eine leere und
+eine mit Text.**
+
+**Und gemessen ueber alle 253 Seiten: 196 Ausloeser 0, 52 Ausloeser 1,
+3 Ausloeser 3 und nur 2 Autorun.** **Nur zwei Seiten von 253 starten
+von selbst.**
+
+**Und `Map017` hat 25 Seiten, alle mit Ausloeser 0.**
+
+**Und `Map002` hat doch zwei `205`-Routen (Ereignis 3 und 4)** -- **das
+stand vorhin als "keine" in der Notiz und war geraten.**
+
+**`All 2195 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **Seiten starten ueberhaupt nicht** --
+**der Runner wird nie gerufen** -- **und gemessen sind die beiden
+Autorun-Seiten auf `Map003` die mit je 211 Befehlen**, **also die
+lange Erzaehlung, an der man sieht, ob ein Interpreter 211 Befehle in
+der richtigen Reihenfolge abarbeitet.**
+

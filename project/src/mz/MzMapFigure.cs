@@ -120,6 +120,34 @@ public sealed class MzMapFigure
     /// </remarks>
     public MzRouteStep.Route? Route { get; init; }
 
+    /// <summary>What starts this page.</summary>
+    /// <remarks>
+    /// <strong>And four of the five kinds, measured.</strong> The engine's
+    /// own <c>isTriggerIn([0, 1, 2])</c> is what decides whether a page
+    /// runs on its own or waits for the player — <strong>and the project
+    /// uses all of them</strong>: 196 pages at 0 (action button), 52 at 1
+    /// (touched), 2 at 2 (autorun), 3 at 3 (parallel).
+    /// </para>
+    /// <para>
+    /// <strong>And only 2 pages of 253 are autorun</strong> — <strong>so
+    /// almost nothing in this game starts by itself</strong>, <strong>and
+    /// a runtime that started every page at once would run a game the
+    /// player has not begun.</strong>
+    /// </para>
+    /// </remarks>
+    public int Trigger { get; init; }
+
+    /// <summary>Which page this is, counted from zero.</summary>
+    /// <remarks>
+    /// <strong>And the engine shows the last matching page, not the
+    /// first.</strong> Measured at
+    /// <c>findProperPageIndex</c>: <c>for (let i = pages.length - 1; i
+    /// &gt;= 0; i--)</c>. <strong>A reader that took the first showed the
+    /// wrong face of every event with two pages</strong> — <strong>and
+    /// with a plain page and a switch page, it showed the plain one.</strong>
+    /// </remarks>
+    public int PageIndex { get; init; }
+
     /// <summary>Whether this page's conditions are met.</summary>
     /// <remarks>
     /// <strong>And a page with no condition is visible, and that is
@@ -196,7 +224,18 @@ public static class MzMapFigureReader
             var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
             var x = ereignis.Member("x")?.IntOr(0) ?? 0;
             var y = ereignis.Member("y")?.IntOr(0) ?? 0;
-            for (var index = 0; index < seiten.Count; index++)
+            // **Und von hinten, und nicht von vorn.**
+            //
+            // **Gemessen an `Game_Event.prototype.findProperPageIndex`:
+            // **`for (let i = pages.length - 1; i >= 0; i--)`**
+            // **-- und die ERSTE passende Seite von hinten gewinnt.**
+            //
+            // **Und mein Leser nahm die erste von vorn** -- **und das
+            // **ist bei zwei Seiten genau die falsche.** **Ein
+            // **Ereignis mit einer leeren Seite und einer mit Text
+            // **zeigt im Spiel den Text, und dieser Leser zeigte die
+            // **leere.**
+            for (var index = seiten.Count - 1; index >= 0; index--)
             {
                 var seite = seiten[index];
                 if (!Meets(seite.Member("conditions"), pFacts))
@@ -216,9 +255,6 @@ public static class MzMapFigureReader
                 var name = bild.Member("characterName")?.StringOr("") ?? "";
                 if (name.Length == 0)
                 {
-                    // **Und eine Seite ohne Bild zeichnet nichts**, und das
-                    // ist der Normalfall fuer eine Startseite, die nur
-                    // Befehle traegt.
                     break;
                 }
 
@@ -237,11 +273,10 @@ public static class MzMapFigureReader
                     MoveSpeed = seite.Member("moveSpeed")?.IntOr(4) ?? 4,
                     MoveFrequency = seite.Member("moveFrequency")?.IntOr(6) ?? 6,
                     Route = ReadRoute(seite.Member("moveRoute")),
+                    Trigger = seite.Member("trigger")?.IntOr(0) ?? 0,
+                    PageIndex = index,
                 });
 
-                // **Und die erste passende Seite gewinnt** -- **denn ab
-                // hier an ist die naechste eine andere Auspraegung
-                // desselben Ereignisses.**
                 break;
             }
         }
@@ -417,4 +452,5 @@ public static class MzMapFigureReader
         return wert != null
             && (wert.Kind == MzKind.Bool ? wert.Boolean : wert.Text == "true");
     }
+
 }

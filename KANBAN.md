@@ -11758,3 +11758,61 @@ gezeichnete Kopf der Spieler an seiner eigenen Stelle ist.**
 
 **`All 2193 tests passed`, Validator gruen.**
 
+## Und die LETZTE passende Seite gewinnt, und nicht die erste
+
+### Der Befund
+
+**Gemessen an `Game_Event.prototype.findProperPageIndex`:**
+
+```js
+for (let i = pages.length - 1; i >= 0; i--) {
+    const page = pages[i];
+    if (this.meetsConditions(page)) {
+        return i;
+    }
+}
+```
+
+**Und mein Leser nahm die ERSTE passende Seite, und geht von vorn.**
+
+**Das ist bei zwei Seiten genau die falsche Seite**, **und zwei Seiten
+sind der haeufigste Fall im Spiel** -- **eine leere, weil die Figur
+nur dasteht, und eine mit Text, wenn der Spieler mit ihr gesprochen
+hat.** **Ein Spiel sagt dir, was eine Person sagt, nachdem ein Schalter
+umgesprungen ist, und dieser Leser sagte dir, was sie davor sagte.**
+
+### Und was startet eine Seite, gemessen
+
+| Ausloeser | Seiten im ganzen Spiel |
+|---|---|
+| 0 -- Aktionstaste | **196** |
+| 1 -- beruehrt | 52 |
+| 2 -- Autorun | **2** |
+| 3 -- parallel | 3 |
+| 4 -- beim Verlassen | 0 |
+
+**Und der Motor prueft selbst `isTriggerIn([0, 1, 2])`** -- **und nur
+zwei Seiten von 253 starten von selbst.**
+
+**Ein Leser, der jede Seite sofort startete, wuerde ein Spiel laufen
+lassen, das der Spieler noch nicht begonnen hat.**
+
+### Und `Map017` gemessen
+
+**25 Seiten, alle mit Ausloeser 0, keine einzige mit einem anderen.**
+**Und acht sichtbare Figuren, denn Ereignis 19 haengt am
+Selbstschalter.**
+
+**Und ich hatte hier "beruehrt" behauptet** -- **das war geraten und
+ist jetzt gemessen.**
+
+### Und die Startkarte hat doch Routen
+
+**Meine vorige Notiz behauptete, `Map002` traegt kein `205`.** **Sie
+traegt zwei:** **Ereignis 3 und 4, beide `[101, 401, 401, 205, 505, 0]`
+-- **Text und dann eine Laufbahn fuer den Spieler.**
+
+**Test evidence** `test_mz_map_figure.cs` (6), **6/6**.
+
+**`All 2195 tests passed`, Validator gruen.**
+

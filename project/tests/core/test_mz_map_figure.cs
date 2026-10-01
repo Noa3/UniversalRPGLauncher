@@ -248,4 +248,122 @@ public partial class TestMzMapFigure : TestBase
                 + "invented an answer nobody asked for");
         }
     }
+
+/// <summary>
+    /// The last matching page wins, and not the first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own loop, backwards.</strong>
+    /// Measured at <c>Game_Event.prototype.findProperPageIndex</c>:
+    /// <c>for (let i = pages.length - 1; i &gt;= 0; i--)</c> —
+    /// <strong>so the last page whose conditions are met is the one that is
+    /// shown.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that took the first showed the wrong face of
+    /// every event with two pages</strong> — <strong>and with a plain page
+    /// and a switch page, it showed the plain one.</strong> <strong>A game
+    /// tells you what a person says after a switch flipped, and this reader
+    /// showed you what they said before.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieLetztePassendeSeiteGewinntUndNichtDieErste()
+    {
+        // **Und ein Ereignis mit zwei Seiten, beide ohne Bedingung.**
+        //
+        // **Das ist der Fall, den ein Spiel am häufigsten benutzt** —
+        // **eine leere Seite, weil die Figur nur dasteht, und eine mit
+        // Text, wenn der Spieler mit ihr gesprochen hat.**
+        var karte = MzDataFile.ReadText("Map.json",
+            "{\"events\":[{\"id\":7,\"x\":3,\"y\":4,\"pages\":["
+            + "{\"conditions\":{\"switch1Valid\":false},"
+            + "\"image\":{\"characterName\":\"Erstes\",\"characterIndex\":0},"
+            + "\"moveType\":0,\"moveSpeed\":4,\"moveFrequency\":6},"
+            + "{\"conditions\":{\"switch1Valid\":false},"
+            + "\"image\":{\"characterName\":\"Letztes\",\"characterIndex\":0},"
+            + "\"moveType\":0,\"moveSpeed\":4,\"moveFrequency\":6}]}]}").Root;
+
+        var figuren = MzMapFigureReader.Read(karte, new MzBranchFacts(),
+            out var _);
+        AssertEq(figuren.Count, 1,
+            "**and one figure stands there**");
+        AssertEq(figuren[0].CharacterName, "Letztes",
+            "**and it is the last page** -- and the engine walks the pages"
+            + " backwards and takes the first one it finds, and a reader"
+            + " that took the first showed the wrong face of every event"
+            + " with two pages");
+        AssertEq(figuren[0].PageIndex, 1,
+            "**and its page is the second**");
+    }
+
+    /// <summary>
+    /// What starts a page here, and how few start by themselves.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine's own test is
+    /// <c>isTriggerIn([0, 1, 2])</c></strong> — <strong>so a page at 3
+    /// (parallel) runs without the player and without locking, and a page
+    /// at 4 (leaving) waits.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And measured over all 253 pages of the project: 196 action
+    /// button, 52 touched, 3 parallel, 2 autorun.</strong> <strong>Only
+    /// two pages of the whole game start by themselves</strong> — <strong>so
+    /// a runtime that started every page at once would run a game the
+    /// player has not begun.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DerAusloeserDiesesSpielsUndWieWenigeVonSelbstStarten()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var karte = Karte();
+        var figuren = MzMapFigureReader.Read(karte, new MzBranchFacts(),
+            out var _);
+
+        // **Und die Ausloeser, nach Zahl, wie die Datei sie nennt.**
+        var ausloeser = new Dictionary<int, int>();
+        foreach (var figur in figuren)
+        {
+            ausloeser.TryGetValue(figur.Trigger, out var anzahl);
+            ausloeser[figur.Trigger] = anzahl + 1;
+        }
+
+        // **Und gemessen: `Map017` hat 25 Seiten, und alle 25 haben den
+        // Ausloeser 0, die Aktionstaste.** **Ich hatte hier 1
+        // behauptet, "beruehrt", und das war geraten.**
+        // **Und gemessen sind es acht, und nicht neun.**
+        //
+        // **Und der Grund steht an derselben Stelle wie bei den Bildern
+        // zwoetern Zeilen weiter oben:** **Ereignis 19 traegt einen
+        // Selbstschalter, den dieser Leser nicht beantworten kann, und
+        // deshalb wird es weggelassen.** **Und neun waere die Zahl, die
+        // ein Leser bekaeme, der die Bedingung als erfuellt annimmt** --
+        // **und das waere eine Figur, die das Spiel an einem Zustand
+        // zeigt, den es nicht gibt.**
+        AssertEq(figuren.Count, 8,
+            "**and eight figures are visible on it** -- and the ninth is"
+            + " event 19, which hangs on a self switch this reader cannot"
+            + " answer, and nine is what a reader that read the condition"
+            + " as satisfied would have drawn");
+        AssertTrue(figuren.Count > 0,
+            "**and it has visible figures**");
+        AssertTrue(ausloeser.ContainsKey(0),
+            "**and every one of them waits for the action button**"
+                + " -- and the engine numbers the action button 0, touched 1,"
+                + " autorun 2, parallel 3 and leaving 4, and map 17"
+                + " has twenty-five pages and every one of them is a 0");
+
+        // **Und keine einzige Seite dieser Karte startet von selbst.**
+        AssertEq(ausloeser.TryGetValue(2, out var selbst) ? selbst : 0, 0,
+            "**and not one of them starts by itself** -- and the measured"
+            + " project has two autorun pages out of 253, both on map 3,"
+            + " and a runtime that started every page would run a game the"
+            + " player has not begun");
+    }
 }
