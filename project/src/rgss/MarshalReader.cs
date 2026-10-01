@@ -296,7 +296,31 @@ public sealed class MarshalReader
     /// decoding a name has turned a text problem into a crash.**
     /// </para>
     /// </remarks>
-    private static string AlsText(byte[] pBytes)
+    /// <summary>
+    /// Decodes bytes the way this reader decodes every string, and that is
+    /// exposed so a caller that has already inflated bytes needs the same
+    /// decision and not a second one.
+    /// </summary>
+    /// <param name="pBytes">The bytes to decode.</param>
+    /// <returns>The text, and never an exception.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And one decoder and not two</strong>, <strong>because a
+    /// second one would be a second answer to the same question and the two
+    /// would drift.</strong> <strong>CP932 first, and UTF-8 when the bytes
+    /// carry no replacement character</strong>, <strong>and that order is
+    /// measured and not guessed</strong> -- <strong>see the remarks on this
+    /// method for the two measurements that decided it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this is the only way a script body becomes text in this
+    /// repository</strong> -- <strong><c>XpScriptBodies</c> calls this and
+    /// nothing else,</strong> <strong>and a caller that wanted a different
+    /// encoding would have to argue with this one instead of starting
+    /// over.</strong>
+    /// </para>
+    /// </remarks>
+    internal static string AlsText(byte[] pBytes)
     {
         if (pBytes.Length == 0)
         {

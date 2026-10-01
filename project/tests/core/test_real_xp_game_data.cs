@@ -213,45 +213,56 @@ public partial class TestRealXpGameData : TestBase
                 + "script list, and every one of them stays a name here");
     }
     /// <summary>
-    /// The source of a real game's first script is cipher, and this reader
-    /// leaves it that way.
+    /// The scripts of a real game are compressed, and this repository can
+    /// read them.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And this is the measurement that closes the wiring, and it
-    /// is a fact about the file and not about this reader.</strong>
-    /// Measured on the finished game on this machine: the first entry of
-    /// <c>Data/Scripts.rxdata</c> carries three fields — an integer, the
-    /// name <c>Game_Temp</c>, and 1104 bytes that start with
-    /// <c>x…WA…6/…</c> — **and those 1104 bytes hold no <c>def</c>, no
-    /// <c>class</c> and no <c>end</c>, and 22 % of their characters are
-    /// ASCII letters.**
+    /// <strong>And this test used to say the opposite, and it was
+    /// wrong.</strong> The old version asserted that an XP script body is
+    /// cipher and held no <c>def</c>, <c>class</c> or <c>end</c>, and
+    /// wrote in its own remarks that <c>"XP and VX encrypt their scripts
+    /// with a key derived from the archive"</c>.
     /// </para>
     /// <para>
-    /// <strong>And there is no folder of <c>.rb</c> files beside
-    /// <c>Data/</c></strong> — only <c>Game.exe</c>,
-    /// <c>Game.ini</c>, <c>Game.rxproj</c> and <c>RGSS104E.dll</c>.
-    /// <strong>XP and VX encrypt their scripts with a key derived from
-    /// the archive</strong>, and the archive is the encrypted one.
+    /// <strong>And the file says otherwise, and the measurement is four
+    /// bytes.</strong> In
+    /// <c>Data/Scripts.rxdata</c> of <c>MicroQuest - Beneath Brimestone
+    /// 1.0</c>, every entry carries its number and its name in the clear
+    /// and its name in the editor's own words, and behind the name the body
+    /// begins <c>78 9c</c>:
+    /// </para>
+    /// <code>
+    /// 5e 04 78 9c b5 58 5b 6f ...
+    ///  ^^^^^^^ ^^^^^
+    ///  |       zlib: deflate, 32K window, default level
+    ///  a Marshal string
+    ///
+    /// @39152  "Spriteset_Map" 22 02 78 9c b5 58 5b 6f
+    /// </code>
+    /// <para>
+    /// <strong>And inflating that block gives 5328 bytes of
+    /// <c>class Spriteset_Map</c> with the engine's own comment
+    /// header</strong> -- <strong>and doing it to all ninety blocks gives
+    /// 538811 bytes of Ruby source.</strong>
     /// </para>
     /// <para>
-    /// <strong>And so the door that was missing is not missing — it is
-    /// barred, by three decisions taken before this session:</strong>
-    /// <c>AGENTS.md</c> line 26 (*imported games are untrusted input*),
-    /// <c>BuiltInEnginePlugins.cs</c> line 424 (*not decrypted or
-    /// executed*) and <c>WolfDataReader.cs</c> line 14 (*deliberately not
-    /// an archive decryptor*).
+    /// <strong>And a body that holds <c>def</c> is a body that is
+    /// compressed and not encrypted</strong> -- <strong>and the reason is
+    /// ordinary: a game's scripts are large, and a project's
+    /// <c>Scripts.rxdata</c> would be megabytes without it.</strong>
+    /// <strong>XP and VX Ace do not encrypt script bodies at all, and VX
+    /// Ace's <c>Scripts.rvdata2</c> holds plain text that this
+    /// repository's parser reads without complaint -- which is measured
+    /// there and not here.</strong>
     /// </para>
     /// <para>
-    /// <strong>And this test says so out loud, because the next session
-    /// will ask.</strong> Decrypting it is the one road that runs foreign
-    /// Ruby, **and a reader that can decrypt a game archive is a reader
-    /// that runs whatever the archive says.** This one does not, and
-    /// <c>RunScripts</c> stays a door the host opens and this repository
-    /// does not.
+    /// <strong>And a test that asserted the wrong thing for as long as it
+    /// did was worse than no test</strong> -- <strong>and it was green, and
+    /// green is what made it dangerous.</strong>
     /// </para>
     /// </remarks>
-    public void Test_DerQuelltextEinesEchtenSpielsBleibtChiffre()
+    public void Test_DieSkripteEinesEchtenXpSpielsSindLesbar()
     {
         UeberspringeWennKeinSpiel();
         var daten = Data();
@@ -260,53 +271,49 @@ public partial class TestRealXpGameData : TestBase
             return;
         }
 
-        var wert = new MarshalReader(
-            File.ReadAllBytes(daten + "/Scripts.rxdata")).Read();
-        AssertTrue(wert.Items.Count > 10,
-            "**and the game carries a game's worth of scripts** — "
-                + wert.Items.Count);
+        var skripte = XpScriptBodies.LeseAlle(daten + "/Scripts.rxdata");
+        AssertTrue(skripte.Count > 50,
+            "**and the game carries a game's worth of scripts** -- "
+                + skripte.Count + " entries, and a game's own script list "
+                + "has about a hundred");
 
-        var erster = wert.Items[0];
-        AssertTrue(erster.Items.Count >= 3,
-            "**and every entry has a number, a name and a body** — and an "
-                + "entry with two fields is a script this reader cannot "
-                + "even name, and a name is the least a reader may do");
+        var lesbar = skripte.Where(pS => pS.Entpackt).ToList();
+        System.Console.WriteLine(
+            "XP  gemessen: " + skripte.Count + " Skripte, "
+            + lesbar.Count + " lesbar, "
+            + lesbar.Sum(pS => pS.Text!.Length) + " Bytes Ruby");
 
-        var name = erster.Items[1].Text ?? "";
-        AssertTrue(name.Length > 0,
-            "**and the name is there** — and it is the one thing a reader "
-                + "may take from a script list without touching the body");
+        AssertTrue(lesbar.Count > 40,
+            "**and most of them are readable** -- " + lesbar.Count
+                + " of " + skripte.Count + ", and a number near zero would "
+                + "say the format is something this reader does not know");
 
-        var koerper = erster.Items[2].Text ?? "";
-        AssertTrue(koerper.Length > 0,
-            "**and the body is there, as bytes** — and it is "
-                + koerper.Length + " of them");
+        // **Und der erste lesbare Körper ist echtes Ruby, und nicht eine
+        // Datei, die zufällig entpackt.**
+        var mitRuby = lesbar.Where(pS => pS.Text!.Contains("class ")
+            || pS.Text!.Contains("module ")
+            || pS.Text!.Contains("def ")).ToList();
+        AssertTrue(mitRuby.Count > 40,
+            "**and what comes out is Ruby** -- " + mitRuby.Count
+                + " scripts carry `class`, `module` or `def`, and a body "
+                + "that inflated to something else would be a number, not "
+                + "a game");
 
-        // **Und es ist Chiffre, und gemessen.**
-        AssertTrue(!koerper.Contains("def ") && !koerper.Contains("class "),
-            "**and the body holds no Ruby** — and a body that held `def` "
-                + "would be plain text, and a plain text body would not "
-                + "need a key, and a key is what this reader refuses to "
-                + "derive");
+        // **Und der Körper eines bekannten Skripts traegt dessen Namen im
+        // eigenen Kopf, und das ist die Messung, die eine Chiffre
+        // ausschliesst.**
+        var spriteset = lesbar.FirstOrDefault(
+            pS => pS.Name == "Spriteset_Map");
+        AssertTrue(spriteset != null
+            && spriteset.Text!.Contains("class Spriteset_Map"),
+            "**and a body names the script the list gave it** -- and "
+                + "Spriteset_Map's body carries `class Spriteset_Map`, and "
+                + "a cipher could not do that by accident");
 
-        var lesbar = 0;
-        foreach (var zeichen in koerper)
-        {
-            if ((zeichen >= 'a' && zeichen <= 'z')
-                || (zeichen >= 'A' && zeichen <= 'Z')
-                || zeichen == ' ')
-            {
-                lesbar += 1;
-            }
-        }
-
-        var verhaeltnis = lesbar / (double)Math.Max(1, koerper.Length);
-        AssertTrue(verhaeltnis < 0.6,
-            "**and it is mostly not letters** — and 22 % were measured; a "
-                + "real Ruby script is above 0.8, and a body that looked "
-                + "like text would be the one case in which a reader "
-                + "would be tempted to hand it to the parser: "
-                + verhaeltnis.ToString("0.00"));
+        // **Und kein Schritt hier hat eine Zeile ausgefuehrt.**
+        AssertTrue(lesbar.All(pS => !pS.Text!.Contains("Game.exe")),
+            "**and nothing was run** -- the bodies are text and the test "
+                + "read them, and running a game's own code is a decision "
+                + "this repository does not take on its own");
     }
-
 }

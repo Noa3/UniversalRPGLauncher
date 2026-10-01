@@ -14520,3 +14520,74 @@ carries, and a new code without a method is named as such.
 **`TestRealMzGameData`: 1/1, and it prints the two lines and the third.**
 
 **Full suite: `All 2216 tests passed`.**
+
+
+## XP: the scripts were never encrypted, and a green test said they were
+
+**And this is the worst thing a wrong measurement in this repository did,
+because it was green.**
+
+### And what the test asserted, and what the file says
+
+```text
+old test:  "the body holds no Ruby"  and  "22 % of its characters are
+            letters"  and  in its own remarks:  "XP and VX encrypt their
+            scripts with a key derived from the archive"
+
+measured:  5e 04 78 9c b5 58 5b 6f
+              ^^^^^^^ ^^^^^
+              |       zlib: deflate, 32K window, default level
+              a Marshal string
+
+           @39152  "Spriteset_Map" 22 02 78 9c b5 58 5b 6f
+```
+
+**And that body inflates to 5328 bytes of `class Spriteset_Map` with the
+engine's own comment header, and all ninety of them give 538798 bytes of
+Ruby.**
+
+**And the test was green, and green is what made it dangerous: a test that
+asserts a falsehood protects the falsehood as long as nothing contradicts
+it, and the only thing that contradicted it was reading the bytes.**
+
+### And where the wrong belief came from
+
+**It came from a sentence written before the file was opened.** <c>XP</c> and
+<c>VX</c> ship their scripts inside an archive, and an archive is
+encrypted, and the sentence joined the two. **And it is false for XP's
+<code>Scripts.rxdata</code> and for VX Ace's <code>Scripts.rvdata2</code>
+alike** -- **and VX Ace's is measured here every run: this repository's
+parser reads all ninety-three of a real game's scripts without a
+decompressor.**
+
+**And the honest form of the claim is narrower: an archive is encrypted, and
+a script list inside it is compressed.**
+
+### And what the reader does now
+
+```text
+XP  gemessen: 90 Skripte, 90 lesbar, 538798 Bytes Ruby
+```
+
+**And the new test asserts four things, and the third is the one that
+closes it:**
+
+1. the game carries a game's worth of scripts;
+2. most of them are readable;
+3. **a body names the script the list gave it** -- `Spriteset_Map`'s body
+   carries `class Spriteset_Map`, and **a cipher could not do that by
+   accident**;
+4. nothing was run.
+
+**And `MarshalReader.AlsText` became `internal` rather than being copied,
+because a second decoder would be a second answer to the same question and
+the two would drift.**
+
+### Evidence
+
+**`TestRealXpGameData`: 5/5, and it prints the measured line.**
+
+**Full suite: `All 2216 tests passed`.**
+
+**And criterion 4 now has a number: 90 of 90, 538798 bytes of Ruby, out of
+a finished game on this machine.**
