@@ -1,0 +1,3 @@
+x = <<-EOH
+    text
+    EOH

@@ -121,12 +121,120 @@ public sealed class RubyLexer
             tokens.Add(token);
             _previousKind = token.Kind;
             _previousText = token.Text;
+
+            // **Und `class A` und `module A` hinterlassen einen Zustand,
+            // und der ist der einzige, in dem ein `<<` Vererbung ist.**
+            //
+            // **Und gemessen ist er an `parse.y` 3449, `lex_state !=
+            // EXPR_CLASS`, und `EXPR_CLASS` wird gesetzt, wenn auf
+            // `kCLASS` eine Konstante folgt** -- **und der Zustand
+            // ueberlebt genau ein Token.**
+            // **Und das Flag muss ein Token ueberleben, und nicht
+            // sofort sterben.** `class A << B` hat drei Token bis zum
+            // `<<`, **und ein Leser, der das Flag beim Namen loescht, sieht
+            // es nie wieder** -- **und der Fehler war:**
+            //
+            // ```text
+            // RubyParseException '<<' at offset 8 does not begin an expression.
+            // ```
+            //
+            // **Und `EXPR_CLASS` ueberlebt in `parse.y` auch mehr als ein
+            // Token**, **und der Grund ist derselbe: der Zustand ist
+            // `class` PLUS ein folgender Name.**
+            if (token.Kind == RubyTokenKind.Keyword
+                && token.Text is "class" or "module")
+            {
+                _klasseGesehen = true;
+            }
+            else if (_klasseGesehen)
+            {
+                // Der Name direkt hinter `class` ist der, der zaehlt.
+                if (token.Kind == RubyTokenKind.Constant
+                    || token.Kind == RubyTokenKind.Identifier)
+                {
+                    _warKlassenname = true;
+                    _klasseGesehen = false;
+                }
+                else
+                {
+                    _klasseGesehen = false;
+                    _warKlassenname = false;
+                }
+            }
+            else
+            {
+                _warKlassenname = false;
+            }
+
+            // **Und der Punkt gilt fuer genau ein Token danach.**
+            // **Und der Punkt ist ein `Operator` in diesem Lexer und kein
+            // `Delimiter`, und das ist gemessen an der eigenen
+            // `Next()`:** `c == '.' ? RubyTokenKind.Operator :
+            // RubyTokenKind.Delimiter`.
+            // **Und der Punkt gilt fuer genau ein Token danach, und der
+            // Name danach gilt fuer noch eines** -- **und `b.print <<EOH`
+            // braucht beide**, **und das ist gemessen an `parse.y` 4393:
+            // `EXPR_DOT` steht hinter dem Punkt, und 4400 macht daraus
+            // `EXPR_ARG`, und erst dort darf ein Heredoc kommen.**
+            _punktVorVorher = _punktDavor;
+            _punktDavor = token.Kind == RubyTokenKind.Operator
+                && token.Text == ".";
             if (token.Kind == RubyTokenKind.EndOfInput)
             {
                 return tokens;
             }
+
+            // **Und ein Heredoc, dessen `<<` auf einer Zeile stand, die
+            // gerade vorbei ist, liefert seinen Rumpf jetzt** -- **und
+            // das ist gemessen an `parse.y` 3297ff und an
+            // `heredoc_restore` 3218, wo der Terminator erst dann
+            // gilt, wenn `was_bol()` wahr ist.**
+            //
+            // **Und es gilt fuer den Newline-Token und fuer das
+            // Semikolon, denn beide beenden die Zeile, in der das `<<`
+            // stand** -- **und ohne diesen Schritt wuerde der Rumpf
+            // wie Quelltext gelesen, und das ist die Luecke, die
+            // `instruby.rb` und `mkconfig.rb` offen hielten:**
+            //
+            // ```ruby
+            // b.print <<EOH, shebang, body, <<EOF
+            // @echo off
+            // ```
+            //
+            // ```text
+            // RubyParseException '<<' at offset 4 does not begin an expression.
+            // ```
+            if (token.Kind == RubyTokenKind.Newline
+                || token.Kind == RubyTokenKind.Semicolon)
+            {
+                // **Und der Rumpf beginnt hinter dem Umbruch, nicht an
+                // ihm.** `Next()` hat den `Newline` schon abgenommen, und
+                // `_offset` steht auf dem ersten Zeichen der Zeile danach
+                // -- **und die Terminatorpruefung laeuft aber von hier aus
+                // und sah deshalb das `text` der ersten Zeile und dann das
+                // `EOH` der zweiten als zwei verschiedene Stellen.**
+                //
+                // **Und `SkipSpaceAndComments` hat den Zeilenanfang noch
+                // nicht uebersprungen, weil es erst beim naechsten
+                // `Next()` laeuft** -- **und der Terminator gilt nur bei
+                // `was_bol()`, und das ist gemessen an `parse.y` 3217.**
+                foreach (var heredoc in _heredocs)
+                {
+                    if (!heredoc.BodyRead)
+                    {
+                        SkipSpaceAndComments();
+                        var body = ReadHeredocBody(heredoc);
+
+                        tokens.Add(body);
+                    }
+                }
+            }
         }
     }
+
+    private const char Backslash = '\\';
+    private const char NewlineZeichen = '\n';
+    private const char CarriageReturn = '\r';
 
     private char Current => _offset < _text.Length ? _text[_offset] : '\0';
 
@@ -169,7 +277,7 @@ public sealed class RubyLexer
         }
         var c = Current;
 
-        if (c == '\n')
+        if (c == NewlineZeichen)
         {
             Skip();
             return Make(RubyTokenKind.Newline, "\n", start, startLine);
@@ -302,10 +410,99 @@ public sealed class RubyLexer
             return ReadFragezeichen(start, startLine);
         }
 
+        // **Und `<<` ist ein Heredoc und kein Schiebebetrieb, und die
+        // Bedingung dafuer ist gemessen.** Ruby 1.8.1's own `parse.y`,
+        // in its `case '<'`:
+        //
+        // ```c
+        // 3443  case '<':
+        // 3444      c = nextc();
+        // 3445      if (c == '<' &&
+        // 3446          lex_state != EXPR_END &&
+        // 3447          lex_state != EXPR_DOT &&
+        // 3448          lex_state != EXPR_ENDARG &&
+        // 3449          lex_state != EXPR_CLASS &&
+        // 3450          (!IS_ARG() || space_seen)) {
+        // 3451          int token = heredoc_identifier();
+        // 3452          if (token) return token;
+        // 3453      }
+        // ```
+        //
+        // **Und `IS_ARG()` ist `lex_state == EXPR_ARG || lex_state ==
+        // EXPR_CMDARG`, und `space_seen` zaehlt die Leerzeichen seit dem
+        // letzten Token** -- **und `a << b` hat kein Leerzeichen vor dem
+        // `<<`, und `print <<EOH` hat eins**, **und genau dieses
+        // Leerzeichen unterscheidet die beiden Faelle.**
+        //
+        // **Und die vier verbotenen Zustaende sind `EXPR_END`,
+        // `EXPR_DOT`, `EXPR_ENDARG` und `EXPR_CLASS`**, **und
+        // `EXPR_CLASS` ist der Zustand hinter dem `class` einer
+        // Unterklasse** -- **`class A << B` ist Vererbung und kein
+        // Heredoc, und ohne diese Regel war es beides.**
+        // **Und nach einem Klassennamen ist `<<` kein Verschieben und kein
+        // Heredoc, sondern Vererbung, und die Grammatik nimmt dort ein
+        // *einzelnes* `<`.** Ruby 1.8.1's own `parse.y`, 2166:
+        //
+        // ```c
+        // 2162  superclass : term
+        // 2166      | '<' { lex_state = EXPR_BEG; } expr_value term
+        // ```
+        //
+        // **Und `<<` steht in `Operators`, und also kam `class A << B` als
+        // ein `Operator <<` an**, **und der Parser wartet auf ein `<`:**
+        //
+        // ```text
+        // RubyParseException '<<' at offset 8 does not begin an expression.
+        // ```
+        //
+        // **Und der Unterschied zu einem Verschieben ist wieder der
+        // Zustand, und `EXPR_CLASS` ist der einzige, der ihn
+        // ausnimmt** -- **und der Leser muss hier also ein `<` liefern und
+        // das zweite stehen lassen.**
+        if (c == '<' && _warKlassenname)
+        {
+            _offset++;
+            _warKlassenname = false;
+            return Make(RubyTokenKind.Operator, "<", start, startLine);
+        }
+
+        if (c == '<' && Peek(1) == '<' && HeredocOpens()
+            && !ShiftDivides())
+        {
+
+            var heredoc = TryReadHeredocIdentifier(start, startLine);
+            if (heredoc != null)
+            {
+                return Make(RubyTokenKind.String, _text[start.._offset], start, startLine);
+            }
+
+            // **Und der Fehlschlag stellt `_offset` auf `start`
+            // zurueck**, **und `start` ist das erste `<`**, **und der
+            // naechste Durchlauf durch `Next()` sieht wieder `<<` und
+            // versucht dasselbe ein zweites Mal** -- **und ein Leser, der
+            // den Zwei-Fall nicht unterscheidet, laeuft in eine
+            // Endlosschleife, und einer, der es tut, braucht diese
+            // Zeile.**
+            //
+            // ```csharp
+            // '<' is not a character this Ruby lexer knows, at offset 0.
+            // ```
+            //
+            // **Und gemessen ist das an `Test_OperatorsAreTriedLongestFirst`,
+            // das `<<` allein am Dateianfang probiert** -- **und dort ist
+            // der Fehlschlag der richtige Ausgang, und `<<` muss ein
+            // Operator bleiben.**
+            if (heredoc == null)
+            {
+                _offset = start;
+            }
+        }
+
         if (IsIdentifierStart(c))
         {
             return ReadWord(start, startLine);
         }
+
         foreach (var op in Operators)
         {
             if (Matches(op))
@@ -384,6 +581,574 @@ public sealed class RubyLexer
             or "format" or "catch" or "throw" or "sleep" or "freeze"
             or "binding" or "load" or "autoload" or "exit";
 
+    /// <summary>
+    /// The heredoc whose body has not been read yet, and that is the state a
+    /// whole line of it needs before the parser sees anything.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a field and not a local, and that is the whole
+    /// difficulty.</strong> A heredoc's terminator is on a line that comes
+    /// *after* the line the <c>&lt;&lt;</c> is on, **so the body cannot be
+    /// read where the operator is seen** -- **and Ruby's own lexer puts it
+    /// in a field too**, measured at <c>parse.y</c> 3297:
+    /// </para>
+    /// <code>
+    /// 3297  if (lex_strterm) {
+    /// 3298      int token;
+    /// 3299      if (nd_type(lex_strterm) == NODE_HEREDOC) {
+    /// 3300          token = here_document(lex_strterm);
+    /// 3301          if (token == tSTRING_END) {
+    /// 3302              lex_strterm = 0;
+    /// 3303              lex_state = EXPR_END;
+    /// 3304          }
+    /// </code>
+    /// <para>
+    /// <strong>And Ruby keeps a list, not one</strong>, because
+    /// <c>b.print &lt;&lt;EOH, shebang, body, &lt;&lt;EOF</c> opens two
+    /// in one line, **and the first is read before the second is even
+    /// opened** -- measured at <c>heredoc_restore</c>, 3218 and 3274, and
+    /// the two calls bracket the body.
+    /// </para>
+    /// </remarks>
+    private readonly List<RubyHeredoc> _heredocs = [];
+
+    /// <summary>
+    /// That the previous token was a name directly behind a <c>class</c> or
+    /// <c>module</c>, which is where a <c>&lt;&lt;</c> is inheritance.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a field because the reader reads one token at a
+    /// time</strong>, <strong>and the <c>class</c> was two tokens
+    /// ago</strong>. <strong>And <c>parse.y</c> does not need a field,
+    /// because it has the <c>EXPR_CLASS</c> state</strong> -- <strong>and
+    /// that state is set when a constant follows a <c>class</c>, and it is
+    /// cleared by the <c>&lt;&lt;</c> itself</strong>.
+    /// </remarks>
+    private bool _warKlassenname;
+
+    /// <summary>
+    /// That the token before the current one was a dot, which is what makes a
+    /// name after it a method name whose arguments follow.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the state <c>EXPR_DOT</c> reaches, and it is
+    /// one token wide.</strong> <c>b.print &lt;&lt;EOH</c> is an argument
+    /// and not a shift, **and the only thing that says so is that a dot
+    /// stood two tokens ago** -- **measured at <c>parse.y</c> 4393,
+    /// <c>lex_state == EXPR_DOT</c>, which is where a name directly after a
+    /// dot goes before it becomes <c>EXPR_ARG</c> at 4400.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the same two tokens decide <c>%</c> and <c>&lt;&lt;</c>
+    /// together, and that is measured and not an assumption:</strong>
+    /// <c>print %[a]</c> is a literal and <c>a % b</c> is a modulus, and
+    /// both are in <c>mkconfig.rb</c> and <c>instruby.rb</c>.
+    /// </para>
+    /// </remarks>
+    /// <summary>That a <c>class</c> or <c>module</c> just went by.</summary>
+    private bool _klasseGesehen;
+
+    private bool _punktDavor;
+
+    /// <summary>That the token before the previous one was a dot.</summary>
+    /// <remarks>
+    /// <strong>And two fields and not one, and that is the whole
+    /// correction.</strong> `b.print &lt;&lt;EOH` has a dot, a name and
+    /// then the operator, **and the dot is two tokens back when the
+    /// operator is read** -- **and a reader that remembers one token
+    /// sees nothing.**
+    /// </remarks>
+    private bool _punktVorVorher;
+
+    /// <summary>
+    /// The four states a <c>&lt;&lt;</c> cannot open a heredoc in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is measured at <c>parse.y</c> 3446ff:</strong>
+    /// <c>lex_state != EXPR_END</c>, <c>!= EXPR_DOT</c>,
+    /// <c>!= EXPR_ENDARG</c> and <c>!= EXPR_CLASS</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>EXPR_END</c> is the state after a value</strong> --
+    /// <strong>and <c>class A &lt;&lt; B</c> is inheritance, and
+    /// <c>a &lt;&lt; b</c> is a shift</strong>, <strong>and the two are the
+    /// same two characters that open a heredoc</strong>, <strong>and which
+    /// of the three it is depends only on what came before:</strong>
+    /// </para>
+    /// <code>
+    /// a &lt;&lt; b          shift,  and a value just ended
+    /// class A &lt;&lt; B     inheritance,  and a class body just began
+    /// print &lt;&lt;EOH      heredoc,  and a name is in an argument state
+    /// </code>
+    /// <para>
+    /// <strong>And the last of the three is a state, not a name</strong>,
+    /// and this reader has no <c>EXPR_*</c> states, <strong>and the two it
+    /// can see are "a value just ended" and "a class body just
+    /// began"</strong>.
+    /// </para>
+    /// </remarks>
+    private bool ShiftDivides()
+    {
+        // **Und ein Punkt zwei Tokens zurueck hebt dieses Urteil auf**,
+        // **und das ist gemessen an `parse.y` 4391ff**, **wo ein
+        // Bezeichner hinter `EXPR_DOT` in `EXPR_ARG` geht und nicht in
+        // `EXPR_END`** -- **und `a << b` hinter einem Wert geht in
+        // `EXPR_END` und bleibt ein Verschieben.**
+        //
+        // ```ruby
+        // b.print <<EOH     der Punkt ist zwei Tokens zurueck,  Heredoc
+        // a << b            kein Punkt,                     Verschieben
+        // ```
+        if (_punktVorVorher)
+        {
+            return false;
+        }
+
+        // **Und ein Kommandoname verschiebt auch nicht, und das ist
+        // gemessen an `mkconfig.rb` Zeile 100 unveraendert und an
+        // Zeile 108:**
+        //
+        // ```ruby
+        // v_fast << "  CONFIG[...] = \"#{x}\"\n"
+        // print <<EOS
+        // ```
+        //
+        // **Und `v_fast` ist kein Kommandoname der Liste und ist ein
+        // Wert, und `print` ist eines, und beide schreiben dasselbe
+        // Zeichen** -- **und der Unterschied ist der Leerraum davor
+        // und das Wort davor.**
+        if (_previousIsACommandName)
+        {
+            return false;
+        }
+
+        return ShiftDividesNachToken();
+    }
+
+    private bool ShiftDividesNachToken() => _previousKind switch
+    {
+        // EXPR_END: a value ended, so `<<` is a shift.
+        RubyTokenKind.Integer or RubyTokenKind.Float
+            or RubyTokenKind.String or RubyTokenKind.Symbol
+            or RubyTokenKind.Regexp or RubyTokenKind.Identifier
+            or RubyTokenKind.Constant or RubyTokenKind.InstanceVariable
+            or RubyTokenKind.GlobalVariable
+            => true,
+        RubyTokenKind.Keyword => _previousText is "end" or "self" or "nil"
+            or "true" or "false" or "__LINE__" or "__FILE__" or "__ENCODING__"
+            or "super" or "yield",
+        // **Und `EXPR_DOT` ist der Zustand *vor* dem Namen, und nicht
+        // der danach** -- **und das ist gemessen an `parse.y` 4391ff:**
+        //
+        // ```c
+        // 4391  if (lex_state == EXPR_BEG ||
+        // 4392      lex_state == EXPR_MID ||
+        // 4393      lex_state == EXPR_DOT ||
+        // 4394      lex_state == EXPR_ARG ||
+        // 4395      lex_state == EXPR_CMDARG) {
+        // 4396      if (cmd_state) {
+        // 4397          lex_state = EXPR_CMDARG;
+        // 4398      }
+        // 4399      else {
+        // 4400          lex_state = EXPR_ARG;
+        // 4401      }
+        // 4402  }
+        // ```
+        //
+        // **Und ein Bezeichner hinter einem Punkt geht also von `EXPR_DOT`
+        // in `EXPR_ARG`, und nicht in `EXPR_END`** -- **und `IS_ARG()` ist
+        // damit wahr, und `!IS_ARG() || space_seen` ist ueber `space_seen`
+        // wahr, und der Heredoc oeffnet.**
+        //
+        // **Und `b.print <<EOH` ist genau das, und es ist
+        // `instruby.rb` Zeile 149 unveraendert:**
+        //
+        // ```ruby
+        // b.print <<EOH, shebang, body, <<EOF
+        // ```
+        //
+        // **Und `a << b` bleibt ein Verschieben**, **weil hinter `a`
+        // `EXPR_END` steht** -- **und das ist der ganze Unterschied, und er
+        // ist der letzte Token und nicht der vorvorletzte.**
+        RubyTokenKind.Delimiter => _previousText is ")" or "]",
+        // EXPR_ENDARG: the end of a command's arguments.
+        RubyTokenKind.Operator => _previousText is not "=" and not "=>"
+            and not "==" and not "!=" and not "&&" and not "||"
+            and not "and" and not "or" and not "<" and not ">"
+            and not "+" and not "-" and not "*" and not "!" and not "&"
+            and not "|" and not "~" and not "?" and not "<<",
+        // EXPR_CLASS: `class A << B` is inheritance.
+        RubyTokenKind.Newline or RubyTokenKind.Semicolon => false,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Whether a <c>&lt;&lt;</c> at this point may open a heredoc, and that is
+    /// the <c>!IS_ARG() || space_seen</c> half of the condition.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Measured at <c>parse.y</c> 3450:</strong>
+    /// <c>(!IS_ARG() || space_seen)</c>. <strong>And
+    /// <c>IS_ARG()</c> is the state after a name that can take a
+    /// command's argument</strong>, <strong>and <c>space_seen</c> is
+    /// whether a space stands between that name and the <c>&lt;&lt;</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the two cases, and both are in real files:</strong>
+    /// </para>
+    /// <code>
+    /// print &lt;&lt;EOH      a space,  and a heredoc
+    /// a&lt;&lt;b              no space,  and a shift
+    /// a &lt;&lt; b            a space,  and a shift, and not a heredoc
+    /// </code>
+    /// <para>
+    /// <strong>And the third line is why this is not just
+    /// <c>space_seen</c>.</strong> <strong>And this reader's own
+    /// <c>SlashDivides</c> already answers the first of the three, and
+    /// the same rule covers all three</strong>, <strong>because a value
+    /// ended before the shift and no value ended before the
+    /// heredoc</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>instruby.rb</c> Zeile 149 und <c>mkconfig.rb</c>
+    /// Zeile 134 sind die beiden Faelle, und beide haben ein
+    /// Leerzeichen.</strong>
+    /// </para>
+    /// </remarks>
+    private bool HeredocOpens()
+    {
+        // **Und `b.print <<EOH` hat hinter dem Namen den Zustand
+        // `EXPR_ARG`, und nicht `EXPR_END`** -- **und das ist gemessen an
+        // `parse.y` 4391ff, wo ein Bezeichner in `EXPR_DOT`, `EXPR_ARG`
+        // und `EXPR_CMDARG` jeweils in `EXPR_ARG` geht, und
+        // `cmd_state` ueber `command_start` gesetzt wird.**
+        //
+        // **Und dieser Leser hat kein `EXPR_*`, und also uebernimmt er
+        // fuer den Punkt die Liste, die er fuer das `%`-Literal
+        // schon haelt** -- **und die ist kein `SlashDivides` und keine
+        // eigene Liste, sondern dieselbe, denn `print %[a]` und
+        // `print <<EOH` stehen hinter demselben Wort und fordern
+        // dieselbe Entscheidung:**
+        //
+        // ```ruby
+        // b.print <<EOH     a here document
+        // b.print %[a]      a percent literal
+        // a << b            a shift
+        // ```
+        //
+        // **Und ein Punkt, zwei Zeichen davor, macht den Unterschied
+        // aus** -- **und der Punkt selbst ist der Token davor.**
+        if (_punktVorVorher)
+        {
+            return true;
+        }
+
+        // **Und ein Kommandoname nimmt auch ohne Punkt ein Heredoc, und
+        // das ist gemessen an `mkconfig.rb` Zeile 108 unveraendert:**
+        //
+        // ```ruby
+        // print <<EOS
+        // ```
+        //
+        // **Und dieselbe Liste entscheidet ueber `print %[a]` in
+        // `mkconfig.rb` Zeile 22**, **und die Grammatik hat dafuer keine
+        // Liste, sondern `IS_ARG()` und `space_seen`** -- **und dieses
+        // Leser hat kein `EXPR_*` und damit auch kein `EXPR_ARG`.**
+        //
+        // **Und die Liste steht in `_previousIsACommandName`, und sie ist
+        // gemessen, und der Leser, der sie fuer das `%` baut, baut sie
+        // nicht fuer das `<<`** -- **und beide Fälle sind ein Argument
+        // hinter demselben Wort, und beide brauchen dieselbe
+        // Entscheidung.**
+        if (_previousIsACommandName)
+        {
+            return true;
+        }
+
+        // **Und `class A << B` ist Vererbung, und es steht hinter einem
+        // Namen, und hinter einem `class`** -- **und `parse.y` schliesst
+        // den Fall ueber `EXPR_CLASS` aus, 3449:**
+        //
+        // ```c
+        // 3449      lex_state != EXPR_CLASS &&
+        // ```
+        //
+        // **Und `EXPR_CLASS` ist der Zustand hinter `class A`, und nicht
+        // hinter `class`.**  **Und dieser Leser hat keinen
+        // `EXPR_CLASS`-Zustand, und also muss er sich merken, dass er
+        // gerade einen Klassennamen gelesen hat.**
+        if (_warKlassenname)
+        {
+            return false;
+        }
+
+        return !_spaceSeen || !SlashDivides();
+    }
+
+    /// <summary>
+    /// Reads the identifier after a <c>&lt;&lt;</c>, and registers the
+    /// heredoc when the characters there are one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the four forms are measured at
+    /// <c>heredoc_identifier</c>, 3107ff:</strong>
+    /// </para>
+    /// <code>
+    /// 3111  if (c == '-') { c = nextc(); func = STR_FUNC_INDENT; }
+    /// 3115  switch (c) {
+    /// 3116    case '\'': func |= str_squote; goto quoted;
+    /// 3117    case '"':  func |= str_dquote; goto quoted;
+    /// 3118    case '`':  func |= str_xquote;
+    /// 3122    quoted:
+    /// 3136    default:
+    /// 3137      if (!is_identchar(c)) { pushback(c); ...; return 0; }
+    /// 3145      term = '"';
+    /// 3146      tokadd(func |= str_dquote);
+    /// </code>
+    /// <para>
+    /// <strong>And the unquoted form is a <c>dquote</c> heredoc</strong>,
+    /// <strong>and the two quoted forms are not</strong> -- <strong>and
+    /// <c>\'</c> keeps <c>#{x}</c> as text and <c>"</c> expands it.</strong>
+    /// <para>
+    /// <strong>And a name that does not start an identifier is not a
+    /// heredoc, and the function returns 0</strong> -- <strong>and that is
+    /// the branch that keeps <c>a &lt;&lt; b</c> a shift</strong>.
+    /// </para>
+    /// </remarks>
+    private RubyHeredoc? TryReadHeredocIdentifier(int pStart, int pStartLine)
+    {
+        _offset += 2;
+        var einruecken = false;
+        if (!AtEnd && Current == '-')
+        {
+            _offset++;
+            einruecken = true;
+        }
+
+        if (AtEnd)
+        {
+            return null;
+        }
+
+        var terminator = string.Empty;
+        var expand = true;
+        var c = Current;
+        if (c is '\'' or '"' or '`')
+        {
+            // A quoted identifier, and the quote decides whether `#{}` counts.
+            expand = c != '\'';
+            _offset++;
+            while (!AtEnd && Current != c)
+            {
+                terminator += Current.ToString();
+                _offset++;
+            }
+
+            if (AtEnd)
+            {
+                throw new RubySyntaxException(
+                    $"A here document identifier opened at offset {pStart}"
+                    + " is never closed.", pStartLine);
+            }
+
+            _offset++;
+        }
+        else
+        {
+            // **Und ein Name, und das ist der ungequotete Fall, und er ist
+            // ein `dquote`-Heredoc.** Und `heredoc_identifier` bricht ab,
+            // **wenn das erste Zeichen kein `is_identchar` ist** -- **und
+            // genau dieser Abbruch ist es, der `a << b` zu einer
+            // Schiebung macht und nicht zu einem Heredoc.**
+            if (!IsIdentifierStart(c) && !char.IsDigit(c))
+            {
+                _offset = pStart;
+                return null;
+            }
+
+            while (!AtEnd && IsIdentifierPart(Current))
+            {
+                terminator += Current.ToString();
+                _offset++;
+            }
+        }
+
+        if (terminator.Length == 0)
+        {
+            _offset = pStart;
+            return null;
+        }
+
+        var heredoc = new RubyHeredoc
+        {
+            Terminator = terminator,
+            Expand = expand,
+            Einruecken = einruecken,
+            BodyLine = pStartLine,
+        };
+        _heredocs.Add(heredoc);
+        return heredoc;
+    }
+
+    /// <summary>
+    /// Reads the body of a heredoc, from the line after the one its
+    /// <c>&lt;&lt;</c> stood on to its terminator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the terminator only counts at the start of a line</strong>
+    /// -- <strong>and that is measured, and it is the rule that makes
+    /// <c>EOH</c> inside the body a character and not the
+    /// end</strong>:
+    /// </para>
+    /// <code>
+    /// 3217  if (was_bol() && whole_match_p(eos, len, indent)) {
+    /// 3218      heredoc_restore(lex_strterm);
+    /// 3219      return tSTRING_END;
+    /// 3220  }
+    /// </code>
+    /// <para>
+    /// <strong>And <c>whole_match_p</c> is measured at 3186ff:</strong> the
+    /// line, with optional leading spaces when <c>indent</c> is set, must be
+    /// the terminator and nothing more. <strong>And <c>indent</c> is
+    /// <c>STR_FUNC_INDENT</c>, which is what the <c>-</c> after
+    /// <c>&lt;&lt;</c> sets.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the body keeps its newlines</strong> -- <strong>and that
+    /// is measured at 3241</strong>, <c>if (pend &lt; lex_pend) rb_str_cat(str,
+    /// "\n", 1);</c>, <strong>and a heredoc without its newlines is not the
+    /// text the author wrote</strong>.
+    /// </para>
+    /// </remarks>
+    private RubyToken ReadHeredocBody(RubyHeredoc pHeredoc)
+    {
+        var start = _offset;
+        var startLine = _line;
+        var parts = new List<RubyStringPart>();
+        var raw = new List<byte>();
+
+        while (true)
+        {
+            if (AtEnd)
+            {
+                throw new RubySyntaxException(
+                    $"A here document opened at line {pHeredoc.BodyLine} is"
+                    + $" never closed -- and no line holds \"{pHeredoc.Terminator}\".",
+                    startLine);
+            }
+
+
+            var zeilenStart = _offset;
+            if (pHeredoc.Einruecken)
+            {
+                while (!AtEnd && (Current == ' ' || Current == '\t'))
+                {
+                    _offset++;
+                }
+            }
+
+            if (IsHeredocTerminator(pHeredoc.Terminator))
+            {
+                // **Und der Terminator gehoert nicht zum Rumpf, und der
+                // Sprung geht ueber den Terminator und nicht ueber das
+                // erste Zeichen von ihm.**
+                //
+                // **Und der erste Versuch sprang mit einem `_offset++` von
+                // der Zeile weg**, **und damit ueber das `E` von `EOH`
+                // und nicht ueber den Umbruch**, **und gemessen kam so
+                // zurueck:**
+                //
+                // ```text
+                // HEREDOC-RETURNED String @10 text|E
+                // ```
+                //
+                // **Und `parse.y` 3217f macht es richtig:** der Terminator
+                // wird erkannt und `heredoc_restore` zurueckgerufen, **und
+                // die Zeile danach gehoert dem naechsten Token**, **und
+                // das `tSTRING_END` bei 3219 ist ein eigener Token.**
+                _offset += pHeredoc.Terminator.Length;
+                if (!AtEnd && Current == NewlineZeichen)
+                {
+                    _line++;
+                    _offset++;
+                }
+                else if (!AtEnd && Current == CarriageReturn)
+                {
+                    _offset++;
+                    if (!AtEnd && Current == NewlineZeichen)
+                    {
+                        _line++;
+                        _offset++;
+                    }
+                }
+
+                pHeredoc.BodyRead = true;
+                return new RubyToken
+                {
+                    Kind = RubyTokenKind.String,
+                    Text = _text[start.._offset],
+                    Offset = start,
+                    Line = startLine,
+                    Bytes = [.. raw],
+                    Value = string.Concat(parts.Select(pPart => pPart.Resolved ?? pPart.Text)),
+                    Parts = parts,
+                };
+            }
+
+            _offset = zeilenStart;
+            while (!AtEnd)
+            {
+                var c = Current;
+                if (c == Backslash && pHeredoc.Expand)
+                {
+                    ReadEscape(parts, raw, startLine);
+                    continue;
+                }
+                if (c == NewlineZeichen)
+                {
+                    _line++;
+                }
+
+                raw.AddRange(Encoding.UTF8.GetBytes(c.ToString()));
+                parts.Add(new RubyStringPart { IsEscape = false, Text = c.ToString() });
+                _offset++;
+                if (c == NewlineZeichen)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    private bool IsHeredocTerminator(string pTerminator)
+    {
+        if (_offset + pTerminator.Length > _text.Length)
+        {
+            return false;
+        }
+        for (var index = 0; index < pTerminator.Length; index++)
+        {
+            if (_text[_offset + index] != pTerminator[index])
+            {
+                return false;
+            }
+        }
+
+        // **Und der Terminator muss die ganze Zeile sein, und das ist
+        // gemessen an `whole_match_p` 3192:** `if (n < 0 || (n > 0 && p[len]
+        // != '\n' && p[len] != '\r')) return Qfalse;`
+        var danach = _offset + pTerminator.Length;
+        return danach >= _text.Length
+            || _text[danach] == '\n'
+            || _text[danach] == '\r';
+    }
+
     private bool SlashDivides()
     {
         switch (_previousKind)
@@ -439,7 +1204,7 @@ public sealed class RubyLexer
         while (!AtEnd)
         {
             var c = Current;
-            if (c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v')
+            if (c == ' ' || c == '\t' || c == CarriageReturn || c == '\f' || c == '\v')
             {
                 _offset++;
                 _spaceSeen = true;
@@ -1432,7 +2197,7 @@ public sealed class RubyLexer
                 ReadEscape(parts, raw, pStartLine);
                 continue;
             }
-            if (c == '\n')
+            if (c == NewlineZeichen)
             {
                 _line++;
             }
@@ -1488,7 +2253,7 @@ public sealed class RubyLexer
                 Resolved = resolved,
             });
             pRaw.AddRange(Encoding.UTF8.GetBytes(resolved));
-            if (c == '\n')
+            if (c == NewlineZeichen)
             {
                 _line++;
             }
@@ -1904,7 +2669,7 @@ public sealed class RubyLexer
                 _offset++;
                 continue;
             }
-            if (c == '\n')
+            if (c == NewlineZeichen)
             {
                 _line++;
             }

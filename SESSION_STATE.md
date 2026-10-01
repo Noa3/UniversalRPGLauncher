@@ -14089,3 +14089,108 @@ green files plus four named gaps, and the count is asserted.**
 **And the reader change is one conditional and one break, in one place**, and
 the trace code is gone, and the probe test is gone, and `git diff --stat` says
 one file, seventy lines added and one removed.
+
+
+## Heredocs, and two thresholds that were never true
+
+**And the four named gaps are closed, and the named-gap list is empty, and
+the shape test refuses to pass if it stops being empty.**
+
+### And the two places the grammar has it, and both were read
+
+```text
+3111  if (c == '-') { c = nextc(); func = STR_FUNC_INDENT; }
+3115  switch (c) {
+3116    case '\'': func |= str_squote; goto quoted;
+3117    case '"':  func |= str_dquote; goto quoted;
+3118    case '`':  func |= str_xquote;
+3136    default:
+3137      if (!is_identchar(c)) { pushback(c); ...; return 0; }
+3145      term = '"';
+```
+
+**And the body, 3197ff, and the rule that made it hard:**
+
+```text
+3217  if (was_bol() && whole_match_p(eos, len, indent)) {
+3218      heredoc_restore(lex_strterm);
+3219      return tSTRING_END;
+```
+
+**And `whole_match_p` at 3192: the terminator has to be the whole line, and
+not a word that starts one.**
+
+### And the three conditions that decide `<<`, and each one cost a round
+
+```text
+3443  case '<':
+3444      c = nextc();
+3445      if (c == '<' &&
+3446          lex_state != EXPR_END &&
+3447          lex_state != EXPR_DOT &&
+3448          lex_state != EXPR_ENDARG &&
+3449          lex_state != EXPR_CLASS &&
+3450          (!IS_ARG() || space_seen)) {
+3451          int token = heredoc_identifier();
+```
+
+**And this reader has no `EXPR_*` states, and so it needed three fields
+instead, and every one of them is one token wide:**
+
+| state | what this reader uses | measured at |
+|---|---|---|
+| `EXPR_END` | `_previousKind` is a value | a value ended, so `a << b` shifts |
+| `EXPR_DOT` | `_punktVorVorher`, **two** tokens back | 4393, and 4400 turns it into `EXPR_ARG` |
+| `EXPR_CLASS` | `_warKlassenname` | 3449, and `class A << B` is inheritance |
+| `!IS_ARG() \|\| space_seen` | `_previousIsACommandName` | 3450, and `print <<EOH` |
+
+**And the two-token window was the correction, and the one-token window was
+the mistake, and it is the same shape as the `else` nine rounds ago: the
+question was "which state" and the answer was "which state, counted from
+where".**
+
+### And the one bug the reader had while measuring this
+
+```text
+HEREDOC-RETURNED String @10 text|E
+```
+
+**And `text|E` is a body that ends inside the terminator, and the cause was
+one `_offset++` where the terminator's length belonged** -- **and `parse.y`
+3217f does it with `heredoc_restore` and no arithmetic at all.**
+
+### And two thresholds that were never true, and neither was the reader
+
+```text
+knoten > 3000   against 288 measured
+knoten >  400   against 104 measured
+```
+
+**And a threshold that is never reached reports nothing**, **and both of them
+had been standing there long enough that nobody noticed the count was
+wrong** -- **and the 192er one had been masking the real question the whole
+time, which was whether a *file* was lost, not whether statements were
+counted.**  **And the ranges are now measured: 288 for ninety readable
+files, 104 for Ruby's own four, and a file that drops out shows in both.**
+
+### Evidence
+
+**`TestRubyLexer: 36/36`, `TestRubyParser: 56/56` -- and the shape list is one
+hundred and thirty-eight files, every one of them green, and the named-gap
+list is empty and asserted.**
+
+**Full suite `2/2216`.**
+
+**And the three remaining files are the three that were already there and are
+not heredocs:**
+
+```text
+Unused_0_O_FakeSprite_And_colorHook.rb at line 386
+_Mods_UltraModManager_..._121_Dialog_Control_System.rb at line 233
+_Mods_UltraModManager_..._mod_manager.rb at line 31
+```
+
+**And `mod_manager.rb` was measured with the heredoc reader removed, and it
+still fails, and that is the honest reading: the two of ninety-three that the
+previous round reported as fixed were fixed by a temporary trace and the
+trace is gone.**

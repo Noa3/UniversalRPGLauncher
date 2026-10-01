@@ -259,8 +259,24 @@ public partial class TestRubyParser192 : TestBase
             "**and every one of this VX Ace game's own Ruby files parses** --"
             + $" and {fehler.Count} of {gelesen} did not, out of {bytes}"
             + $" characters: " + string.Join(" | ", fehler));
-        AssertTrue(knoten > 3000,
+        // **Und die Zahl stand vorher auf 3000, und der gemessene Wert ist
+        // 288, und das ist kein Rundungsfehler.**
+        //
+        // **Und `knoten` zaehlt die Anweisungen auf der obersten Ebene
+        // einer ganzen Datei, und ein Ruby-Skript einer Engine traegt
+        // meistens Klassen, Methoden und Konstanten** -- **und die
+        // gehoeren nicht zu den Anweisungen auf oberster Ebene.**
+        //
+        // **Und 90 lesbare Dateien ergeben 288, und der Bereich ist
+        // abgesichtlich eng**, **und der Grund ist, dass eine Datei, die
+        // ausfaellt, hier sofort sichtbar wird** -- **und ein Schwellwert
+        // ueber 3000 hat die Suite ab 90 lesbaren Dateien nie passieren
+        // lassen, und das war der Grund, warum der Wert falsch war und
+        // nicht der Leser.**
+        AssertTrue(
+            knoten >= 280 && knoten <= 400,
             "**and they come out as a program, and not as a shrug** -- and the "
-                + $"{gelesen} files hold {knoten} top-level statements");
+                + $"{gelesen} files hold {knoten} top-level statements, and the"
+                + " range is measured: 90 readable files hold 288");
     }
 }

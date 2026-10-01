@@ -78,3 +78,44 @@ public sealed class RubyStringPart
     /// <summary>For an escape, what it produces, where the reader knows.</summary>
     public string? Resolved { get; init; }
 }
+
+/// <summary>
+/// One here document that a <c>&lt;&lt;</c> has opened and whose body has not
+/// been read yet.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>And this is a lexer-private state and not a token</strong>,
+/// because a heredoc's body is not one token: <c>&lt;&lt;EOH</c> is one
+/// token where the <c>&lt;&lt;</c> stands, and the body is a second one
+/// that arrives later.
+/// </para>
+/// <para>
+/// <strong>And the four fields are the four the grammar has</strong>,
+/// measured at <c>heredoc_identifier</c> 3107ff and
+/// <c>here_document</c> 3208ff: the terminator, whether <c>#{}</c> counts,
+/// whether leading spaces are allowed in front of the terminator, and the
+/// line the <c>&lt;&lt;</c> stood on -- <strong>and that last one is only
+/// for the error message</strong>.
+/// </para>
+/// </remarks>
+internal sealed class RubyHeredoc
+{
+    /// <summary>The word that ends the body, without any quote.</summary>
+    public required string Terminator { get; init; }
+
+    /// <summary>
+    /// Whether <c>#{}</c> in the body is an interpolation, and that is false
+    /// for <c>&lt;&lt;'X'</c> and true for everything else.
+    /// </summary>
+    public required bool Expand { get; init; }
+
+    /// <summary>Whether the <c>-</c> was written, so leading spaces count.</summary>
+    public required bool Einruecken { get; init; }
+
+    /// <summary>The line the <c>&lt;&lt;</c> stood on, for the error.</summary>
+    public required int BodyLine { get; init; }
+
+    /// <summary>Set once the body has been read.</summary>
+    public bool BodyRead { get; set; }
+}
