@@ -12860,3 +12860,172 @@ p3: RubyParseException ']' at offset 21 does not begin an expression.
 
 **Full suite `4/2216`, and every one of the tests that existed before is green,
 and three were added.**
+
+
+## A VX Ace game on this machine ships ninety-three of its own Ruby files, and that is
+## the first measurement of a real game's Ruby without decryption
+
+**And this is what ended the `mkconfig.rb` chase, and it ended it by finding
+something better.**
+
+### And the game names its own runtime
+
+**Measured in `D:/NextCloud/Games/Android Games/LonaRPG/Game.ini`, and it is
+the file's own text:**
+
+```
+[Game]
+Library=System\RGSS301.dll
+Scripts=Data\Scripts.rvdata2
+Title=B.0.10.6
+```
+
+**And `RGSS301` is VX Ace, and VX Ace is Ruby 1.9.2, and that is not the Ruby
+the four engine files are** -- **those are 1.8.1 from the `v1_8_1` tag.**
+
+**And `Scripts.rvdata2` is 320 bytes, and an archive of ninety-three game
+scripts would not be** -- **so the scripts ship unencrypted, in `ModScripts/`,
+ninety-three files and 377138 bytes.** **And `LonaRPG` is not in `KANBAN.md`,
+and it is the first place in this repository where a real game's own Ruby is
+readable without decryption and without execution.**
+
+**And they are not the engine's scripts.** They are a mod loader's contents --
+`UltraModManager`, `Cheats Mod`, `ArmoredLona` -- **so a reader that passes all
+of them has read a large body of Ruby 1.9.2 game code, and not the VX Ace
+standard library, and the difference is named here rather than implied.**
+
+### And the first measurement: 47 of 93 did not parse
+
+**And each one is a measured gap, not a guess, and they came in this order.**
+
+**And a block parameter on its own line is the first, and it is the most
+common one:**
+
+```ruby
+parts.each{
+	|part|
+	part_bitmap = part[0]
+}
+```
+
+```
+RubyParseException '|' at offset 13 does not begin an expression.
+```
+
+**And `ReadBlockParameters()` looked for `|` right after the `{`, and a
+newline token stood there** -- **and `brace_block` is `{ block_body }` and
+`block_body` starts with `compstmt`, and a newline is no token that opens
+anything.** **47 to 41.**
+
+### And an `else` after an `elsif` was never read, and that one is a plain bug
+
+```ruby
+if a
+  x
+elsif b == 0
+  y
+else
+  z
+end
+```
+
+```
+RubyParseException 'end' was expected at offset 24 but 'else' is ...
+```
+
+**And the reader had the `else` as a C# `else` on `if (IsKeyword("elsif"))`,
+and that branch is not reached once an `elsif` has been read** -- **and the
+chain is exactly the case where an `else` is common.** **And `parse.y` keeps
+the two apart:**
+
+```text
+if_tail : kELSIF expr_value then compstmt if_tail
+        | kELSE compstmt
+```
+
+**41 to 40, and the 1.8.1 suite did not move.**
+
+### And `def` takes any operator as a method name
+
+**Measured at `parse.y` 886:**
+
+```text
+fname : tIDENTIFIER
+      | tCONSTANT
+      | tFID
+      | op
+          {
+              lex_state = EXPR_END;
+          }
+```
+
+**And three files of this game write `def [](key)`, `def +(other)` and
+`def *(other)`:**
+
+```
+A member name was expected at offset 4, but '[' is there.
+```
+
+### And the string terminator does not apply inside an interpolation, and that is
+## the largest of the four
+
+**Measured at Ruby 1.9.2's own `parse.y` at 5830, and 1.8.1 has no such
+rule:**
+
+```c
+else if ((func & STR_FUNC_EXPAND) && c == '#' && lex_p < lex_pend) {
+    int c2 = *lex_p;
+    if (c2 == '$' || c2 == '@' || c2 == '{') {
+        pushback(c);
+        break;
+    }
+}
+```
+
+**And `pushback(c); break;` means the string reader hands the position to the
+parser, which reads an expression there, and the terminator is only set again
+on the next call.** **And nine files of this game write exactly that:**
+
+```ruby
+add_command("#{$mod_cheats.getText("modules/autobandage:command")}", ...)
+```
+
+**And without the rule:**
+
+```
+RubyParseException ')' was expected at offset 27 but 'k' is there.
+```
+
+**40 to 29, and the 1.8.1 suite stayed at 55/56.**
+
+### And what is still open, named
+
+**Three shapes of the fifty-one are red, and each is named rather than
+counted:**
+
+```
+k9  numbers = *args              '*' at offset 10
+k10 numbers = *(0..max)          '*' at offset 10
+k7  def []=(key, value)          '=' at offset 6
+z1  the multi-line %[...] block  ']' at offset 296
+```
+
+**And `k9` is measured in the grammar at 1408 and 1412:**
+
+```text
+args ',' tSTAR arg_value
+     tSTAR arg_value
+```
+
+**and both sit under `mrhs`, and `mrhs` is the right side of `=`.**
+
+### Evidence
+
+**Full suite `7/2216`, and the four that existed before are the same four, and
+three were added.**
+
+**`TestRubyParser: 55/56`, and the one that fails is the test that reads the
+four real 1.8.1 files.**
+
+**`TestRubyParser192: 0/1`, and it is the new one, and it fails on 29 of 93
+rather than on 47.**

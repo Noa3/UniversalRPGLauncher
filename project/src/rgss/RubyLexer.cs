@@ -1191,6 +1191,10 @@ public sealed class RubyLexer
         _offset++;
         var parts = new List<RubyStringPart>();
         var raw = new List<byte>();
+
+        // **Und wie tief eine Interpolation offen ist, und das ist null
+        // ausserhalb von `#{`.**
+        var interpolation = 0;
         while (true)
         {
             if (AtEnd)
@@ -1199,11 +1203,66 @@ public sealed class RubyLexer
                     $"A string opened at offset {pStart} is never closed.", pStartLine);
             }
             var c = Current;
-            if (c == pQuote)
+            // **Und der Trenner gilt nicht, solange eine Interpolation
+            // offen ist, und das ist gemessen an 1.9.2 bei 5830:**
+            //
+            // ```c
+            // else if ((func & STR_FUNC_EXPAND) && c == '#'
+            //     && lex_p < lex_pend) {
+            //     int c2 = *lex_p;
+            //     if (c2 == '$' || c2 == '@' || c2 == '{') {
+            //         pushback(c);
+            //         break;
+            //     }
+            // }
+            // ```
+            //
+            // **Und `pushback(c); break;` heisst: der String-Leser gibt die
+            // Stelle an den Parser, der dort einen Ausdruck liest, und der
+            // Trenner wird erst beim naechsten Aufruf wieder gesetzt.**
+            //
+            // **Und ein Spiel schreibt genau das, und neun Dateien eines
+            // VX-Ace-Spiels tun es:**
+            //
+            // ```ruby
+            // add_command("#{$mod_cheats.getText("modules/autobandage:command")}", ...)
+            // ```
+            //
+            // **Und ohne diese Regel kam:**
+            //
+            // ```
+            // RubyParseException ')' was expected at offset 27
+            //     but 'k' is there.
+            // ```
+            if (interpolation == 0 && c == pQuote)
             {
                 _offset++;
                 break;
             }
+            if (c == '{' && interpolation > 0)
+            {
+                interpolation++;
+            }
+            else if (c == '}' && interpolation > 0)
+            {
+                interpolation--;
+            }
+
+            if (c == '#' && interpolation == 0 && pQuote != '\''
+                && (Peek(1) == '{' || Peek(1) == '$' || Peek(1) == '@'))
+            {
+                // **`#{$x}` und `#@x` sind eine Interpolation und kein
+                // Inhalt, und beide brauchen keinen Ausdruck in
+                // geschweiften Klammern.**
+                if (Peek(1) == '{')
+                {
+                    interpolation++;
+                }
+
+                _offset += 2;
+                continue;
+            }
+
             if (c == '\\')
             {
                 if (pQuote == '\'')

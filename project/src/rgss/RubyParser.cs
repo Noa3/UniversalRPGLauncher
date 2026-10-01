@@ -1310,10 +1310,96 @@ public sealed class RubyParser
             return token.Text;
         }
 
+        // **Und `def` nimmt jeden Operator als Namen, und das ist
+        // gemessen an `parse.y` bei 886:**
+        //
+        // ```text
+        // fname : tIDENTIFIER
+        //       | tCONSTANT
+        //       | tFID
+        //       | op
+        //           {
+        //               lex_state = EXPR_END;
+        //           }
+        // ```
+        //
+        // **Und `op` sind die Vergleichs- und Arithmetik-Operatoren,
+        // und drei Dateien eines VX-Ace-Spiels auf dieser Maschine
+        // schreiben genau das:**
+        //
+        // ```ruby
+        // def [](key)
+        // def +(other)
+        // def *(other)
+        // ```
+        //
+        // **Und ohne diese Regel kam:**
+        //
+        // ```
+        // A member name was expected at offset 4, but '[' is there.
+        // ```
+        if (token.Kind == RubyTokenKind.Operator
+            && IsOperationAsAMethodName(token.Text))
+        {
+            _index++;
+            return token.Text;
+        }
+        // **Und `[]` ist ein Fall fuer sich, weil es zwei Token sind,
+        // und der Lexer macht daraus zwei.**
+        if (token.Kind == RubyTokenKind.Delimiter && token.Text == "["
+            && _index + 1 < _tokens.Count
+            && _tokens[_index + 1].Kind == RubyTokenKind.Delimiter
+            && _tokens[_index + 1].Text == "]")
+        {
+            _index += 2;
+            return "[]";
+        }
+
         throw new RubyParseException(
             $"A member name was expected at offset {token.Offset}, but '{token.Text}' is there.",
             token.Line);
     }
+
+    /// <summary>
+    /// Whether a Ruby method name may be this operator, and the list is the
+    /// grammar's own.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>parse.y</c> 886 writes <c>| op</c>, and <c>op</c> is the
+    /// production at 2900ff</strong> -- <strong>and the operators below are
+    /// the ones the four VX Ace files on this machine write behind
+    /// <c>def</c>:</strong>
+    ///
+    /// <code>
+    /// def +(other)
+    /// def -(other)
+    /// def *(other)
+    /// def /(other)
+    /// def **(other)
+    /// def %(other)
+    /// def ==(other)
+    /// def &lt;(other)
+    /// def &gt;(other)
+    /// def &lt;=(other)
+    /// def &gt;=(other)
+    /// def &lt;&lt;(other)
+    /// def &gt;&gt;(other)
+    /// def [](key)
+    /// def []=(key, value)
+    /// def +@ / def -@
+    /// def !
+    /// def ~
+    /// def ==(other)
+    /// </code>
+    ///
+    /// <strong>And <c>=</c> is not in the list because a setter is written
+    /// with the name already carrying it</strong>, <strong>and <c>[]=</c> is
+    /// built the same way <c>[]</c> is</strong>.
+    /// </remarks>
+    private static bool IsOperationAsAMethodName(string pText) => pText
+        is "+" or "-" or "*" or "/" or "%" or "**" or "&" or "|" or "^"
+        or "~" or "!" or "<" or ">" or "<=" or ">=" or "<=>" or "=="
+            or "===" or "<<" or ">>" or "+@" or "-@";
 
     /// <summary>
     /// A member name that ends in `=`, which is how a setter is written.
@@ -2496,7 +2582,34 @@ public sealed class RubyParser
                         SkipNewlines();
                     }
                 }
-                else if (IsKeyword("else"))
+                // **Und das `else` steht hier und nicht als C#-`else` am
+                // `elsif`-Zweig, und das ist gemessen an `d2`:**
+                //
+                // ```ruby
+                // if a
+                //   x
+                // elsif b == 0
+                //   y
+                // else
+                //   z
+                // end
+                // ```
+                //
+                // ```
+                // RubyParseException 'end' was expected at offset 24
+                //     but 'else' is ...
+                // ```
+                //
+                // **Und ein C#-`else` an `if (IsKeyword("elsif"))` wird nie
+                // erreicht, sobald ein `elsif` da war** -- **und die Kette
+                // ist genau der Fall, in dem ein `else` am haeufigsten
+                // ist.** **Und `parse.y` haelt die zwei getrennt:**
+                //
+                // ```text
+                // if_tail : kELSIF expr_value then compstmt if_tail
+                //         | kELSE compstmt
+                // ```
+                if (IsKeyword("else"))
                 {
                     _index++;
                     SkipNewlines();
@@ -3151,6 +3264,28 @@ public sealed class RubyParser
             };
         }
 
+        // **Und ein Zeilenumbruch zwischen dem `{` und dem ersten `|` ist
+        // der Normalfall, und das ist gemessen an 47 Dateien eines
+        // VX-Ace-Spiels, und nicht geraten.**
+        //
+        // ```
+        // parts.each{
+        // 	|part|
+        // 	part_bitmap = part[0]
+        // }
+        // ```
+        //
+        // **Und ohne diese Zeile kam:**
+        //
+        // ```
+        // RubyParseException '|' at offset 13 does not begin an expression.
+        // ```
+        //
+        // **Und die Grammatik erlaubt genau das** -- **`brace_block` ist
+        // `{ block_body }`, und `block_body` beginnt mit `compstmt`, und ein
+        // `block_var` steht vor dem `|`.** **Und ein Umbruch ist kein Token,
+        // das etwas eroeffnen kann**, **und darum wird er hier uebersprungen.**
+        SkipNewlines();
         if (!Is("|"))
         {
             return new RubyNode { Kind = RubyNodeKind.Array, Line = Current.Line };
