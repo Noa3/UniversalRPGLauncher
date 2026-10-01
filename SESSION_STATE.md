@@ -13777,3 +13777,66 @@ files and every one of them is green.**
 
 **And the last of those is worth measuring next: a file that parses is not
 necessarily read correctly, and this test only asks that it parses.**
+
+
+## Six rounds on one file, and the honest account of them
+
+**And the fix landed, and the six rounds are recorded here because the method
+that failed is worth naming.**
+
+### And the fix, and it is one grammar line
+
+**Measured at 353, 1581 and 1619:**
+
+```text
+353  bodystmt   : compstmt opt_rescue opt_else opt_ensure
+1581 kCLASS cpath superclass { ... } bodystmt kEND
+1619 kMODULE cpath { ... } bodystmt kEND
+```
+
+**And the `class`/`module` branch knew only `end`,** **and `ArmeSammeln` was
+the reader that `def` and `begin` already used** -- **and the same construct in
+three places with two readers is the same mistake the modifier was, two rounds
+ago.**
+
+### And what six rounds of narrowing did NOT find
+
+**The file is `_Mods_UltraModManager_scripts_startup_mod_manager.rb`, and the
+failure is `rescue` at offset 843.** **And here is every cut that came out
+green, and every one of them is a shorter piece of the same file:**
+
+```text
+aq5  the begin/rescue/end block alone            green
+ar3  the def from the unless on                  red   offset 758
+ar2  the def without the first assignment       red   offset 826
+ar1  the whole def                               red   offset 843
+an3  do + begin + if/else + rescue               green
+ao3  rescue with a print and a backtrace         green
+at4  do + parameter + begin + next unless        green
+as1  Dir["#{...}"].each do                      green
+```
+
+**And that is the shape of a wrong guess: the pieces are green and the whole
+is red, and no prefix of it is red.** **And six rounds of that is six rounds
+of asking "which piece" when the answer was "the state the parser is in when
+it arrives there".**
+
+**And the one measurement that was worth anything was the token dump** -- **and
+it showed a correct stream, which is the more confusing result of the two,
+because it removes the lexer's name from the list without naming the parser's.**
+
+**And what this costs, stated plainly: I did not find the cause in six rounds
+and I stopped rather than spend a seventh guessing.** **And the two other
+open items from the previous round are still open, and one of them is
+documented as unsettled because there is no Ruby on this machine to settle it.**
+
+### Evidence
+
+**`TestRubyParser192`: three of ninety-three, and the third is this file.**
+
+**`TestRubyParser: 55/56`, and the shape list is one hundred and twenty-one
+files and every one of them is green.**
+
+**Full suite `6/2217`, and the only reader change in this round was the
+`class`/`module` arm, which is measured at `parse.y` 1619 and made `af5`, `af6`,
+`af7`, `af8`, `af9` and `af10` pass.**
