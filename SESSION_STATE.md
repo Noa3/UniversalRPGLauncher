@@ -11315,3 +11315,54 @@ ihnen einen ueber `setupStartingMapEvent`, und jeder hat seinen
 eigenen `_index`** -- **und eine Seite, die auf eine andere wartet,
 wartet auf deren Index, und nicht auf den eigenen.**
 
+## Und jede parallele Seite hat ihre eigene Maschine
+
+**Gemessen an `Game_Event.prototype.updateParallel`:**
+
+```js
+if (!this._interpreter.isRunning()) this._interpreter.setup(this.list(), this._eventId);
+this._interpreter.update();
+```
+
+**`this._interpreter` gehoert dem Ereignis, und nicht der Karte.**
+
+**Und der Interpreter der Karte nimmt genau ein Ereignis und gibt
+zurueck** -- **gemessen an `setupStartingMapEvent`: `for (const
+event of this.events()) if (event.isStarting()) { ... return true; }`.**
+**Und `Game_Event.start` setzt `_starting` fuer alle, aber `if (this.
+isTriggerIn([0, 1, 2])) this.lock()`** -- **und eine parallele Seite
+ist Ausloeser 3, und der steht nicht in der Liste**, **also laeuft sie
+neben der Karte, und nicht an ihrer Stelle.**
+
+**Und das trifft dieses Spiel, denn seine drei parallelen Seiten tragen
+zusammen siebzehn Laufbahnen, neun davon mit `wait`:**
+
+| Karte | Ereignis | Befehle | Routen | davon mit `wait` |
+|---|---|---|---|---|
+| Map002 | 5 | 22 | 0 | 0 |
+| Map005 | 4 | 176 | 8 | 4 |
+| Map010 | 7 | 141 | 9 | 5 |
+
+**Und jedes Ziel auf beiden busy Karten existiert als Figur** --
+**auf Map005: 3, 9, 10, 15 und der Spieler; auf Map010: 2, 4, 5, 8, 9,
+10 und 11.**
+
+**Und gemessen sind auf Map005 nur vier Figuren mit Bild, und nicht
+elf** -- **denn 7 der 11 Events tragen ein leeres `characterName`**
+-- **und genau das zeigt auch das Spiel.** **Und der Rest wird nicht
+unsichtbar gelassen, sondern sichtbar gemacht** -- **gemessen an
+Befehl 19 und 20 dieser Seite: `203 [10, 0, 2, 10, 0]` und `322 [1,
+"MC_Sprite_sheet", 0, "SlimeActors", 0, ...]`.**
+
+**Und meine erste Erwartung an dieser Zahl war falsch**, **und der
+Grund war, dass ich `image` am Event vermutet hatte** -- **und es liegt
+an der Seite** -- **und der Leser es richtig liest.**
+
+**`All 2199 tests passed`, Validator gruen.**
+
+**Und als naechstes fehlt:** **die Seiten mit Ausloeser 0 warten auf
+den Aktionsknopf, und gemessen sind 196 von 253 Seiten genau das** --
+**und `Game_Character.prototype.checkEventTriggerAuto` fragt drei
+Bedingungen: Schalter, Held beruehrt die Figur, oder der Schalter
+daneben** -- **und das Spiel hat viele davon.**
+

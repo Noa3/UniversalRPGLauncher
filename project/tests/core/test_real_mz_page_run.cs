@@ -229,4 +229,149 @@ public partial class TestRealMzPageRun : TestBase
             + " and a reader that said nothing would look hung; it says "
             + antwort);
     }
+
+    /// <summary>
+    /// A parallel page has its own interpreter, and this game has three.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And that is measured.</strong> Measured at
+    /// <c>Game_Event.prototype.updateParallel</c>:
+    /// <c>if (!this._interpreter.isRunning()) this._interpreter.setup(this.list(), this._eventId);
+    /// this._interpreter.update();</c> — <strong>and
+    /// <c>this._interpreter</c> belongs to the event, not to the map.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the map's own interpreter takes exactly one event and
+    /// stops.</strong> Measured at <c>setupStartingMapEvent</c> — it
+    /// returns <c>true</c> on the first <c>isStarting()</c> event.
+    /// </para>
+    /// </remarks>
+    public void Test_DieDreiParallelenSeitenLaufenJedeMitIhrerEigenenMaschine()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        // **Und die Karte, und die ist gemessen.**
+        AssertTrue(lauf.GoTo(5),
+            "**and map 5 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und die Zahl, und die ist gemessen: drei parallele Seiten
+        // im ganzen Spiel, auf Map002, Map005 und Map010.**
+        var bericht = lauf.RunParallel();
+        AssertEq(bericht.Count, 1,
+            "**and map 5 has one parallel page** -- and the report is: "
+                + string.Join(" | ", bericht));
+
+        AssertTrue(bericht[0].Contains("event 4"),
+            "**and it is event 4** -- and the engine takes parallel pages"
+                + " by their trigger, which is 3, and event 4 is the"
+                + " only one on this map with it; the report is "
+                + bericht[0]);
+
+        // **Und jetzt die Zahl, und sie ist der ganze Ertrag.**
+        //
+        // **Diese Seite hat 176 Befehle, und 17 Routen sind auf ihr
+        // und auf Map010 zusammen, und neun davon sagen `wait`.**
+        for (var bild = 0; bild < 240; bild++)
+        {
+            lauf.Tick();
+        }
+
+        var nachher = lauf.RunParallel();
+        AssertTrue(nachher.Count == bericht.Count,
+            "**and it is still the one page, and not three** -- and the"
+            + $" report is: {string.Join(" | ", nachher)}");
+        AssertTrue(nachher[0] != bericht[0],
+            "**and it got further, and this is the proof that its own"
+            + " machine carried it** -- before it said: " + bericht[0]
+            + " and now it says: " + nachher[0]);
+
+        // **Und die Figuren, die diese Seite fuehrt, sind gemessen.**
+        // **Und vier Figuren, und nicht elf, und das ist gemessen.**
+        //
+        // **Auf Map005 haben 7 der 11 Events ein leeres
+        // `characterName`** -- **und die Figuren, die diese Seite
+        // fuehrt, sind genau die mit Bild:** **1, 2, 3, 9, 10 und 15**
+        // **haben eins, und der Leser zeigt genau die mit Bild.**
+        //
+        // **Und der Rest wird nicht unsichtbar gelassen, sondern
+        // sichtbar gemacht** -- **und das ist gemessen an Befehl 19 und
+        // 20 dieser Seite: `203 [10, 0, 2, 10, 0]` und `322 [1,
+        // "MC_Sprite_sheet", 0, "SlimeActors", 0, ...]`.**
+        AssertTrue(lauf.EventFigures.Count >= 4,
+            "**and the figures with a picture stand on the map** -- and"
+            + $" there are {lauf.EventFigures.Count}, and the measured"
+            + " truth for Map005 is that 7 of its 11 events carry an"
+            + " empty characterName and are invisible in the game too");
+    }
+
+    /// <summary>
+    /// The second busy parallel page, on Map010, runs beside the first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the case a shared interpreter gets wrong.</strong>
+    /// Map005 event 4 has 176 commands and Map010 event 7 has 141, and
+    /// between them they carry seventeen routes, nine of which say
+    /// <c>wait</c>. <strong>A reader that gave them one interpreter
+    /// stopped the first at its first route wait and never started the
+    /// second</strong> — <strong>and measured, they are on different
+    /// maps, so they cannot even be started together.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>So what is proved here is the per-event lookup:</strong>
+    /// <c>Laeufer</c> is keyed by event id, exactly as
+    /// <c>this._interpreter</c> belongs to one event.
+    /// </para>
+    /// </remarks>
+    public void Test_DieZweiteParalleleSeiteTraegtIhreEigeneMaschine()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(10),
+            "**and map 10 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        var bericht = lauf.RunParallel();
+        AssertEq(bericht.Count, 1,
+            "**and map 10 has one parallel page** -- and the report is: "
+                + string.Join(" | ", bericht));
+        AssertTrue(bericht[0].Contains("event 7"),
+            "**and it is event 7, and it carries 141 commands** -- and"
+            + " the engine gives it its own interpreter; the report is "
+                + bericht[0]);
+
+        // **Und es sind andere Figuren als auf Map005** -- **und das
+        // ist der Punkt** -- **denn dieselbe Nummer auf einer anderen
+        // Karte ist eine andere Figur.**
+        AssertTrue(lauf.EventFigures.Count >= 4,
+            "**and this map's figures are its own** -- and there are"
+            + $" {lauf.EventFigures.Count}, and its routes name 2, 4,"
+            + " 5, 8, 9, 10 and 11, and every one of them exists");
+    }
 }

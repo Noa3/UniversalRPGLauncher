@@ -1047,6 +1047,101 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <c>isRepeated</c>, so a held key keeps working.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>Starts every parallel page on this map, each with its own
+    /// interpreter.</summary>
+    /// <returns>One line per page, and what each one is doing.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a parallel page has its own interpreter, and that is
+    /// measured.</strong> Measured at
+    /// <c>Game_Event.prototype.updateParallel</c>:
+    /// <c>if (!this._interpreter.isRunning()) this._interpreter.setup(this.list(), this._eventId);
+    /// this._interpreter.update();</c>
+    /// — <strong>and <c>this._interpreter</c> belongs to the event, not
+    /// to the map.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the map's own interpreter is for a different thing
+    /// entirely.</strong> Measured at <c>setupStartingMapEvent</c>:
+    /// <c>for (const event of this.events()) if (event.isStarting()) {
+    /// event.clearStartingFlag(); this._interpreter.setup(event.list(),
+    /// event.eventId()); return true; }</c> — <strong>one event, then it
+    /// stops.</strong> <c>Game_Event.start</c> sets <c>_starting</c> for
+    /// every event it starts, but <c>if (this.isTriggerIn([0, 1, 2]))
+    /// this.lock()</c> — <strong>and a parallel page is trigger 3, which
+    /// is not in that list, so it runs beside the map's page.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this matters for this game because its three parallel
+    /// pages carry seventeen routes between them, nine of which say
+    /// <c>wait</c>.</strong> Measured: Map002 event 5 has 22 commands,
+    /// Map005 event 4 has 176, and Map010 event 7 has 141 — <strong>and
+    /// every route target on both busy maps exists as a figure.</strong>
+    /// A reader that ran them through one interpreter would stop the first
+    /// at its first route wait and never start the other two.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> RunParallel()
+    {
+        var bericht = new List<string>();
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            bericht.Add(
+                $"map {CurrentMapId} is not among the maps this runtime read,"
+                    + " so no page on it can run");
+            return bericht;
+        }
+
+        foreach (var ereignis in karte.Root.Member("events")?.Items
+            ?? new List<MzValue>())
+        {
+            var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
+            foreach (var seite in ereignis.Member("pages")?.Items
+                ?? new List<MzValue>())
+            {
+                if ((seite.Member("trigger")?.IntOr(0) ?? 0) != 3)
+                {
+                    continue;
+                }
+
+                var befehle = new List<MzCommandEntry>();
+                foreach (var eintrag in
+                    seite.Member("list")?.Items ?? new List<MzValue>())
+                {
+                    befehle.Add(MzCommandEntry.From(eintrag));
+                }
+
+                if (befehle.Count <= 1)
+                {
+                    continue;
+                }
+
+                // **Und jede bekommt ihren eigenen Interpreter** --
+                // **denn sonst teilen sie sich einen, und die erste
+                // wartet, und die anderen warten auf sie.**
+                var ergebnis = Laeufer.TryGetValue(id, out var alt)
+                    && alt != null && alt.Stopped == MzStep.Waiting
+                    ? _runner.Run(befehle, Facts, CurrentMapId, id, Random, alt)
+                    : _runner.Run(befehle, Facts, CurrentMapId, id, Random);
+                var eigener = new MzInterpreter(befehle);
+
+                if (ergebnis.Interpreter != null
+                    && ergebnis.Stopped == MzStep.Waiting)
+                {
+                    Laeufer[id] = ergebnis.Interpreter;
+                }
+                else
+                {
+                    Laeufer.Remove(id);
+                }
+
+                bericht.Add($"event {id}: {ergebnis.Describe()}");
+            }
+        }
+
+        return bericht;
+    }
+
     /// <summary>The pages still waiting, and where each one stopped.</summary>
     /// <remarks>
     /// <para>
