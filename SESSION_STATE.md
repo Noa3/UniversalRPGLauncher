@@ -13119,3 +13119,84 @@ on twenty-nine of ninety-three.**
 
 **And the two red shapes are the same two as before this round, and both are
 the multi-line `%[...]` block:**
+
+
+## A command takes a `%`-literal without brackets, and the reader needs a name for that
+
+**And this one took a token dump and about thirty calls to find, and the reason
+it took that long is that I read my own test output wrong three times.**
+
+### And the measured streams, and which of them was wrong
+
+```text
+print %[module]     Identifier'print' | Operator'%' | Delimiter'[' | Keyword'module'
+print %[|Foo|]      Identifier'print' | Operator'%' | Delimiter'[' | Constant'Foo'
+print %[|module Config|]  Identifier'print' | Operator'%' | ...
+f(a, %w[b])         Identifier'f' | Delimiter'(' | Identifier'a' | Delimiter',' | String'%w[b]'
+x = %w[a b]         Identifier'x' | Operator'=' | String'%w[a b]'
+```
+
+**And the first three were `print` and the last two were not, and the first
+three were wrong.** **And `mkconfig.rb` line 22 is `print %[`, and that is
+Ruby's own build script, and it is not invalid.**
+
+### And `parse.y` says a command leaves `EXPR_CMDARG`, and that is not knowable here
+
+**Measured at 4397 and 4408:**
+
+```c
+if (cmd_state) {
+    lex_state = EXPR_CMDARG;
+}
+else {
+    lex_state = EXPR_ARG;
+}
+...
+if (is_local_id(yylval.id) && ...)
+    lex_state = EXPR_END;
+```
+
+**And `IS_ARG()` is `EXPR_ARG || EXPR_CMDARG`, so a command name is `IS_ARG()`
+and `print %[` is a literal.** **And `is_local_id` reads the symbol table, and
+a reader that lexes the whole file before the parser sees one token does not
+have it.**
+
+**And so this holds the narrow side of that: a name in a list opens a `%`
+literal behind it.** **And the list is named in the source rather than implied,
+and the cost is named there too: a game method not in the list, called with a
+`%`-literal without brackets, reads as a modulus, and that is the false
+negative, and it fails to parse rather than to read wrongly.**
+
+### And my own test was wrong, and three of my readings were wrong before that
+
+**And `Test_APercentIsAModulusUnlessNothingCouldDivide` asserted that
+`print %w[a b]` is a modulus, and it is not** -- **and I wrote that assertion,
+and it was wrong when I wrote it, and it stayed wrong through three runs of a
+green-looking suite.**
+
+```text
+Test_APercentIsAModulusUnlessNothingCouldDivide:
+    Unhandled exception: `print %w[a b]` has no token `%`.
+```
+
+**And that message is the reader being right and the test being wrong.**
+
+**And twice before this round I called a shape green because I filtered the
+message with `grep 'd[0-9]_'`, and the message is joined with `|` and the
+first entry carried the count and the later entries were cut off by `head -1`
+** -- **and both times the red shape was in the message and I did not look.**
+
+### Evidence
+
+**`mkconfig.rb` moved from line 30 to line 88, and line 88 is past the
+`print %[` block that was blocking it.**
+
+**`TestRubyLexer: 36/36`, and the shape list is sixty-four files and every one
+of them is green.**
+
+**`TestRubyParser: 55/56`, and the one that fails is the four real files.**
+
+**Full suite `6/2217`.**
+
+**`TestRubyParser192` is still on twenty-nine of ninety-three, and those
+twenty-nine were not touched by this round and are the next work.**

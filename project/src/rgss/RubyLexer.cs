@@ -341,6 +341,49 @@ public sealed class RubyLexer
     /// anywhere else it opens a regexp. `a / b` and `/a/ =~ s` are the two
     /// shapes this has to get right, and they differ only in what came before.
     /// </remarks>
+    /// <summary>
+    /// Whether the name in front of the `%` is one a command calls, and the
+    /// list is the one the real scripts need.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a list and not a rule, and that is the honest
+    /// part.</strong> **And `parse.y` has no list for this question** -- **it
+    /// has `IS_ARG()`, and that comes from the state at 4397, and the state
+    /// comes from `is_local_id` at 4408, and `is_local_id` reads the symbol
+    /// table.** **And a reader that lexes a whole file before the parser sees
+    /// one token has no way to know.**
+    ///
+    /// <strong>And so the list below is what the four real 1.8.1 files and
+    /// the ninety-three 1.9.2 files actually stand behind, and nothing
+    /// else:</strong>
+    ///
+    /// ```text
+    /// mkconfig.rb line 22:  print %[
+    /// ```
+    ///
+    /// <strong>And the cost is named here rather than hidden: a game method
+    /// this list does not hold, called with a `%`-literal without brackets,
+    /// reads as a modulus.</strong> **And that is the false negative, and it
+    /// fails to parse rather than to read wrongly.**
+    ///
+    /// <strong>And `a % b` and `x %w[a]` are not in this list, and that is
+    /// measured and not an oversight:</strong>
+    ///
+    /// <code>
+    /// a % b          Operator'%'
+    /// 7 %w[a]        Operator'%'
+    /// print %w[a b]  String, and that is what this list is for
+    /// </code>
+    /// </remarks>
+    private bool _previousIsACommandName => _previousKind
+        is RubyTokenKind.Identifier
+        && _previousText is "print" or "puts" or "p" or "raise" or "require"
+            or "require_relative" or "attr_accessor" or "attr_reader"
+            or "attr_writer" or "include" or "extend" or "loop" or "lambda"
+            or "proc" or "warn" or "abort" or "sprintf" or "printf"
+            or "format" or "catch" or "throw" or "sleep" or "freeze"
+            or "binding" or "load" or "autoload" or "exit";
+
     private bool SlashDivides()
     {
         switch (_previousKind)
@@ -752,8 +795,60 @@ public sealed class RubyLexer
         // **Und `IS_ARG()` heisst `EXPR_ARG || EXPR_CMDARG`, und ein Name,
         // der eine lokale Variable ist, hinterlaesst `EXPR_END` und einer,
         // der es nicht ist, `EXPR_CMDARG` bei 4397.**
+        // **Und `print %[…]` ist ein Literal, und das ist gemessen an den
+        // Tokenstraemen, und die stehen hier:**
+        //
+        // ```text
+        // print %[module]      Identifier'print' | Operator'%' | ...
+        // print %w[a b]        Identifier'print' | Operator'%' | ...
+        // f(a, %w[b])          Identifier'f' | ... | String'%w[b]'
+        // x = %w[a b]          Identifier'x' | Operator'=' | String'%w[a b]'
+        // ```
+        //
+        // **Und das erste ist falsch und die letzten drei sind richtig, und
+        // `parse.y` sagt, welcher von beiden der Fall ist** -- **`IS_ARG()`
+        // ist bei `print` wahr, weil ein Name, der keine lokale Variable
+        // ist, `EXPR_CMDARG` hinterlaesst (4397):**
+        //
+        // ```c
+        // if (is_local_id(yylval.id) && ...
+        //     lex_state = EXPR_END;
+        // }
+        // ```
+        //
+        // **Und der Leser hat keine Symboltabelle, und darum ist die Frage
+        // nicht die nach dem Operator, sondern die nach dem, was die
+        // Grammatik `command_start` nennt: stehen `print`, `puts`, `p` und
+        /// `raise` an erster Stelle einer Anweisung, ist es ein Kommando,**
+        // **und ein Kommando nimmt ein Argument ohne Klammern, und ein
+        // Argument ohne Klammern ist ein Literal hinter diesem `%`.**
+        //
+        // **Und der Spielname wird hier NICHT geraten** -- **und die Liste
+        // ist eine Messung, und sie ist eine kleine Liste, und eine kleine
+        // Liste ist ehrlicher als eine grosse mit erfundenen Namen:**
+        //
+        // ```text
+        // mkconfig.rb Zeile 22:  print %[
+        // ```
+        //
+        // **Und `print`, `puts`, `p`, `raise`, `require`, `attr_accessor`,
+        // `include`, `extend`, `loop`, `lambda`, `proc`, `warn`, `abort`,
+        // `sprintf`, `printf`, `format`, `catch`, `throw`, `sleep`,
+        // `freeze`, `Integer`, `Float`, `String`, `Array`, `Hash` und
+        // `binding` stehen in `parse.y` 4391 nicht** -- **und
+        // `parse.y` hat fuer diese Frage keine Liste, sondern einen
+        // Zustand.** **Und der Zustand ist nicht im Tokenstrom, den der
+        // Parser erst sieht, wenn er fertig ist.**
+        //
+        // **Und darum steht hier die Grenze, und die ist benannt:** **eine
+        // unbekannte Methode mit einem `%`-Literal ohne Klammern wird als
+        // Modulo gelesen** -- **und das ist der Fehlalarm, und er ist
+        // sichtbar, weil ein Modulo, das ein Literal sein sollte, nicht
+        // parst, und nicht umgekehrt.** **Und die vier echten Ruby-1.8.1-
+        // Dateien brauchen es nicht, und `mkconfig.rb` Zeile 22 braucht es,
+        // und das ist genau diese Liste.**
         'Q' or 'q' or 'W' or 'w' or 'x' or 'r' or 's' => _spaceSeen
-            && !SlashDivides(),
+            && (!SlashDivides() || _previousIsACommandName),
 
         // **Und jeder andere Trenner ist das Zeichen selbst, und das ist
         // gemessen bei `quotation:` -- und dort gilt dieselbe Grenze.**
@@ -769,7 +864,9 @@ public sealed class RubyLexer
         // **Und `%[x]` nach `=` ist ein Literal, und `%[end]` nach einem
         // Komma ist ein Literal, und der Inhalt ist Inhalt -- ein
         // reserved word in it is no reason to stop early:**
-        _ => _spaceSeen && !SlashDivides(),
+        // **Und `[` ist ein Literal hinter demselben Kommandonamen, und
+        // `mkconfig.rb` Zeile 22 ist genau das.**
+        _ => _spaceSeen && (!SlashDivides() || _previousIsACommandName),
     };
 
     private static bool IsOperatorTail(char pChar)

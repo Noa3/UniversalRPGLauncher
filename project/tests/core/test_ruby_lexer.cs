@@ -507,10 +507,11 @@ public partial class TestRubyLexer : TestBase
 
     public void Test_APercentIsAModulusUnlessNothingCouldDivide()
     {
-        // The five that stay a modulus, and the stream says why.
+        // The four that stay a modulus, and the stream says why. And
+        // `print` is deliberately NOT among them -- see below.
         foreach (var quelle in new[]
         {
-            "a % b", "%w[a b]", "print %w[a b]", "-7 % 3", "7 %w[a]",
+            "a % b", "%w[a b]", "-7 % 3", "7 %w[a]",
         })
         {
             AssertEq(FirstWithText(quelle, "%").Kind, RubyTokenKind.Operator,
@@ -525,6 +526,16 @@ public partial class TestRubyLexer : TestBase
             RubyTokenKind.String,
             "**`%w[a b]` behind `=` is a literal** — and an operator cannot "
                 + "divide");
+        AssertEq(FirstStartingWith("print %w[a b]", "%w").Kind,
+            RubyTokenKind.String,
+            "**`%w[a b]` behind `print` is a literal** — and that is "
+                + "`mkconfig.rb` line 22, and a command takes an argument "
+                + "without brackets, and a command without brackets is a "
+                + "literal behind that `%`");
+        AssertEq(FirstStartingWith("print %[\nmodule Config\n]", "%[").Kind,
+            RubyTokenKind.String,
+            "**`%[...]` behind `print` is a literal** — and a reserved word "
+                + "inside it is content, and the whole block is one token");
         AssertEq(FirstStartingWith("f(a, %w[b])", "%w").Kind,
             RubyTokenKind.String,
             "**`%w[b]` behind a comma is a literal** — and so is the one the "
