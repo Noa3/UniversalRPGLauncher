@@ -826,4 +826,67 @@ public partial class TestRealMzRuntimeRun : TestBase
                 + " -- and that is the object the page commands move,"
                 + " and not a row in the file");
     }
+
+    /// <summary>
+    /// The player is painted where it stands, and the map is big
+    /// enough to stand on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the last of the two homes.</strong> The
+    /// painter had a second branch that read <c>PlayerX</c> and
+    /// <c>PlayerY</c> — <strong>fields of the runtime, and not of the
+    /// player</strong> — <strong>and that branch is gone.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a dead branch is not harmless</strong> — <strong>it
+    /// is where the next reader looks for the truth.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the player has to fit on the map at all.</strong>
+    /// Measured: <c>System.json</c> says <c>startX: 4</c> and
+    /// <c>startY: 11</c>, <strong>and the start map <c>Map002</c> is
+    /// 14 by 18</strong> — <strong>so the player fits.</strong> <strong>A
+    /// start position outside its map is a figure painted on nothing,
+    /// and it is invisible</strong> — <strong>and it looks like a map
+    /// with nobody on it.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DerSpielerStehtAufDerGemaltenKarte()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.Repaint(), "**and the start map paints**"
+            + " -- and the refusal is: " + lauf.PaintReason);
+
+        // **Und der Spieler passt auf seine Karte.**
+        AssertTrue(lauf.MapWidth > 0 && lauf.MapHeight > 0,
+            "**and the map has a size**");
+        AssertTrue(lauf.PlayerX >= 0 && lauf.PlayerX < lauf.MapWidth,
+            "**and the player's column is on the map**"
+                + " -- and it is " + lauf.PlayerX + " of "
+                + lauf.MapWidth + ", and a start position outside the"
+                + " map is a figure painted on nothing");
+        AssertTrue(lauf.PlayerY >= 0 && lauf.PlayerY < lauf.MapHeight,
+            "**and its row is on the map**"
+                + " -- and it is " + lauf.PlayerY + " of "
+                + lauf.MapHeight);
+
+        // **Und er wird wirklich gemalt.**
+        AssertTrue(lauf.FiguresDrawn > 0,
+            "**and something was drawn on this map**");
+        AssertEq(lauf.Facts.Player.Figur!.X, lauf.PlayerX,
+            "**and the drawn figure is the player at its own place**");
+    }
 }

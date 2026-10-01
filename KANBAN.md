@@ -11720,3 +11720,41 @@ Karte zu zeichnen, auf der der Spieler nie war.**
 
 **`All 2192 tests passed`, Validator gruen.**
 
+## Und der tote Zweig ist weg, und der Spieler steht auf der Karte
+
+### Der tote Zweig
+
+**Der Zeichner hatte zwei Wege zum Spieler:** **einer ueber die
+Figur, einer ueber `PlayerX` und `PlayerY`.** **Und `PlayerX` und
+`PlayerY` waren Felder der Runtime, und nicht Felder des Spielers** --
+**und gemessen standen die an 4,11 und die Figur an 0,0.**
+
+**Ein toter Zweig ist nicht harmlos**, **denn er ist der Ort, an dem
+ein naechster Leser die Wahrheit sucht.** **Jetzt gibt es nur noch
+einen Weg, und der geht ueber die Figur.**
+
+### Und gemessen passt der Spieler auf seine Karte
+
+| Karte | Groesse | `startX`/`startY` = 4/11 passt |
+|---|---|---|
+| `Map001` "Capture" | 17 × 13 | ja |
+| `Map002` "Start" | **14 × 18** | ja |
+| `Map015` "Day 5-VentsC" | 17 × 13 | ja |
+| `Map017` "Day 5 - Part 2" | 22 × 16 | ja |
+
+**Und meine vorige Notiz behauptete, `Map015` sei zu klein fuer den
+Spieler** -- **das war geraten und ist jetzt gemessen weg.**
+
+**Und eine Startposition ausserhalb ihrer Karte ist unsichtbar** --
+**und sie sieht genau aus wie eine Karte, auf der niemand steht.**
+
+### Und die Kartengroesse wird jetzt gemeldet
+
+**`MapWidth` und `MapHeight` stehen in der Runtime**, **und der Test
+misst, dass 4 in 0..14 und 11 in 0..18 liegt** -- **und dass der
+gezeichnete Kopf der Spieler an seiner eigenen Stelle ist.**
+
+**Test evidence** `test_real_mz_runtime_run.cs` (10), **10/10**.
+
+**`All 2193 tests passed`, Validator gruen.**
+

@@ -501,6 +501,9 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // **Und die Figuren werden ueber die Kacheln gemalt, und nicht
         // in sie hinein** -- **denn eine Figur ist 144 Pixel breit und
         // eine Kachel 48**, **und sie steht mittig auf dreien.**
+        MapWidth = karte.Root.Member("width")?.IntOr(0) ?? 0;
+        MapHeight = karte.Root.Member("height")?.IntOr(0) ?? 0;
+
         Figures = MzMapFigureReader.Read(
             karte.Root, _facts, out var notwendig);
         FigureNotes = notwendig;
@@ -894,15 +897,19 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // gemalt, und nicht auf seiner Kachel** -- **denn er ist
             // unterwegs, und eine Figur, die auf ihrer Kachel springt,
             // geht nicht.**
+            //
+            // **Und es gibt keinen zweiten Zweig, und es gab einen.**
+            // **Der zeichnete aus `PlayerX` und `PlayerY`, und das sind
+            // Felder dieser Klasse, und nicht des Spielers** -- **und
+            // gemessen standen die an 4,11 und die Figur an 0,0.**
+            // **Ein toter Zweig ist nicht harmlos**, **denn er ist
+            // der Ort, an dem ein naechster Leser die Wahrheit sucht.**
             var spieler = Facts.Player.Figur;
             if (spieler != null
-                ? MzCharacterRenderer.Draw(
+                && MzCharacterRenderer.Draw(
                     PlayerSheet, spieler, _playerClock?.Column ?? 1,
                     MzMapRenderer.TilePixels, MzMapRenderer.TilePixels,
-                    pPixels)
-                : MzCharacterRenderer.Draw(
-                    PlayerSheet, PlayerIndex, PlayerDirection,
-                    _playerClock?.Column ?? 1, PlayerX, PlayerY, pPixels))
+                    pPixels))
             {
                 gezeichnet++;
             }
@@ -911,6 +918,25 @@ public sealed class MzEngineRuntime : IEngineRuntime
         FiguresDrawn = gezeichnet;
         return gezeichnet;
     }
+
+    /// <summary>How wide the current map is, in tiles.</summary>
+    /// <remarks>
+    /// <strong>And a figure outside the map is a figure painted on
+    /// nothing.</strong> Measured: <c>System.json</c> says
+    /// <c>startX: 4</c> and <c>startY: 11</c>, <strong>and the start map
+    /// is 14 by 18</strong> — <strong>so the player fits</strong>, <strong>and
+    /// that is a measurement and not an assumption.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a start position outside its map is invisible</strong>
+    /// — <strong>and it looks exactly like a map with nobody on
+    /// it.</strong>
+    /// </para>
+    /// </remarks>
+    public int MapWidth { get; private set; }
+
+    /// <summary>How tall the current map is, in tiles.</summary>
+    public int MapHeight { get; private set; }
 
     /// <summary>Which sheet the player's figure is drawn from.</summary>
     /// <remarks>

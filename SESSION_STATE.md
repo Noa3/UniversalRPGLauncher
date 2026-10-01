@@ -11154,3 +11154,26 @@ zweite Zweig tot** -- **und die Kacheln unter dem Spieler werden nicht
 nach ihm gezeichnet, weil seine Y-Koordinate gar nicht in der Hoehe der
 Karte liegt.**
 
+## Und der tote Zweig ist weg
+
+**Der Zeichner hatte zwei Wege zum Spieler: einer ueber die Figur,
+einer ueber `PlayerX`/`PlayerY`** -- **und das sind Felder der
+Runtime und nicht des Spielers.** **Der zweite Weg ist entfernt.**
+
+**Und `MapWidth`/`MapHeight` stehen jetzt in der Runtime, und der Test
+misst, dass der Spieler auf der Startkarte steht** -- **`Map002` ist
+14 x 18, und `System.json` sagt 4/11, und das passt.**
+
+**Und meine vorige Notiz behauptete, `Map015` sei zu klein** -- **das
+war geraten.** **Alle vier gemessenen Karten sind grosser als die
+Startposition.**
+
+**`All 2193 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **die Laufbahn wird nur abgearbeitet,
+wenn `moveType 3` gilt**, **und die 96 `205`-Befehle werden nur
+ausgefuehrt, wenn eine Seite bei ihnen ist** -- **und es laeuft keine
+einzige Seite dieses Spiels**, **weil die Startkarte `Map002` acht
+Ereignisse hat und keine davon ein `205` traegt** -- **also ist noch
+nichts davon am laufen.**
+
