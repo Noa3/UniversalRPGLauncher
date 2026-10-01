@@ -14703,3 +14703,61 @@ All 2218 tests passed
 **`TestRealRm2kRuntimeRun`: 6/6, and it prints the line.**
 
 **Full suite: `All 2218 tests passed`.**
+
+
+## Eleven games, eight engines, and the inventory was written by hand until now
+
+**And two of the eight had a finished game on this machine all along and
+this repository had not looked.**
+
+### And what is here, each engine named by the file that says so
+
+| game | engine | marker |
+|---|---|---|
+| CamelliaCoronation-Win | MZ | `js/rmmz_core.js` |
+| Dreaming Mary | VX Ace | `Game.ini` `Library=RGSS301.dll` |
+| Dragon Destiny | RM2K | `RPG_RT.ldb` |
+| Fatal Fantasy Update | MV | `www/js/rpg_core.js` |
+| Heartache 101 v2.5 | XP | `Game.ini` `Library=RGSS102E.dll` |
+| LegalTruck_v1.1 | MV | `www/js/rpg_core.js` |
+| Lisa | RM2K | `RPG_RT.ldb` |
+| MicroQuest | XP | `RGSS104E.dll` |
+| Pom Gets Wi-Fi | RM2K | `RPG_RT.ldb` |
+| Random Dungeon | VX | `RGSS202E.dll` |
+| The Princess and the Rose Knight | VX | `RGSS202E.dll` |
+| dungeon5min, Kaiju Girlfriend | WOLF | `Data.wolf` |
+
+**And two of them carry their data in an archive and not beside them, and
+both archives name themselves in five bytes:**
+
+```text
+Game.rgss3a  ->  52 47 53 53 33 61   "RGSS3a"
+Game.rgssad  ->  52 47 53 53 41 44   "RGSSAD"
+```
+
+**And `Game.ini` names the engine outright, in the two fields RPG Maker
+itself writes:** `Library=RGSS301.dll` and `Scripts=Data\Scripts.rvdata2`
+for VX Ace, `RGSS202E.dll` for VX, `RGSS104E.dll` and `RGSS102E.dll` for XP.
+
+### And the first version of the test failed, and it should have
+
+**It read `Heartache 101` as unknown, and the reason was that its data is in
+`Game.rgssad` and there is no `Data/` beside it.** **So a detector that
+looked only for a data directory would have refused a finished XP game, and
+the one file that names the engine is three fields of a text file.**
+
+**And that is the same shape as the three before it** -- a hand-kept list
+next to the test, a threshold that was never true, a cipher that was not a
+cipher. **The rule this repository keeps relearning: derive it from the files
+or do not assert it.**
+
+### Evidence
+
+**`TestGameInventory`: 2/2, and the eleven engines are read from the games
+and not from a table.**
+
+**Full suite: `All 2220 tests passed`.**
+
+**And this closes the question criterion 3 and 5 could not answer: both had a
+finished game here all along, and neither was looked at. Three MV games and
+two VX games, and the VX one is new to this repository entirely.**
