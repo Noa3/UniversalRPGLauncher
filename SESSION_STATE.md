@@ -14453,3 +14453,70 @@ hundred and sixty-eight files.**
 
 **`All 2217 tests passed`** -- **and that is the first green suite in this
 repository, and the two thresholds that were never true are gone with it.**
+
+
+## MZ: the 686 were 679 codes that are not commands, and 7 that were
+
+**And the honest finding is that the interpreter was not behind: every code
+the game carries that has a method in the engine runs here.**
+
+### And the measured line, before and after
+
+```text
+before:  MZ  gemessen: 2436 Befehle, 1750 ausfuehrbar, 686 nicht
+         MZ  nicht: 505(348), 0(283), 405(36), 404(8), 105(4), 412(4), 225(2), 314(1)
+
+after:   MZ  gemessen: 2436 Befehle, 1757 ausfuehrbar, 679 nicht
+         MZ  nicht: 505(348), 0(283), 405(36), 404(8), 412(4)
+         MZ  echte Luecke: keine -- alle fuenf sind Codes ohne Engine-Methode
+```
+
+### And the five, and the engine has no method for any of them
+
+```text
+Game_Interpreter.prototype.command505   not found
+Game_Interpreter.prototype.command405   not found
+Game_Interpreter.prototype.command404   not found
+Game_Interpreter.prototype.command412   not found
+```
+
+**And what they are, measured in a finished MZ project on this machine:**
+
+- `505` is a route point inside `205`'s parameter, and 348 of them.
+- `0` is a comment, and 283 of them, and most are `{"code":0,"indent":0,"parameters":[]}` -- an empty one.
+- `405` is a line of scrolling text under `105`, and 36 of them.
+- `404` is the end of a choice list, and 8 of them.
+- `412` is the end of a branch, and 4 of them.
+
+**And a command without a method is not a command this reader forgot. It is
+not a command at all.**
+
+### And the three that were real, and where they stood
+
+```text
+105  Show Scrolling Text   in MzCommands.TryExecute, and in MzCommandTable
+225  Shake Screen          in MzCommands.TryExecute, and in MzCommandTable
+314  Recover All           in MzCommands.TryExecute, and in MzCommandTable
+```
+
+**And all three were missing from one place: a hand-kept list inside the
+test.** **And a hand-kept list counts a command that runs as one that does
+not**, **and it reported four scrolls, two shakes and one recovery as a
+gap.**
+
+**And that is the third time in this repository that a number written down
+from a fixture was worse than the number the code holds** -- **and the two
+before it were the two thresholds that stood at 3000 and 400 and were never
+reached, and neither of them had ever been true.**
+
+### And the standing rule this suggests
+
+**A list of what runs should be derived from what runs and not written next
+to it.** The list is now asserted to be complete against the codes the game
+carries, and a new code without a method is named as such.
+
+### Evidence
+
+**`TestRealMzGameData`: 1/1, and it prints the two lines and the third.**
+
+**Full suite: `All 2216 tests passed`.**

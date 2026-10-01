@@ -223,6 +223,30 @@ public partial class TestRealMzGameData : TestBase
             UniversalRPG.Web.MzCommandTable.ChangeVehicleImage, // 322
             UniversalRPG.Web.MzCommandTable.ShowChoiceList,   // 102
             UniversalRPG.Web.MzCommandTable.ChoicesOption,   // 402
+            // **Und diese drei standen in keiner Liste, obwohl alle drei
+            // in `MzCommands.TryExecute` einen Fall haben und alle drei
+            // eine Konstante in `MzCommandTable` tragen** -- **und
+            // gemessen ist das an `rmmz_objects.js` eines fertigen
+            // MZ-Projekts auf dieser Maschine:**
+            //
+            // ```js
+            // Game_Interpreter.prototype.command105 = function(params) {
+            //     if ($gameMessage.isBusy()) { return false; }
+            //     $gameMessage.setScroll(params[0], params[1]);
+            //     while (this.nextEventCode() === 405) { this._index++;
+            //         $gameMessage.add(this.currentCommand().parameters[0]); }
+            //     this.setWaitMode("message");
+            //     return true;
+            // };
+            // ```
+            //
+            // **Und die Liste war handgepflegt, und eine handgepflegte
+            // Liste zaehlt eine Ausfuehrung, die es gibt, als fehlend** --
+            // **und `Map003` Event 9 hat ein `105` mit vier `405`-Zeilen,
+            // und die vier wurden als "nicht ausfuehrbar" gemeldet.**
+            UniversalRPG.Web.MzCommandTable.ScrollText,      // 105
+            UniversalRPG.Web.MzCommandTable.ScreenShake,     // 225
+            UniversalRPG.Web.MzCommandTable.RecoverAll,      // 314
         };
 
         var nicht = vorkommen
@@ -238,6 +262,40 @@ public partial class TestRealMzGameData : TestBase
                 .OrderByDescending(pKvp => pKvp.Value)
                 .Select(pKvp => pKvp.Key + "(" + pKvp.Value + ")")));
 
+        // **Und die fuenf, die bleiben, haben keine Methode in der Engine
+        // und sind damit keine Befehle** -- **und das ist an
+        // `rmmz_objects.js` gemessen, wo keines der fuenf vorkommt:**
+        //
+        // ```text
+        // Game_Interpreter.prototype.command505   not found
+        // Game_Interpreter.prototype.command405   not found
+        // Game_Interpreter.prototype.command404   not found
+        // Game_Interpreter.prototype.command412   not found
+        // ```
+        //
+        // **Und die drei mit Methoden sind `105`, `225` und `314`, und
+        // `105` traegt seine Zeilen in `405`-Eintraegen, und `505` ist ein
+        // Routenpunkt im Parameter von `205`** -- **und ein
+        // handgepflegter Zaehler, der das nicht weiss, meldet eine
+        // Ausfuehrung, die es gibt, als fehlend**, **und das war 4
+        // Scrolltexte und 2 Erschuetterungen und 1 Genesung.**
+        var ohneMethode = new HashSet<int> { 0, 404, 405, 412, 505 };
+        var echteLuecke = nicht
+            .Where(pKvp => !ohneMethode.Contains(pKvp.Key))
+            .ToList();
+        System.Console.WriteLine(
+            "MZ  echte Luecke: " + (echteLuecke.Count == 0
+                ? "keine -- alle fuenf sind Codes ohne Engine-Methode"
+                : string.Join(", ", echteLuecke
+                    .Select(pKvp => pKvp.Key + "(" + pKvp.Value + ")"))));
+
+        AssertTrue(echteLuecke.Count == 0,
+            "**and every code the game carries that has a method in the"
+            + " engine runs here** -- and these do not: "
+            + (echteLuecke.Count == 0
+                ? "none"
+                : string.Join(", ", echteLuecke
+                    .Select(pKvp => pKvp.Key + "(" + pKvp.Value + ")"))));
         AssertTrue(nicht.Count > 0,
             "**and this reader still cannot run every command the game "
                 + "uses** -- "
