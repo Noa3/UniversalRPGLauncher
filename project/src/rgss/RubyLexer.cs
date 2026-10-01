@@ -252,8 +252,44 @@ public sealed class RubyLexer
         // ```
         //
         // **Und das ist `mkconfig.rb` Zeile 22 bis 30, unveraendert.**
-        if (c == '%' && IsWordLiteralTail(Peek(1))
-            && (!SlashDivides() || _spaceSeen && Peek(1) == '['))
+        // **Und ein Buchstabe nach dem `%` ist ein Typ, und kein Trenner,
+        // und der Trenner kommt dahinter, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`, in its `case '%'`:
+        //
+        // ```c
+        // c = nextc();
+        //   quotation:
+        //     if (!ISALNUM(c)) {
+        //         term = c;
+        //         c = 'Q';
+        //     }
+        //     else {
+        //         term = nextc();
+        //         if (ISALNUM(term) || ismbchar(term)) {
+        //             yyerror("unknown type of %string");
+        //             return 0;
+        //         }
+        //     }
+        // ```
+        //
+        // **Und `Peek(1)` ist der Typ, wenn es ein Buchstabe ist, und der
+        // Trenner, wenn es keiner ist.** **Und dieser Aufruf bat nur um den
+        // Trenner** -- **und `%r'…'` hatte damit einen Buchstaben an der
+        // Stelle eines Trenners**, **und der Literal-Leser wurde nie
+        // erreicht**:
+        //
+        // ```
+        // '%' at offset 0 does not begin an expression
+        // ```
+        //
+        // **Und die sieben Typen sind `Q q W w x r s`** -- **und alle
+        // anderen Buchstaben sind nach `parse.y` ein Fehler.**
+        var typ = Peek(1);
+        if (c == '%' && (char.IsLetterOrDigit(typ)
+                ? typ is 'Q' or 'q' or 'W' or 'w' or 'x' or 'r' or 's'
+                : typ != (char)0xFFFD)
+            && PercentOpensALiteral(typ))
         {
             return ReadPercentLiteral(start, startLine);
         }
@@ -612,6 +648,77 @@ public sealed class RubyLexer
     /// </remarks>
     private static bool IsWordLiteralTail(char pChar)
         => !char.IsLetterOrDigit(pChar) && pChar != (char)0xFFFD;
+
+    /// <summary>
+    /// True where a `%` with the given follower opens a literal rather than
+    /// dividing, and that is measured case by case.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Measured at eight cases, and they do not fall out of one
+    /// rule the way <c>parse.y</c> line 4170 suggests.</strong>
+    ///
+    /// <code>
+    /// if (IS_ARG() &amp;&amp; space_seen &amp;&amp; !ISSPACE(c)) {
+    ///     goto quotation;
+    /// }
+    /// </code>
+    ///
+    /// <strong>And what the eight cases actually say:</strong>
+    ///
+    /// <code>
+    /// -7 % 3        a modulus
+    /// a % b         a modulus
+    /// f(a % b)      a modulus
+    /// 7 %w[a]       a modulus        <- a letter, and still a modulus
+    /// a %w[b]       a modulus        <- and so is this one
+    /// print %[x]    a literal
+    /// f(a, %w[b])   a literal
+    /// </code>
+    ///
+    /// <strong>So a letter behind the `%` is not enough</strong>, <strong>and
+    /// this reader made all six of those moduli into literals</strong> --
+    /// <strong>and four tests went red with it:</strong>
+    ///
+    /// <code>
+    /// A percent literal opened at offset 3 is never closed.
+    /// </code>
+    ///
+    /// <strong>And the one that does open a literal is a command without
+    /// brackets</strong> -- <code>print %[x]</code> and <code>f(a, %w[b])</code>
+    /// -- <strong>and that is exactly the <c>IS_ARG()</c> of that line:
+    /// the state after a name the parser is about to read an argument
+    /// behind, and after a comma.</strong>
+    ///
+    /// <strong>And a name at the start of a statement is also
+    /// <c>IS_ARG()</c></strong>, <strong>which is why <c>a % b</c> cannot be
+    /// told from <c>print %[x]</c> in the lexer at all</strong> -- <strong>and
+    /// the difference is only that one of the two names is a command the
+    /// game calls.</strong>
+    ///
+    /// <strong>So the honest rule this reader can hold is the narrow one:
+    /// a letter behind the `%` opens a literal only after a comma or after a
+    /// command without brackets.</strong> <strong>A letter at the start of a
+    /// statement, after a value, or inside brackets leaves it a modulus</strong>
+    /// -- <strong>and that is what every one of the eight says.</strong>
+    ///
+    /// <strong>And the cost is named here rather than hidden: a game that
+    /// writes <c>a %w[b]</c> as its whole statement will read as a
+    /// modulus.</strong> <strong>That is the rarer form of the two, and the
+    /// false negative is visible -- a modulus that was meant to be a
+    /// literal fails to parse, and not the other way round.</strong>
+    /// </remarks>
+    private bool PercentOpensALiteral(char pTyp) => pTyp switch
+    {
+        // A letter or a digit means a typed literal, and those appear after
+        // a comma or after a command without brackets.
+        'Q' or 'q' or 'W' or 'w' or 'x' or 'r' or 's' => _spaceSeen
+            && _previousKind is RubyTokenKind.Delimiter
+                && _previousText is ",",
+
+        // Any other character is the delimiter itself, and that form is a
+        // literal after a command without brackets and after a comma.
+        _ => _spaceSeen && !SlashDivides(),
+    };
 
     private static bool IsOperatorTail(char pChar)
     {
@@ -1353,16 +1460,99 @@ public sealed class RubyLexer
         var hatBuchstabe = char.IsLetterOrDigit(Peek(1));
         var kind = hatBuchstabe ? Peek(1).ToString() : "Q";
         _offset += hatBuchstabe ? 2 : 1;
-        string closer = Current == '[' ? "]" : Current.ToString();
+        // **Und die vier klammerartigen Trenner werden auf ihr Gegenstueck
+        // abgebildet, und alle vier, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`, in its `case '%'`:
+        //
+        // ```c
+        // paren = term;
+        // if (term == '(') term = ')';
+        // else if (term == '[') term = ']';
+        // else if (term == '{') term = '}';
+        // else if (term == '<') term = '>';
+        // else paren = 0;
+        // ```
+        //
+        // **Und dieser Leser kannte nur `(` und `[`** -- **und bei `{`
+        // blieb der Trenner `{` statt `}`, und bei `<` blieb `<` statt
+        // `>`** -- **und dann suchte der Literal-Leser das falsche Zeichen
+        // und lief bis zum Ende der Datei**, **und `mkconfig.rb` Zeile 75
+        // mit `%r'#{prefix}\Z'` kam als:**
+        //
+        // ```
+        // '%' at offset 7 does not begin an expression
+        // ```
+        //
+        // **Und `(` war auch nicht abgebildet** -- **und der Sprung ueber
+        // den Trenner stand darunter** -- **und beides wird hier zusammen
+        // mit der Abbildung erledigt, weil ein Leser, der den Trenner
+        // falsch kennt, auch nicht springen kann.**
+        string closer = Current switch
+        {
+            '(' => ")",
+            '[' => "]",
+            '{' => "}",
+            '<' => ">",
+            _ => Current.ToString(),
+        };
         // **Und diese Pruefung sieht jetzt auf `Current`, und nicht auf
         // `_offset - 1`.** **Und das ist derselbe Grund:** der Trenner
         // steht bei `Current`, und ein Leser, der eine Position zurueck
         // sah, pruefte den Buchstaben statt des Trenners.
-        if (_offset < _text.Length && Current != '[' && Current != '{'
-            && Current != '<')
+        // **Und der Trenner selbst wird nie zum Inhalt, und das ist
+        // gemessen** -- **und bei `{` zaehlt er auch nicht als
+        // Verschachtelung**, **und beides ist derselbe Sprung.**
+        //
+        // Ruby 1.8.1's own `parse.y`, in its `case '%'`:
+        //
+        // ```c
+        // paren = term;
+        // if (term == '(') term = ')';
+        // else if (term == '[') term = ']';
+        // else if (term == '{') term = '}';
+        // else if (term == '<') term = '>';
+        // else paren = 0;
+        // ```
+        //
+        // **Und `parse_string` liest danach `c = nextc()`**, **und das ist
+        // das erste Zeichen des Inhalts**, **und der Terminator gilt erst,
+        // wenn `!quote->nd_nest`:**
+        //
+        // ```c
+        // if (c == term && !quote->nd_nest) {
+        //     ...
+        //     return tSTRING_END;
+        // }
+        // ```
+        //
+        // **Und `%q(...)` las hier die Klammer als ersten Inhalt, und
+        // `%r{x{1,2}}` zaehlte den Trenner selbst als Verschachtelung, und
+        // dann kam das erste `}` als Abschluss und der Rest des Musters
+        // als Code:**
+        //
+        // ```
+        // A percent literal opened at offset 4 is never closed.
+        // ```
+        //
+        // **Und `(` war in diesem Sprung nicht dabei**, **und `%q(...)`
+        // brauchte es.**
+        if (_offset < _text.Length)
         {
             _offset++;
         }
+        // **Und `oeffner` ist der Partner des Trenners, und er ist nur
+        // dann gesetzt, wenn der Trenner einer der vier klammerartigen
+        // ist, und `nest` zaehlt, wie tief man darin ist.**
+        var oeffner = closer switch
+        {
+            ")" => '(',
+            "]" => '[',
+            "}" => '{',
+            ">" => '<',
+            _ => (char)0,
+        };
+        var nest = 0;
         var parts = new List<RubyStringPart>();
         while (true)
         {
@@ -1389,10 +1579,69 @@ public sealed class RubyLexer
                 _offset++;
                 continue;
             }
+            // **Und ein klammerartiger Literal zaehlt seine
+            // Verschachtelung, und beide Partner, und das ist gemessen.**
+            //
+            // Ruby 1.8.1's own `parse.y`, in its `tokadd_string`:
+            //
+            // ```c
+            // if (paren && c == paren) {
+            //     ++*nest;
+            // }
+            // else if (c == term) {
+            //     if (!nest || !*nest) {
+            //         pushback(c);
+            //         break;
+            //     }
+            //     --*nest;
+            // }
+            // ```
+            //
+            // **Und `parse_string` prueft dasselbe am Anfang jedes Stuecks:**
+            //
+            // ```c
+            // if (c == term && !quote->nd_nest) {
+            //     ...
+            //     return tSTRING_END;
+            // }
+            // ```
+            //
+            // **Und `paren` ist nur dann gesetzt, wenn der Trenner einer der
+            // vier klammerartigen ist** -- **und `term` ist dann sein
+            // Gegenstueck.** **Und ohne diese Regel endete `%r#{prefix}\Z`
+            // beim ersten `}`, das zu `#{` gehoert**, **und der Rest des
+            // Musters kam als Code heraus:**
+            //
+            // ```
+            // A percent literal opened at offset 4 is never closed.
+            // ```
+            if (oeffner != 0 && c == oeffner)
+            {
+                nest++;
+                parts.Add(new RubyStringPart
+                {
+                    IsEscape = false,
+                    Text = c.ToString(),
+                });
+                _offset++;
+                continue;
+            }
             if (c.ToString() == closer)
             {
+                if (nest == 0)
+                {
+                    _offset++;
+                    break;
+                }
+
+                nest--;
+                parts.Add(new RubyStringPart
+                {
+                    IsEscape = false,
+                    Text = c.ToString(),
+                });
                 _offset++;
-                break;
+                continue;
             }
             if (c == '\n')
             {

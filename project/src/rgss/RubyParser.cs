@@ -2230,7 +2230,40 @@ public sealed class RubyParser
                     // ```
                     // 'when' at offset 33 does not begin an expression
                     // ```
-                    SkipNewlines();
+                    // **Und nur die Form ohne Argumente ueberspringt hier
+                    // den Zeilenumbruch, und das ist gemessen.**
+                    //
+                    // `attr_accessor` allein steht am Zeilenende, und
+                    // `Current` waere dann schon das `end` der naechsten
+                    // Zeile.
+                    //
+                    // **Und eine Form MIT Argumenten tut das nicht, und
+                    // das ist auch gemessen:**
+                    //
+                    // ```c
+                    // command_args : { CMDARG_PUSH(1); } open_args
+                    // open_args    : call_args | ...
+                    // call_args    : command | args opt_block_arg | ...
+                    // paren_args   : '(' call_args opt_nl ')' | ...
+                    // ```
+                    //
+                    // **Und ein `opt_nl` steht nur bei `paren_args`, also
+                    // bei Klammern, und nirgends sonst.** **Also nach einem
+                    // Namen ohne Klammern folgt nie ein Zeilenumbruch.**
+                    //
+                    // **Und ein Leser, der hier trotzdem `SkipNewlines`
+                    // macht, frisst die Zeilengrenze und laesst das
+                    // `unless`, das danach kommt, als Argument im selben
+                    // Aufruf stehen** -- **und dann:**
+                    //
+                    // ```
+                    // 'end' at offset 57 does not begin an expression
+                    // ```
+                    if (Current.Kind == RubyTokenKind.Newline
+                        || Current.Kind == RubyTokenKind.Semicolon)
+                    {
+                        SkipNewlines();
+                    }
                     var argumente = new List<RubyNode>();
                     while (true)
                     {

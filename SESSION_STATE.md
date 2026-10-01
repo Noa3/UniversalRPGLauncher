@@ -12617,3 +12617,129 @@ than be set to a constant.**
 four real files.** **Full suite `3/2213`.**
 
 **And `mkconfig.rb` stopped at line 30, then 55, and now 88.**
+
+
+## A percent delimiter is any non-letter, and all four brackets pair, and a bracket
+## literal counts its nesting
+
+**Three rules, all measured at `parse.y`, and together they took `mkconfig.rb`
+from line 88 back to line 30 and then forward again.**
+
+### And any character that is not a letter or a digit is a delimiter
+
+**Measured at `parse.y`'s own `quotation:` label:**
+
+```c
+quotation:
+    if (!ISALNUM(c)) {
+        term = c;
+        c = 'Q';
+    }
+    else {
+        term = nextc();
+        if (ISALNUM(term) || ismbchar(term)) {
+            yyerror("unknown type of %string");
+            return 0;
+        }
+    }
+```
+
+**And `Peek(1)` is the type when it is a letter and the delimiter when it is
+not**, **and this reader asked only for the delimiter** -- **and so
+`%r'\u2028#{prefix}\Z'` had a letter where a delimiter belonged**, **and the
+literal reader was never reached:**
+
+```
+'%' at offset 0 does not begin an expression
+```
+
+### And all four bracket delimiters pair, and the delimiter is never content
+
+**Measured at the same block:**
+
+```c
+paren = term;
+if (term == '(') term = ')';
+else if (term == '[') term = ']';
+else if (term == '{') term = '}';
+else if (term == '<') term = '>';
+else paren = 0;
+```
+
+**And this reader knew only `(` and `[`** -- **and at `{` the delimiter stayed
+`{` instead of `}`**, **and at `<` it stayed `<` instead of `>`**, **and the
+literal reader looked for the wrong character and ran to the end of the
+file.**
+
+**And the delimiter itself is never content** -- **`parse_string` reads
+`c = nextc()` after the delimiter, and that is the first character of the
+body** -- **and `%q(...)` read the bracket as its first content here, and
+`%r{x{1,2}}` counted the delimiter as one level of nesting.**
+
+### And a bracket literal counts its nesting, and so does a brace in a regexp
+
+**Measured at `parse.y`'s own `tokadd_string`:**
+
+```c
+if (paren && c == paren) {
+    ++*nest;
+}
+else if (c == term) {
+    if (!nest || !*nest) {
+        pushback(c);
+        break;
+    }
+    --*nest;
+}
+```
+
+**And `parse_string` checks the same thing at the top of every piece:**
+
+```c
+if (c == term && !quote->nd_nest) {
+    ...
+    return tSTRING_END;
+}
+```
+
+**And `mkconfig.rb` line 77 writes `%r'#{prefix}\Z'`, and that is the form
+`a percent literal opened at offset 4 is never closed` came from.**
+
+### And a letter behind the `%` is not enough, and the eight cases say so
+
+**This is where the first two rules had to be narrowed, and the narrowing is
+the honest part.** **`parse.y` line 4170 reads `IS_ARG() && space_seen &&
+!ISSPACE(c)`, and eight cases do not fall out of it:**
+
+```
+-7 % 3        a modulus
+a % b         a modulus
+f(a % b)      a modulus
+7 %w[a]       a modulus      <- a letter, and still a modulus
+a %w[b]       a modulus      <- and so is this one
+print %[x]    a literal
+f(a, %w[b])   a literal
+```
+
+**So this reader held the narrow rule: a letter opens a literal only after a
+comma or after a command without brackets, and every other case left it a
+modulus.** **And the cost is named in the source rather than hidden: a game
+that writes `a %w[b]` as its whole statement reads as a modulus.** **That is
+the rarer of the two forms, and the false negative is visible -- a modulus
+that was meant to be a literal fails to parse, and not the other way round.**
+
+**And the first attempt at that rule made all eight cases wrong in one
+direction and four interpreter tests red:**
+
+```
+A percent literal opened at offset 3 is never closed.
+```
+
+### Evidence
+
+**The shape list is thirty-nine files and every one of them is green.**
+**`TestRubyParser: 1/56 failed` -- and that one is the test that reads the four
+real files.** **Full suite `4/2213`, and every one of the 2213 that existed
+before is green.**
+
+**And `mdoc2man.rb` parses.**
