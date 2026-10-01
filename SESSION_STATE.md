@@ -11122,8 +11122,35 @@ Kachel ragt.**
 
 **`All 2191 tests passed`, Validator gruen.**
 
-**Und was als naechstes fehlt:** **der Zeichner braucht noch die
-Bush-Tiefe** -- **`refreshBushDepth` schneidet eine Figur in einen
- oberen und einen unteren Teil, wenn sie im Gebuesch steht** -- **und
-`isBigCharacter` gibt es bei Bildern mit zwei Zellen Breite.**
+**Und was als naechstes fehlt:** **und was NICHT fehlt, ist die
+Gebueschtiefe** -- **sie ist gemessen und sie ist null.**
+**`data/TilesetEvents.json` existiert in diesem Projekt nicht**, **und
+ohne diese Datei ist `$gameMap.bushDepth()` immer 0**, **und
+`refreshBushDepth` setzt dann `_bushDepth = 0`**, **und die Figur wird
+nie zerschnitten.**
+**Und `isBigCharacter` kommt im Motor null Mal vor** -- **das war eine
+Annahme, und sie ist jetzt gemessen weg.**
+
+## Und der Spieler hatte zwei Orte, und stand in der Ecke
+
+**`PlayerX`/`PlayerY` waren Felder der Runtime, und `Facts.Player`
+hatte seine eigenen** -- **gemessen: Figur 0,0 und Spieler 4,11**, **und
+gezeichnet wird die Figur**, **also stand ein Spielerkopf in der Ecke
+des Zimmers.**
+
+**Und `data/TilesetEvents.json` existiert in diesem Projekt nicht** --
+**also ist `bushDepth` immer 0, und `isBigCharacter` kommt im Motor
+null Mal vor.** **Beides war von mir geraten und ist jetzt gemessen.**
+
+**Und ein Kartenwechsel baut die Figur nicht neu**, **denn
+`performTransfer` setzt die Position aus dem Befehl.**
+
+**`All 2192 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **der Spieler steht jetzt richtig, aber
+er wird nur an `PlayerX`/`PlayerY` gezeichnet, wenn die Runtime keine
+Figur hat** -- **und die Figur ist jetzt immer da, also ist der
+zweite Zweig tot** -- **und die Kacheln unter dem Spieler werden nicht
+nach ihm gezeichnet, weil seine Y-Koordinate gar nicht in der Hoehe der
+Karte liegt.**
 

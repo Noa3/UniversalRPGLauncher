@@ -101,6 +101,17 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         CurrentMapId = pMapId;
+
+        // **Und der Spieler wird auf der neuen Karte nicht verschoben
+        // und nicht vergessen** -- **er bleibt, wo er ist.**
+        //
+        // **Gemessen an `Game_Player`: der Spieler IST die Figur, und
+        // ein Kartenwechsel aendert `_x` und `_y` nicht**, **sondern
+        // `performTransfer` setzt sie aus dem Befehl.** **Ein Leser,
+        // der die Figur bei jedem Kartenwechsel neu baute, stellte den
+        // Spieler auf 0,0** -- **und einer, der sie nie neu baute,
+        // zeichnete eine Figur auf einer Karte, auf der der Spieler
+        // nie war.**
         return Repaint();
     }
 
@@ -1204,6 +1215,20 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     "data/System.json", File.ReadAllBytes(systemPfad));
                 PlayerX = system.Root.Member("startX")?.IntOr(0) ?? 0;
                 PlayerY = system.Root.Member("startY")?.IntOr(0) ?? 0;
+
+                // **Und der Spieler wird auch dorthin gestellt.**
+                //
+                // **Und `PlayerX` und `PlayerY` waren Felder dieser
+                // Klasse, und `Facts.Player` hatte seine eigenen, und
+                // beide kannten nichts voneinander.** **Gemessen: die
+                // Figur stand auf 0,0 und der Spieler auf 4,11** --
+                // **und gemalt wurde die Figur**, **also stand auf der
+                // Karte ein Spielerkopf in der Ecke des Zimmers und
+                // der Spieler war woanders.** **Zwei Orte fuer eine
+                // Sache ist genau der Fehler, den der Motor nicht
+                // machen kann, weil er nur einen hat.**
+                Facts.Player.StandAt(
+                    CurrentMapId > 0 ? CurrentMapId : 1, PlayerX, PlayerY);
             }
             catch (MzDataException)
             {

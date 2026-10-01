@@ -11678,3 +11678,45 @@ geschlossen.**
 
 **`All 2191 tests passed`, Validator gruen.**
 
+## Und die Gebueschtiefe war eine Annahme, und der Spieler stand in der Ecke
+
+### Und `TilesetEvents.json` existiert in diesem Projekt nicht
+
+**Gemessen: `data/TilesetEvents.json` ist nicht da** -- **und diese
+Datei ist es, aus der `$gameMap.bushDepth()` liest.**
+
+**Also ist `_bushDepth` immer 0, `refreshBushDepth` setzt es auf 0,
+und eine Figur wird nie zerschnitten.** **Und `isBigCharacter` kommt
+im Motor null Mal vor** -- **das stand in meiner letzten Notiz als
+Faelligkeit, und es war geraten.**
+
+**Eine Faelligkeit, die man messen kann, misst man, bevor man sie
+baut.** **Und ein gemessenes Nichts ist ein Ergebnis.**
+
+### Und der Spieler hatte zwei Orte
+
+**Gemessen: die Figur stand auf 0,0 und der Spieler auf 4,11.**
+
+**Der Grund: `PlayerX` und `PlayerY` waren Felder der Runtime, und
+`Facts.Player` hatte seine eigenen, und keiner von beiden kannte den
+anderen.** **Und gezeichnet wird die Figur.**
+
+**Also stand auf der Karte ein Spielerkopf in der Ecke des Zimmers,
+und der Spieler war woanders, und beides sah richtig aus.**
+
+**Zwei Orte fuer eine Sache ist genau der Fehler, den der Motor nicht
+machen kann, weil er nur einen hat** -- **und `Game_Player` erbt von
+`Game_Character` und ist die Figur.**
+
+### Und ein Kartenwechsel verschiebt den Spieler nicht
+
+**Gemessen an `performTransfer`: ein Kartenwechsel setzt `_x` und
+`_y` aus dem Befehl, und sonst nichts.** **Also baut `GoTo` die Figur
+nicht neu** -- **das hiesse, den Spieler auf 0,0 zu stellen** --
+**und vergisst sie auch nicht** -- **das hiesse, eine Figur auf einer
+Karte zu zeichnen, auf der der Spieler nie war.**
+
+**Test evidence** `test_real_mz_runtime_run.cs` (9), **9/9**.
+
+**`All 2192 tests passed`, Validator gruen.**
+

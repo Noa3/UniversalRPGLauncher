@@ -771,4 +771,59 @@ public partial class TestRealMzRuntimeRun : TestBase
                 + "and one that read the frequency as frames would have "
                 + "waited a hundred and fifty");
     }
+
+    /// <summary>
+    /// The player keeps its own figure across a change of map.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own question, and the answer is
+    /// in <c>Game_Player</c>.</strong> The player <strong>is</strong> the
+    /// character — <strong>there is no pair</strong> — <strong>and a
+    /// change of map moves the player, not a copy of it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a figure built when the map was read is a figure
+    /// built once.</strong> <strong>A runtime that rebuilt it on every
+    /// change of map lost the walk it was in</strong>, <strong>and one
+    /// that never rebuilt it drew a figure on a map where the player
+    /// had never been.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DerSpielerBehaeltSeineFigurUeberDenKartenwechsel()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(15), "**and map 15 paints**");
+        AssertTrue(lauf.Facts.Player.Figur != null,
+            "**and the player has a figure**");
+
+        AssertTrue(lauf.GoTo(17), "**and map 17 paints**");
+        AssertTrue(lauf.Facts.Player.Figur != null,
+            "**and the player still has one on the new map**"
+                + " -- and a runtime that rebuilt the figure on every"
+                + " change of map lost the walk it was in");
+        AssertEq(lauf.Facts.Player.Figur!.X, lauf.PlayerX,
+            "**and it stands where the player stands**"
+                + " -- and the player and its figure are one object"
+                + " and not two");
+        AssertEq(lauf.Facts.Player.Figur!.Y, lauf.PlayerY,
+            "**and on the right row**");
+
+        AssertEq(lauf.EventFigures.Count, lauf.Figures.Count,
+            "**and every figure of the new map has a live figure**"
+                + " -- and that is the object the page commands move,"
+                + " and not a row in the file");
+    }
 }
