@@ -325,13 +325,29 @@ public sealed class RubyParser
     /// Ruby 1.8.1's own tree.</strong>
     /// </para>
     /// </remarks>
-    private List<RubyNode> ParseAssignmentTarget()
+    private List<RubyNode> ParseAssignmentTarget(bool pZiel = true)
     {
         var liste = new List<RubyNode>();
 
-        if (Is("("))
+        // **Und die Klammer ist nur dann eine Zielseite, und das ist
+        // gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`: `lhs : mlhs_basic | tLPAREN mlhs_entry
+        // ')'` -- **und `mlhs_basic : mlhs_head | mlhs_head mlhs_item |
+        // mlhs_head tSTAR mlhs_node | ...`**, **und `mlhs_head : mlhs_item
+        // ','`.**
+        //
+        // **Also braucht `(a, b)` ein Komma und `(a)` braucht ein `=`**
+        // **-- und ohne eines von beidem ist die Klammer ein geklammerter
+        // Ausdruck und keine Zielseite.**
+        //
+        // **Und diese Bedingung fehlte, und 26 Tests brachen** -- **denn
+        // `Is("(")` ist bei `[7.zero?, 0.zero?, ...]` wahr**, **und der
+        // Leser las die ganze Liste als eine Klammer-Zielseite, und der
+        // Punkt nach `7` kam dann an die Spitze von `ParsePrimary`.**
+        if (Is("(") && KlammerIstEineZielseite())
         {
-            var runde = Take().Text;
+            Take();
             while (!Is(")") && !AtEnd)
             {
                 SkipNewlines();
@@ -375,7 +391,11 @@ public sealed class RubyParser
 
         liste.Add(ParseTernary());
 
-        while (Is(",") && CommaBelongsToTheTarget())
+        // **Und nur die linke Seite sammelt Namen.** **Und `arg` ist kein
+        // `mlhs`**, **gemessen an `parse.y`: `arg : lhs '=' arg`** --
+        // **und die rechte Seite von `a = 1, 2` ist ein Ausdruck und keine
+        // Liste von Namen.**
+        while (pZiel && Is(",") && CommaBelongsToTheTarget())
         {
             Take();
             SkipNewlines();
@@ -387,7 +407,18 @@ public sealed class RubyParser
                     Kind = RubyNodeKind.Splat,
                     Line = Current.Line,
                 });
-                if (StartsAValue() && !Is("="))
+                // **Und der Name nach dem Stern, und nicht ein Wert.**
+                //
+                // **Gemessen an `parse.y`: `mlhs_basic : mlhs_head tSTAR
+                // mlhs_node`** -- **und `mlhs_node` ist ein Name, keine
+                // Liste**, **und `mlhs_basic : mlhs_head tSTAR` schreibt
+                // die `-1`, und die ist der Stern ganz ohne Namen.**
+                //
+                // **Und `!Is("=")` war hier falsch, denn nach `Take()` zeigt
+                // `Current` auf den Namen und nicht auf ein `=`.** **Also
+                // las der Leser `rest` als Wert und stiess danach auf das
+                // Komma, das schon gegessen war.**
+                if (StartsAValue())
                 {
                     liste.Add(ParseTernary());
                 }
@@ -405,6 +436,73 @@ public sealed class RubyParser
         }
 
         return liste;
+    }
+
+    /// <summary>
+    /// Whether the bracket at the current token is a target, not a group.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And measured at <c>parse.y</c>: <c>lhs : mlhs_basic |
+    /// tLPAREN mlhs_entry ')'</c>, and <c>mlhs_head : mlhs_item ','</c>.</strong>
+    /// <strong>So a bracket on the left of an <c>=</c> holds names, and a
+    /// bracket anywhere else holds an expression.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the tell is what follows the closing bracket</strong> --
+    /// <strong>a comma, which means more names, or an <c>=</c>, which means
+    /// this whole bracket was the left side.</strong> <strong>And
+    /// <c>Is("(")</c> alone is not that tell</strong>, <strong>and a
+    /// reader that used it read the element list of every array as a
+    /// target list**, <strong>which is where 26 tests went red.</strong>
+    /// </para>
+    /// </remarks>
+    private bool KlammerIstEineZielseite()
+    {
+        var k = _index;
+        var tiefe = 0;
+
+        while (k < _tokens.Count)
+        {
+            var t = _tokens[k];
+            if (t.Kind == RubyTokenKind.EndOfInput)
+            {
+                return false;
+            }
+
+            if (t.Kind == RubyTokenKind.Delimiter)
+            {
+                if (t.Text == "(")
+                {
+                    tiefe++;
+                }
+                else if (t.Text == ")")
+                {
+                    tiefe--;
+                    if (tiefe == 0)
+                    {
+                        // **Und was hinter der schliessenden Klammer
+                        // steht, entscheidet es.**
+                        var j = k + 1;
+                        while (j < _tokens.Count
+                            && (_tokens[j].Kind == RubyTokenKind.Newline
+                                || _tokens[j].Kind == RubyTokenKind.Semicolon))
+                        {
+                            j++;
+                        }
+
+                        return j < _tokens.Count
+                            && (_tokens[j].Kind == RubyTokenKind.Operator
+                                && (_tokens[j].Text == ","
+                                    || _tokens[j].Text == "="));
+                    }
+                }
+            }
+
+            k++;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -467,11 +565,78 @@ public sealed class RubyParser
             }
 
             // **And the name after the comma, if there is one.**
+            // **Und hier endet die Vorausschau, und das ist gemessen.**
+            //
+            // Ruby 1.8.1's own `parse.y`:
+            //
+            // ```c
+            // f_opt : tIDENTIFIER '=' arg_value
+            // f_arg : f_norm_arg | f_arg ',' f_norm_arg
+            // ```
+            //
+            // **So `def m(a = 10, b = 20)` ist eine Parameterliste, und
+            // das Komma zwischen `a = 10` und `b = 20` gehoert zu
+            // `f_arg ',' f_norm_arg`** -- **und nicht zu einem `mlhs`.**
+            //
+            // **Und eine Vorausschau, die ueber das erste `=` hinauslaeuft,
+            // sieht irgendwo weiter hinten ein `=` und glaubt, es sei
+            // eine Mehrfachzuweisung** -- **und dann verschiebt sie die
+            // Parameter um eine Stelle, und `def m(a = 10, b = 20)` bindet
+            // die 10 an `b` und die 20 an nichts.**
+            //
+            // **Und das ist keine Vermutung: zwölf Fehlschlaege in zwei
+            // Tests sahen genau so aus.**
             if (k < _tokens.Count
                 && StartsAValueAt(k)
                 && k + 1 < _tokens.Count
-                && (_tokens[k + 1].Text == ","
-                    || _tokens[k + 1].Text == "="))
+                && _tokens[k + 1].Text == "=")
+            {
+                // **Und ein Name links von `=` ist ein Parameter mit
+                // Vorgabe, und keine zweite Zuweisung.**
+                //
+                // **Und das ist nur dann wahr, und wenn kein Stern
+                // vorausging.** **Gemessen an `parse.y`:** `mlhs_basic :
+                // mlhs_head tSTAR mlhs_node { $$ = NEW_MASGN($1, $3); }` --
+                // **und `a, *rest = c` hat ein `=` hinter dem Namen, und
+                // es ist trotzdem ein `mlhs`.**
+                //
+                // **Und ohne diese Unterscheidung verwarf der Leser den
+                // Splat und `$make, *rest = Shellwords.shellwords($make)`
+                // endete als `$make` allein, und das Komma kam an die
+                // Spitze von `ParsePrimary`.**
+                var stern = false;
+                for (var r = _index; r < k; r++)
+                {
+                    if (_tokens[r].Text == "*")
+                    {
+                        stern = true;
+                        break;
+                    }
+                }
+
+                // **Und ein Name links von `=` ist der LETZTE Name der
+                // Zielseite, und das `=` steht dahinter.**
+                //
+                // **Gemessen an `parse.y`: `arg : lhs '=' arg`** -- **und
+                // das `=` gehoert zu `arg` und nicht zu `lhs`, und es steht
+                // direkt hinter dem letzten Namen.**
+                //
+                // **Und k stand auf diesem letzten Namen**, **und die
+                // Rueckgabe am Ende der Methode fragte genau den
+                // falschen Token**, **und `a, *rest = x` sah deshalb aus
+                // wie `sprite.draw(x, y)`.**
+                if (k + 1 < _tokens.Count && _tokens[k + 1].Text == "=")
+                {
+                    k++;
+                }
+
+                break;
+            }
+
+            if (k < _tokens.Count
+                && StartsAValueAt(k)
+                && k + 1 < _tokens.Count
+                && _tokens[k + 1].Text == ",")
             {
                 k++;
                 continue;
@@ -480,7 +645,28 @@ public sealed class RubyParser
             break;
         }
 
+        // **Und `k` steht jetzt auf dem LETZTEN Namen, und nicht auf dem
+        // `=`, und die alte Rueckgabe fragte genau den falschen Token.**
+        //
+        // **Gemessen an `parse.y`:** `lhs : mlhs_basic`, und
+        // `mlhs_basic : mlhs_head | mlhs_head mlhs_item | ...`, und
+        // `mlhs_head : mlhs_item ','` -- **und das `=` kommt in `arg`:
+        // `arg : lhs '=' arg`.** **Also gehoert das `=` nicht zur
+        // Zielseite und steht hinter ihr.**
+        //
+        // **Und eine Rueckgabe, die `k` selbst prueft, sieht den letzten
+        // Namen und sagt nein** -- **und dann bekam `a, b, c = 1, 2, 3`
+        // das Komma als Anweisungsanfang, und derselbe Fehler kam bei
+        // `a, b = x` und bei `a, *b = x` ohne jeden Stern.**
+        while (k < _tokens.Count
+            && (_tokens[k].Kind == RubyTokenKind.Newline
+                || _tokens[k].Kind == RubyTokenKind.Semicolon))
+        {
+            k++;
+        }
+
         return k < _tokens.Count
+            && _tokens[k].Kind == RubyTokenKind.Operator
             && _tokens[k].Text == "=";
     }
 
@@ -488,6 +674,61 @@ public sealed class RubyParser
     private bool StartsAValueAt(int pIndex) =>
         pIndex < _tokens.Count
         && StartsAValue(_tokens[pIndex]);
+
+    /// <summary>
+    /// The values on the right of a <c>=</c> that has several names.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a separate reader and not the same one with a
+    /// flag turned off, and that is measured.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Measured at <c>parse.y</c>: <c>arg : lhs '=' arg</c>, and
+    /// this second <c>arg</c> does not lead into <c>mlhs</c> -- <strong>so
+    /// a reader that ran the name reader over the values treated
+    /// <c>1, 2</c> as two names.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>a, b = 1, 2</c> is still <c>[1, 2]</c></strong>,
+    /// <strong>because the grammar's <c>NEW_MASGN(list_append($1, $2), 0)
+    /// </c> turns the right side into a list</strong> -- <strong>so the
+    /// value of a multiple assignment has as many elements as the target
+    /// has names, and every comma leads to the next one.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And turning the name reader's flag off was not enough
+    /// either</strong>, <strong>because then the comma of the right side
+    /// was left uneaten and came to the front of <c>ParsePrimary</c>.</strong>
+    /// <strong>So it needs its own loop, and that loop is here.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyNode ReadWertListe()
+    {
+        var werte = new List<RubyNode> { ParseTernary() };
+
+        while (Is(","))
+        {
+            Take();
+            SkipNewlines();
+            if (!StartsAValue())
+            {
+                break;
+            }
+
+            werte.Add(ParseTernary());
+            SkipNewlines();
+        }
+
+        return werte.Count == 1
+            ? werte[0]
+            : new RubyNode
+            {
+                Kind = RubyNodeKind.Array,
+                Line = werte[0].Line,
+                Children = [.. werte],
+            };
+    }
 
     /// <summary>Several names on the left of one <c>=</c>.</summary>
     /// <remarks>
@@ -505,10 +746,23 @@ public sealed class RubyParser
         Children = [.. pNames],
     };
 
-    private RubyNode ParseAssignment()
+    private RubyNode ParseAssignment(bool pZiel = true)
     {
-        var links = new List<RubyNode> { ParseTernary() };
-        var left = links[0];
+        // **Und nur die linke Seite ist ein `mlhs`, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`: `arg : lhs '=' arg` -- **und `arg`
+        // ist kein `mlhs`, und nur `lhs` ist eines**, **denn
+        // `lhs : mlhs_basic` und `mlhs_basic : mlhs_head`**.
+        //
+        // **Und ein Leser, der beide Seiten mit demselben Aufruf liest,
+        // liest `a = 1, 2` als eine Zuweisung an `a, 1`** -- **und dann
+        // kommt das Komma von `2` an die Spitze von `ParsePrimary` und
+        // `a, b, c = 1, 2, 3` bricht bei Offset 11 ab.**
+        //
+        // **Also liest der Aufrufer die rechte Seite mit dem
+        // Ausdrucksleser**, **und der kennt keine Komma-Schleife.**
+        var links = ParseAssignmentTarget(pZiel);
+        var left = links.Count == 1 ? links[0] : Masgn(links);
         if (Is("=") || Is("=>"))
         {
             // **Und `links` ist jetzt eine Liste, und das ist gemessen.**
@@ -525,7 +779,63 @@ public sealed class RubyParser
             // genau das.**
 
             var op = Take().Text;
-            var right = ParseAssignment();
+
+            // **Und die rechte Seite ist eine Namensliste, und kein
+            // einfacher Ausdruck, und beides ist gemessen.**
+            //
+            // Ruby 1.8.1's own `parse.y`: `arg : lhs '=' arg` -- **und
+            // dieses zweite `arg` kann kein Tupel sein**, **denn `arg`
+            // fuehrt nicht in `mlhs`.**
+            //
+            // **Und `a, b = 1, 2` ist trotzdem `[1, 2]`**, **denn
+            // `NEW_MASGN(list_append($1, $2), 0)` und die rechte Seite wird
+            // in der Grammatik zu einer Liste gemacht** -- **und der Wert
+            // einer Mehrfachzuweisung hat also so viele Elemente wie die
+            // Zielseite Namen, und jedes Kommas fuehrt zum naechsten.**
+            //
+            // **Und `pZiel` durchzureichen war falsch** (**dann las der
+            // Leser die rechte Seite als Namen und stiess auf das Komma**),
+            // **und `pZiel` hart auf false zu setzen war auch falsch**
+            // (**dann blieb das Komma der rechten Seite ungegessen und kam
+            // an die Spitze von `ParsePrimary` -- und genau das war der
+            // Fehler bei `a, b = 1, 2`**).
+            //
+            // **Also liest die rechte Seite ihre eigene Liste.**
+            // **Und auch bei EINEM Namen darf der Wert ein Komma
+            // tragen**, **denn `a = 1, 2` ist `[1, 2]` und nicht `1`
+            // gefolgt von einem zweiten Ausdruck** -- **und Ruby 1.8.1
+            // schreibt das nicht als Tupel, sondern der Wert wird von der
+            // Zielliste her aufgeteilt.**
+            //
+            // **Und eine Kette hat beliebig viele Glieder, und nicht
+            // zwei** -- **und `@name = @date = @id = nil` bei
+            // `mdoc2man.rb` Zeile 53 hat drei.** **Und ein `if` liest
+            // eines, und der Rest stand danach als Anweisung da.**
+            //
+            // **Und `a = b = c` ist eine Kette**, **und das zweite `=` ist
+            // keine Liste und kein Komma** -- **gemessen an `parse.y`:
+            // `arg : lhs '=' arg`, und das zweite `arg` kann wieder ein
+            // `lhs '=' arg` sein**, **und `%right '=' tOP_ASGN` gibt dem
+            // `=` die lockerste Bindung von allen.**
+            var right = ReadWertListe();
+
+            while (Is("=") || Is("=>"))
+            {
+                var op2 = Take().Text;
+                var danach = ReadWertListe();
+                right = new RubyNode
+                {
+                    Kind = RubyNodeKind.Assignment,
+                    Operator = op2,
+                    Line = right.Line,
+                    Children = [right, danach],
+                    Role_Children =
+                    [
+                        new() { Role = RubyNodeRole.Target, Node = right },
+                        new() { Role = RubyNodeRole.Value, Node = danach },
+                    ],
+                };
+            }
             return new RubyNode
             {
                 Kind = RubyNodeKind.Assignment,
@@ -571,7 +881,9 @@ public sealed class RubyParser
             if (Is(op))
             {
                 _index++;
-                var right = ParseAssignment();
+
+                // **Und auch hinter einem `+=` steht ein `arg`.**
+                var right = ParseAssignment(false);
                 return new RubyNode
                 {
                     Kind = RubyNodeKind.OpAssignment,
@@ -1799,7 +2111,25 @@ public sealed class RubyParser
                     var argumente = new List<RubyNode>();
                     while (true)
                     {
-                        argumente.Add(ParsePostfix(ParsePrimary()));
+                        // **Und ein Argument ist ein ganzer `arg`, und nicht
+                        // ein Primarausdruck, und das ist gemessen.**
+                        //
+                        // Ruby 1.8.1's own `parse.y`:
+                        //
+                        // ```c
+                        // command_args : { CMDARG_PUSH(1); } open_args
+                        // open_args    : call_args | ...
+                        // call_args     : call_args ',' assoc | assocs | arg
+                        // ```
+                        //
+                        // **Und `arg` ist ein voller Ausdruck**, **also
+                        // `install a+b, c+d, :mode => 0755` hat drei
+                        // Argumente und nicht fuenf** -- **und ein Leser,
+                        // der `ParsePostfix(ParsePrimary())` nimmt, liest
+                        // `a` und laesst `+b` liegen**, **und dann kam das
+                        // Komma an die Spitze von `ParsePrimary`.**
+                        argumente.Add(ParseTernary());
+                        SkipNewlines();
                         if (!Is(","))
                         {
                             break;
@@ -2704,7 +3034,20 @@ public sealed class RubyParser
                         Children =
                         [
                             name,
-                            ParseExpression(),
+                            // **Und hier kein Wertleser**, **denn ein
+                            // Vorgabewert ist ein `arg_value` und kein
+                            // Wert einer Mehrfachzuweisung.**
+                            //
+                            // **Gemessen an `parse.y`: `f_opt :
+                            // tIDENTIFIER '=' arg_value`** -- **und die
+                            // Liste danach gehoert zu `f_arg ',' f_norm_arg`
+                            // und nicht zum Vorgabewert.**
+                            //
+                            // **Und `ParseExpression` las hier ueber den
+                            // Wertleser das Komma der Parameterliste mit**,
+                            // **und `def m(a = 10, b = 20)` band die 10 an
+                            // `b` und die 20 an nichts.**
+                            ParseTernary(),
                         ],
                     });
                 }

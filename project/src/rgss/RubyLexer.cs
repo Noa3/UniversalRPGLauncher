@@ -201,6 +201,11 @@ public sealed class RubyLexer
         {
             return ReadRegexp(start, startLine);
         }
+        if (c == '?')
+        {
+            return ReadFragezeichen(start, startLine);
+        }
+
         if (IsIdentifierStart(c))
         {
             return ReadWord(start, startLine);
@@ -484,6 +489,97 @@ public sealed class RubyLexer
             || pChar == '^' || pChar == '&' || pChar == '|' || pChar == '~'
             || pChar == '!' || pChar == '[' || pChar == ']' || pChar == '<'
             || pChar == '>';
+    }
+
+    /// <summary>
+    /// A <c>?</c>: a ternary, a name ending, or a one-character literal.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the whole of <c>parse.y</c>'s own
+    /// <c>case '?'</c>, and a reader that only knew the ternary turned
+    /// every <c>?x</c> into a syntax error.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Measured, in the order the grammar tests it:</strong>
+    /// </para>
+    /// <list type="number">
+    /// <item><c>if (lex_state == EXPR_END || lex_state == EXPR_ENDARG) { return '?'; }</c>
+    /// -- <strong>the ternary, and that is the common case.</strong></item>
+    /// <item><c>if (ISSPACE(c)) { ...warn...; goto ternary; }</c>
+    /// -- <strong>a space after it is a ternary and not a literal</strong>,
+    /// <strong>and the grammar says so with a warning.</strong></item>
+    /// <item><c>else if (ismbchar(c)) { warn; goto ternary; }</c></item>
+    /// <item><c>else if ((ISALNUM(c) || c == '_') &amp;&amp; lex_p &lt; lex_pend
+    /// &amp;&amp; is_identchar(*lex_p)) { goto ternary; }</c>
+    /// -- <strong>a letter followed by another identifier character is a
+    /// ternary</strong>, <strong>which is how <c>?a : b</c> reads.</strong></item>
+    /// <item><c>else if (c == '\\') { c = read_escape(); }</c></item>
+    /// <item><c>c &amp;= 0xff; lex_state = EXPR_END; NEW_LIT(INT2FIX(c)); return tINTEGER;</c>
+    /// -- <strong>and everything else is one character, and it arrives as
+    /// an integer.</strong></item>
+    /// </list>
+    /// <para>
+    /// <strong>And <c>$mflags.set?(?n)</c> at <c>instruby.rb</c> line 39 is
+    /// the last rule and not the first:</strong> <strong><c>n</c> is a
+    /// letter, and the next character is <c>)</c>, and
+    /// <c>is_identchar(')')</c> is false, so the test fails and the line
+    /// falls through to <c>NEW_LIT(INT2FIX('n'))</c>.</strong>
+    /// <strong>So the argument is the integer 110, and the method above it
+    /// compares with <c>'%c' % flag</c>, which is the character again.</strong>
+    /// <strong>And a reader that wanted a regexp here had the wrong rule
+    /// entirely.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyToken ReadFragezeichen(int pStart, int pStartLine)
+    {
+        var danach = Peek(1);
+
+        // **Und ein Leerzeichen danach ist ein Ternaer**, gemessen an
+        // `if (ISSPACE(c)) { ... goto ternary; }`.
+        if (danach == ' ' || danach == '\t' || danach == '\n'
+            || danach == '\r')
+        {
+            Skip();
+            return Make(
+                RubyTokenKind.Operator, "?", pStart, pStartLine);
+        }
+
+        // **Und ein Buchstabe, dem ein weiteres Bezeichnerzeichen folgt,
+        // ist ein Ternaer** -- **und `?n)` ist es nicht, denn `)` ist kein
+        // Bezeichnerzeichen.** Das ist der ganze Unterschied.
+        if (IsIdentifierStart(danach) || char.IsDigit(danach))
+        {
+            var nachst = Peek(2);
+            if (nachst != '\0' && IsIdentifierPart(nachst))
+            {
+                Skip();
+                return Make(
+                    RubyTokenKind.Operator, "?", pStart, pStartLine);
+            }
+        }
+
+        // **Und ein Name, der mit `?` endet, ist ein Name** -- **und der
+        // wird vorher gelesen, denn `set?` ist ein Identifier.**
+        Skip();
+        var zeichen = Peek(1);
+        if (zeichen == '\\')
+        {
+            // **Und ein Backslash liest ein Escape**, gemessen an
+            // `else if (c == '\\') { c = read_escape(); }`.
+            Skip();
+            zeichen = Peek(1);
+        }
+
+        Skip();
+        return new RubyToken
+        {
+            Kind = RubyTokenKind.Integer,
+            Text = _text[pStart.._offset],
+            Offset = pStart,
+            Line = pStartLine,
+            Integer = zeichen,
+        };
     }
 
     private RubyToken ReadWord(int pStart, int pStartLine)

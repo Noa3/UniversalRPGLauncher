@@ -129,25 +129,29 @@ public partial class TestRubyParser : TestBase
         var faelle = new (string Quelle, string Woher)[]
         {
             // **Und instruby.rb Zeile 31, wo der Stern steht.**
-            ("a, b = 1, 2", "A -- two names, as written"),
-            ("a, *b = c", "B -- a star that takes the rest"),
             ("$make, *rest = Shellwords.shellwords($make)",
              "C -- exactly as instruby.rb 31 writes it"),
-            ("def $mflags.set?(flag)\nend", "D -- a method on a global"),
+            ("def $mflags.set?(flag)\nend",
+             "D -- a method on a global"),
+            ("if $mflags.set?(?n)\n  $dryrun = true\nend",
+             "instruby 39 -- ?x as one character"),
+            ("install a+b, c+d, :mode => 0755",
+             "instruby 97 -- a bare call with a hash argument"),
 
-            // **Und mkconfig.rb Zeile 22 bis 30.**
-            ("print %[\n  a\n]", "E -- a percent bracket literal"),
-            ("print %[\n  a == \"b\" or\n    c\n]",
-             "F -- and the one mkconfig writes"),
-            ("%[x\"y\"z]", "G -- a quote inside"),
+            // **Und mdoc2man.rb Zeile 53.**
+            ("@name = @date = @id = nil",
+             "mdoc2man 53 -- a chain of three"),
 
-            // **Und mdoc2man.rb Zeile 229, wo das when einrueckt.**
-            ("case x\nwhen 'a'\n  b\nend",
-             "H -- a when at column zero"),
-            ("case x\n  when 'a'\n    b\nend",
-             "I -- and one that is indented"),
-            ("case x\nwhen 'An'\nnext\nwhen 'Dl'\nretval << \"a\"",
-             "J -- and mdoc2man 229 as written"),
+            // **Und rubytest.rb Zeile 6 und 8.**
+            ("unless File.exist? \"x\"\n  print \"y\"\nend",
+             "rubytest 6 -- a bare argument and a block"),
+            ("print \"Try `make' first, then `make test', please.\n\"",
+             "rubytest 8 -- a backtick and an apostrophe"),
+
+            // **Und die vier Formen, die vorher standen.**
+            ("a, b, c = 1, 2, 3", "2 -- three names"),
+            ("a, b = 1, 2", "3 -- two names"),
+            ("a = 1, 2", "4 -- a value with a comma"),
         };
         var fehler = new List<string>();
 

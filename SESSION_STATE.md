@@ -12272,3 +12272,105 @@ reader is measured and reachable only from itself** -- **and
 new tests** -- **so every one of the 2210 that existed before is green,
 and 237 of them were green again only after the interpreter was reverted.**
 `scripts/validate.sh` exits 4 and says the same thing.
+
+
+## The `mlhs` reader is wired, and `?x` turned out to be one character
+
+**Wired, measured, zero regressions, and the failures went 52 to 4 to 3.**
+
+### And a bracket on the left is only a target when a comma or `=` follows it
+
+**Measured at `parse.y`: `lhs : mlhs_basic | tLPAREN mlhs_entry ')'`, and
+`mlhs_head : mlhs_item ','`.** **So a bracket holding names needs a comma
+after it or an `=` after it, and without one it is a grouped
+expression.**
+
+**And `Is("(")` is not that tell**, **and a reader that used it read the
+element list of every array as a target list** -- **and `[7.zero?, 0.zero?,
+...]` broke at the point after `7`.** That was 26 tests, and an A/B that put
+one line back took the suite from 52 to 18.
+
+### And a name left of an `=` is a parameter with a default, not a second name
+
+**Measured at `parse.y`: `f_opt : tIDENTIFIER '=' arg_value` and `f_arg :
+f_norm_arg | f_arg ',' f_norm_arg`.** **So the comma after `a = 10` belongs
+to the parameter list and not to an `mlhs`.**
+
+**And a lookahead that ran past the first `=` found another `=` further on
+and believed it was a multiple assignment**, **and then `def m(a = 10, b =
+20)` bound the 10 to `b` and the 20 to nothing.** Twelve failures in two
+tests looked exactly like that.
+
+### And the `=` sits behind the last name, and the lookahead asked the wrong token
+
+**Measured at `parse.y`: `arg : lhs '=' arg` -- and the `=` belongs to
+`arg` and not to `lhs`, and it stands directly behind the last name.**
+
+**And the lookahead's answer checked the token it stood on, which was that
+last name**, **so `a, b = x` and `a, *rest = x` looked exactly like
+`sprite.draw(x, y)`.** The first is a target and the second is an argument
+list, and both were answered the same way.
+
+### And only the left side is an `mlhs`, and the right side is a list of its own
+
+**Measured at `parse.y`: `arg : lhs '=' arg`, and this second `arg` does
+not lead into `mlhs`.** **And `a, b = 1, 2` is still `[1, 2]`**, **because
+`NEW_MASGN(list_append($1, $2), 0)` turns the right side into a list** --
+**so the value has as many elements as the target has names.**
+
+**And turning the flag off was not enough either**, **because then the
+comma of the right side was left uneaten and came to the front of
+`ParsePrimary`.** So it needs its own loop, and `ReadWertListe` is it.
+
+**And a default value is not a value of a multiple assignment** --
+**measured at `f_opt : tIDENTIFIER '=' arg_value`** -- **so
+`ReadParameterList` calls `ParseTernary` and not the value reader, and
+that alone took 17 failures away.**
+
+### And a chain of assignments has any number of links
+
+`@name = @date = @id = nil` at `mdoc2man.rb` line 53 has three. **An `if`
+read one, and the rest stood there as its own statement.**
+
+### And `?x` is one character and not a regexp
+
+**Measured at `parse.y`, `case '?'`, in the order it tests:** at
+`EXPR_END` or `EXPR_ENDARG` it is the ternary; **a space after it is the
+ternary and not a literal**, and the grammar says so with a warning; **a
+letter followed by another identifier character is the ternary**, which is
+how `?a : b` reads; **and everything else falls through to `NEW_LIT(INT2FIX(c))`
+and arrives as an integer.**
+
+**And `$mflags.set?(?n)` at `instruby.rb` line 39 is the last rule and not
+the first**: `n` is a letter and the next character is `)`, and
+`is_identchar(')')` is false, so the test fails and the line falls through
+to the literal. **So the argument is the integer 110, and the method above
+it compares with `'%c' % flag`.** **A reader that wanted a regexp here had
+the wrong rule entirely**, and there was no such rule.
+
+### And an argument of a call without brackets is a whole expression
+
+**Measured at `parse.y`: `command : operation command_args %prec tLOWEST`,
+and `command_args : open_args`, and `call_args : ... | arg`, and `arg` is
+a whole expression.** **So `install a+b, c+d, :mode => 0755` has three
+arguments and not five**, **and the reader took `ParsePostfix(ParsePrimary())`
+which read `a` and left `+b` lying there.**
+
+### And where the numbers went
+
+```
+52  after wiring the mlhs reader with only Is("(") as the test
+18  after the bracket needs a comma or an = after it
+17  after the default value stopped using the value reader
+ 4  after the lookahead stopped asking the wrong token
+ 3  the four real files
+```
+
+**And all three that remain are the one test that reads the four real
+files**, **and the probe list
+`Test_DieFormenDieDieEchtenSkripteNochStoppen` is green** -- **and every
+case in it is copied out of one of the four files**, which is what made the
+next place measurable instead of guessed.
+
+**Evidence:** full suite `3/2213 tests failed`, **and every one of the 2210
+that existed before is green.**
