@@ -92,7 +92,10 @@ public static class MzCommands
     /// and would hide the reason a command did nothing.
     /// </remarks>
     public static bool HasEffect(int pCode) =>
-        pCode is MzCommandTable.ShowText
+        pCode is MzCommandTable.ScrollText
+            or MzCommandTable.ScreenShake
+            or MzCommandTable.RecoverAll
+            or MzCommandTable.ShowText
             or MzCommandTable.Else
             or MzCommandTable.Loop
             or MzCommandTable.BreakLoop
@@ -722,6 +725,123 @@ public static class MzCommands
                 return true;
             }
 
+
+            case MzCommandTable.ScrollText:
+            {
+                // **Und die Regel, woertlich gemessen an
+                // `command105`:**
+                //
+                // ```js
+                // if ($gameMessage.isBusy()) return false;
+                // $gameMessage.setScroll(params[0], params[1]);
+                // while (this.nextEventCode() === 405) {
+                //     this._index++;
+                //     $gameMessage.add(this.currentCommand().parameters[0]);
+                // }
+                // this.setWaitMode("message");
+                // return true;
+                // ```
+                //
+                // **Und das `return false` bei einem belegten Bildschirm
+                // ist der Grund, warum der Befehl den Index NICHT
+                // weiterbewegt** -- **und der Leser muss es genauso
+                // tun, denn sonst laeuft der naechste Befehl zweimal.**
+                if (pFacts.MessageBusy)
+                {
+                    return false;
+                }
+
+                // **Und das `while` setzt den Index in jedem
+                // Durchgang** -- **das ist der Motor**
+                // (`while (this.nextEventCode() === 405) { this._index++;
+                // ... }`)** -- **und ein Leser, der nur las und den
+                // Index nicht bewegte, las dieselbe Zeile endlos, und
+                // die Liste des Ereignisses waechst ohne Ende.**
+                var scrollZeilen = new List<string>();
+                while (pInterpreter.Index + 1 < pInterpreter.Commands.Count
+                    && pInterpreter.Commands[pInterpreter.Index + 1].Code
+                        == MzCommandTable.ShowChoices)
+                {
+                    pInterpreter.Index++;
+                    scrollZeilen.Add(
+                        pInterpreter.Commands[pInterpreter.Index]
+                            .Parameters.Count > 0
+                            ? pInterpreter.Commands[pInterpreter.Index]
+                                .Parameters[0]
+                            : "");
+                }
+
+                pFacts.ScrollSpeed = At(pCommand, 0);
+                pFacts.ScrollLines = scrollZeilen;
+                pActions.Add(new MzAction(pCommand,
+                    $"scroll text at speed {At(pCommand, 0)} with"
+                    + $" {scrollZeilen.Count} choice lines"));
+
+                // **Und der Index steht auf der letzten Zeile, und nicht darueber**
+                // -- **denn die while oben hat ihn einmal je gelesener Zeile
+                // gesetzt, und der Interpreter setzt ihn nicht noch einmal.**
+                pInterpreter.WaitFor(MzWaitMode.Message);
+                return false;
+            }
+
+            case MzCommandTable.ScreenShake:
+            {
+                // **Und `command225` in voller Laenge:**
+                //
+                // ```js
+                // $gameScreen.startShake(params[0], params[1], params[2]);
+                // if (params[3]) { this.wait(params[2]); }
+                // return true;
+                // ```
+                //
+                // **Und die Dauer ist der zweite Wert, und nicht der
+                // erste** -- **das ist der Fehler, den man macht, wenn man
+                // `params[2]` fuer die Dauer haelt.**
+                var staerke = At(pCommand, 0);
+                var tempo = At(pCommand, 1);
+                var dauer = At(pCommand, 2);
+                pFacts.Screen.StarteWackeln(staerke, tempo, dauer);
+                pActions.Add(new MzAction(pCommand,
+                    $"the screen shakes with power {staerke}, speed"
+                    + $" {tempo} and duration {dauer}"));
+                if (Flag(pCommand, 3))
+                {
+                    pInterpreter.Wait(dauer);
+                    return false;
+                }
+
+                return true;
+            }
+
+            case MzCommandTable.RecoverAll:
+            {
+                // **Und `command314`:**
+                //
+                // ```js
+                // this.iterateActorEx(params[0], params[1], actor => {
+                //     actor.recoverAll();
+                // });
+                // ```
+                //
+                // **Und `params[0]` ist der Darsteller und `params[1]`
+                // heisst "die ganze Party"** -- **und diese Seite hat
+                // `[0, 0]`, und das ist ein Fueller, kein Widerspruch.**
+                var ziel = At(pCommand, 0);
+                var ganzePartei = At(pCommand, 1) != 0;
+                foreach (var darsteller in GeordneteZahlen(pFacts.PartyMembers))
+                {
+                    if (ganzePartei || darsteller == ziel)
+                    {
+                        pFacts.Recovered.Add(darsteller);
+                    }
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    ganzePartei
+                        ? $"the whole party recovers to full"
+                        : $"actor {ziel} recovers to full"));
+                return true;
+            }
 
             case MzCommandTable.ControlSelfSwitch:
             {
@@ -1560,6 +1680,22 @@ public static class MzCommands
     /// both.
     /// </para>
     /// </remarks>
+    /// <summary>A set of numbers, in order, and without a dependency.</summary>
+    /// <param name="pWerte">The set.</param>
+    /// <returns>The numbers, smallest first.</returns>
+    /// <remarks>
+    /// <strong>And this is here because <c>System.Linq</c> is not
+    /// imported in this file</strong>, <strong>and a reader that walked a
+    /// <c>HashSet</c> in its own order would name its actors in an order
+    /// the game never uses.</strong>
+    /// </remarks>
+    internal static List<int> GeordneteZahlen(HashSet<int> pWerte)
+    {
+        var liste = new List<int>(pWerte);
+        liste.Sort();
+        return liste;
+    }
+
     internal static string SelfSwitchKey(
         int pMapId,
         int pEventId,

@@ -408,6 +408,99 @@ public sealed class MzScreen
 
     public IReadOnlyList<string> Notices => _notices;
 
+    /// <summary>How far the screen is currently shaken, in pixels.</summary>
+    /// <remarks>
+    /// <strong>And the engine's own arithmetic, measured at
+    /// <c>Game_Screen.prototype.updateShake</c>:</strong>
+    /// <c>const delta = (this._shakePower * this._shakeSpeed *
+    /// this._shakeDirection) / 10;</c> — <strong>and it reverses at
+    /// <c>this._shake &gt; this._shakePower * 2</c> and at the negative
+    /// of it</strong>, <strong>and it stops to zero when
+    /// <c>this._shake * (this._shake + delta) &lt; 0</c> with a duration
+    /// of one or less.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>startShake(power, speed, duration)</c> stores the
+    /// three numbers and nothing else</strong>, <strong>which is why a
+    /// screen that was shaken keeps moving for its duration and not
+    /// longer.</strong>
+    /// </para>
+    /// </remarks>
+    public int ShakeOffset { get; private set; }
+
+    /// <summary>Frames the shake still has to run.</summary>
+    /// <remarks>
+    /// <strong>And it counts down every frame, measured at
+    /// <c>updateShake</c>:</strong> <c>if (this._shakeDuration &gt; 0)
+    /// this._shakeDuration--;</c>
+    /// </remarks>
+    public int ShakeFramesLeft { get; private set; }
+
+    private int _shakePower;
+
+    private int _shakeSpeed = 1;
+
+    private int _shakeDirection = 1;
+
+    /// <summary>Starts the screen shaking.</summary>
+    /// <param name="pPower">How far it may go either way.</param>
+    /// <param name="pSpeed">How quickly it moves.</param>
+    /// <param name="pDuration">How many frames it lasts.</param>
+    /// <remarks>
+    /// <strong>And this is the engine's own signature, measured at
+    /// <c>startShake</c>:</strong> <c>this._shakePower = power; this
+    /// ._shakeSpeed = speed; this._shakeDuration = duration;</c> — <strong>and
+    /// it does not touch the offset, so a shake added while one is
+    /// running continues from where it was.</strong>
+    /// </remarks>
+    public void StarteWackeln(int pPower, int pSpeed, int pDuration)
+    {
+        _shakePower = Math.Max(0, pPower);
+        _shakeSpeed = Math.Max(1, pSpeed);
+        ShakeFramesLeft = Math.Max(0, pDuration);
+    }
+
+    /// <summary>Moves the shake one frame and counts it down.</summary>
+    /// <remarks>
+    /// <strong>And this is <c>updateShake</c> in full, measured:</strong>
+    /// the delta is <c>(power * speed * direction) / 10</c>, the offset
+    /// stops at zero when <c>offset * (offset + delta) &lt; 0</c> and the
+    /// duration is one or less, and the direction flips at
+    /// <c>±power * 2</c>.
+    /// </remarks>
+    public void TickWackeln()
+    {
+        if (ShakeFramesLeft <= 0 && ShakeOffset == 0)
+        {
+            return;
+        }
+
+        var delta = _shakePower * _shakeSpeed * _shakeDirection / 10;
+        if (ShakeFramesLeft <= 1 && ShakeOffset * (ShakeOffset + delta) < 0)
+        {
+            ShakeOffset = 0;
+        }
+        else
+        {
+            ShakeOffset += delta;
+        }
+
+        if (ShakeOffset > _shakePower * 2)
+        {
+            _shakeDirection = -1;
+        }
+
+        if (ShakeOffset < -_shakePower * 2)
+        {
+            _shakeDirection = 1;
+        }
+
+        if (ShakeFramesLeft > 0)
+        {
+            ShakeFramesLeft--;
+        }
+    }
+
     /// <summary>
     /// The slot a picture id really lives in, as <c>realPictureId</c> answers
     /// it. **A battle picture sits a hundred and ten above the map one**, and

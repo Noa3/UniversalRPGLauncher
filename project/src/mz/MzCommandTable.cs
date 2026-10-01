@@ -53,6 +53,49 @@ public static class MzCommandTable
 
     /// <summary>Puts a picture on the screen. The engine makes a new picture
     /// and puts it in the slot, so anything the old one had is gone with it.</summary>
+    /// <summary>Scroll Text. Its choices follow in 405 entries.</summary>
+    /// <remarks>
+    /// <strong>And its rules are measured at
+    /// <c>Game_Interpreter.prototype.command105</c>:</strong> <c>if
+    /// ($gameMessage.isBusy()) return false;
+    /// $gameMessage.setScroll(params[0], params[1]); while
+    /// (this.nextEventCode() === 405) { this._index++;
+    /// $gameMessage.add(this.currentCommand().parameters[0]); }
+    /// this.setWaitMode("message"); return true;</c> — <strong>and the
+    /// <c>while</c> is the engine's own, so the interpreter steps once
+    /// over its own 405 lines and not again.</strong>
+    /// </remarks>
+    public const int ScrollText = 105;
+
+    /// <summary>Screen Shake, and the fourth parameter waits for it.</summary>
+    /// <remarks>
+    /// <strong>And its rules are measured at
+    /// <c>command225</c>:</strong> <c>$gameScreen.startShake(params[0],
+    /// params[1], params[2]); if (params[3]) this.wait(params[2]);</c> —
+    /// <strong>and <c>startShake</c> stores power, speed and duration, and
+    /// <c>updateShake</c> moves by <c>(power * speed * direction) / 10</c>
+    /// and reverses at <c>±power * 2</c>.</strong>
+    /// </remarks>
+    public const int ScreenShake = 225;
+
+    /// <summary>Flash the screen. Its fourth parameter waits for it.</summary>
+    /// <remarks>
+    /// <strong>And measured at <c>command224</c>:</strong>
+    /// <c>$gameScreen.flashWhite(params[0], params[1]); if (params[2])
+    /// this.wait(params[1]);</c>
+    /// </remarks>
+    public const int ScreenFlash = 224;
+
+    /// <summary>Recover all of an actor, or of the whole party.</summary>
+    /// <remarks>
+    /// <strong>And its rules are measured at
+    /// <c>Game_Interpreter.prototype.command314</c>:</strong> <c>this
+    /// .iterateActorEx(params[0], params[1], actor =&gt; { actor.recoverAll();
+    /// });</c> — <strong>and <c>iterateActorEx</c> walks the party when
+    /// <c>params[1]</c> is true and one actor when it is false.</strong>
+    /// </remarks>
+    public const int RecoverAll = 314;
+
     public const int ShowPicture = 231;
 
     /// <summary>Moves a picture to a new place over a number of frames. It
@@ -105,10 +148,29 @@ public static class MzCommandTable
     public const int ShowChoiceList = 102;
 
     /// <summary>
-    /// The 405: <b>the choices as the editor wrote them</b>, under a 102. It
-    /// has no <c>command405</c> method, because the 102 that shows them reads
-    /// it by position.
+    /// The 405: <b>a line of a 102's choices, and a line of a 105's
+    /// scroll text</b>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it has two jobs, and that is measured.</strong> Under a
+    /// <c>102 Show Choice</c> it is one option, and it has no
+    /// <c>command405</c> method, because the 102 that shows them reads it
+    /// by position.
+    /// </para>
+    /// <para>
+    /// <strong>And under a <c>105 Scroll Text</c> it is one line of the
+    /// text that scrolls.</strong> Measured at <c>command105</c>: <c>while
+    /// (this.nextEventCode() === 405) { this._index++;
+    /// $gameMessage.add(this.currentCommand().parameters[0]); }</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And this project's four 105 commands carry exactly that</strong>
+    /// — <strong>Map003 event 9 has one at index 201 followed by eight
+    /// lines of narrative, and Map006 event 7 has one at index 5 with an
+    /// empty 405 among its lines, which is a paragraph break.</strong>
+    /// </para>
+    /// </remarks>
     public const int ShowChoices = 405;
 
     /// <summary>

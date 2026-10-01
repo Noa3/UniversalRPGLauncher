@@ -11595,3 +11595,103 @@ Ereignis im Bild nimmt** -- **`Game_Sprite_Character.update` ruft
 `checkEventTriggerTouch` mit der Zeigerposition** -- **und die
 Bildschirmkoordinaten, die dieser Leser noch nicht fuehrt.**
 
+## Und ein Befehl, den dieser Leser gar nicht hatte, und drei mehr
+
+**Und zuerst eine Korrektur meiner eigenen Behauptung.** **Ich hatte
+als naechsten Schritt "den Klick auf ein Ereignis im Bild" geschrieben**
+-- **und gemessen existiert der in dieser MZ-Version nicht:**
+
+- **`rmmz_sprites.js` enthaelt kein `Game_Sprite_Character`, sondern
+  ein `Sprite_Character`, und das erbt von `Sprite`, nicht von
+  `Sprite_Clickable`.**
+- **`onMouseLeftClick` und `onTouch` kommen in der Datei null mal
+  vor.**
+- **Und `checkEventTriggerTouch` wird genau einmal aufgerufen**, **und
+  zwar von `Game_Character.prototype.moveStraight`.**
+
+**Also gibt es in MZ 1.9 keinen Weg, ein Ereignis im Bild
+anzuklicken.** **Und meine Behauptung war eine Fehlannahme, und sie
+stand in einer Datei, die andere Agenten lesen.**
+
+**Und die echte Lücke ist eine andere, und sie ist gemessen:** **das
+Spiel benutzt 34 verschiedene Befehle, und sechs davon stehen in keiner
+Befehlstabelle dieses Lesers:**
+
+| Code | Befehl | Wie oft im Spiel |
+|---|---|---|
+| 0 | das Ende der Liste | 279x |
+| 105 | Scroll Text | 4x |
+| 225 | Screen Shake | 2x |
+| 314 | Recover All | 1x |
+| 404 | Ende einer Verzweigung | 8x |
+| 505 | ein Schritt einer Laufbahn | 348x |
+
+**Und `0`, `404` und `505` sind keine Befehle, sondern Satelliten** --
+**und die behandelt der Leser an anderer Stelle, und das ist richtig.**
+
+**Und die drei echten Befehle fehlten wirklich, und jetzt tun sie es:**
+
+- **`105 Scroll Text`, gemessen an `command105`:**
+
+```js
+if ($gameMessage.isBusy()) return false;
+$gameMessage.setScroll(params[0], params[1]);
+while (this.nextEventCode() === 405) {
+    this._index++;
+    $gameMessage.add(this.currentCommand().parameters[0]);
+}
+this.setWaitMode("message");
+```
+
+**Und die `while` setzt den Index selbst** -- **genau wie `101` es
+tut** -- **und mein erster Versuch las nur und verschob ihn nicht, und
+las dieselbe Zeile endlos, und die Liste waechst ohne Ende:**
+`Array dimensions exceeded supported range`. **Und danach haette der
+zweite Durchlauf denselben Index noch einmal gesetzt** -- **die
+Doppelschaltung, die vor drei Tagen 105 Befehle gekostet hat, an
+genau derselben Stelle.**
+
+- **`225 Screen Shake`, gemessen an `command225`:**
+  `$gameScreen.startShake(params[0], params[1], params[2]); if
+  (params[3]) this.wait(params[2]);` -- **und `updateShake` rechnet
+  `delta = (power * speed * direction) / 10` und kehrt bei `±power * 2`
+  um.** **Und die Dauer ist der DRITTE Wert, und nicht der zweite** --
+  **das ist der Fehler, den man macht, wenn man `params[2]` fuer die
+  Dauer haelt.** **Und `MzScreen` kann das jetzt, mit
+  `StarteWackeln`, `TickWackeln`, `ShakeOffset` und
+  `ShakeFramesLeft`.**
+
+- **`314 Recover All`, gemessen an `command314`:**
+  `this.iterateActorEx(params[0], params[1], actor => { actor.recoverAll();
+  });` -- **und `params[1]` heisst "die ganze Party".** **Und
+  `recoverAll` ist nicht "geheilt"**, **es stellt Trefferpunkte,
+  Magiepunkte und jeden Zustand wieder her.**
+
+**Und ein Nebenbefund, und der ist ein Hinweis fuer die Zukunft: `405`
+hat zwei Jobs.** **Unter einer `102` ist es eine Auswahlzeile, und
+unter einer `105` ist es eine Zeile des Lauftextes** -- **und
+Map006 Event 7 hat zwolf davon, Index 6 bis 17, und zwei davon sind
+leer.**
+
+**Und gemessen ist der Beweis: Map006 Event 7 bei (2,12), Prioritaet 1,
+verlangt Schalter 6, und der 105 bei Index 5, und dahinter zwoelf
+Zeilen mit zwei leeren, und der Leser liest alle zwoelf, und die Seite
+wartet danach bei Index 19 an einem `201`, den er nicht ausfuehren
+kann.**
+
+**Und `SchalteEin` und `SchalteAus` gibt es jetzt**, **denn 10 der 253
+Seiten verlangen einen Schalter, und ohne diese Seite startet der
+Leser sie zu Recht nicht.**
+
+**`All 2205 tests passed`, Validator gruen.**
+
+**Und ein Werkzeugbefund, und der ist wichtig fuer jede spaetere
+Aussage:** **ein Godot-Lauf kann mit `Segmentation fault` in
+`System.GC.RunFinalizers()` enden, und das ist beim ersten Lauf nach
+einem Build passiert und beim zweiten nicht.** **Ein Absturz nach
+`All 2205 tests passed` ist kein Fehlschlag des Tests, und ein
+Absturz davor ist kein gruener Lauf** -- **und ich habe es jetzt
+**dreimal geprueft und protokolliert, statt es wegzuerklaeren:**
+**ein Lauf mit Segfault nach gruenem Lauf, ein Lauf ohne Segfault,
+und ein Validator mit derselben Meldung, der dann exit 0 gab.**
+

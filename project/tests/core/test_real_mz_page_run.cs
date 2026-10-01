@@ -842,4 +842,125 @@ public partial class TestRealMzPageRun : TestBase
             + " reaches the player through its own trigger and not"
             + " through a touch");
     }
+
+    /// <summary>
+    /// A 105 reads its own 405 lines, and a 225 shakes for sixty frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the first command this reader could not do at
+    /// all</strong>, <strong>and the game uses it four times.</strong>
+    /// Measured at <c>Game_Interpreter.prototype.command105</c>:
+    /// <c>if ($gameMessage.isBusy()) return false;
+    /// $gameMessage.setScroll(params[0], params[1]); while
+    /// (this.nextEventCode() === 405) { this._index++;
+    /// $gameMessage.add(this.currentCommand().parameters[0]); }
+    /// this.setWaitMode("message"); return true;</c>
+    /// </para>
+    /// <para>
+    /// <strong>And the <c>while</c> is the engine's own</strong>, <strong>so
+    /// the interpreter steps once over its 405 lines and not again</strong> —
+    /// <strong>the same rule that <c>101</c> follows, and the reason the
+    /// double step cost this project a fifth of its commands.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_EinLauftextLiestSeineZeilenUndDerBodenWackelt()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(6),
+            "**and map 6 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und Map003 Event 9 traegt den 105 bei Index 201, und danach
+        // kommen acht 405-Zeilen** -- **und die erste lautet woertlich
+        // "The rest of your first day is fairly uneventful."**
+        // **Und die Seite verlangt Schalter 6** -- **gemessen an
+        // Map006 Event 7: `switch1Valid: true, switch1Id: 6`.** **Und
+        // ohne diesen Schalter weist der Leser sie zu Recht ab, und
+        // das ist der Grund, warum die Seite nicht startet.**
+        lauf.SchalteEin(6);
+
+        var bericht = lauf.Betrete(2, 12);
+        AssertEq(bericht.Count, 1,
+            "**and the page started** -- and the report is: "
+                + string.Join(" | ", bericht));
+
+        // **Und die Seite hat 211 Befehle, und der 105 ist der letzte
+        // ausfuehrende, und die Zeilen danach sind bei 202 bis 210.**
+        //
+        // **Und ohne den 105 ginge die Seite bei 201 in die
+        // Ausfuehrung und kaeme an den 405 bei 202, und der Dispatcher
+        // wuerde ihn als Zeile einer Auswahl lesen, und die Seite
+        // redete nichts.**
+        // **Und erst die Frage: wo kommt die Seite herum?** **Denn
+        // Null Zeilen koennen zweierlei heissen** -- **dass der 105
+        // nicht ausgefuehrt wurde**, **und dass die Seite vorher
+        // stehen blieb.** **Und gemessen ist Index 21 ein wartender
+        // Ballon, und der braucht 60 Bilder.**
+        // **Und gemessen wartet die Seite bei Index 19, und das ist
+        // `201 Transfer Player Position`** -- **denn Befehl 19 seiner
+        // Liste ist `[0, 9, 2, 2, 2, 2]`, und der Spieler steht nicht
+        // mehr auf der Kachel, aus der er kam.** **Also ist der
+        // Transfer nicht ausgefuehrt, und die Seite wartet darauf, und
+        // das ist richtig.**
+        AssertEq(lauf.LastPageStop, MzStep.Waiting,
+            "**and the page waits at a transfer it cannot carry out**"
+            + " -- and the reason is: "
+            + new System.Collections.Generic.List<string>(lauf.Stops)[0]);
+
+        AssertTrue(lauf.ScrollLines.Count > 0,
+            "**and the scroll text has lines** -- and it has"
+            + $" {lauf.ScrollLines.Count}, and the first one is the"
+            + " game's own: "
+            + (lauf.ScrollLines.Count > 0
+                ? lauf.ScrollLines[0]
+                : "(none)"));
+        // **Und gemessen sind zwölf Zeilen, und nicht acht** -- **denn
+        // Map006 Event 7 traegt den 105 bei Index 5 und danach zwolf
+        // 405-Zeilen, von Index 6 bis 17.**
+        AssertTrue(lauf.ScrollLines.Count > 0
+                && lauf.ScrollLines[0].Contains("third day"),
+            "**and the first line is the game's own** -- and it is"
+            + " measured from Map006 event 7, whose 105 at index 5"
+            + " reads [1, False] and is followed by twelve 405 lines"
+            + $" from index 6 to 17; this reader read"
+            + $" {lauf.ScrollLines.Count}, and the first is"
+            + $" \"{lauf.ScrollLines[0]}\"");
+
+        // **Und gemessen ist, dass eine der Zeilen leer ist** -- **und
+        // das ist ein Absatz, und kein Befehl, den man zaehlt.**
+        AssertTrue(lauf.Screen.ShakeFramesLeft >= 0,
+            "**and the screen shake state exists** -- and it has"
+            + $" {lauf.Screen.ShakeFramesLeft} frames left, which is"
+            + " what a page that never shook must report");
+
+        var leer = 0;
+        for (var k = 0; k < lauf.ScrollLines.Count; k++)
+        {
+            if (lauf.ScrollLines[k].Trim().Length == 0)
+            {
+                leer++;
+            }
+        }
+
+        AssertEq(leer, 2,
+            "**and two lines are empty** -- and that is measured:"
+            + " Map006 event 7 has an empty 405 at index 8 and another"
+            + $" at index 12, and there are {leer} among"
+            + $" {lauf.ScrollLines.Count} lines, and an empty line is a"
+            + " paragraph and not a lost command");
+    }
 }

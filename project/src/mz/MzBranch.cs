@@ -250,6 +250,43 @@ public sealed class MzBranchFacts
     /// </summary>
     public MzScreen Screen { get; init; } = new();
 
+    /// <summary>How fast the scroll text runs, and what it says.</summary>
+    /// <remarks>
+    /// <strong>And these come from <c>105 Scroll Text</c>, measured at
+    /// <c>command105</c>:</strong> <c>$gameMessage.setScroll(params[0],
+    /// params[1]); while (this.nextEventCode() === 405) { this._index++;
+    /// $gameMessage.add(this.currentCommand().parameters[0]); }</c> —
+    /// <strong>the speed is the first parameter and the second one is the
+    /// line the text scrolls over.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this project's four 105 commands carry
+    /// <c>[1, False]</c> and <c>[3, False]</c> and <c>[2, False]</c>, so
+    /// the second value is a boolean here and a string in the engine
+    /// where a scroll is a dialogue.</strong>
+    /// </para>
+    /// </remarks>
+    public int ScrollSpeed { get; set; }
+
+    /// <summary>The choice lines a scroll text carries in its 405s.</summary>
+    public List<string> ScrollLines { get; set; } = new();
+
+    /// <summary>Which actors have been healed to full.</summary>
+    /// <remarks>
+    /// <strong>And this comes from <c>314 Recover All</c>, measured at
+    /// <c>command314</c>:</strong> <c>this.iterateActorEx(params[0],
+    /// params[1], actor =&gt; { actor.recoverAll(); });</c> — <strong>and
+    /// <c>iterateActorEx</c> walks the whole party when the second
+    /// parameter is set and one actor when it is not.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>recoverAll</c> is not "healed"</strong> — <strong>it
+    /// restores hp, mp and every state</strong>, <strong>and a reader that
+    /// wrote only the hit points back is a different command.</strong>
+    /// </para>
+    /// </remarks>
+    public HashSet<int> Recovered { get; } = new();
+
     /// <summary>
     /// Whether the party is in a battle, which is the one condition
     /// <c>command351</c> asks before it opens the menu.

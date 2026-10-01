@@ -1285,6 +1285,31 @@ public sealed class MzEngineRuntime : IEngineRuntime
         return bericht;
     }
 
+    /// <summary>Turns a switch on, as a game's own commands would.</summary>
+    /// <param name="pId">The switch number.</param>
+    /// <remarks>
+    /// <strong>And this is here because a page's conditions can gate the
+    /// whole page</strong>, <strong>and measured, 10 of this project's 253
+    /// pages ask for a switch</strong> — <strong>and Map006 event 7 asks
+    /// for switch 6</strong>, <strong>which is the page with the game's
+    /// scroll text.</strong>
+    /// <para>
+    /// <strong>And this is the same dictionary <c>121 Control Switches</c>
+    /// writes</strong>, <strong>so a test that sets a switch here and a
+    /// page that tests it there are talking about one thing.</strong>
+    /// </para>
+    /// </remarks>
+    public void SchalteEin(int pId) => Facts.Switches[pId] = true;
+
+    /// <summary>Turns a switch off.</summary>
+    /// <param name="pId">The switch number.</param>
+    /// <remarks>
+    /// <strong>And the same dictionary, and the engine's own numbers:
+    /// <c>$gameSwitches.setValue(n, true)</c> and <c>.setValue(n,
+    /// false)</c>.</strong>
+    /// </remarks>
+    public void SchalteAus(int pId) => Facts.Switches[pId] = false;
+
     /// <summary>Turns the player to face a direction.</summary>
     /// <param name="pDirection">The direction to look.</param>
     /// <remarks>
@@ -1871,6 +1896,20 @@ public sealed class MzEngineRuntime : IEngineRuntime
         Array.Empty<string>();
 
     /// <summary>How many pages have run.</summary>
+    /// <summary>The lines of the scroll text this reader last read.</summary>
+    /// <remarks>
+    /// <strong>And this is here so that a test can see what a 105
+    /// produced</strong>, <strong>because the lines are otherwise inside
+    /// <c>$gameMessage</c> in the engine and inside a local here.</strong>
+    /// </remarks>
+    public IReadOnlyList<string> ScrollLines => Facts.ScrollLines;
+
+    /// <summary>The screen's pictures, its shake and its flashes.</summary>
+    public MzScreen Screen => Facts.Screen;
+
+    /// <summary>Which actors a 314 recovered.</summary>
+    public IReadOnlyCollection<int> Recovered => Facts.Recovered;
+
     public int PagesRun { get; private set; }
 
     /// <summary>Which event ran last.</summary>
