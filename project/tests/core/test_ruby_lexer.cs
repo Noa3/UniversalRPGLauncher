@@ -428,4 +428,157 @@ public partial class TestRubyLexer : TestBase
             "**and the line makes the tokens it looks like** -- and there"
             + $" are {token.Count}: {liste}");
     }
+
+    /// <summary>
+    /// A percent behind a comma is a literal, and behind anything else it is a
+    /// modulus unless nothing could divide.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is eight measured token streams, and they are the
+    /// rule that replaced a wider one.</strong>
+    ///
+    /// <code>
+    /// a % b         Operator'%'   a modulus
+    /// %w[a b]       Operator'%'   a modulus at the head of a statement
+    /// x = %w[a b]   Operator'%'   a modulus after '='
+    /// print %w[a b] Operator'%'   a modulus after a name
+    /// -7 % 3        Operator'%'   a modulus
+    /// 7 %w[a]       Operator'%'   a modulus, and a letter is not enough
+    /// f(a, %w[b])   String'%w[b]' the only one that is a literal
+    /// </code>
+    ///
+    /// <strong>And the reason is <c>parse.y</c> line 4408, and not line
+    /// 4170:</strong>
+    ///
+    /// <code>
+    /// if (is_local_id(yylval.id) &amp;&amp; ...
+    ///     lex_state = EXPR_END;
+    /// }
+    /// </code>
+    ///
+    /// <strong>and <c>IS_ARG()</c> at 4170 is <c>EXPR_ARG || EXPR_CMDARG</c>,
+    /// and a name that is a local variable leaves <c>EXPR_END</c> and one that
+    /// is not leaves <c>EXPR_CMDARG</c> at 4397.</strong>
+    ///
+    /// <strong>And whether a name is a local variable is a table the lexer
+    /// does not have</strong> -- <strong>and so a comma is the one place
+    /// this reader can be sure of, and it is the one the four real scripts
+    /// use:</strong>
+    ///
+    /// <code>
+    /// dirname(__FILE__).sub!(%r'#{prefix}\Z', '')
+    /// STDERR.puts "ignored" if line =~ %r:^(sample/test.rb|not):
+    /// </code>
+    ///
+    /// <strong>And that second one sits behind <c>=~</c>, which is an
+    /// operator and not a comma</strong> -- <strong>and it works because
+    /// <c>SlashDivides()</c> is false behind an operator</strong>, **and
+    /// both of the real cases are measured green.</strong>
+    /// </remarks>
+    /// <summary>The first token whose text starts with the given text.</summary>
+    private static RubyToken FirstStartingWith(string pSource, string pText)
+    {
+        foreach (var token in Lex(pSource))
+        {
+            if (token.Text.StartsWith(pText, StringComparison.Ordinal))
+            {
+                return token;
+            }
+        }
+
+        throw new System.InvalidOperationException(
+            $"No token in `{pSource}` starts with `{pText}`.");
+    }
+
+    /// <summary>The first token whose text is the given text.</summary>
+    private static RubyToken FirstWithText(string pSource, string pText)
+    {
+        foreach (var token in Lex(pSource))
+        {
+            if (token.Text == pText)
+            {
+                return token;
+            }
+        }
+
+        throw new System.InvalidOperationException(
+            $"`{pSource}` has no token `{pText}`.");
+    }
+
+    public void Test_APercentIsAModulusUnlessNothingCouldDivide()
+    {
+        // The five that stay a modulus, and the stream says why.
+        foreach (var quelle in new[]
+        {
+            "a % b", "%w[a b]", "print %w[a b]", "-7 % 3", "7 %w[a]",
+        })
+        {
+            AssertEq(FirstWithText(quelle, "%").Kind, RubyTokenKind.Operator,
+                "**`%` is a modulus in `" + quelle + "`** — and a letter "
+                    + "behind it is not enough, and a space in front of it "
+                    + "is not enough either when a name stands there");
+        }
+
+        // The three that are a literal, and each behind something that
+        // cannot divide.
+        AssertEq(FirstStartingWith("x = %w[a b]", "%w").Kind,
+            RubyTokenKind.String,
+            "**`%w[a b]` behind `=` is a literal** — and an operator cannot "
+                + "divide");
+        AssertEq(FirstStartingWith("f(a, %w[b])", "%w").Kind,
+            RubyTokenKind.String,
+            "**`%w[b]` behind a comma is a literal** — and so is the one the "
+                + "comma form is there for");
+        AssertEq(FirstStartingWith("x =~ %r:^(a|not):", "%r").Kind,
+            RubyTokenKind.Regexp,
+            "**`%r:(a|not):` behind `=~` is a regexp** — and that is "
+                + "rubytest.rb line 42, and an operator cannot divide");
+    }
+
+    /// <summary>
+    /// Whatever a percent literal holds is content, and a reserved word in it
+    /// is still content.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this one is what <c>print %[end]</c> and
+    /// <c>print %[module Config]</c> got wrong, and the wrong reading was
+    /// the more obvious one.</strong>
+    ///
+    /// <strong>A reader that stopped the literal at a reserved word broke the
+    /// two of them, and it broke them at the word and not at the
+    /// delimiter:</strong>
+    ///
+    /// <code>
+    /// p4: RubyParseException 'end' at offset 8 does not begin an expression.
+    /// p3: RubyParseException ']' at offset 21 does not begin an expression.
+    /// </code>
+    ///
+    /// <strong>And the whole failure was one branch, and it was mine, not
+    /// Ruby's:</strong> <code>SlashDivides()</code> was standing in for
+    /// <c>IS_ARG()</c>, **and it answers true behind every name**, and a
+    /// command name is a name.
+    /// </remarks>
+    public void Test_APercentLiteralHoldsAKeywordAsContent()
+    {
+        foreach (var quelle in new[]
+        {
+            "f(a, %[end])", "f(a, %[module Config])", "f(a, %[def x])",
+            "f(a, %[if x])", "f(a, %r{end})", "f(a, %q[end])",
+        })
+        {
+            var anteile = 0;
+            foreach (var token in Lex(quelle))
+            {
+                if (token.Kind == RubyTokenKind.String
+                    || token.Kind == RubyTokenKind.Regexp)
+                {
+                    anteile++;
+                }
+            }
+
+            AssertEq(anteile, 1,
+                "**one literal out of `" + quelle + "`** — and the content "
+                    + "between the delimiters is content, reserved word or not");
+        }
+    }
 }

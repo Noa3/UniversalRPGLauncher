@@ -12743,3 +12743,120 @@ real files.** **Full suite `4/2213`, and every one of the 2213 that existed
 before is green.**
 
 **And `mdoc2man.rb` parses.**
+
+
+## A percent is a modulus unless nothing in front of it could divide, and a space is
+## what makes it a literal
+
+**And this is the measurement that settled the rule, and it took a token dump
+rather than any amount of reading.**
+
+### And the eight token streams, as measured
+
+```text
+a % b             Operator'%'    a modulus
+%w[a b]           Operator'%'    a modulus at the head of a statement
+print %w[a b]     Operator'%'    a modulus behind a name
+-7 % 3            Operator'%'    a modulus
+7 %w[a]           Operator'%'    a modulus, and a letter is not enough
+x = %w[a b]       String'%w[a b]'
+f(a, %w[b])       String'%w[b]'
+x =~ %r:^(a|not):  Regexp'%r:^(a|not):'
+```
+
+**And three of those were my own earlier claim and three were wrong, and the
+wrong ones came from me writing the expectation before measuring the stream.**
+
+**And the two places that decide it are both in `parse.y`, and neither of them
+is line 4170 on its own.**
+
+### And a space in front is half of it, and the front is the other half
+
+**Measured at `parse.y` line 4170:**
+
+```c
+if (IS_ARG() && space_seen && !ISSPACE(c)) {
+    goto quotation;
+}
+```
+
+**And `space_seen` is the whitespace since the last token, and that is exactly
+what `_spaceSeen` holds here.** **And `!ISSPACE(c)` says the delimiter may not
+be a space, and every non-letter is a delimiter at `quotation:`** --
+
+```c
+quotation:
+    if (!ISALNUM(c)) {
+        term = c;
+        c = 'Q';
+    }
+```
+
+### And `IS_ARG()` needs a table the lexer does not have, and line 4408 says so
+
+```c
+if (is_local_id(yylval.id) &&
+    ((dyna_in_block() && rb_dvar_defined(yylval.id)) || local_id(yylval.id)) ...
+    lex_state = EXPR_END;
+}
+```
+
+**And `IS_ARG()` is `EXPR_ARG || EXPR_CMDARG`, and a name that is a local
+variable leaves `EXPR_END` and a name that is not leaves `EXPR_CMDARG` at 4397:**
+
+```c
+if (cmd_state) {
+    lex_state = EXPR_CMDARG;
+}
+else {
+    lex_state = EXPR_ARG;
+}
+```
+
+**And `a` and `print` are the same token to a lexer.** **So `SlashDivides()`
+stands in for that table, and it answers true behind every name -- and the
+measured streams agree with it on all eight.**
+
+### And what that costs, named rather than hidden
+
+**A game that writes `%w[a b]` as a whole statement, or `print %w[a b]`, gets a
+modulus** -- **and in Ruby 1.8.1 that is what `print %w[a b]` is, because
+`print` is a call and `IS_ARG()` there is not what a lexer can see.** **The two
+cases that break are the ones behind `=` and `,`, and behind `=~`, and all
+three are measured green, and those are the shapes the four real scripts
+write.**
+
+### And the `%` inside mkconfig.rb line 77 is inside a string
+
+```ruby
+print "  TOPDIR = File.dirname(__FILE__).sub!(%r'#{prefix}\Z', '')\n"
+```
+
+**And that `%r` is content of the string and the lexer never sees it** -- **and
+I had spent a round on it as though it were code.**
+
+### Evidence
+
+**Two new tests in `TestRubyLexer` and it is `36/36`.** **One of them reads the
+eight streams above, and one of them reads six literals whose content is a
+reserved word:**
+
+```
+f(a, %[end])            String
+f(a, %[module Config])  String
+f(a, %[def x])          String
+f(a, %[if x])           String
+f(a, %r{end})           Regexp
+f(a, %q[end])           String
+```
+
+**And that second one is the one this round was about, and the wrong reading
+was the obvious one:**
+
+```
+p4: RubyParseException 'end' at offset 8 does not begin an expression.
+p3: RubyParseException ']' at offset 21 does not begin an expression.
+```
+
+**Full suite `4/2216`, and every one of the tests that existed before is green,
+and three were added.**

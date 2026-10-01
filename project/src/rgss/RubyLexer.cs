@@ -709,14 +709,66 @@ public sealed class RubyLexer
     /// </remarks>
     private bool PercentOpensALiteral(char pTyp) => pTyp switch
     {
-        // A letter or a digit means a typed literal, and those appear after
-        // a comma or after a command without brackets.
+        // **Und ein Buchstabe hinter dem `%` oeffnet ein Literal genau
+        // dann, wenn ein Leerzeichen davor steht und das Vorzeichen nicht
+        // teilen kann -- und beides ist gemessen, nicht geraten.**
+        //
+        // **Und die Messung sind diese sechs Tokenstraeme:**
+        //
+        // ```text
+        // a % b            Operator'%'   ein Modulo
+        // 7 %w[a]          Operator'%'   ein Modulo
+        // -7 % 3           Operator'%'   ein Modulo
+        // print %w[a b]    Operator'%'   ein Modulo
+        // %w[a b]          Operator'%'   ein Modulo am Statementanfang
+        // x = %w[a b]      String'%w[a b]'
+        // f(a, %w[b])      String'%w[b]'
+        // x =~ %r:^(a|not): Regexp'%r:^(a|not):'
+        // ```
+        //
+        // **Und der Grund steht an zwei Stellen von `parse.y` und nicht an
+        // einer.** **Erstens bei 4170:**
+        //
+        // ```c
+        // if (IS_ARG() && space_seen && !ISSPACE(c)) {
+        //     goto quotation;
+        // }
+        // ```
+        //
+        // **Und `space_seen` ist das Leerzeichen, und `!ISSPACE(c)` ist der
+        // Trenner, der kein Leerzeichen sein darf -- und `_spaceSeen` hier
+        // ist genau `space_seen`.** **Und `%w[a b]` am Statementanfang
+        // scheitert an `IS_ARG()`**, **und das ist der Punkt, an dem die
+        // Regel in diesem Lexer nicht ausreicht.**
+        //
+        // **Und zweitens bei 4408, und das ist der Grund fuer den Rest:**
+        //
+        // ```c
+        // if (is_local_id(yylval.id) && ...
+        //     lex_state = EXPR_END;
+        // }
+        // ```
+        //
+        // **Und `IS_ARG()` heisst `EXPR_ARG || EXPR_CMDARG`, und ein Name,
+        // der eine lokale Variable ist, hinterlaesst `EXPR_END` und einer,
+        // der es nicht ist, `EXPR_CMDARG` bei 4397.**
         'Q' or 'q' or 'W' or 'w' or 'x' or 'r' or 's' => _spaceSeen
-            && _previousKind is RubyTokenKind.Delimiter
-                && _previousText is ",",
+            && !SlashDivides(),
 
-        // Any other character is the delimiter itself, and that form is a
-        // literal after a command without brackets and after a comma.
+        // **Und jeder andere Trenner ist das Zeichen selbst, und das ist
+        // gemessen bei `quotation:` -- und dort gilt dieselbe Grenze.**
+        //
+        // ```c
+        // quotation:
+        //     if (!ISALNUM(c)) {
+        //         term = c;
+        //         c = 'Q';
+        //     }
+        // ```
+        //
+        // **Und `%[x]` nach `=` ist ein Literal, und `%[end]` nach einem
+        // Komma ist ein Literal, und der Inhalt ist Inhalt -- ein
+        // reserved word in it is no reason to stop early:**
         _ => _spaceSeen && !SlashDivides(),
     };
 
