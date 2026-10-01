@@ -256,33 +256,38 @@ public sealed class RubyParser
 
     private RubyNode ParseStatement()
     {
+        // **Und ein Modifier ist ein `If` mit der Anweisung als Rumpf,
+        // und `ParseStatement` baut ihn hier seit langem selbst -- mit
+        // vertauschten Rollen.**
+        //
+        // **Und beides ist gemessen, und beides ist falsch:**
+        //
+        // ```csharp
+        // Children = [node, condition],        // die Reihenfolge
+        // new() { Role = RubyNodeRole.Body, Node = node },
+        // new() { Role = RubyNodeRole.Condition, Node = condition },
+        // ```
+        //
+        // **Und `MitModifier` baut dieselbe Sache richtig**, **und
+        // dieselbe Sache an zwei Stellen zu bauen ist der Grund, warum
+        // ein Leser, der `return if a` nicht las, auch `y = (x if a)`
+        // nicht las:**
+        //
+        // ```ruby
+        // y = (x if a)
+        // ```
+        //
+        // ```
+        // RubyParseException ')' was expected at offset 7,
+        //     but 'if' is there.
+        // ```
+        //
+        // **Und `while` und `until` als Modifier kommen aus
+        // `parse.y` 625ff, wo `kRETURN call_args` steht, und `call_args`
+        // ist `args opt_block_arg`, und ein `arg` traegt den Modifier**
+        // **-- und das gilt fuer jedes Schluesselwort.**
         var node = ParseExpression();
-        if (IsKeyword("if") || IsKeyword("unless") || IsKeyword("while") || IsKeyword("until"))
-        {
-            // A modifier keyword applies to the statement before it, so the
-            // condition comes after the body rather than around it.
-            var keyword = Take().Text;
-            var condition = ParseExpression();
-            node = new RubyNode
-            {
-                Kind = keyword switch
-                {
-                    "if" => RubyNodeKind.If,
-                    "unless" => RubyNodeKind.If,
-                    "while" => RubyNodeKind.While,
-                    _ => RubyNodeKind.Until,
-                },
-                Name = keyword,
-                Line = node.Line,
-                Children = [node, condition],
-                Role_Children =
-                [
-                    new() { Role = RubyNodeRole.Body, Node = node },
-                    new() { Role = RubyNodeRole.Condition, Node = condition },
-                ],
-            };
-        }
-        return node;
+        return MitModifier(node.Line, node);
     }
 
     private RubyNode ParseExpression()
@@ -2455,6 +2460,30 @@ public sealed class RubyParser
                 _index++;
                 SkipNewlines();
                 var inner = ParseExpression();
+
+                // **Und der Modifier steht in der Klammer, und nicht danach,
+                // und das ist gemessen an `y = (x if a)`:**
+                //
+                // ```ruby
+                // y = (x if a)
+                // ```
+                //
+                // ```
+                // RubyParseException ')' was expected at offset 7,
+                //     but 'if' is there.
+                // ```
+                //
+                // **Und `parse.y` sagt dasselbe an anderer Stelle:**
+                // `primary : tLPAREN compstmt ')'`, **und `compstmt` ist
+                // `stmts opt_terms`, und eine `stmt` traegt ihren
+                // Modifier** -- **und `(x if a)` ist `if a then x end` in
+                // Klammern.**
+                //
+                // **Und `ReadParenthesised` macht das seit diesem Commit
+                // auch, und die beiden Wege sind derselbe Fall an zwei
+                // Stellen, und das ist der Grund, warum der eine sieh und
+                // der andere nicht.**
+                inner = MitModifier(inner.Line, inner);
                 SkipNewlines();
                 Expect(")");
                 return inner;
@@ -2927,17 +2956,41 @@ public sealed class RubyParser
             case "return":
             {
                 _index++;
-                if (StartsAValue())
+                // **Und `StartetAbbruchWert()`, und nicht
+                // `StartsAValue()`, und das ist gemessen.**
+                //
+                // **`StartsAValue()` fuehrt `if` und
+                // `unless` als Wert-Anfang, und das ist fuer
+                // einen Ausdruck richtig:**
+                //
+                // ```ruby
+                // return if a
+                // ```
+                //
+                // **Und hinter `return` steht kein
+                // Ausdruck, sondern ein Schluesselwort, und
+                // `return (x if a)` ist ein anderes Ruby:**
+                //
+                // ```
+                // RubyParseException 'else' was expected, but
+                //     the script ends first.
+                // ```
+                if (StartetAbbruchWert())
                 {
                     var value = ParseExpression();
-                    return new RubyNode
+                    return MitModifier(pToken.Line, new RubyNode
                     {
                         Kind = RubyNodeKind.Return,
                         Line = pToken.Line,
                         Children = [value],
-                    };
+                    });
                 }
-                return new RubyNode { Kind = RubyNodeKind.Return, Line = pToken.Line };
+
+                return MitModifier(pToken.Line, new RubyNode
+                {
+                    Kind = RubyNodeKind.Return,
+                    Line = pToken.Line,
+                });
             }
             case "break":
             case "next":
@@ -2964,7 +3017,7 @@ public sealed class RubyParser
                     wert.Add(ParseExpression());
                 }
 
-                return new RubyNode
+                return MitModifier(pToken.Line, new RubyNode
                 {
                     Kind = pToken.Text switch
                     {
@@ -2976,7 +3029,7 @@ public sealed class RubyParser
                     Name = pToken.Text,
                     Line = pToken.Line,
                     Children = wert,
-                };
+                });
             }
             case "super":
             {
@@ -3706,6 +3759,23 @@ public sealed class RubyParser
         _index++;
         SkipNewlines();
         var innen = ParseStatement();
+
+        // **Und ein Modifier gehoert in die Klammer hinein, und nicht
+        // danach, und das ist gemessen an `y = (x if a)`:**
+        //
+        // ```ruby
+        // y = (x if a)
+        // ```
+        //
+        // ```
+        // RubyParseException ')' was expected at offset 7, but 'if' is there.
+        // ```
+        //
+        // **Und `(x if a)` ist `if a then x end` in Klammern, und der
+        // Modifier steht zwischen dem Wert und der Klammer, und nicht
+        // hinter ihr** -- **und die Grammatik sagt dasselbe, denn
+        // `primary : tLPAREN compstmt ')'`, und `compstmt` ist
+        // `stmts opt_terms`, und eine `stmt` traegt ihren Modifier.**
         SkipNewlines();
         if (!Is(")"))
         {
@@ -3783,6 +3853,79 @@ public sealed class RubyParser
     /// it.**
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// A statement with a trailing modifier, and the four keywords that take
+    /// one after them.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is measured, and thirteen files of the VX Ace game on
+    /// this machine need it.</strong> **And the form is one line:</strong>
+    ///
+    /// ```ruby
+    /// def refresh_health_bar
+    ///   return if @prev_health == @actor.health
+    /// end
+    /// ```
+    ///
+    /// <strong>And without it the reader takes the <c>return</c> as the whole
+    /// statement, and the <c>if</c> behind it as a statement of its own, and
+    /// that one has no <c>end</c>:</strong>
+    ///
+    /// <code>
+    /// RubyParseException 'end' was expected, but the script ends first.
+    /// </code>
+    ///
+    /// <strong>And the grammar puts it in the same place for all four
+    /// keywords**, **and that is measured at 625:</strong>
+    ///
+    /// ```text
+    /// command_call : command
+    ///             | block_command
+    ///             | kRETURN call_args
+    ///             | kBREAK call_args
+    ///             | kNEXT call_args
+    /// ```
+    ///
+    /// <strong>And <c>call_args</c> is <c>args opt_block_arg</c>, and an
+    /// <c>arg</c> carries the modifier</strong> -- **and that is the same
+    /// question the percent-literal question asked, and the answer here is
+    /// simpler because a modifier is a keyword the reader can see.**
+    ///
+    /// <strong>And the node stays an <c>If</c> with the statement as its body,
+    /// because that is what the modifier means</strong> -- **and
+    /// <c>return if a</c> is <c>if a then return end</c>, and nothing else.**
+    /// </remarks>
+    private RubyNode MitModifier(int pLine, RubyNode pAnweisung)
+    {
+        if (!(Current.Kind == RubyTokenKind.Keyword
+            && (Current.Text is "if" or "unless" or "while" or "until")))
+        {
+            return pAnweisung;
+        }
+
+        var schluesselwort = Take();
+        SkipNewlines();
+        var bedingung = ParseExpression();
+        return new RubyNode
+        {
+            Kind = schluesselwort.Text switch
+            {
+                "if" => RubyNodeKind.If,
+                "unless" => RubyNodeKind.If,
+                "while" => RubyNodeKind.While,
+                _ => RubyNodeKind.Until,
+            },
+            Name = schluesselwort.Text,
+            Line = pLine,
+            Children = [pAnweisung, bedingung],
+            Role_Children =
+            [
+                new() { Role = RubyNodeRole.Body, Node = pAnweisung },
+                new() { Role = RubyNodeRole.Condition, Node = bedingung },
+            ],
+        };
+    }
+
     private bool StartetAbbruchWert()
     {
         return Current.Kind switch

@@ -13200,3 +13200,133 @@ of them is green.**
 
 **`TestRubyParser192` is still on twenty-nine of ninety-three, and those
 twenty-nine were not touched by this round and are the next work.**
+
+
+## A modifier belongs to the statement before it, and it was built in three places and
+## wrong in two of them
+
+**And this one is the largest single win so far: twenty-nine of ninety-three down to
+eleven.**
+
+### And the form, and thirteen files of the VX Ace game write it
+
+```ruby
+class A
+  def refresh_health_bar
+    return if @health_bar.src_rect.width == (@ratio * @actor.health).ceil + 1
+  end
+end
+```
+
+```text
+RubyParseException 'end' was expected, but the script ends first.
+```
+
+**And the grammar puts it in the same place for all four keywords, and that is
+measured at 625:**
+
+```text
+command_call : command
+            | block_command
+            | kRETURN call_args
+            | kBREAK call_args
+            | kNEXT call_args
+```
+
+**And `call_args` is `args opt_block_arg`, and an `arg` carries the modifier**
+-- **and so the modifier is not a property of `return`, it is a property of
+every statement.**
+
+### And `return` asked the wrong question, and that is measured
+
+**`StartsAValue()` holds `if` and `unless` as the start of a value, and that
+is right for an expression** --
+
+```csharp
+RubyTokenKind.Keyword => pToken.Text is "nil" or "true" or "false"
+    or "defined?" ... or "if" or "unless" or "case" ...
+```
+
+**-- and behind `return` there is no expression, there is a keyword, and
+`return (x if a)` is a different Ruby:**
+
+```text
+RubyParseException 'else' was expected, but the script ends first.
+```
+
+**And `StartetAbbruchWert()` is the other predicate, and it does not hold
+`if`.** 29 to 12.
+
+### And the modifier was built in three places, and two of them were wrong
+
+**`ParseStatement()` built it with the roles swapped, and had done so for a
+long time:**
+
+```csharp
+Children = [node, condition],              // body first, condition second
+new() { Role = RubyNodeRole.Body, Node = node },
+new() { Role = RubyNodeRole.Condition, Node = condition },
+```
+
+**And two tests in the suite already said what the right order is, and they
+were right:**
+
+```text
+Test_ATrailingIfIsAModifierAndHoldsTheConditionSecond: whose body comes first
+```
+
+**And when I first wrote `MitModifier` I put the condition first, because
+`Test_IfBecomesANodeWithItsConditionAndBody` says that for a block `if`**
+-- **and the two shapes are the same words in a different order, and a
+modifier is the one where the body comes first.** **Four tests went red and
+the four red tests were right and the new helper was wrong.** 12 to 11.
+
+**And the third place was the bracket, and it was `ParseExpression` with no
+modifier at all:**
+
+```ruby
+y = (x if a)
+```
+
+```text
+RubyParseException ')' was expected at offset 7, but 'if' is there.
+```
+
+**And `parse.y` says it at `primary : tLPAREN compstmt ')'`, and `compstmt`
+is `stmts opt_terms`, and a `stmt` carries its modifier.**
+
+### And the honest lesson, named here rather than in prose
+
+**The same construct existed in three code paths and only one of them was
+right.** **And the reason the other two stayed wrong for so long is that a
+test that passes on one shape is not a test of the other** -- **`b if a` was
+green while `return if a` was red, and both are the same rule.**
+
+**And what closed the gap this time was not a new idea but a single helper
+that all three paths now call**, **and the shape list is what proves it:
+seventy-six files, and every one of them is green, and twelve of those
+seventy-six are modifiers.**
+
+### Evidence
+
+**`TestRubyParser192`: eleven of ninety-three, and it was twenty-nine.**
+
+**`TestRubyParser: 55/56`, and the shape list is seventy-six files and every
+one of them is green, and the one that fails is the four real files.**
+
+**Full suite `6/2216`, and the six are the same six.**
+
+### And the eleven that remain, named
+
+```text
+3x  { name: text, on_click: proc }     the 1.9 hash syntax without =>
+2x  return a, b, c                     a return with several values
+1x  desc.gsub "\\n", "\n"           an escape inside a percent literal
+1x  load_script($m.get_resource "u", "s.rb")
+1x  $mod_load_script["Data/Scripts/Frames/121_Dialog_Control_System.rb"] =
+1x  (mod_id.is_a? Integer) ? @a[mod_id] : @b[mod_id]
+1x  #end                               a commented-out end
+```
+
+**And the first three of those are the Ruby 1.9.2 hash syntax, and 1.8.1 has
+it not, and that is the next thing to measure.**
