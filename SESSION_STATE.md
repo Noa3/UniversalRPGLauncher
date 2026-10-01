@@ -13910,3 +13910,75 @@ files and every one of them is green.**
 
 **And the reader code has not changed in this round at all** -- **the whole
 change is four files that state a boundary the reader already held.**
+
+
+## The third file: the trace found the exact line, and the cause is still not named
+
+**And this round cost about twenty calls and produced one measurement worth
+keeping, and the measurement is a place rather than a cause.**
+
+### And what the trace said, exactly
+
+```text
+BEGIN-ZWEIG  @200  Zeile 5     module/class ModManager
+BEGIN-FERTIG @455  'rescue'  Zeile 12  koerper=2
+ARME-SAMMELN @455 'rescue'  Zeile 12  koerper=2
+BEGIN-ZWEIG  @427  Zeile 19    begin
+BEGIN-FERTIG @803  'else'   Zeile 26  koerper=5      <- here, and not at line 31
+ARME-SAMMELN @803 'else'   Zeile 26  koerper=5
+```
+
+**And the source, measured at the same offsets:**
+
+```text
+19       begin
+22         if @mods_ini.sections.include? basename
+26         else
+30         end
+31       rescue => e
+33       end
+```
+
+**So the `begin` body was closed by the `else` of the `if` inside it, and not by
+its own `rescue`.** **That is the finding, and it is a place and not a cause,
+and the difference matters: `ParseStatements("rescue", "else", "ensure",
+"end")` cannot tell an `else` that belongs to an `if` from one that belongs to
+the `begin` itself.**
+
+### And why this took so long, named without softening it
+
+**Eleven cuts, all of them green, and the whole red.** **And the reason is
+now measured and not guessed: the pieces are green because each cut removed
+the *only* thing that made the difference, and what makes the difference is
+that the reader stops at the wrong `else`** -- **and every cut that kept the
+`else` inside the `begin` body but shortened something else was green, and
+every cut that kept everything and removed nothing was red.**
+
+**And what would have found it in one call, and did not happen here, is a
+trace of the closer decision itself** -- **which is where the next round
+starts, and this one stops.**
+
+### And the other two files are unchanged and still named
+
+```text
+Unused_0_O_FakeSprite_And_colorHook.rb at line 386   a commented-out end
+_Mods_UltraModManager_scripts_replacers_121_... at 233   the unsettled %r line
+```
+
+**And the second of those is the one this repository documented as unsettled in
+an earlier round, because `parse.y` says it is a modulus and a game that runs
+does not write a modulus, and there is no Ruby on this machine to settle it.**
+
+### Evidence
+
+**`TestRubyParser192`: three of ninety-three, unchanged.**
+
+**`TestRubyParser: 55/56`, and the shape list is one hundred and twenty-five
+files and every one of them is green.**
+
+**Full suite `6/2216`.**
+
+**And the reader code is byte-identical to `HEAD`:** **the whole round was
+three temporary traces and eleven fixtures, and none of it changed the
+reader, and that is the correct outcome for a round that found a place and
+not a cause.**
