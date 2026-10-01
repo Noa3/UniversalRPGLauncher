@@ -233,6 +233,10 @@ public partial class TestRealMzGameData : TestBase
             "MZ  gemessen: " + gesamt + " Befehle, "
             + (gesamt - nicht.Sum(pKvp => pKvp.Value)) + " ausfuehrbar, "
             + nicht.Sum(pKvp => pKvp.Value) + " nicht");
+        System.Console.WriteLine(
+            "MZ  nicht: " + string.Join(", ", nicht
+                .OrderByDescending(pKvp => pKvp.Value)
+                .Select(pKvp => pKvp.Key + "(" + pKvp.Value + ")")));
 
         AssertTrue(nicht.Count > 0,
             "**and this reader still cannot run every command the game "
