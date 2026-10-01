@@ -11202,3 +11202,26 @@ Autorun-Seiten auf `Map003` die mit je 211 Befehlen**, **also die
 lange Erzaehlung, an der man sieht, ob ein Interpreter 211 Befehle in
 der richtigen Reihenfolge abarbeitet.**
 
+## Und eine Seite laeuft
+
+**`RunPage(StartMode.Autorun)` laeuft die Maschine des Motors:**
+**Interpreter laufen lassen, laeuft er noch, anhalten, sonst
+entsperren und die naechste Seite fragen, und `setupStartingEvent`
+fragt in dieser Reihenfolge.**
+
+**Und `Map003` Ereignis 9 laeuft jetzt und sagt:**
+**"This passage is weird... I can hear chatter?"** -- **zwei Befehle
+ausgefuehrt, dann wartet `101` auf den Spieler.**
+
+**Und `LastActions` traegt, was die Seite getan hat** -- **denn "eine
+Seite lief" ist kein Beweis.**
+
+**Und `Map017` hat keine Autorun-Seite, und `RunPage` sagt das.**
+
+**`All 2197 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **die Seite wartet bei `101`, und
+nichts drueckt die Aktionstaste** -- **also laufen die uebrigen 209
+Befehle nie** -- **und die Parallel-Seiten (Ausloeser 3, drei im
+Spiel) bekommen gar keinen eigenen Interpreter.**
+

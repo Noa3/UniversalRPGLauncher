@@ -635,6 +635,201 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// moved 253 figures nobody asked to move.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>How a page gets chosen to run, as the engine does it.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine's machine is a <c>for (;;)</c>, and its
+    /// order is fixed.</strong> Measured at
+    /// <c>Game_Map.prototype.updateInterpreter</c>: run the interpreter,
+    /// <strong>and if it is still running, stop</strong>, <strong>and if it
+    /// has finished, unlock its event, clear it, and ask
+    /// <c>setupStartingEvent</c> for the next page</strong> — <strong>and if
+    /// there is none, stop.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>setupStartingEvent</c> asks in this order:</strong> a
+    /// reserved common event, a test event, <strong>a starting map
+    /// event</strong>, and an autorun common event.
+    /// </para>
+    /// <para>
+    /// <strong>And "a starting map event" is one whose page is
+    /// autorun.</strong> Measured at <c>setupStartingMapEvent</c>: it walks
+    /// the events, and the first with <c>isStarting()</c> wins,
+    /// <strong>clears its flag and takes its list.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the flag is set by <c>start</c>, which is called when
+    /// the page is chosen</strong> — <strong>and <c>start</c> only sets it
+    /// when the list has more than one entry</strong>, <strong>because a
+    /// list of one is just the end.</strong>
+    /// </para>
+    /// </remarks>
+    public enum StartMode
+    {
+        /// <summary>Nothing to run, and that is an answer.</summary>
+        None,
+
+        /// <summary>The action button was pressed.</summary>
+        ActionButton,
+
+        /// <summary>The player touched the event.</summary>
+        Touched,
+
+        /// <summary>The page runs by itself when the map opens.</summary>
+        Autorun,
+
+        /// <summary>The page runs beside the others, every frame.</summary>
+        Parallel,
+    }
+
+    /// <summary>
+    /// Runs the next page the engine would run, and nothing else.
+    /// </summary>
+    /// <param name="pStart">Which page to start, or zero to run the
+    /// autorun page the engine would choose.</param>
+    /// <returns>What the page did.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the machine, and not a loop over every
+    /// page.</strong> <strong>Measured: only two of this project's 253
+    /// pages are autorun</strong>, <strong>so a runtime that started every
+    /// page would run a game the player has not begun.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a page at trigger 3 runs beside the others and is not
+    /// started by this</strong> — <strong>it has its own interpreter</strong>
+    /// <strong>and the engine gives it one.</strong>
+    /// </para>
+    /// </remarks>
+    public string RunPage(StartMode pStart = StartMode.Autorun)
+    {
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            return $"map {CurrentMapId} is not among the maps this runtime"
+                + " read, so no page can run on it";
+        }
+
+        var ereignisse = karte.Root.Member("events")?.Items;
+        if (ereignisse == null)
+        {
+            return "the map has no events, and a map with no events has no"
+                + " pages to run";
+        }
+
+        foreach (var ereignis in ereignisse)
+        {
+            var seiten = ereignis.Member("pages")?.Items;
+            var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
+            if (seiten == null || seiten.Count == 0)
+            {
+                continue;
+            }
+
+            for (var index = seiten.Count - 1; index >= 0; index--)
+            {
+                var seite = seiten[index];
+                var ausloeser = seite.Member("trigger")?.IntOr(0) ?? 0;
+                if (!Passt(ausloeser, pStart))
+                {
+                    continue;
+                }
+
+                if (!MzMapFigureReader.Meets(
+                    seite.Member("conditions"), Facts))
+                {
+                    return $"event {id} page {index} is the page the engine"
+                        + " would run, and its conditions this reader cannot"
+                        + " answer, so it is not run";
+                }
+
+                // **Und die Liste wird aus der Datei gelesen, und nicht
+                // aus dem Interpreter** -- **denn der Motor liest sie
+                // auch aus der Seite, und `setup(list, eventId)` nimmt
+                // genau diese.**
+                var befehle = new List<MzCommandEntry>();
+                foreach (var eintrag in
+                    seite.Member("list")?.Items ?? new List<MzValue>())
+                {
+                    befehle.Add(MzCommandEntry.From(eintrag));
+                }
+                if (befehle.Count <= 1)
+                {
+                    // **Und eine Liste von einem Eintrag ist nur das
+                    // Ende** -- **gemessen an `Game_Event.start`: `if
+                    // (list && list.length > 1)`.** **Und das ist der
+                    // Grund, warum viele Seiten nie starten**, **und
+                    // nicht die, weil sie zu kurz waeren.**
+                    continue;
+                }
+
+                var ergebnis = _runner.Run(
+                    befehle, Facts, CurrentMapId, id, Random);
+                PagesRun++;
+                LastPage = id;
+                LastPageStop = ergebnis.Stopped;
+                LastActions = ergebnis.Actions;
+                return $"event {id} page {index} was given {befehle.Count}"
+                    + $" commands with trigger {ausloeser}, and it carried"
+                    + $" out {ergebnis.Actions.Count} of them before it"
+                    + $" stopped: {ergebnis.Describe()}";
+            }
+        }
+
+        return "no page on this map runs now, and that is the engine's own"
+            + " answer -- setupStartingEvent returns false and the loop"
+            + " stops";
+    }
+
+    /// <summary>
+    /// One generator for the whole run, so a page can be replayed.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And one stream for the whole game, and not one per page.</strong>
+    /// Measured at <c>Game_Interpreter</c>, which holds a single
+    /// <c>_random</c>. <strong>A runtime that made a new one per page
+    /// would replay the same numbers every page</strong> — <strong>and a
+    /// test that runs a page twice would get the same result both times,
+    /// which is exactly what it would prove and nothing.</strong>
+    /// </remarks>
+    public MzRandom Random { get; } = new();
+
+    /// <summary>What the last page actually did, command by command.</summary>
+    /// <remarks>
+    /// <strong>And this is the only proof that the interpreter works.</strong>
+    /// <strong>"A page ran" says nothing</strong> — <strong>a run that
+    /// executed two of 211 commands and called it a page has run
+    /// something</strong> — <strong>and the actions say which two.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a 101 stops the run, because the engine's wait is not
+    /// a lie:</strong> a message box waits for the player, and until he
+    /// presses the button the page does not go on.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<MzAction> LastActions { get; private set; } =
+        Array.Empty<MzAction>();
+
+    /// <summary>How many pages have run.</summary>
+    public int PagesRun { get; private set; }
+
+    /// <summary>Which event ran last.</summary>
+    public int LastPage { get; private set; }
+
+    /// <summary>Where that page stopped.</summary>
+    public MzStep LastPageStop { get; private set; }
+
+    private static bool Passt(int pAusloeser, StartMode pStart)
+    {
+        return pAusloeser switch
+        {
+            2 => pStart == StartMode.Autorun,
+            3 => false,
+            0 => pStart == StartMode.ActionButton,
+            1 => pStart == StartMode.Touched,
+            _ => false,
+        };
+    }
+
     public int Tick()
     {
         var wechselt = 0;

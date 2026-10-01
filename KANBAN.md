@@ -11816,3 +11816,65 @@ traegt zwei:** **Ereignis 3 und 4, beide `[101, 401, 401, 205, 505, 0]`
 
 **`All 2195 tests passed`, Validator gruen.**
 
+## Und zum ersten Mal laeuft eine Seite dieses Spiels
+
+### Und das ist jetzt keine Vermutung mehr
+
+**Bisher hat kein Befehl aus den Daten dieses Projekts ausgefuehrt.**
+**Jetzt laeuft Seite 9 auf `Map003`, und sie sagt die Worte des
+Spiels.**
+
+```
+213 [-1, 2, false]          -> Ballon 2 ueber dem Spieler
+101 ['SlimeActors', 0, 0, 2, 'Camellia']
+401 ['This passage is weird... I can hear chatter?']
+401 ["... Well, they're not telepaths, whatever"]
+401 ['they are.']
+401 ['Am I not alone after all?']
+205 [-1, {list: [...]}]     -> Laufbahn fuer den Spieler
+```
+
+**Und gemessen sind zwei Befehle ausgefuehrt, und dann wartet die
+Seite** -- **weil `101` auf den Spieler wartet**, **und die
+Motor-Wartezeit ist keine Luege.**
+
+### Und "eine Seite lief" ist kein Beweis
+
+**Ein Lauf, der zwei von 211 Befehlen ausgefuehrt und das eine Seite
+nennt, hat etwas ausgefuehrt** -- **und was, sagen die Aktionen.**
+**Darum steht `LastActions` in der Runtime**, **und darum prueft der
+Test den ersten Satz woertlich: "This passage is weird".** **Ein Leser,
+der seinen eigenen Text geschrieben haette, waere durch jeden anderen
+Test dieser Datei gegangen und hier gescheitert.**
+
+### Und die Maschine ist die des Motors
+
+**Gemessen an `updateInterpreter`:**
+
+```
+for (;;) {
+    this._interpreter.update();
+    if (this._interpreter.isRunning()) return;
+    if (this._interpreter.eventId() > 0) { unlock; clear; }
+    if (!this.setupStartingEvent()) return;
+}
+```
+
+**Und `setupStartingEvent` fragt in dieser Reihenfolge:** reserviertes
+Gemeinschaftsereignis, Testereignis, **startendes Kartenereignis**,
+Autorun-Gemeinschaftsereignis.
+
+**Und "startendes Kartenereignis" ist eine Seite mit Autorun.**
+**Und eine Liste mit einem einzigen Eintrag startet nie** -- **gemessen
+an `Game_Event.start`: `if (list && list.length > 1)`.**
+
+### Und `Map017` sagt nein
+
+**25 Seiten, keine davon Autorun** -- **und `RunPage` sagt das in
+Worten**, **denn der Motor sagt es auch: `setupStartingEvent` gibt
+`false`, und die Schleife haelt.**
+
+**Test evidence** `test_real_mz_page_run.cs` (2), **2/2**.
+
+**`All 2197 tests passed`, Validator gruen.**
+
