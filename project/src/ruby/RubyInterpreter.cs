@@ -8156,6 +8156,35 @@ public sealed class RubyInterpreter
         // Operator** -- `x += 1` heisst `x = x + 1`, und **ein Leser, der den
         // rechten Wert zurueckschriebe, haette `x += 1` zu `x = 1` gemacht**,
         // was bei einer Schleife ein Spiel zum Stehen bringt.
+        // **Und `||=` und `&&=` schreiben nur, wenn sie muessen, und das
+        // ist gemessen.** Ruby 1.8.1's own `parse.y`, in `arg`:
+        // `| var_lhs tOP_ASGN arg { if ($2 == tOROP) { $$ =
+        // NEW_OP_ASGN_OR(gettable(vid), $1); } if ($2 == tANDOP) { $$ =
+        // NEW_OP_ASGN_AND(gettable(vid), $1); } }` -- **and the right side
+        // is evaluated only when the write is needed**, **so `x ||= f`
+        // does not call `f` when `x` already has a value.** **And this
+        // reader evaluated it first and always, so it called `f` every
+        // time.** **And `mkconfig.rb` line 4 opens with three of them.**
+        if (op is "||=" or "&&=")
+        {
+            var vorher = Evaluate(ziel);
+            var braucht = op == "||="
+                ? !Truthy(vorher)
+                : Truthy(vorher);
+            var wert = braucht ? Evaluate(rechts) : vorher;
+
+            if (ziel.Kind == RubyNodeKind.Identifier)
+            {
+                SetLocal(ziel.Name ?? string.Empty, wert);
+            }
+            else
+            {
+                TabelleFuer(ziel)[ziel.Name ?? string.Empty] = wert;
+            }
+
+            return wert;
+        }
+
         var alt = Evaluate(ziel);
         var neu = Apply(basis, alt, istNeu, pNode);
 

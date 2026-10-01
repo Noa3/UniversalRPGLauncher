@@ -128,16 +128,26 @@ public partial class TestRubyParser : TestBase
     {
         var faelle = new (string Quelle, string Woher)[]
         {
-            ("mflags = ($OPT['a'] || '').strip if mflags.empty?",
-             "instruby.rb 23 -- a modifier after a call on a bracket"),
+            // **Und instruby.rb Zeile 31, wo der Stern steht.**
+            ("a, b = 1, 2", "A -- two names, as written"),
+            ("a, *b = c", "B -- a star that takes the rest"),
             ("$make, *rest = Shellwords.shellwords($make)",
-             "instruby.rb 31 -- a star that takes the rest of the values"),
-            ("retval << \".nf\n\" << '\\&  '",
-             "mdoc2man.rb 232 -- two appends, which is one expression"),
-            ("dest = drive ? /= \"x\"(?![a])/i : /= \"y\"/",
-             "mkconfig.rb 90 -- a ternary whose arms are delimited regexps"),
-            ("error << line if line =~ %r:^(a|not):",
-             "rubytest.rb 42 -- a modifier after an append, and %r"),
+             "C -- exactly as instruby.rb 31 writes it"),
+            ("def $mflags.set?(flag)\nend", "D -- a method on a global"),
+
+            // **Und mkconfig.rb Zeile 22 bis 30.**
+            ("print %[\n  a\n]", "E -- a percent bracket literal"),
+            ("print %[\n  a == \"b\" or\n    c\n]",
+             "F -- and the one mkconfig writes"),
+            ("%[x\"y\"z]", "G -- a quote inside"),
+
+            // **Und mdoc2man.rb Zeile 229, wo das when einrueckt.**
+            ("case x\nwhen 'a'\n  b\nend",
+             "H -- a when at column zero"),
+            ("case x\n  when 'a'\n    b\nend",
+             "I -- and one that is indented"),
+            ("case x\nwhen 'An'\nnext\nwhen 'Dl'\nretval << \"a\"",
+             "J -- and mdoc2man 229 as written"),
         };
         var fehler = new List<string>();
 
@@ -168,6 +178,17 @@ public partial class TestRubyParser : TestBase
             + $" its own** -- and {fehler.Count} did not: "
             + string.Join(" | ", fehler));
     }
+
+    /// <summary>The one shape all four real scripts stop on.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And every case here is the smallest string that shows the
+    /// shape, and the count says how far it got.</strong> **And a probe
+    /// that only says "failed" is a guess, and this repository has three
+    /// guesses in a row in its history** -- **so this one prints what it
+    /// read.</strong>
+    /// </para>
+    /// </remarks>
 
     private string Refusal(Action pAction)
     {

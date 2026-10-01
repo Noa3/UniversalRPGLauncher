@@ -12182,3 +12182,93 @@ editor installs no `rmmv_*.js`: `NewData/js` holds only `main.js`,
 `plugins.js` and `rpg_core.js` v1.6.2 -- the MV-versioned engine -- and
 `rmmv_managers.js` and its siblings are nowhere in the installation or in
 any of the 41 `dlc/` folders.**
+
+
+## And three more of Ruby's own rules, and 237 tests that a wrong place
+## would have broken
+
+**The four real files stop in three places now, and each was measured
+against `parse.y` and not guessed.**
+
+### And `||=` and `&&=` were missing, and they are not binary operators
+
+Measured in the `arg` production:
+
+```c
+| var_lhs tOP_ASGN arg
+      if ($2 == tOROP)  { $$ = NEW_OP_ASGN_OR(gettable(vid), $1); }
+  if ($2 == tANDOP) { $$ = NEW_OP_ASGN_AND(gettable(vid), $1); }
+```
+
+**And the lexer delivers `||=` and `&&=` as `tOP_ASGN` with `yylval.id`
+set to `tOROP` or `tANDOP`** -- **so they are one token with a kind inside
+it.**
+
+**And they are not `a = a || b`.** `a ||= f` does not call `f` when `a`
+already has a value, **and this reader evaluated the right side first and
+always.** `mkconfig.rb` line 4 opens with three of them.
+
+### And `def` takes every singleton, not only `self`
+
+Measured at `parse.y` line 1635 and line 1652:
+
+```c
+| kDEF fname
+| kDEF singleton dot_or_colon {lex_state = EXPR_FNAME;} fname
+```
+
+**and `singleton : var_ref | '(' {lex_state = EXPR_BEG;} expr opt_nl ')'`
+-- and `var_ref` is a variable.** **So `def $mflags.set?(flag)` is a
+singleton method on the array in a global variable**, `def obj.name` is
+one on the value of `obj`, and `def (expr).name` is one on the value of
+an expression.
+
+**And the receiver comes before the name, and a reader that read the name
+first had already spent the `.`.** **And the question "is the next token a
+dot" is not the question `Is(".")` asks** -- **`Is` asks about the
+current token, which is the receiver, so the answer was always no.**
+
+### And where this went wrong twice, and the number that settled it
+
+**The first attempt put the receiver into `Children` before the parameter
+list, and 242 tests went red.** **The second attempt put it into
+`Role_Children` and fixed the interpreter's index arithmetic, and 242
+tests stayed red** -- **and the second attempt was the wrong file
+entirely.** **Reverting the interpreter alone took the suite from 242
+failures to 5** -- **so the whole regression was in one place and the
+parser was never the cause.**
+
+**And `PunktDanach` incremented `_index`, which is a question changing the
+state it is asked about**, **and every caller that asked and then went on
+reading ran one token too far.**
+
+**And the lesson is the one this repository has now learned three times:**
+**a trace that keeps confirming the code is not a measurement.** **Twice
+here the trace through `ParseUnary -> ParsePostfix(ParsePrimary) ->
+case Delimiter -> ParseExpression -> Expect(")")` checked out perfectly and
+the code was correct and the hypothesis was wrong** -- **and seven probe
+cases later the same shape parsed fine, because the failing shape was
+never that shape at all.**
+
+**So the diagnostic that worked was not a trace. It was a list of the
+smallest strings that show each shape, with the count and the node kind
+printed for each.** **And that is now `Test_DieFormenDieDieEchtenSkripteNochStoppen`,
+with every case copied out of one of the four files.**
+
+### And the open part, which is not a small thing
+
+**`RubyValue` has no table for a singleton method on an object** --
+**measured: the reader stores a self-method as `self.<name>` inside the
+type's method table and looks it up under that prefix, and there is no
+place at all for a method that belongs to one array in one global
+variable.** **So the syntax of `def $a.b` is now read and the meaning is
+not yet carried out**, **and `instruby.rb` needs both.**
+
+**And `RubyNodeKind.Splat` is written and not wired** -- **the `mlhs`
+reader is measured and reachable only from itself** -- **and
+`$make, *rest = ...` needs it.**
+
+**Evidence:** full suite `4/2213 tests failed`, and **all four are the two
+new tests** -- **so every one of the 2210 that existed before is green,
+and 237 of them were green again only after the interpreter was reverted.**
+`scripts/validate.sh` exits 4 and says the same thing.

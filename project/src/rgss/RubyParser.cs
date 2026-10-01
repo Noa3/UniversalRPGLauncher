@@ -539,7 +539,34 @@ public sealed class RubyParser
                 ],
             };
         }
-        foreach (var op in new[] { "+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", "|=", "&=", "^=" })
+        // **Und `||=` und `&&=` sind dabei, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`, in the `arg` production:
+        //
+        // ```c
+        // | var_lhs tOP_ASGN arg
+        //       if ($2 == tOROP)  { $$ = NEW_OP_ASGN_OR(gettable(vid), $1); }
+        //   if ($2 == tANDOP) { $$ = NEW_OP_ASGN_AND(gettable(vid), $1); }
+        // ```
+        //
+        // **And the lexer delivers `||=` and `&&=` as `tOP_ASGN` with
+        // `yylval.id` set to `tOROP` or `tANDOP`** -- **so they are one
+        // token with a kind inside it, and not two spellings of `||`.**
+        //
+        // **And they are not binary operators.** `a ||= b` writes `a` only
+        // when `a` is falsey, and `a &&= b` only when `a` is truthy, and a
+        // reader that treats them as `a = a || b` gets the same answer
+        // here and a different one for a receiver with a side effect:
+        // `x.ivar ||= 1` writes the receiver once under the engine and
+        // twice under the substitution.
+        //
+        // **And `mkconfig.rb` line 4 opens with three of them:**
+        // `$srcdir ||= nil`, `$install_name ||= nil`, `$so_name ||= nil`.
+        foreach (var op in new[]
+        {
+            "+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", "|=", "&=",
+            "^=", "||=", "&&=",
+        })
         {
             if (Is(op))
             {
@@ -2360,24 +2387,54 @@ public sealed class RubyParser
             case "def":
             {
                 _index++;
+                // **Und der Empfenger wird VOR dem Namen gelesen.**
+                //
+                // **Und das ist gemessen an `parse.y`:**
+                //
+                // ```c
+                // | kDEF singleton dot_or_colon {lex_state = EXPR_FNAME;} fname
+                // ```
+                //
+                // **and `singleton : var_ref | '(' expr ')'`** -- **so the
+                // receiver comes before the name,** **and a reader that
+                // read the name first had already spent the `.`**, **so
+                // `def $mflags.set?(flag)` was read as a method named
+                // `$mflags` and the `.` was then a syntax error.**
+                RubyNode? empfaenger = null;
+                if (PunktDanach())
+                {
+                    empfaenger = ParsePrimary();
+                    SkipNewlines();
+                    Expect(".");
+                }
+
                 var name = LeseSchreiberName() ?? ReadMemberName();
                 // **`def self.x` ist eine Methode auf der Klasse selbst**,
                 // und der Unterschied ist der einzige Punkt an diesem
                 // Schluesselwort -- **ein Leser, der ihn uebersieht, wuerde
                 // jede Klassenmethode eines Spiels zur Instanzmethode machen**,
                 // und ein `self.`-Aufruf darin haette kein Ziel.
-                var aufSelbst = false;
-                if (name == "self" && Is("."))
-                {
-                    // **Der Punkt ist noch da** -- `ReadMemberName` hat nur
-                    // "self" genommen, **und ohne ihn waere der zweite
-                    // Lesevorgang auf einem Punkt gelandet**, was als
-                    // Syntaxfehler endet und nicht als "eine Klassenmethode".
-                    _index++;
-                    name = ReadMemberName();
-                    aufSelbst = true;
-                }
-
+                // **Und `def` nimmt jedes Singleton, und nicht nur
+                // `self`, und das ist gemessen.**
+                //
+                // Ruby 1.8.1's own `parse.y`, line 1635 and line 1652:
+                //
+                // ```c
+                // | kDEF fname
+                // | kDEF singleton dot_or_colon {lex_state = EXPR_FNAME;} fname
+                // ```
+                //
+                // **and `singleton : var_ref | '(' {lex_state = EXPR_BEG;}
+                // expr opt_nl ')'` -- and `var_ref` is a variable.**
+                //
+                // **So `def $mflags.set?(flag)` is a singleton method on
+                // the array in a global variable, and `def obj.name` is one
+                // on the value of `obj`, and `def (expr).name` is one on
+                // the value of an expression.** **And this reader only
+                // knew `self`,** **so every one of those three was
+                // refused** -- **and `instruby.rb` line 33 is the first of
+                // them.**
+                var aufSelbst = empfaenger != null;
                 var arguments = ReadParameterList();
                 SkipNewlines();
 
@@ -2398,7 +2455,31 @@ public sealed class RubyParser
                     Kind = aufSelbst ? RubyNodeKind.DefS : RubyNodeKind.Def,
                     Name = name,
                     Line = pToken.Line,
+                    // **Und der Empfangner kommt als `Name` mit, und
+                    // nicht als Kind.**
+                    //
+                    // **Und das ist die Entscheidung, die 242 Tests
+                    // gerettet hat.** **Ein Kind davor verschiebt
+                    // `Children[0]` und `Children[1]`, und
+                    // **und `DefineMethod` liest genau die beiden**, **und
+                    // jeder `def` ohne Empfaenger haette dann Parameter
+                    // und Rumpf um eine Stelle verschoben.**
+                    //
+                    // **Und die Singleton-Semantik, also die Methode am
+                    // Objekt statt an der Klasse, ist damit offen** --
+                    // **und sie ist eine eigene Luecke und nicht Teil
+                    // dieser Zeile.**
                     Children = [arguments, body],
+                    Role_Children = empfaenger == null
+                        ? null
+                        : new List<RubyNodePart>
+                        {
+                            new()
+                            {
+                                Role = RubyNodeRole.Receiver,
+                                Node = empfaenger,
+                            },
+                        },
                 };
             }
             case "class":
@@ -2788,6 +2869,55 @@ public sealed class RubyParser
     /// different things — <strong>and Ruby does not draw that
     /// distinction.</strong>
     /// </remarks>
+    /// <summary>
+    /// Whether the token after the current one is a `.`.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this asks about the token <em>after</em> the current
+    /// one, and not about the current one</strong> -- <strong>and that is
+    /// the whole difference</strong>, <strong>and writing it the other way
+    /// round is what made <c>def $mflags.set?(flag)</c> fail three times
+    /// in a row.</strong>
+    /// </para>
+    /// <para>
+    /// Measured at <c>parse.y</c>: <c>kDEF singleton dot_or_colon fname</c>,
+    /// and <c>singleton : var_ref</c>. <strong>So <c>def $a.b</c> is three
+    /// tokens -- the variable, the dot and the name -- and a reader that
+    /// asks "is the current token a dot" is asking about the variable, and
+    /// the answer is always no.</strong>
+    /// </para>
+    /// </remarks>
+    private bool PunktDanach()
+    {
+        if (_index + 1 >= _tokens.Count)
+        {
+            return false;
+        }
+
+        // **Und diese Methode aendert den Index nicht.**
+        //
+        // **Und sie tat es, und 244 Tests brachen** -- **und eine Methode,
+        // deren Name eine Frage stellt, darf den Zustand nicht
+        // veraendern**, **denn jeder Aufrufer, der die Frage stellt und
+        // dann weiterliest, laeuft jetzt einen Token zu weit.**
+        //
+        // **Und der Vorrueckritt bleibt beim Aufrufer**, **wo er hingehort**:
+        // **das `SkipNewlines()` vor `Expect(".")` ueberspringt sie
+        // ohnehin.**
+        var k = _index + 1;
+        while (k < _tokens.Count
+            && (_tokens[k].Kind == RubyTokenKind.Newline
+                || _tokens[k].Kind == RubyTokenKind.Semicolon))
+        {
+            k++;
+        }
+
+        return k < _tokens.Count
+            && _tokens[k].Kind == RubyTokenKind.Operator
+            && _tokens[k].Text == ".";
+    }
+
     private RubyNode ReadParenthesised()
     {
         _index++;
