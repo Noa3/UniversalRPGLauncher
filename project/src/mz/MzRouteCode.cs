@@ -49,6 +49,80 @@ public static class MzRouteCode
     /// <summary>Move one tile up.</summary>
     public const int MoveUp = 4;
 
+    /// <summary>Step one tile the way the figure is facing.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>ROUTE_MOVE_FORWARD = 12</c> in the engine,
+    /// and the engine's whole body is one line:</strong>
+    /// <c>moveForward = function() { this.moveStraight(this.direction());
+    /// };</c> <strong>And the direction is the figure's own, not a
+    /// constant</strong>, <strong>so a figure facing left walks left and
+    /// the same route step walks right on a figure facing right.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the measured game uses this four times</strong>, <strong>and
+    /// the reader had no constant for it</strong>, <strong>so those four
+    /// steps fell through to "no effect" and the figures stood still where
+    /// the game walks them forward.</strong>
+    /// </para>
+    /// </remarks>
+    public const int MoveForward = 12;
+
+    /// <summary>Step one tile the way the figure is <em>not</em> facing.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>ROUTE_MOVE_BACKWARD = 13</c>, and the engine
+    /// does not merely step backwards</strong> -- <strong>it forces the
+    /// direction lock on, steps, and restores the lock exactly as it
+    /// was:</strong>
+    /// </para>
+    /// <code>
+    /// moveBackward = function() {
+    ///     const lastDirectionFix = this.isDirectionFixed();
+    ///     this.setDirectionFix(true);
+    ///     this.moveStraight(this.reverseDir(this.direction()));
+    ///     this.setDirectionFix(lastDirectionFix);
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>And the lock matters, and it is the whole difference from
+    /// 12.</strong> <strong>Without it a character whose event page fixed
+    /// its direction would have turned around to walk away and stayed
+    /// facing backwards</strong>, <strong>which is not what the game does.
+    /// The measured game uses this ten times, and the reader had no
+    /// constant for it.</strong>
+    /// </para>
+    /// </remarks>
+    public const int MoveBackward = 13;
+
+    /// <summary>Leap by an offset, without checking the way.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>ROUTE_JUMP = 14</c>, and it is the only move
+    /// route step that takes parameters</strong> -- <c>this.jump(params[0],
+    /// params[1])</c> -- <strong>and every one of the measured game's
+    /// jumps is <c>[0, 0]</c>, all 31 of them.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a jump is not a step, and that is what makes it its own
+    /// code.</strong> Measured at <c>jump</c>: it sets the direction by
+    /// whichever of the two offsets is larger, adds both to the position
+    /// <strong>without a passability test</strong>, sets
+    /// <c>_jumpPeak = 10 + distance - _moveSpeed</c> and
+    /// <c>_jumpCount = _jumpPeak * 2</c>, resets the stop count and
+    /// straightens the figure.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>[0, 0]</c> therefore does not move and does not change
+    /// the facing</strong> -- <strong>both offsets are 0, so both
+    /// <c>if</c>s are skipped</strong>, <strong>and the distance is 0, so
+    /// the peak is <c>10 - _moveSpeed</c> and the animation still runs.</strong>
+    /// <strong>The measured game uses it 31 times and the reader had no
+    /// constant for it.</strong>
+    /// </para>
+    /// </remarks>
+    public const int Jump = 14;
+
     /// <summary>Wait for a number of frames.</summary>
     public const int Wait = 15;
 

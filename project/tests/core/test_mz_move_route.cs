@@ -369,13 +369,43 @@ partial class TestMzMoveRoute : TestBase
         jumper.Route.Force(jump);
         jumper.Route.Step(jumper, withWall);
 
+        // **And this expectation was wrong, and it was wrong in the way a
+        // reader can be wrong most expensively.**
+        //
+        // It said "a jump of 3,1 goes three to the right and not one down,
+        // because the bigger axis wins", and that reads the engine's
+        // direction block as an axis choice. Measured at `jump`:
+        //
+        // ```js
+        // if (Math.abs(xPlus) > Math.abs(yPlus)) {
+        //     if (xPlus !== 0) { this.setDirection(xPlus < 0 ? 4 : 6); }
+        // } else {
+        //     if (yPlus !== 0) { this.setDirection(yPlus < 0 ? 8 : 2); }
+        // }
+        // this._x += xPlus;
+        // this._y += yPlus;
+        // ```
+        //
+        // **The `if` picks the facing and nothing else, and it is inside
+        // the direction block; the position is two plain additions after
+        // it.** So 3,1 lands three right AND one down, which is a
+        // diagonal tile and not a mistake. A leap that dropped the
+        // smaller axis landed the figure on the wrong tile.
         AssertEq(
             jumper.X, 8,
-            "and a jump of 3,1 goes three to the right and not one down,"
-            + $" because the bigger axis wins; it is on {jumper.X}");
+            "and a jump of 3,1 moves three to the right, because the engine"
+            + $" adds xPlus outright; it is on {jumper.X}");
         AssertEq(
-            jumper.Y, 5,
-            $"and the y does not change at all; it is {jumper.Y}");
+            jumper.Y, 6,
+            "and one down as well, because it adds yPlus too and the if"
+            + $" only chose the facing; it is on {jumper.Y}");
+        AssertTrue(
+            withWall.IsPassable(8, 5, MzCharacter.Right) == false,
+            "**and (8,5) is the wall in the map this test used** -- and a"
+            + " leap of 3,1 still crossed onto (8,6), which is free, while"
+            + " the figure came from (5,5), the wall's own row. Measured"
+            + " `jump` has no canPass, no checkPassage and no event, and a"
+            + " route *step* is the one that asks.");
     }
 
     public void Test_APageIsHeldOnlyWhenTheRoutesOwnWaitFlagSaysSo()
@@ -743,5 +773,229 @@ partial class TestMzMoveRoute : TestBase
             "**and he faces the way he went**");
         AssertTrue(spieler.Route.IsHoldingThePage,
             "**and the page waits for the route** -- and the engine sets the wait mode to route only when the route says wait, and this project says wait**");
+    }
+
+
+    // **And the three route codes this game uses and the reader had no
+    // constant for are 12, 13 and 14** -- forward, backward and jump.
+    //
+    // **And measured: 96 routes, 444 steps, of which 4 are 12, 10 are 13
+    // and 31 are 14.** **And all 31 jumps are `[0, 0]`, and 383 of the
+    // 444 steps carry no `parameters` key at all** -- **so the engine
+    // reads `params[0]` as undefined, which is not a number and not an
+    // error.**
+    public void Test_DerSprungDesMotorsAddiertBeideAchsenUndNichtNurDieGroessere()
+    {
+        var map = Map.Open();
+        var fig = new MzCharacter();
+        fig.PlaceAt(5, 5);
+        fig.TurnTo(MzCharacter.Right);
+
+        // **And the measured rule at `jump`:**
+        //
+        // ```js
+        // if (Math.abs(xPlus) > Math.abs(yPlus)) {
+        //     if (xPlus !== 0) { this.setDirection(xPlus < 0 ? 4 : 6); }
+        // } else {
+        //     if (yPlus !== 0) { this.setDirection(yPlus < 0 ? 8 : 2); }
+        // }
+        // this._x += xPlus;
+        // this._y += yPlus;
+        // ```
+        //
+        // **And the `if` picks the facing and nothing else, and the
+        // position is two plain additions after it.**
+        fig.LeapBy(3, 1);
+        AssertEq(fig.X, 8,
+            "**and a leap of 3,1 moves three to the right** -- and the engine"
+            + " adds xPlus outright, whatever the if did");
+        AssertEq(fig.Y, 6,
+            "**and one down as well** -- and this is what a first draft of"
+            + " this method got wrong, by reading the if as choosing the"
+            + " axis instead of choosing the facing");
+
+        // **And a leap is not checked for passability**, and this map has
+        // no wall on (8,6) -- so this is measured against a wall too.
+        var mauer = new Map(20, 15, (8, 6));
+        var fig2 = new MzCharacter();
+        fig2.PlaceAt(5, 5);
+        fig2.TurnTo(MzCharacter.Right);
+        fig2.LeapBy(3, 1);
+        AssertEq(fig2.X, 8,
+            "**and it lands there even though that tile is a wall** --"
+            + " measured: `jump` has no canPass, no checkPassage and no"
+            + " event; the engine adds the offsets and is done");
+        AssertTrue(mauer.IsPassable(8, 6, MzCharacter.Right) == false,
+            "**and the map this test used really does block that tile**"
+            + " -- and so the leap crossed a wall, which is a jump");
+    }
+
+    public void Test_EinSprungVonNullNullBleibtStehenUndLaeuftTrotzdem()
+    {
+        var map = Map.Open();
+        var fig = new MzCharacter();
+        fig.PlaceAt(4, 6);
+        fig.TurnTo(MzCharacter.Left);
+
+        // **And all 31 of this game's jumps are `[0, 0]`, and every one of
+        // them keeps its position and its facing** -- because both offsets
+        // are 0, so both `if` branches are skipped and both additions add
+        // nothing. **And the leap still runs**: `distance` is 0, so the
+        // peak is `10 - _moveSpeed` and at the engine's default 4 the
+        // count is 12.
+        var route = new MzMoveRoute();
+        route.Force(MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":14,\"parameters\":[0,0]},"
+            + "{\"code\":0}],\"repeat\":false,\"skippable\":false,"
+            + "\"wait\":true}"));
+        route.Step(fig, map);
+
+        AssertEq(fig.X, 4,
+            "**and the figure did not move** -- and that is measured on all"
+            + " 31 of this game's jumps, which are every one of them 0,0");
+        AssertEq(fig.Y, 6,
+            "**and it did not move on the other axis either**");
+        AssertEq(fig.Direction, MzCharacter.Left,
+            "**and it kept the facing it had** -- and both `if` branches"
+            + " are skipped when the offset is 0, so setDirection is"
+            + " never reached");
+        AssertTrue(fig.IsJumping,
+            "**and the leap still runs** -- and a first draft of this"
+            + " method wrote Math.Max(1, Math.Max(|x|,|y|) * 6), which is"
+            + " one frame for 0,0, while the engine's peak of 10 minus"
+            + " the speed of 4 gives a count of 12");
+        AssertEq(fig.JumpCount, 12,
+            "**and it runs for the engine's own twelve frames** --"
+            + " (10 + 0 - 4) * 2, measured at `jump`");
+    }
+
+    public void Test_VorwaertsUndZurueckGehenInDieBlickrichtungUndNichtInDie()
+    {
+        var map = Map.Open();
+
+        // **And `moveForward` is one line:** `this.moveStraight(this.direction());`
+        var rechts = new MzCharacter();
+        rechts.PlaceAt(3, 3);
+        rechts.TurnTo(MzCharacter.Right);
+        var r1 = new MzMoveRoute();
+        r1.Force(MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":12},{\"code\":0}],\"repeat\":false,"
+            + "\"skippable\":false,\"wait\":true}"));
+        r1.Step(rechts, map);
+        AssertEq(rechts.X, 4,
+            "**and step 12 walks the way the figure faces** -- and a figure"
+            + " facing right walks right, measured at `moveForward`");
+        AssertEq(rechts.Y, 3,
+            "**and not down** -- and the direction is the figure's own"
+            + " and not a constant");
+
+        var hoch = new MzCharacter();
+        hoch.PlaceAt(3, 3);
+        hoch.TurnTo(MzCharacter.Up);
+        var r2 = new MzMoveRoute();
+        r2.Force(MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":12},{\"code\":0}],\"repeat\":false,"
+            + "\"skippable\":false,\"wait\":true}"));
+        r2.Step(hoch, map);
+        AssertEq(hoch.Y, 2,
+            "**and the same step walks up for a figure facing up** -- and"
+            + " that is the whole difference between 12 and a constant");
+
+        // **And `moveBackward` is four lines and the lock is the point:**
+        //
+        // ```js
+        // moveBackward = function() {
+        //     const lastDirectionFix = this.isDirectionFixed();
+        //     this.setDirectionFix(true);
+        //     this.moveStraight(this.reverseDir(this.direction()));
+        //     this.setDirectionFix(lastDirectionFix);
+        // };
+        // ```
+        var links = new MzCharacter();
+        links.PlaceAt(3, 3);
+        links.TurnTo(MzCharacter.Right);
+        var r3 = new MzMoveRoute();
+        r3.Force(MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":13},{\"code\":0}],\"repeat\":false,"
+            + "\"skippable\":false,\"wait\":true}"));
+        r3.Step(links, map);
+        AssertEq(links.X, 2,
+            "**and step 13 walks away from the facing** -- and a figure"
+            + " facing right walks left, measured at `moveBackward`");
+        AssertEq(links.Direction, MzCharacter.Right,
+            "**and keeps the facing it had** -- and that is what the"
+            + " direction lock is for: without it the figure would have"
+            + " turned around to walk away and stayed facing backwards");
+    }
+
+    public void Test_RoutenCode29SetztDasTempoUndNichtNurEinenSatz()
+    {
+        var map = Map.Open();
+        var fig = new MzCharacter();
+        fig.PlaceAt(3, 3);
+        fig.TurnTo(MzCharacter.Right);
+
+        AssertEq(fig.MoveSpeed, 4,
+            "**and a figure starts at the engine's own default** --"
+            + " measured: `initMembers` sets `this._moveSpeed = 4;`");
+
+        // **And measured at the engine's switch:**
+        // `case gc.ROUTE_CHANGE_SPEED: this.setMoveSpeed(params[0]); break;`
+        // **And the game uses this 26 times: 22 times 5, twice 6, twice 4.**
+        var route = new MzMoveRoute();
+        route.Force(MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":29,\"parameters\":[5]},{\"code\":0}],"
+            + "\"repeat\":false,\"skippable\":false,\"wait\":true}"));
+        var gemeldet = route.Step(fig, map);
+
+        AssertEq(fig.MoveSpeed, 5,
+            "**and route code 29 sets it** -- and a reader that only wrote"
+            + " a sentence about the number left all 26 of this game's"
+            + " speed changes unapplied, and every one of those figures"
+            + " walked at 4 while the game walked it at 5");
+        AssertTrue(gemeldet.Contains("0.125"),
+            "**and the message carries the real step size** -- and"
+            + $" 2^5/256 is 0.125 tiles a frame, and it said: {gemeldet}");
+
+        // **And the step size is not cosmetic:** it is `2^moveSpeed / 256`,
+        // so 4 and 5 differ by a factor of two and every wait measured
+        // against a walk halves with it.
+        // **And a figure only has an arrival time while it is walking**,
+        // and the engine's `updateMove` moves the *real* position toward
+        // the logical one. `MoveStraight` sets the real position one tile
+        // back, so that is the state a walk is measured from.
+        var geher = new MzCharacter();
+        geher.PlaceAt(3, 3);
+        geher.TurnTo(MzCharacter.Right);
+        geher.SetMoveSpeed(5);
+        geher.MoveStraight(MzCharacter.Right, map);
+        AssertEq(geher.X, 4,
+            "**and it has set off to the right**");
+        AssertEq(geher.FramesToArrival(), 8,
+            "**and a figure at speed 5 covers that tile in eight frames**"
+            + " -- and this is the figure's own speed being read, not a"
+            + " literal 4 in the signature");
+
+        geher.SetMoveSpeed(4);
+        AssertEq(geher.FramesToArrival(), 16,
+            "**and at the default 4 the same tile takes sixteen** -- and"
+            + " the difference is the factor of two, measured");
+
+        // **And route code 30 sets the animation rate,** and the measured
+        // game never uses it, so the default 6 is what runs.
+        AssertEq(fig.MoveFrequency, 6,
+            "**and the walk animation rate starts at the engine's own 6**"
+            + " -- measured: `initMembers` sets `this._moveFrequency = 6;`");
+        var r2 = new MzMoveRoute();
+        r2.Force(MzRouteStep.ReadFromParameter(
+            "{\"list\":[{\"code\":30,\"parameters\":[3]},{\"code\":0}],"
+            + "\"repeat\":false,\"skippable\":false,\"wait\":true}"));
+        var m2 = r2.Step(fig, map);
+        AssertEq(fig.MoveFrequency, 3,
+            "**and route code 30 sets it too** -- and the threshold it"
+            + " feeds is `30 * (5 - moveFrequency)`, so a forced custom"
+            + " route starts after 60 frames at 3");
+        AssertTrue(m2.Contains("60"),
+            $"**and the message says when the route starts** -- it said: {m2}");
     }
 }

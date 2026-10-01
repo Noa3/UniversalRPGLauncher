@@ -11914,3 +11914,142 @@ suite `All 2206 tests passed`, `bash scripts/validate.sh` exit 0 with
 
 **And MZ JavaScript is still not executed.** `Hinweise` names the first line
 and the line count of every block it skipped, and `eval` is never reached.
+
+
+## Route codes 12, 13 and 14 existed in the reader but not in the table,
+## and a leap moved one axis where the engine moves two
+
+**The signal was not a failing test.** The suite was green at
+`All 2206 tests passed`, and this card was found by re-measuring the
+executable inventory instead of trusting the old number.
+
+**Measured on the real game: 96 routes, 444 steps, of which 4 are `12`
+(MoveForward), 10 are `13` (MoveBackward) and 31 are `14` (Jump).** The
+route reader had cases for all three -- `case MoveForward:`, `case
+MoveBackward:` and `case Jump:` were all present in `MzMoveRoute.cs` at
+`HEAD` -- **but `MzRouteCode.cs` had no constant for any of them**, so
+the names resolved to nothing the switch could match and the three codes
+fell through.
+
+**And `MzRouteCode.cs` did have the three names.** This is the part worth
+writing down: **the reader was not missing the behaviour, it was missing
+the numbering.** Measured at the engine:
+
+```js
+Game_Character.ROUTE_MOVE_FORWARD = 12;
+Game_Character.ROUTE_MOVE_BACKWARD = 13;
+Game_Character.ROUTE_JUMP = 14;
+```
+
+**And the three engine bodies, which are three different rules:**
+
+```js
+moveForward = function() { this.moveStraight(this.direction()); };
+
+moveBackward = function() {
+    const lastDirectionFix = this.isDirectionFixed();
+    this.setDirectionFix(true);
+    this.moveStraight(this.reverseDir(this.direction()));
+    this.setDirectionFix(lastDirectionFix);
+};
+```
+
+`13` forces the direction lock on for the step and restores it after --
+**so the figure walks away and keeps facing where it was**, which is the
+whole difference from `12`.
+
+**And `14` is not a step at all.** Measured at `jump`:
+
+```js
+if (Math.abs(xPlus) > Math.abs(yPlus)) {
+    if (xPlus !== 0) { this.setDirection(xPlus < 0 ? 4 : 6); }
+} else {
+    if (yPlus !== 0) { this.setDirection(yPlus < 0 ? 8 : 2); }
+}
+this._x += xPlus;
+this._y += yPlus;
+const distance = Math.round(Math.sqrt(xPlus * xPlus + yPlus * yPlus));
+this._jumpPeak = 10 + distance - this._moveSpeed;
+this._jumpCount = this._jumpPeak * 2;
+this.resetStopCount();
+this.straighten();
+```
+
+**The `if` chooses the facing and nothing else -- it is inside the
+direction block, and the position is two plain additions after it.** This
+repository's `LeapBy` read the `if` as an axis choice and added only the
+larger axis, so a leap of 3,1 landed three right and **nowhere down**,
+on the wrong tile. Its own comment said so and called it the rule:
+
+> "Only the bigger axis moves, and this is the rule."
+
+**It was the reader's rule, and a test asserted it** --
+`Test_ABackwardStepTurnsTheCharacterAndPutsTheFacingBackAndAJumpGoesOverAWall`
+said *"a jump of 3,1 goes three to the right and not one down, because
+the bigger axis wins"*. A test that encodes a misreading is worse than no
+test, because the next reader takes it as measured. Both are corrected
+now, against `jump`.
+
+**And a leap is not checked for passability.** The engine adds the offsets
+outright -- no `canPass`, no `checkPassage`, no event. This reader called
+`CanPass` and refused, so it refused exactly the leaps the game makes. A
+route *step* goes through `moveStraight` and is checked; a leap is not.
+
+**And all 31 leaps of the measured game are `[0, 0]`,** so the distance is
+0, the peak is `10 - _moveSpeed` and at the default 4 the count is 12 --
+**and the leap still runs and keeps its facing**, because both offsets are
+0 and both `if` branches are skipped. A first draft wrote
+`Math.Max(1, Math.Max(|x|,|y|) * 6)`, which is one frame for `[0, 0]`.
+
+**And `IsJumping` was a stored flag, and the engine has no flag.**
+Measured: `isJumping = function() { return this._jumpCount > 0; }` -- a
+derived question, and `jump` writes `_jumpCount` and nothing else. This
+reader had `public bool IsJumping { get; private set; }` set only at the
+end of `PassFrame`, **so a figure that had just leapt was not `IsJumping`
+until the frame after, and a `[0, 0]` leap -- all 31 of them -- never
+reported as running at all.** It is now `=> _jumpFrames > 0` and the flag
+is gone.
+
+**And route code 29 was a sentence, not a state change.** Measured at the
+engine's switch: `case gc.ROUTE_CHANGE_SPEED: this.setMoveSpeed(params[0]);
+break;`. **The measured game uses `29` twenty-six times and writes a real
+number: 22 times `5`, twice `6`, twice `4`.** This reader only wrote a
+message and kept no field, so **every one of those figures walked at the
+default 4 while the game walked them at 5** -- and a step is
+`2^moveSpeed / 256` tiles per frame, **so the same route took twice as
+long and every wait measured against it doubled.**
+
+**And `FramesToArrival` had a literal `4` in its signature,** so it read
+the default rather than the figure's own speed. It now reads
+`MoveSpeed`, defaulting to the engine's 4 only when asked.
+
+**And one number was formatted in the machine's culture.** The step size
+`2^5/256` came out as `0,125` on this host, because an interpolated
+double follows the current culture. **It is now written with
+`CultureInfo.InvariantCulture`**, which is the number the engine uses.
+
+**And route code 30 sets the animation rate,** `setMoveFrequency(params[0])`,
+default 6, feeding the threshold `30 * (5 - moveFrequency)`. **The measured
+game uses code 30 zero times**, so the default is what runs and the branch
+is here for routes that do.
+
+### And the executable inventory, re-measured on this game's own data
+
+```
+Befehle abgedeckt:    2376 / 2432
+Routenschritte:        444 / 444
+```
+
+**The remaining 56 are not gaps.** `402` (16) and `405` (36) are
+continuation lines that their parents consume -- `command102` builds its
+branch table out of the `402`s and jumps straight into the chosen one, and
+`command105` reads its `405`s in `while (this.nextEventCode() === 405)
+{ this._index++; ... }` -- **and neither has a `command402`/`command405`
+method except `402`, which the engine does have and which this reader
+handles as part of the `102` block.** `412` (4) is the end marker of a
+branch. `command405` and `command412` do not exist in the engine at all,
+measured by their absence in `rmmz_objects.js`.
+
+**Evidence:** `TestMzMoveRoute: 15/15`, full suite
+`All 2210 tests passed`, `bash scripts/validate.sh` exit 0 with
+`UniversalRPG validation passed.`

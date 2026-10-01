@@ -331,16 +331,52 @@ public sealed class MzMoveRoute
                     + " reader has no renderer to show it";
 
             case ChangeSpeed:
-                // **The parameter is a number the game wrote, and this reader
-                // keeps it.** Speed means "how many tiles per frame" and
-                // `distancePerFrame` reads it, so a reader that stored the
-                // value without a renderer is still honest: the number is
-                // there and nothing is guessed.
-                return pStep.Parameters.Count > 0
-                    ? $"the character's speed is set to {pStep.Parameters[0]},"
-                        + " which this reader keeps as the number the game wrote"
-                    : "the route asks for a speed and writes none, so none is"
-                        + " set";
+                // **And this sets the speed, and it did not before.**
+                //
+                // Measured at the engine's own switch:
+                // `case gc.ROUTE_CHANGE_SPEED: this.setMoveSpeed(params[0]);
+                // break;` and `setMoveSpeed = function(moveSpeed) {
+                // this._moveSpeed = moveSpeed; };`
+                //
+                // **And the measured game uses this 26 times and writes a
+                // real number: 22 times 5, twice 6, twice 4.** **And a
+                // reader that only wrote a sentence left every one of those
+                // figures at the default 4**, **so a route that the game
+                // walks at 5 was walked at 4** -- and a step is
+                // `2^moveSpeed / 256` tiles per frame, **so the same route
+                // took twice as long here.**
+                var speed = Number(pStep, 0);
+                pCharacter.SetMoveSpeed(speed);
+                // **Und die Zahl steht mit Punkt, und nicht mit Komma.**
+                //
+                // **Und das ist gemessen: `distancePerFrame` ist
+                // `Math.pow(2, this.moveSpeed()) / 256`, und eine
+                // Interpolation formatiert nach der aktuellen Kultur** --
+                // **und auf dieser Maschine ist das Deutsch, also
+                // `0,125`, und ein Test, der `0.125` sucht, findet es
+                // nie.** **Invariant ist die Zahl, die der Motor
+                // benutzt.**
+                var proFrame = Math.Pow(2, speed) / 256.0;
+                return $"the character's speed is set to {speed}, which is"
+                    + $" {proFrame.ToString("F3", CultureInfo.InvariantCulture)}"
+                    + " tiles per frame"
+                    + (speed == 4 ? ", and that is the engine's own default"
+                        : ", and that is not the engine's default of 4");
+
+            case ChangeFrequency:
+                // **And the same shape:** `case gc.ROUTE_CHANGE_FREQ:
+                // this.setMoveFrequency(params[0]); break;` and
+                // `initMembers` sets `this._moveFrequency = 6;`.
+                //
+                // **And the measured game uses code 30 zero times**, **so
+                // this branch never runs on this data** -- **and the
+                // threshold it feeds, `30 * (5 - moveFrequency)`, is what
+                // decides when a forced custom route starts.**
+                var freq = Number(pStep, 0);
+                pCharacter.SetMoveFrequency(freq);
+                return $"the character's walk animation repeats every {freq}"
+                    + $" frames, and a forced custom route then starts after"
+                    + $" {30 * (5 - freq)} frames";
 
             case StepAnimeOn:
             case StepAnimeOff:
@@ -385,15 +421,39 @@ public sealed class MzMoveRoute
         var yPlus = Number(pStep, 1);
         var horizontal = Math.Abs(xPlus) > Math.Abs(yPlus);
 
+        // **Und ein Sprung fragt nicht, ob er erlaubt ist.**
+        //
+        // **Und das ist gemessen an `jump`:** `this._x += xPlus; this._y +=
+        // yPlus;` — **und kein `canPass` davor**, **und kein `checkPassage`,
+        // und kein Ereignis.** **Ein Schritt geht durch `moveStraight`,
+        // und der fragt; ein Sprung tut es nicht.**
+        //
+        // **Und die gemessene Regelung setzt die Richtung, und nur wenn
+        // der groessere Versatz nicht 0 ist:**
+        //
+        // ```js
+        // if (Math.abs(xPlus) > Math.abs(yPlus)) {
+        //     if (xPlus !== 0) { this.setDirection(xPlus < 0 ? 4 : 6); }
+        // } else {
+        //     if (yPlus !== 0) { this.setDirection(yPlus < 0 ? 8 : 2); }
+        // }
+        // ```
+        //
+        // **Und bei `[0, 0]` — und alle 31 Spruenge des gemessenen Spiels
+        // sind `[0, 0]` — bleibt die Richtung, weil beide `if`-Zweige
+        // uebersprungen werden.** **Und die Position bleibt, weil beide
+        // Versaetze 0 sind**, **und die Entfernung 0 ist, also ist der
+        /// Scheitel `10 - _moveSpeed` und der Sprung laeuft trotzdem.**
+        //
+        // **Und eine Pruefung, die der Motor nicht macht, verweigert genau
+        // die Spruenge, die das Spiel wirklich macht.**
         var dir = horizontal
             ? (xPlus < 0 ? MzCharacter.Left : MzCharacter.Right)
             : (yPlus < 0 ? MzCharacter.Up : MzCharacter.Down);
 
-        if (!pCharacter.CanPass(pCharacter.X, pCharacter.Y, dir, pMap))
+        if (xPlus != 0 || yPlus != 0)
         {
-            return $"a jump of {xPlus},{yPlus} is refused, because the step in"
-                + $" direction {dir} is not allowed, and the character stays on"
-                + $" {pCharacter.X},{pCharacter.Y}";
+            pCharacter.TurnTo(dir);
         }
 
         // **`this._x += xPlus; this._y += yPlus;`** — the whole leap, and the

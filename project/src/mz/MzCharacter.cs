@@ -378,9 +378,88 @@ public sealed class MzCharacter
     /// position matches and it would otherwise look arrived; <b>the jump
     /// count is what keeps the next step from being issued early</b>.
     /// </remarks>
-    public bool IsJumping { get; private set; }
+    /// <summary>Whether a leap is still being drawn, as the engine asks.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a derived question, and it was a stored flag,
+    /// and a stored flag is a second truth.</strong> Measured at
+    /// <c>isJumping</c>: <c>return this._jumpCount &gt; 0;</c> -- <strong>and
+    /// there is no setter, and <c>jump</c> writes <c>_jumpCount</c> and
+    /// nothing else.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the flag was only ever updated inside <c>Tick</c>
+    /// </strong>, <strong>so a figure that had just leapt was not
+    /// <c>IsJumping</c> until the frame after the leap</strong>, <strong>and
+    /// a leap of <c>[0, 0]</c> -- <strong>which is all 31 leaps of this
+    /// game</strong> -- never reported as running at all.</strong>
+    /// </para>
+    /// </remarks>
+    public bool IsJumping => _jumpFrames > 0;
 
     /// <summary>How many frames a jump still has, as <c>_jumpCount</c>.</summary>
+    /// <summary>How fast this figure walks, 1 to 6.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>_moveSpeed</c>, and the engine's default is
+    /// <strong>4</strong>:</strong> <c>initMembers</c> sets
+    /// <c>this._moveSpeed = 4;</c> <strong>and route code 29 calls
+    /// <c>this.setMoveSpeed(params[0])</c>, which is a plain assignment.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the measured game uses route code 29 twenty-six times
+    /// and writes a real number into it: 22 times <c>5</c>, twice <c>6</c>,
+    /// twice <c>4</c>.</strong> <strong>And the reader had no field for
+    /// it at all and only wrote a sentence about it</strong>, <strong>so
+    /// every one of those twenty-six steps left the figure walking at 4
+    /// while the game had it walking at 5.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is not cosmetic.</strong> A step takes
+    /// <c>2^moveSpeed / 256</c> tiles per frame, so 4 and 5 differ by a
+    /// factor of two -- <strong>the same route reaches a tile at half the
+    /// time, and every wait measured against it halves with it.</strong>
+    /// </para>
+    /// </remarks>
+    public int MoveSpeed { get; private set; } = 4;
+
+    /// <summary>How often this figure repeats its walking animation, 1 to 3.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>_moveFrequency</c>, and the engine's default
+    /// is <strong>6</strong>:</strong> <c>initMembers</c> sets
+    /// <c>this._moveFrequency = 6;</c> <strong>and route code 30 calls
+    /// <c>this.setMoveFrequency(params[0])</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the custom-route start threshold is
+    /// <c>30 * (5 - moveFrequency)</c></strong>, <strong>so at the default
+    /// 6 a page's route does not begin until 30 * (5 - 6) frames</strong>
+    /// -- <strong>which is negative, and so a route that is forced starts
+    /// on the first frame</strong>, <strong>and a route that is not forced
+    /// waits the walk clock out.</strong> <strong>The measured game uses
+    /// code 30 zero times</strong>, <strong>so the default is what runs.</strong>
+    /// </para>
+    /// </remarks>
+    public int MoveFrequency { get; private set; } = 6;
+
+    /// <summary>Sets the walking speed, as route code 29 does.</summary>
+    /// <remarks>
+    /// **And the engine does not range-check this**
+    /// (<c>this._moveSpeed = moveSpeed;</c>), **so a game that wrote a
+    /// number outside 1 to 6 gets it stored as it is**, **and a reader
+    /// that clamps would walk differently from the game.</strong>
+    /// </remarks>
+    public void SetMoveSpeed(int pSpeed) => MoveSpeed = pSpeed;
+
+    /// <summary>Sets the walk animation rate, as route code 30 does.</summary>
+    /// <remarks>
+    /// **And the engine does not range-check this either**, **and the
+    /// measured game never writes it, so this is here for the routes that
+    /// do rather than guessed at.</strong>
+    /// </remarks>
+    public void SetMoveFrequency(int pFrequency) => MoveFrequency = pFrequency;
+
     public int JumpCount => IsJumping ? _jumpFrames : 0;
 
     private int _jumpFrames;
@@ -611,12 +690,17 @@ public sealed class MzCharacter
         // **A jump runs on its own frames, not on the walking speed.**
         // `updateJump` counts `_jumpCount` down and moves the drawing
         // position over the leap; the walking code is not involved.
+        // **Und die zweite Wahrheit ist weg.** Measured at
+        // `updateJump`: `this._jumpCount--;` and nothing else, and
+        // `isJumping` asks `_jumpCount > 0` where it is asked.
+        // **A figure that leapt on this frame is therefore mid-leap
+        // on the same frame**, which a flag set at the end of
+        // `PassFrame` could not be.
         if (_jumpFrames > 0)
         {
             _jumpFrames--;
             return;
         }
-        IsJumping = _jumpFrames > 0;
 
         if (Waiting)
         {
@@ -660,9 +744,20 @@ public sealed class MzCharacter
 
     /// <summary>How many frames until the character has arrived, and the
     /// route is done with this step.</summary>
-    public int FramesToArrival(int pSpeed = 4)
+    public int FramesToArrival(int pSpeed = -1)
     {
-        var step = Math.Pow(2, pSpeed) / 256.0;
+        // **And the speed is this figure's own, and not a literal.**
+        //
+        // **Measured at the engine:** `getRealMoveSpeed() { return this._moveSpeed
+        // + (this.isPlayer() ? 1 : 0); }` and the step size is
+        // `Math.pow(2, this.moveSpeed()) / 256` in `updatePosition`. **And
+        // `_moveSpeed` starts at 4 and route code 29 overwrites it.**
+        //
+        // **And a default of 4 in the signature was the reader's own**
+        // -- **and a figure the game had set to 5 waited twice as long as
+        // it should, because nobody passed the speed in.**
+        var speed = pSpeed < 0 ? MoveSpeed : pSpeed;
+        var step = Math.Pow(2, speed) / 256.0;
         var dx = Math.Abs(X - RealX);
         var dy = Math.Abs(Y - RealY);
         return (int)Math.Ceiling(Math.Max(dx, dy) / step);
@@ -711,25 +806,49 @@ public sealed class MzCharacter
     /// </remarks>
     public void LeapBy(int pXPlus, int pYPlus)
     {
-        // **Only the bigger axis moves, and this is the rule.** `jump` is
-        //   if (Math.abs(xPlus) > Math.abs(yPlus)) { … } else { … }
-        // — a first draft added both, and a jump of 3,1 moved the character
-        // three right **and one down**, into a tile the engine never enters.
-        // A jump is a straight leap, and the smaller number is ignored.
-        if (Math.Abs(pXPlus) > Math.Abs(pYPlus))
-        {
-            X += pXPlus;
-        }
-        else
-        {
-            Y += pYPlus;
-        }
-        // **A jump is a count, not a position.** `_jumpCount` is set to the
-        // number of frames the leap is drawn over, and `isJumping` asks
-        // whether it is still above zero — so a character that has landed on
-        // its tile is still mid-jump for those frames, and the next step
-        // waits.
-        _jumpFrames = Math.Max(1, Math.Max(Math.Abs(pXPlus), Math.Abs(pYPlus)) * 6);
+        // **And both axes move, and this is the rule, and a first draft of
+        // this method got it wrong in the most expensive direction.**
+        //
+        // Measured at `jump` in the game's js/rmmz_objects.js:
+        //
+        // ```js
+        // if (Math.abs(xPlus) > Math.abs(yPlus)) {
+        //     if (xPlus !== 0) { this.setDirection(xPlus < 0 ? 4 : 6); }
+        // } else {
+        //     if (yPlus !== 0) { this.setDirection(yPlus < 0 ? 8 : 2); }
+        // }
+        // this._x += xPlus;
+        // this._y += yPlus;
+        // ```
+        //
+        // **And the `if`/`else` chooses the facing and nothing else** -- it
+        // is inside the direction block, and the position is two plain
+        // additions after it. **A jump of 3,1 therefore lands three right
+        // AND one down**, which is a diagonal tile and not a mistake, and a
+        // reader that believed the `if` chose the axis landed the figure
+        // three right and nowhere else, on the wrong tile.
+        //
+        // **And a jump is not checked for passability.** The engine adds
+        // the offsets outright; there is no `canPass`, no `checkPassage` and
+        // no event. A route step goes through `moveStraight` and is
+        // checked; a jump is not.
+        X += pXPlus;
+        Y += pYPlus;
+
+        // **And the leap's height comes from the diagonal, not from the
+        // bigger axis:** `const distance = Math.round(Math.sqrt(xPlus *
+        // xPlus + yPlus * yPlus)); this._jumpPeak = 10 + distance -
+        // this._moveSpeed; this._jumpCount = this._jumpPeak * 2;`
+        //
+        // **And every one of the measured game's 31 jumps is `[0, 0]`**,
+        // so the distance is 0, the peak is `10 - _moveSpeed` and at the
+        // default speed of 4 the count is 12 -- **and the jump still runs.**
+        // A first draft wrote `Math.Max(1, Math.Max(|x|,|y|) * 6)`, which
+        // is 1 frame for `[0, 0]`, and a leap the engine draws over 12
+        // frames was over in one.
+        var distance = (int)Math.Round(Math.Sqrt(
+            (pXPlus * pXPlus) + (pYPlus * pYPlus)));
+        _jumpFrames = Math.Max(1, (10 + distance - MoveSpeed) * 2);
     }
 
     /// <summary>
