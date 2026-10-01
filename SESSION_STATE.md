@@ -12424,3 +12424,62 @@ is reached and not in the arm.
 
 **Evidence:** `TestRubyParser: 2/56 failed`, **full suite `4/2213`, and
 every one of the 2213 that existed before is green.**
+
+
+## A string and the next token are two strings only on one line, and that was it
+
+**One line of `parse.y`, and it ended six rounds of chasing.**
+
+```c
+string  : string1
+        | string string1
+        {
+            $$ = literal_concat($1, $2);
+        }
+string1 : tSTRING_BEG string_contents tSTRING_END
+```
+
+**And no `tNL` stands between the two `string1`.** **And the lexer
+creates no `tNL` exactly when the first string ends with a backslash** --
+**and that is the only case in which two strings stand on one line.**
+
+**And a reader that calls `SkipNewlines` there looks at the next line** --
+**and in `v3` that was a `while`, and the arm ended at its `end`, and the
+`case`'s own `end` was left standing:**
+
+```
+'end' at offset 68 does not begin an expression
+```
+
+### And the three files that isolated it, and what each one ruled out
+
+**Measured, not guessed, by cutting one thing at a time:**
+
+```
+v1  while as the first statement                       green
+v2  one statement, then while                          green
+v3  retval << "q", then while                          RED
+v4  retval << "\n", no while                           green
+v5  retval << q, then while                            green
+v6  retval = 1, then while                             green
+v7  retval alone, then while                           green
+v8  retval << "q", then while                          RED
+v9  retval << 1, then while                            green
+v10 "q" << 1, then while                               green
+```
+
+**So `v8` against `v9` is one line**: **a string as the right operand of
+`<<`, and not a string.** **And `v5` against `v8` is the same.** **And a
+string on the left (`v10`) is fine, because there the string is read by a
+different path.**
+
+### And mdoc2man.rb parses
+
+**And that file is 465 lines of Ruby 1.8.1's own mdoc man page writer,
+with ten `when` arms, a `while`, a multi-line `&&`, a regexp at the
+start of a line, `break` and `next` in the arms, and three `case`s
+nested inside other blocks.**
+
+**Evidence:** the shape list is twenty-one of twenty-two green,
+`TestRubyParser: 1/56 failed`, **full suite `4/2213`**, **and three of the
+four real scripts parse, where four did not fail and now three do.**

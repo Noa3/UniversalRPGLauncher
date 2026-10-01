@@ -1975,7 +1975,40 @@ public sealed class RubyParser
             case RubyTokenKind.String:
             {
                 _index++;
-                SkipNewlines();
+                // **Und zwischen zwei Stringliteralen steht kein `tNL`,
+                // und das ist gemessen.**
+                //
+                // Ruby 1.8.1's own `parse.y`:
+                //
+                // ```c
+                // string  : string1
+                //         | string string1
+                //         {
+                //             $$ = literal_concat($1, $2);
+                //         }
+                // string1 : tSTRING_BEG string_contents tSTRING_END
+                // ```
+                //
+                // **Und kein `tNL` steht zwischen den beiden `string1`.**
+                // **Und der Lexer erzeugt genau dann keinen, wenn der erste
+                // String mit einem Backslash endet** -- **und das ist der
+                // einzige Fall, in dem zwei Strings in einer Zeile stehen.**
+                //
+                // **Und ein Leser, der hier `SkipNewlines` macht, sieht
+                // danach die naechste Zeile** -- **und in `v3` war das ein
+                // `while`, und der Zweig endete an dessen `end`, und das
+                // `end` des `case` blieb stehen:**
+                //
+                // ```
+                // 'end' at offset 68 does not begin an expression
+                // ```
+                //
+                // **Und derselbe Fehler kam bei `v8` mit `<< "q"` und bei
+                // `y6` aus `mdoc2man.rb`, und `v9` mit `<< 1` war gruen**
+                // **-- weil es dort keinen String gab.** **Und die while
+                // in der Schleife bleibt, denn dort ist `Current` der
+                // String direkt, weil der Lexer keinen Newline-Token
+                // erzeugt hat.**
                 // Two adjacent string literals are one string in Ruby, and a game
                 // relies on that to split a long line without a backslash.
                 var parts = new List<RubyStringPart>(token.Parts);
