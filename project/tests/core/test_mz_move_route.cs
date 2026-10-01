@@ -238,20 +238,44 @@ partial class TestMzMoveRoute : TestBase
             character.X, 6,
             $"and the character has not moved twice; it is on {character.X}");
 
-        // **Five steps, five frames.**
-        for (var frame = 0; frame < 5; frame++)
+        // **Und die Figur braucht fuer eine Kachel sechzehn Bilder,
+        // und nicht eines.** **Das ist die Engine, und nicht ein
+        // Fehler dieses Lesers:** **`distancePerFrame` ist
+        // `2^realMoveSpeed / 256`, und bei Tempo 4 ist das ein
+        // Sechzehntel.**
+        //
+        // **Und eine erste Fassung dieses Tests nahm an, ein Schritt
+        // brauche ein Bild, und `PassFrame` ging dann wirklich eine
+        // ganze Kachel je Bild** -- **das heisst: die Figur sprang,
+        // und der Test beschrieb genau diesen Sprung als Erfolg.**
+        // **Wer die ganze Kachel nimmt, sieht zwei Spruenge; wer die
+        // Bruchzahl nimmt, sieht einen Lauf.**
+        //
+        // **Und die Reihe ist schneller, als sie aussieht: Tempo 1
+        // braucht 128 Bilder je Kachel und Tempo 6 nur 4** -- **und
+        // das ist der Unterschied zwischen einem langsam gehenden
+        // und einem gehenden Menschen.**
+        var bilderJeKachel = 256 / (1 << 4);   // also sechzehn
+        var schritte = 5;
+        var bilder = bilderJeKachel * schritte;
+        for (var frame = 0; frame < bilder; frame++)
         {
             character.PassFrame();
             character.Route.Step(character, map);
         }
+
         AssertEq(
             character.X, 10,
-            "and after five steps the character has walked five tiles to the"
-            + $" right, one per frame, and not five in one; it is on {character.X}");
+            "and after eighty frames the character has walked five"
+                + " tiles to the right, one step per arrived tile and"
+                + " never five in one call; it is on " + character.X
+                + $" and drawn at {character.RealX}");
         AssertEq(
             character.Route.IsDone, true,
-            $"and the route is done, having spent its steps; it is"
-            + $" {character.Route.IsDone}");
+            "and the route is done, having spent its steps; it is "
+                + character.Route.IsDone
+                + $" and {character.FramesToArrival()} frames remain");
+
     }
 
     public void Test_AnEventTurnsEvenWhenTheStepIsRefusedAndAThroughOneWalksOverAWall()

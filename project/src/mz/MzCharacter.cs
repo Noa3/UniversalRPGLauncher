@@ -72,6 +72,19 @@ public sealed class MzCharacter
     /// about.</summary>
     public int X { get; private set; }
 
+    /// <summary>Which figure of its sheet this is.</summary>
+    /// <remarks>
+    /// <strong>And this belongs to the figure, and not to the
+    /// page.</strong> Measured:
+    /// <c>Game_CharacterBase.prototype.setImage</c> sets
+    /// <c>_tileId</c>, <c>_characterName</c> and <c>_characterIndex</c> on
+    /// the character itself — <strong>so every figure has one, the
+    /// player's included</strong>, <strong>and a page that changes a
+    /// figure's picture changes it here and nowhere else.</strong>
+    /// </remarks>
+    public int CharacterIndex { get; private set; }
+
+
     public int Y { get; private set; }
 
     /// <summary>Where the character is drawn, part-way across a tile.</summary>
@@ -593,9 +606,22 @@ public sealed class MzCharacter
             return;
         }
 
-        // **One tile per frame, or two above speed four.** The engine's
-        // `distancePerFrame` is `1 + (realMoveSpeed() > 4 ? 1 : 0)`.
-        var step = pSpeed > 4 ? 2 : 1;
+        // **Und der Schritt ist eine Bruchzahl, und nicht eine ganze
+        // Kachel.** **Gemessen an
+        // `Game_CharacterBase.prototype.updateMove`:**
+        // **`_realX = Math.min(_realX + distancePerFrame(), _x)`,
+        // und `distancePerFrame` ist `2^realMoveSpeed / 256`.**
+        //
+        // **Bei Tempo 4 ist das ein Viertel einer Kachel je Bild, bei
+        // Tempo 5 ein Achttel und bei Tempo 6 ein Sechzehntel.**
+        //
+        // **Und diese Datei hatte hier zwei ganze Kacheln, je nachdem ob
+        // Tempo 4 ueberschritten war oder nicht** -- **das heisst: der
+        // Sprung von Tempo 4 auf 5 liess die Figur doppelt so schnell
+        // gehen, und beide Geschwindigkeiten waren falsch.** **Ein
+        // Leser, der die Bruchzahl nimmt, sieht einen Lauf;
+        // einer, der ganze Kacheln nimmt, sieht zwei Spruenge.**
+        var step = Math.Pow(2, pSpeed) / 256.0;
 
         if (X < RealX)
         {
@@ -619,13 +645,41 @@ public sealed class MzCharacter
     /// route is done with this step.</summary>
     public int FramesToArrival(int pSpeed = 4)
     {
-        var step = pSpeed > 4 ? 2.0 : 1.0;
+        var step = Math.Pow(2, pSpeed) / 256.0;
         var dx = Math.Abs(X - RealX);
         var dy = Math.Abs(Y - RealY);
         return (int)Math.Ceiling(Math.Max(dx, dy) / step);
     }
 
     /// <summary>Turns without moving, as the four <c>ROUTE_TURN_*</c> do.</summary>
+    /// <summary>
+    /// Puts this figure's own picture on it.
+    /// </summary>
+    /// <param name="pName">Which sheet.</param>
+    /// <param name="pIndex">Which figure of that sheet.</param>
+    /// <remarks>
+    /// <strong>And this is the engine's <c>setImage</c>, and it sets
+    /// three things</strong> — <strong>the tile id, the name and the
+    /// index</strong> — <strong>and a reader that set only the name drew
+    /// figure zero forever.</strong>
+    /// </remarks>
+    /// <summary>Which sheet this figure is drawn from.</summary>
+    /// <remarks>
+    /// <strong>And a figure with a sheet but no index is always the
+    /// first one.</strong> <strong>Measured:
+    /// <c>Game_Player.prototype.refresh</c> calls
+    /// <c>setImage(actor.characterName(), actor.characterIndex())</c>
+    /// with both</strong>, <strong>and a reader that kept only the name
+    /// drew every actor as actor one.</strong>
+    /// </remarks>
+    public string CharacterName { get; private set; } = "";
+
+    public void SetImage(string pName, int pIndex)
+    {
+        CharacterName = pName;
+        CharacterIndex = pIndex < 0 ? 0 : pIndex;
+    }
+
     public void TurnTo(int pDir) => Direction = pDir;
 
     /// <summary>

@@ -154,6 +154,52 @@ public sealed class MzCharacterRenderer
     /// rows of two</strong>.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Draws a figure where it is between two tiles.
+    /// </summary>
+    /// <param name="pSheet">Its sheet.</param>
+    /// <param name="pFigur">The figure, whose drawing position is
+    /// between tiles while it walks.</param>
+    /// <param name="pStep">Which step column.</param>
+    /// <param name="pPixelBreite">How wide one tile is in pixels.</param>
+    /// <param name="pPixelHoehe">How tall one tile is in pixels.</param>
+    /// <param name="pPixels">The painted map.</param>
+    /// <returns>Whether it drew.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a figure between two tiles is drawn between two
+    /// tiles.</strong> Measured: the engine keeps <c>_x</c>/<c>_y</c> for
+    /// the tile and <c>_realX</c>/<c>_realY</c> for where it is drawn, and
+    /// <c>_realX</c> starts one tile behind and closes the gap at
+    /// <c>2^realMoveSpeed / 256</c> a frame.
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that drew only the tile saw a figure
+    /// teleport.</strong> <strong>A walk that is only its two end
+    /// positions is not a walk</strong> — <strong>it is two pictures with
+    /// nothing between them.</strong>
+    /// </para>
+    /// </remarks>
+    public static bool Draw(
+        MzCharacterSheet pSheet,
+        MzCharacter? pFigur,
+        int pStep,
+        int pPixelBreite,
+        int pPixelHoehe,
+        Rm2kPixelBuffer pPixels)
+    {
+        if (pSheet == null || pFigur == null)
+        {
+            return false;
+        }
+
+        return DrawAt(
+            pSheet, pFigur.CharacterIndex, pFigur.Direction, pStep,
+            pFigur.RealX * pPixelBreite,
+            pFigur.RealY * pPixelHoehe,
+            pPixels);
+    }
+
     public static bool Draw(
         MzCharacterSheet pSheet,
         int pIndex,
@@ -191,9 +237,70 @@ public sealed class MzCharacterRenderer
         var spalteRichtung = richtungsReihe;
         var schritt = Math.Min(pStep, StepsPerDirection - 1);
 
-        var x0 = (spalte * DirectionsPerSheet + spalteRichtung)
-            * FigurePixels + schritt * FigurePixels;
-        var y0 = zeileRichtung * FigureHeight;
+        return DrawAtPixels(
+            pSheet, spalte, x0: (spalte * DirectionsPerSheet + spalteRichtung)
+                * FigurePixels + schritt * FigurePixels,
+            y0: zeileRichtung * FigureHeight,
+            zielX: (pTileX * MzMapRenderer.TilePixels - (MzMapRenderer.TilePixels
+                - FigurePixels) / 2),
+            zielY: (pTileY * MzMapRenderer.TilePixels
+                + (MzMapRenderer.TilePixels - FigureHeight)),
+            pPixels: pPixels);
+    }
+
+    /// <summary>
+    /// Draws one figure at a pixel position, and not at a tile.
+    /// </summary>
+    /// <param name="pSheet">Its sheet.</param>
+    /// <param name="pIndex">Which figure in the sheet.</param>
+    /// <param name="pDirection">Which way it faces.</param>
+    /// <param name="pStep">Which step column.</param>
+    /// <param name="pX">Where its left edge is, in pixels.</param>
+    /// <param name="pY">Where its feet are, in pixels.</param>
+    /// <param name="pPixels">The painted map.</param>
+    /// <returns>Whether it drew.</returns>
+    /// <remarks>
+    /// <strong>And this is the one that can put a figure between two
+    /// tiles</strong>, <strong>because it takes pixels and not
+    /// tiles</strong>. <strong>And the figure is still centred on its
+    /// cell</strong> — <strong>144 wide on a 48-pixel tile is three
+    /// tiles, and the engine centres it, and a figure pinned to the left
+    /// edge of its cell looks wrong in every frame of every walk.</strong>
+    /// </remarks>
+    public static bool DrawAt(
+        MzCharacterSheet pSheet,
+        int pIndex,
+        int pDirection,
+        int pStep,
+        double pX,
+        double pY,
+        Rm2kPixelBuffer pPixels)
+    {
+        if (pSheet == null)
+        {
+            return false;
+        }
+
+        if (!Cell(pDirection, pStep, out var richtungsReihe, out var spalte))
+        {
+            return false;
+        }
+
+        var schritt = Math.Min(pStep, StepsPerDirection - 1);
+        return DrawAtPixels(
+            pSheet, spalte,
+            x0: (spalte * DirectionsPerSheet + richtungsReihe) * FigurePixels
+                + schritt * FigurePixels,
+            y0: richtungsReihe * FigureHeight,
+            zielX: (int)(pX - (MzMapRenderer.TilePixels - FigurePixels) / 2),
+            zielY: (int)(pY + (MzMapRenderer.TilePixels - FigureHeight)),
+            pPixels: pPixels);
+    }
+
+    private static bool DrawAtPixels(
+        MzCharacterSheet pSheet, int spalte, int x0, int y0,
+        int zielX, int zielY, Rm2kPixelBuffer pPixels)
+    {
 
         // **Und die Vier Richtungen liegen nebeneinander, und nicht
         // uebereinander** -- **die Spalten 0 bis 3 sind unten, links,
@@ -201,11 +308,6 @@ public sealed class MzCharacterRenderer
         // dieses Blatt gar nicht fuehrt, denn es hat nur eine Reihe.**
         // **Und die Figur steht mittig auf ihrer Kachel** -- **sie ist
         // drei Kacheln breit und die Kachel ist 48 Pixel.**
-        var versatzX = (MzMapRenderer.TilePixels - FigurePixels) / 2;
-        var zielX = pTileX * MzMapRenderer.TilePixels - versatzX;
-        var zielY = pTileY * MzMapRenderer.TilePixels
-            + (MzMapRenderer.TilePixels - FigureHeight);
-
         for (var dy = 0; dy < FigureHeight; dy++)
         {
             var quelleY = y0 + dy;

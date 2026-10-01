@@ -509,15 +509,27 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // **Und ohne diese Namen sagt jeder `205` "diese Figur habe ich
         // nicht"**, **und 96 Routen tun gar nichts.**
         var figuren = new Dictionary<int, MzCharacter>();
+        EventFigures = new Dictionary<int, MzCharacter?>();
         foreach (var figur in Figures)
         {
             var held = new MzCharacter(figur.X, figur.Y);
             held.TurnTo(figur.Direction);
             figuren[figur.EventId] = held;
+            EventFigures[figur.EventId] = held;
         }
 
         Facts = Facts.WithCharacters(figuren, Facts.Player);
-        Facts.Player.BuildFigure();
+
+        // **Und der Spieler bekommt seine Figur, und sie bekommt ihr
+        // Bild** -- **denn `Game_Player.prototype.refresh` ruft
+        // `setImage(actor.characterName(), actor.characterIndex())`, und
+        // beide.** **Ein Leser, der nur den Namen behielt, zeichnete
+        // jeden Darsteller als Darsteller eins.**
+        var spielerFigur = Facts.Player.BuildFigure();
+        if (spielerFigur != null)
+        {
+            spielerFigur.SetImage(PlayerSheetName, PlayerIndex);
+        }
 
         Clocks = new Dictionary<int, MzWalkClock?>();
         Routes = new Dictionary<int, MzMoveRoute?>();
@@ -654,33 +666,42 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 continue;
             }
 
-            // **Und die Figur, auf der die Laufbahn spricht.**
-            if (Characters.TryGetValue(
-                    figur.CharacterName, out var blatt) && blatt != null)
-            {
-                routeCharacter = new MzCharacter(figur.X, figur.Y);
-                routeCharacter.TurnTo(
-                    Clocks.TryGetValue(figur.EventId, out var u) && u != null
-                        ? u.Direction : figur.Direction);
-            }
+            // **Und auf der Figur, die schon da ist, und nicht auf
+            // einer, die jedes Bild neu gebaut wird** -- **denn eine
+            // Figur, die jedes Bild neu entsteht, ist nie angekommen**,
+            // **und eine Laufbahn, die auf ihr wartet, wartet auf eine
+            // Figur, die es nicht gibt.**
+            var holder = EventFigures.TryGetValue(figur.EventId, out var da) ? da : null;
 
-            if (route.Step(routeCharacter, null) != "")
+            if (route.Step(holder, null) != "")
             {
-                // **Und die Drehung kommt bei der Uhr an, denn die Uhr
-                // ist es, die die Figur zeichnet** -- **und ohne das
-                // zeichnete die Runtime eine Figur, die sich umdreht,
-                // immer noch in ihrer alten Richtung.**
-                if (routeCharacter != null
+                if (holder != null
                     && Clocks.TryGetValue(figur.EventId, out var uhr)
                     && uhr != null)
                 {
-                    uhr.Direction = routeCharacter.Direction;
-                    uhr.Moving = !routeCharacter.IsStopping;
+                    uhr.Direction = holder.Direction;
+                    // **Und die Uhr geht nur, wenn die Figur wirklich
+                    // unterwegs ist** -- **und das ist der Motor, und
+                    // nicht `moveType`.**
+                    uhr.Moving = !holder.IsStopping;
                 }
 
                 wechselt++;
             }
         }
+
+        // **Und der Spieler folgt seiner Figur, und die Figur geht
+        // weiter.**
+        //
+        // **Gemessen: der Motor hat gar kein Sync, weil er gar kein
+        // Paar hat** -- **`Game_Player` erbt von `Game_Character` und
+        // ist die Figur selbst.** **Und dieses Paar hier ist eine
+        // Notloesung fuer den Leser, und die muss an jedem Ende
+        // zusammenruecken, sonst laufen Spieler und Figur auseinander
+        // und eine Karte zeigt eine Figur auf einer Kachel, auf der
+        // der Spieler nicht ist.**
+        Facts.Player.SyncFigure();
+        AdvancePlayer();
 
         if (_playerClock != null && _playerClock.Tick())
         {
@@ -696,8 +717,64 @@ public sealed class MzEngineRuntime : IEngineRuntime
         return wechselt;
     }
 
+    /// <summary>
+    /// Walks the player one frame towards the tile it is on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the arithmetic is the engine's, and it is a
+    /// fraction.</strong> Measured:
+    /// <c>distancePerFrame</c> is <c>2^realMoveSpeed / 256</c> — <strong>so
+    /// at speed 4 a figure crosses a quarter of a tile in a
+    /// frame</strong>, <strong>and at speed 5 an eighth, and at speed 6 a
+    /// sixteenth.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the drawing position is one tile behind, which is what
+    /// makes a walk look like a walk.</strong> Measured:
+    /// <c>_realX = xWithDirection(_x, reverseDir(d))</c> — <strong>and a
+    /// figure that simply appears on its new tile has no walk in it
+    /// at all</strong>, <strong>it is a tile-to-tile jump dressed as
+    /// movement.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the pattern counts while it walks</strong> — at 1.5 a
+    /// frame — <strong>which is why a figure that is really moving shows
+    /// three columns and one that stands shows one.</strong>
+    /// </para>
+    /// </remarks>
+    private void AdvancePlayer()
+    {
+        var figuer = Facts.Player.Figur;
+        if (figuer == null || figuer.IsStopping)
+        {
+            return;
+        }
+
+        figuer.PassFrame();
+        Facts.Player.SyncFigure();
+
+        if (_playerClock != null)
+        {
+            _playerClock.Moving = !figuer.IsStopping;
+            _playerClock.Direction = figuer.Direction;
+        }
+    }
+
     /// <summary>How many frames this runtime has run.</summary>
     public int Frames { get; private set; }
+
+    /// <summary>The live figures, by event.</summary>
+    /// <remarks>
+    /// <strong>And these are the same objects a route acts on.</strong>
+    /// Measured: the engine has one <c>Game_Character</c> per event and
+    /// the page's commands speak to <em>that</em> object — <strong>and a
+    /// reader that built a fresh figure every frame had a figure that was
+    /// never anywhere</strong>, <strong>and a route waiting for it to
+    /// arrive waited for ever.</strong>
+    /// </remarks>
+    public Dictionary<int, MzCharacter?> EventFigures { get; private set; } =
+        new();
 
     /// <summary>Which route belongs to which event.</summary>
     public Dictionary<int, MzMoveRoute?> Routes { get; private set; } = new();
@@ -713,19 +790,6 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// frame.</strong>
     /// </remarks>
     private Dictionary<int, int> _standing = new();
-
-    /// <summary>
-    /// The figure the route is carried out on.
-    /// </summary>
-    /// <remarks>
-    /// <strong>And a route acts on a character, and not on a
-    /// number.</strong> <c>processMoveCommand</c> calls
-    /// <c>moveStraight</c>, <c>setDirection</c> and friends on the
-    /// character, <strong>and the clock this runtime keeps is only the
-    /// pattern</strong>, <strong>so the route needs a character to
-    /// speak to.</strong>
-    /// </remarks>
-    private MzCharacter? routeCharacter;
 
     /// <summary>Which walk clock belongs to which event.</summary>
     public Dictionary<int, MzWalkClock?> Clocks { get; private set; } = new();
@@ -784,9 +848,19 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // jedes Darstellers.**
         if (PlayerSheet != null)
         {
-            if (MzCharacterRenderer.Draw(
-                PlayerSheet, PlayerIndex, PlayerDirection,
-                _playerClock?.Column ?? 1, PlayerX, PlayerY, pPixels))
+            // **Und der Spieler wird an seiner Zwischenposition
+            // gemalt, und nicht auf seiner Kachel** -- **denn er ist
+            // unterwegs, und eine Figur, die auf ihrer Kachel springt,
+            // geht nicht.**
+            var spieler = Facts.Player.Figur;
+            if (spieler != null
+                ? MzCharacterRenderer.Draw(
+                    PlayerSheet, spieler, _playerClock?.Column ?? 1,
+                    MzMapRenderer.TilePixels, MzMapRenderer.TilePixels,
+                    pPixels)
+                : MzCharacterRenderer.Draw(
+                    PlayerSheet, PlayerIndex, PlayerDirection,
+                    _playerClock?.Column ?? 1, PlayerX, PlayerY, pPixels))
             {
                 gezeichnet++;
             }
@@ -795,6 +869,18 @@ public sealed class MzEngineRuntime : IEngineRuntime
         FiguresDrawn = gezeichnet;
         return gezeichnet;
     }
+
+    /// <summary>Which sheet the player's figure is drawn from.</summary>
+    /// <remarks>
+    /// <strong>And this is the leader's, not the party's first
+    /// entry.</strong> Measured:
+    /// <c>Game_Player.prototype.refresh</c> asks
+    /// <c>$gameParty.leader()</c> — <strong>and a leader is the first
+    /// living member, and not actor one by number</strong>, <strong>so a
+    /// reader that took the lowest actor id drew the wrong figure once a
+    /// party member left.</strong>
+    /// </remarks>
+    public string PlayerSheetName { get; private set; } = "";
 
     /// <summary>How many figures the last paint drew.</summary>
     public int FiguresDrawn { get; private set; }
@@ -1045,6 +1131,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         var bildName = erste?.Member("characterName")?.StringOr("") ?? "";
         PlayerIndex = erste?.Member("characterIndex")?.IntOr(0) ?? 0;
+        PlayerSheetName = bildName;
 
         // **Und der Spieler bekommt seine Uhr aus seinen eigenen Werten,
         // und aus den Standardwerten des Motors, wo er keine hat.**

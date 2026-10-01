@@ -11545,3 +11545,65 @@ Quelldatei, die Tests enthaelt, ist kein Quellcode.**
 
 **`All 2190 tests passed`, Validator gruen.**
 
+## Und der Spieler ist die Figur, und er läuft wirklich
+
+### Der Befund, der die Zwei-Objekte-Loesung gekillt hat
+
+**Ich hatte dem Spieler eine eigene Figur gegeben und danach zwischen
+beiden kopiert. Gemessen an `Game_Player.prototype.initialize` ist das
+eine Kopfschleife, die der Motor nicht hat:**
+
+```
+Game_Player.prototype.initialize = function() {
+    Game_Character.prototype.initialize.call(this);
+    this.setTransparent($dataSystem.optTransparent);
+};
+```
+
+**Und `initMembers` ist `Game_Character`s, plus ein paar eigene
+Glieder.** **Der Spieler erbt `_x`, `_y`, `_direction` und `_pattern`
+und behaelt sie selbst** -- **es gibt kein Paar, das man abgleichen
+koennte.**
+
+**Und die Kopfschleife war nicht nur ueberfluessig, sie war falsch:**
+**sie haette den Spieler und seine Figur auseinanderlaufen lassen,
+und `SyncFigure` haette das nur verstaerkt.**
+
+### Und der Schritt ist eine Bruchzahl, und nicht eine Kachel
+
+**Gemessen an `updateMove`:**
+
+```
+_realX = Math.min(_realX + distancePerFrame(), _x)
+distancePerFrame = 2^realMoveSpeed / 256
+```
+
+| Tempo | Kacheln je Bild | Bilder je Kachel |
+|---|---|---|
+| 1 | 1/128 | **128** |
+| 4 | 1/16 | **16** |
+| 5 | 1/8 | 8 |
+| 6 | 1/4 | 4 |
+
+**Und `PassFrame` hatte hier zwei ganze Kacheln, je nachdem ob Tempo 4
+ueberschritten war oder nicht** -- **das heisst: der Sprung von Tempo 4
+auf 5 liess die Figur doppelt so schnell gehen, und beide
+Geschwindigkeiten waren falsch.**
+
+**Wer die ganze Kachel nimmt, sieht zwei Spruenge; wer die Bruchzahl
+nimmt, sieht einen Lauf.**
+
+### Und ich habe die Bilder je Kachel erst falsch gerechnet
+
+**Im Test standen vier, und `2^4 / 256` ist ein Sechzehntel, und ein
+Sechzehntel braucht sechzehn Bilder.** **Der Test hat es gemerkt, weil
+die Figur nach 20 Bildern erst drei Kacheln weit war.**
+
+**Ein Test, der die Arithmetik des Motors nachrechnet, merkt einen
+Fehler in der Arithmetik des Motors, die man ihm selbst eingebaut
+hat.**
+
+**Test evidence** `test_mz_move_route.cs` (11), **11/11**.
+
+**`All 2190 tests passed`, Validator gruen.**
+

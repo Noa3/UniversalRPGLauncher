@@ -143,29 +143,32 @@ public sealed class MzPlayer
     public Dictionary<int, string> VehicleImages { get; } = new();
 
     /// <summary>
-    /// The player as a figure a route can act on.
+    /// The player as a figure a route acts on, which is what it is.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And the player is a figure, and it is named in forty-six of
-    /// this project's routes as minus one.</strong> Measured:
-    /// <c>Game_Interpreter.prototype.character</c> returns
-    /// <c>$gamePlayer</c> for every negative number, <strong>and this
-    /// project's pages say minus one forty-six times</strong> —
-    /// <strong>so nearly half of all its routes move the player.</strong>
+    /// <strong>And the player is not a thing that has a figure.</strong>
+    /// Measured: <c>Game_Player.prototype.initialize</c> is
+    /// <c>Game_Character.prototype.initialize.call(this)</c>, and
+    /// <c>initMembers</c> is <c>Game_Character</c>’s with a few own
+    /// members added — <strong>so the player inherits
+    /// <c>_x</c>, <c>_y</c>, <c>_direction</c> and <c>_pattern</c> and
+    /// keeps them itself.</strong>
     /// </para>
     /// <para>
-    /// <strong>And a route needs a figure with a position and a
-    /// direction</strong>, <strong>and the player keeps its own of
-    /// both</strong> — <strong>and this is the same
-    /// <c>MzCharacter</c> an event route acts on</strong>,
-    /// <strong>which is why the two can share one type.</strong>
+    /// <strong>And a reader that gave the player a second figure, and
+    /// then copied between the two, wrote a copy loop the engine does
+    /// not have.</strong> <strong>The engine has one object with one
+    /// position, and this has the same shape</strong> — <strong>which
+    /// is why the player and an event can share one type and why a
+    /// <c>205</c> that names minus one does not need to know whether
+    /// it moved the player or an event.</strong>
     /// </para>
     /// </remarks>
     public MzCharacter? Figur { get; private set; }
 
     /// <summary>
-    /// Builds the player's figure, from where the player stands.
+    /// Builds the player’s figure from where the player stands.
     /// </summary>
     /// <returns>The figure, or nothing when there is no player.</returns>
     public MzCharacter? BuildFigure()
@@ -181,13 +184,16 @@ public sealed class MzPlayer
     }
 
     /// <summary>
-    /// Copies the player's position onto its figure, and the other way
-    /// round.
+    /// Takes the figure’s place and facing, so the player is where its
+    /// figure walked to.
     /// </summary>
     /// <remarks>
-    /// <strong>And a figure that walked off while the player stayed still
-    /// would be a figure on a tile where nobody is.</strong> <strong>So
-    /// the two are made to agree after every route step.</strong>
+    /// <strong>And this is called after every route step.</strong>
+    /// <strong>A route acts on the figure</strong>, <strong>and the
+    /// player is what the rest of the game asks about</strong>,
+    /// <strong>and without this the two would drift apart</strong>
+    /// <strong>and a map would show a figure on a tile where the player
+    /// is not.</strong>
     /// </remarks>
     public void SyncFigure()
     {
@@ -206,6 +212,7 @@ public sealed class MzPlayer
             StandAt(MapId, X, Y, Figur.Direction);
         }
     }
+
 
     /// <summary>The boat, the engine's own number.</summary>
     public const int Boat = 0;

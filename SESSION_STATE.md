@@ -11070,3 +11070,32 @@ der Lauf zwischen zwei Kacheln wird nicht gezeichnet** -- **die Figur
 springt von Kachel zu Kachel statt zu gehen** -- **und `SyncFigure`
 haengt noch nicht am Lauf, also folgt `Facts.Player` der Figur nicht.**
 
+## Und der Spieler ist die Figur, und er läuft
+
+**`Game_Player.prototype.initialize` ruft
+`Game_Character.prototype.initialize.call(this)`** -- **der Spieler
+ERBT die Figur und ist sie.** **Meine Zwei-Objekte-Loesung mit
+`SyncFigure` war eine Kopfschleife, die der Motor nicht hat** --
+**und haette Spieler und Figur auseinanderlaufen lassen.**
+
+**Und `distancePerFrame` ist `2^tempo / 256`, und nicht eine ganze
+Kachel** -- **bei Tempo 4 ein Sechzehntel, also 16 Bilder je
+Kachel.** **`PassFrame` hatte zwei ganze Kacheln, und beide
+Geschwindigkeiten waren falsch.**
+
+**Und im Test hatte ich erst vier Bilder je Kachel geschrieben, und
+der Test hat es gemerkt.**
+
+**Der Spieler wird jetzt ueber `RealX`/`RealY` gemalt**, **und nicht
+auf seiner Kachel**, **denn eine Figur, die auf ihrer Kachel springt,
+geht nicht.**
+
+**`All 2190 tests passed`, Validator gruen.**
+
+**Und was als naechstes fehlt:** **die Figuren der Ereignisse werden
+noch auf ihren Kacheln gezeichnet und nicht an ihrer Zwischenposition**
+-- **`EventFigures` haelt die lebenden Figuren, aber `PaintFigures`
+nutzt noch `figur.X` und `figur.Y`** -- **und ausserdem wird der
+Spieler erst nach dem Laden der Karte aufgebaut, aber nicht bei
+jedem Kartenwechsel.**
+
