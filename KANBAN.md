@@ -1,5 +1,60 @@
 ## Active
 
+### K-RUBY-SINGLETON -- `def $a.b` ist gelesen und nicht ausgefuehrt, und
+### das ist ein Werttyp-Problem und kein Zeilenproblem
+
+**Blockiert `instruby.rb`**, **und `instruby.rb` ist eine der vier echten
+Ruby-1.8.1-Dateien**, **und die vier sind der einzige Nachweis, den der
+Ruby-Leser hat.**
+
+**Gemessen an `eval.c`, `case NODE_DEFS`:**
+
+```c
+VALUE recv = rb_eval(self, node->nd_recv);
+klass = rb_singleton_class(recv);
+defn = copy_node_scope(node->nd_defn, ruby_cref);
+rb_add_method(klass, node->nd_mid, defn, NOEX_PUBLIC);
+```
+
+**Und `class.c` Zeile 748:** `rb_define_method(rb_singleton_class(obj),
+name, func, argc);` -- **und `rb_singleton_class` erzeugt eine echte
+Klasse fuer dieses Objekt**, **mit `m_tbl` und `super`**, **und
+`rb_mod_init_copy` klont sie bei `dup` und `clone`.**
+
+**Und `node.h` fuehrt `NODE_DEFS` neben `NODE_DEFN`, und `NODE_SCLASS`.**
+
+**Und der Leser hat keine Stelle dafuer.** Gemessen:
+`RubyValue` ist ein `sealed class` mit `IEquatable`, **und seine
+Gleichheit ist ein WERTVERGLEICH** -- `case RubyValueKind.Integer:
+return Integer == pOther.Integer;` -- **und es gibt kein Feld, keine
+Identitaet und keine Tabelle: `_objekte`, `ObjektId` und `_identitaet
+kommen null Mal vor.**
+
+**Und das ist der Grund, und nicht eine fehlende Verzweigung.** **Eine
+Singleton-Methode gehoert zu einem Objekt, und `RubyValue` ist ein Wert,
+und zwei gleiche Arrays sind hier dasselbe.** **Also koennte
+`$a.b = 1` und `def $a.b` sich nicht unterscheiden, wenn der Leser die
+Methode an den Wert haengte** -- **und `def $a.b; end` muesste die
+Methode an ein Objekt haengen, das es vorher nicht gab.**
+
+**Umfang, gemessen:** 11 `RubyValue`-Fabriken
+(`OfArray OfBlock OfBoolean OfBytes OfEmptyObject OfHash OfInteger
+OfObject OfReal OfRegexp OfSymbol`), **eine `Equals`-Methode, und die
+Aufrufstelle `rb_singleton_class`-Aehnlichkeit fehlt in der
+Methodenauflosung komplett.**
+
+**Und der naechste Schritt ist nicht geraten:** eine `Identitaet` an
+`RubyValue`, **die bei den Fabriken fuer `OfObject`, `OfArray` und
+`OfHash` vergeben wird und sonst `0` bleibt**, **und eine Tabelle
+`Objekt -> Typ` im Interpreter**, **und `def` haengt daran statt an den
+Typ des Empfaengers.**
+
+**Abnahme:** `def $a.b; end` und dann `$a.b` antwortet, **`def $a.b`
+und `def $c.b` sind zwei verschiedene Methoden auf zwei gleichen
+Werten**, **und die 76 Tests der Ruby181-Suite bleiben gruen und
+`instruby.rb` parst.**
+
+
 **Und die Regel "Exception faengt alles" war ueberfluessig, und ich habe sie
 gelo
 
