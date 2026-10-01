@@ -11484,3 +11484,49 @@ haben einen eigenen Weg** -- **`checkEventTriggerTouch` ist in
 `triggerTouchAction` schaut auf `$gameTemp.isDestinationValid()`** --
 **und gemessen sind alle 52 Seiten nicht normal.**
 
+## Und eine Beruehrungsseite antwortet beim Ankommen, und nicht auf den Knopf
+
+**Der Motor stellt acht Fragen, und gemessen sind alle acht:**
+
+| Wer | Frage | Ausloeser | Prioritaet |
+|---|---|---|---|
+| `triggerButtonAction` | `checkEventTriggerHere` | `[0]` | **nicht** normal |
+| `triggerButtonAction` | `checkEventTriggerThere` | `[0, 1, 2]` | normal |
+| `updateNonmoving` | `checkEventTriggerHere` | `[1, 2]` | **nicht** normal |
+| `moveStraight` | `checkEventTriggerTouchFront` | via `checkEventTriggerTouch` → `[1, 2]` | normal |
+| `triggerTouchActionD1` | `checkEventTriggerHere` | `[0]` | nicht normal |
+| `triggerTouchActionD2` | `checkEventTriggerThere` | `[0, 1, 2]` | normal |
+| `triggerTouchActionD3` | `checkEventTriggerThere` | `[0, 1, 2]` | normal |
+
+**Und `updateNonmoving` steht in `if (wasMoving)`** -- **also
+feuert es einmal beim Ankommen, und nicht in jedem Bild** -- **und
+`isEventRunning()` sperrt alles, solange eine Seite laeuft.**
+
+**Und gemessen sind alle 52 Beruehrungsseiten dieses Spiels nicht
+normal** -- **und das ist kein Zufall:** **eine Seite, auf die man
+tritt, steht auf der Kachel, und eine normale Seite steht im Bild vor
+dem Helden und wird angesprochen.**
+
+**Und `Beruehre` fragt jetzt beide Wege** -- **unter den Fuessen mit
+`[1, 2]` und `normal=false`, und davor mit `[1, 2]` und `normal=true`**
+-- **und `Betrete` fragt den ersten Weg gleich mit**, **denn ein
+Ankommen ist das, worauf `updateNonmoving` reagiert.**
+
+**Und der Beweis, Map001:** **Event 4 bei (5,7) und Event 5 bei (5,8),
+beide Trigger 1, beide Prioritaet 0, beide mit den Worten "This scout
+trail leads further along the cliff to one of their main lookouts. I
+have no need to go this way."** **Der Spieler tritt auf (5,7), und
+Event 4 antwortet** -- **und er tritt auf (5,8), und Event 5
+antwortet.**
+
+**Und `SucheStartende` nimmt jetzt die Ausloeserliste als Parameter**,
+**weil `isTriggerIn` `triggers.includes(this._trigger)` ist** -- **und
+eine leere Liste nimmt alles an.**
+
+**`All 2203 tests passed`, Validator gruen.**
+
+**Und als naechstes fehlt:** **die zwei Trefferseiten (Ausloeser 2) und
+die Bedingung `canStartLocalEvents`**, **die `!this.isInAirship()`
+ist** -- **und gemessen kommt das Luftschiff in diesem Spiel nicht
+vor.**
+

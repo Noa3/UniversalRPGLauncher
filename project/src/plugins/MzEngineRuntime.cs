@@ -1124,6 +1124,72 @@ public sealed class MzEngineRuntime : IEngineRuntime
         return bericht;
     }
 
+    /// <summary>Steps the player onto a tile and starts what it touches.
+    /// </summary>
+    /// <returns>One line per page the arrival started.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a different question from the button, and the
+    /// engine asks it in a different place.</strong> Measured at
+    /// <c>Game_Player.prototype.updateNonmoving</c>:
+    /// <c>if (!$gameMap.isEventRunning()) { if (wasMoving) {
+    /// $gameParty.onPlayerWalk(); this.checkEventTriggerHere([1, 2]); if
+    /// ($gameMap.setupStartingEvent()) return; }</c> — <strong>and it is
+    /// inside <c>wasMoving</c>, so a page answers once, when the player
+    /// arrives, and not every frame.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>here</c> asks for a page that is NOT normal
+    /// priority</strong>, which is what makes the rule work: <c>there</c>
+    /// asks for a normal one, and <c>here</c> for a not-normal one.
+    /// </para>
+    /// <para>
+    /// <strong>And measured, all 52 touch pages of this project are not
+    /// normal</strong> — <strong>which is not a coincidence: a page that
+    /// is triggered by touch sits on the tile and is walked onto, and a
+    /// normal-priority page stands in front of the hero in the picture
+    /// and is spoken to.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the third way, measured:</strong>
+    /// <c>moveStraight</c> calls <c>this.checkEventTriggerTouchFront(d)</c>,
+    /// which computes the tile in the direction of travel and calls
+    /// <c>checkEventTriggerTouch(x, y)</c>, which asks
+    /// <c>startMapEvent(x, y, [1, 2], true)</c> — <strong>a NORMAL
+    /// priority page, one tile ahead.</strong> <strong>So a touch page
+    /// answers twice in the engine, once underfoot and once ahead, and
+    /// only if it is normal priority does the second happen.</strong>
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> Beruehre()
+    {
+        var bericht = new List<string>();
+
+        // **Und die Kachel unter den Fuessen, und zwar mit der
+        // Ausloeserliste `[1, 2]`** -- **gemessen an `updateNonmoving`.**
+        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, 1, 2))
+        {
+            bericht.Add(zeile);
+        }
+
+        if (bericht.Count > 0)
+        {
+            return bericht;
+        }
+
+        // **Und die Kachel davor, und zwar mit derselben Liste** --
+        // **gemessen an `checkEventTriggerTouchFront`, das
+        // `startMapEvent(x, y, [1, 2], true)` ruft.**
+        var vorne = (PlayerX + SchrittX(PlayerDirection),
+            PlayerY + SchrittY(PlayerDirection));
+        foreach (var zeile in SucheStartende(vorne, true, 1, 2))
+        {
+            bericht.Add(zeile);
+        }
+
+        return bericht;
+    }
+
     /// <summary>Turns the player to face a direction.</summary>
     /// <param name="pDirection">The direction to look.</param>
     /// <remarks>
@@ -1179,16 +1245,20 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public IReadOnlyList<string> DruckeKnopf()
     {
         var bericht = new List<string>();
-        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false))
+        // **Und `[0]` unter den Fuessen** -- **gemessen an
+        // `triggerButtonAction`, das `checkEventTriggerHere([0])` ruft.**
+        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, 0))
         {
             bericht.Add(zeile);
         }
 
         if (bericht.Count == 0)
         {
+            // **Und `[0, 1, 2]` davor** -- **gemessen an derselben
+            // Stelle: `this.checkEventTriggerThere([0, 1, 2])`.**
             var vorne = (PlayerX + SchrittX(PlayerDirection),
                 PlayerY + SchrittY(PlayerDirection));
-            foreach (var zeile in SucheStartende(vorne, true))
+            foreach (var zeile in SucheStartende(vorne, true, 0, 1, 2))
             {
                 bericht.Add(zeile);
             }
@@ -1248,7 +1318,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     private IReadOnlyList<string> SucheStartende(
         (int X, int Y) pTile,
-        bool pNormal)
+        bool pNormal,
+        params int[] pAusloeser)
     {
         var bericht = new List<string>();
         if (!Maps.TryGetValue(CurrentMapId, out var karte))
@@ -1275,7 +1346,20 @@ public sealed class MzEngineRuntime : IEngineRuntime
             {
                 var seite = seiten[index];
                 var ausloeser = seite.Member("trigger")?.IntOr(0) ?? 0;
-                if (ausloeser != 0 && ausloeser != 1 && ausloeser != 2)
+
+                // **Und der Ausloeser, den der Motor verlangt.**
+                //
+                // **Gemessen:** `checkEventTriggerHere([0])` vom Knopf,
+                // `checkEventTriggerThere([0, 1, 2])` von der Kachel
+                // davor, und `checkEventTriggerHere([1, 2])` von
+                // `updateNonmoving`, und `startMapEvent(x, y, [1, 2],
+                // true)` von `checkEventTriggerTouch`.
+                //
+                // **Und `isTriggerIn` ist
+                // `triggers.includes(this._trigger)` -- und eine leere
+                // Liste nimmt alles an.**
+                if (pAusloeser.Length > 0
+                    && System.Array.IndexOf(pAusloeser, ausloeser) < 0)
                 {
                     continue;
                 }
@@ -1345,6 +1429,25 @@ public sealed class MzEngineRuntime : IEngineRuntime
         var bericht = new List<string>();
         PlayerX = pX;
         PlayerY = pY;
+
+        // **Und das Betreten ist mehr als ein Schritt** -- **denn
+        // `updateNonmoving` fragt beim Ankommen, und zwar mit `[1, 2]`
+        // und mit `here`, also nach einer Seite, die NICHT normal
+        // ist.**
+        //
+        // **Gemessen an Map001:** **die Beruehrungsseiten dort tragen
+        // Prioritaet 0, und der Spieler tritt auf sie**, **und ohne
+        // diesen Aufruf redete keine davon.**
+        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, 1, 2))
+        {
+            bericht.Add(zeile);
+        }
+
+        if (bericht.Count > 0)
+        {
+            return bericht;
+        }
+
         if (!Maps.TryGetValue(CurrentMapId, out var karte))
         {
             bericht.Add(

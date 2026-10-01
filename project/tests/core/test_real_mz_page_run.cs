@@ -661,6 +661,89 @@ public partial class TestRealMzPageRun : TestBase
         AssertTrue(lauf.LastActions.Count >= 1
                 && lauf.LastActions[0].What.Contains("backtrack"),
             "**and it said the game's own words** -- and they are"
-            + $" measured from Map001 event 3: {lauf.LastActions[0].What}");
+            + " measured from Map001 event 3: " + lauf.LastActions[0].What);
+    }
+
+    /// <summary>
+    /// A touch page answers when the player arrives, not on the button.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And that is measured at
+    /// <c>Game_Player.prototype.updateNonmoving</c>:</strong>
+    /// <c>if (!$gameMap.isEventRunning()) { if (wasMoving) {
+    /// $gameParty.onPlayerWalk(); this.checkEventTriggerHere([1, 2]); if
+    /// ($gameMap.setupStartingEvent()) return; }</c> — <strong>and it
+    /// sits inside <c>wasMoving</c>, so it fires once on arrival and not
+    /// every frame.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>here</c> asks for a page that is NOT normal
+    /// priority</strong> — <strong>and all 52 touch pages of this
+    /// project are exactly that</strong>, <strong>which is not a
+    /// coincidence: a page you walk onto stands on the tile, and a
+    /// normal-priority page stands in front of the hero in the picture
+    /// and is spoken to.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_EineBeruehrungsseiteAntwortetBeimAnkommen()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(1),
+            "**and map 1 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und Map001 Event 4 steht bei (5,7), ist Trigger 1 und
+        // Prioritaet 0** -- **und sagt "This scout trail leads further
+        // along the cliff to one of their main lookouts. I have no need
+        // to go this way."**
+        var bericht = lauf.Betrete(5, 7);
+        AssertEq(bericht.Count, 1,
+            "**and one page answered the arrival** -- and the report is: "
+                + string.Join(" | ", bericht));
+        AssertTrue(bericht[0].Contains("event 4"),
+            "**and it is event 4, and not the button page next door** --"
+            + $" and the report is {bericht[0]}, and event 5 at (5,8) has"
+            + " the same trigger and the same priority and the same"
+            + " words");
+
+        // **Und der Beweis, dass es die Beruehrung war und nicht der
+        // Knopf** -- **denn der Knopf fragt nach `[0]` unter den
+        // Fuessen**, **und diese Seite ist `[1]`.**
+        var alle = new System.Text.StringBuilder();
+        for (var k = 0; k < lauf.LastActions.Count; k++)
+        {
+            alle.Append(lauf.LastActions[k].Code).Append(':')
+                .Append(lauf.LastActions[k].What).Append(" | ");
+        }
+
+        AssertTrue(alle.ToString().Contains("scout trail"),
+            "**and it said the game's own words for that tile** -- and"
+            + $" the actions were {alle}");
+
+        // **Und jetzt die Nachbarseite, und die ist von dieser hier
+        // nicht zu unterscheiden ausser durch ihre Position** -- **und
+        // das ist der Beweis, dass der Motor auf die Kachel schaut und
+        // nicht auf das Ereignis.**
+        var daneben = lauf.Betrete(5, 8);
+        AssertEq(daneben.Count, 1,
+            "**and the next tile's page answered too** -- and the report"
+            + " is: " + string.Join(" | ", daneben));
+        AssertTrue(daneben[0].Contains("event 5"),
+            "**and it is event 5** -- and this is the whole proof that"
+            + $" the tile decides: {daneben[0]}");
     }
 }
