@@ -2532,19 +2532,43 @@ public sealed class RubyParser
                 // noch selbst.** Eine Pruefung, die in beiden Faellen noch
                 // einmal nach `end` sieht, wuerde bei jedem
                 // `case ... else ... end` fehlschlagen.
-                if (elseBlock == null && whenRuest.Name != "end")
+                // **Und das `end` des `case` gehoert IMMER diesem `case`,
+                // und es wird genau einmal gefressen, und das ist
+                // gemessen.**
+                //
+                // Ruby 1.8.1's own `parse.y`:
+                //
+                // ```c
+                // primary  : kCASE expr_value opt_terms case_body kEND
+                //          | kCASE opt_terms case_body kEND
+                // case_body: kWHEN when_args then compstmt cases
+                // cases    : opt_else | case_body
+                // opt_else : none | kELSE compstmt
+                // ```
+                //
+                // **Und ein `kEND` steht in `primary` und nirgends sonst**,
+                // **und `opt_else` hat kein `kEND`.** **Also liegt das `end`
+                // hinter dem `else`, und es wird hinter jedem `else`
+                // gelesen, und auch hinter keinem.**
+                //
+                // **Und ein Waechter, der das `end` nur nimmt, wenn kein
+                // `else` da war, laesst es bei jedem `case ... else ...`
+                // stehen** -- **und dann sieht der umgebende Block ein
+                // `end`, das ihm nicht gehoert**, **und das kommt als**
+                //
+                // ```
+                // 'end' at offset 60 does not begin an expression
+                // ```
+                if (IsKeyword("end"))
                 {
-                    if (IsKeyword("end"))
-                    {
-                        _index++;
-                    }
-                    else
-                    {
-                        throw new RubyParseException(
-                            $"'end' was expected at offset {Current.Offset}, "
-                                + $"but '{Current.Text}' is there.",
-                            Current.Line);
-                    }
+                    _index++;
+                }
+                else
+                {
+                    throw new RubyParseException(
+                        $"'end' was expected at offset {Current.Offset}"
+                            + $"but '{Current.Text}' is there.",
+                        Current.Line);
                 }
 
                 if (elseBlock != null)

@@ -12374,3 +12374,53 @@ next place measurable instead of guessed.
 
 **Evidence:** full suite `3/2213 tests failed`, **and every one of the 2210
 that existed before is green.**
+
+
+## The case reads its own end, and that was the whole of it
+
+**Measured at `parse.y`, and the real block out of `mdoc2man.rb` is the proof.**
+
+```
+primary  : kCASE expr_value opt_terms case_body kEND
+         | kCASE opt_terms case_body kEND
+case_body: kWHEN when_args then compstmt cases
+cases    : opt_else | case_body
+opt_else : none | kELSE compstmt
+```
+
+**And a `kEND` stands in `primary` and nowhere else**, **and `opt_else` has
+no `kEND`.** So the `end` lies behind the `else`, and it is read behind
+every `else` and behind none.
+
+**And a guard that took the `end` only when there was no `else` left it
+standing for every `case ... else ... end`** -- **and then the
+surrounding block saw an `end` that was not its own**, **and that
+arrives as**
+
+```
+'end' at offset 60 does not begin an expression
+```
+
+**That was `Test_AWhenArmMatchesOnAnyOfItsValues`, and it is green.**
+
+### And `ReadBody` eats its closer and `ReadBodyUntil` leaves it standing
+
+**Measured in the reader itself.** So there is exactly one `_index++` for
+exactly one `end` here, and not one per path.
+
+### And the probe list is eleven files now, and ten of them are green
+
+**And `c_case_wenn_nach_break.rb` -- which is `mdoc2man.rb` lines 171 to
+238, unchanged, all ten `when` arms with a `while` and a multi-line `&&`
+and a regexp at the start of a line -- parses.** That was the shape the
+real scripts stopped at for the last four rounds.
+
+**And the one that is not green is `y6_when_re_echt.rb`**, **and it is a
+cut I made, and the cut is the thing**: **it is the `Re` arm alone under
+a `case`, with no arm before it.** **And there the reader stops the arm
+at the `end` of the `while` inside it** -- **and with an arm in front of
+it, the same arm reads through.** So the defect is in how the first arm
+is reached and not in the arm.
+
+**Evidence:** `TestRubyParser: 2/56 failed`, **full suite `4/2213`, and
+every one of the 2213 that existed before is green.**
