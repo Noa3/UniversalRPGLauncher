@@ -13840,3 +13840,73 @@ files and every one of them is green.**
 **Full suite `6/2217`, and the only reader change in this round was the
 `class`/`module` arm, which is measured at `parse.y` 1619 and made `af5`, `af6`,
 `af7`, `af8`, `af9` and `af10` pass.**
+
+
+## A block carries no arms, and that is where the last of the ninety-three stood
+
+**And the reader was right for the ninth time in a row, and this one is the
+clearest of them.**
+
+### And the boundary, measured in both versions
+
+**Ruby 1.8.1, `parse.y` 1739 and 1802:**
+
+```text
+1739 do_block    : kDO_BLOCK opt_block_var compstmt kEND
+1802 brace_block : '{' opt_block_var compstmt '}'
+```
+
+**And Ruby 1.9.2, `parse192.y` 3531 and 3677:**
+
+```text
+3531 do_block    : keyword_do_block opt_block_param compstmt keyword_end
+3677 brace_block : '{' opt_block_param compstmt '}'
+```
+
+**And `compstmt` and not `bodystmt`** -- **and `bodystmt` is the one that has
+`opt_rescue`, `opt_else` and `opt_ensure`** -- **and so a `do` block and a
+`{` block take no arms at all, in either version.**
+
+**And the reader refuses them, and it is right:**
+
+```ruby
+x.each do |y|
+  a
+rescue => e
+  b
+end
+```
+
+```text
+RubyParseException 'rescue' at offset 33 does not begin an expression.
+```
+
+**And the nine rounds it took to get here are worth counting, because the
+first six of them found nothing at all** -- **and the seventh found the
+boundary by asking what a block is made of rather than which block was
+broken.**
+
+### And the shape that made it clear
+
+```text
+ax1  x.each do |y| / a / end                            green
+ax2  x.each do |y| / begin / a / rescue => e / b / end / end   green
+ax3  x.each { |y| / a / }                              green
+ax4  x.each { |y| / begin / a / rescue => e / b / end / }  green
+```
+
+**And the four that are red are red because they are not Ruby** -- **and the
+one in the game needs a `begin`, and it has one, and the failure is somewhere
+the nine cuts did not reach.**
+
+### Evidence
+
+**`TestRubyParser192`: three of ninety-three, and one of them is this file.**
+
+**`TestRubyParser: 55/56`, and the shape list is one hundred and twenty-five
+files and every one of them is green.**
+
+**Full suite `6/2217`.**
+
+**And the reader code has not changed in this round at all** -- **the whole
+change is four files that state a boundary the reader already held.**
