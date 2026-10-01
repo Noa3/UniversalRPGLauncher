@@ -55,6 +55,29 @@ public enum MzWaitMode
     Route = 2,
 
     /// <summary>
+    /// Held while an icon over a figure is still showing — the engine's
+    /// <c>"balloon"</c>, set by a 213 whose third parameter is true.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this mode was missing, and that is why a page of 211
+    /// commands stopped at eight.</strong> Measured at
+    /// <c>updateWaitMode</c>: <c>case "balloon": character =
+    /// this.character(this._characterId); waiting = character &amp;&amp;
+    /// character.isBalloonPlaying();</c>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that counted sixty frames instead waited for
+    /// a length of time the game never said</strong> — <strong>and the
+    /// engine waits for the icon to be gone, which is a condition and not
+    /// a clock.</strong> The official help says it plainly: <em>the event
+    /// will be paused until the balloon icon being displayed has
+    /// disappeared.</em>
+    /// </para>
+    /// </remarks>
+    Balloon = 4,
+
+    /// <summary>
     /// Held while a line, a choice, a number to enter or an item to choose is
     /// on the screen — the engine's <c>"message"</c>.
     /// </summary>

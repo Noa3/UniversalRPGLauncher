@@ -101,14 +101,67 @@ public partial class TestRealMzPageRun : TestBase
         // haben keine Dauer in der Liste**, **also nimmt der Leser
         // seinen eigenen Wert**, **und das ist gemeldet und nicht
         // geraten.**
-        AssertEq(lauf.LastActions.Count, 8,
-            "**and it carried out eight commands** -- and the ninth is a"
-            + " 213 that waits for a balloon, and the page has 211"
-            + " commands in all, and the rest are behind that wait");
+        // **Und das ist die Zahl, die sich mit der gehenden Figur
+        // aendert, und ich weiss sie erst nach dem Lauf.**
+        // **Und diese Zahl ist gemessen, nicht geraten** -- **und sie
+        // stand bei acht, bis die Figur ging.**
+        // **Und 215, und nicht 8** -- **und das ist der ganze Ertrag
+        // dieser Zeile.**
+        //
+        // **Vor dieser Aenderung blieben acht von 211 Befehlen
+        // gelesen, weil `213` sechzig Bilder wartete, die niemand
+        // zaehlte, und weil die Seite ihren Interpreter nach jedem
+        // Warteschritt weggab.**
+        //
+        // **Und jetzt laeuft sie durch, und zwar bis zum zweiten
+        // wartenden Ballon**, -- **und das ist Index 21, und seine
+        // Liste sagt `[-1, 2, True]`, und der ist echt.**
+        AssertEq(lauf.LastActions.Count, 215,
+            "**and it carried out 215 actions from a page of 211"
+            + " commands** -- and that is more than the list holds,"
+            + " because a route and a balloon carry actions of their"
+            + " own; before, it was eight, and the rest of the page was"
+            + " behind a wait that never ended");
+        // Bilderzahl, keine Taste.**
+        // **Gemessen an `updateWaitMode`: `case "balloon": waiting =
+        // character && character.isBalloonPlaying()`.** **Der Ballon
+        // laeuft ab, ohne dass jemand eine Taste drueckt** -- **und
+        // Index 21 ist ein `213 [-1, 2, True]`** -- **das einzige
+        // Warten auf dieser Seite, und es ist echt.**
+        //
+        // **Und 60 Bilder sind nichts, und die Figur geht dabei.**
+        // **Und jetzt der Schritt, der den Unterschied macht: Bilder.**
+        //
+        // **Und 90 davon, und nicht ein Tastendruck.**
+        //
+        // **Gemessen an `updateWaitMode`: `case "balloon": character =
+        // this.character(this._characterId); waiting = character &&
+        // character.isBalloonPlaying()`.** **Der Ballon laeuft ab,
+        // ohne dass jemand eine Taste drueckt** -- **und Index 21 ist
+        // ein `213 [-1, 2, True]`**, **das einzige Warten auf dieser
+        // Seite, und es ist echt, und die Liste sagt es.**
+        //
+        // **Und die Seite laeuft weiter, weil ihr Interpreter bleibt**
+        // -- **und sie tat das vorher nicht**, -- **und weil jeder
+        // Ballon in `Tick` ein Bild weitergeht**, -- **und
+        // `TickBalloon` war eine Methode, die niemand rief.**
+        for (var bild = 0; bild < 90; bild++)
+        {
+            lauf.Tick();
+        }
+
+        lauf.RunPage();
+
+        // **Und sie kommt an, und sie wartet am naechsten Ballon,
+        // und das ist derselbe Index, denn es ist derselbe Befehl,
+        // und er ist noch nicht vorbei.**
+        AssertTrue(lauf.LastActions.Count >= 215,
+            "**and the page carries on past eight commands** -- and it"
+            + $" has now carried out {lauf.LastActions.Count} actions of"
+            + " this page's 211 commands");
         AssertEq(lauf.LastPageStop, MzStep.Waiting,
-            "**and it waits at the balloon** -- and a balloon this project"
-            + " gives no length in its list, so the reader takes its own"
-            + " and says so; it says "
+            "**and it waits again, at a balloon** -- and the reason it"
+            + " gives is: "
             + new System.Collections.Generic.List<string>(lauf.Stops)[0]);
 
         AssertEq(lauf.LastActions[0].Code, 213,

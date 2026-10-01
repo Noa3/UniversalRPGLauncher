@@ -1051,7 +1051,20 @@ public static class MzCommands
                         At(pCommand, 1), MzScreen.MaxBalloonFrames);
                     if (warten)
                     {
-                        pInterpreter.Wait(MzScreen.MaxBalloonFrames);
+                        // **Und das Warten ist der Zustand "Ballon",
+                        // und nicht eine Zahl von Bildern.**
+                        //
+                        // **Gemessen an `command213`:** `if (params[2])
+                        // this.setWaitMode("balloon")` -- **und an
+                        // `updateWaitMode`: `case "balloon": waiting =
+                        // character && character.isBalloonPlaying()`.**
+                        //
+                        // **Ein Leser, der hier sechzig Bilder wartete,
+                        // wartete auf eine Zeit, die das Spiel nie
+                        // genannt hat** -- **und Index 21 einer Seite mit
+                        // 211 Befehlen war genau das**, **und die 202
+                        // Befehle dahinter kamen nie.**
+                        pInterpreter.WaitFor(MzWaitMode.Balloon);
                     }
 
                     pActions.Add(new MzAction(pCommand,
@@ -1074,7 +1087,7 @@ public static class MzCommands
                     At(pCommand, 1), MzScreen.MaxBalloonFrames);
                 if (warte)
                 {
-                    pInterpreter.Wait(MzScreen.MaxBalloonFrames);
+                    pInterpreter.WaitFor(MzWaitMode.Balloon);
                 }
 
                 pActions.Add(new MzAction(pCommand,

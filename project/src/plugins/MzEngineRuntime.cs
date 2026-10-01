@@ -537,6 +537,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
             var held = new MzCharacter(figur.X, figur.Y);
             held.TurnTo(figur.Direction);
             held.SetImage(figur.CharacterName, figur.CharacterIndex);
+            held.EventId = figur.EventId;
             figuren[figur.EventId] = held;
             EventFigures[figur.EventId] = held;
         }
@@ -778,8 +779,37 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // `isRepeated`, nicht `isTriggered`**, **und eine
                 // gehaltene Taste wirkt weiter.**
                 var alle = new List<MzAction>();
-                var ergebnis = _runner.Run(
-                    befehle, Facts, CurrentMapId, id, Random);
+                var ergebnis = Laeufer.TryGetValue(id, out var laufend)
+                    && laufend != null && laufend.Stopped == MzStep.Waiting
+                    ? _runner.Run(
+                        befehle, Facts, CurrentMapId, id, Random, laufend)
+                    : _runner.Run(
+                        befehle, Facts, CurrentMapId, id, Random);
+
+                // **Und der Interpreter bleibt, wenn die Seite wartet.**
+                //
+                // **Das ist die Luecke, die 209 von 211 Befehlen
+                // ungelesen liess:** **`RunPage` gab den Interpreter
+                // nach einem Warteschritt weg** -- **und die Seite
+                // fing beim naechsten Aufruf wieder bei Index 0 an.**
+                //
+                // **Und der Motor macht das nicht:** **`update` laeuft
+                // weiter, und der Interpreter lebt in `update`**, und
+                // `map` haelt ihn ueber `updateWaitMode` am Leben.
+                //
+                // **Und `213 [-1, 2, true]` bei Index 21 dieser Seite
+                // braucht genau das** -- **denn ein Ballon laeuft in 60
+                // Bildern ab, und wer seinen Interpreter wegwirft,
+                // wartet auf einen Ballon, den niemand mehr zaehlt.**
+                if (ergebnis.Interpreter != null
+                    && ergebnis.Stopped == MzStep.Waiting)
+                {
+                    Laeufer[id] = ergebnis.Interpreter;
+                }
+                else
+                {
+                    Laeufer.Remove(id);
+                }
                 alle.AddRange(ergebnis.Actions);
                 var weiter = true;
 
@@ -1017,28 +1047,103 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <c>isRepeated</c>, so a held key keeps working.</strong>
     /// </para>
     /// </remarks>
-    /// <summary>Whether a figure has a route step still to walk.</summary>
+    /// <summary>The pages still waiting, and where each one stopped.</summary>
     /// <remarks>
-    /// <strong>And this is the engine's own question.</strong> Measured at
-    /// <c>isHoldWait</c>: a page at a route is held while
-    /// <c>character.isRouteBeingForced()</c>, <strong>and the engine's
-    /// own measure is <c>!character.isDone()</c>.</strong>
+    /// <para>
+    /// <strong>And the engine keeps them: this is
+    /// <c>Game_Map</c>'s own <c>_interpreter</c>, and <c>Game_Player</c>'s,
+    /// and <c>Game_Interpreter</c>'s.</strong> Measured at
+    /// <c>Game_Map.prototype.update</c>, which calls
+    /// <c>this._interpreter.update()</c> every frame.
     /// </para>
     /// <para>
-    /// <strong>And a route that runs on <c>moveType 3</c> is not a
-    /// route this reader waits for</strong> — <strong>that is
-    /// <c>moveTypeCustom</c>, which runs beside the page and not
-    /// through it</strong>, <strong>and a page waiting for it would wait
-    /// for ever.</strong>
+    /// <strong>And a reader that threw a waiting page away restarted it
+    /// at its first command</strong> — <strong>and a page of 211 commands
+    /// with one balloon wait never got past the eight commands in front
+    /// of that wait, for ever, however many times it was run.</strong>
     /// </para>
     /// </remarks>
-    private bool EinSchrittOffen
+    private Dictionary<int, MzInterpreter> Laeufer { get; } = new();
+
+    /// <summary>The figure a route walks, or nothing when it has none.</summary>
+    /// <param name="pRoute">The route.</param>
+    /// <returns>The figure it acts on.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine finds it by <c>_characterId</c>, and this
+    /// reader has to do the same.</strong> Measured at
+    /// <c>updateWaitMode</c>: <c>case "route": character =
+    /// this.character(this._characterId)</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the figure of the player is the player's own</strong> —
+    /// <strong>because the player <em>is</em> a figure</strong> —
+    /// <strong>and forty-six of this project's routes name him with minus
+    /// one.</strong>
+    /// </para>
+    /// </remarks>
+    private MzCharacter? TrägerVon(MzMoveRoute pRoute)
+    {
+        foreach (var held in EventFigures.Values)
+        {
+            if (held != null && ReferenceEquals(held.Route, pRoute))
+            {
+                return held;
+            }
+        }
+
+        return Facts.Player.Figur != null
+            && ReferenceEquals(Facts.Player.Figur.Route, pRoute)
+            ? Facts.Player.Figur
+            : null;
+    }
+
+    /// <summary>Whether any figure still shows a balloon.</summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own question, and it is not "have
+    /// sixty frames passed".</strong> Measured at
+    /// <c>updateWaitMode</c>: <c>waiting = character &amp;&amp;
+    /// character.isBalloonPlaying()</c> — <strong>and the official help
+    /// says the event pauses until the icon has disappeared.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And without this the page at index 21 of 211 waited for
+    /// ever</strong> — <strong>because a page is only run when someone
+    /// asks, and the icon is only counted when a frame is ticked.</strong>
+    /// </remarks>
+    private bool BallonLaeuft
+    {
+        get
+        {
+            foreach (var held in EventFigures.Values)
+            {
+                if (held != null && held.BalloonFramesLeft > 0)
+                {
+                    return true;
+                }
+            }
+
+            return Facts.Player.Figur != null
+                && Facts.Player.Figur.BalloonFramesLeft > 0;
+        }
+    }
+
+    /// <summary>Whether any figure still has its route forced.</summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own question, and it is not
+    /// "has steps left".</strong> Measured at <c>isMoveRouteForcing</c>,
+    /// which is <c>_moveRouteForcing</c> — <strong>and that is set by
+    /// <c>forceMoveRoute</c> and cleared by <c>processRouteEnd</c>.</strong>
+    /// <strong>A figure mid-step is still forcing, and a figure standing
+    /// at the end of its route is not.</strong>
+    /// </remarks>
+    public bool Erzwungen
     {
         get
         {
             foreach (var route in Routes.Values)
             {
-                if (route != null && !route.IsDone)
+                if (route != null && route.IsForcing)
                 {
                     return true;
                 }
@@ -1067,7 +1172,32 @@ public sealed class MzEngineRuntime : IEngineRuntime
         {
             MzWaitMode.Transfer => !Facts.Player.Erased
                 && Facts.Player.MapId == CurrentMapId,
-            MzWaitMode.Route => !EinSchrittOffen,
+            // **Und die Route wartet, solange sie erzwungen wird, und
+            // nicht solange sie Schritte hat.**
+            //
+            // **Gemessen an `updateWaitMode`:**
+            // `case "route": character = this.character(this._characterId);
+            // waiting = character && character.isMoveRouteForcing();`
+            // **und `processRouteEnd` loest die Erzwungung** -- **und
+            // ein Schritt, der wartet, ist noch keine Erzwungung.**
+            //
+            // **Ein Leser, der auf "die Route hat noch Schritte" wartete,
+            // Wartete auf eine Figur, die geht** -- **und ohne den
+            // Schritt oben bleibt sie stehen** -- **und die Seite
+            // wartete auf eine Figur, die sich nicht bewegt.**
+            MzWaitMode.Route => !Erzwungen,
+
+            // **Und der Ballon wartet, bis er weg ist, und nicht, bis
+            // eine Zahl von Bildern vorbei ist.**
+            //
+            // **Gemessen an `updateWaitMode`: `case "balloon": character
+            // = this.character(this._characterId); waiting = character
+            // && character.isBalloonPlaying()`.**
+            //
+            // **Und `this._characterId` ist der Zielbefehl von `213`,
+            // und das ist bei 36 Ballons dieses Spiels 15 mal der
+            // Spieler.**
+            MzWaitMode.Balloon => !BallonLaeuft,
             MzWaitMode.Message => _keys.Pressed.Contains("ok")
                 || _keys.Pressed.Contains("cancel"),
             _ => true,
@@ -1107,6 +1237,82 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public int Tick()
     {
         var wechselt = 0;
+
+        // **Und jede Figur, auf der eine Laufbahn erzwungen wurde, geht
+        // zuerst.**
+        //
+        // **Das ist die Reihenfolge des Motors, und sie ist gemessen:**
+        // **`updateRoutineMove` nimmt einen Befehl pro Bild, und
+        // **`updateMove` schiebt die Figur auf ihre Kachel** -- **und
+        // **`isHoldWait` fragt `character.isRouteBeingForced()`**
+        // **jedes Bild neu.**
+        //
+        // **Und eine Seite, die bei einer 205 wartet, wartet auf
+        // genau das** -- **und ohne diesen Schritt hier bleibt die
+        // Figur stehen, und die Seite wartet auf eine Figur, die sich
+        // nicht bewegt, und 209 von 211 Befehlen bleiben ungelesen.**
+        foreach (var route in Routes.Values)
+        {
+            if (route == null)
+            {
+                continue;
+            }
+
+            // **Und die Figur, auf der die Route spricht** -- **und das
+            // ist die Figur des Befehls, der sie erzwungen hat**,
+            // **und fuer den Spieler der Spielers eigene Figur.**
+            var held = TrägerVon(route);
+            if (held == null)
+            {
+                continue;
+            }
+
+            held.PassFrame();
+            if (route.Step(held, null) != "")
+            {
+                if (Clocks.TryGetValue(held.EventId, out var uhr)
+                    && uhr != null)
+                {
+                    uhr.Direction = held.Direction;
+                    uhr.Moving = !held.IsStopping;
+                }
+
+                wechselt++;
+            }
+        }
+
+        // **Und jeder Ballon laeuft ein Bild weiter, und das ist
+        // gemessen.**
+        //
+        // **`TickBalloon` war eine Methode, die niemand rief** -- **und
+        // ein Ballon, den niemand zaehlt, bleibt fuer immer** -- **und
+        // `213 [-1, 2, true]` wartet genau auf ihn.**
+        foreach (var held in EventFigures.Values)
+        {
+            held?.TickBalloon(1);
+        }
+
+        Facts.Player.Figur?.TickBalloon(1);
+
+        // **Und jede wartende Seite kommt ein Bild weiter, und das ist
+        // der Motorweg.**
+        //
+        // **Gemessen an `Game_Map.prototype.update`: `this._interpreter
+        // .update()` wird jedes Bild gerufen** -- **und eine Seite, die
+        // 60 Bilder auf einen Ballon wartet und nur beim Start von
+        // `RunPage` bekommt, wartet auf einen Ballon, den niemand
+        // zaehlt** -- **und bei Index 21 von 211 ist das der ganze
+        // Rest des Spiels.**
+        foreach (var warte in Laeufer.Values)
+        {
+            if (warte == null)
+            {
+                continue;
+            }
+
+            warte.PassFrame(WaitBeantwortet);
+        }
+
         foreach (var uhr in Clocks.Values)
         {
             if (uhr != null && uhr.Tick())

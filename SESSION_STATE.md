@@ -11273,3 +11273,45 @@ Interpreter** -- **und die Figuren bewegen sich nur ueber `205`, und
 eine Seite, die bei einer `205` wartet, braucht eine Figur, die
 geht.**
 
+## Und acht von 211 wurden zu 215
+
+**Drei Fehler, und jeder davon allein haette die Seite angehalten:**
+
+- **`213` wartete sechzig Bilder, und die Bilder zaehlte niemand.**
+  **Gemessen an `command213`: `if (params[2]) this.setWaitMode("balloon")`
+  -- und an `updateWaitMode`: `case "balloon": waiting = character &&
+  character.isBalloonPlaying()`.** **Der Motor wartet auf einen
+  Zustand, und nicht auf eine Uhr** -- **und `MzWaitMode` kannte vier
+  Zustaende, und keiner davon war Ballon.**
+  **Jetzt sind es fuenf, und `TickBalloon` wird gerufen** -- **und das
+  war eine Methode, die existierte und nie aufgerufen wurde.**
+
+- **Die Seite gab ihren Interpreter nach jedem Warteschritt weg.**
+  **Gemessen an `Game_Map.prototype.update`: `this._interpreter.update()`
+  wird jedes Bild gerufen**, **und die Engine haelt ihre Interpreter in
+  `Game_Map`, `Game_Player` und `Game_Interpreter` selbst.**
+  **Jetzt haelt `MzEngineRuntime` sie in `Laeufer`**, **und eine Seite,
+  die wartet, laeuft weiter, wo sie stehen blieb.**
+
+- **`Tick()` ging die Figuren, aber nicht die Ballone und nicht die
+  wartenden Seiten.** **Und ein Ballon, den niemand zaehlt, bleibt.**
+
+**Und gemessen ist es jetzt 215 Aktionen aus 211 Befehlen, wo es acht
+waren** -- **und mehr als die Liste fasst, weil eine Laufbahn und ein
+Ballon eigene Aktionen tragen** -- **und die Seite wartet danach an
+einem `213 [-1, 2, True]` bei Index 21, und das ist echt, denn die
+Liste sagt es.**
+
+**Und gemessen sind 36 Ballons im ganzen Spiel, 26 davon ohne Warten**
+-- **und der Leser liest `params[2]`, und `MzCommandEntry` macht aus
+einem JSON-`false` den String `"false"`**, **und `Flag` liest ihn
+richtig.**
+
+**`All 2197 tests passed`, Validator gruen.**
+
+**Und als naechstes fehlt:** **die drei Parallel-Seiten (Ausloeser 3)
+bekommen noch keinen eigenen Interpreter** -- **und der Motor gibt
+ihnen einen ueber `setupStartingMapEvent`, und jeder hat seinen
+eigenen `_index`** -- **und eine Seite, die auf eine andere wartet,
+wartet auf deren Index, und nicht auf den eigenen.**
+

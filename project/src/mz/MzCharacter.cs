@@ -72,6 +72,23 @@ public sealed class MzCharacter
     /// about.</summary>
     public int X { get; private set; }
 
+    /// <summary>Which event this figure belongs to, or zero for none.</summary>
+    /// <remarks>
+    /// <strong>And a route needs to know who it walks, and that is the
+    /// engine's <c>_characterId</c>.</strong> Measured at
+    /// <c>updateWaitMode</c>: <c>case "route": character =
+    /// this.character(this._characterId)</c> — **and that is how a page
+    /// at a 205 finds out whether the figure arrived.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the player has no event</strong>, <strong>and its
+    /// figure carries zero</strong> — <strong>and a reader that looked
+    /// for a figure by event id found none for the player, and a page
+    /// at a 205 for minus one waited for ever.</strong>
+    /// </para>
+    /// </remarks>
+    public int EventId { get; set; }
+
     /// <summary>Which figure of its sheet this is.</summary>
     /// <remarks>
     /// <strong>And this belongs to the figure, and not to the
