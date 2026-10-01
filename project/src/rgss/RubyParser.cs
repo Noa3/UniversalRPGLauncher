@@ -57,8 +57,18 @@ public sealed class RubyParser
         // Declared loosest first. The grammar reads the same table from the
         // bottom up, so the order here is the reverse of its declaration order
         // and each entry binds more tightly than the one above it.
-        ["||"],
-        ["&&"],
+        //
+        // **And the words are in here, and that is measured.** Ruby
+        // 1.8.1's own parse.y line 305 says `%left kOR kAND`, line 312
+        // says `%left tOROP` and line 313 says `%left tANDOP`, and line
+        // 277 declares one token for all four: `%token tANDOP tOROP
+        // /* && and || */`. **So `and` and `&&` are one operator to the
+        // grammar and `or` and `||` are one, and the word forms bind
+        // looser than the symbol forms** -- which is the opposite of what
+        // a reader would guess. **And `or` binds looser than `and`**,
+        // measured at those same three lines, in declaration order.
+        ["or", "||"],
+        ["and", "&&"],
         ["not"],
         ["modifier_rescue"],
         ["=>", ":="],
@@ -280,11 +290,240 @@ public sealed class RubyParser
         return ParseAssignment();
     }
 
+    /// <summary>The left side of an <c>=</c>, as the grammar's <c>mlhs</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a list and not a single node, and that is
+    /// measured.</strong> Ruby 1.8.1's own <c>parse.y</c>, productions
+    /// <c>mlhs</c>, <c>mlhs_entry</c>, <c>mlhs_basic</c>, <c>mlhs_item</c>
+    /// and <c>mlhs_head</c>, every one of which ends in <c>NEW_MASGN</c>:
+    /// </para>
+    /// <code>
+    /// mlhs       : mlhs_basic | '(' mlhs_entry ')'
+    /// mlhs_entry : mlhs_basic | '(' mlhs_entry ')'
+    /// mlhs_basic : mlhs_head
+    ///            | mlhs_head mlhs_item
+    ///            | mlhs_head tSTAR mlhs_node
+    ///            | mlhs_head tSTAR
+    ///            | tSTAR mlhs_node
+    ///            | tSTAR
+    /// mlhs_item  : mlhs_node | '(' mlhs_entry ')'
+    /// mlhs_head  : mlhs_item ','
+    /// </code>
+    /// <para>
+    /// <strong>And the two forms this reader did not have are both in
+    /// that text.</strong> <strong>A second name after a comma</strong>
+    /// (<c>a, b = 1, 2</c>) <strong>and a star that takes the rest</strong>
+    /// (<c>a, *rest = ...</c>, whose <c>mlhs_head tSTAR mlhs_node</c>
+    /// production passes <c>-1</c> as the splat and a bare
+    /// <c>mlhs_head tSTAR</c> passes <c>-1</c> with no name at all).</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that read the target as one expression
+    /// refused every script that unpacks a list</strong> --
+    /// <strong>and <c>instruby.rb</c> line 31 does exactly that, in
+    /// Ruby 1.8.1's own tree.</strong>
+    /// </para>
+    /// </remarks>
+    private List<RubyNode> ParseAssignmentTarget()
+    {
+        var liste = new List<RubyNode>();
+
+        if (Is("("))
+        {
+            var runde = Take().Text;
+            while (!Is(")") && !AtEnd)
+            {
+                SkipNewlines();
+                if (Is(")") || AtEnd)
+                {
+                    break;
+                }
+
+                liste.AddRange(ParseAssignmentTarget());
+                SkipNewlines();
+                if (Is(","))
+                {
+                    Take();
+                }
+            }
+
+            if (Is(")"))
+            {
+                Take();
+            }
+
+            return liste;
+        }
+
+        // **And the star may lead**, measured at `tSTAR mlhs_node`.
+        if (Is("*"))
+        {
+            Take();
+            liste.Add(new RubyNode
+            {
+                Kind = RubyNodeKind.Splat,
+                Line = Current.Line,
+            });
+            if (StartsAValue())
+            {
+                liste.Add(ParseAssignmentTarget()[0]);
+            }
+
+            return liste;
+        }
+
+        liste.Add(ParseTernary());
+
+        while (Is(",") && CommaBelongsToTheTarget())
+        {
+            Take();
+            SkipNewlines();
+            if (Is("*"))
+            {
+                Take();
+                liste.Add(new RubyNode
+                {
+                    Kind = RubyNodeKind.Splat,
+                    Line = Current.Line,
+                });
+                if (StartsAValue() && !Is("="))
+                {
+                    liste.Add(ParseTernary());
+                }
+            }
+            else if (StartsAValue())
+            {
+                liste.Add(ParseTernary());
+            }
+            else
+            {
+                // **And `mlhs_head tSTAR` has no name after the star**,
+                // and a reader that demanded one stopped here.
+                break;
+            }
+        }
+
+        return liste;
+    }
+
+    /// <summary>
+    /// Whether a comma here starts another name of the same <c>=</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the decision the grammar makes with two tokens
+    /// of lookahead, and without it a comma is ambiguous.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Measured at <c>parse.y</c>: <c>arg : lhs '=' arg</c>, and
+    /// <c>lhs : mlhs_basic</c>, and <c>mlhs_head : mlhs_item ','</c> --
+    /// and the parser resolves the clash by trying <c>mlhs</c> and letting
+    /// the <c>'='</c> further right fail if it does not fit.</strong>
+    /// <strong>So a comma belongs to the target exactly when an <c>=</c>
+    /// follows the names it introduces.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that swallowed every comma broke the commonest
+    /// call in Ruby.</strong> <c>sprite.draw(x, y)</c> -- <strong>the comma
+    /// there is between two arguments, not between two names, and this
+    /// method is what tells the two apart.</strong>
+    /// </para>
+    /// </remarks>
+    private bool CommaBelongsToTheTarget()
+    {
+        var k = _index;
+
+        // **And the names may continue with stars, and the names after
+        // them are still names** -- `a, *b, c = 1`.
+        while (k < _tokens.Count
+            && (_tokens[k].Kind == RubyTokenKind.Newline
+                || _tokens[k].Kind == RubyTokenKind.Semicolon))
+        {
+            k++;
+        }
+
+        while (k < _tokens.Count && _tokens[k].Text == ",")
+        {
+            k++;
+            while (k < _tokens.Count
+                && (_tokens[k].Kind == RubyTokenKind.Newline
+                    || _tokens[k].Kind == RubyTokenKind.Semicolon))
+            {
+                k++;
+            }
+
+            // **And a star is a name in its own right**, measured at
+            // `mlhs_basic : mlhs_head tSTAR mlhs_node` and `... tSTAR`.
+            if (k < _tokens.Count && _tokens[k].Text == "*")
+            {
+                k++;
+                while (k < _tokens.Count
+                    && (_tokens[k].Kind == RubyTokenKind.Newline
+                        || _tokens[k].Kind == RubyTokenKind.Semicolon))
+                {
+                    k++;
+                }
+            }
+
+            // **And the name after the comma, if there is one.**
+            if (k < _tokens.Count
+                && StartsAValueAt(k)
+                && k + 1 < _tokens.Count
+                && (_tokens[k + 1].Text == ","
+                    || _tokens[k + 1].Text == "="))
+            {
+                k++;
+                continue;
+            }
+
+            break;
+        }
+
+        return k < _tokens.Count
+            && _tokens[k].Text == "=";
+    }
+
+    /// <summary>Whether a token at an index begins a value.</summary>
+    private bool StartsAValueAt(int pIndex) =>
+        pIndex < _tokens.Count
+        && StartsAValue(_tokens[pIndex]);
+
+    /// <summary>Several names on the left of one <c>=</c>.</summary>
+    /// <remarks>
+    /// <strong>And the engine writes this as <c>NEW_MASGN</c>, measured at
+    /// <c>parse.y</c> -- and the operator is written <c>masgn</c> here so a
+    /// caller can tell "one name" from "a list of names".</strong>
+    /// <strong>And a single name is not wrapped</strong>, <strong>so the
+    /// shape a game writes stays the shape the tree has.</strong>
+    /// </remarks>
+    private static RubyNode Masgn(List<RubyNode> pNames) => new()
+    {
+        Kind = RubyNodeKind.Assignment,
+        Operator = "masgn",
+        Line = pNames.Count > 0 ? pNames[0].Line : 0,
+        Children = [.. pNames],
+    };
+
     private RubyNode ParseAssignment()
     {
-        var left = ParseTernary();
+        var links = new List<RubyNode> { ParseTernary() };
+        var left = links[0];
         if (Is("=") || Is("=>"))
         {
+            // **Und `links` ist jetzt eine Liste, und das ist gemessen.**
+            //
+            // Ruby 1.8.1's `parse.y`: `mlhs : mlhs_basic | '(' mlhs_entry
+            // ')'`, and `mlhs_basic : mlhs_head | mlhs_head mlhs_item |
+            // mlhs_head tSTAR mlhs_node | mlhs_head tSTAR | tSTAR
+            // mlhs_node | tSTAR`, and `mlhs_head : mlhs_item ','`.
+            //
+            // **So `$make, *rest = Shellwords.shellwords($make)` legal
+            // ist** -- **und der Leser, der die Zielseite als einen
+            // Ausdruck las, verweigerte es bei jedem echten Skript, das
+            // eine Liste auspackt.** **Und `instruby.rb` Zeile 31 macht
+            // genau das.**
+
             var op = Take().Text;
             var right = ParseAssignment();
             return new RubyNode
@@ -366,10 +605,27 @@ public sealed class RubyParser
         var left = ParseUnary();
         while (true)
         {
-            if (Current.Kind != RubyTokenKind.Operator)
+            // **Und `and`, `or` und `not` sind Schluesselwoerter und
+            // keine Operatoren, und die Grammatik kennt alle vier
+            // Spielarten als eine.**
+            //
+            // **Gemessen an `parse.y` Zeile 277:**
+            // `%token tANDOP tOROP /* && and || */` -- **der Kommentar
+            // nennt alle vier Formen fuer ein Token, und `&&` und `||`
+            // liefert der Lexer als `Operator`, `and` und `or` als
+            // `Keyword`.**
+            //
+            // **Und die Tabelle muss an dieser Stelle beide annehmen**,
+            // **denn `BindingPower` kennt jetzt `or`, `and` neben `||`
+            // und `&&`** -- **und eine Pruefung, die nur auf
+            // `Operator` schaut, laesst jedes `and` und `or` einer
+            // echten Ruby-Datei als zwei Anweisungen fallen.**
+            if (Current.Kind != RubyTokenKind.Operator
+                && Current.Kind != RubyTokenKind.Keyword)
             {
                 return left;
             }
+
             if (!BindingPower.TryGetValue(Current.Text, out var level))
             {
                 return left;
@@ -2634,9 +2890,20 @@ public sealed class RubyParser
     }
 
     /// <summary>True where a value may begin, so an operator after it is binary.</summary>
-    private bool StartsAValue()
+    private bool StartsAValue() => StartsAValue(Current);
+
+    /// <summary>Whether a given token begins a value.</summary>
+    /// <remarks>
+    /// **And this is one method and not two, because a lookahead has to
+    /// ask the same question about a token it has not consumed yet**
+    /// -- **and the comma that separates a call's arguments from the
+    /// comma that separates an assignment's names is the same token**,
+    /// **so the two readers answered differently and only one of them
+    /// could be right.</**>
+    /// </remarks>
+    private static bool StartsAValue(RubyToken pToken)
     {
-        return Current.Kind switch
+        return pToken.Kind switch
         {
             RubyTokenKind.Integer => true,
             RubyTokenKind.Float => true,
@@ -2647,13 +2914,13 @@ public sealed class RubyParser
             RubyTokenKind.Constant => true,
             RubyTokenKind.InstanceVariable => true,
             RubyTokenKind.GlobalVariable => true,
-            RubyTokenKind.Keyword => Current.Text is "nil" or "true" or "false" or "self"
-                or "defined?" or "__LINE__" or "__FILE__" or "__ENCODING__" or "not"
-                or "if" or "unless" or "case" or "begin" or "yield" or "super" or "return"
-                or "lambda",
-            RubyTokenKind.Delimiter => Current.Text is "(" or "[" or "{",
-            RubyTokenKind.Operator => Current.Text is "-" or "+" or "!" or "~" or "::"
-                or ".." or "..." or "*" or "&",
+            RubyTokenKind.Keyword => pToken.Text is "nil" or "true" or
+                "false" or "defined?" or "__LINE__" or "__FILE__"
+                or "__ENCODING__" or "if" or "unless" or "case"
+                or "begin" or "yield" or "super" or "self" or "lambda",
+            RubyTokenKind.Delimiter => pToken.Text is "(" or "[" or "{",
+            RubyTokenKind.Operator => pToken.Text is "-" or "+" or "!"
+                or "~" or ".." or "..." or "*" or "&",
             _ => false,
         };
     }

@@ -264,14 +264,23 @@ public sealed class RubyLexer
             case RubyTokenKind.Delimiter:
                 return _previousText is ")" or "]";
             case RubyTokenKind.Operator:
-                // An operator that takes an expression is followed by something
-                // new, and '=' and '=~' and '!~' among them. So after those a
-                // slash opens a regular expression, and after an operator that
-                // joins two values it divides.
+                // **Und `?` steht auf dieser Liste, und das ist
+                // gemessen.**
+                //
+                // **An `parse.y`s eigenem `case '?'`:**
+                // `if (lex_state == EXPR_END || lex_state == EXPR_ENDARG)
+                // { lex_state = EXPR_BEG; return '?'; }` -- **und
+                // `EXPR_BEG` ist genau der Zustand, in dem `case
+                // '/':` einen Regexp oeffnet.**
+                //
+                // **Und `mkconfig.rb` Zeile 90 schreibt genau das:**
+                // `dest = drive ? /="x"(?![a])/i : /="y"/` -- **und ein
+                // Leser ohne `?` auf dieser Liste teilte durch und
+                // las den Rest als Code.**
                 return _previousText is not "=~" and not "!~" and not "="
-                    and not "==" and not "!=" and not "<" and not ">" and not "<="
-                    and not ">=" and not "=>" and not "&&" and not "||" and not "<<"
-                    and not "+" and not "-" and not "*";
+                    and not "==" and not "!=" and not "<" and not ">"
+                    and not ">=" and not "=>" and not "&&" and not "||"
+                    and not "+" and not "-" and not "*" and not "?";
             case RubyTokenKind.Newline:
             case RubyTokenKind.Semicolon:
                 return false;
@@ -432,10 +441,41 @@ public sealed class RubyLexer
             || pChar == '@' || pChar == '$';
     }
 
+    /// <summary>
+    /// Which letters after <c>%</c> open a percent literal, and which.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this list is Ruby 1.8.1's own, measured, and the
+    /// reader had it wrong in both directions at once.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Measured at <c>parse.y</c>'s own <c>case '%':</c>, the
+    /// <c>switch (c)</c> has exactly seven cases:</strong>
+    /// <c>'Q'</c> to <c>str_dquote</c>, <c>'q'</c> to <c>str_squote</c>,
+    /// <c>'W'</c> to <c>str_dquote | STR_FUNC_QWORDS</c>, <c>'w'</c> to
+    /// <c>str_squote | STR_FUNC_QWORDS</c>, <c>'x'</c> to
+    /// <c>str_xquote</c>, <c>'r'</c> to <c>str_regexp</c> and
+    /// <c>'s'</c> to <c>str_ssym</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And a bare <c>%</c> followed by a non-alphanumeric is
+    /// <c>'Q'</c></strong>, measured at the lines above:
+    /// <c>if (!ISALNUM(c)) { term = c; c = 'Q'; }</c>. <strong>And
+    /// <c>'%r'</c> returns <c>tREGEXP_BEG</c> and <c>'%s'</c> returns
+    /// <c>tSYMBEG</c></strong> -- <strong>so those two are not strings
+    /// with a prefix but different kinds of token entirely.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>'i'</c> is not in that list.</strong>
+    /// <strong><c>%i</c> came with Ruby 1.9, and a reader that accepts
+    /// it reads a file 1.8.1 refuses</strong> -- <strong>and the reader
+    /// here accepted it and refused <c>%r</c>, which is the one
+    /// <c>rubytest.rb</c> line 42 uses.</strong>
+    /// </para>
+    /// </remarks>
     private static bool IsWordLiteralTail(char pChar)
-    {
-        return pChar == 'w' || pChar == 'W' || pChar == 'i' || pChar == 'I';
-    }
+        => pChar is 'Q' or 'q' or 'W' or 'w' or 'x' or 'r' or 's';
 
     private static bool IsOperatorTail(char pChar)
     {
@@ -1071,26 +1111,28 @@ public sealed class RubyLexer
 
     private RubyToken ReadPercentLiteral(int pStart, int pStartLine)
     {
-        var kind = Peek(1);
-        _offset += 2;
-        string closer;
-        switch (kind)
-        {
-            case 'w':
-            case 'W':
-                closer = Peek(1) == '[' ? "]" : Peek(1).ToString();
-                break;
-            case 'i':
-            case 'I':
-                closer = Peek(1) == '[' ? "]" : Peek(1).ToString();
-                break;
-            default:
-                closer = Peek(1) == '[' ? "]" : Peek(1).ToString();
-                break;
-        }
-        if (_offset < _text.Length && _text[_offset - 1] != '[' && _text[_offset - 1] != '('
-            && _text[_offset - 1] != '[' && _text[_offset - 1] != '{'
-            && _text[_offset - 1] != '<' && _text[_offset - 1] != '|')
+        // **Und der Trenner ist das Zeichen, auf das `_offset` jetzt
+        // zeigt, und nicht das darauffolgende.**
+        //
+        // **Und `_offset += 2` ueberspringt genau `%` und den Buchstaben,
+        // und bei `%r:` zeigt es danach auf `:`.** **Ein Leser, der
+        // `Peek(1)` nahm, las den ersten Inhalt als Trenner** -- **und
+        // `%r:^(a|not):` endete dann nach `^` statt nach dem zweiten `:`,
+        // und der Rest des Musters kam als Code heraus.**
+        //
+        // **Und bei einem `%` ohne Buchstaben ist es dasselbe Bild:**
+        // gemessen an `parse.y`, `if (!ISALNUM(c)) { term = c; c = 'Q';
+        // }`, **und dann ist `_offset += 1` richtig und `+= 2` falsch.**
+        var hatBuchstabe = char.IsLetterOrDigit(Peek(1));
+        var kind = hatBuchstabe ? Peek(1).ToString() : "Q";
+        _offset += hatBuchstabe ? 2 : 1;
+        string closer = Current == '[' ? "]" : Current.ToString();
+        // **Und diese Pruefung sieht jetzt auf `Current`, und nicht auf
+        // `_offset - 1`.** **Und das ist derselbe Grund:** der Trenner
+        // steht bei `Current`, und ein Leser, der eine Position zurueck
+        // sah, pruefte den Buchstaben statt des Trenners.
+        if (_offset < _text.Length && Current != '[' && Current != '{'
+            && Current != '<')
         {
             _offset++;
         }
@@ -1132,6 +1174,53 @@ public sealed class RubyLexer
             parts.Add(new RubyStringPart { IsEscape = false, Text = c.ToString() });
             _offset++;
         }
+        // **Und `%r` ist ein Regexp und kein String, und das ist
+        // gemessen.**
+        //
+        // **An `parse.y`s eigenem `case '%'`:**
+        //
+        // ```c
+        // case 'r':
+        //     lex_strterm = NEW_STRTERM(str_regexp, term, paren);
+        //     return tREGEXP_BEG;
+        // ```
+        //
+        // **Und `str_regexp` ist `STR_FUNC_REGEXP|STR_FUNC_ESCAPE|
+        // STR_FUNC_EXPAND`, und `tREGEXP_BEG` ist ein anderer Token als
+        // `tSTRING_BEG`.** **Und `%s` gibt `tSYMBEG`, also ein Symbol.**
+        //
+        // **Und dieser Leser gab beiden `String`**, **und deshalb war
+        // `%r:^(sample/test.rb|not):` in `rubytest.rb` Zeile 42 kein
+        // Regexp, sondern Text.**
+        var istRegexp = kind == "r";
+
+        if (istRegexp)
+        {
+            var optionen = 0;
+            while (!AtEnd && (Current == 'i' || Current == 'm' || Current == 'x'))
+            {
+                optionen += Current switch
+                {
+                    'm' => 2,
+                    'i' => 1,
+                    'x' => 4,
+                    _ => 0,
+                };
+                _offset++;
+            }
+
+            return new RubyToken
+            {
+                Kind = RubyTokenKind.Regexp,
+                Text = _text[pStart.._offset],
+                Offset = pStart,
+                Line = pStartLine,
+                Value = string.Concat(parts.Select(pPart => pPart.Resolved
+                    ?? pPart.Text)),
+                Options = optionen,
+            };
+        }
+
         return new RubyToken
         {
             Kind = RubyTokenKind.String,

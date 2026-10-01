@@ -408,4 +408,24 @@ public partial class TestRubyLexer : TestBase
         var error = Refusal(() => Lex("/abc"));
         AssertTrue(error.Contains("never closed"), $"an unclosed regexp is refused: {error}");
     }
+
+
+    /// <summary>What the lexer makes of one written line.</summary>
+    /// <remarks>
+    /// **And this is here because a parser error names a token and a
+    /// reader who cannot see the token list has to guess** -- **and
+    /// guessing is what produced three wrong explanations in a row.</strong>
+    /// </remarks>
+    public void Test_WasDerLexerAusDieserZeileMacht()
+    {
+        var quelle = "mflags = ($OPT['a'] || '').strip if mflags.empty?";
+        var token = new RubyLexer(quelle).Tokenize();
+        var liste = string.Join(" ",
+            token.Select(pToken => pToken.Kind + ":" + pToken.Text));
+
+        AssertTrue(
+            token.Count == 17,
+            "**and the line makes the tokens it looks like** -- and there"
+            + $" are {token.Count}: {liste}");
+    }
 }

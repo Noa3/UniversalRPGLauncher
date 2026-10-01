@@ -12053,3 +12053,132 @@ measured by their absence in `rmmz_objects.js`.
 **Evidence:** `TestMzMoveRoute: 15/15`, full suite
 `All 2210 tests passed`, `bash scripts/validate.sh` exit 0 with
 `UniversalRPG validation passed.`
+
+
+## Ruby: the four scripts Ruby 1.8.1 itself ships, and three real gaps
+
+**And the reader had never been run against a file it did not write.**
+**416 Ruby tests existed and every one of them was written by the same
+hand as the reader**, **and a reader that handles every construct its
+author thought of can still reject a file Ruby accepts** -- **and there is
+no way to find that out from tests written by the same hand.**
+
+**And the four `.rb` files of the `v1_8_1` tag were already on this
+machine** (they are how `parse.y` and `eval.c` were checked in earlier
+cards), **so this cost nothing to obtain:** `instruby.rb`,
+`mdoc2man.rb`, `mkconfig.rb`, `rubytest.rb`, **20426 bytes together**,
+now in `project/tests/fixtures/ruby181/`.
+
+**On the first run all four were refused, and each for a different
+reason, and every one of the four is a rule the reader got wrong:**
+
+### And `and` and `or` were missing from the precedence table
+
+Measured at Ruby 1.8.1's own `parse.y`: line 277 declares
+`%token tANDOP tOROP /* && and || */`, line 305 says `%left kOR kAND`,
+line 312 `%left tOROP`, line 313 `%left tANDOP`. **So `and` and `&&` are
+one operator to the grammar, `or` and `||` are one, the word forms bind
+looser than the symbol forms, and `or` binds looser than `and`.** The
+table here had `||` and `&&` and nothing else.
+
+**And the deeper half: `&&` and `||` arrive from the lexer as
+`Operator` and `and` and `or` arrive as `Keyword`,** **and
+`ParseBinary` tested `Current.Kind != RubyTokenKind.Operator` and
+returned.** **So a table entry alone would not have helped** -- **every
+`and` and `or` in a real file fell out as two statements.**
+
+### And `%r` was not a regexp, and `%i` was not a Ruby 1.8.1 literal
+
+Measured at `parse.y`'s own `case '%'`: exactly seven cases -- `Q` to
+`str_dquote`, `q` to `str_squote`, `W` to `str_dquote|STR_FUNC_QWORDS`,
+`w`, `x` to `str_xquote`, **`r` to `str_regexp` returning
+`tREGEXP_BEG`**, `s` to `str_ssym` returning `tSYMBEG`. **The reader's
+`IsWordLiteralTail` accepted `w`, `W`, `i`, `I`.** **`%i` came with Ruby
+1.9 and a reader that accepts it reads a file 1.8.1 refuses**, **and
+`%r` -- which `rubytest.rb` line 42 uses -- was refused.** **And the
+reader returned `String` for `%r`, so even when it was accepted it was
+text and not a pattern.**
+
+### And the percent-literal delimiter was read one character too far
+
+`_offset += 2` skips `%` and the letter, and then the code took
+`Peek(1)` as the delimiter -- **which at `%r:` is the first character of
+the pattern, not the `:`.** So `%r:^(a|not):` ended after `^` and the
+rest of the pattern came out as code. Measured at the same `case '%'`:
+`if (!ISALNUM(c)) { term = c; c = 'Q'; }` -- **and a bare `%` with no
+letter advances one character, not two.**
+
+### And `?` was not on the list after which `/` opens a regexp
+
+Measured at `case '/'`: `if (lex_state == EXPR_BEG || lex_state ==
+EXPR_MID) { lex_strterm = NEW_STRTERM(str_regexp, '/', 0); return
+tREGEXP_BEG; }` -- **and measured at `case '?'`: `if (lex_state ==
+EXPR_END || lex_state == EXPR_ENDARG) { lex_state = EXPR_BEG; return
+'?'; }`.** **So `?` puts the lexer in the state that opens a pattern.**
+`SlashDivides` did not list `?`, so `mkconfig.rb` line 90 --
+`dest = drive ? /="x"(?![a])/i : /="y"/` -- divided and the rest of the
+line came out as code.
+
+### And the third shape: a star on the left of an `=`
+
+`$make, *rest = Shellwords.shellwords($make)` at `instruby.rb` line 31.
+Measured at `parse.y`: `mlhs : mlhs_basic | '(' mlhs_entry ')'`,
+`mlhs_basic : mlhs_head | mlhs_head mlhs_item | mlhs_head tSTAR
+mlhs_node | mlhs_head tSTAR | tSTAR mlhs_node | tSTAR`, `mlhs_head :
+mlhs_item ','`. **Every one of those ends in `NEW_MASGN`**, **and the
+`-1` is how the engine writes "a star with no name after it".**
+
+**And the reader read the target as a single expression, so every script
+that unpacks a list was refused.**
+
+### And this one cost 22 tests, and the A/B is what proved it
+
+**The first attempt routed the assignment through the new `mlhs`
+reader, and 26 tests that had been green went red** -- `7.zero?`,
+`(-12).gcd(18)`, `%d`-formats, default arguments. **The failure was
+`'.' at offset 4 does not begin an expression` in every one of them.**
+
+**And three wrong explanations came before the right one, and that is
+worth writing down.** **A call on a parenthesised expression was traced
+through `ParseUnary -> ParsePostfix(ParsePrimary) -> case Delimiter ->
+ParseExpression -> Expect(")")` and every step checked out** -- **and
+the code was correct and the test was wrong.** **Then the same trace was
+repeated for the array case, and again for `(-12).gcd`.** **A trace
+that keeps confirming the code is not a measurement.**
+
+**What settled it was an A/B: one line changed so the old single
+expression is read again, and the suite went from 52 failures to 4.**
+**The `mlhs` reader is therefore written, documented and measured, and
+not yet wired** -- **and a change that breaks 22 green tests is not
+finished, whatever the author's argument for it says.**
+
+**And the remaining 4 failures are the two new tests**, **and they are
+the real work**: `rubytest.rb` and `mdoc2man.rb` parse, and
+`instruby.rb` and `mkconfig.rb` do not. **And the shape that stops all
+four is one shape** -- **`(b || c).strip` and `(-12).gcd(18)` are the
+same shape, and it is a `.` after a closing bracket, and the bracket
+branch returns `inner` and the postfix that would read the `.` is not
+reached.**
+
+**Evidence:** full suite `4/2213 tests failed`, **and every one of the
+26 that were broken by the `mlhs` wiring is green again.** **This is a
+`VERIFY` state and not a `DONE` one**: **the four real files do not yet
+parse.**
+
+### And what the three RPG Maker editors on this machine settle
+
+Measured, and it answers a question that was open as criterion 8:
+
+```
+D:/SteamLibrary/steamapps/common/RPGXP       RTP/ 280 Audio + 601 Graphics
+D:/SteamLibrary/steamapps/common/RPGVXAce   RTP/ 340 Audio +  10 Fonts
+                                                       + 429 Graphics
+D:/SteamLibrary/steamapps/common/RPG Maker MV   no rmmv_*.js anywhere
+```
+
+**So the RTP for XP and VX Ace is already installed and needs no
+download**, **and MZ is not on this machine at all.** **And the MV
+editor installs no `rmmv_*.js`: `NewData/js` holds only `main.js`,
+`plugins.js` and `rpg_core.js` v1.6.2 -- the MV-versioned engine -- and
+`rmmv_managers.js` and its siblings are nowhere in the installation or in
+any of the 41 `dlc/` folders.**

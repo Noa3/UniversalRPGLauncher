@@ -33,6 +33,142 @@ public partial class TestRubyParser : TestBase
         return statements[0];
     }
 
+    /// <summary>
+    /// Ruby 1.8.1's own four scripts, and the shapes they stop on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And these are the engine's own files, byte for byte.</strong>
+    /// The four <c>.rb</c> files of the v1_8_1 tag, 20426 bytes together.
+    /// <strong>And a test that wrote its own Ruby would have proved that
+    /// the reader agrees with its author's idea of Ruby, and nothing
+    /// else.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieVierSkripteVonRuby181SelbstWerdenGelesen()
+    {
+        var wurzel = "res://tests/fixtures/ruby181";
+        var namen = new[]
+        {
+            "instruby.rb", "mdoc2man.rb", "mkconfig.rb", "rubytest.rb",
+        };
+        var fehler = new List<string>();
+        var knoten = 0;
+
+        foreach (var name in namen)
+        {
+            var pfad = $"{wurzel}/{name}";
+            if (!Godot.FileAccess.FileExists(pfad))
+            {
+                fehler.Add($"{name} is not at {pfad}");
+                continue;
+            }
+
+            var bytes = Godot.FileAccess.GetFileAsBytes(pfad);
+            var quelle = System.Text.Encoding.UTF8.GetString(bytes);
+
+            try
+            {
+                var program = new RubyParser(new RubyLexer(quelle).Tokenize())
+                    .ParseProgram();
+                knoten += program.Count;
+                if (program.Count == 0)
+                {
+                    fehler.Add($"{name} parsed as no statements, and it"
+                        + $" holds {quelle.Length} characters");
+                }
+            }
+            catch (Exception pProblem)
+            {
+                // **And the line is in the exception, measured at
+                // `RubyParseException.Line` and `RubySyntaxException.Line`,
+                // and the text around it comes out of the file itself**,
+                // **so the message shows what stands there.**
+                var zeile = pProblem is RubyParseException ppe
+                    ? ppe.Line
+                    : (pProblem as RubySyntaxException)?.Line ?? -1;
+                var anfang = 0;
+                for (var k = 0; k < zeile - 1 && anfang < quelle.Length; k++)
+                {
+                    anfang = quelle.IndexOf('\n', anfang) + 1;
+                }
+
+                fehler.Add($"{name} at line {zeile}: ["
+                    + quelle.Substring(
+                        anfang,
+                        Math.Min(110, quelle.Length - anfang))
+                        .Replace("\n", "\\n")
+                    + "]");
+            }
+        }
+
+        AssertTrue(
+            fehler.Count == 0,
+            "**and every one of Ruby 1.8.1's own four scripts parses** --"
+            + $" and {fehler.Count} did not: "
+            + string.Join(" | ", fehler));
+        AssertTrue(
+            knoten > 400,
+            "**and they come out as a program, and not as a shrug** -- and"
+            + $" the four files hold {knoten} top-level statements");
+    }
+
+    /// <summary>
+    /// The shapes the four real scripts stop on, one at a time.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And every shape here is copied out of one of the four
+    /// files, and not invented</strong> -- <strong>and a reader that
+    /// handles a whole file stops on the first shape it never met, so the
+    /// shape is the unit of failure.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieFormenDieDieEchtenSkripteNochStoppen()
+    {
+        var faelle = new (string Quelle, string Woher)[]
+        {
+            ("mflags = ($OPT['a'] || '').strip if mflags.empty?",
+             "instruby.rb 23 -- a modifier after a call on a bracket"),
+            ("$make, *rest = Shellwords.shellwords($make)",
+             "instruby.rb 31 -- a star that takes the rest of the values"),
+            ("retval << \".nf\n\" << '\\&  '",
+             "mdoc2man.rb 232 -- two appends, which is one expression"),
+            ("dest = drive ? /= \"x\"(?![a])/i : /= \"y\"/",
+             "mkconfig.rb 90 -- a ternary whose arms are delimited regexps"),
+            ("error << line if line =~ %r:^(a|not):",
+             "rubytest.rb 42 -- a modifier after an append, and %r"),
+        };
+        var fehler = new List<string>();
+
+        foreach (var (quelle, woher) in faelle)
+        {
+            try
+            {
+                var program = Parse(quelle);
+                if (program.Count != 1)
+                {
+                    fehler.Add($"{woher}: parsed as {program.Count}"
+                        + " statements, not 1");
+                }
+            }
+            catch (Exception pProblem)
+            {
+                var alle = new RubyLexer(quelle).Tokenize();
+                var liste = string.Join(" ",
+                    alle.Select(x => x.Kind + ":" + x.Text));
+                fehler.Add($"{woher}: {pProblem.GetType().Name}"
+                    + $" {pProblem.Message} | tokens: {liste}");
+            }
+        }
+
+        AssertTrue(
+            fehler.Count == 0,
+            "**and each of the shapes the real scripts stop at parses on"
+            + $" its own** -- and {fehler.Count} did not: "
+            + string.Join(" | ", fehler));
+    }
+
     private string Refusal(Action pAction)
     {
         try
