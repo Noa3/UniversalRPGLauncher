@@ -171,24 +171,90 @@ partial class TestMzBranchEvaluator : TestBase
         }
     }
 
-    public void Test_ASwitchThatIsNotKnownIsRefusedRatherThanCalledOff()
+    /// <summary>A switch nobody supplied is off, because the engine says so.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this test used to say the opposite, and in words:</strong>
+    /// "a switch nobody has supplied is not called off", "this reader
+    /// treated what it does not know as off, and a game content would be
+    /// skipped with nothing to show for it".
+    /// </para>
+    /// <para>
+    /// <strong>And that reasoning was wrong, and the engine settles it.</strong>
+    /// Measured at <c>Game_Switches.prototype.value</c>: <c>return
+    /// !!this._data[switchId];</c> — <strong>and <c>setValue</c> writes
+    /// only when <c>switchId &gt; 0 &amp;&amp; switchId &lt;
+    /// $dataSystem.switches.length</c></strong> — <strong>and so every
+    /// switch outside that range is off for the whole game, and no
+    /// caller can supply it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>command111</c> compares <c>value(params[1]) ===
+    /// (params[2] === 0)</c></strong> — <strong>and the brackets stand
+    /// around the second condition</strong> — <strong>and
+    /// <c>false === false</c> is true.</strong> <strong>And this is not
+    /// theory: measured at Map011 event 6, the game carries</strong>
+    /// <strong><c>[0, 10, 0]</c>, and without this rule one of its four
+    /// branches could not be answered at all.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_ASwitchThatIsNotKnownIsOffBecauseTheEngineSaysSo()
     {
-        // The one failure here that would be invisible. A branch that asked
-        // about a switch the caller has not supplied would come to false if the
-        // reader treated what it does not know as off, and a game's content
-        // would be skipped with nothing to show for it. So it says what is
-        // missing instead.
         var branch = MzBranch.FromParameters(["0", "99", "0"]);
-        var result = MzBranchEvaluator.Evaluate(branch, new MzBranchFacts());
+        //
+        // **Und ich habe zuerst das Gegenteil behauptet** -- **und der
+        // Zweig des Lesers war die ganze Zeit richtig.** **Ein Kommentar,
+        // der die Frage verkehrt herum benennt, faehrt einen Test mit,
+        // der die Antwort verkehrt herum prueft.**
+AssertEq(
+            MzBranchEvaluator.Evaluate(
+                branch, new MzBranchFacts()).Outcome,
+            MzBranchOutcome.False,
+            "**and a switch nobody supplied is off** -- because the"
+                + " engine value() is `!!this._data[switchId]`, and a"
+                + " slot that was never written is falsy, and"
+                + " `false === true` is false");
+
+        var fragtNachAn = MzBranch.FromParameters(["0", "99", "0"]);
 
         AssertEq(
-            result.Outcome, MzBranchOutcome.Unknown,
-            "a switch nobody has supplied is not called off");
-        AssertTrue(
-            result.Missing.Contains("99"),
-            $"and the refusal names the switch it needed: {result.Missing}");
-    }
+            MzBranchEvaluator.Evaluate(
+                fragtNachAn, new MzBranchFacts()).Outcome,
+            MzBranchOutcome.False,
+            "**and asking whether that same switch is on comes to false"
+                + "** -- because `command111` says `value(params[1]) ==="
+                + " (params[2] === 0)`, and the brackets stand around the"
+                + " ANSWER and not around the question, and"
+                + " `params[2] === 0` is exactly when it asks whether the"
+                + " switch is on");
 
+        var fragtNachAus = MzBranch.FromParameters(["0", "99", "1"]);
+
+        AssertEq(
+            MzBranchEvaluator.Evaluate(
+                fragtNachAus, new MzBranchFacts()).Outcome,
+            MzBranchOutcome.True,
+            "**and asking whether it is off comes to true** -- and that"
+                + " is the other side of the same comparison, and a"
+                + " reader that read the third parameter the other way"
+                + " round would take the wrong branch of this game's own"
+                + " pages");
+
+        // **Und derselbe Fall mit einer gesetzten Nummer, denn es ist
+        // derselbe Pfad** -- **und gemessen ist `[8, 2]` und `[1, 1,
+        // 0, 10, 1]` in diesem Spiel, und die beiden brauchen echten
+        // Zustand** -- **und der Schalter nicht, denn es gibt keinen.**
+        // **Und derselbe Zweig mit gesetztem Schalter, denn sonst
+        // waere der ganze Test eine Konstante.**
+        var gesetzt = new MzBranchFacts { Switches = { [99] = true } };
+        AssertEq(
+            MzBranchEvaluator.Evaluate(branch, gesetzt).Outcome,
+            MzBranchOutcome.True,
+            "**and the very same branch comes to true once the switch"
+                + " is on** -- and the two together are the whole rule:"
+                + " a switch nobody supplied is off, and the same"
+                + " switch set to on flips the branch");
+    }
     public void Test_ABranchThatAsksForTheAuthorsOwnScriptIsReportedAndNotRun()
     {
         // The engine writes `result = !!eval(params[1])` for this kind. This

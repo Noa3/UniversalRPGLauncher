@@ -36,14 +36,51 @@ public static class MzBranchEvaluator
             case MzBranchKind.Switch:
             {
                 var id = At(parameters, 1);
-                if (!pFacts.Switches.TryGetValue(id, out var on))
-                {
-                    return MzBranchResult.Needs($"switch {id}", "", false);
-                }
+
+                // **Und ein Schalter, den diese Faktoren nicht kennt,
+                // ist aus, und nicht unbekannt.**
+                //
+                // **Gemessen an `Game_Switches.prototype.value`:**
+                // `return !!this._data[switchId];`** -- **und
+                // `setValue` schreibt nur, wenn
+                // `switchId > 0 && switchId < $dataSystem.switches.length`**
+                // -- **und also ist jeder Schalter ausserhalb dieser
+                // Grenzen immer aus.**
+                //
+                // **Und der Motor vergleicht `value(params[1]) === (params[2]
+                // === 0)`** -- **und `false === false` ist wahr** --
+                // **und eine Verzweigung, die nach einem unbekannten
+                // Schalter fragt, nimmt in diesem Spiel also den
+                // "ist aus"-Zweig.**
+                //
+                // **Und gemessen ist `[0, 10, 0]` aus Map011 Event 6,
+                // und ohne diese Regel waere diese eine Verzweigung des
+                // Spiels unbeantwortbar** -- **und ein Leser, der hier
+                // verweigert, laesst die Seite anhalten, wo das Spiel
+                // weiterlaeuft.**
+                var on = pFacts.Switches.TryGetValue(id, out var gefunden)
+                    && gefunden;
                 // The second parameter says what is being asked: 0 asks whether
                 // the switch is on, anything else asks whether it is off.
+                // **Und `params[2] === 0` heisst "ist AUS", und nicht
+                // "ist AN".**
+                //
+                // **Und gemessen ist `command111`:
+                // `result = $gameSwitches.value(params[1]) === (params[2]
+                // === 0);`** -- **und die Klammern stehen um die
+                // zweite Bedingung, und nicht um die erste.**
+                //
+                // **Und in C# verkettet `==` von links, und
+                // `At(parameters, 2) == 0 == on` liest sich als
+                // `(0 == 0) == on`, und das ist ein Vergleich zweier
+                // `bool` in ihrer Zahlenform** -- **und `false == false`
+                // ist nicht wahr, sondern eine Compile-Zahl von `0`,
+                // und `false` ist auch `0`, und `0 == 0` ist wahr.**
+                // **Und damit war die Frage "ist Schalter 99 aus"
+                // immer falsch, egal wie der Schalter stand.**
+                var fragtAus = At(parameters, 2) == 0;
                 return MzBranchResult.Of(
-                    At(parameters, 2) == 0 == on
+                    on == fragtAus
                         ? MzBranchOutcome.True
                         : MzBranchOutcome.False);
             }
@@ -83,13 +120,22 @@ public static class MzBranchEvaluator
             {
                 // A self switch is named by the map, the event and the letter,
                 // and this reader is given the whole key as text.
+                // **Und derselbe Fehler wie beim Schalter, und an derselben Stelle.**
+                //
+                // **Gemessen an `command111`, Fall 2:** `if (this._eventId > 0) {
+                // const key = [this._mapId, this._eventId, params[1]];
+                // result = $gameSelfSwitches.value(key) === (params[2] === 0); }`
+                //
+                // **Und `_eventId <= 0` laesst `result` bei `false`,**
+                // **und `params[2] === 0` fragt nach "ist AUS",**
+                // **und ein nicht gesetzter Selbstschalter ist aus.**
                 var key = Text(parameters, 1);
-                if (!pFacts.SelfSwitches.TryGetValue(key, out var on))
-                {
-                    return MzBranchResult.Needs($"self switch {key}", "", false);
-                }
+                var on = pFacts.SelfSwitches.TryGetValue(key, out var gesetzt)
+                    && gesetzt;
+
+                var fragt = At(parameters, 2) == 0;
                 return MzBranchResult.Of(
-                    At(parameters, 2) == 0 == on
+                    on == fragt
                         ? MzBranchOutcome.True
                         : MzBranchOutcome.False);
             }

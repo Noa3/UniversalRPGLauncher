@@ -231,7 +231,53 @@ public static class MzCommandTable
 
     /// <summary>Runs a line of the author's own JavaScript. The engine's
     /// <c>command355</c> ends in <c>eval(script)</c> and is not run here.</summary>
+    /// <summary>
+    /// A line of the author's own JavaScript, and its 655s follow it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this repository does not run it, and it is reported
+    /// and not executed.</strong> Measured at <c>command355</c>:
+    /// <c>let script = this.currentCommand().parameters[0] + "\n"; while
+    /// (this.nextEventCode() === 655) { this._index++; script +=
+    /// this.currentCommand().parameters[0] + "\n"; } eval(script);</c>
+    /// </para>
+    /// <para>
+    /// <strong>And the <c>while</c> is the engine's own, and it steps the
+    /// index once per line</strong> — <strong>the same rule as
+    /// <c>101</c> over its <c>401</c>s and <c>105</c> over its
+    /// <c>405</c>s, and the reader must not step it again.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And measured on this repository's own fixture, Map002
+    /// event 6 holds 83 commands of which 62 are 655s, and without
+    /// this branch the reader walked past the block one line at a time
+    /// and the run froze at 100000 commands.</strong>
+    /// </para>
+    /// </remarks>
     public const int Script = 355;
+
+    /// <summary>A line of the author's own JavaScript, under a 355.</summary>
+    /// <remarks>
+    /// <strong>And it has no <c>command655</c> method, and that is
+    /// measured</strong> — <strong>the engine reads its lines inside
+    /// <c>command355</c>'s own <c>while</c>, and the dispatcher never
+    /// sees one.</strong> <strong>And a reader that has no branch for it
+    /// treats it as a command with no effect and walks to the end of the
+    /// list in single steps.</strong>
+    /// </remarks>
+    public const int ScriptLine = 655;
+
+    /// <summary>A line of a plugin command's arguments.</summary>
+    /// <remarks>
+    /// <strong>And it has no <c>command657</c> method either, and that is
+    /// measured</strong> — <strong>and <c>command357</c> takes its three
+    /// parameters out of the list itself</strong>:
+    /// <c>PluginManager.callCommand(this, pluginName, params[1],
+    /// params[3]);</c> — <strong>and <c>params[2]</c> is the number of
+    /// <c>657</c> lines that follow.</strong>
+    /// </remarks>
+    public const int PluginCommandLine = 657;
 
     /// <summary>Changes how many of an item the party has. The engine's
     /// <c>gainItem</c> clamps the count to <c>maxItems</c>, which is

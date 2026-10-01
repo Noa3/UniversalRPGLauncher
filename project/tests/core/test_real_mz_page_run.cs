@@ -1014,4 +1014,129 @@ public partial class TestRealMzPageRun : TestBase
             + $" {lauf.ScrollLines.Count} lines, and an empty line is a"
             + " paragraph and not a lost command");
     }
+
+    /// <summary>
+    /// This game's own three branches, and the page that carries them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the older test read a fixture, and this game has
+    /// branches of its own that no fixture covers.</strong> Measured:
+    /// <c>111</c> comes four times in this project, and three kinds are
+    /// used — <c>[8, 2]</c> an item, <c>[1, 1, 0, 10, 1]</c> a variable
+    /// compared with a constant, and <c>[0, 10, 0]</c> a switch.
+    /// </para>
+    /// <para>
+    /// <strong>And all three are in Map007 event 3, one after another,
+    /// and that page has 43 commands.</strong> <strong>It is the page
+    /// that gives birth, takes the party apart and moves the player to
+    /// map 6.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieDreiEigenenVerzweigungenDiesesSpiels()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(7),
+            "**and map 7 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und die drei Verzweigungen einzeln, und jede mit dem
+        // Zustand, den das Spiel selbst verlangt.**
+        //
+        // **Und gemessen ist `Map007.json` Event 3: Index 0 ist `111
+        // [8, 2]`, Index 2 ist `111 [1, 1, 0, 10, 1]`.**
+        var mitGegenstand = new MzBranchFacts
+        {
+            Items = { [2] = 3 },
+        };
+        var mitVariable = new MzBranchFacts
+        {
+            Variables = { [1] = 10 },
+        };
+
+        AssertEq(
+            MzBranchEvaluator.Evaluate(
+                MzBranch.FromParameters(["8", "2"]), mitGegenstand).Outcome,
+            MzBranchOutcome.True,
+            "**and the item branch answers** -- and `[8, 2]` asks"
+            + " whether the party holds item 2, and this reader was"
+            + " given three of them; measured from Map007 event 3"
+            + " index 0");
+
+        AssertEq(
+            MzBranchEvaluator.Evaluate(
+                MzBranch.FromParameters(["1", "1", "0", "10", "1"]),
+                mitVariable).Outcome,
+            MzBranchOutcome.True,
+            "**and the variable branch answers** -- and it compares"
+            + " variable 1 with the constant 10 by \"greater than or"
+            + " equal\", and variable 1 is 10; measured from Map007"
+            + " event 3 index 2");
+
+        // **Und die dritte, und die ist ein Schalter, und der steht
+        // woertlich als `[0, 10, 0]`: Schalter 10 soll AUS sein.**
+        //
+        // **Und gemessen ist das der ganze Unterschied zwischen einer
+        // Verzweigung, die das Spiel erzaehlt, und einer, die es
+        // umkehrt:** **`params[2] === 0` heisst "ist AUS", und ein
+        // Leser, der 0 als "ist an" liest, nimmt den anderen Zweig
+        // und aendert die Geschichte.**
+        var ohneSchalter = new MzBranchFacts();
+
+        // **Und `[0, 10, 0]` fragt nach AN, und nicht nach aus.**
+        //
+        // **Und das ist gemessen an `command111`, Fall 0:** `result =
+        // $gameSwitches.value(params[1]) === (params[2] === 0);`** --
+        // **und die Klammern stehen um die ANTWORT, und nicht um die
+        // FRAGE:** **und `params[2] === 0` ist genau dann wahr, wenn
+        // nach AN gefragt wird.**
+        //
+        // **Und ich habe zuerst das Gegenteil behauptet** -- **und der
+        // Code war die ganze Zeit richtig.** **Ein Comment, der die
+        // Frage verkehrt herum benennt, faehrt einen Test mit, der die
+        // Antwort umkehrt.**
+        AssertEq(
+            MzBranchEvaluator.Evaluate(
+                MzBranch.FromParameters(["0", "10", "0"]),
+                ohneSchalter).Outcome,
+            MzBranchOutcome.False,
+            "**and the switch branch answers** -- and `[0, 10, 0]`"
+                + " asks whether switch 10 is ON, and it is not, so"
+                + " the branch is false; measured from Map011 event 6");
+
+        // **Und mit gesetztem Schalter, denn sonst waere der Test
+        // tautologisch.**
+        AssertEq(
+            MzBranchEvaluator.Evaluate(
+                MzBranch.FromParameters(["0", "10", "0"]),
+                new MzBranchFacts { Switches = { [10] = true } })
+                .Outcome,
+            MzBranchOutcome.True,
+            "**and with the switch on the same branch is true** -- and"
+                + " that is what makes it a test and not a constant");
+
+        // **Und jetzt die Seite, und das ist der ganze Beweis.**
+        var bericht = lauf.Betrete(1, 12);
+        AssertEq(bericht.Count, 1,
+            "**and the page started** -- and it is at (1,12) with 43"
+            + " commands and no condition of its own; the report is: "
+                + string.Join(" | ", bericht));
+        AssertTrue(lauf.LastActions.Count > 0,
+            "**and it carried something out** -- and it carried out "
+                + $"{lauf.LastActions.Count}, and the first is"
+                + $" {lauf.LastActions[0].Code}");
+    }
 }

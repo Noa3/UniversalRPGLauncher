@@ -11847,3 +11847,70 @@ ohne eigene Abdeckung** (111, 112, 122, 126, 230, 231, 232)** --
 **und `401` mit 938 Vorkommen ist der haeufigste Befehl ueberhaupt,
 und er wird ueber die Position innerhalb eines `101` gelesen.**
 
+
+## MZ `355` had no branch, and one page of Map002 froze at 100000 commands
+
+**The signal:** `Test_EveryCommonEventThisGameCallsIsNamedRatherThanSteppedOver`
+asserted `onAScript >= 1` and got `0`, and it had never passed. Measured on
+`project/tests/fixtures/mz/data/Map002.json`: **6 pages, 4 carry a `117`, 2
+carry a `355`** -- and **the fixture was byte-identical to `HEAD` the whole
+time.** The first hypothesis, that the fixture had lost its `117`s and `355`s,
+was wrong: `git status` showed no change to
+`project/tests/fixtures/`, and a second `Map002.json` under `mz_plain` was
+counted by mistake before `FixtureRoot` was read.
+
+**The real cause:** `MzCommandTable.Script = 355` existed as a constant and
+**nothing in `project/src` had a branch for it** -- `case MzCommandTable.Script:`
+appeared zero times. A command with no branch is stepped over one line at a
+time, so a `355` with 62 `655`s under it was walked through 62 single steps,
+and the run reached the 100000-command ceiling. Measured: `named = 2`,
+`waiting = 2`, and one list frozen.
+
+**And the `655`s have no method at all, and that is the engine's own shape.**
+At `command355` in `js/rmmz_objects.js`:
+
+```js
+let script = this.currentCommand().parameters[0] + "\n";
+while (this.nextEventCode() === 655) { this._index++; script += ...; }
+eval(script);
+```
+
+**There is no `command655` and no `command657`** -- the engine reads the lines
+inside `command355`'s own `while`, exactly as `101` reads its `401`s and `105`
+its `405`s. So the reader must consume the block itself, and must not advance
+a second time.
+
+**And a refusal was wrong, and the engine says why.** At `executeCommand`:
+
+```js
+const methodName = "command" + command.code;
+if (typeof this[methodName] === "function") {
+    if (!this[methodName](command.parameters)) { return false; }
+}
+this._index++;
+```
+
+**A command with no method is still stepped over, and `command355` returns
+`true`.** So a `355` is **reported and not executed, and the page carries on**:
+`Index++` past the whole block and `return true`. The first attempt called
+`Refuse` and returned `false`, which stopped the page where the game does not.
+
+**And the guard clause I wrote first broke a test that was right.** `if (Index +
+1 < _commands.Count) Index++;` keeps the index on the last command of a
+one-command list, so `IsRunning` stayed true and the run never ended.
+`Test_ACommandWithNoMethodIsSteppedOver` caught it. **The engine has no such
+condition**, and neither does this reader now: `Index++` unconditionally, and
+`IsRunning => Index < _commands.Count` ends the list the same way the engine
+does.
+
+**And where the message goes is not where the first attempt put it.** `Reason`
+is overwritten by the end-of-list text, so a caller reading `result.Reason`
+learns nothing. The interpreter now carries `Hinweise` -- a list, in order,
+of what was reported and not run -- and the test counts that.
+
+**Evidence:** `TestMzEventRunner: 16/16`, `TestMzInterpreter: 19/19`, full
+suite `All 2206 tests passed`, `bash scripts/validate.sh` exit 0 with
+`UniversalRPG validation passed.`
+
+**And MZ JavaScript is still not executed.** `Hinweise` names the first line
+and the line count of every block it skipped, and `eval` is never reached.

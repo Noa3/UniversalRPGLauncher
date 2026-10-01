@@ -264,6 +264,75 @@ public sealed class MzInterpreter
 
         // A command the engine has no method for is stepped over. The engine
         // asks whether the method exists and, when it does not, still advances.
+        // **Und ein `355` wird nicht ausgefuehrt, und der Block
+        // dahinter wird in einem Zug ueberlesen.**
+        //
+        // **Und das ist gemessen an `command355`: `let script =
+        // this.currentCommand().parameters[0] + "\n"; while
+        // (this.nextEventCode() === 655) { this._index++; script +=
+        // this.currentCommand().parameters[0] + "\n"; } eval(script);`**
+        // -- **und die `while` ist die des Motors, und sie setzt den
+        // Index einmal je Zeile** -- **und `eval` fuehrt dieser Leser
+        // nicht aus, und das ist eine Grenze dieses Repositorys, keine
+        // Luecke in ihm.**
+        //
+        // **Und gemessen ist, was ohne diese Regel passiert:** **die
+        // Fixture Map002 Event 6 hat 83 Befehle, davon 62 `655`, und der
+        // Leser ging an dem 355 vorbei, treating each 655 as a command
+        // with no effect, one step at a time, until the run froze at
+        // 100000 commands.**
+        if (command.Code == MzCommandTable.Script)
+        {
+            var zeilen = new List<string>();
+            if (command.Parameters.Count > 0)
+            {
+                zeilen.Add(command.Parameters[0]);
+            }
+
+            while (Index + 1 < _commands.Count
+                && _commands[Index + 1].Code == MzCommandTable.ScriptLine)
+            {
+                Index++;
+                zeilen.Add(_commands[Index].Parameters.Count > 0
+                    ? _commands[Index].Parameters[0]
+                    : "");
+            }
+
+            // **Und es ist ein Hinweis, und keine Verweigerung.**
+            //
+            // **Und das ist gemessen an `executeCommand`:** `if (typeof
+            // this[methodName] === "function") { if (!this[methodName]
+            // (command.parameters)) return false; } this._index++;`
+            // -- **und `command355` gibt `true` zurueck**, -- **und
+            // `update()` laeuft weiter.**
+            //
+            // **Und `355` hat eine Seite ohne `655`: dann ist der Block
+            // leer, und `this._index++` fuehrt auf den Index nach dem
+            // Block, und genau das macht diese Regel.**
+            Hinweise.Add(
+                "the page runs the author's own JavaScript, and this"
+                + " repository does not run it; the block is"
+                + $" {zeilen.Count} line(s) long and starts with"
+                + $" \"{(zeilen.Count > 0 ? zeilen[0] : "(empty)")}"
+                + "\", and the"
+                + " index now stands on the command after the block");
+
+            // **Und der Index geht hinter den Block, und immer.**
+            //
+            // **Und gemessen an `executeCommand`: `this._index++;` steht
+            // nach dem Aufruf, und ohne Bedingung.** **Und
+            // `IsRunning` ist `Index < _commands.Count`** -- **und
+            // also beendet das Hochzaehlen ueber das Ende die Liste
+            // genauso, wie es der Motor tut.**
+            //
+            // **Und die Bedingung, die ich zuerst schrieb, verhinderte
+            // genau den Fall, den ein Test prueft** -- **eine Liste aus
+            // einem einzigen `355`, ohne `0` am Ende** -- **und liess
+            // den Lauf bei Index 0 stehen, immer.**
+            Index++;
+            return true;
+        }
+
         if (!MzCommands.HasEffect(command.Code))
         {
             Index++;
@@ -631,6 +700,20 @@ public sealed class MzInterpreter
     /// <summary>Why the run is being held up, when the answer is a condition
     /// and not a count.</summary>
     public MzWaitMode WaitMode { get; private set; } = MzWaitMode.None;
+
+    /// <summary>What was reported and not run, in the order it happened.</summary>
+    /// <remarks>
+    /// <strong>And this is here because a 355 is reported and not
+    /// executed</strong>, <strong>and a refusal would stop the page where
+    /// the game carries on</strong> — <strong>and measured at
+    /// <c>executeCommand</c>: <c>command355</c> returns <c>true</c>, and
+    /// the run goes on.</strong> <para>
+    /// <strong>And this is the same list <c>MzBranchFacts.Notices</c>
+    /// carries</strong>, <strong>and a caller reading one of them learns
+    /// the same thing.</strong>
+    /// </para>
+    /// </remarks>
+    public List<string> Hinweise { get; } = new();
 
     /// <summary>
     /// Counts one frame off a wait, which is what the engine does before each
