@@ -746,4 +746,100 @@ public partial class TestRealMzPageRun : TestBase
             "**and it is event 5** -- and this is the whole proof that"
             + $" the tile decides: {daneben[0]}");
     }
+
+
+    /// <summary>
+    /// A trigger-2 page needs the opposite priority from a trigger-1 page.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And that is the whole point, and it is measured at
+    /// <c>Game_Event.prototype.checkEventTriggerTouch</c>:</strong>
+    /// <c>if (!$gameMap.isEventRunning()) { if (this._trigger === 2
+    /// &amp;&amp; $gamePlayer.pos(x, y)) { if (!this.isJumping() &amp;&amp;
+    /// this.isNormalPriority()) this.start(); } }</c> — <strong>and
+    /// <c>updateNonmoving</c> asked <c>here([1, 2])</c>, which is
+    /// <c>normal = false</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And measured, this project's two trigger-2 pages both carry
+    /// priority 0</strong>, <strong>so neither can start this way, and a
+    /// reader that claimed otherwise would be wrong.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_EineTrefferseiteBrauchtDieUmgekehrtePrioritaet()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts**");
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and the host built an MZ runtime**");
+            return;
+        }
+
+        AssertTrue(lauf.GoTo(3),
+            "**and map 3 paints** -- and the refusal is: "
+                + lauf.PaintReason);
+
+        // **Und Event 9 steht bei (6,7) mit Ausloeser 2 und Prioritaet
+        // 0** -- **und `updateNonmoving` fragt `[1, 2]` mit `here`, also
+        // nach einer Seite, die NICHT normal ist.** **Ausloeser 2 steht
+        // in dieser Liste, also startet die Seite beim Aufreten.**
+        lauf.Betrete(5, 5);
+        var bericht = lauf.Betrete(6, 7);
+        AssertEq(bericht.Count, 1,
+            "**and the arrival path started it** -- and the report is: "
+                + string.Join(" | ", bericht));
+        AssertTrue(bericht[0].Contains("event 9"),
+            "**and it is event 9, with its 211 commands** -- and the"
+            + $" report is {bericht[0]}");
+
+        // **Und der eigene Weg des Ereignisses verlangt das Gegenteil**
+        // -- **gemessen an `checkEventTriggerTouch`, das
+        // `isNormalPriority()` verlangt, und diese Seite ist 0.**
+        AssertEq(lauf.FuehreAn().Count, 0,
+            "**and the event's own touch path refused it** -- and that"
+            + " is the measured truth: checkEventTriggerTouch requires"
+            + " isNormalPriority(), and this page's priorityType is 0");
+
+        // **Und nun die Worte, und die sind woertlich aus der Datei.**
+        //
+        // **Und gemessen ist Map003 Event 9, 211 Befehle, und Index 0
+        // ist ein `213 [-1, 2, false]`** -- **und der Satz bei Index 1.**
+        var alle = new System.Text.StringBuilder();
+        for (var k = 0; k < lauf.LastActions.Count && k < 6; k++)
+        {
+            alle.Append(lauf.LastActions[k].Code).Append(':')
+                .Append(lauf.LastActions[k].What).Append(" / ");
+        }
+
+        AssertTrue(alle.ToString().Contains("This passage"),
+            "**and the game's own sentence came out** -- and the first"
+            + $" actions were {alle}");
+        AssertTrue(lauf.LastActions.Count >= 3,
+            "**and it carried more than two actions out** -- and it"
+            + $" carried out {lauf.LastActions.Count}");
+
+        // **Und gemessen ist, dass der Satz an Position 2 steht**, **denn
+        // Index 0 der Seite ist ein 213 und Index 1 ein 101.**
+
+
+        // **Und das ist die ehrliche Antwort:** **die Seite ist ueber
+        // ihren eigenen Ausloeser erreichbar, und ueber den
+        // Beruehrungsweg nicht** -- **und das ist kein Fehler des
+        // Lesers, sondern der Motor, der normale Prioritaet verlangt und
+        // diese Seite nicht hat.**
+        AssertEq(lauf.FuehreAn().Count, 0,
+            "**and the touch path still refuses it after the arrival**"
+            + " -- and this is the honest answer: the engine's rule is"
+            + " isNormalPriority(), and this page is priority 0, so it"
+            + " reaches the player through its own trigger and not"
+            + " through a touch");
+    }
 }

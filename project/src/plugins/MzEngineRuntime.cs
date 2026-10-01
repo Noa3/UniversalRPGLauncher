@@ -1190,6 +1190,101 @@ public sealed class MzEngineRuntime : IEngineRuntime
         return bericht;
     }
 
+    /// <summary>Walks onto a tile and lets the event feel the touch.
+    /// </summary>
+    /// <returns>One line per page the touch started.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the fourth and last way an event page starts,
+    /// and it is the only one the engine gives to the event itself:</strong>
+    /// measured at <c>Game_Event.prototype.checkEventTriggerTouch</c>:
+    /// <c>if (!$gameMap.isEventRunning()) { if (this._trigger === 2
+    /// &amp;&amp; $gamePlayer.pos(x, y)) { if (!this.isJumping() &amp;&amp;
+    /// this.isNormalPriority()) this.start(); } }</c>
+    /// </para>
+    /// <para>
+    /// <strong>Three conditions, and all three are measured: the page's
+    /// trigger must be 2, the player must stand on the tile, and the page
+    /// must be of NORMAL priority.</strong> <strong>And not jumping,
+    /// which a page on foot never is.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this path asks for the opposite priority from the
+    /// other three.</strong> <c>updateNonmoving</c> asked
+    /// <c>here([1, 2])</c>, which is <c>normal = false</c>; this asks
+    /// <c>isNormalPriority()</c>, which is <c>normal = true</c>.
+    /// <strong>And measured, this project's two trigger-2 pages both carry
+    /// priority 0</strong> — <strong>so neither can ever start this way,
+    /// and a reader that reported them as reachable through touch would be
+    /// wrong.</strong> The honest answer is that they are reachable
+    /// through their trigger-0 siblings and nothing else.
+    /// </para>
+    /// <para>
+    /// <strong>And there is a fifth trigger this reader has never
+    /// implemented: <c>page.trigger === 4</c>.</strong> Measured at
+    /// <c>Game_Event.prototype.setupPageSettings</c>: <c>if
+    /// (this._trigger === 4) this._interpreter = new
+    /// Game_Interpreter(); else this._interpreter = null;</c> — <strong>a
+    /// page that runs beside the map with its own machine, like a parallel
+    /// page but independently of it.</strong> <strong>And measured, this
+    /// project has no trigger-4 page at all</strong>, <strong>so nothing
+    /// here depends on it.</strong>
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> FuehreAn()
+    {
+        var bericht = new List<string>();
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            bericht.Add(
+                $"map {CurrentMapId} is not among the maps this runtime read,"
+                    + " so nothing on it can be touched");
+            return bericht;
+        }
+
+        foreach (var ereignis in karte.Root.Member("events")?.Items
+            ?? new List<MzValue>())
+        {
+            if (ereignis.Member("x")?.IntOr(-1) != PlayerX
+                || ereignis.Member("y")?.IntOr(-1) != PlayerY)
+            {
+                continue;
+            }
+
+            var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
+            var seiten = ereignis.Member("pages")?.Items
+                ?? new List<MzValue>();
+            for (var index = seiten.Count - 1; index >= 0; index--)
+            {
+                var seite = seiten[index];
+
+                // **Und genau Ausloeser 2, und nicht 0 oder 1.**
+                if ((seite.Member("trigger")?.IntOr(0) ?? 0) != 2)
+                {
+                    continue;
+                }
+
+                // **Und NORMALE Prioritaet, und das ist das Gegenteil
+                // von `updateNonmoving`, das `here` ohne `normal` rief.**
+                if ((seite.Member("priorityType")?.IntOr(1) ?? 1) != 1)
+                {
+                    continue;
+                }
+
+                if (!MzMapFigureReader.Meets(
+                    seite.Member("conditions"), Facts, CurrentMapId, id))
+                {
+                    continue;
+                }
+
+                bericht.Add(RunPageEvent(id, seite, false));
+                break;
+            }
+        }
+
+        return bericht;
+    }
+
     /// <summary>Turns the player to face a direction.</summary>
     /// <param name="pDirection">The direction to look.</param>
     /// <remarks>

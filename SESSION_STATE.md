@@ -11530,3 +11530,68 @@ die Bedingung `canStartLocalEvents`**, **die `!this.isInAirship()`
 ist** -- **und gemessen kommt das Luftschiff in diesem Spiel nicht
 vor.**
 
+## Und Ausloeser 2 ist die vierte und letzte Art, wie eine Seite startet
+
+**Der Motor gibt sie dem Ereignis selbst, und nicht der Karte.
+Gemessen:**
+
+```js
+// Game_Event.prototype.checkEventTriggerTouch
+if (!$gameMap.isEventRunning()) {
+    if (this._trigger === 2 && $gamePlayer.pos(x, y)) {
+        if (!this.isJumping() && this.isNormalPriority()) {
+            this.start();
+        }
+    }
+}
+```
+
+**Drei Bedingungen, alle gemessen:** **der Ausloeser muss 2 sein,
+der Spieler muss auf der Kachel stehen, und die Seite muss **normale**
+Prioritaet haben.**
+
+**Und das ist die **umgekehrte** Prioritaet von `updateNonmoving`**,
+**das `here([1, 2])` rief, und `here` ist `normal = false`.**
+
+**Und gemessen sind die beiden Ausloeser-2-Seiten dieses Spiels beide
+mit Prioritaet 0** -- **also koennen sie ueber diesen Weg niemals
+starten** -- **und ein Leser, der behauptete, sie waeren ueber
+Beruehrung erreichbar, haette Unrecht.**
+
+**Und sie starten trotzdem, denn `updateNonmoving` fragt `[1, 2]`, und 2
+steht in dieser Liste** -- **Map003 Event 9 und Event 10 mit je 211
+Befehlen starten beim Aufreten, und ihr erster Satz lautet woertlich
+"This passage is weird... I can hear chatter?"**
+
+**Und ein fuenfter Ausloeser, den dieser Leser nie gebaut hat:**
+**`page.trigger === 4`.** **Gemessen an `setupPageSettings`: `if
+(this._trigger === 4) this._interpreter = new Game_Interpreter(); else
+this._interpreter = null;`** -- **eine Seite, die neben der Karte mit
+eigener Maschine laeuft.** **Und gemessen hat dieses Spiel keine
+Ausloeser-4-Seite, und also haengt hier nichts daran.**
+
+**Und gemessen sind alle Ausloeser dieses Spiels:**
+
+| Ausloeser | Bedeutung | Seiten |
+|---|---|---|
+| 0 | Aktionsknopf | 196 |
+| 1 | Beruehrung | 52 |
+| 2 | Autorun (Beruehrung mit normaler Prioritaet) | 2 |
+| 3 | parallel | 3 |
+| 4 | eigener Interpreter | 0 |
+
+**Und `Betrete` fragt jetzt `[1, 2]` beim Aufreten** -- **denn das ist
+der Weg, den der Motor geht** -- **und `FuehreAn` fragt `[2]` mit
+normaler Prioritaet**, **und verweigert diese Seite, und sagt es.**
+
+**Und noch eine Zahl, gemessen:** **Event 9 traegt 211 Befehle, und
+seine Ballons stehen an Index 0, 11, 21, 36, 121 und 194** -- **und
+nur die bei 21 und 36 warten.**
+
+**`All 2204 tests passed`, Validator gruen.**
+
+**Und als naechstes fehlt:** **der Weg, den ein Klick auf ein
+Ereignis im Bild nimmt** -- **`Game_Sprite_Character.update` ruft
+`checkEventTriggerTouch` mit der Zeigerposition** -- **und die
+Bildschirmkoordinaten, die dieser Leser noch nicht fuehrt.**
+
