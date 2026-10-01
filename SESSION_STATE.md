@@ -14761,3 +14761,63 @@ and not from a table.**
 **And this closes the question criterion 3 and 5 could not answer: both had a
 finished game here all along, and neither was looked at. Three MV games and
 two VX games, and the VX one is new to this repository entirely.**
+
+
+## RPG Maker 2003: no game here, so the RTP is what there is to measure, and
+## the honest claim is narrow
+
+**And the RTP was downloaded from the engine's own site, installed into the
+user's mount point, and measured.**
+
+### And what was there before
+
+```text
+E:/RPGMakerGames, three RM2K games:   .ldb and .lmu, and no .lcf anywhere
+```
+
+**And a machine-wide search for `*.lcf` found nothing** -- **so the
+repository's `lcf_binary_reader` and its `RpgMaker2003` detection have never
+been measured against a game, and there is no RPG Maker 2003 game here to
+measure them against.**
+
+### And what is downloadable without a licence
+
+```text
+https://assets.rpgmakerweb.com/rpg2003_rtp_installer.zip   13 MB
+  -> 680 entries, 675 files after the installer's own three
+  -> Backdrop 34, Battle 54, BattleCharSet, BattleWeapon, CharSet 15,
+     ChipSet 5, FaceSet, GameOver, Monster, Music, Panorama, Sound,
+     System, System2, Title
+```
+
+**And it carries no map, no database and no event.** **It is half of what a
+game needs and not the half that decides whether a game runs**, and saying so
+is worth more than a number that looks complete.
+
+### And the measurement, and what it is worth
+
+```text
+RM2K3 RTP: 15 CharSets, 288px breit (15x)
+TestRealRm2k3Rtp: 3/3
+All 2223 tests passed
+```
+
+**And 288 pixels is the same raster the three RPG Maker 2000 games use, over
+all thirty-seven of their sheets** -- **and that is a fact about the engine
+and not about a version, and it is why one raster serves both
+generations.**
+
+**And the third test is the one that is about safety and not about a
+format:** the registry resolves a real file in the mounted RTP, refuses a
+file that is not there, and refuses `../../../Windows/System32/drivers/etc/hosts`.
+
+### And where it was installed, and why not somewhere else
+
+```text
+C:/Users/noa3/AppData/Local/RPG Maker 2003/RTP     675 files
+C:/Program Files (x86)/RPG Maker 2003/RTP          refused: no write access
+```
+
+**And the registry takes its root path from the outside**, so the mount
+point is the caller's decision and not this repository's -- **and that is
+the same separation the archive reader has, and it is deliberate.**
