@@ -12483,3 +12483,80 @@ nested inside other blocks.**
 **Evidence:** the shape list is twenty-one of twenty-two green,
 `TestRubyParser: 1/56 failed`, **full suite `4/2213`**, **and three of the
 four real scripts parse, where four did not fail and now three do.**
+
+
+## A percent after a value is a literal when a space stands between, and that was the rule
+
+**Measured at `parse.y` line 4170, and it is one line:**
+
+```c
+if (IS_ARG() && space_seen && !ISSPACE(c)) {
+    goto quotation;
+}
+...
+return '%';
+```
+
+**And `IS_ARG()` is `lex_state == EXPR_ARG || lex_state == EXPR_CMDARG`,
+and `space_seen` counts the white spaces the lexer skipped since the last
+token.**
+
+**So `print %[x]` is a literal and `a % b` is a modulus, and this reader
+had both wrong** -- **and the second wrongness was the expensive one**:
+
+- **without `IS_ARG` a `%` after a value with a name behind it became the
+  literal `%b`**, **and the rest of the expression was left lying there.**
+- **without `space_seen` a `%` after a value became a modulus**, **and the
+  bracket arrived as its own token**, **and a literal over nine lines came
+  out as:**
+  ```
+  ']' at offset 288 does not begin an expression
+  ```
+
+**And that nine-line literal is `mkconfig.rb` lines 22 to 30, unchanged.**
+
+### And any character that is not a letter or a digit is a delimiter
+
+**Measured at `parse.y`'s `case '%'`, at its `quotation:` label:**
+
+```c
+quotation:
+    if (!ISALNUM(c)) {
+        term = c;
+        c = 'Q';
+    }
+    ...
+    paren = term;
+    if (term == '(') term = ')';
+    else if (term == '[') term = ']';
+    else if (term == '{') term = '}';
+    else if (term == '<) term = '>';
+    else paren = 0;
+```
+
+**And this reader's `IsWordLiteralTail` knew only `Q q W w x r s`**, **so
+`%[`, `%q(`, `%{` and `%<` never reached the literal reader at all** --
+**and the `%` fell through to the operator table.**
+
+### And the five files that measured it
+
+```
+w1  print %[x]        the literal
+w2  a % b             the modulus
+w3  x = a % b         the modulus after an assignment
+w4  print %w[a b]     the known form
+w5  a %w[x]           a literal after a value, no space
+```
+
+**And all five are green, and two of them -- `w2` and `w5` -- were red
+before the change and the first attempt made all five red.**
+
+### Evidence
+
+**The shape list is twenty-six files and every one of them is green.**
+**`TestRubyParser: 1/56 failed`** -- **and that one is the test that reads
+the four real files.** **Full suite `3/2213`, and every one of the 2213 that
+existed before is green.**
+
+**And `mkconfig.rb` stopped at line 30 and now stops at line 55**, which
+is an `elsif` with a regexp. **And `mdoc2man.rb` parses.**

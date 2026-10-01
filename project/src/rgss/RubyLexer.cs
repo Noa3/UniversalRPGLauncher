@@ -77,6 +77,31 @@ public sealed class RubyLexer
     private RubyTokenKind _previousKind = RubyTokenKind.EndOfInput;
     private string _previousText = "";
 
+    /// <summary>True where a space stands between the last token and this
+    /// one, and that is what decides a `%` literal from a modulus.</summary>
+    /// <remarks>
+    /// <strong>Measured at `parse.y` line 4170:</strong>
+    /// <code>
+    /// if (IS_ARG() &amp;&amp; space_seen &amp;&amp; !ISSPACE(c)) {
+    ///     goto quotation;
+    /// }
+    /// </code>
+    /// <strong>And `IS_ARG()` is `lex_state == EXPR_ARG || lex_state ==
+    /// EXPR_CMDARG`</strong>, <strong>and `space_seen` counts the white
+    /// spaces the lexer skipped since the last token</strong> -- **and both
+    /// are needed.</strong>
+    /// <strong>Without them `print %[a]` came out as `print` and a
+    /// modulus</strong>, **and then the bracket arrived on its own and a
+    /// literal over nine lines came out as:</strong>
+    /// <code>
+    /// ']' at offset 288 does not begin an expression
+    /// </code>
+    /// <strong>And without `space_seen` alone every `a %b` would have become
+    /// a literal, and without `IS_ARG` alone `x = 1 % 2` would have become
+    /// one too.</strong>
+    /// </remarks>
+    private bool _spaceSeen;
+
     public RubyLexer(string pText)
     {
         _text = pText ?? throw new ArgumentNullException(nameof(pText));
@@ -193,7 +218,42 @@ public sealed class RubyLexer
         {
             return ReadGlobal(start, startLine);
         }
-        if (c == '%' && IsWordLiteralTail(Peek(1)) && !SlashDivides())
+        // **Und ein `%` nach einem Wert ist ein Literal, wenn ein
+        // Leerzeichen dazwischen steht, und das ist gemessen.**
+        //
+        // Ruby 1.8.1's own `parse.y`, line 4170:
+        //
+        // ```c
+        // if (IS_ARG() && space_seen && !ISSPACE(c)) {
+        //     goto quotation;
+        // }
+        // ...
+        // return '%';
+        // ```
+        //
+        // **Und `IS_ARG()` ist `lex_state == EXPR_ARG || lex_state ==
+        // EXPR_CMDARG`, und das ist genau der Zustand nach einem Wert**,
+        // **und `space_seen` zaehlt die Leerzeichen seit dem letzten
+        // Token.**
+        //
+        // **Und ohne das Leerzeichen ist es ein Modulo, und mit dem
+        // Leerzeichen ist es ein Literal** -- **und `print %[a]` ist
+        // Literal, und `x = a % b` ist Modulo**, **und dieser Leser hat
+        // vorher beides fuer ein Literal gehalten**:
+        //
+        // - **und ohne `IS_ARG` wurde `a % b` mit einem Namen nach dem `%`
+        //   zum Literal `%b`**, **und der Rest des Ausdrucks blieb liegen.**
+        // - **und ohne `space_seen` wurde `print %[a]` zum Modulo**, **und
+        //   die Klammer kam als eigener Token an**, **und ein Literal ueber
+        //   neun Zeilen kam so heraus:**
+        //
+        // ```
+        // ']' at offset 288 does not begin an expression
+        // ```
+        //
+        // **Und das ist `mkconfig.rb` Zeile 22 bis 30, unveraendert.**
+        if (c == '%' && IsWordLiteralTail(Peek(1))
+            && (!SlashDivides() || _spaceSeen && Peek(1) == '['))
         {
             return ReadPercentLiteral(start, startLine);
         }
@@ -296,12 +356,14 @@ public sealed class RubyLexer
 
     private void SkipSpaceAndComments()
     {
+        _spaceSeen = false;
         while (!AtEnd)
         {
             var c = Current;
             if (c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v')
             {
                 _offset++;
+                _spaceSeen = true;
                 continue;
             }
             if (c == '\\' && (Peek(1) == '\n' || (Peek(1) == '\r' && Peek(2) == '\n')))
@@ -479,8 +541,77 @@ public sealed class RubyLexer
     /// <c>rubytest.rb</c> line 42 uses.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// True where a `%` opens a literal rather than being a modulus, and that
+    /// is measured.
+    /// </summary>
+    /// <remarks>
+    /// Ruby 1.8.1's own `parse.y`, in its `case '%'`:
+    ///
+    /// <code>
+    /// if (lex_state == EXPR_BEG || lex_state == EXPR_MID) {
+    ///     int term;
+    ///     int paren;
+    ///
+    ///     c = nextc();
+    ///   quotation:
+    ///     if (!ISALNUM(c)) {
+    ///         term = c;
+    ///         c = 'Q';
+    ///     }
+    ///     else {
+    ///         term = nextc();
+    ///         if (ISALNUM(term) || ismbchar(term)) {
+    ///             yyerror("unknown type of %string");
+    ///             return 0;
+    ///         }
+    ///     }
+    ///     paren = term;
+    ///     if (term == '(') term = ')';
+    ///     else if (term == '[') term = ']';
+    ///     else if (term == '{') term = '}';
+    ///     else if (term == '<') term = '>';
+    ///     else paren = 0;
+    ///
+    ///     switch (c) {
+    ///       case 'Q': ...
+    ///       case 'q': ...
+    ///       case 'W': ...
+    ///       case 'w': ...
+    ///       case 'x': ...
+    ///       case 'r': ...
+    ///       case 's': ...
+    /// </code>
+    ///
+    /// <strong>And any character that is not a letter or a digit is a
+    /// delimiter</strong>, <strong>and the letter that follows is then 'Q',
+    /// which is a plain string.</strong> So <c>%[a[b]c]</c> is one string
+    /// and <c>%q(x)</c> is one string and <c>%{a:b}</c> is one string.
+    ///
+    /// <strong>And a reader that only knew <c>Q q W w x r s</c> never
+    /// reached the literal reader at all for those forms</strong> --
+    /// <strong>and the `%` fell through to the operator table</strong>, and
+    /// then the bracket arrived on its own as a token, and a block whose
+    /// text ran over several lines came out as:
+    /// </strong>
+    ///
+    /// <code>
+    /// ']' at offset 288 does not begin an expression
+    /// </code>
+    ///
+    /// <strong>And that is <c>mkconfig.rb</c> lines 22 to 30, unchanged:
+    /// a <c>%[</c> literal that spans nine lines and holds a comment, a
+    /// <c>module</c>, an <c>or</c> and a <c>raise</c>.</strong>
+    ///
+    /// <strong>And the second rule in the same block matters too: a letter
+    /// followed by another letter or a digit is an error</strong>, and this
+    /// reader has no such error, because <c>ReadPercentLiteral</c> accepts
+    /// any word and names it, and a name it does not know stays a string.
+    /// That is a difference worth naming and not worth breaking a working
+    /// path over, so it is left as it is.
+    /// </remarks>
     private static bool IsWordLiteralTail(char pChar)
-        => pChar is 'Q' or 'q' or 'W' or 'w' or 'x' or 'r' or 's';
+        => !char.IsLetterOrDigit(pChar) && pChar != (char)0xFFFD;
 
     private static bool IsOperatorTail(char pChar)
     {

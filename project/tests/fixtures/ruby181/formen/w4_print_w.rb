@@ -1,0 +1,1 @@
+print %w[a b]
