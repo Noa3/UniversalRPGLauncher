@@ -13982,3 +13982,110 @@ files and every one of them is green.**
 three temporary traces and eleven fixtures, and none of it changed the
 reader, and that is the correct outcome for a round that found a place and
 not a cause.**
+
+
+## The tenth round found it, and it was a newline
+
+**And the twenty calls of the last round bought this, and the fix is seven
+lines, and the thing that took twenty rounds to find was one `SkipNewlines()`
+that ate a token the lexer had deliberately produced.**
+
+### And the smallest case, and it is twenty-two bytes
+
+```ruby
+z 1
+if c
+  d
+end
+```
+
+```text
+RubyParseException 'end' at offset 13 does not begin an expression.
+```
+
+**And `z 1` alone is green, and `z` alone followed by an `if` is green, and
+the two together are red.** **And a bare call with an argument needs no
+newline to be understood, and that is measured in two grammars:**
+
+```text
+1394  args : arg_value
+1398      | args ',' arg_value
+
+419  | stmt kIF_MOD expr_value
+```
+
+**And a comma crosses the newline and an argument without a comma does not,
+and a modifier belongs to a statement and not to an argument** -- **and both
+of those rules say that the `tNL` after `1` ends the statement.**
+
+### And the lexer had said so all along, and this repository's own lexer agrees
+
+```text
+3338  case '\n':
+3340    case EXPR_BEG:
+3341    case EXPR_FNAME:
+3342    case EXPR_DOT:
+3343    case EXPR_CLASS:
+3344      goto retry;
+3345    default:
+3346      break;
+3348  command_start = Qtrue;
+```
+
+**And a newline is swallowed in exactly four states, and after `1` the state
+is not one of them, and so the `tNL` comes back** -- **and this repository's
+own token stream says the same, and the measurement is four lines:**
+
+```text
+TOKEN Identifier  @0  z     zeile 1
+TOKEN Integer     @2  1     zeile 1
+TOKEN Newline     @3  ""     zeile 1
+TOKEN Keyword     @4  if    zeile 2
+```
+
+**And the parser threw that `tNL` away.**
+
+### And what ten rounds taught, and it is the same lesson four times now
+
+**The trace was worth more than every cut.**  Nine cuts were green and the
+whole was red, and the trace found the exact line in one call, and it took
+another two rounds to reach the 22-byte case that the trace had been pointing
+at the whole time.  **And the mistake, named: the trace said "the body of the
+`begin` was closed at the wrong `else`", and that was true and it was not the
+cause** -- **and the cause was four lines earlier, in a call that had a
+newline in it.**
+
+### And what the two remaining files are, and they are the same gap
+
+```text
+instruby.rb at line 149   b.print <<EOH, shebang, body, <<EOF
+mkconfig.rb  at line 134  EOS
+```
+
+**And this repository's lexer has no heredoc state at all:** `<<` is in the
+operator table, and nothing else, **and so `x = <<EOH` reads as `x = x << EOH`:
+
+```text
+RubyParseException '<<' at offset 4 does not begin an expression.
+```
+
+**And both remaining files are Ruby 1.8.1's own build scripts, and both write
+a Windows batch file with a heredoc** -- **and neither is a game script, and
+neither is a VX Ace script, and no game on this machine has one.**  **And the
+four forms are in the directory under the name `offen_`, and the shape test
+counts them and refuses to pass if the number changes** -- **so the gap is
+named, and a reader that grows one of them has to move it out of that list
+and say which grammar rule it read.**
+
+### Evidence
+
+**`TestRubyParser192`: two of ninety-three, and both are heredocs.**
+
+**`TestRubyParser`: `55/56`, and the shape list is one hundred and twenty-five
+green files plus four named gaps, and the count is asserted.**
+
+**Full suite `6/2216`.**
+
+**And the reader change is one conditional and one break, in one place**, and
+the trace code is gone, and the probe test is gone, and `git diff --stat` says
+one file, seventy lines added and one removed.

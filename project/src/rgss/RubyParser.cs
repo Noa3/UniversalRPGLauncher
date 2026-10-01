@@ -2508,7 +2508,76 @@ public sealed class RubyParser
                         // `a` und laesst `+b` liegen**, **und dann kam das
                         // Komma an die Spitze von `ParsePrimary`.**
                         argumente.Add(ParseTernary());
-                        SkipNewlines();
+
+                        // **Und nach dem letzten Argument steht der
+                        // Zeilenumbruch, und der gehoert zur Anweisung und
+                        // nicht zum Aufruf, und das ist gemessen am
+                        // Tokenstrom, den dieser Leser selbst erzeugt:**
+                        //
+                        // ```text
+                        // TOKEN Identifier  @0  z     zeile 1
+                        // TOKEN Integer     @2  1     zeile 1
+                        // TOKEN Newline     @3  ""     zeile 1
+                        // TOKEN Keyword     @4  if    zeile 2
+                        // ```
+                        //
+                        // **Und `SkipNewlines()` hat diesen `tNL` gefressen,
+                        // und dann kam `if` als naechstes Argument, und
+                        // `ParseTernary` las es als Ausdruck, und der
+                        // Modifier-Leser machte daraus `z 1 if c`, und das
+                        // `end` des `if` blieb als Anweisung uebrig:**
+                        //
+                        // ```ruby
+                        // z 1
+                        // if c
+                        //   d
+                        // end
+                        // ```
+                        //
+                        // ```text
+                        // RubyParseException 'end' at offset 13 does not
+                        //     begin an expression.
+                        // ```
+                        //
+                        // **Und ein Komma fuehrt ueber den Umbruch, und ein
+                        // Argument ohne Komma nicht, und das ist gemessen an
+                        // `parse.y` 1394ff:**
+                        //
+                        // ```text
+                        // 1394  args : arg_value
+                        // 1398      | args ',' arg_value
+                        // ```
+                        //
+                        // **Und `stmt` traegt den Modifier und nicht `arg`,
+                        // und das ist gemessen bei 419:**
+                        //
+                        // ```text
+                        // 419  | stmt kIF_MOD expr_value
+                        // ```
+                        //
+                        // **Und der Lexer selbst entscheidet das auch, und
+                        // das ist gemessen an `parse.y` 3338:**
+                        //
+                        // ```text
+                        // 3338  case '\n':
+                        // 3340    case EXPR_BEG:
+                        // 3341    case EXPR_FNAME:
+                        // 3342    case EXPR_DOT:
+                        // 3343    case EXPR_CLASS:
+                        // 3344      goto retry;
+                        // 3345    default:
+                        // 3346      break;
+                        // ```
+                        //
+                        // **Und nach `1` steht der Zustand nicht auf diesen
+                        // vier, und also gibt der Lexer den `tNL` zurueck,
+                        // und der Leser muss ihn stehen lassen.**
+                        if (Current.Kind == RubyTokenKind.Newline
+                            || Current.Kind == RubyTokenKind.Semicolon)
+                        {
+                            break;
+                        }
+
                         if (!Is(","))
                         {
                             break;
