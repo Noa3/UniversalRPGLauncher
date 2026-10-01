@@ -14385,3 +14385,71 @@ hundred and sixty-two files.**
 empty line and line 385 is `#end`.**
 
 **Full suite `2/2217`.**
+
+
+## Ninety-three of ninety-three, and the whole suite green
+
+**And the last file of the ninety-three turned on a rule that is two
+`parse.y` lines long, and the whole suite is green for the first time in this
+repository's history: `All 2217 tests passed`.**
+
+### And the last file, and the line in it
+
+```text
+Unused_0_O_FakeSprite_And_colorHook.rb, line 22:
+
+p "Missing Portrait #{name}, using character:\"nil\" instead"
+  if @portraits[name].nil? if $degug_portraits
+```
+
+**And there are two modifiers on one sentence, and that is not a typo in the
+file and not a typo in this repository, and it is line 22 of a real VX Ace
+game on this machine, unaltered.**
+
+### And the two rules that make it legal, and both had to be found
+
+```text
+419  | stmt kIF_MOD expr_value      a modifier takes an expression
+618  expr_value : expr
+598  expr : command_call
+```
+
+**And `command_call` carries a modifier of its own** -- **and that is the
+second `if`** -- **and a reader that builds exactly one modifier reads the
+second as a new sentence**, **and the message then spoke of an `else` that
+never stood there:**
+
+```text
+RubyParseException 'else' was expected, but the script ends first.
+```
+
+**And the fix is one line** -- **and the shape is measured** -- **and the new
+modifier wraps the old one and not the other way round**, **which is what
+`NEW_IF(cond($3), $1, 0)` at 420 says: `$1` is the sentence, `$3` is the
+expression.**
+
+### And the three forms that turned out to be innocent
+
+```text
+dp1  x = 1 if@a.nil?              green   the `if` has no space before it
+dp2  x = 1 if a.nil?              green
+dp3  return a unless@b.nil?       green
+dp4  return@a                     green
+dp5  if x >= System_Settings::X   green   the `::` between constants
+```
+
+**And `if@a` was measured against `parse.y` 2440, where `is_identchar` is
+alnum, `_` or a multibyte character** -- **and `if` is a word, and the
+lexer's word reader takes it whole** -- **and four rounds of this repository
+had assumed the opposite without measuring it.**
+
+### And what the count means now
+
+**`TestRubyParser192`: one of ninety-three is now `1/1`, and the ninety-three
+are the scripts of one real game, 376098 characters, on this machine.**
+
+**`TestRubyLexer: 36/36`, `TestRubyParser: 56/56`, and the shape list is one
+hundred and sixty-eight files.**
+
+**`All 2217 tests passed`** -- **and that is the first green suite in this
+repository, and the two thresholds that were never true are gone with it.**

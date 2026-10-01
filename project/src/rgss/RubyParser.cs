@@ -4535,7 +4535,41 @@ public sealed class RubyParser
 
         SkipNewlines();
         var bedingung = ParseExpression();
-        return new RubyNode
+
+        // **Und ein Modifier nimmt einen *Ausdruck*, und ein Ausdruck kann
+        // selbst einen Modifier tragen, und das ist gemessen an zwei
+        // Regeln von `parse.y`, und die beiden sind es, die zusammen den
+        // Fall erlauben:**
+        //
+        // ```text
+        // 419  | stmt kIF_MOD expr_value
+        // 618  expr_value : expr
+        // 598  expr : command_call
+        // ```
+        //
+        // **Und `command_call` traegt wieder einen Modifier, und darum ist
+        // `p "x" if a if b` ein gueltiger Satz** -- **und genau das ist
+        // Zeile 22 einer echten VX-Ace-Datei auf dieser Maschine,
+        // unveraendert:**
+        //
+        // ```ruby
+        // p "Missing Portrait #{name}, using character:\"nil\" instead" if @portraits[name].nil? if $degug_portraits
+        // ```
+        //
+        // **Und ein Leser, der genau einen Modifier baut, liest den
+        // zweiten als Anweisung**, **und die Meldung sprach von einem
+        // `else`, das nie dasteht:**
+        //
+        // ```text
+        // RubyParseException 'else' was expected, but the script ends first.
+        // ```
+        //
+        // **Und die Form ist eine Schleife und keine Sonderbehandlung**,
+        // **und der neue Modifier umschliesst den alten und nicht der
+        // alte den neuen** -- **und das ist gemessen an
+        // `NEW_IF(cond($3), $1, 0)`, wo `$1` der Satz und `$3` der
+        // Ausdruck ist.**
+        var gebaut = new RubyNode
         {
             Kind = schluesselwort.Text switch
             {
@@ -4553,6 +4587,8 @@ public sealed class RubyParser
                 new() { Role = RubyNodeRole.Condition, Node = bedingung },
             ],
         };
+
+        return MitModifier(gebaut.Line, gebaut);
     }
 
     private bool StartetAbbruchWert()
