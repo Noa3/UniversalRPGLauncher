@@ -13515,3 +13515,76 @@ one of them is green, and nine of those ninety-nine are the return forms.**
 literal and a regexp next to brackets and escapes.** **And three are
 `call_args` again** -- **a command without brackets with several arguments,
 which is `command : operation command_args` and `command_args` is a list.**
+
+
+## An argument may itself be a command, and a command's arguments are a list
+
+**And this took the eight of ninety-three down to five, and both of its rules
+are one line in `parse.y` each.**
+
+### And `call_args : command`, and `command : operation command_args`
+
+```text
+1259 call_args : command
+ 667 command   : operation command_args
+1368 open_args  : call_args
+```
+
+**And so `load_script($mod_manager.get_resource "umm", "scripts/x.rb")` is a
+command without brackets whose first argument is itself a command without
+brackets** -- **and four files of the VX Ace game on this machine write it:**
+
+```ruby
+load_script($mod_manager.get_resource "umm", "scripts/text_update.rb")
+```
+
+```text
+RubyParseException ')' was expected at offset 28, but '"umm"' is there.
+```
+
+**And the receiver branch knew `(` and `[` and nothing else, and both of those
+are a call or an index with brackets around them** -- **and without brackets
+there is only a call.**
+
+### And a line break may stand between the `=` and the value
+
+```ruby
+$mod_load_script["Data/Scripts/Frames/121_Dialog_Control_System.rb"] =
+  $mod_manager.get_resource("umm", "scripts/replacers/121_Dialog_Control_System.rb")
+```
+
+**And `ReadWertListe()` read its first element without skipping a line break,
+and `arg : lhs '=' arg` says nothing stands there** -- **and one more file of
+the same game wrote the assignment across two lines.**
+
+### And the argument list does not end at a newline, and that is measured too
+
+**And `command_args` is `open_args`, and `open_args` is `call_args`, and an
+`opt_nl` stands only under `paren_args`** -- **so a line break does not end a
+bracketless argument list, and `ReadAufrufOhneKlammern` therefore does not skip
+one between its arguments.** **And that is the same fact the `when`-reader
+comment already named from the other side.**
+
+### Evidence
+
+**`TestRubyParser192`: five of ninety-three, and it was eight.**
+
+**`TestRubyParser: 55/56`, and the shape list is one hundred and eight files
+and every one of them is green, and eighteen of those are the return and
+bracketless-command forms.**
+
+**Full suite `6/2216`.**
+
+### And the five that remain, named
+
+```text
+1x  #end                                a commented-out end
+1x  text.slice!(/^\[[^\[\]]+\]/)[/…/]  a regexp next to brackets and escapes
+1x  rescue => e                          a bare rescue with a name, in a form
+                                          the reader counts differently
+2x  parsed as no statements              two files that parse to nothing
+```
+
+**And the first of those is worth measuring before anything else: a file that
+parses to no statements is a reader that returned an empty program, and that
+is a different failure from one that refused.**

@@ -710,6 +710,22 @@ public sealed class RubyParser
     /// </remarks>
     private RubyNode ReadWertListe()
     {
+        // **Und ein Zeilenumbruch vor dem ersten Wert ist erlaubt, und das
+        // ist gemessen an einer VX-Ace-Datei auf dieser Maschine:**
+        //
+        // ```ruby
+        // $mod_load_script["Data/Scripts/Frames/121_Dialog_Control_System.rb"] =
+        //   $mod_manager.get_resource("umm", "scripts/replacers/121_....rb")
+        // ```
+        //
+        // **Und `arg : lhs '=' arg`, und `args : args ',' arg_value`, und
+        /// ein `tNL` zwischen `lhs '='` und dem Wert steht in `arg` nicht**
+        // **-- und ohne diese Zeile kam:**
+        //
+        // ```
+        // RubyParseException ... at offset 62, but '$mod_manager' is there.
+        // ```
+        SkipNewlines();
         var werte = new List<RubyNode> { ReadEinWert() };
 
         while (Is(","))
@@ -1180,6 +1196,38 @@ public sealed class RubyParser
                     };
                     continue;
                 }
+                // **Und ein Aufruf ohne Klammern nach einem Punkt ist
+                // ein Aufruf, und das ist gemessen an `parse.y` 1259
+                // und 667:**
+                //
+                // ```text
+                // call_args  : command
+                // command    : operation command_args
+                // ```
+                //
+                // **Und `load_script($mod_manager.get_resource "umm",
+                // "scripts/text_update.rb")` ist ein Aufruf-ohne-Klammern
+                // als Argument eines anderen** -- **und vier Dateien eines
+                // VX-Ace-Spiels auf dieser Maschine schreiben genau das:**
+                //
+                // ```ruby
+                // load_script($mod_manager.get_resource "umm", "s.rb")
+                // ```
+                //
+                // ```
+                // RubyParseException ')' was expected at offset 28,
+                //     but '"umm"' is there.
+                // ```
+                //
+                // **Und der Zweig hatte nur `(` und `[`, und beide sind
+                // ein Aufruf oder ein Index mit Klammern drum** -- **und
+                // ohne Klammern gibt es nur einen Aufruf.**
+                if (StartsAValue() && StartsAnArgument())
+                {
+                    node = ReadAufrufOhneKlammern(node, name);
+                    continue;
+                }
+
                 node = new RubyNode
                 {
                     Kind = RubyNodeKind.Call,
@@ -3859,6 +3907,57 @@ public sealed class RubyParser
         return k < _tokens.Count
             && _tokens[k].Kind == RubyTokenKind.Operator
             && _tokens[k].Text == ".";
+    }
+
+    /// <summary>
+    /// A call whose arguments have no brackets, on a receiver.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the same reader the bare-name call uses, and that
+    /// is the point.</strong> <c>a.b c, d</c> is <c>a.b(c, d)</c>, and the
+    /// grammar says so twice:
+    ///
+    /// <code>
+    /// call_args : command
+    /// command   : operation command_args
+    /// </code>
+    ///
+    /// <strong>And four files of the VX Ace game on this machine write it:</strong>
+    ///
+    /// <code>
+    /// load_script($mod_manager.get_resource "umm", "scripts/text_update.rb")
+    /// </code>
+    ///
+    /// <strong>And the argument list ends at the comma, and at nothing
+    /// else</strong> -- <strong>a newline does not end it, because
+    /// <c>command_args</c> is <c>open_args</c> and an <c>opt_nl</c> stands
+    /// only under <c>paren_args</c></strong> -- <strong>and that is why this
+    /// reader does not skip a line break between the arguments.</strong>
+    /// </remarks>
+    private RubyNode ReadAufrufOhneKlammern(RubyNode pEmpfaenger, string pName)
+    {
+        var argumente = new List<RubyNode>();
+        while (true)
+        {
+            argumente.Add(ParseTernary());
+            SkipNewlines();
+            if (!Is(","))
+            {
+                break;
+            }
+
+            _index++;
+            SkipNewlines();
+        }
+
+        return new RubyNode
+        {
+            Kind = RubyNodeKind.Call,
+            Name = pName,
+            Line = pEmpfaenger.Line,
+            Children = [pEmpfaenger, .. argumente],
+            Role_Children = CallParts(pEmpfaenger, argumente),
+        };
     }
 
     private RubyNode ReadParenthesised()
