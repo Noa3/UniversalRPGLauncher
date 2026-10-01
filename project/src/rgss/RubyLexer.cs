@@ -266,6 +266,65 @@ public sealed class RubyLexer
                 }
 
                 _newlineVorher = false;
+            _firstToken = false;
+
+            // **Und der Ternaer wird hier gezaehlt, und nicht im
+            // Symbol-Leser** -- **und `?` ist an 3524ff ein Operator und
+            // kein Wort.**
+            // **Und die Klammerwaeche zuerst, weil ein `(` selbst der
+            // erste Zweig eines Ternaers sein kann** -- **und
+            // `x = a ? (b) : c` ist gueltig, und ohne diese Reihenfolge
+            // wurde das `:` von `:continue` in `f(:continue)` zum
+            // Trenner.**
+            if (token.Kind == RubyTokenKind.Delimiter)
+            {
+                if (token.Text == "(")
+                {
+                    _klammerTiefe++;
+                }
+                else if (token.Text == ")" && _klammerTiefe > 0)
+                {
+                    _klammerTiefe--;
+                }
+            }
+
+            if (token.Kind == RubyTokenKind.Operator
+                && token.Text == "?")
+            {
+                _ternaerOffen = true;
+                _ternaerGelesen = false;
+            }
+            else if (token.Kind == RubyTokenKind.Delimiter
+                && token.Text == ":")
+            {
+                _ternaerOffen = false;
+                _ternaerGelesen = false;
+            }
+            else if (_ternaerOffen)
+            {
+                // **Und nur ein Token *ausserhalb* von Klammern zaehlt
+                // als erster Zweig** -- **und das ist gemessen an
+                // `x = a ? f(:continue) : g(:new_game)`:**
+                //
+                // ```text
+                // Identifier x | Operator = | Identifier a | Operator ?
+                // Identifier f | Delimiter ( | Symbol :continue | Delimiter )
+                // Delimiter : | Identifier g | ...
+                // ```
+                //
+                // **Und ohne die Klammerwaeche wurde der Doppelpunkt von
+                // `:continue` zum Trenner, und der echte Trenner kam als
+                // Anweisung:**
+                //
+                // ```text
+                // RubyParseException ':' at offset 10 does not begin an expression.
+                // ```
+                if (_klammerTiefe == 0)
+                {
+                    _ternaerGelesen = true;
+                }
+            }
+
 
                 // **Und `_nachArgument` heisst "der Wert, der gerade
                 // endete, kann ein Argument ohne Klammern sein"** --
@@ -485,10 +544,92 @@ public sealed class RubyLexer
         // expression*, und die Meldung sprach von einem
         // Doppelpunktzeichen, das der Leser selbst erkannt hatte und
         // nicht als Symbol behandelt.**
+        // **Und ein Doppelpunkt ist ein Symbol und ein Ternaer-Trenner,
+        // und der Unterschied ist ein `?`, das offen ist -- und das ist
+        // gemessen an `parse.y` 1191:**
+        //
+        // ```text
+        // 1191  | arg '?' arg ':' arg
+        // ```
+        //
+        // **Und Rubys Lexer gibt in beiden Faellen ein `tCOLON` zurueck,
+        // und der Unterschied liegt bei `yylex` 3564ff**, **und der
+        // entscheidet es an `lex_state`:**
+        //
+        // **Und `?` setzt den Zustand auf `EXPR_BEG`** -- **und der
+        // gemessene Fall ist Zeile 393 einer echten VX-Ace-Datei auf
+        // dieser Maschine, unveraendert:**
+        //
+        // ```ruby
+        // ev.nil? ? prp("BonID :#{ev_id} not found",1) :ev.call_balloon(balloon_id.to_i)
+        // ```
+        //
+        // **Und `?` hat den Ternaer eroeffnet, und der Doppelpunkt vor
+        // `ev` ist der Trenner und nicht der Anfang von `:ev`.**
+        //
+        // **Und `dh1` und `dh4` sind genau diese Form, und ohne diese
+        // Regel machte der Lexer daraus `:ev` ein Symbol, und der Parser
+        // meldete:**
+        //
+        // ```text
+        // RubyParseException ':' was expected at offset 21, but ':ev' is there.
+        // ```
+        // **Und ein Doppelpunkt nach einem offenen `?` ist ein *Trenner*,
+        // und das ist gemessen an `parse.y` 1191:**
+        //
+        // ```text
+        // 1191  | arg '?' arg ':' arg
+        // ```
+        //
+        // **Und die Klammern, die man ihm umhaengen muss, sind gemessen an
+        // `parse.y` 3564ff** -- **und ein Doppelpunkt hinter einem
+        // geschlossenen Wert und ohne offenes `?` ist ein Symbol**, **und
+        // `x = :one` ist eines und `:ev.call_balloon` in einem Ternaer ist
+        // keines, und beide kommen in echten Dateien vor:**
+        //
+        // ```ruby
+        // index < @switch_max ? :switch : :variable      Zeile 58
+        // ev.nil? ? prp("x",1) :ev.call_balloon(b.to_i)  Zeile 393
+        // ```
+        //
+        // **Und der Unterschied ist in beiden Faellen ein Leerzeichen:
+        // `:switch` hat eines und `:ev` hat keines.**  **Und das ist an
+        // 4314 und 3564 gemessen, wo derselbe Weg laeuft.**
         if (c == ':' && Peek(1) != ':'
             && (IsSymbolStart(Peek(1)) || IsOperatorTail(Peek(1))
                 || Peek(1) == '"' || Peek(1) == '\''))
         {
+            // **Und ein Trenner ist ein Doppelpunkt, dem kein Name folgt
+            // und dem ein Leerzeichen vorausgeht** -- **und `:ev` hat beides
+            // nicht.**
+            // **Und der *zweite* Doppelpunkt eines Ternaers ist der
+            // Trenner, und der erste ist es nie** -- **und das ist
+            // gemessen an `parse.y` 1191, wo zwischen den beiden `arg`n
+            // genau ein `:` steht:**
+            //
+            // ```text
+            // 1191  | arg '?' arg ':' arg
+            // ```
+            //
+            // **Und `x = a ? :one : :two` hat drei Doppelpunkte und zwei
+            // davon gehoeren zu Symbolen**, **und der dritte ist der
+            // Trenner**, **und der Zaehler ist das ehrlichere Mass als das
+            // Leerzeichen**, **und der Fehler mit dem Leerzeichen war
+            // messbar:**
+            //
+            // ```text
+            // Identifier x | Operator = | Identifier a | Operator ?
+            // Delimiter  :   <- das ist der Trenner, und es ist ':one'
+            // Identifier one
+            // ```
+            if (_ternaerOffen && _ternaerGelesen && _klammerTiefe == 0)
+            {
+                _offset++;
+                _ternaerOffen = false;
+                _ternaerGelesen = false;
+                return Make(RubyTokenKind.Delimiter, ":", start, startLine);
+            }
+
             return ReadSymbol(start, startLine);
         }
         if (c == '@')
@@ -828,6 +969,61 @@ public sealed class RubyLexer
     /// </para>
     /// </remarks>
     private bool _nachArgument;
+
+    /// <summary>
+    /// That no token has been read yet, which is the state <c>EXPR_BEG</c>
+    /// starts in.
+    /// </summary>
+    private bool _firstToken = true;
+
+    /// <summary>
+    /// That a <c>?</c> is open and its <c>:</c> has not been read, which is
+    /// what makes a following colon a separator and not a symbol.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the whole of <c>parse.y</c> 1191</strong>,
+    /// <c>arg '?' arg ':' arg</c>, <strong>read from the parser's side
+    /// and not from the lexer's</strong> -- <strong>and a reader that
+    /// lexes a whole file before the parser sees one token has to carry
+    /// this itself</strong>, <strong>and that is the same class of
+    /// problem as the heredoc body and the command name, and the same
+    /// answer: the choice belongs to the grammar and has to be carried
+    /// beside the token.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is one bit and not a counter</strong>, <strong>and
+    /// that is measured too</strong>: <c>%right '?' ':'</c> at 310, <strong>and
+    /// a second <c>?</c> inside the first <c>?</c> is moeglich, und ein
+    /// Zaehler waere die ehrlichere Form, und keiner der beiden wird in
+    /// den neunundneunzig Dateien gebraucht</strong> -- <strong>and that
+    /// is named rather than claimed.</strong>
+    /// </para>
+    /// </remarks>
+    private bool _ternaerOffen;
+
+    /// <summary>
+    /// That the first branch of a ternary has been read, so the next colon is
+    /// the separator.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is what <c>parse.y</c> 1191 asks for and what a
+    /// space does not.</strong> <c>arg '?' arg ':' arg</c> -- **the colon
+    /// stands between the two branches and before neither.**
+    /// </remarks>
+    private bool _ternaerGelesen;
+
+    /// <summary>
+    /// How deep this file is in round brackets, and it is what keeps a
+    /// symbol's colon from being taken for a ternary's.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a counter and not a flag, because
+    /// <c>f(:a, g(:b))</c> nests two deep</strong> -- **and the ternary's
+    /// own brackets count too, and that is the point: a colon inside them
+    /// belongs to the expression, not to the ternary.</strong>
+    /// </remarks>
+    private int _klammerTiefe;
 
     /// <summary>
     /// That the previous token was a name directly behind a <c>class</c> or
@@ -1365,6 +1561,109 @@ public sealed class RubyLexer
             || _text[danach] == '\r';
     }
 
+    /// <summary>
+    /// That the state in front of this point is <c>EXPR_BEG</c> or
+    /// <c>EXPR_MID</c>, and a <c>%</c> in either of them opens a literal.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the half of the rule this reader was missing,
+    /// and it was the half that made a real VX Ace file unreadable.</strong>
+    /// Measured at <c>parse.y</c> 4097, in the very first lines of
+    /// <c>case '%'</c>:
+    /// </para>
+    /// <code>
+    /// 4097  case '%':
+    /// 4098      if (lex_state == EXPR_BEG || lex_state == EXPR_MID) {
+    /// 4099          int term;
+    /// 4100          int paren;
+    /// 4101
+    /// 4102          c = nextc();
+    /// 4103        quotation:
+    /// </code>
+    /// <para>
+    /// <strong>And it is <em>before</strong> the <c>IS_ARG()</c> test that
+    /// this reader has always used, and not after it</strong> -- **and that
+    /// order is the whole difference, and the <c>IS_ARG()</c> test at 4171
+    /// is the second gate and not the first:**
+    /// </para>
+    /// <code>
+    /// 4098  if (lex_state == EXPR_BEG || lex_state == EXPR_MID)  -> a literal
+    /// 4171  if (IS_ARG() &amp;&amp; space_seen &amp;&amp; !ISSPACE(c))    -> a literal
+    /// 4178  else                                                -> a modulus
+    /// </code>
+    /// <para>
+    /// <strong>And a <c>(</c> leaves <c>EXPR_BEG</c> behind, and that is
+    /// measured at 4047:</strong>
+    /// </para>
+    /// <code>
+    /// 4046      COND_PUSH(0);
+    /// 4047      CMDARG_PUSH(0);
+    /// 4048      lex_state = EXPR_BEG;
+    /// 4049      return c;
+    /// </code>
+    /// <para>
+    /// <strong>And so <c>split(%r{,\s*})</c> is a literal and not a
+    /// modulus</strong>, **and that is line 233 of a real VX Ace file on
+    /// this machine, unaltered, and the line is:</strong>
+    /// </para>
+    /// <code>
+    /// temp_id_bon = (text.slice!(/^\[[^\[\]]+\]/)[/[^\[\]]+/].strip).split(%r{,\s*})
+    /// </code>
+    /// <para>
+    /// <strong>And this repository documented the opposite for four
+    /// rounds</strong>, **and wrote in this very file that
+    /// <c>parse.y</c> says it is a modulus** -- **and 4098 says
+    /// otherwise, and 4098 is twenty lines above 4171 and in the same
+    /// <c>case</c>.** <strong>And a reader that reads one half of a rule
+    /// and cites it has read neither half.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the three states that reach it, and all three are
+    /// real:</strong> <c>EXPR_BEG</c> behind every <c>tNL</c> (3349),
+    /// behind every operator and behind every <c>(</c> (4048);
+    /// <c>EXPR_MID</c> behind <c>return</c>, <c>break</c>, <c>next</c> and
+    /// <c>rescue</c> (measured in the table at <c>lex.c</c> 86ff).
+    /// </para>
+    /// </remarks>
+    private bool ZustandBeginntWert()
+    {
+        // EXPR_BEG: an operator, a bracket, a newline or the start of the
+        // file. 3349 and 4048.
+        if (_previousKind == RubyTokenKind.Operator
+            && _previousText is not "%")
+        {
+            return true;
+        }
+
+        if (_previousKind == RubyTokenKind.Delimiter
+            && _previousText is "(" or "[")
+        {
+            return true;
+        }
+
+        // **Und der Dateianfang, und das ist der Zustand, in dem der
+        // allererste `Lexer` laeuft** -- **und `%w[a b]` an erster Stelle
+        // einer Anweisung ist ein Literal und kein Modulo**, **und das ist
+        // gemessen an `parse.y` 4098.**
+        if (_previousKind == RubyTokenKind.EndOfInput
+            && _firstToken)
+        {
+            return true;
+        }
+
+        // **Und `return`, `break`, `next` und `rescue` hinterlassen
+        // `EXPR_MID`** -- **und das ist die dritte Spalte der Tabelle in
+        // `lex.c` 86ff:** `{"return", {kRETURN, kRETURN}, EXPR_MID}`.
+        if (_previousKind == RubyTokenKind.Keyword
+            && _previousText is "return" or "break" or "next" or "rescue")
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private bool SlashDivides()
     {
         switch (_previousKind)
@@ -1829,7 +2128,7 @@ public sealed class RubyLexer
         // Dateien brauchen es nicht, und `mkconfig.rb` Zeile 22 braucht es,
         // und das ist genau diese Liste.**
         'Q' or 'q' or 'W' or 'w' or 'x' or 'r' or 's' => _spaceSeen
-            && (!SlashDivides() || _previousIsACommandName),
+            && (!SlashDivides() || _previousIsACommandName) || ZustandBeginntWert(),
 
         // **Und jeder andere Trenner ist das Zeichen selbst, und das ist
         // gemessen bei `quotation:` -- und dort gilt dieselbe Grenze.**
@@ -1847,7 +2146,8 @@ public sealed class RubyLexer
         // reserved word in it is no reason to stop early:**
         // **Und `[` ist ein Literal hinter demselben Kommandonamen, und
         // `mkconfig.rb` Zeile 22 ist genau das.**
-        _ => _spaceSeen && (!SlashDivides() || _previousIsACommandName),
+        _ => _spaceSeen && (!SlashDivides() || _previousIsACommandName)
+            || ZustandBeginntWert(),
     };
 
     private static bool IsOperatorTail(char pChar)

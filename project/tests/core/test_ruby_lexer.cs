@@ -511,7 +511,7 @@ public partial class TestRubyLexer : TestBase
         // `print` is deliberately NOT among them -- see below.
         foreach (var quelle in new[]
         {
-            "a % b", "%w[a b]", "-7 % 3", "7 %w[a]",
+            "a % b", "-7 % 3", "7 %w[a]",
         })
         {
             AssertEq(FirstWithText(quelle, "%").Kind, RubyTokenKind.Operator,
@@ -519,6 +519,30 @@ public partial class TestRubyLexer : TestBase
                     + "behind it is not enough, and a space in front of it "
                     + "is not enough either when a name stands there");
         }
+
+        // **Und `%w[a b]` am Dateianfang war in diesem Test ein Modulo, und
+        // das war falsch, und `parse.y` 4098 sagt es:**
+        //
+        // ```c
+        // 4097  case '%':
+        // 4098      if (lex_state == EXPR_BEG || lex_state == EXPR_MID) {
+        // 4099          int term;
+        // 4100          int paren;
+        // ```
+        //
+        // **Und `EXPR_BEG` ist der Zustand, in dem der Lexer startet,
+        // gemessen an `parse.y` 2545ff, wo `command_start = 1` steht und
+        // kein Zustand gesetzt ist, der etwas anderes waere** -- **und
+        // darum ist `%w[a b]` an erster Stelle einer Datei ein Literal und
+        // kein Modulo, und dieser Test hat vier Runden lang das Gegenteil
+        // behauptet.**
+        AssertEq(
+            FirstStartingWith("%w[a b]", "%w").Kind,
+            RubyTokenKind.String,
+            "**`%w[a b]` at the start of a file is a literal** — and that is "
+                + "measure.y 4098, where EXPR_BEG is one of the two states "
+                + "that open a percent literal, and the start of a file is "
+                + "in EXPR_BEG");
 
         // The three that are a literal, and each behind something that
         // cannot divide.

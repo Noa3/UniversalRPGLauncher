@@ -14293,3 +14293,95 @@ were there before the heredoc reader, and both are unrelated to it.**
 **And `mod_manager.rb` and `StatsEdit.rb` are green, and this time with no
 trace in the tree, which is the difference between the last round's claim
 and this one.**
+
+
+## The last of the ninety-three, and the two rules that were half-read
+
+**And eighty-eight of ninety-three became ninety-two, and every one of the
+three files that turned green turned green because a rule in this repository
+had been read only halfway.**
+
+### And the half rule, and it is the first line of `case '%'`
+
+```text
+4097  case '%':
+4098      if (lex_state == EXPR_BEG || lex_state == EXPR_MID) {
+4099          int term;
+4100          int paren;
+4102          c = nextc();
+4103        quotation:
+```
+
+**And this repository documented the opposite for four rounds** -- **and
+wrote in `RubyLexer.cs` that "parse.y says it is a modulus"** -- **and 4098
+says otherwise, and 4098 is twenty lines above the `IS_ARG()` test that was
+being used, and in the same `case`.**
+
+**And the two gates, in the order the C code reads them:**
+
+```text
+4098  if (lex_state == EXPR_BEG || lex_state == EXPR_MID)  -> a literal
+4171  if (IS_ARG() && space_seen && !ISSPACE(c))           -> a literal
+4178  else                                                 -> a modulus
+```
+
+**And the first gate was missing, and it is the one that decides
+`split(%r{,\s*})`** -- **and that is line 233 of a real VX Ace file on this
+machine, and it was the open question this repository had documented as
+unsettled because it had no Ruby on the machine to settle it.**
+
+**And `(` leaves `EXPR_BEG` behind, measured at 4048.**
+
+### And a test that was wrong for four rounds
+
+```text
+Test_APercentIsAModulusUnlessNothingCouldDivide:
+  "%w[a b]"  expected Operator,  measured String
+```
+
+**And `parse.y` 2545ff sets `command_start = 1` at the start and leaves the
+state at `EXPR_BEG`, and `EXPR_BEG` is one of the two states that open a
+percent literal.**  **So the test was wrong, and it had been wrong since it
+was written, and it was never noticed because it passed against a reader
+that was wrong in the same direction.**
+
+### And the ternary's colon, and it is one bit and a counter
+
+```text
+1191  | arg '?' arg ':' arg
+```
+
+**And the three shapes, and all three are in real files, and all three
+needed a different rule:**
+
+```ruby
+index < @switch_max ? :switch : :variable     the colon between the branches
+ev.nil? ? prp("x",1) :ev.call_balloon(b.to_i)  the colon, and no space
+x = a ? f(:continue) : g(:new_game)            a symbol with a colon inside
+```
+
+**And the first needs a *count*** -- **because the first colon belongs to
+the first branch and the second is the separator** -- **and the second needs
+*no space* to separate the colon from a name** -- **and the third needs a
+*bracket depth***, **because `f(:continue)` is inside brackets and its colon
+belongs to the symbol and not to the ternary.**
+
+**And each of the three rules broke the other two, and that is measured and
+not asserted:**
+
+```text
+space_seen only   :continue became the separator   and :ev stayed a symbol
+counter only      the same
+counter + depth   all three green
+```
+
+### Evidence
+
+**`TestRubyLexer: 36/36`, `TestRubyParser: 56/56`, and the shape list is one
+hundred and sixty-two files.**
+
+**`TestRubyParser192`: one of ninety-three, and it is
+`Unused_0_O_FakeSprite_And_colorHook.rb` at line 386, and line 386 is an
+empty line and line 385 is `#end`.**
+
+**Full suite `2/2217`.**

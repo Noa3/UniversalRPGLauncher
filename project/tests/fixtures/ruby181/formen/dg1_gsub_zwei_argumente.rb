@@ -1,1 +1,0 @@
-desc.gsub "a", "b"

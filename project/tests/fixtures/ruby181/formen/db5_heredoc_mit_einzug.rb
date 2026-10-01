@@ -1,3 +1,0 @@
-x = <<-EOH
-    text
-    EOH

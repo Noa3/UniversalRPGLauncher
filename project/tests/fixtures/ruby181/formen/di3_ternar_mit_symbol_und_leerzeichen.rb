@@ -1,0 +1,1 @@
+index < max ? :switch : :variable

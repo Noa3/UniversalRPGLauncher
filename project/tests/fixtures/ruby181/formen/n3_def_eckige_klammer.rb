@@ -1,3 +1,0 @@
-def [](key)
-	y
-end
