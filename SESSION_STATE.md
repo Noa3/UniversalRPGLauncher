@@ -17715,6 +17715,84 @@ ausgefuehrt.** **Der naechste Schritt ist ein Befehlssatz, der
 `command_101` bis `command_355` gegen diese Koerper implementiert und
 der bei jedem Test mit dem Ruby des Spiels verglichen wird.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 3: was ein Befehl kostet
+
+**Und die Frage ist nicht mehr "was macht Befehl 121", denn das steht
+im Koerper.**
+
+**Und die Frage ist:  wie viel von diesem Spiel laeuft ohne
+Ruby-Interpreter?** -- **und die Antwort kommt ebenfalls aus den
+Koerpern.**
+
+```
+XP 96 Befehle: Ablauf=7 Bildschirm=2 Eingabe=1 Inventar=12 Ton=23
+               Unbekannt=45 ZustandsSchreibend=2 ZweiOrt=4
+```
+
+**Und `Unbekannt=45` ist die groesste Zahl und das ist kein Defekt,
+den man verstecken will** -- **das ist die ehrliche Groesse des
+Teils, den dieses Repository noch nicht gelesen hat.**
+
+### Und drei falsche Reihenfolgen, jede an einem echten Befehl
+
+**Und die Reihenfolge der Muster ist der ganze Entwurf, und sie war
+nicht die erste.**
+
+| Reihenfolge | Folge |
+|---|---|
+| Text vor Auswahl | `command_102` ("Zeige Auswahl") wurde Text |
+| Muster `choice` | `command_101` wurde eine Frage |
+| Muster `return false` | `command_101` wurde ein Sprung |
+
+**Und `return false` ist die Warte-Antwort des Interpreters** --
+**es heisst "noch nicht fertig"** -- **und nicht "springe weg"**, --
+**und jeder Textbefehl enthaelt es.**
+
+**Und `command_101` erwaehnt `choice` viermal** -- **in
+`# If next event command is show choices`, in `choice_start` und in der
+Pruefung auf den Nachbarbefehl** -- **und das blosse Wort entscheidet
+nichts.**
+
+### Und der Unterschied zwischen 101 und 102 ist eine Klammer
+
+```ruby
+# command_101,  Zeile 27   setup_choices(@list[@index].parameters)
+# command_102,  Zeile 3    setup_choices(@parameters)
+```
+
+**Und `@list[@index].parameters` ist der Nachbarbefehl** -- **und
+`@parameters` ist der eigene** -- **und das ist die Regel des
+Interpreters und nicht eine Besonderheit dieser zwei Befehle.**
+
+**Und `command_101` stellt also KEINE Frage** -- **es leitet nur
+weiter, wenn der naechste Befehl eine ist** -- **und genau darum ist
+es Bildschirm.**
+
+### Und meine eigene Testbehauptung war zum zweiten Mal falsch
+
+**Und ich hatte geschrieben, `setup_choices` stehe in Kommentaren.**
+
+**Und es steht nie in einem -- und `imKommentar` ist 0.**
+
+**Und trotzdem war der Weg zu "Zeige Text ist eine Frage" ueber
+Kommentare** -- **aber ueber ein anderes Muster.**
+
+**Und diese Testdatei wurde dreimal neu geschrieben**, -- **weil ich
+an einem Anker geschnitten habe und die Datei zerriss**, -- **und ab
+dem zweiten Versuch wird sie geschrieben und nicht mehr
+gepatcht.**
+
+```
+TestRgssCommandCost: 5/5
+All 2364 tests passed
+```
+
+**Und was fehlt, und das ist der ganze Rest von Kriterium 4 bis 6:**
+**die 96 Koerper sind gelesen, 51 sind klassifiziert, und keiner wird
+ausgefuehrt.** **Der naechste Schritt ist ein Interpreter, der
+`@parameters` setzt, `@index` erhoeht und bei `return false` wartet** --
+**und der Befehlssatz, der das fuer die 51 bekannten Befehle tut.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
