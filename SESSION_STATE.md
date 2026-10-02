@@ -16508,3 +16508,48 @@ Rechnung.**
 **Und die 449 ueber Variablen und die 359 ueber Bilder sind ehrliche
 Arbeit** -- **beide hat der Leser, und beide brauchen eine echte
 Auswertung der Formen, die dieses Spiel schreibt.**
+
+
+## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
+
+**Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
+Fehler, alle in derselben Datei:
+
+1. `LeseVergleich` hat den Operator mitgenommen, den es nur pruefen sollte.
+   Ein Parserlevel, das nur sieht, ob ein Operator folgt, darf ihn nicht
+   essen -- nur die Ebene, die ihn akzeptiert, nimmt ihn auf.
+2. `&&` und `||` standen nicht in der Zwei-Zeichen-Liste, also gab
+   `NaechsteOperator` nur ein `&` beziehungsweise `|` zurueck.
+3. `LeseOder` hat ein `&&` als Fehler gemeldet -- es gehoert einer Ebene
+   hoeher und wird dort nicht gegessen, es wird nur durchgereicht.
+4. Und die Regel "Operatoren einer hoeheren Ebene sind kein Fehler" fehlte
+   ueberhaupt: `1 + 2` wurde an der Vergleichsebene abgelehnt.
+
+**Messung am echten Spiel** (`D:/Itch/sister/www`, 4952 Skriptbedingungen):
+
+```text
+MV Rechnungen: 364 gelesen, 0 verweigert
+MV Skript-Bedingungen: 4952 insgesamt, 320 davon beantwortbar (6%)
+```
+
+**Was die Rechnung verweigert, und warum.** Die 136 Kreisbedingungen
+lesen `$gameVariables.value(4)` und `value(5)` -- die Position des
+Spielers. Dieses Spiel schreibt 40 Variablen, und **kein einziger `122` in
+allen 81 Karten schreibt 4 oder 5.** Die kommen aus einem Plugin-Skript.
+Eine Bedingung ueber die Spielerposition auf einer Karte, die dieses
+Repository nicht laedt, wird nicht geraten und nicht mit null
+beantwortet; sie nennt die Nummer, die fehlt.
+
+**Vorher/nachher im echten Lauf:** 2 Aktionen -> **13 Aktionen**.
+Befehlsabdeckung: 50 -> **58 von 114** dispatchbar (50%).
+`MV sister` 93%, `LegalTruck` 99%, `MZ Camellia` 85%.
+`All 2292 tests passed`.
+
+**Zwei Tests, die eine erfundene Grenze prueften.** Der Vertrag
+`Test_ABranchThatAsksForTheAuthorsOwnScriptIsReportedAndNotRun` prfte
+`1 + 1 === 2` als "Skript des Autors". Gemessen kommt diese Zeile in
+keinem der drei Spiele auf diesem Rechner vor -- nullmal. Ersetzt durch
+`$gameSelfVariables.get(this, 'Type') === 0`, die haeufigste echte
+Autorzeile (1032x), plus ein neuer Test, dass eine Rechnung eine Rechnung
+bleibt.
+

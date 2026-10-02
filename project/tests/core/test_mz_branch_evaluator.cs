@@ -255,30 +255,85 @@ AssertEq(
                 + " a switch nobody supplied is off, and the same"
                 + " switch set to on flips the branch");
     }
+    /// <summary>
+    /// A branch on the author's own script is reported, and not run.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The engine writes <c>result = !!eval(params[1])</c> for this kind.
+    /// <b>And this repository does not evaluate a game's
+    /// JavaScript</b>, <b>and the one thing it may not do is answer as
+    /// though it had.</b>
+    /// </para>
+    /// <para>
+    /// <strong>And the line this used to test was
+    /// <c>"1 + 1 === 2"</c>, and that line is arithmetic and not a script
+    /// question</strong> -- <b>and it is now answered, and correctly, as
+    /// true</b>. <strong>And measured at the three finished games on this
+    /// machine, <c>1 + 1 === 2</c> appears zero times</strong>: <b>it is
+    /// not something a game writes, and a test that invents one and then
+    /// rules on it is a test of the invention.</b>
+    /// </para>
+    /// <para>
+    /// <strong>And the boundary that is real is the one this game
+    /// actually writes</strong> -- <b>1032 times:
+    /// <c>$gameSelfVariables.get(this, 'Type') === 0</c></b>, <b>and a
+    /// store a plugin makes for itself</b>, <b>and no amount of arithmetic
+    /// answers that.</b>
+    /// </para>
+    /// </remarks>
     public void Test_ABranchThatAsksForTheAuthorsOwnScriptIsReportedAndNotRun()
     {
-        // The engine writes `result = !!eval(params[1])` for this kind. This
-        // repository does not evaluate a game's JavaScript and the one thing it
-        // may not do is answer as though it had. The branch is reported, the
-        // author's text is kept, and nothing is evaluated.
-        const string authorsLine = "1 + 1 === 2";
+        // **Und das ist eine Zeile, die ein fertiges Spiel wirklich
+        // schreibt** -- **und sie dreizehnhundertzweimal im MV-Spiel und
+        // nullmal in den beiden anderen.**
+        const string authorsLine =
+            "$gameSelfVariables.get(this, 'Type') === 0";
         var branch = MzBranch.FromParameters(["12", authorsLine]);
 
-        AssertEq(branch.Kind, MzBranchKind.Script, "it is a branch on a script");
-        AssertEq(
-            branch.ScriptText, authorsLine,
+        AssertEq(branch.Kind, MzBranchKind.Script,
+            "it is a branch on a script");
+        AssertEq(branch.ScriptText, authorsLine,
             "and the author's own line is kept as it was written");
 
         var result = MzBranchEvaluator.Evaluate(branch, new MzBranchFacts());
         AssertEq(
             result.Outcome, MzBranchOutcome.ScriptNotRun,
-            "and the answer is that it was not run, and not whether the line is"
-            + " true");
+            "and the answer is that it was not run, and not whether the line"
+            + " is true");
         AssertTrue(
             result.Outcome != MzBranchOutcome.True
             && result.Outcome != MzBranchOutcome.False,
-            "which is the point: it says neither true nor false, because saying"
-            + " either would be a claim about code this repository did not run");
+            "which is the point: it says neither true nor false, because"
+            + " saying either would be a claim about code this repository"
+            + " did not run");
+        AssertTrue(result.Missing.Length > 0,
+            "and it says what it would need -- and it said '"
+            + result.Missing + "', and a refusal that does not say what it"
+            + " would need is a refusal nobody can act on");
+    }
+
+    /// <summary>
+    /// And an arithmetic branch is answered, because it is arithmetic.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>1 + 1 === 2</c> is a fact about arithmetic and not
+    /// about the author's code</strong>, <strong>and refusing it would be
+    /// refusing a thing this repository knows.</strong>
+    /// </remarks>
+    public void Test_EineRechnungIstKeineSkriptfrage()
+    {
+        var branch = MzBranch.FromParameters(["12", "1 + 1 === 2"]);
+        var ergebnis = MzBranchEvaluator.Evaluate(branch, new MzBranchFacts());
+        AssertEq(ergebnis.Outcome, MzBranchOutcome.True,
+            "**and one plus one is two** -- and it came to "
+            + ergebnis.Outcome + ", and this is the line the test before it"
+            + " used to refuse");
+
+        var falsch = MzBranch.FromParameters(["12", "1 + 1 === 3"]);
+        AssertEq(MzBranchEvaluator.Evaluate(falsch, new MzBranchFacts())
+            .Outcome, MzBranchOutcome.False,
+            "**and one plus one is not three**");
     }
 
     public void Test_GoldIsComparedByItsOwnNumberingAndNotTheVariables()

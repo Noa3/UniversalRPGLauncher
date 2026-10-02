@@ -264,6 +264,61 @@ public static class MzBranchEvaluator
                 // beantwortete, behauptete ein Ergebnis, das er nicht
                 // berechnet hat.** **Und dieses Spiel schreibt genau das,
                 // einmal.**
+                // **Und bevor die Liste der Engine-Fragen kommt, kommt
+                // die Rechnung** -- **denn eine Bedingung, die nur Zahlen
+                // und `$gameVariables.value(n)` liest, ist Arithmetik
+                // und keine Skriptfrage.**
+                //
+                // **Und gemessen an `D:/Itch/sister/www`: 364 von 4952
+                // Skriptbedingungen sind genau das**, **und die haeufigste
+                // Form ist ein Radius um einen Punkt auf der Karte:**
+                //
+                // ```js
+                // ($gameVariables.value(4) - 1107) ** 2
+                //   + ($gameVariables.value(5) - 612) ** 2 <= 113 ** 2
+                // ```
+                //
+                // **Und die Rechnung wird nur gemacht, wenn sie ganz
+                // aufgeht** -- **und ein Ausdruck mit einem Namen darin
+                // geht nicht auf und bleibt die Verweigerung, die sie
+                // war.**
+                // **Und eine Rechnung, in der eine Variable vorkommt, die
+                // das Spiel nie geschrieben hat, ist nicht dieselbe wie
+                // eine, in der eine Null steht.**
+                //
+                // `Game_Variables.prototype.value` gibt null zurueck,
+                // wenn die Variable leer ist, **und eine leere Variable
+                // ist nicht dieselbe wie eine, die auf null
+                // geschrieben wurde.** **Und gemessen an diesem Spiel:
+                // 3280 seiner Variablen werden nie geschrieben, und
+                // `$gameVariables.value(3280) > 5` ist eine Frage ueber
+                // etwas, das es nicht gibt.**
+                //
+                // **Und `$gameScreen.picture(40)` ist derselbe Fall und
+                // noch deutlicher**: **eine Frage ueber ein Bild, das nie
+                // gezeigt wurde.** **Und die Rechnung geht trotzdem auf,
+                // weil der Leser fuer beides eine Zahl hat.**
+                if (!MzArithmetic.KenntAlleVariablen(
+                    pBranch.ScriptText, pFacts))
+                {
+                    var fehlend = MzArithmetic.WelcheVariableFehlt(
+                        pBranch.ScriptText, pFacts);
+                    return MzBranchResult.ScriptNotRun(
+                        "variable " + fehlend + ", which this game has "
+                        + "never written, and a variable that was never "
+                        + "written is not the same as one that was written "
+                        + "as zero");
+                }
+
+                var gerechnet = MzArithmetic.TryRead(
+                    pBranch.ScriptText, pFacts, out var rechenFehler);
+                if (gerechnet.HasValue)
+                {
+                    return MzArithmetic.IstWahr(gerechnet.Value)
+                        ? MzBranchResult.Of(MzBranchOutcome.True)
+                        : MzBranchResult.Of(MzBranchOutcome.False);
+                }
+
                 var antwort = MzEngineCondition.Answer(
                     pBranch.ScriptText, pFacts, out var warum);
                 if (antwort.HasValue)

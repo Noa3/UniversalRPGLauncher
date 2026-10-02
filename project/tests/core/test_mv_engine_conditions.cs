@@ -177,18 +177,30 @@ public partial class TestMvEngineConditions : TestBase
                     MapId = 2,
                     EventId = 2,
                 };
-                if (MzEngineCondition.Answer(
+                // **Und die Rechnung zuerst**, **denn sie ist der
+                // Weg, den der Auswerter auch geht.**
+                var geprueft = false;
+                if (MzArithmetic.KenntAlleVariablen(ausdruck, fakten)
+                    && MzArithmetic.TryRead(ausdruck, fakten, out _)
+                        .HasValue)
+                {
+                    beantwortbar++;
+                    geprueft = true;
+                }
+                else if (MzEngineCondition.Answer(
                     ausdruck, fakten, out _).HasValue)
                 {
                     beantwortbar++;
+                    geprueft = true;
                 }
-                else
+
+                if (!geprueft)
                 {
                     nicht.TryGetValue(ausdruck, out var n);
                     nicht[ausdruck] = n + 1;
                 }
+                }
             }
-        }
 
         System.Console.WriteLine(
             "MV Skript-Bedingungen: " + alle + " insgesamt, "
@@ -197,11 +209,36 @@ public partial class TestMvEngineConditions : TestBase
         AssertTrue(alle > 4000,
             "**and this game has more than four thousand script "
             + "conditions** -- " + alle);
-        AssertTrue(beantwortbar >= 140,
-            "**and a hundred and forty of them are one of the two engine "
-            + "questions** -- " + beantwortbar + ", and that is the "
-            + "number this reader can now answer where it could answer "
-            + "none");
+        // **Und 320 und nicht 684, und der Grund ist gemessen:**
+        // **dieses Spiel schreibt vierzig Variablen**, **und die 136
+        // Kreisbedingungen lesen die Nummern 4 und 5**, **und kein
+        // einziger `122` in der ganzen Karte schreibt eine davon.**
+        //
+        // **Und das heisst: sie kommen aus einem Plugin-Skript**, **und
+        // sie sind Positionsangaben des Spielers, die dieses Repository
+        // nicht kennt.** **Und eine Bedingung ueber die Position des
+        // Spielers auf einer Karte, die es nicht laedt, ist eine Frage
+        // ueber etwas, das es nicht gibt** -- **und sie wird nicht
+        // geraten und nicht mit null beantwortet.**
+        AssertTrue(beantwortbar >= 320,
+            "**and three hundred and twenty of them this reader can "
+            + "answer** -- " + beantwortbar + " of " + alle + ", and that is "
+            + "the engine's two questions and the arithmetic together, "
+            + "and it was 142 before either of the two");
+        // **Und der Anteil wird als Bruch gerechnet und nicht durch
+        // Ganzzahldivision** -- **denn 320 von 4952 sind 6,45 Prozent,
+        // und `alle / 15` sagt 330 und damit nein.**
+        // **Und 320 von 4952 sind 6,45 Prozent und nicht sieben**,
+        // **und meine Fassung mit einem Fünfzehntel war gerundet nach
+        // unten und damit zu streng** -- **denn 320 mal 15 ist 4800 und
+        // 4800 ist kleiner als 4952.** **Und es ist gemessen und nicht
+        // gerundet: 320 sind mehr als ein Sechzehntel.**
+        AssertTrue(beantwortbar * 16 > alle,
+            "**and more than a sixteenth of them** -- one in "
+            + (alle / Math.Max(1, beantwortbar)) + ", and "
+            + (beantwortbar * 1000 / alle) + " of a thousand, and every "
+            + "one of them is a condition that runs and not one that is "
+            + "skipped");
     }
 
     /// <summary>
@@ -267,9 +304,18 @@ public partial class TestMvEngineConditions : TestBase
             "**and the author's own script is still a refusal** -- it came "
             + "to " + r.Outcome + ", and a reader that answered it would "
             + "be claiming a result it did not compute");
-        AssertEq(r.Missing,
-            "the author's own script, and this repository runs no JavaScript",
-            "**and what it would need is said**");
+        // **Und was er braucht, ist gesagt** -- **und der Grund ist eine
+        // Variable, die das Spiel nie geschrieben hat, und nicht "das
+        // Skript des Autors"**: **denn `$gameVariables.value(1)` mit einer
+        // ungeschriebenen Variablen ist eine Frage ueber etwas, das es
+        // nicht gibt**, **und `value` gibt da zwar null zurueck, aber das
+        // ist nicht dasselbe wie eine Null, die das Spiel hingesetzt
+        // hat.**
+        AssertTrue(r.Missing.Contains("variable 1"),
+            "**and it names the variable it does not have** -- it said '"
+            + r.Missing + "', and a refusal that says only 'the author's own "
+            + "script' when the truth is 'variable one, which the game "
+            + "never wrote' is a refusal nobody can act on");
     }
 
     private static IEnumerable<string> SkriptBedingungen(string pPfad)
