@@ -16765,6 +16765,55 @@ TestMvWeatherAndNames: 3/3
 All 2316 tests passed
 ```
 
+## 2026-10-02 — Der Kampfblock: 301 schreibt die Zahl, 601-603 lesen sie
+
+**Der Fund, der den ganzen Block erklaert:**
+
+```js
+BattleManager.setEventCallback(function(n) {
+    this._branch[this._indent] = n;
+}.bind(this));
+```
+
+**und `command601` ist `if (this._branch[this._indent] !== 0) {
+skipBranch(); }` — also vergleichen drei Befehle gegen `0`, `1` und
+`2`, und `command111` hat in MZ keine Kampf-Art** (Switch, Variable,
+Self Switch, Timer, Actor, Enemy, Character, Gold, Item, Weapon, Armor,
+Button, Script, Vehicle). **Die Zahlen kommen aus
+`BattleManager.endBattle(result)`: `endBattle(0)` Sieg, `endBattle(1)`
+Flucht, `endBattle(2)` Niederlage.**
+
+**Und dieselbe `_branch`-Stelle beantwortet auch `402`, `403` und `404`
+— dort stehen `true` und `false`, weil `111` und `401` Boolesches
+schreiben.**
+
+**Zwölf Befehle:** `331`-`337`, `339`, `340` (Gegner), `601`-`603`
+(Ausgang).
+
+**Drei eigene Befunde:**
+
+* **`iterateEnemyIndex` nimmt einen negativen Index als *jeden*
+  Gegner — nicht jeden *lebenden*** — **weil
+  `$gameTroop.members()` die ganze Liste ist.** **Nur `339` fragt
+  `enemy.isAlive()`**, **und zwar in seinem eigenen Rückruf.** **Meine
+  erste Fassung hat an dieser Stelle gefiltert, und damit hätte `336`
+  eine leere Liste bekommen — und `336` ist genau `enemy.appear()`,
+  also der Befehl, der einen versteckten Gegner zurückholt.**
+* **`340` ist nicht `331` mit einer Operation** — **es ist fest
+  `enemy.gainHp(-value)`** — **und das Minus steht im Aufruf.** **Ein
+  Leser, der `gainHp(value)` ruft, heilt statt zu verletzen.**
+* **`336` ist zwei Aufrufe und nicht einer** — **`enemy.appear();
+  $gameTroop.makeUniqueNames();`** — **und `appear()` allein ließe zwei
+  Gegner derselben Art mit demselben Namen.**
+
+```text
+MZ: 100 von 114 dispatchbar (87%), 14 ohne
+  und die 14 sind kein Kampf und keine Partie mehr:
+  109, 133, 136, 137, 139, 140, 202, 206, 285, 323, 324, 325, 326, 342
+TestMvBattleOutcomes: 5/5
+All 2321 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

@@ -133,7 +133,21 @@ public partial class TestMzCommandCoverageHonest : TestBase
             // **Und `103`, `281`, `282` und `284` standen hier und sind
             // jetzt raus** -- **und `TestMvMapDisplay` beweist alle vier
             // an `VHMV`.**
-            109,
+            //
+            // **Und mit dem Kampfblock fehlt kein Kampf- und
+            // kein Partiebefehl mehr** -- **und was bleibt, ist eine
+            // kleine Liste mit erkennbarem Grund:**
+            //
+            // ```text
+            // 109 Change Skills       323 Change Skill Learn
+            // 133 Change Equipment    324 Change Class Learn
+            // 136/137/139/140 State  325 Change Skill Forget
+            // 202 Show Balloon        326 Change Exp
+            // 206 Move Actor          342 Recover HP
+            //                         285 Show Balloon Icon
+            // ```
+            109, 133, 136, 137, 139, 140, 202, 206, 285, 323, 324,
+            325, 326, 342,
         })
         {
             AssertTrue(nicht.Contains(erwartet),

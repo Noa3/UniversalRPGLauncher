@@ -556,6 +556,19 @@ public sealed class MzBranchFacts
     public Dictionary<int, string> Namen { get; } = new();
 
     /// <summary>
+    /// The troop in the battle, and it is <c>$gameTroop</c> for the
+    /// commands that change enemies.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is where the three battle outcomes
+    /// land</strong> -- <strong><c>301</c> hands
+    /// <c>BattleManager.setEventCallback(function(n) { this._branch
+    /// [this._indent] = n; })</c></strong>, <strong>and that is where
+    /// <c>601</c>, <c>602</c> and <c>603</c> read it.</strong>
+    /// </remarks>
+    public MzBattle Kampf { get; } = new();
+
+    /// <summary>
     /// Who the name editor was opened for, and what it was given.
     /// </summary>
     /// <remarks>

@@ -118,6 +118,18 @@ public static class MzCommands
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
             MzCommandTable.RotatePicture,
+            MzCommandTable.ChangeEnemyHp,
+            MzCommandTable.ChangeEnemyMp,
+            MzCommandTable.ChangeEnemyTp,
+            MzCommandTable.ChangeEnemyState,
+            MzCommandTable.ChangeEnemyLife,
+            MzCommandTable.ChangeEnemyLocation,
+            MzCommandTable.EnemyTransform,
+            MzCommandTable.EnemyAnimation,
+            MzCommandTable.EnemyDamage,
+            MzCommandTable.BattleWin,
+            MzCommandTable.BattleEscape,
+            MzCommandTable.BattleLose,
             MzCommandTable.SetWeatherEffect,
             MzCommandTable.ChangeBattleback,
             MzCommandTable.ChangeActorName,
@@ -1492,6 +1504,304 @@ public static class MzCommands
                     + " and " + At(pCommand, 4) + " as the buying kind, "
                     + "and " + zeilen.Count + " of them came from the "
                     + "605 lines that followed"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeEnemyHp:
+            case MzCommandTable.ChangeEnemyMp:
+            case MzCommandTable.ChangeEnemyTp:
+            {
+                // **Und `command331` bis `command333` sind dieselbe Zeile
+                // mit drei Feldern:**
+                //
+                // ```js
+                // iterateEnemyIndex(this._params[0], function(enemy) {
+                //     value = this.operateValue(this._params[1],
+                //         this._params[2], this._params[3]);
+                //     enemy.setHp(value, this._params[4]);
+                //     enemy.clearResult();
+                // }.bind(this));
+                // return true;
+                // ```
+                //
+                // **Und der erste Parameter ist der Gegner und der
+                // zweite die Art des Operanden** -- **das ist
+                // `operateValue(operation, operandType, operand)` mit `0`
+                // plus und `1` minus** -- **und dasselbe `operateValue`,
+                // das `311` auf der Darstellerseite benutzt.**
+                if (!TryOperateValue(
+                    pCommand, pFacts, 1, out var wertGegner,
+                    out var fehltGegner))
+                {
+                    pFacts.Notices.Add(fehltGegner);
+                    return true;
+                }
+
+                foreach (var gegner in GegnerZiele(pFacts, At(pCommand, 0)))
+                {
+                    switch (pCommand.Code)
+                    {
+                        case MzCommandTable.ChangeEnemyHp:
+                            gegner.Hp = wertGegner;
+                            break;
+                        case MzCommandTable.ChangeEnemyMp:
+                            gegner.Mp = wertGegner;
+                            break;
+                        default:
+                            gegner.Tp = wertGegner;
+                            break;
+                    }
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    "the troop's "
+                    + (pCommand.Code == MzCommandTable.ChangeEnemyHp
+                        ? "hit points"
+                        : pCommand.Code == MzCommandTable.ChangeEnemyMp
+                            ? "magic points"
+                            : "tactical points")
+                    + " are " + wertGegner + " on the enemies this "
+                    + "command named"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeEnemyState:
+            {
+                // **Und `command334`:** `if (this._params[1] === 0) {
+                // enemy.addState(this._params[2]); } else {
+                // enemy.removeState(this._params[2]); }` -- **und ein `0`
+                // fuegt hinzu und jeder andere Wert entfernt** -- **und
+                // `enemy.clearResult()` kommt dazu.**
+                var gegnerZustand = GegnerZiele(pFacts, At(pCommand, 0));
+                var zustandsId = At(pCommand, 2);
+                var hinzu = At(pCommand, 1) == 0;
+                foreach (var gegner in gegnerZustand)
+                {
+                    if (hinzu)
+                    {
+                        gegner.Zustaende.Add(zustandsId);
+                    }
+                    else
+                    {
+                        gegner.Zustaende.Remove(zustandsId);
+                    }
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"state {zustandsId} is "
+                    + (hinzu ? "given to" : "taken from")
+                    + " the enemies this command named"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeEnemyLife:
+            {
+                // **Und `command335` ist genau `enemy.recoverAll()` und
+                // sonst nichts** -- **kein Index und kein Zustand und
+                // kein Wert:**
+                //
+                // ```js
+                // iterateEnemyIndex(this._params[0], function(enemy) {
+                //     enemy.recoverAll();
+                // }.bind(this));
+                // return true;
+                // ```
+                //
+                // **Und `recoverAll` nimmt jedem Gegner jeden Zustand.**
+                foreach (var gegner in GegnerZiele(pFacts, At(pCommand, 0)))
+                {
+                    gegner.Zustaende.Clear();
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    "the enemies this command named recover, and every "
+                    + "state is off them"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeEnemyLocation:
+            {
+                // **Und `command336` macht zwei Dinge**, **und das zweite
+                // steht in einer eigenen Zeile:**
+                //
+                // ```js
+                // iterateEnemyIndex(this._params[0], function(enemy) {
+                //     enemy.appear();
+                //     $gameTroop.makeUniqueNames();
+                // }.bind(this));
+                // return true;
+                // ```
+                //
+                // **Und `appear()` allein wuerde zwei Gegner derselben
+                // Art mit demselben Namen hinterlassen** -- **und
+                // `makeUniqueNames()` ist der ganze Unterschied.**
+                foreach (var gegner in GegnerZiele(pFacts, At(pCommand, 0)))
+                {
+                    gegner.Sichtbar = true;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    "the enemies this command named appear, and the "
+                    + "troop's names were made unique, which is `enemy"
+                    + ".appear(); $gameTroop.makeUniqueNames();` and not "
+                    + "one call but two"));
+                return true;
+            }
+
+            case MzCommandTable.EnemyTransform:
+            {
+                // **Und `command337` ist `enemy.transform(params[1])` und
+                // `makeUniqueNames()` und sonst nichts** -- **und
+                // `transform` wechselt die Klasse und damit den
+                // Namen.**
+                foreach (var gegner in GegnerZiele(pFacts, At(pCommand, 0)))
+                {
+                    gegner.Klasse = At(pCommand, 1);
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    "the enemies this command named become class "
+                    + At(pCommand, 1) + ", and their names follow it, "
+                    + "which is `enemy.transform(this._params[1])`"));
+                return true;
+            }
+
+            case MzCommandTable.EnemyAnimation:
+            {
+                // **Und `command339` prueft `if (enemy.isAlive())`** --
+                // **und das ist eine Bedingung und kein Index:**
+                //
+                // ```js
+                // iterateEnemyIndex(this._params[0], function(enemy) {
+                //     if (enemy.isAlive()) {
+                //         enemy.startAnimation(this._params[1], false, 0);
+                //     }
+                // }.bind(this));
+                // return true;
+                // ```
+                //
+                // **Und ein toter Gegner bekommt keine Animation.**
+                var gespielt = 0;
+                foreach (var gegner in GegnerZiele(pFacts, At(pCommand, 0)))
+                {
+                    if (gegner.Sichtbar)
+                    {
+                        gespielt++;
+                    }
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"{gespielt} of the living enemies play "
+                    + $"{At(pCommand, 1)}, and `command339` says `if "
+                    + "(enemy.isAlive())`, so a hidden one is skipped"));
+                return true;
+            }
+
+            case MzCommandTable.EnemyDamage:
+            {
+                // **Und `command340` ist nicht `331` mit einer
+                // Operation** -- **es ist fest ein `gainHp(-value)`:**
+                //
+                // ```js
+                // iterateEnemyIndex(this._params[0], function(enemy) {
+                //     var value = this.operateValue(this._params[1],
+                //         this._params[2], this._params[3]);
+                //     enemy.gainHp(-value);
+                // }.bind(this));
+                // return true;
+                // ```
+                //
+                // **Und das Minus steht im Aufruf und nicht in der
+                // Operation** -- **und `gainHp` rechnet `this._hp +=
+                // value`**, **und ein Leser, der `gainHp(value)` ruft,
+                // heilt statt zu verletzen.**
+                if (!TryOperateValue(
+                    pCommand, pFacts, 1, out var wertSchaden,
+                    out var fehltSchaden))
+                {
+                    pFacts.Notices.Add(fehltSchaden);
+                    return true;
+                }
+
+                foreach (var gegner in GegnerZiele(pFacts, At(pCommand, 0)))
+                {
+                    gegner.Hp -= wertSchaden;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    "the enemies this command named lose "
+                    + System.Math.Abs(wertSchaden) + " hit points, and "
+                    + "`command340` is `enemy.gainHp(-value)`, so the minus "
+                    + "is in the call and not in the operation"));
+                return true;
+            }
+
+            case MzCommandTable.BattleWin:
+            case MzCommandTable.BattleEscape:
+            case MzCommandTable.BattleLose:
+            {
+                // **Und die drei sind dieselbe Zeile mit einer Zahl:**
+                //
+                // ```js
+                // command601() {
+                //     if (this._branch[this._indent] !== 0) {
+                //         this.skipBranch();
+                //     }
+                //     return true;
+                // }
+                // ```
+                //
+                // **Und `command301` schreibt genau diese Zahl an genau
+                // diesen Platz:**
+                //
+                // ```js
+                // BattleManager.setEventCallback(function(n) {
+                //     this._branch[this._indent] = n;
+                // }.bind(this));
+                // ```
+                //
+                // **Und `BattleManager.endBattle(result)` ruft ihn mit
+                // `endBattle(0)` aus dem Sieg, `endBattle(1)` aus der
+                // Flucht und `endBattle(2)` aus der Niederlage.**
+                //
+                // **Und dieselbe `_branch`-Stelle beantwortet auch
+                // `402`, `403` und `404`** -- **und dort stehen
+                // Wahrscheinlich `true` und `false` drin**, **weil `111`
+                // und `401` Boolesches schreiben.** **Ein Leser, der an
+                // dieser Stelle einen Wahrheitswert findet, darf daraus
+                // keine Kampfroute machen.**
+                var ergebnis = pCommand.Code switch
+                {
+                    MzCommandTable.BattleWin => (int)MzBattleResult.Win,
+                    MzCommandTable.BattleEscape => (int)MzBattleResult.Escape,
+                    _ => (int)MzBattleResult.Lose,
+                };
+
+                if (!pFacts.InBattle)
+                {
+                    pFacts.Notices.Add(
+                        $"{pCommand.Code} was asked for outside a battle, "
+                        + "and `this._branch[this._indent]` holds whatever "
+                        + "the last `111` or `401` left there, which is a "
+                        + "boolean and not one of the three numbers");
+                    return true;
+                }
+
+                var passt = (int)pFacts.Kampf.Ausgang.GetValueOrDefault()
+                    == ergebnis;
+                pActions.Add(new MzAction(pCommand,
+                    $"the battle ended in {pFacts.Kampf.Ausgang}, and this "
+                    + $"branch is the one for "
+                    + $"{((MzBattleResult)ergebnis)}, and it is "
+                    + (passt ? "taken" : "skipped")
+                    + ", and a skipped one is `skipBranch()` and not a "
+                    + "`return false`"));
+                if (passt)
+                {
+                    return true;
+                }
+
+                pInterpreter.SkipBranch();
                 return true;
             }
 
@@ -3210,6 +3520,76 @@ case MzCommandTable.ChangeExp:
     /// $gameVariables.value(param2)) }</c>.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// <c>iterateEnemyIndex</c>, and it is what all nine of the troop
+    /// commands start with.
+    /// </summary>
+    /// <param name="pFacts">Where the troop is.</param>
+    /// <param name="pIndex">Negative for every enemy, else the one.</param>
+    /// <returns>
+    /// The enemies the index names. An index past the end of the list names
+    /// none, and that is not an error.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own rule and it has two
+    /// halves.</strong>
+    /// </para>
+    /// <code>
+    /// iterateEnemyIndex(param, callback) {
+    ///     if (param &lt; 0) {
+    ///         $gameTroop.members().forEach(callback);
+    ///     } else {
+    ///         var enemy = $gameTroop.members()[param];
+    ///         if (enemy) {
+    ///             callback(enemy);
+    ///         }
+    ///     }
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And a negative index is every enemy and a positive one
+    /// is exactly one</strong> -- <strong>and an index past the end is
+    /// nothing at all, because of <c>if (enemy)</c>, and not an
+    /// error.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>iterateBattler(param1, param2, callback)</c> calls
+    /// that only while <c>$gameParty.inBattle()</c> holds</strong> --
+    /// <strong>and outside a battle it does nothing at all.</strong>
+    /// </para>
+    /// </remarks>
+    private static List<MzEnemy> GegnerZiele(
+        MzBranchFacts pFacts, int pIndex)
+    {
+        var ziele = new List<MzEnemy>();
+        if (!pFacts.InBattle)
+        {
+            // **Und ausserhalb eines Kampfes laeuft keiner der neun
+            // Befehle** -- **und `iterateBattler` sagt `if
+            // ($gameParty.inBattle())`, und nicht `else`.**
+            return ziele;
+        }
+
+        if (pIndex < 0)
+        {
+            foreach (var gegner in pFacts.Kampf.Alle())
+            {
+                ziele.Add(gegner);
+            }
+
+            return ziele;
+        }
+
+        var einer = pFacts.Kampf.GegnerNummer(pIndex);
+        if (einer != null)
+        {
+            ziele.Add(einer);
+        }
+
+        return ziele;
+    }
+
     private static string AufTraeger(
         MzCommandEntry pCommand, MzBranchFacts pFacts, int pStart,
         Action<int, int> pNotiere, string pWas)

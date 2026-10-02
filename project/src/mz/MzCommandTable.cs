@@ -305,6 +305,66 @@ public static class MzCommandTable
     public const int ChangeName = 320;
 
     /// <summary>
+    /// <c>command331</c> -- $gameTroop.members()[n].setHp(value, this._params[0] < 0).
+    /// </summary>
+    public const int ChangeEnemyHp = 331;
+
+    /// <summary>
+    /// <c>command332</c> -- enemy.gainMp(value).
+    /// </summary>
+    public const int ChangeEnemyMp = 332;
+
+    /// <summary>
+    /// <c>command333</c> -- enemy.gainTp(value).
+    /// </summary>
+    public const int ChangeEnemyTp = 333;
+
+    /// <summary>
+    /// <c>command334</c> -- enemy.addState / enemy.removeState, and collapse on death.
+    /// </summary>
+    public const int ChangeEnemyState = 334;
+
+    /// <summary>
+    /// <c>command335</c> -- enemy.recoverAll().
+    /// </summary>
+    public const int ChangeEnemyLife = 335;
+
+    /// <summary>
+    /// <c>command336</c> -- enemy.appear(), and makeUniqueNames().
+    /// </summary>
+    public const int ChangeEnemyLocation = 336;
+
+    /// <summary>
+    /// <c>command337</c> -- enemy.transform(params[1]).
+    /// </summary>
+    public const int EnemyTransform = 337;
+
+    /// <summary>
+    /// <c>command339</c> -- enemy.startAnimation(params[1], false, 0), and only if alive.
+    /// </summary>
+    public const int EnemyAnimation = 339;
+
+    /// <summary>
+    /// <c>command340</c> -- enemy.gainHp(-value).
+    /// </summary>
+    public const int EnemyDamage = 340;
+
+    /// <summary>
+    /// <c>command601</c> -- _branch !== 0.
+    /// </summary>
+    public const int BattleWin = 601;
+
+    /// <summary>
+    /// <c>command602</c> -- _branch !== 1.
+    /// </summary>
+    public const int BattleEscape = 602;
+
+    /// <summary>
+    /// <c>command603</c> -- _branch !== 2.
+    /// </summary>
+    public const int BattleLose = 603;
+
+    /// <summary>
     /// <c>command103</c> -- <c>$gameMessage.setNumberInput(params[0],
     /// params[1])</c>, and it waits for the answer.
     /// </summary>
