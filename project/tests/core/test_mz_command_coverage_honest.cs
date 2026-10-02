@@ -59,24 +59,46 @@ public partial class TestMzCommandCoverageHonest : TestBase
                 + "repository made up");
 
         var zahlen = befehle.Select(pB => pB.Code).ToHashSet();
-        var steuerung = new HashSet<int>
-        {
-            102, 111, 112, 113, 115, 118, 119, 402, 411, 413,
-        };
-        var befehle_ = new HashSet<int>
-        {
-            101, 104, 105, 108, 121, 122, 123, 125, 126, 127, 128, 129, 201,
-            203, 205, 211, 212, 213, 214, 216, 217, 221, 222, 223, 224, 225,
-            230, 231, 232, 235, 241, 242, 243, 244, 245, 246, 249, 250, 251,
-            261, 301, 313, 314, 318, 322, 351, 355, 357,
-        };
-
-        var gedeckt = befehle_.Union(steuerung).ToHashSet();
-        var nicht = zahlen.Except(gedeckt).OrderBy(pZahl => pZahl).ToList();
+        // **Und die Liste wird aus dem Tor gelesen und nicht neben ihm
+        // gepflegt** -- **denn sie ist viermal auseinandergelaufen, und
+        // jedes Mal hat sie einen Befehl, der im Tor war, als einen
+        // gemeldet, der keiner ist.** **Und das ist die Richtung, in der
+        // eine Abdeckungszahl nie falsch sein darf.**
+        //
+        // **Und 102, 111, 112, 113, 115, 118 und 413 laufen im
+        // Interpreter und nicht im Tor** -- **denn ein Zweig, eine
+        // Auswahl und ein Sprung sind keine Wirkung auf den Kartenstand
+        // und keine auf den Bildschirm, sondern Steuerung.**
+        // **Und `401`, `655` und `657` stehen nicht im Befehlssatz, und
+        // das ist richtig** -- **denn sie sind Zeilen unter einem Befehl
+        // und keine Befehle**: **`401` ist eine Zeile Text unter einem
+        // `101`**, **und `655` und `657` sind die beiden Haelften eines
+        // Skriptblocks unter einem `355`.** **Und `MzCommandSet` nennt
+        // `657` neben `0`, `412` und `505` in `NoMethodCodes`** --
+        // **und `NoMethodCodes` ist die Liste der Zahlen, die die
+        // Engine absichtlich ohne Methode speichert.**
+        //
+        // **Und sie kommen aus dem Nenner heraus**, **denn eine
+        // Abdeckung von 62 unter 114 waere eine andere Aussage als eine
+        // von 62 unter 111, und beide Zahlen sind nicht wahr.**
+        var keinBefehl = new HashSet<int> { 401, 655, 657 };
+        var befehleZahlen = zahlen.Except(keinBefehl).ToHashSet();
+        var steuerung = MzCommands.SteuerungsBefehle()
+            .Except(keinBefehl).ToHashSet();
+        // **Und `401` bleibt aus dem Tor**, **denn der Interpreter
+        // braucht es dort** -- **es ist eine Zeile unter einem `101`,
+        // und er nimmt sie und lehnt sie ab, wenn keiner da ist**,
+        // **und `test_mz_interpreter` prueft genau das.** **Und eine
+        // Zahl, die im Tor steht und nicht im Befehlssatz, gehoert in
+        // den Nenner und nicht in den Zaehler.**
+        var gedeckt = MzCommands.GateBefehle().Union(steuerung)
+            .Intersect(befehleZahlen).ToHashSet();
+        var nicht = befehleZahlen.Except(gedeckt)
+            .OrderBy(pZahl => pZahl).ToList();
         System.Console.WriteLine(
-            "MZ Befehlssatz: " + zahlen.Count + " Befehle, " + gedeckt.Count
+            "MZ Befehlssatz: " + befehleZahlen.Count + " Befehle, " + gedeckt.Count
             + " in einem Auspraecher ("
-            + (gedeckt.Count * 100 / zahlen.Count) + "%), "
+            + (gedeckt.Count * 100 / befehleZahlen.Count) + "%), "
             + nicht.Count + " ohne: " + string.Join(",", nicht));
 
         AssertTrue(gedeckt.All(zahlen.Contains),

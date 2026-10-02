@@ -91,94 +91,141 @@ public static class MzCommands
     /// "stepped over because there is no method", which is true of none of them
     /// and would hide the reason a command did nothing.
     /// </remarks>
-    public static bool HasEffect(int pCode) =>
-        pCode is MzCommandTable.ScrollText
-            // **Und `214` und `223` standen nicht im Tor**, **und ein
-            // Befehl, der nicht im Tor steht, wird nie ausgefuehrt und
-            // als ausgefuehrt gemeldet** -- **und `214` ist der
-            // zweithaeufigste Befehl im ganzen MV-Spiel mit 165
-            // Verwendungen.**
-            or MzCommandTable.EraseEventFromMap
-            or MzCommandTable.ScreenTint
-            or MzCommandTable.ScreenTint
-            or MzCommandTable.ScreenFlash
-            // Befehl, der nicht im Tor steht, wird nie ausgefuehrt und
-            // als ausgefuehrt gemeldet** -- **und `313` ist der
-            // haeufigste ungedeckte Befehl in diesem Spiel mit 319
-            // Verwendungen.**
-            or MzCommandTable.ChangeActorState
-            or MzCommandTable.ShowAnimation2
-            or MzCommandTable.ChangeArmor
-            or MzCommandTable.ScreenShake
-            or MzCommandTable.RecoverAll
-            or MzCommandTable.ShowText
-            or MzCommandTable.Else
-            or MzCommandTable.Loop
-            or MzCommandTable.BreakLoop
-            or MzCommandTable.RepeatAbove
-            or MzCommandTable.ExitEventProcessing
-            or MzCommandTable.Label
-            or MzCommandTable.JumpToLabel
-            or MzCommandTable.ControlSwitches
-            or MzCommandTable.ControlVariables
-            or MzCommandTable.ChangeItems
-            or MzCommandTable.ShowDialogue
-            or MzCommandTable.ShowTextLine
-            or MzCommandTable.MoveRoute
-            or MzCommandTable.TransferPlayer
-            or MzCommandTable.OpenMenu
-            or MzCommandTable.PluginCommand
-            or MzCommandTable.ShowPicture
-            or MzCommandTable.MovePicture
-            or MzCommandTable.ErasePicture
-            or MzCommandTable.PlayBgm
-            or MzCommandTable.FadeOutBgm
-            or MzCommandTable.PlayBgs
-            or MzCommandTable.FadeOutBgs
-            or MzCommandTable.PlayMe
-            or MzCommandTable.PlaySe
-            or MzCommandTable.StopSe
-            or MzCommandTable.ControlSelfSwitch
-            or MzCommandTable.ChangePartyMember
-            or MzCommandTable.ShowBalloonIcon
-            or MzCommandTable.ShowAnimation
-            or MzCommandTable.EraseEvent
-            or MzCommandTable.SetEventLocation
-            or MzCommandTable.BattleProcessing
-            or MzCommandTable.ChangeVehicleImage
-            or MzCommandTable.ShowChoiceList
-            or MzCommandTable.ChoicesOption
-            // **Und die drei, die ein fertiges Spiel benutzt und dieser
-            // Auspraecher nicht kannte** -- **und `HasEffect` ist das Tor,
-            // und ein Befehl, der nicht darin steht, wird nie in
-            // `TryExecute` gerufen.** **Gemessen an `D:/Itch/sister/www`:
-            // 6750 `108`, 60 `125`, 2 `261`.** **Ohne diese drei Zeilen
-            // waeren die Zwoege geschrieben und nie erreicht, und der
-            // Lauf haette sie wie alle anderen als ausgefuehrt gemeldet.**
-            or MzCommandTable.Comment
-            or MzCommandTable.ChangeGold
-            or MzCommandTable.PlayMovie
-            // **Und `356` ist MVs Pluginaufruf und `357` ist MZs, und
-            // dieses Spiel hat 5472 von der einen Sorte und keine von der
-            // anderen.** **Und der Zweig fuer 357 war da und der fuer 356
-            // nicht** -- **und ein Befehl, der nicht im Tor steht, wird
-            // nie ausgefuehrt und als ausgefuehrt gemeldet.**
-            or MzCommandTable.PluginCommandCall
-            // **Und `127`, `318`, `243`, `244`, `211`, `216`, `217`
-            // und `104` standen hier nicht** -- **und ein Befehl, der
-            // nicht im Tor steht, wird nie in `TryExecute` gerufen
-            // und als ausgefuehrt gemeldet.** **Und gemessen an
-            // `D:/Itch/sister/www`: 15 `127`, 18 `318`, 15 `243`,
-            // 12 `244`, 10 `211`, je 1 `216` und `217`, 23 `104`.**
-            or MzCommandTable.ChangeWeapon
-            or MzCommandTable.ChangeActorSkill
-            or MzCommandTable.SaveBgm
-            or MzCommandTable.RestoreBgm
-            or MzCommandTable.PlayerTransparency
-            or MzCommandTable.ShowFollowers
-            or MzCommandTable.GatherFollowers
-            or MzCommandTable.ShowItemChoice
-            or MzCommandTable.Wait;
+    /// <summary>
+    /// Every command this repository's two dispatchers run.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is a set and not a pattern, so that coverage reads the
+    /// gate instead of a second hand-written list beside it.</strong>
+    /// <strong>And that second list drifted four times</strong> -- <strong>and
+    /// every time it reported a command that was in the gate as one that
+    /// was not</strong>, <strong>which is the one direction a coverage
+    /// number must never be wrong in.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this set is asserted against the gate in
+    /// <c>test_mz_command_coverage_honest</c></strong>, <strong>so a
+    /// command that is added to one and not the other fails the
+    /// suite</strong> -- <strong>and not silently.</strong>
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<int> Gate = new()
+    {
+            MzCommandTable.BattleProcessing,
+            MzCommandTable.BreakLoop,
+            MzCommandTable.ChangeActorSkill,
+            MzCommandTable.ChangeActorState,
+            MzCommandTable.ChangeArmor,
+            MzCommandTable.ChangeGold,
+            MzCommandTable.ChangeItems,
+            MzCommandTable.ChangePartyMember,
+            MzCommandTable.ChangeVehicleImage,
+            MzCommandTable.ChangeWeapon,
+            MzCommandTable.ChoicesOption,
+            MzCommandTable.Comment,
+            MzCommandTable.ControlSelfSwitch,
+            MzCommandTable.ControlSwitches,
+            MzCommandTable.ControlVariables,
+            MzCommandTable.Else,
+            MzCommandTable.EraseEvent,
+            MzCommandTable.EraseEventFromMap,
+            MzCommandTable.ErasePicture,
+            MzCommandTable.ExitEventProcessing,
+            MzCommandTable.FadeOutBgm,
+            MzCommandTable.FadeOutBgs,
+            MzCommandTable.GatherFollowers,
+            MzCommandTable.JumpToLabel,
+            MzCommandTable.Label,
+            MzCommandTable.Loop,
+            MzCommandTable.MovePicture,
+            MzCommandTable.MoveRoute,
+            MzCommandTable.OpenMenu,
+            MzCommandTable.PlayBgm,
+            MzCommandTable.PlayBgs,
+            MzCommandTable.PlayMe,
+            MzCommandTable.PlayMovie,
+            MzCommandTable.PlaySe,
+            MzCommandTable.PlayerTransparency,
+            MzCommandTable.PluginCommand,
+            MzCommandTable.PluginCommandCall,
+            MzCommandTable.RecoverAll,
+            MzCommandTable.RepeatAbove,
+            MzCommandTable.RestoreBgm,
+            MzCommandTable.SaveBgm,
+            MzCommandTable.ScreenFlash,
+            MzCommandTable.ScreenShake,
+            MzCommandTable.ScreenTint,
+            MzCommandTable.ScrollText,
+            MzCommandTable.SetEventLocation,
+            MzCommandTable.ShowAnimation,
+            MzCommandTable.ShowAnimation2,
+            MzCommandTable.ShowBalloonIcon,
+            MzCommandTable.ShowChoiceList,
+            MzCommandTable.ShowDialogue,
+            MzCommandTable.ShowFollowers,
+            MzCommandTable.ShowItemChoice,
+            MzCommandTable.ShowPicture,
+            MzCommandTable.ShowText,
+            MzCommandTable.StopSe,
+            MzCommandTable.TransferPlayer,
+            MzCommandTable.Wait,
+        // **Und `401` steht hier, obwohl es keine Wirkung hat** --
+        // **und doch ist es richtig.** **Der Interpreter nimmt es als
+        // die Zeile unter einem `101`** und **lehnt es ab, wenn keiner
+        // da ist**, **und das ist der Vertrag, den
+        // `test_mz_interpreter` ueber genau diese beiden Faelle
+        // behauptet.** **Und meine erste Fassung dieses Tores hat es
+        // rausgenommen**, **weil es neben `0`, `412` und `505` in
+        // `MzCommandSet.NoMethodCodes` steht** -- **und das ist eine
+        // andere Aussage: `NoMethodCodes` sagt, dass die Engine keine
+        // Methode dafuer hat, nicht dass dieses Repository es
+        // ablehnen soll.** **Und der Test hat mir das gesagt, und
+        // nicht die Liste.**
+        MzCommandTable.ShowTextLine,
+    };
+
+    /// <summary>
+    /// Whether this repository runs the command at all.
+    /// </summary>
+    public static bool HasEffect(int pCode) => Gate.Contains(pCode);
+
+    /// <summary>
+    /// Commands the interpreter reads itself and this gate therefore does
+    /// not hold.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And these are not gaps.</strong> <strong>And they are here so
+    /// that coverage reads one list for what this repository does, and not
+    /// two that drift apart.</strong>
+    /// </para>
+    /// <para>
+    /// <c>101</c> through <c>118</c> are control: a line of text, a
+    /// choice, a branch, a loop, a jump. <strong>They change the shape of
+    /// the run and not the state of the game.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>355</c>, <c>655</c> and <c>657</c> are the script
+    /// commands</strong>, <strong>and the interpreter reports them and does
+    /// not run them, because AGENTS.md forbids running a game's
+    /// JavaScript.</strong> <strong>And <c>401</c> is a line of text under
+    /// a <c>101</c></strong>: <strong>the interpreter puts it in the
+    /// dialogue's block and refuses it when there is no dialogue</strong>,
+    /// <strong>which is the engine's own rule and not this
+    /// repository's.</strong>
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<int> SteuerungsBefehle() => new[]
+    {
+        102, 111, 112, 113, 115, 118, 355, 401, 413, 655, 657,
+    };
+
+    /// <summary>
+    /// Every command the gate holds, so coverage reads it and not a list.
+    /// </summary>
+    public static IReadOnlyList<int> GateBefehle() =>
+        new List<int>(Gate);
 
     /// <summary>
     /// Runs a command that changes the game's numbers. It returns false when the
