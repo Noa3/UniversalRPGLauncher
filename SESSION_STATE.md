@@ -18439,6 +18439,76 @@ All 2392 tests passed
 bekannt:** -- **`clear`, dann `$game_map`, dann `@list`, dann
 `@branch`, dann der erste Befehl.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 14: die Welt liest echte Dateien
+
+**Und MicroQuests `Game_Map.setup` hat genau einen Satz, der eine
+Datei braucht:**
+
+```ruby
+@map = load_data(sprintf("Data/Map%03d.rxdata", @map_id))
+```
+
+**Und `RgssDatenHost` beantwortet jetzt `load_data`**, -- **und liest
+mit `MarshalReader`**, -- **und wandelt den Wertbaum in einen
+Ruby-Wertbaum um**, -- **und fuehrt nichts aus, was nicht gefragt
+wurde.**
+
+```
+Gelesen: 1, Verweigert: 1
+Fragen: Konstante Graphics | freeze an Nil (Block) | load_data an Symbol
+```
+
+**Und das ist der erste Host in diesem Repository, der Daten
+bereitstellt und nicht nur Skripte.**
+
+### Und `map_id` ist kein Feld, sondern eine Methode
+
+```ruby
+def map_id
+  return @map_id
+end
+def width
+  return @map.width
+end
+```
+
+**Und in den 21 `attr_accessor`-Zeilen von `Game_Map` steht
+`map_id` NICHT** -- **und das ist der ganze Befund**: -- **eine Welt,
+die nur Felder anbietet, antwortet `map_id` nicht.**
+
+**Und `Game_Map.setup(map_id)` setzt `@map_id` und `@map`, und
+`@map` ist der Wert, den `load_data` liefert.**
+
+### Und der Verlust ist benannt
+
+```text
+m                            -> Nil
+m.inspect                    -> String
+m.nil?                       -> Boolean
+load_data("nicht/da.rxdata") -> Nil
+```
+
+**Und `Verweigert: 1` und `Gelesen: 1`** -- **und der Aufrufer sieht
+in beiden Faellen `nil`.**
+
+**Und damit ist der naechste Schritt eine Frage an den Aufrufpfad des
+Interpreters und keine an das Spiel:** -- **der Host liefert, und der
+Wert kommt nicht bei `m = ...` an.**
+
+```
+All 2396 tests passed
+```
+
+**Und die vier Behauptungen, die dieser Weg gekostet hat, sind jetzt
+alle durch Messung ersetzt:**
+
+| Behauptung | gemessen |
+|---|---|
+| "`Interpreter` hat kein `setup`" | 7× `class Interpreter`, Tabelle wurde geleert |
+| "die C#-Welt fehlt" | `attr_accessor` baut die Felder selbst |
+| "der Dispatcher baut Namen aus Nummern" | 98 `when`-Zweige, 96 `return command_` |
+| "`@list` trägt `Object`" | `@list` ist `nil`, `Describe`s Rückfall |
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
