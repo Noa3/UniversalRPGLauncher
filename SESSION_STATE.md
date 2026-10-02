@@ -18928,6 +18928,93 @@ etwas gezeigt, das ich gebraucht habe.**
 All 2409 tests passed
 ```
 
+## 2026-10-02 — Kriterien 5 und 6 beginnen: VX liest seine eigenen Skripte
+
+**Und Random Dungeon hat kein `Scripts.rvdata2`**, -- **und es hat
+ein `Scripts.rvdata` mit 338 856 Bytes.**
+
+**Und ein Leser, der nur nach `rvdata2` sucht, meldet fuer ein Spiel
+mit 338 KB Ruby "keine Skripte".**
+
+```text
+Scripts.rvdata: True (338856 Bytes); Scripts.rvdata2: False
+Gelesen: 186 Eintraege
+  mit Quelle: 186; Namen: | Modul | Vocab | Sound | Cache |
+    Game_Temp | Game_System | Game_Message | Game_Switches | Game_Variables
+Game_Interpreter-Eintraege: 1
+VX-Befehle gelesen: 90
+  Verteilung: Ablauf=11 Eingabe=1 Inventar=11 Ton=11 Unbekannt=44
+               ZustandsSchreibend=6 ZweiOrt=6
+```
+
+**Und 186 Skripte, alle 186 mit Ruby, und 90 VX-Befehle aus dem Spiel
+selbst, und `Game_Interpreter` genau einmal** -- **und XP hat kein
+`Game_Interpreter` und schreibt statt dessen `Interpreter 1` bis
+`Interpreter 7`.**
+
+### Und die Skripte laufen: 167 von 180
+
+```text
+VX: 167 geparst und ausgefuehrt, 13 nicht
+    Game_Interpreter: 'else' at offset 5721 does not begin an expression.
+    未)難易度変更: NoMethodError: undefined operator '<<'
+VX-Typen: 202, fehlend: (keine)
+```
+
+**Und alle zehn Typen, die VX braucht, sind definiert** --
+**`Game_Player`, `Game_Character`, `Game_Event`, `Game_Map`,
+`Game_Interpreter`, `Game_Switches`, `Game_Variables`,
+`Game_SelfSwitches`, `Game_Temp`, `Game_Party`.**
+
+**Und der Fehler in `未)難易度変更` ist kein Spielfehler** --
+**das ist ein Plugin mit japanischem Namen**, -- **und es bricht zur
+*Laufzeit* ab**, -- **und ein Leser, der das als "das Spiel laeuft
+nicht" fasst, sagt nichts aus.**
+
+### Und der echte Blocker ist ein Parserfehler, gemessen ueber zehn Varianten
+
+```text
+A: for a in $game_party.members do yield a end   'end' was expected
+B: for a in $game_party.members do
+  yield a
+end   'end' was expected
+C: for a in $game_party.members
+  yield a
+end      1 Anweisungen
+D: for a in [1,2] do yield a end                 'end' was expected
+E: for a in [1,2] do
+  yield a
+end            'end' was expected
+F: for a in [1,2]
+  yield a
+end               1 Anweisungen
+G: [1,2].each do |a| yield a end                1 Anweisungen
+H: while true do
+  break
+end                   1 Anweisungen
+I: 1.times do |a| yield a end                   1 Anweisungen
+J: for a in [1,2] do break end                  'end' was expected
+```
+
+**Und jede Form von `for` mit `do` scheitert, und `while do`, `each
+do` und `times do` gehen.**
+
+**Und die Spur an `case "for"` in `RubyParser` hat NIE ausgeloest** --
+**und das heisst:  der Zweig wird nie erreicht, und der Fehler liegt
+davor.**
+
+**Und diese Zeile aus Random Dungeons `Game_Interpreter` ist der
+Grund:**
+
+```ruby
+if param == 0       # 全体
+  for actor in $game_party.members do yield actor end
+else                # 単体
+```
+
+**Und damit ist Kriterium 5 an einer Stelle blockiert, die klar
+benannt ist und nicht geschaetzt.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

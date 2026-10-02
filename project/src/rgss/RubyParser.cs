@@ -3194,6 +3194,11 @@ public sealed class RubyParser
                 var liste = ParseExpression();
                 SkipNewlines();
                 SkipThen();
+
+                // **Und `SkipThen()` nimmt nur `then`, und `do` ist in
+                // Rubys `for` das `do` von `comp_for`**,
+                // -- **und es wird hier genommen und nicht von der
+                // Ausdrucksebene.**
                 if (IsKeyword("do"))
                 {
                     _index++;
