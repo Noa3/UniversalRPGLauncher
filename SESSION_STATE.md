@@ -18971,82 +18971,132 @@ VX-Typen: 202, fehlend: (keine)
 *Laufzeit* ab**, -- **und ein Leser, der das als "das Spiel laeuft
 nicht" fasst, sagt nichts aus.**
 
-### Und der echte Blocker ist ein Parserfehler, gemessen ueber zehn Varianten
+### Und der Blocker ist behoben:  `for … do … end` auf einer Zeile
 
-**Und gemessen ist, und der Test heisst `TestRubyForGemessen`:**
+**Und der Ort war `RubyParser`, `ParsePostfix`, Zeile 1464:**
 
-```text
-A: for a in $game_party.members do yield a end   'end' was expected
-B: for a in $game_party.members do\n  yield a\nend   'end' was expected
-C: for a in $game_party.members\n  yield a\nend          1 Anweisungen
-D: for a in [1,2] do break end                      'end' was expected
-E: for a in [1,2] do\n  break\nend                 'end' was expected
-F: for a in [1,2]\n  break\nend                     1 Anweisungen
-G: [1,2].each do |a| yield a end                  1 Anweisungen
-H: while true do\n  break\nend                     1 Anweisungen
-I: 1.times do |a| yield a end                     1 Anweisungen
-J: for a in [1,2] do break end                      'end' was expected
+```csharp
+if (IsKeyword("do") && !AfterACondition)
 ```
 
-**Und jede Form von `for` mit `do` auf derselben Zeile wie die
-Sammlung scheitert, und `while do`, `each do` und `times do`
-gehen, und derselbe `for` ohne dieses `do` geht.**
+**Und `AfterACondition` gilt nach `if`, `while`, `until` und
+`case` -- und nicht nach `for`** -- **und darum wurde das `do`
+einer `for`-Sammlung als Blockanfang gelesen**, --
+**und der Rest der `for` als Rumpf dieses Blocks**, --
+**und das `end` der `for` hat den Block geschlossen.**
 
-**Und der Fehler ist ein Token breit, und die Spur nennt die
-Stelle** (`URPG_TRACE=for`):
-
-```text
-for a in [1,2] do break end
-  FOR nach der Liste: '' (Art EndOfInput)
-```
-
-**Und `ParseExpression` hat `do`, `break` und `end` alle drei
-verschluckt.**
-
-**Und Rubys `parse.y` hat dafuer eine eigene Produktion:**
+**Und Rubys `parse.y` haelt genau diese beiden Faelle getrennt:**
 
 ```c
+kWHILE expr_value do compstmt opt_terms kEND
 for_var in p_value expr_value do compstmt opt_terms kEND
 ```
 
-**Und `expr_value` ist ein `arg`, und ein `arg` nimmt weder einen
-Block noch ein Praefix -- und darum stoppt Rubys eigener Leser hier
-und dieser Leser nicht.**
+**Und beide nennen dasselbe `expr_value`, und beide halten vor dem
+`do` an** -- **denn `expr_value` ist ein `arg`, und ein `arg`
+traegt keinen Block.**
 
-**Und der Ort ist `RubyParser`, `case "for"`, wo `ParseExpression`
-die Sammlung bekommt -- und dort ist die Korrektur noch nicht
-gemacht, weil fuenf verschiedene Versuche sie nicht getroffen
-haben.**
+**Und die Spur hat es gemessen, bevor die Zeile gelesen war:**
 
-**Und diese Zeile aus Random Dungeons `Game_Interpreter` ist der
-Grund:**
-
-```ruby
-if param == 0       # 全体
-  for actor in $game_party.members do yield actor end
-else                # 単体
+```text
+for a in $game_party.members do yield actor end
+  nach der Liste: 'yield'    <- das do fehlt, es haengt am Aufruf
 ```
 
-**Und damit ist Kriterium 5 an einer Stelle blockiert, die
-gemessen und nicht geschaetzt ist.**
+**Und was ich vorher falsch gemacht habe, und warum:**
 
-### Und was in diesem Schritt danebenging, und zurueckgenommen wurde
+| Versuch | Ergebnis |
+|---|---|
+| `StartsAValue` um `for` erweitert | nichts, der Zweig war erreicht |
+| eigene `ParseExpressionBisTrenner` | verschluckte mehr als vorher |
+| `ParsePostfixMitOperatoren` mit nachgebauter Operatorliste |手术 zu breit |
+| Spur an `case "for"` | nie ausgeloest, `_spur` war nicht gesetzt |
 
-**Und `StartsAValue` wurde um `for`, `while` und `until` erweitert** --
-**und das brachte nichts**, -- **und die Spur zeigte, dass der
-`case "for"`-Zweig von Anfang an erreicht wurde.**
+**Und die vierte Zeile der Tabelle ist der eigentliche
+Fehler:** **`URPG_TRACE=x` schaltet die Spur nicht ein** --
+**`_spur` ist nur gesetzt, wenn der Schaltertext in einem Token
+*vorkommt*.** -- **Und `URPG_TRACE=for` schaltet sie ein.**
 
-**Und die Spur selbst war dreimal stumm**, -- **und nicht weil der
-Fehler dort nicht liegt**, -- **und sondern weil `_spur` nur gesetzt
-ist, wenn der Schaltertext in einem Token *vorkommt*:** --
-**`URPG_TRACE=x` schaltet nichts ein, `URPG_TRACE=for` schon.**
+### Und was die Korrektur bewirkt hat
 
-**Und `project/src/rgss/RubyParser.cs` wurde zweimal versehentlich
-ueberschrieben**, -- **einmal durch ein Skript, das die falsche
-Datei anfasste**, -- **und einmal durch eine Blockentfernung, die
-den `case`-Zweig zerriss**, -- **und beide Male aus `HEAD`
-wiederhergestellt** -- **und der Baum ist gegenueber `HEAD` bis auf
-den neuen Test unveraendert.**
+```text
+VX vorher: 167 von 180 geparst, 13 nicht
+VX jetzt : 172 von 180 geparst,  8 nicht
+VX-Typen : 203, fehlend: (keine)
+```
+
+**Und alle zwoelf `for`-Formen gehen jetzt**, --
+**und die Verschachtelung auch**, --
+**und ein `do`, das wirklich ein Block ist, geht auch.**
+
+### Und die acht, die noch scheitern
+
+```text
+Scene_Battle       [Parse]   '+=' at offset 8193 does not begin an expression
+シンボルエンカウント      [Parse]   ':' was expected at offset 15080, but 'false' is there
+マップ軽量化             [Parse]   an alias names two things, and '[' is at offset 3872
+多人数パーティ            [Parse]   ',' at offset 21058 does not begin an expression
+ポップアップ              [Parse]   ',' at offset 11043 does not begin an expression
+ボス専用コラプス            [Parse]   ',' at offset 5602 does not begin an expression
+マップ小物メソッド         [Parse]   ',' at offset 3580 does not begin an expression
+未)難易度変更              [Laufzeit] undefined operator '<<'
+```
+
+**Und vier davon sind dieselbe Form** (`TestRgssVxKomma` hat die
+Zeilen gedruckt):
+
+```ruby
+@actors[index1], @actors[index2] = @actors[index2], @actors[index1]
+self.ox , self.oy = bitmap.width / 2 , bitmap.height / 2
+c[e], c[f] = c[f], c[e]
+s.x  , s.y  = x , y
+```
+
+**Und die Bisektion (`TestRubyMlhsZiele`) sagt, wo es
+scheitert:**
+
+```text
+a, b = 1, 2       1 Anweisungen
+a, @b = 1, 2     1 Anweisungen
+a, A.b = 1, 2    ',' at offset 1 does not begin an expression
+a, a[i] = 1, 2   ',' at offset 1 does not begin an expression
+a, a.b = 1, 2    ',' at offset 1 does not begin an expression
+```
+
+**Und ein einfacher Name links geht, und ein gepunkteter oder
+indizierter Ausdruck nicht** --
+**und `ParseAssignmentTarget` liest einen Namen pro Komma** --
+**und `parse.y` hat `mlhs_item : mlhs_basic | tSTAR mlhs_node |
+primary_value '[' aref_args ']'`, und ein `primary_value` ist auch
+ein Mitgliedszugriff.**
+
+**Und das ist der naechste Fehler, und er ist vier von den
+acht.**
+
+### Und ein Fehler in meiner Arbeitsweise, der zweimal Geld gekostet hat
+
+**Und `--no-restore` ist kein vollstaendiger Build** --
+**und ein geloeschter Test stand danach noch in
+`project/.godot/mono/temp/bin/Debug/UniversalRPG.dll`** --
+**und wurde ausgefuehrt** -- **und ich habe drei Laeufe lang
+gemessen, ohne zu merken, dass der Test laengst nicht mehr
+existiert.**
+
+**Belegt:**
+
+```text
+vor dotnet build:          TestRubyForDo in der DLL:  True
+nach dotnet build:         TestRubyForDo in der DLL:  False
+```
+
+**Und `RubyParser.cs` wurde in dieser Runde dreimal
+versehentlich ueberschrieben**, -- **zweimal durch Zeilenindizes,
+die nicht die Ankersignatur trafen**, -- **und beide Male
+wiederhergestellt oder von Hand korrigiert.**
+
+**Und die Regel, die daraus folgt, ist noch nicht im Repo:**
+**nach jeder Dateiloeschung ein `dotnet build` ohne
+`--no-restore`.**
 
 
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert

@@ -9,27 +9,30 @@ namespace UniversalRPG.Tests.Core;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>And this asserts what was measured and not what
-/// should work.</strong> Every form of <c>for</c> carrying a
-/// <c>do</c> on the same line as the collection fails today, and the
-/// same <c>for</c> without that <c>do</c> parses, and
-/// <c>while</c>, <c>each</c> and <c>times</c> with <c>do</c> parse.
-/// That is the fault, and it is one token wide.
+/// <strong>And this was a fault test and is now a
+/// regression test.</strong> Every form of <c>for</c> carrying a
+/// <c>do</c> on the same line as the collection failed: the
+/// <c>do</c> was read as a block opener, and the rest of the
+/// <c>for</c> was read as that block's body, and the <c>end</c> of
+/// the <c>for</c> closed the block. <c>while</c>, <c>each</c> and
+/// <c>times</c> with <c>do</c> parsed throughout, which is what made
+/// the fault one token wide rather than general.
 /// </para>
 /// <para>
-/// <strong>And the consequence is named:</strong> Random Dungeon's own
+/// <strong>And the place was <c>RubyParser</c>,
+/// <c>ParsePostfix</c>, at <c>IsKeyword("do") &amp;&amp;
+/// !AfterACondition</c></strong>, -- <strong>because a
+/// <c>for</c> reads a collection and not a condition, and so it was
+/// not on the list of the constructs that set that flag.</strong>
+/// Ruby 1.8.1 keeps the two apart in the grammar, where
+/// <c>expr_value</c> is an <c>arg</c> and an <c>arg</c> carries no
+/// block.
+/// </para>
+/// <para>
+/// <strong>And the consequence was named:</strong> Random Dungeon's own
 /// <c>Game_Interpreter</c> writes
-/// <c>for actor in $game_party.members do yield actor end</c>, and this
-/// reader cannot read it, and that is why 167 of 180 of its scripts
-/// run.
-/// </para>
-/// <para>
-/// <strong>And the place is named too:</strong> with
-/// <c>URPG_TRACE=for</c> the parser prints, after reading the
-/// collection, which token stands next -- and for
-/// <c>for a in [1,2] do break end</c> that is
-/// <c>EndOfInput</c>, so <c>ParseExpression</c> consumed <c>do</c>,
-/// <c>break</c> and <c>end</c> together.
+/// <c>for actor in $game_party.members do yield actor end</c>, and that
+/// line is why its script was one of the thirteen that failed.
 /// </para>
 /// </remarks>
 public partial class TestRubyForGemessen : TestBase
@@ -78,6 +81,8 @@ public partial class TestRubyForGemessen : TestBase
             "H: while true do" + NL + "    break" + NL + "  end",
             "I: 1.times do |a| yield a end",
             "J: for a in [1,2] do break end",
+            "K: for a in [1,2] do for b in [3,4] do break end end",
+            "L: for a in [1,2] do for b in [3,4] do break end\nend",
         };
 
         foreach (var v in varianten)
@@ -86,14 +91,15 @@ public partial class TestRubyForGemessen : TestBase
                 + Lese(v.Substring(3)));
         }
 
-        // **Und das ist der Fehler, und er ist eine Messung.**
-        AssertEq("'end' was expected, but the script ends first.",
+        // **Und jetzt geht die Form, die vorher fehlschlug.**
+        AssertEq("1 Anweisungen",
             Lese("for a in [1,2] do break end"),
-            "**and `for` with `do` on the same line does not parse**"
-                + " -- and the same `for` without that `do` parses,"
-                + " and the difference is one token, and the place is"
-                + " `RubyParser`, `case \"for\"`, where"
-                + " `ParseExpression` is given the collection");
+            "**and `for` with `do` on the same line parses** -- and it"
+                + " did not before, and the place was"
+                + " `RubyParser`, `ParsePostfix`, where"
+                + " `IsKeyword(\"do\") && !AfterACondition` hung a block"
+                + " onto the collection and read the rest of the"
+                + " `for` as that block's body");
 
         // **Und die andere Haelfte geht, und das macht den Fehler
         // eindeutig.**
@@ -112,13 +118,23 @@ public partial class TestRubyForGemessen : TestBase
             "**and `while do` parses** -- and so the block keyword"
                 + " itself is not what fails");
 
-        // **Und der Leser, der das nicht kann, ist genau der
-        // Umfang, der fehlt.**
-        AssertTrue(Lese("for a in $game_party.members do yield a end")
-            .Contains("was expected"),
+        // **Und die Zeile aus Random Dungeons `Game_Interpreter`
+        // ist lesbar, und die ist der Grund fuer die ganze
+        // Messung.**
+        AssertEq("1 Anweisungen",
+            Lese("for a in $game_party.members do yield a end"),
             "**and the line out of Random Dungeon's own"
-                + " `Game_Interpreter` cannot be read** -- and that is"
-                + " the whole reason its `Game_Interpreter` script is"
-                + " one of the thirteen that fail");
+                + " `Game_Interpreter` is readable now** -- and that is"
+                + " why its script was one of the thirteen that"
+                + " failed, and that is the whole reason this"
+                + " measurement existed");
+
+        // **Und ein Block, der wirklich einer ist, geht auch.**
+        AssertEq("1 Anweisungen",
+            Lese("[1,2].each do |a| yield a end"),
+            "**and a `do` that really opens a block still opens"
+                + " one** -- and that is the half that could have"
+                + " broken while fixing the other half");
+
     }
 }

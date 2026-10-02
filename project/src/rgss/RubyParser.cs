@@ -114,6 +114,39 @@ public sealed class RubyParser
     private bool AfterACondition { get; set; }
 
     /// <summary>
+    /// True while the collection of a <c>for</c> is being read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a second flag and not an addition to
+    /// <see cref="AfterACondition"/>, because a <c>for</c> reads its
+    /// collection and not a condition.</strong> <c>while a do b end</c>
+    /// has read a condition, and <c>for a in b do c end</c> has read a
+    /// collection, -- <strong>and Ruby's grammar keeps them apart</strong>:
+    /// </para>
+    /// <code>
+    /// kWHILE expr_value do compstmt opt_terms kEND
+    /// for_var in p_value expr_value do compstmt opt_terms kEND
+    /// </code>
+    /// <para>
+    /// <strong>And both name the same nonterminal, and both stop before
+    /// the <c>do</c></strong>, -- <strong>because
+    /// <c>expr_value</c> is an <c>arg</c></strong> -- <strong>and an
+    /// <c>arg</c> carries no block.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this is measured.</strong> With
+    /// <c>URPG_TRACE=for</c> the parser prints, after reading the
+    /// collection of <c>for a in $game_party.members do yield actor
+    /// end</c>, that the index stands at <c>'yield'</c> -- <strong>and
+    /// the <c>do</c> is gone</strong> -- <strong>and that
+    /// <c>ParsePostfix</c> is where it went, at
+    /// <c>IsKeyword("do") &amp;&amp; !AfterACondition</c>.</strong>
+    /// </para>
+    /// </remarks>
+    private bool InForCollection { get; set; }
+
+    /// <summary>
     /// Creates a parser, and reads the trace switch out of the environment.
     /// </summary>
     /// <param name="pTokens">The tokens to read.</param>
@@ -1255,6 +1288,54 @@ public sealed class RubyParser
         return ParsePostfix(ParsePrimary());
     }
 
+    /// <summary>
+    /// Reads the collection of a <c>for</c>, which carries no block.
+    /// </summary>
+    /// <typeparam name="pLesen">Reads the collection itself.</typeparam>
+    /// <returns>What the reader returned.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the flag is set here and not inside
+    /// <see cref="ParsePostfix"/>, because <c>ParsePostfix</c> is also
+    /// reached from places where a <c>do</c> after the value really is
+    /// a block.</strong> <c>[1,2].each do |a| end</c> needs that path
+    /// and must keep working.
+    /// </para>
+    /// <para>
+    /// <strong>And it is restored afterwards and not left set</strong>,
+    /// -- <strong>because a <c>for</c> body may contain another
+    /// <c>for</c></strong>, -- <strong>and a nested
+    /// <c>for</c> must read its own collection the same
+    /// way.</strong>
+    /// </para>
+    /// </remarks>
+    private RubyNode SammlungVonFor(Func<RubyNode> pLesen)
+    {
+        var vorher = InForCollection;
+        InForCollection = true;
+        try
+        {
+            return pLesen();
+        }
+        finally
+        {
+            InForCollection = vorher;
+        }
+    }
+
+    /// <summary>
+    /// Reads the collection of a <c>for</c>.
+    /// </summary>
+    /// <returns>The collection.</returns>
+    /// <remarks>
+    /// <strong>And this is <see cref="ParseExpression"/> and not
+    /// something else</strong>, -- <strong>because the collection may
+    /// be any expression</strong>, -- <strong>and the only thing that
+    /// had to change is that <c>ParsePostfix</c> may not hang a block
+    /// onto it.</strong>
+    /// </remarks>
+    private RubyNode ReadSammlung() => ParseExpression();
+
     private RubyNode ParsePostfix(RubyNode pNode)
     {
         var node = pNode;
@@ -1461,7 +1542,40 @@ public sealed class RubyParser
                 };
                 continue;
             }
-            if (IsKeyword("do") && !AfterACondition)
+            // **Und ein `do` nach einer Argumentebene ist kein Block.**
+            //
+            // **Und gemessen ist das, mit der Spur `URPG_TRACE=for`:**
+            //
+            // ```text
+            // for a in $game_party.members do yield actor end
+            //   nach der Liste: 'yield'    <- das do haengt am Aufruf
+            // ```
+            //
+            // **Und `AfterACondition` fragt nur, ob eine `if`, `while`,
+            // `until` oder `case` davor steht** --
+            // **und ein `for` steht nicht in dieser Liste** --
+            // **und darum wurde `do` hier als Block gelesen**,
+            // **und `yield actor end` als sein Rumpf**,
+            // **und das `end` des `for` ist dann das `end` des
+            // Blocks gewesen.**
+            //
+            // **Und Ruby 1.8.1 hat dafuer eine eigene Produktion:**
+            //
+            // ```c
+            // for_var in p_value expr_value do compstmt opt_terms kEND
+            // ```
+            //
+            // **und `expr_value` ist ein `arg`** --
+            // **und ein `arg` nimmt per Grammatik keinen Block**
+            // (`parse.y`: `arg : lhs '=' arg_rhs | var_lhs tOP_ASGN arg_rhs
+            // | primary`, und `do` steht in `primary` nur ueber
+            // `method_call brace_block`) --
+            // **und darum stoppt Rubys eigener Leser vor dem `do`
+            // und dieser Leser nicht.**
+            //
+            // **Und `for` steht hier in `AfterACondition`, weil eine
+            // Schleife ein `do` danach erwartet.**
+            if (IsKeyword("do") && !AfterACondition && !InForCollection)
             {
                 _index++;
                 var parameters = ReadBlockParameters();
@@ -3191,7 +3305,24 @@ public sealed class RubyParser
 
                 _index++;
                 SkipNewlines();
-                var liste = ParseExpression();
+                // **Und die Sammlung traegt keinen Block**, --
+                // **und das ist der ganze Fehler.**
+                //
+                // **Und `URPG_TRACE=for` sagt es:**  nach dieser Zeile
+                // steht der Index auf `'yield'`, -- **und das `do`
+                // ist fort**,
+                // **weil `ParsePostfix` es als Blockanfang gelesen
+                // hat und `yield actor end` als dessen Rumpf.**
+                //
+                // **Und Ruby 1.8.1 sagt dasselbe anders:**
+                //
+                // ```c
+                // for_var in p_value expr_value do compstmt opt_terms kEND
+                // ```
+                //
+                // **und `expr_value` ist ein `arg`, und ein `arg`
+                // nimmt keinen Block.**
+                var liste = SammlungVonFor(ReadSammlung);
                 SkipNewlines();
                 SkipThen();
 
