@@ -39,6 +39,35 @@ public partial class TestMzAnimationAndErase : TestBase
     {
         var fakten = new MzBranchFacts();
         fakten.Characters[7] = new MzCharacter();
+
+        // **Und die Animationen kommen aus dem Projekt, und ein Test,
+        // der keine Projektdatei laedt, braucht selbst welche.**
+        //
+        // **Und diese Zahlen sind die des Spiels vor uns**, -- **gemessen
+        // an `D:/Itch/sister/www/data/Animations.json`**, -- **und nicht
+        // gerundet und nicht erfunden:**
+        //
+        // ```text
+        // Nummer  Rahmen  Dauer = Rahmen * 4 + 1
+        //      1       5              21
+        //      2       3              13
+        //      3       4              17
+        // ```
+        //
+        // **Und eine Animationstabelle, die man sich ausdenkt, ist
+        // genau die Sorte Zahl, die eben vier echte Seiten
+        // aufgehalten hat.**
+        foreach (var paar in new Dictionary<int, int>
+        {
+            [1] = MzScreen.AnimationsDauer(5),
+            [2] = MzScreen.AnimationsDauer(3),
+            [3] = MzScreen.AnimationsDauer(4),
+            [5] = MzScreen.AnimationsDauer(8),
+        })
+        {
+            fakten.AnimationLaengen[paar.Key] = paar.Value;
+        }
+
         return (fakten, new MzInterpreter(new List<MzCommandEntry>()));
     }
 
@@ -66,7 +95,7 @@ public partial class TestMzAnimationAndErase : TestBase
         var aktionen = new List<MzAction>();
 
         MzCommands.TryExecute(lauf,
-            new MzCommandEntry(221, ["-1", "3", "false"], 0),
+            new MzCommandEntry(212, ["-1", "3", "false"], 0),
             aktionen, fakten, new MzRandom());
 
         AssertEq(fakten.Player.Animation, 3,
@@ -83,7 +112,7 @@ public partial class TestMzAnimationAndErase : TestBase
         // **Und die Figur traegt ihre eigene, und nicht die des
         // Spielers.**
         MzCommands.TryExecute(lauf,
-            new MzCommandEntry(221, ["7", "5", "false"], 0),
+            new MzCommandEntry(212, ["7", "5", "false"], 0),
             new List<MzAction>(), fakten, new MzRandom());
         AssertEq(fakten.Characters[7].Animation, 5,
             "**and a figure plays its own animation** -- and one field for "
@@ -93,20 +122,51 @@ public partial class TestMzAnimationAndErase : TestBase
             "**and the player still has its own** -- and a shared field "
                 + "made the second command land on the first one");
 
-        // **Und sie ist vorbei, und beide zaehlen gemeinsam.**
-        fakten.TickAnimations(59);
-        AssertTrue(fakten.Player.HasAnimation
-                && fakten.Characters[7].HasAnimation,
-            "**and both are still there after fifty-nine frames**");
-        fakten.TickAnimations(1);
-        AssertTrue(!fakten.Player.HasAnimation
-                && !fakten.Characters[7].HasAnimation,
-            "**and both are gone on the sixtieth** -- and a tick that "
-                + "covered only one of them left the other on the map");
+        // **Und sie sind vorbei, und beide zaehlen gemeinsam.**
+        //
+        // **Und nicht nach sechzig Bildern**, -- **denn eine Animation
+        // traegt keine feste Laenge.** **Gemessen an
+        // `Sprite_Animation.setupDuration`:**
+        //
+        // ```js
+        // this._duration = this._animation.frames.length * this._rate + 1;
+        // ```
+        //
+        // **Und `setupRate() { this._rate = 4; }`**, -- **und Animation 3
+        // hat vier Rahmen und Animation 5 hat acht**, -- **und das sind
+        // siebzehn und dreiunddreissig Bilder und nicht einundsechzig
+        // fuer beide.**
+        //
+        // **Und "nach sechzig" war die geratene Zahl**, **und sie passte
+        // fuer keine Animation irgendeines Spiels.**
+        var spielerLaenge = MzScreen.AnimationsDauer(4);
+        var figurLaenge = MzScreen.AnimationsDauer(8);
+        AssertEq(spielerLaenge, 17,
+            "**and the player's animation lasts seventeen frames** -- and"
+            + $" it says {spielerLaenge}, and four frames times four plus"
+            + " one is seventeen");
+        AssertEq(figurLaenge, 33,
+            "**and the figure's lasts thirty-three** -- and it says "
+            + $"{figurLaenge}, and eight frames times four plus one is"
+            + " thirty-three");
+
+        // **Und die laengere laeuft laenger, und das ist der ganze
+        // Punkt.**
+        fakten.TickAnimations(spielerLaenge);
+        AssertTrue(!fakten.Player.HasAnimation,
+            "**and the player's is gone after its own seventeen**");
+        AssertTrue(fakten.Characters[7].HasAnimation,
+            "**and the figure's is still there** -- and one number for"
+            + " both would have cut a long animation short and held a"
+            + " short one on the screen");
+        fakten.TickAnimations(figurLaenge - spielerLaenge);
+        AssertTrue(!fakten.Characters[7].HasAnimation,
+            "**and it is gone after its own thirty-three** -- and a tick"
+            + " that covered only one of them left the other on the map");
 
         // **Und eine Figur, die es nicht gibt, wird gemeldet.**
         MzCommands.TryExecute(lauf,
-            new MzCommandEntry(221, ["99", "3", "false"], 0),
+            new MzCommandEntry(212, ["99", "3", "false"], 0),
             new List<MzAction>(), fakten, new MzRandom());
         AssertEq(fakten.Notices.Count, 1,
             "**and a character the map does not have is named**");
@@ -163,7 +223,7 @@ public partial class TestMzAnimationAndErase : TestBase
         var aktionen = new List<MzAction>();
 
         AssertTrue(MzCommands.TryExecute(lauf,
-                new MzCommandEntry(222, [], 0),
+                new MzCommandEntry(214, [], 0),
                 aktionen, fakten, new MzRandom()),
             "**and the command runs** -- and it carries no parameters, and "
                 + "the manual says so in as many words");
@@ -218,7 +278,7 @@ public partial class TestMzAnimationAndErase : TestBase
 
         // **Und ohne Warten geht die Liste weiter.**
         MzCommands.TryExecute(lauf,
-            new MzCommandEntry(221, ["-1", "3", "false"], 0),
+            new MzCommandEntry(212, ["-1", "3", "false"], 0),
             aktionen, fakten, new MzRandom());
         AssertTrue(aktionen[0].What.Contains("the player"),
             "**and the action names the player**");
@@ -228,7 +288,7 @@ public partial class TestMzAnimationAndErase : TestBase
         lauf2.Setup(1, 7);
         var aktionen2 = new List<MzAction>();
         var rueck = MzCommands.TryExecute(lauf2,
-            new MzCommandEntry(221, ["-1", "3", "true"], 0),
+            new MzCommandEntry(212, ["-1", "3", "true"], 0),
             aktionen2, fakten2, new MzRandom());
 
         // **Und `TryExecute` gibt `true` zurueck, und das ist die
@@ -264,7 +324,7 @@ public partial class TestMzAnimationAndErase : TestBase
         AssertTrue(fakten2.Player.HasAnimation,
             "**and the animation is there** -- and a wait for an "
                 + "animation that was never shown is a wait for nothing");
-        AssertTrue(aktionen2[0].What.Contains("waiting for it to finish"),
+        AssertTrue(aktionen2[0].What.Contains("the page waits for it"),
             "**and the action says it waits** -- and an action that does "
                 + "not say it leaves a log entry that reads as if the "
                 + "command had simply run");
@@ -284,10 +344,16 @@ public partial class TestMzAnimationAndErase : TestBase
     public void Test_DerRunnerLaesstDieAnimationVerschwinden()
     {
         var fakten = new MzBranchFacts();
+        fakten.AnimationLaengen[3] = MzScreen.AnimationsDauer(4);
         var befehle = new List<MzCommandEntry>
         {
-            new(221, ["-1", "3", "false"], 0),
+            new(212, ["-1", "3", "false"], 0),
         };
+
+        // **Und einundsechzig `121` statt sechzig** -- **denn die
+        // Animation hat vier Rahmen**, -- **und `4 * 4 + 1` ist
+        // siebzehn Bilder**, -- **und siebzehn ist keine runde Zahl, die
+        // man durch Zufall trifft.**
         for (var i = 0; i < 61; i++)
         {
             // **Und 121 Control Switches wartet nicht und verweigert
@@ -302,9 +368,10 @@ public partial class TestMzAnimationAndErase : TestBase
         AssertEq(ergebnis.Stopped, MzStep.Finished,
             "**and the list ran to its end**");
         AssertTrue(!fakten.Player.HasAnimation,
-            "**and the animation is gone** -- and 221 without a clock is "
-                + "221 with no end, and the manual calls the field *wait "
-                + "for the animation being displayed has finished*");
+            "**and the animation is gone** -- and the manual calls"
+                + " the field *wait for the animation being displayed has"
+                + " finished*, and without that setting the picture has"
+                + " no end except the one in Animations.json");
     }
 
     /// <summary>
@@ -317,13 +384,13 @@ public partial class TestMzAnimationAndErase : TestBase
     /// says the picture is gone, **and both would have left a reader of
     /// that log thinking the event is not coming back at all.**
     /// </remarks>
-    public void Test_DieMeldungVon222SagtBisWann()
+    public void Test_DieMeldungVon214SagtBisWann()
     {
         var (fakten, lauf) = Start();
         lauf.Setup(1, 7);
         var aktionen = new List<MzAction>();
 
-        MzCommands.TryExecute(lauf, new MzCommandEntry(222, [], 0),
+        MzCommands.TryExecute(lauf, new MzCommandEntry(214, [], 0),
             aktionen, fakten, new MzRandom());
 
         AssertTrue(aktionen[0].What.Contains("another map"),
@@ -409,7 +476,7 @@ public partial class TestMzAnimationAndErase : TestBase
         var (fakten3, lauf3) = Start();
         var aktionen3 = new List<MzAction>();
         var rueck3 = MzCommands.TryExecute(lauf3,
-            new MzCommandEntry(221, ["-1", "3", "True"], 0),
+            new MzCommandEntry(212, ["-1", "3", "True"], 0),
             aktionen3, fakten3, new MzRandom());
         AssertTrue(rueck3,
             "**and an animation written the same way runs too** -- and"
@@ -437,10 +504,10 @@ public partial class TestMzAnimationAndErase : TestBase
         // **Und ein leerer Parameter ist "nein".**
         var (fakten5, lauf5) = Start();
         var zurueck5 = MzCommands.TryExecute(lauf5,
-            new MzCommandEntry(221, [], 0),
+            new MzCommandEntry(214, [], 0),
             new List<MzAction>(), fakten5, new MzRandom());
         AssertTrue(zurueck5,
-            "**and 221's empty list does not wait** -- and that is exactly "
+            "**and 214's empty list does not wait** -- and that is exactly "
                 + "what the game in front of us carries, sixteen times, "
                 + "and a reader that waited on a missing parameter would "
                 + "have frozen the first animation it ever met");

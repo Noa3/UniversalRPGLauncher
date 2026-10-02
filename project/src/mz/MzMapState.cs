@@ -76,6 +76,26 @@ public sealed class MzMapState
     /// erases itself twice — which a loop can do — erases nothing the
     /// second time and stops there.
     /// </remarks>
+    /// <summary>
+    /// Mark an event as erased, and say what it was.
+    /// </summary>
+    /// <param name="pEventId">The event.</param>
+    /// <returns>Its name, and nothing when there is no such event.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>And the engine does not remove anything.</b> Measured at
+    /// <c>Game_Map.prototype.eraseEvent</c>: <c>this._events[eventId].erase()
+    /// </c> -- and at <c>Game_Event.prototype.erase</c>: <c>this._erased =
+    /// true;</c>. <strong>The event stays in the map and keeps its
+    /// pages</strong>, and only <c>Game_Event.isErased</c> answers true,
+    /// and the help says <i>until the party moves to another map</i>.
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that removed it from the map made every later
+    /// command that named it say "no such character"</strong>, and a game's
+    /// own event erases itself and then runs four more commands.
+    /// </para>
+    /// </remarks>
     public string? Erase(int pEventId)
     {
         if (pEventId <= 0)

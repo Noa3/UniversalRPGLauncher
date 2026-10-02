@@ -740,6 +740,47 @@ public sealed class MzBranchFacts
     public List<int> AnimationAsked { get; } = new();
 
     /// <summary>
+    /// How long each animation of this project plays, in frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And an animation carries no length of its own</strong>, --
+    /// <strong>and <c>212</c> carries none either</strong>, -- <strong>and
+    /// both of those are in the engine and in the help</strong>, -- <strong>
+    /// and the sum is <c>frames.length * 4 + 1</c> in
+    /// <c>Sprite_Animation.setupDuration</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this table is empty until the project is read</strong>,
+    /// and <strong>a number that is missing from it is a number this
+    /// project does not have</strong>, -- <strong>and the answer then is
+    /// "this project has no animation with that number"</strong> rather
+    /// than another animation's length.
+    /// </para>
+    /// </remarks>
+    public Dictionary<int, int> AnimationLaengen { get; } = new();
+
+    /// <summary>
+    /// How long one animation plays, or why it cannot be answered.
+    /// </summary>
+    /// <param name="pNummer">The animation's number.</param>
+    /// <param name="pLaenge">
+    /// Its length in frames, and zero when the project has no such
+    /// animation.
+    /// </param>
+    /// <returns>Whether the project has it.</returns>
+    public bool AnimationsLaenge(int pNummer, out int pLaenge)
+    {
+        if (AnimationLaengen.TryGetValue(pNummer, out pLaenge))
+        {
+            return true;
+        }
+
+        pLaenge = 0;
+        return false;
+    }
+
+    /// <summary>
     /// Whether the party is in a battle, which is the one condition
     /// <c>command351</c> asks before it opens the menu.
     /// </summary>
@@ -1028,6 +1069,14 @@ public sealed class MzBranchFacts
         foreach (var wen in AnimationAsked)
         {
             kopie.AnimationAsked.Add(wen);
+        }
+
+        // **Und die Animationslaengen kommen mit**, -- **denn ein
+        // Kindlauf, der sie nicht kennt, wartet auf kein Bild**,
+        // **und `212` darf in einem gemeinsamen Ereignis stehen.**
+        foreach (var paar in AnimationLaengen)
+        {
+            kopie.AnimationLaengen[paar.Key] = paar.Value;
         }
 
         return kopie;

@@ -275,36 +275,106 @@ public partial class TestMvStatesAnimationArmor : TestBase
     }
 
     /// <summary>
-    /// <c>212</c> names a character and not an actor.
+    /// <c>212</c> names a character, and which one is not a guess.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine says which character in three lines, and
+    /// the middle one is the one a reader gets wrong.</strong> Measured at
+    /// <c>Game_Interpreter.prototype.character</c>:
+    /// </para>
+    /// <code>
+    /// character(param) {
+    ///     if ($gameParty.inBattle()) { return null; }
+    ///     else if (param < 0) { return $gamePlayer; }
+    ///     else if (this.isOnCurrentMap()) {
+    ///         return $gameMap.event(param > 0 ? param : this._eventId);
+    ///     } else { return null; }
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And so three things follow that this repository had wrong
+    /// or missing</strong> -- <strong>every negative number is the
+    /// player and not only <c>-1</c></strong>, <strong><c>0</c> is the
+    /// running event and not the player</strong>, and <strong>the event
+    /// number is only used when the parameter is <c>0</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the animation length is the project's own</strong>, --
+    /// <c>frames.length * 4 + 1</c> in <c>Sprite_Animation.setupDuration
+    /// </c>, -- <strong>and a number this project does not have is not
+    /// answered with another animation's length.</strong>
+    /// </para>
+    /// </remarks>
     public void Test_DerErsteWertVon212IstEinDarsteller()
     {
         var fakten = new MzBranchFacts();
-        fakten.Characters[0] = new MzCharacter { EventId = 0 };
-        fakten.Characters[-1] = new MzCharacter { EventId = 0 };
+        fakten.Characters[7] = new MzCharacter { EventId = 7 };
+
+        // **Und die Animationen, und ihre Laengen kommen aus dem
+        // Projekt** -- **und diese Zahlen sind gemessen, nicht geraten.**
+        fakten.AnimationLaengen[157] = MzScreen.AnimationsDauer(6);
+        fakten.AnimationLaengen[182] = MzScreen.AnimationsDauer(3);
+        fakten.AnimationLaengen[3] = MzScreen.AnimationsDauer(4);
 
         var interp = new MzInterpreter(new List<MzCommandEntry>
         {
+            // **Und `0`, und das ist das laufende Ereignis** -- **und das
+            // ist hier Ereignis sieben.**
             Befehl(MzCommandTable.ShowAnimation, "0", "157", "false"),
             Befehl(MzCommandTable.ShowAnimation, "-1", "182", "false"),
-            // **Und ein Darsteller, den es nicht gibt.**
+            // **Und `-9`, und das ist auch der Spieler** -- **denn die
+            // Bedingung ist `< 0`.**
             Befehl(MzCommandTable.ShowAnimation, "-9", "3", "false"),
         });
-        interp.Setup(0, 0);
+        interp.Setup(0, 7);
         interp.Run(new List<MzAction>(), fakten);
 
-        AssertEq(fakten.AnimationAsked.Count, 2,
-            "**and two of the three ran** -- " + fakten.AnimationAsked.Count
-            + ", and the third names a character that is not on the map, "
-            + "which is what the engine's `if (this._character)` steps over "
-            + "and is not an error");
-        AssertTrue(fakten.AnimationAsked.Contains(0),
-            "**and the first character got its animation**");
-        AssertEq(fakten.Characters[0].AnimationFramesLeft, 0,
-            "**and it has no frames** -- and that is honest: "
-            + "`requestAnimation(157)` takes a number and the length is in "
-            + "the project's own Animations.json, so no frame count is "
-            + "invented here");
+        // **Und zwei von den drei haben eine Figur gefunden.**
+        AssertEq(fakten.AnimationAsked.Count, 1,
+            "**and one of the three reached a map figure** -- "
+                + fakten.AnimationAsked.Count + ", and the third is"
+                + " `-9`, which is the player and not a map figure");
+        AssertTrue(fakten.AnimationAsked.Contains(7),
+            "**and it is the running event** -- and `0` becomes"
+                + " `this._eventId`, and that is 7 here");
+
+        // **Und die Figur spielt so lange, wie das Projekt sagt.**
+        AssertEq(
+            fakten.Characters[7].AnimationFramesLeft,
+            MzScreen.AnimationsDauer(6),
+            "**and it plays as long as the project's own animation 157"
+                + " says** -- and six frames times four plus one is"
+                + " twenty-five, and that is a number this repository"
+                + " read and not chose");
+
+        // **Und der Spieler hat die dritte**, -- **denn `-9` ist er.**
+        AssertEq(
+            fakten.Player.AnimationFramesLeft,
+            MzScreen.AnimationsDauer(4),
+            "**and the player plays the third** -- and `-9` is the"
+                + " player because `character(param)` asks `param < 0`,"
+                + " and four frames times four plus one is seventeen,"
+                + " and the second command's animation 182 never"
+                + " arrived because it was replaced by the third");
+
+        // **Und eine Nummer, die das Projekt nicht hat, wird nicht
+        // beantwortet.**
+        var ohne = new MzBranchFacts();
+        var interp2 = new MzInterpreter(new List<MzCommandEntry>
+        {
+            Befehl(MzCommandTable.ShowAnimation, "-1", "9999", "false"),
+        });
+        interp2.Setup(0, 7);
+        interp2.Run(new List<MzAction>(), ohne);
+        AssertEq(
+            ohne.Player.AnimationFramesLeft, 0,
+            "**and an animation this project does not have is refused"
+                + " rather than answered with another one's length**");
+        AssertTrue(
+            ohne.Notices.Count >= 1,
+            "**and it says so** -- and a silence here reads as though"
+            + " the command had done what it was told");
     }
 
     /// <summary>

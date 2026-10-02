@@ -1035,6 +1035,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 PagesRun++;
                 LastActions = alle;
                 LastPageStop = ergebnis.Stopped;
+                LastPageIndex = ergebnis.Interpreter?.Index ?? 0;
                 Stops = new List<string> { ergebnis.Reason,
                     ergebnis.Describe() };
                 return $"event {id} page {index} was given {befehle.Count}"
@@ -2338,14 +2339,117 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // `RunPage` bekommt, wartet auf einen Ballon, den niemand
         // zaehlt** -- **und bei Index 21 von 211 ist das der ganze
         // Rest des Spiels.**
-        foreach (var warte in Laeufer.Values)
+        //
+        // **Und `PassFrame` allein laesst die Seite nicht
+        // weiterlaufen**,
+        //
+        // **Und die Engine tut beides im selben Aufruf**,
+        // -- **denn `Game_Map.prototype.update` sagt:**
+        //
+        // ```js
+        // Game_Map.prototype.update = function() {
+        //     ...
+        //     if (this._interpreter.isRunning()) {
+        //         this._interpreter.update();
+        //     }
+        //     ...
+        // };
+        // ```
+        //
+        // **Und `Game_Interpreter.prototype.update` ist eine
+        // Schleife ueber `executeCommand`**,
+        // **und ein Schritt darin setzt den Index hoch und
+        // liest den naechsten Befehl.**
+        //
+        // **Und ein Leser, der nur `PassFrame` aufruft, loest
+        // die Wartezeit und liest keinen einzigen Befehl
+        // weiter**,
+        // **und eine Seite, die bei Index 209 wartet, wartet
+        // dort fuer immer.**
+        var laeufe = Laeufer.ToList();
+        foreach (var paar in laeufe)
         {
+            var warte = paar.Value;
             if (warte == null)
             {
                 continue;
             }
 
-            warte.PassFrame(WaitBeantwortet);
+            if (!warte.PassFrame(WaitBeantwortet)
+                || !warte.KannFortgesetztWerden)
+            {
+                continue;
+            }
+
+            // **Und die Befehle kommen aus der Karte, und nicht
+            // aus dem Interpreter**,
+            // **denn `Game_Map.setup(list, eventId)` liest sie
+            // aus der Seite.**
+            if (!Maps.TryGetValue(CurrentMapId, out var karte)
+                || karte.Root.Member("events")?.Items == null)
+            {
+                continue;
+            }
+
+            MzCommandEntry[]? liste = null;
+            foreach (var e in karte.Root.Member("events")!.Items)
+            {
+                if (e.Member("id")?.IntOr(-1) != paar.Key)
+                {
+                    continue;
+                }
+
+                var seiten = e.Member("pages")?.Items;
+                if (seiten == null || seiten.Count == 0)
+                {
+                    break;
+                }
+
+                // **Und die hoechste passende Seite**, -- **und
+                // `findProperPageIndex` laeuft von hinten.**
+                for (var s = seiten.Count - 1; s >= 0; s--)
+                {
+                    if (!MzMapFigureReader.Meets(
+                        seiten[s].Member("conditions"),
+                        Facts, CurrentMapId, paar.Key))
+                    {
+                        continue;
+                    }
+
+                    var gebaut = new List<MzCommandEntry>();
+                    foreach (var c in
+                        seiten[s].Member("list")!.Items)
+                    {
+                        gebaut.Add(MzCommandEntry.From(c));
+                    }
+
+                    liste = gebaut.ToArray();
+                    break;
+                }
+
+                break;
+            }
+
+            if (liste == null)
+            {
+                continue;
+            }
+
+            var fort = _runner.Run(
+                liste, Facts, CurrentMapId, paar.Key, Random,
+                warte);
+            Actions.AddRange(fort.Actions);
+            if (fort.Interpreter != null
+                && fort.Interpreter.KannFortgesetztWerden)
+            {
+                Laeufer[paar.Key] = fort.Interpreter;
+            }
+            else
+            {
+                Laeufer.Remove(paar.Key);
+            }
+
+            wechselt++;
         }
 
         foreach (var uhr in Clocks.Values)
@@ -2664,6 +2768,23 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public int FiguresDrawn { get; private set; }
 
     /// <summary>Which character sheet belongs to which name.</summary>
+    /// <summary>
+    /// How long each animation of this project plays, in frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the key is the animation's number and the
+    /// value is its length in frames</strong>, -- <strong>and the sum
+    /// is the engine's own:</strong> <c>frames.length * 4 + 1</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And a number that is not in this table is a number
+    /// this project does not have</strong>, -- <strong>and the reader
+    /// says so instead of using another animation's length.</strong>
+    /// </para>
+    /// </remarks>
+    public Dictionary<int, int> AnimationFrames { get; } = new();
+
     public Dictionary<string, MzCharacterSheet?> Characters { get; private set; } =
         new(StringComparer.Ordinal);
 
@@ -2864,6 +2985,69 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// figures put a second one on a map that already had one.</strong>
     /// </para>
     /// </remarks>
+
+    /// <summary>
+    /// Reads how long each animation of this project plays.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And an animation has no length of its own</strong>, -- <strong>and
+    /// the command carries none either</strong>, -- <strong>and both of those
+    /// facts are in the help and in `command212`</strong>, -- <strong>and
+    /// the length is <c>frames.length * 4 + 1</c> in
+    /// <c>Sprite_Animation.setupDuration</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this table is why a page can wait for a picture that is
+    /// really there.</strong> Measured on <c>sister/www</c>: its three
+    /// hundred animations carry from one to sixty-six frames, -- <strong>and
+    /// sixty was none of them</strong>, -- <strong>and a reader that used
+    /// one number for all of them showed every game's effects in the
+    /// wrong time.</strong>
+    /// </para>
+    /// </remarks>
+    private void LadeAnimationen()
+    {
+        AnimationFrames.Clear();
+        var pfad = Path.Combine(
+            _game.GameDirectory, "data", "Animations.json");
+        if (!File.Exists(pfad))
+        {
+            return;
+        }
+
+        MzDataFile tabelle;
+        try
+        {
+            tabelle = MzDataFile.Read(
+                "data/Animations.json", File.ReadAllBytes(pfad));
+        }
+        catch (MzDataException ausnahme)
+        {
+            TilesetProblem = ausnahme.Message;
+            return;
+        }
+
+        for (var id = 1; id < tabelle.Root.Items.Count; id++)
+        {
+            var eintrag = tabelle.Root.Items[id];
+            if (eintrag.Kind != MzKind.Array)
+            {
+                continue;
+            }
+
+            AnimationFrames[id] = MzScreen.AnimationsDauer(eintrag.Items.Count);
+        }
+
+        // **Und die Tabelle gehoert in die Spieltatsachen**, -- **denn
+        // `212` ist ein Befehl und liest `pFacts`**, -- **und ein Befehl,
+        // der eine Tabelle des Laufzeithalters bräuchte, wäre der erste
+        // Ort, an dem der Leser von aussen nach etwas fragt.**
+        foreach (var paar in AnimationFrames)
+        {
+            Facts.AnimationLaengen[paar.Key] = paar.Value;
+        }
+    }
     private void ReadCharacters()
     {
         var schluessel = EncryptionKey();
@@ -2900,6 +3084,19 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 Characters[name] = blatt;
             }
         }
+
+        // **Und die Animations kommen aus `Animations.json`.**
+
+        //
+        // **Und die Dauer einer Animation ist keine Konstante**, --
+        // **sondern `frames.length * 4 + 1`**, -- **gemessen an
+        // `Sprite_Animation.setupDuration` und `setupRate`** -- **und
+        // `212` nennt nur die Nummer.**
+
+        // **Und ohne diese Tabelle wartet eine Seite auf ein Bild,
+        // das in einer Zeit verschwindet, die das Spiel nie
+        // genannt hat.**
+        LadeAnimationen();
 
         // **Und der Spieler kommt aus `Actors.json`.**
         var pfad = Path.Combine(

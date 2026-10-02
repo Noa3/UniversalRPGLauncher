@@ -615,26 +615,57 @@ public sealed class MzScreen
 public const int MaxBalloonFrames = 76;
 
     /// <summary>
-    /// How long an animation stays when the command did not say.
+    /// How many game frames one picture of an animation stays up.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And this is the same choice as the balloon's, and the
-    /// code admits it the same way.</strong> The official help for
-    /// <c>221 Show Animation</c> names the character, the animation and
-    /// whether to wait, <strong>and no duration, and no duration
-    /// anywhere in the command.</strong>
+    /// <strong>And this is the engine's own number, and it is not a
+    /// guess.</strong> Measured at <c>Sprite_Animation</c> in
+    /// <c>rpg_sprites.js</c>: <c>setupRate() { this._rate = 4; }</c> and
+    /// <c>setupDuration() { this._duration = this._animation.frames.length
+    /// * this._rate + 1; }</c>.
     /// </para>
     /// <para>
-    /// <strong>And an animation is not a balloon.</strong> A balloon is
-    /// an icon over a head; <strong>an animation is a short picture that
-    /// plays once</strong>, **and one second is long enough to read one
-    /// and short enough that a game's map does not sit still for it.**
-    /// </para>
+    /// <strong>And so an animation's length in frames is <c>frames * 4
+    /// + 1</c></strong>, and <strong>it is not a constant at all</strong>
+    /// -- <strong>and the sixty that stood here was a choice dressed as a
+    /// number.</strong> Measured on <c>sister/www</c>: that project's three
+    /// hundred animations carry from one to sixty-six frames, so the
+    /// lengths run from five to two hundred and sixty-five frames.
     /// </para>
     /// </remarks>
-    public const int MaxAnimationFrames = 60;
+    public const int AnimationRate = 4;
 
+    /// <summary>
+    /// How long an animation stays, as the engine's own sum.
+    /// </summary>
+    /// <param name="pFrames">How many pictures the animation has.</param>
+    /// <returns>How long it plays, in frames.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the <c>+ 1</c> is the engine's and not a cushion.</strong>
+    /// It is in <c>setupDuration</c>, and a reader that leaves it out
+    /// stops an animation one frame early, <strong>and one that adds more
+    /// than that holds a page up over a picture that has already
+    /// gone.</strong>
+    /// </para>
+    /// </remarks>
+    public static int AnimationsDauer(int pFrames)
+    {
+        return Math.Max(0, pFrames) * AnimationRate + 1;
+    }
+
+    /// <summary>
+    /// The longest animation in this repository's games, and a bound and
+    /// not a rule.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Measured on <c>sister/www</c>: sixty-six frames is the most
+    /// any of its three hundred animations carries</strong>, -- <strong>and
+    /// a game with a longer one is still read</strong>, -- <strong>and this
+    /// number only bounds a lookup that walks a table.</strong>
+    /// </remarks>
+    public const int MaxAnimationFrames = 265;
 
     /// <summary>
     /// Advances a fade by a frame, and silences the channel when it ends.
@@ -766,6 +797,61 @@ public const int MaxBalloonFrames = 76;
     public bool FlashIsMoving => FlashDuration > 0;
 
     /// <summary>
+    /// How bright the screen is, as the engine's <c>_brightness</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the one number the engine keeps that this
+    /// repository had no field for</strong>, -- <strong>and <c>221</c> and
+    /// <c>222</c> are exactly the two commands that move it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is not a colour and not an opacity.</strong> Measured
+    /// at <c>updateFadeOut</c>: <c>this._brightness = (this._brightness
+    /// * (d - 1)) / d;</c> and at <c>updateFadeIn</c>: <c>(this._brightness
+    /// * (d - 1) + 255) / d</c> -- <strong>and it lands on 0 and on 255,
+    /// and never anywhere between by accident.</strong>
+    /// </para>
+    /// </remarks>
+    public int Brightness { get; private set; } = 255;
+
+    /// <summary>
+    /// Frames the screen fade has left, and zero while it is not fading.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And there are two of them and they cancel.</strong> Measured
+    /// at <c>startFadeOut</c>: <c>this._fadeOutDuration = duration;
+    /// this._fadeInDuration = 0;</c> and at <c>startFadeIn</c> the same
+    /// the other way round -- <strong>and a game that fades out and is
+    /// then told to fade in does not run two fades at once.</strong>
+    /// </remarks>
+    public int FadeOutDuration { get; private set; }
+
+    /// <summary>And the other one, for the same reason.</summary>
+    public int FadeInDuration { get; private set; }
+
+    /// <summary>
+    /// The engine's own <c>fadeSpeed</c>, which is where both of them get
+    /// their number.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And neither command carries a duration.</strong> Measured at
+    /// <c>command221</c>: <c>$gameScreen.startFadeOut(this.fadeSpeed());
+    /// this.wait(this.fadeSpeed());</c> -- <strong>and at
+    /// <c>Game_Interpreter.prototype.fadeSpeed</c>: <c>return 24;</c>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that guessed the duration showed the fade in
+    /// a time the game never asked for</strong>, -- <strong>and the wait
+    /// and the picture both have to use the same number</strong>, --
+    /// <strong>or the screen is black while the page already carries
+    /// on.</strong>
+    /// </para>
+    /// </remarks>
+    public const int FadeSpeed = 24;
+
+    /// <summary>
     /// Begin a flash, the way the engine's <c>startFlash</c> does.
     /// </summary>
     public string StarteBlitz(int[] pFarbe, int pDauer)
@@ -796,6 +882,95 @@ public const int MaxBalloonFrames = 76;
     /// once for the flash</strong> -- <strong>and a reader that shared one
     /// would have been right about both.</strong>
     /// </remarks>
+    /// <summary>
+    /// Darkens the screen towards black, over a number of frames.
+    /// </summary>
+    /// <param name="pFrames">How long the fade takes.</param>
+    /// <returns>What it did, in words.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>Game_Screen.prototype.startFadeOut</c>, and
+    /// it takes one number</strong> -- <c>this._fadeOutDuration = duration;
+    /// this._fadeInDuration = 0;</c> -- <strong>and it does not move the
+    /// brightness itself.</strong>
+    /// </para>
+    /// </remarks>
+    public string StarteAbdunkeln(int pFrames)
+    {
+        FadeOutDuration = Math.Max(0, pFrames);
+        FadeInDuration = 0;
+        return FadeOutDuration == 0
+            ? "the screen is already black, so there is nothing to darken"
+            : $"the screen darkens over {FadeOutDuration} frames"
+                + $", and it starts at {Brightness}";
+    }
+
+    /// <summary>
+    /// Brightens the screen from black, over a number of frames.
+    /// </summary>
+    /// <param name="pFrames">How long the fade takes.</param>
+    /// <returns>What it did, in words.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>Game_Screen.prototype.startFadeIn</c>, and it
+    /// is the mirror of the other one</strong> -- <c>this._fadeInDuration =
+    /// duration; this._fadeOutDuration = 0;</c> -- <strong>and it too does
+    /// not move the brightness itself.</strong>
+    /// </para>
+    /// </remarks>
+    public string StarteAufhellen(int pFrames)
+    {
+        FadeInDuration = Math.Max(0, pFrames);
+        FadeOutDuration = 0;
+        return FadeInDuration == 0
+            ? "the screen is already bright, so there is nothing to lighten"
+            : $"the screen lightens over {FadeInDuration} frames"
+                + $", and it starts at {Brightness}";
+    }
+
+    /// <summary>
+    /// Moves the screen brightness one frame, and stops at the end.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine own arithmetic, and both of its
+    /// forms</strong> -- <c>updateFadeOut</c>: <c>this._brightness =
+    /// (this._brightness * (d - 1)) / d;</c> and <c>updateFadeIn</c>:
+    /// <c>this._brightness = (this._brightness * (d - 1) + 255) / d</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the division is the whole of it</strong>, -- <strong>and
+    /// a reader that moved the brightness by one per frame showed a fade
+    /// that is not the engine fade</strong>, -- <strong>and one that counted
+    /// frames and left the brightness alone showed a fade with no picture at
+    /// all.</strong>
+    /// </para>
+    /// </remarks>
+    public void TickBildschirm()
+    {
+        if (FadeOutDuration > 0)
+        {
+            var d = FadeOutDuration;
+            Brightness = (Brightness * (d - 1)) / d;
+            FadeOutDuration--;
+            if (FadeOutDuration <= 0)
+            {
+                Brightness = 0;
+            }
+        }
+
+        if (FadeInDuration > 0)
+        {
+            var d = FadeInDuration;
+            Brightness = (Brightness * (d - 1) + 255) / d;
+            FadeInDuration--;
+            if (FadeInDuration <= 0)
+            {
+                Brightness = 255;
+            }
+        }
+    }
+
     public void TickBlitz()
     {
         if (FlashDuration <= 0)
@@ -992,6 +1167,7 @@ public const int MaxBalloonFrames = 76;
         // **Und der Blitz laeuft auf demselben Bild wie der Ton**,
         // **denn `Game_Screen.update` ruft `updateFlash` zwischen
         // `updateTone` und `updateWeather`.**
+        TickBildschirm();
         TickBlitz();
 
         // **Und die Audio-Fades laufen auf demselben Bild wie die

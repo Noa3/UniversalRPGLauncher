@@ -1102,12 +1102,38 @@ public static class MzCommands
                 if (pInterpreter.MapId > 0 && pInterpreter.EventId > 0)
                 {
                     var da = pFacts.Map.Erase(pInterpreter.EventId);
+
+                    // **Und die Figur wird auch markiert** -- **denn das
+                    // ist der Weg, den die Engine geht.**
+                    //
+                    // **Gemessen an `Game_Map.prototype.eraseEvent`:**
+                    // `this._events[eventId].erase();` -- **und das ist
+                    // `Game_Event.prototype.erase`: `this._erased = true;`**
+                    //
+                    // **Und dieses Repository hatte zwei Orte fuer
+                    // dieselbe Sache** -- **`MzMapState._entfernt` und
+                    // `MzCharacter.Erased`** -- **und nur einen davon
+                    // benutzt.**
+                    //
+                    // **Und die Figur bleibt auf der Karte**, **und ihre
+                    // Seiten bleiben lesbar**, **und die Hilfe sagt *bis
+                    // die Partei die Karte wechselt*.**
+                    if (pFacts.Characters.TryGetValue(
+                        pInterpreter.EventId, out var zeichen)
+                        && zeichen != null)
+                    {
+                        zeichen.Erase();
+                    }
                     pActions.Add(new MzAction(pCommand,
                         da == null
                             ? $"event {pInterpreter.EventId} is erased from "
                                 + $"map {pInterpreter.MapId}"
+                                + ", and it stays erased until the party "
+                                + "moves to another map"
                             : da + " is erased from map "
-                                + pInterpreter.MapId));
+                                + pInterpreter.MapId
+                                + ", and it stays erased until the party "
+                                + "moves to another map"));
                 }
                 else
                 {
@@ -3243,18 +3269,82 @@ case MzCommandTable.ChangeExp:
                 var wessen = At(pCommand, 0);
                 var animation = At(pCommand, 1);
                 var warten = Flag(pCommand, 2);
-                if (pFacts.Characters.TryGetValue(wessen, out var zeichen)
+
+                // **Und minus eins ist der Spieler**, -- **und das war
+                // hier lange falsch notiert** -- **und der Zweig fragte
+                // nur `Characters`**, -- **und der Spieler steht nicht
+                // darin** -- **und damit zeigte keine einzige Animation
+                // auf dem Spieler.**
+                //
+                // **Gemessen an `Game_Interpreter.prototype.character`:**
+                //
+                // ```js
+                // character(param) {
+                //     if ($gameParty.inBattle()) { return null; }
+                //     else if (param < 0) { return $gamePlayer; }
+                //     else if (this.isOnCurrentMap()) {
+                //         return $gameMap.event(param > 0 ? param : this._eventId);
+                //     } else { return null; }
+                // }
+                // ```
+                //
+                // **Und `0` ist das laufende Ereignis, nicht der Spieler** --
+                // **und `-9` ist der Spieler wie `-1`, denn die Bedingung
+                // ist `< 0` und nicht `=== -1`.**
+                // **Und die Laenge kommt aus dem Projekt**, -- **und der
+                // Befehl traegt sie nicht**, -- **und `Sprite_Animation`
+                // rechnet sie: `frames.length * 4 + 1`.**
+                //
+                // **Und eine Animation, die dieses Projekt nicht hat,
+                // wird nicht mit der Laenge einer anderen beantwortet.**
+                if (!pFacts.AnimationsLaenge(animation, out var laenge))
+                {
+                    pFacts.Notices.Add(
+                        $"212 asked for animation {animation}, and this"
+                        + " project has no animation with that number");
+                    pActions.Add(new MzAction(pCommand,
+                        $"animation {animation} was asked for and this"
+                        + " project does not have it, and the engine's own"
+                        + " `if (this._character)` does not cover that"
+                        + " case either -- it asks the sprite"));
+                    return true;
+                }
+
+                if (wessen < 0)
+                {
+                    pFacts.Player.ShowAnimation(animation, laenge);
+                    pActions.Add(new MzAction(pCommand,
+                        $"the player is asked for animation {animation}"
+                        + $" over {laenge} frames"
+                        + (warten ? ", and the page waits for it" : "")));
+                    if (warten)
+                    {
+                        pInterpreter.WaitFor(MzWaitMode.Animation);
+                    }
+
+                    return true;
+                }
+
+                // **Und `0` ist nicht die Figur null, sondern das laufende
+                // Ereignis.**
+                //
+                // **Gemessen an `Game_Interpreter.prototype.character`:**
+                // `return $gameMap.event(param > 0 ? param : this._eventId);`
+                // -- **und `0` wird also zu `this._eventId`.**
+                //
+                // **Und der Editor schreibt `0` fuer "dieses Ereignis"** --
+                // **und ein Leser, der `Characters[0]` fragt, findet eine
+                // Figur, die es nicht gibt**, -- **und ein Spiel, das
+                // `212 [0, ...]` schreibt, laeuft ohne Animation**.
+                var gesucht = wessen > 0 ? wessen : pInterpreter.EventId;
+                if (pFacts.Characters.TryGetValue(gesucht, out var zeichen)
                     && zeichen != null)
                 {
-                    // **Und die Bildzahl ist null, weil sie in der
-                    // Projektablage steht und nicht im Befehl** -- **und der
-                    // Befehl traegt sie nicht, also wird sie nicht
-                    // erfunden.**
-                    zeichen.ShowAnimation(animation, 0);
+                    zeichen.ShowAnimation(animation, laenge);
                     pFacts.AnimationAsked.Add(zeichen.EventId);
                     pActions.Add(new MzAction(pCommand,
                         $"character {wessen} is asked for animation "
-                        + $"{animation}"
+                        + $"{animation} over {laenge} frames"
                         + (warten ? ", and the page waits for it" : "")));
                     if (warten)
                     {
@@ -3272,8 +3362,24 @@ case MzCommandTable.ChangeExp:
                 }
                 else
                 {
+                    // **Und "steht nicht auf dieser Karte" wird gemeldet**
+                    // -- **und nicht nur in die Liste geschrieben.**
+                    //
+                    // **Und die Engine sagt nichts**, -- **und
+                    // `command212` fragt `this._character`, und das ist
+                    // `null` fuer eine Nummer, die es nicht gibt** --
+                    // **und das ist kein Fehler.**
+                    //
+                    // **Und ein Log, das nur die Aktion fuehrt, liest
+                    // sich, als haette der Befehl schlicht getan, was
+                    // ihm befohlen war.**
+                    pFacts.Notices.Add(
+                        $"212 asked for animation {animation} over"
+                        + $" character {gesucht}, and this map has no such"
+                        + " character, and the engine's own `if"
+                        + " (this._character)` steps over it");
                     pActions.Add(new MzAction(pCommand,
-                        $"character {wessen} was asked for animation "
+                        $"character {gesucht} was asked for animation "
                         + $"{animation} and is not on this map, which is "
                         + "what the engine's own `if (this._character)` "
                         + "does and is not an error"));
@@ -3409,71 +3515,63 @@ case MzCommandTable.ChangeExp:
             }
 
             case MzCommandTable.FadeoutScreen:
+            case MzCommandTable.FadeinScreen:
             {
-                // Die Hilfe zu `221 Show Animation` sagt dieselben drei
-                // Saetze wie zu `213 Show Balloon Icon`: *Character — The
-                // display location will be based on the position of the
-                // player or event. Animations — Specify the animation to
-                // display. Wait for Completion — When enabled, the event
-                // will be paused until the animation being displayed has
-                // finished.*
+                // **Und diese beiden Befehle trugen vorher den Code von
+                // `212 Show Animation`.**
                 //
-                // **Und minus eins ist hier auch der Spieler**,
-                // **denn es ist derselbe erste Parameter und dieselbe
-                // Hilfe.**
-                var ziel = At(pCommand, 0);
-                var warten = Flag(pCommand, 2);
-                if (ziel < 0)
+                // **Gemessen an `command221`, und das ist der ganze
+                // Befehl:**
+                //
+                // ```js
+                // Game_Interpreter.prototype.command221 = function() {
+                //     if (!$gameMessage.isBusy()) {
+                //         $gameScreen.startFadeOut(this.fadeSpeed());
+                //         this.wait(this.fadeSpeed());
+                //         this._index++;
+                //     }
+                //     return false;
+                // };
+                // ```
+                //
+                // **Und `command222` ist derselbe Befehl mit
+                // `startFadeIn`.**
+                //
+                // **Und `return false` ist hier richtig**, -- **und das
+                // ist der einzige Grund, warum es hier richtig ist:**
+                // `this._index++` steht im Rumpf, -- **und dieser
+                // Befehl zaehlt sich selbst hoch**, -- **und gibt dann
+                // `false` zurueck, damit `executeCommand` nicht noch
+                // einmal eins zaehlt.** **Und das ist genau das Muster,
+                // das `101` bis `105` auch haben.**
+                //
+                // **Und die Dauer kommt aus `fadeSpeed()`, und das ist
+                // `return 24`** -- **und nicht aus den Parametern, denn
+                // dieser Befehl traegt keine.**
+                var einblenden = pCommand.Code == MzCommandTable.FadeinScreen;
+                var geschwindigkeit = MzScreen.FadeSpeed;
+
+                // **Und `$gameMessage.isBusy()` ist die ganze Bedingung**
+                // -- **und ein Dialog im Bild hebt den Befehl auf und
+                // laesst die Seite warten**, -- **und ohne diese
+                // Pruefung wuerde ein Spiel seinen Bildschirm
+                // abdunkeln, waehrend jemand liest.**
+                if (pFacts.MessageBusy)
                 {
-                    pFacts.Player.ShowAnimation(
-                        At(pCommand, 1), MzScreen.MaxAnimationFrames);
-                }
-                else if (pFacts.Characters.TryGetValue(ziel, out var figur)
-                    && figur != null)
-                {
-                    figur.ShowAnimation(
-                        At(pCommand, 1), MzScreen.MaxAnimationFrames);
-                }
-                else
-                {
-                    pFacts.Notices.Add(
-                        $"animation asked for character {ziel}, and this "
-                        + "map has no such character");
-                    return true;
+                    return false;
                 }
 
-                // **Und wie beim Ballon wartet der Befehl ueber
-                // `Wait`, und der Rueckgabewert sagt, ob die Liste
-                // weitergeht** -- **und die beiden sind nicht
-                // dasselbe**, **und ein `return false` ohne zu warten
-                // las den Befehl im naechsten Bild noch einmal und
-                // setzte die Uhr bei jedem Durchgang neu.**
-                if (warten)
-                {
-                    pInterpreter.Wait(MzScreen.MaxAnimationFrames);
-                }
+                var gemeldet = einblenden
+                    ? pFacts.Screen.StarteAufhellen(geschwindigkeit)
+                    : pFacts.Screen.StarteAbdunkeln(geschwindigkeit);
+                pActions.Add(new MzAction(pCommand, gemeldet));
+                pInterpreter.Wait(geschwindigkeit);
 
-                pActions.Add(new MzAction(pCommand,
-                    $"animation {At(pCommand, 1)} over "
-                    + (ziel < 0 ? "the player" : $"character {ziel}")
-                    + (warten ? ", waiting for it to finish" : "")));
-
-                // **Und `212` gibt immer `true` zurueck** — **und
-                // die Wartezeit steht in `setWaitMode`**, -- **und die
-                // wird im naechsten `updateWait()` ausgefragt**, --
-                // **und nicht im Befehl.**
-                //
-                // **Gemessen an `command212`:** es endet mit `return
-                // true;`, und `executeCommand` sagt `if
-                // (!this[methodName]()) { return false; } this._index++; }`
-                // -- **und also geht der Index hoch, und das Warten
-                // passiert danach.**
-                //
-                // **Und `return !warten` hiess: ein wartendes `212`
-                // gibt `false` zurueck**, -- **und damit blieb der
-                // Index stehen**, -- **und der Befehl lief bei jedem
-                // Bild erneut und zeigte die Animation erneut.**
-                return true;
+                // **Und `this._index++` heisst hier: der Befehl zaehlt
+                // sich selbst hoch, und der Rueckgabewert sagt nur
+                // "nicht noch einmal".**
+                pInterpreter.Index++;
+                return false;
             }
 
             case MzCommandTable.ChangeActorImages:
@@ -3602,31 +3700,6 @@ case MzCommandTable.ChangeExp:
                             + "answer"));
                 return true;
                 }
-
-            case MzCommandTable.FadeinScreen:
-            {
-                // Die Hilfe zu `222 Erase Event` sagt woertlich:
-                // *Temporarily removes the event currently being run.
-                // There are no parameters to set. The event will remain
-                // erased until the party moves to another map.*
-                //
-                // **Und "es gibt keine Parameter" ist eine Aussage ueber
-                // die Datei, und nicht ueber den Code** -- **der Befehl
-                // kann traeger sein und ist dann kein Zaehler, und ein
-                // Test, der ihm drei Parameter gibt, hat einen anderen
-                // Befehl gebaut.**
-                var ereignis = pInterpreter.EventId;
-                if (pFacts.Characters.TryGetValue(ereignis, out var laeuft)
-                    && laeuft != null)
-                {
-                    laeuft.Erase();
-                }
-
-                pActions.Add(new MzAction(pCommand,
-                    $"event {ereignis} erased until the party moves to "
-                    + "another map"));
-                return true;
-            }
 
 
             case MzCommandTable.ShowBalloonIcon:

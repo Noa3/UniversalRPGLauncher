@@ -17379,6 +17379,101 @@ Fixture gelesen hatte** -- **und die Zahl neun stimmte.**
 All 2337 tests passed
 ```
 
+## 2026-10-02 — Die Fade-Befehle, und die Animationsuhr ist keine Konstante
+
+**Und `case MzCommandTable.FadeoutScreen` trug den Code von `212 Show
+Animation`.**
+
+**Und `222 Fadein Screen` war ein zweites Mal im Switch** -- **und der
+Code darin war `214 Erase Event`**, -- **und `214` stand schon an
+zweiter Stelle mit einem besseren Fall.**
+
+**Und `FadeinScreen = 222` war richtig, und der Block darunter war es
+nicht:**
+
+```csharp
+case MzCommandTable.FadeinScreen:
+{
+    // Die Hilfe zu `222 Erase Event` sagt woertlich:
+    // *Temporarily removes the event currently being run.*
+```
+
+**Und `Erase Event` ist `214`**, -- **gemessen an der Zeile, die die
+Engine ueber jeden Befehl schreibt:**
+
+```text
+ 214: Erase Event      221: Fadeout Screen     222: Fadein Screen
+ 235: Erase Picture     242: Fadeout BGM        246: Fadeout BGS
+```
+
+### Und der Bildschirm hatte keine Helligkeit
+
+**Und `221` und `222` sind genau die zwei Befehle, die sie bewegen**,
+**und dieses Repository hatte fuer `this._brightness` kein Feld.**
+
+```js
+Game_Screen.prototype.updateFadeOut = function() {
+    if (this._fadeOutDuration > 0) {
+        var d = this._fadeOutDuration;
+        this._brightness = (this._brightness * (d - 1)) / d;
+        this._fadeOutDuration--;
+    }
+};
+```
+
+**Und `fadeSpeed()` ist `return 24`**, -- **und kein Befehl traegt eine
+Dauer**, -- **und Wartezeit und Bild muessen dieselbe Zahl
+benutzen**, -- **sonst ist der Bildschirm schwarz, waehrend die Seite
+schon weiterlaeuft.**
+
+### Und die Animation hat gar keine feste Laenge
+
+**Und `MaxAnimationFrames = 60` war geraten**, -- **und der Code gibt
+es zu:**
+
+> *„And an animation is not a balloon ... one second is long enough to
+> read one"*
+
+**Gemessen an `Sprite_Animation`:**
+
+```js
+setupRate() { this._rate = 4; }
+setupDuration() {
+    this._duration = this._animation.frames.length * this._rate + 1;
+}
+```
+
+**Und die Dauer ist also `Rahmen * 4 + 1`, und die Rahmenzahl steht in
+`Animations.json`** -- **und gemessen an `sister/www` traegt eine
+dreihundert Animationen von einem bis sechsundsechzig Rahmen.**
+
+**Und `212` bekommt die Zahl jetzt aus der Tabelle**, **und eine
+Nummer, die das Projekt nicht hat, wird nicht mit der Laenge einer
+anderen beantwortet.**
+
+### Und `param 0` ist nicht der Spieler
+
+```js
+character(param) {
+    if ($gameParty.inBattle()) { return null; }
+    else if (param < 0) { return $gamePlayer; }
+    else if (this.isOnCurrentMap()) {
+        return $gameMap.event(param > 0 ? param : this._eventId);
+    } else { return null; }
+}
+```
+
+**Und `0` ist das laufende Ereignis**, **und `-9` ist genauso der
+Spieler wie `-1`**, -- **weil die Bedingung `< 0` ist.**
+
+### Und die Seiten lesen jetzt ihr Ende
+
+```text
+Map003 Event 9:  211 Befehle, Index 210, und 210 ist das `0`
+Map006 Event 7:   26 Befehle, Index 21,  und  21 ist das `0`
+All 2342 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

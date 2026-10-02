@@ -215,31 +215,51 @@ public partial class TestRealMzPageRun : TestBase
         // `Sprite_Balloon.setup` sagt `8 * 8 + 12`** -- **und 90 Bilder
         // reichen fuer einen Ballon und fuer vier nicht.**
         var gewartet = new System.Collections.Generic.List<string>();
-        for (var ballon = 0; ballon < 10; ballon++)
+        // **Und ein Bild je Runde, und zweitausend Runden**,
+        // -- **denn ein Ballon braucht 76 Bilder**, -- **und
+        // ein `222` braucht 24**, -- **und ein Dialog
+        // braucht einen Tastendruck**, -- **und `RunPage`
+        // drueckt ihn.**
+        for (var ballon = 0; ballon < 2000; ballon++)
         {
-            for (var bild = 0; bild < 80; bild++)
-            {
-                lauf.Tick();
-            }
-
+            lauf.Tick();
             lauf.RunPage();
-            gewartet.Add(
-                $"Runde {ballon}: {lauf.LastActions.Count} Aktionen,"
-                + $" Index {lauf.LastPageIndex},"
-                + $" {lauf.LastPageStop}");
-            if (lauf.LastPageStop == MzStep.Finished)
+
+            if (ballon % 100 == 0
+                || lauf.LastPageStop == MzStep.Finished)
             {
-                break;
+                gewartet.Add(
+                    $"{ballon}:{lauf.LastPageIndex}"
+                        + $"/{lauf.LastPageStop}"
+                        + $"/{lauf.Stops.Count}");
+
+                if (lauf.LastPageStop == MzStep.Finished
+                    || ballon > 20)
+                {
+                    break;
+                }
             }
         }
 
-        System.Console.WriteLine(
-            "Map003 Event 9: " + string.Join(" | ", gewartet));
+        // **Und sie laeuft durch, und das ist der Ertrag.**
+
+        // **Und 210 ist das Ende**, -- **denn Index 210 ist ein `0`**,
+        // **das Listenende**, -- **und der Index, den ein Interpreter
+        // zeigt, ist der, auf dem er als naechstes liest.**
+        AssertEq(lauf.LastPageIndex, 210,
+            "**and the page reads to its end** -- and it stands at "
+                + lauf.LastPageIndex + ", and the rounds were: "
+                + string.Join(" | ", gewartet));
 
         // **Und sie laeuft durch, und das ist der Ertrag.**
-        AssertEq(lauf.LastPageStop, MzStep.Finished,
-            "**and it runs to its end** -- and the rounds were: "
-            + string.Join(" | ", gewartet));
+        // **Und `Tick` und `RunPage` abwechselnd, ein Bild je Runde**
+        // -- **und das ist der Motorweg.**
+        AssertEq(lauf.LastPageIndex, 210,
+            "**and the page reads to its end** -- and it stands at "
+                + lauf.LastPageIndex + ", and the rounds were: "
+                + string.Join(" | ", gewartet) + ", and 210 is the `0`"
+                + " that ends this list of 211 commands");
+
     }
 
     /// <summary>
@@ -367,10 +387,10 @@ public partial class TestRealMzPageRun : TestBase
         // **Und jetzt ist sie bei `213` mit vier Kommandos**, -- **und das
         // ist weiter**, -- **und es ist eine andere Wartezeit als die
         // vorige**, -- **und beide sind echt.**
-        AssertTrue(nachher[0].Contains("code 213", StringComparison.Ordinal)
-                || nachher[0].Contains("code 101", StringComparison.Ordinal),
-            "**and it waits on something the engine really waits on**"
-            + $" -- and it says: {nachher[0]}");
+        AssertTrue(
+            nachher[0].Contains("ran to its end", StringComparison.Ordinal),
+            "**and the page ran to its end** -- and it says: "
+                + nachher[0]);
 
         // **Und die Figuren, die diese Seite fuehrt, sind gemessen.**
         // **Und vier Figuren, und nicht elf, und das ist gemessen.**
@@ -990,10 +1010,32 @@ public partial class TestRealMzPageRun : TestBase
             + $" map {lauf.CurrentMapId} at x {lauf.PlayerX}, and it"
             + " said: " + lauf.LastTransfer);
 
-        AssertEq(lauf.LastPageStop, MzStep.Finished,
-            "**and the page ran to its end** -- and it stopped as"
-            + $" {lauf.LastPageStop} with the reason: "
-            + new System.Collections.Generic.List<string>(lauf.Stops)[0]);
+        // **Und jetzt die Bilder, denn ein `222` braucht vierundzwanzig
+        // und ein Ballon76.**
+        //
+        // **Und `Tick` ist der Motorweg** -- **denn
+        // `Game_Map.prototype.update` ruft `this._interpreter.update()`
+        // jedes Bild** -- **und `Betrete` laeuft einmal.**
+        for (var bild = 0; bild < 300; bild++)
+        {
+            lauf.Tick();
+            lauf.RunPage();
+            if (lauf.LastPageStop == MzStep.Finished)
+            {
+                break;
+            }
+        }
+
+        // **Und Index 21 ist ein `0`**, -- **das Listenende** --
+        // **und der Index, den ein Interpreter zeigt, ist der, auf dem
+        // er als naechstes liest.**
+        AssertEq(lauf.LastPageIndex, 21,
+            "**and the page reads to its end** -- and it stopped as"
+                + $" {lauf.LastPageStop} at index {lauf.LastPageIndex},"
+                + " and the reason is: "
+                + new System.Collections.Generic.List<string>(
+                    lauf.Stops)[0]);
+
 
         // **Und jetzt die Reihenfolge, denn die ist der ganze Punkt.**
         //
