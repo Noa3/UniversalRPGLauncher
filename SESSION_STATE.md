@@ -18973,35 +18973,50 @@ nicht" fasst, sagt nichts aus.**
 
 ### Und der echte Blocker ist ein Parserfehler, gemessen ueber zehn Varianten
 
+**Und gemessen ist, und der Test heisst `TestRubyForGemessen`:**
+
 ```text
 A: for a in $game_party.members do yield a end   'end' was expected
-B: for a in $game_party.members do
-  yield a
-end   'end' was expected
-C: for a in $game_party.members
-  yield a
-end      1 Anweisungen
-D: for a in [1,2] do yield a end                 'end' was expected
-E: for a in [1,2] do
-  yield a
-end            'end' was expected
-F: for a in [1,2]
-  yield a
-end               1 Anweisungen
-G: [1,2].each do |a| yield a end                1 Anweisungen
-H: while true do
-  break
-end                   1 Anweisungen
-I: 1.times do |a| yield a end                   1 Anweisungen
-J: for a in [1,2] do break end                  'end' was expected
+B: for a in $game_party.members do\n  yield a\nend   'end' was expected
+C: for a in $game_party.members\n  yield a\nend          1 Anweisungen
+D: for a in [1,2] do break end                      'end' was expected
+E: for a in [1,2] do\n  break\nend                 'end' was expected
+F: for a in [1,2]\n  break\nend                     1 Anweisungen
+G: [1,2].each do |a| yield a end                  1 Anweisungen
+H: while true do\n  break\nend                     1 Anweisungen
+I: 1.times do |a| yield a end                     1 Anweisungen
+J: for a in [1,2] do break end                      'end' was expected
 ```
 
-**Und jede Form von `for` mit `do` scheitert, und `while do`, `each
-do` und `times do` gehen.**
+**Und jede Form von `for` mit `do` auf derselben Zeile wie die
+Sammlung scheitert, und `while do`, `each do` und `times do`
+gehen, und derselbe `for` ohne dieses `do` geht.**
 
-**Und die Spur an `case "for"` in `RubyParser` hat NIE ausgeloest** --
-**und das heisst:  der Zweig wird nie erreicht, und der Fehler liegt
-davor.**
+**Und der Fehler ist ein Token breit, und die Spur nennt die
+Stelle** (`URPG_TRACE=for`):
+
+```text
+for a in [1,2] do break end
+  FOR nach der Liste: '' (Art EndOfInput)
+```
+
+**Und `ParseExpression` hat `do`, `break` und `end` alle drei
+verschluckt.**
+
+**Und Rubys `parse.y` hat dafuer eine eigene Produktion:**
+
+```c
+for_var in p_value expr_value do compstmt opt_terms kEND
+```
+
+**Und `expr_value` ist ein `arg`, und ein `arg` nimmt weder einen
+Block noch ein Praefix -- und darum stoppt Rubys eigener Leser hier
+und dieser Leser nicht.**
+
+**Und der Ort ist `RubyParser`, `case "for"`, wo `ParseExpression`
+die Sammlung bekommt -- und dort ist die Korrektur noch nicht
+gemacht, weil fuenf verschiedene Versuche sie nicht getroffen
+haben.**
 
 **Und diese Zeile aus Random Dungeons `Game_Interpreter` ist der
 Grund:**
@@ -19012,8 +19027,27 @@ if param == 0       # 全体
 else                # 単体
 ```
 
-**Und damit ist Kriterium 5 an einer Stelle blockiert, die klar
-benannt ist und nicht geschaetzt.**
+**Und damit ist Kriterium 5 an einer Stelle blockiert, die
+gemessen und nicht geschaetzt ist.**
+
+### Und was in diesem Schritt danebenging, und zurueckgenommen wurde
+
+**Und `StartsAValue` wurde um `for`, `while` und `until` erweitert** --
+**und das brachte nichts**, -- **und die Spur zeigte, dass der
+`case "for"`-Zweig von Anfang an erreicht wurde.**
+
+**Und die Spur selbst war dreimal stumm**, -- **und nicht weil der
+Fehler dort nicht liegt**, -- **und sondern weil `_spur` nur gesetzt
+ist, wenn der Schaltertext in einem Token *vorkommt*:** --
+**`URPG_TRACE=x` schaltet nichts ein, `URPG_TRACE=for` schon.**
+
+**Und `project/src/rgss/RubyParser.cs` wurde zweimal versehentlich
+ueberschrieben**, -- **einmal durch ein Skript, das die falsche
+Datei anfasste**, -- **und einmal durch eine Blockentfernung, die
+den `case`-Zweig zerriss**, -- **und beide Male aus `HEAD`
+wiederhergestellt** -- **und der Baum ist gegenueber `HEAD` bis auf
+den neuen Test unveraendert.**
+
 
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
