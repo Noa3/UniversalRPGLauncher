@@ -231,11 +231,36 @@ public partial class TestMzAnimationAndErase : TestBase
             new MzCommandEntry(221, ["-1", "3", "true"], 0),
             aktionen2, fakten2, new MzRandom());
 
-        AssertTrue(!rueck,
-            "**and with wait on, TryExecute says the list is still "
-                + "waiting** -- and a reader that returned true anyway let "
-                + "the next command run while the animation was still on "
-                + "the screen, and the whole wait setting does nothing");
+        // **Und `TryExecute` gibt `true` zurueck, und das ist die
+        // Engine.**
+        //
+        // **Gemessen an `command212` und `command213`:** beide enden mit
+        // `return true;`, -- **und `executeCommand` sagt `if
+        // (!this[methodName]()) { return false; } this._index++; }`** --
+        // **und also geht der Index hoch.**
+        //
+        // **Und die Wartezeit steht woanders**, -- **in
+        // `setWaitMode('animation')`**, -- **und die wird im naechsten
+        // `updateWait()` ausgefragt**, -- **und das ist
+        // `isAnimationPlaying()` und nicht der Rueckgabewert eines
+        // Befehls.**
+        //
+        // **Und `return !warten` war mein Fehler**, -- **und er kostete
+        // eine echte Seite 46 Befehle**, -- **denn die Seite blieb auf
+        // ihrem `213` bei Index 130 stehen und zeigte das Icon bei jedem
+        // Bild neu.**
+        //
+        // **Und "die Liste haelt" ist darum eine Aussage ueber
+        // `MzStep.Waiting`, nicht ueber `true` oder `false`.**
+        AssertTrue(rueck,
+            "**and with wait on, TryExecute says the command ran** -- and"
+                + " the engine's `command212` ends in `return true;` and"
+                + " `executeCommand` steps the index over it");
+        AssertEq(lauf2.Stopped, MzStep.Waiting,
+            "**and the list is waiting all the same** -- and that is where"
+                + " the wait lives: `setWaitMode('animation')`, asked by"
+                + " `updateWait` every frame, and not by a return value;"
+                + " it is " + lauf2.Stopped);
         AssertTrue(fakten2.Player.HasAnimation,
             "**and the animation is there** -- and a wait for an "
                 + "animation that was never shown is a wait for nothing");
@@ -342,11 +367,27 @@ public partial class TestMzAnimationAndErase : TestBase
         var rueck = MzCommands.TryExecute(lauf,
             new MzCommandEntry(213, ["-1", "2", "True"], 0),
             aktionen, fakten, new MzRandom());
-        AssertTrue(!rueck,
-            "**and \"True\" holds the list** -- and a reader that only "
-                + "parsed numbers read this as zero, and zero is not one, "
-                + "and the wait setting of thirty-six commands in the game "
-                + "in front of us did nothing");
+        // **Und "die Liste haelt" ist eine Aussage ueber `MzStep`, und
+        // nicht ueber den Rueckgabewert.**
+        //
+        // **Gemessen an `command213`:** es endet mit `return true;` --
+        // **und `executeCommand` sagt `if (!this[methodName]()) { return
+        // false; } this._index++; }`** -- **und also geht der Index
+        // hoch.** **Und `101` gibt `false` zurueck** und der Index
+        // bleibt -- **und das ist der ganze Unterschied.**
+        //
+        // **Und "True" zu lesen ist damit eine eigene Frage**, -- **und
+        // ein Leser, der nur Zahlen las, sah hier eine Null** -- **und
+        // eine Null ist keine Eins**, -- **und die Warteeinstellung von
+        // sechsunddreissig Befehlen tat nichts.**
+        AssertTrue(rueck,
+            "**and \"True\" says the command ran** -- and `command213`"
+                + " ends in `return true;`, and `executeCommand` steps the"
+                + " index over it");
+        AssertEq(lauf.Stopped, MzStep.Waiting,
+            "**and \"True\" holds the list all the same** -- and the wait"
+                + " lives in `setWaitMode('balloon')` and not in a return"
+                + " value; it is " + lauf.Stopped);
         AssertTrue(aktionen[0].What.Contains("waiting for it to go"),
             "**and the action says it waits**");
 
@@ -370,11 +411,14 @@ public partial class TestMzAnimationAndErase : TestBase
         var rueck3 = MzCommands.TryExecute(lauf3,
             new MzCommandEntry(221, ["-1", "3", "True"], 0),
             aktionen3, fakten3, new MzRandom());
-        AssertTrue(!rueck3,
-            "**and an animation written the same way waits too** -- and "
-                + "the help gives both commands the same third setting, "
-                + "so a reader that read one and not the other was half "
-                + "right and no test could see it");
+        AssertTrue(rueck3,
+            "**and an animation written the same way runs too** -- and"
+                + " `command212` ends in `return true;` like `command213`,"
+                + " and the help gives both the same third setting");
+        AssertEq(lauf3.Stopped, MzStep.Waiting,
+            "**and it waits in the same way** -- and `setWaitMode"
+                + "('animation')` is asked every frame by `updateWait`;"
+                + " it is " + lauf3.Stopped);
 
         // **Und eine Zahl geht auch, weil 121 und 122 Zahlen
         // schreiben.**
@@ -382,10 +426,13 @@ public partial class TestMzAnimationAndErase : TestBase
         var rueck4 = MzCommands.TryExecute(lauf4,
             new MzCommandEntry(213, ["-1", "2", "1"], 0),
             new List<MzAction>(), fakten4, new MzRandom());
-        AssertTrue(!rueck4,
-            "**and a plain one waits as well** -- and a finished project "
-                + "writes both forms, and a reader that took only the word "
-                + "would have broken every hand-edited event");
+        AssertTrue(rueck4,
+            "**and a plain one runs as well** -- and a finished project"
+                + " writes both forms, and a reader that took only the word"
+                + " would have broken every hand-edited event");
+        AssertEq(lauf4.Stopped, MzStep.Waiting,
+            "**and it waits just the same** -- and the word and the number"
+                + " are the same setting; it is " + lauf4.Stopped);
 
         // **Und ein leerer Parameter ist "nein".**
         var (fakten5, lauf5) = Start();

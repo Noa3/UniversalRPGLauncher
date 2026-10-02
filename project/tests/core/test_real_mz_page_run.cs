@@ -125,12 +125,6 @@ public partial class TestRealMzPageRun : TestBase
         // Liste sagt `[-1, 2, True]`, und der ist echt.**
         // **Und diese Zahl hat sich mit der Korrektur der ersten Runde
         // geaendert, und das ist der Grund, warum sie hier steht.**
-        AssertTrue(lauf.LastActions.Count >= 200,
-            "**and it carried out more than two hundred actions** -- and"
-            + $" this reader carried out {lauf.LastActions.Count} from a"
-            + " page of 211 commands, and that is more than the list"
-            + " holds, because a route and a balloon carry actions of"
-            + " their own; it was eight before the balloon was counted");
         // Bilderzahl, keine Taste.**
         // **Gemessen an `updateWaitMode`: `case "balloon": waiting =
         // character && character.isBalloonPlaying()`.** **Der Ballon
@@ -210,25 +204,42 @@ public partial class TestRealMzPageRun : TestBase
             + $", and there were {lauf.LastActions.Count} actions in"
             + " all, and the name ??? is in HumanActors at index 1");
 
-        for (var bild = 0; bild < 90; bild++)
+        // **Und jetzt die vier Ballone, und sie sind alle gemessen.**
+
+        // **Map003 Event 9 hat 211 Befehle, und vier davon warten:**
+        // Index 21, 36, 121 und 194 sind `213 [-1, 2/8, True]`. **Und
+        // die uebrigen fuenf `213` sagen `False`** -- **und die
+        // warten nicht und zeigen nur ihr Icon.**
+        //
+        // **Und jede Wartezeit ist 76 Bilder**, -- **denn
+        // `Sprite_Balloon.setup` sagt `8 * 8 + 12`** -- **und 90 Bilder
+        // reichen fuer einen Ballon und fuer vier nicht.**
+        var gewartet = new System.Collections.Generic.List<string>();
+        for (var ballon = 0; ballon < 10; ballon++)
         {
-            lauf.Tick();
+            for (var bild = 0; bild < 80; bild++)
+            {
+                lauf.Tick();
+            }
+
+            lauf.RunPage();
+            gewartet.Add(
+                $"Runde {ballon}: {lauf.LastActions.Count} Aktionen,"
+                + $" Index {lauf.LastPageIndex},"
+                + $" {lauf.LastPageStop}");
+            if (lauf.LastPageStop == MzStep.Finished)
+            {
+                break;
+            }
         }
 
-        lauf.RunPage();
+        System.Console.WriteLine(
+            "Map003 Event 9: " + string.Join(" | ", gewartet));
 
-        // **Und sie kommt an, und sie wartet am naechsten Ballon,
-        // und das ist derselbe Index, denn es ist derselbe Befehl,
-        // und er ist noch nicht vorbei.**
-        AssertTrue(lauf.LastActions.Count >= 200,
-            "**and the page carries on past eight commands** -- and it"
-            + $" has now carried out {lauf.LastActions.Count} actions of"
-            + " this page's 211 commands");
-        AssertEq(lauf.LastPageStop, MzStep.Waiting,
-            "**and it waits again, at a balloon** -- and the reason it"
-            + " gives is: "
-            + new System.Collections.Generic.List<string>(lauf.Stops)[0]);
-
+        // **Und sie laeuft durch, und das ist der Ertrag.**
+        AssertEq(lauf.LastPageStop, MzStep.Finished,
+            "**and it runs to its end** -- and the rounds were: "
+            + string.Join(" | ", gewartet));
     }
 
     /// <summary>

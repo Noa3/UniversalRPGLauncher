@@ -927,7 +927,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // gehaltene Taste wirkt weiter.**
                 var alle = new List<MzAction>();
                 var ergebnis = Laeufer.TryGetValue(id, out var laufend)
-                    && laufend != null && laufend.Stopped == MzStep.Waiting
+                    && laufend != null && laufend.KannFortgesetztWerden
                     ? _runner.Run(
                         befehle, Facts, CurrentMapId, id, Random, laufend)
                     : _runner.Run(
@@ -949,7 +949,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // Bildern ab, und wer seinen Interpreter wegwirft,
                 // wartet auf einen Ballon, den niemand mehr zaehlt.**
                 if (ergebnis.Interpreter != null
-                    && ergebnis.Stopped == MzStep.Waiting)
+                    && ergebnis.Interpreter.KannFortgesetztWerden)
                 {
                     Laeufer[id] = ergebnis.Interpreter;
                 }
@@ -1249,7 +1249,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // **denn sonst teilen sie sich einen, und die erste
                 // wartet, und die anderen warten auf sie.**
                 var ergebnis = Laeufer.TryGetValue(id, out var alt)
-                    && alt != null && alt.Stopped == MzStep.Waiting
+                    && alt != null && alt.KannFortgesetztWerden
                     ? _runner.Run(befehle, Facts, CurrentMapId, id, Random, alt)
                     : _runner.Run(befehle, Facts, CurrentMapId, id, Random);
                 var eigener = new MzInterpreter(befehle);
@@ -1266,6 +1266,12 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // stehen**, -- **und der Unterschied zwischen zwei
                 // Wegen durch dieselbe Engine war ein
                 // Tastendruck.**
+                // **Und der Index des Interpreters ist die
+                // Wahrheit ueber den Fortschritt** -- **und nicht die
+                // Zahl der Befehle dieser einen Runde**, -- **denn
+                // jede Runde beginnt dort, wo die vorige
+                // aufgehoert hat.**
+                var erreicht = ergebnis.Interpreter?.Index ?? 0;
                 for (var mal = 0; mal <= befehle.Count; mal++)
                 {
                     if (ergebnis.Stopped == MzStep.Finished)
@@ -1296,7 +1302,13 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     Laeufer.Remove(id);
                 }
 
-                bericht.Add($"event {id}: {ergebnis.Describe()}");
+                erreicht = Math.Max(
+                    erreicht, ergebnis.Interpreter?.Index ?? 0);
+                bericht.Add(
+                    $"event {id}: {ergebnis.Describe()}, "
+                    + $"and it reached command {erreicht} "
+                    + $"of {befehle.Count}");
+
             }
         }
 
@@ -1829,7 +1841,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         var ergebnis = Laeufer.TryGetValue(pId, out var alt)
-            && alt != null && alt.Stopped == MzStep.Waiting
+            && alt != null && alt.KannFortgesetztWerden
             ? _runner.Run(befehle, Facts, CurrentMapId, pId, Random, alt)
             : _runner.Run(befehle, Facts, CurrentMapId, pId, Random);
 
@@ -1890,7 +1902,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
             MissingCommonEvent = ergebnis.MissingCommonEvent,
         };
 
-        if (ergebnis.Interpreter != null && ergebnis.Stopped == MzStep.Waiting)
+        if (ergebnis.Interpreter != null
+            && ergebnis.Interpreter.KannFortgesetztWerden)
         {
             Laeufer[pId] = ergebnis.Interpreter;
         }
@@ -1903,6 +1916,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
         LastPage = pId;
         LastActions = ergebnis.Actions;
         LastPageStop = ergebnis.Stopped;
+        LastPageIndex = ergebnis.Interpreter?.Index ?? 0;
+
         Stops = new List<string> { ergebnis.Reason, ergebnis.Describe() };
         return $"event {pId}: {ergebnis.Describe()}";
     }
@@ -2207,6 +2222,16 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public int LastPage { get; private set; }
 
     /// <summary>Where that page stopped.</summary>
+    /// <summary>Where the last page stopped in its own list.</summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own <c>this._index</c></strong>,
+    /// and <strong>a report that says only "waiting" does not say how
+    /// far it got</strong> -- **and a page of 211 commands that stands
+    /// at 21 for ever and a page that stands at 194 look identical from
+    /// the outside.**
+    /// </remarks>
+    public int LastPageIndex { get; private set; }
+
     public MzStep LastPageStop { get; private set; }
 
     private static bool Passt(int pAusloeser, StartMode pStart)

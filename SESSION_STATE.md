@@ -17157,6 +17157,89 @@ das Repository auseinanderlaufen** -- **statt die Zahl zu behaupten.**
 All 2333 tests passed
 ```
 
+## 2026-10-02 — Die Regel, die ich verkehrt herum hatte: `return true`
+
+**Der zweite grosse Fund, und derselbe Fehler in einer zweiten Form.**
+
+**Und die Quelle sagt es woertlich.** Ich habe alle Befehle gelesen, die
+`setWaitMode` benutzen:
+
+```text
+  101  return ['false']  message      101-105 sagen alle false
+  201  return ['false']  transfer
+  261  return ['false']  video
+  204  return ['false','true']  scroll
+  205  return ['true']  route
+  212  return ['true']  animation
+  213  return ['true']  balloon
+  217  return ['true']  gather
+  339  return ['true']  action
+```
+
+**Und `executeCommand` ist eindeutig:**
+
+```js
+if (!this[methodName]()) { return false; }
+this._index++;
+```
+
+**Also: `return true` heisst "der Index steigt, und die Wartezeit
+passiert im naechsten `updateWait()`".** **Und `return false` heisst
+"der Index bleibt, und derselbe Befehl laeuft im naechsten Bild
+noch einmal".**
+
+**Und `101` gibt `false` zurueck, weil es seinen Text selbst erst
+anzeigt und dann wartet -- `command101` schluckt die 401-Zeilen mit
+`this._index++` im eigenen Rumpf, -- und deshalb steht am Ende
+`return false` und der Index zeigt auf den naechsten Befehl.**
+
+**Und ich hatte es umgekehrt:**
+
+```csharp
+case 212:  return !warten;      // falsch
+case 213:  return !warten;      // falsch
+```
+
+**Und der Preis war messbar: eine Seite von 176 Befehlen kam bis
+Index 130 und die letzten 46 kamen nie.**
+
+### Und der zweite Fehler, derselbe in der Uebergabe
+
+**Und `PassFrame` hinterlaesst `MzStep.Stepped`, und `RunParallel`
+pruefte auf `MzStep.Waiting`** -- **und also wurde der Interpreter
+weggeworfen und die Seite bei jedem Aufruf neu gelesen:**
+
+```csharp
+alt.Stopped == MzStep.Waiting   // nie wahr, denn Tick() sagt Stepped
+```
+
+**Und jetzt steht in `MzInterpreter` eine Eigenschaft da, die die
+Frage stellt, die der Motor stellt:**
+
+```csharp
+public bool KannFortgesetztWerden => IsRunning
+    && Stopped != MzStep.Finished
+    && Stopped != MzStep.Truncated;
+```
+
+**Und `isRunning()` ist `return this._index < this._list.length`** --
+**eine Frage ueber die Liste und nie ueber die Wartezeit.**
+
+```text
+vorher:  Map005 Event 4   130 von 176 Befehlen, Index bleibt 130
+nachher: Map005 Event 4   176 von 176 Befehlen, ran to its end
+         Map003 Event 9    62 Aktionen, Finished
+All 2334 tests passed
+```
+
+### Und drei Tests behaupteten das Gegenteil
+
+**Und die Tests waren nicht kaputt, sondern ein Beweis, den ich nie
+geprueft hatte** -- **denn sie fragten `TryExecute` nach `true` oder
+`false` und nannten das "die Liste haelt".** **Und "die Liste haelt"
+ist eine Aussage ueber `MzStep.Waiting`, nicht ueber den
+Rueckgabewert eines Befehls.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

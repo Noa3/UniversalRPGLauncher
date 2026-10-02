@@ -3346,7 +3346,23 @@ case MzCommandTable.ChangeExp:
                     $"animation {At(pCommand, 1)} over "
                     + (ziel < 0 ? "the player" : $"character {ziel}")
                     + (warten ? ", waiting for it to finish" : "")));
-                return !warten;
+
+                // **Und `212` gibt immer `true` zurueck** — **und
+                // die Wartezeit steht in `setWaitMode`**, -- **und die
+                // wird im naechsten `updateWait()` ausgefragt**, --
+                // **und nicht im Befehl.**
+                //
+                // **Gemessen an `command212`:** es endet mit `return
+                // true;`, und `executeCommand` sagt `if
+                // (!this[methodName]()) { return false; } this._index++; }`
+                // -- **und also geht der Index hoch, und das Warten
+                // passiert danach.**
+                //
+                // **Und `return !warten` hiess: ein wartendes `212`
+                // gibt `false` zurueck**, -- **und damit blieb der
+                // Index stehen**, -- **und der Befehl lief bei jedem
+                // Bild erneut und zeigte die Animation erneut.**
+                return true;
             }
 
             case MzCommandTable.ChangeActorImages:
@@ -3571,7 +3587,20 @@ case MzCommandTable.ChangeExp:
                     pActions.Add(new MzAction(pCommand,
                         $"balloon icon {At(pCommand, 1)} over the player"
                         + (warten ? ", waiting for it to go" : "")));
-                    return !warten;
+
+                    // **Und `213` gibt immer `true` zurueck**, -- **wie
+                    // `212`, `205`, `217` und `339`**, -- **und `101`,
+                    // `201` und `261` geben `false`**.
+                    //
+                    // **Gemessen an `command213`:** es endet mit
+                    // `return true;` und setzt davor
+                    // `setWaitMode("balloon")` -- **und also geht der
+                    // Index hoch und das Warten laeuft im naechsten
+                    // `updateWait()`**, -- **und ein Leser, der
+                    // `false` zurueckgibt, laesst jeden `213` sein Icon
+                    // bei jedem Bild neu setzen und die Seite nie
+                    // weitergehen.**
+                    return true;
                 }
 
                 if (!pFacts.Characters.TryGetValue(ziel, out var figur)
@@ -3594,7 +3623,11 @@ case MzCommandTable.ChangeExp:
                 pActions.Add(new MzAction(pCommand,
                     $"balloon icon {At(pCommand, 1)} over character {ziel}"
                     + (warte ? ", waiting for it to go" : "")));
-                return !warte;
+
+                // **Und auch hier gibt die Engine `true`
+                // zurueck** -- **und `command213` gibt es fuer
+                // Spieler und Figur gleich.**
+                return true;
             }
 
             case MzCommandTable.ControlSwitches:

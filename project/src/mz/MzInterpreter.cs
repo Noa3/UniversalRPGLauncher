@@ -137,6 +137,47 @@ public sealed class MzInterpreter
     public bool IsRunning => Index < _commands.Count;
 
     /// <summary>
+    /// Whether this page still has commands, and can therefore be handed
+    /// to the next frame instead of started over.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And "not finished" is the engine's question and not
+    /// "waiting".</strong> Measured at <c>update()</c>: <c>while
+    /// (this.isRunning())</c>, and <c>isRunning()</c> is <c>return
+    /// this._index &lt; this._list.length</c> -- a question about the
+    /// list and never about the wait.
+    /// </para>
+    /// <para>
+    /// <strong>And three of this reader's own states are not
+    /// finished</strong>, and a caller that looked only at
+    /// <see cref="MzStep.Waiting"/> threw them away:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><c>Stepped</c> -- and this is what
+    /// <see cref="PassFrame"/> leaves behind when the wait it held is
+    /// over, and so it is what every waiting page becomes between two
+    /// frames.</description></item>
+    /// <item><description><c>Refused</c> -- and a command that is not
+    /// known leaves the index where it was on purpose, and the page is
+    /// stuck, not over.</description></item>
+    /// <item><description><c>Frozen</c> -- and that is the engine's own
+    /// freeze, and it is not a reason to read the page from its
+    /// first command again.</description></item>
+    /// </list>
+    /// <para>
+    /// <strong>And that cost this repository a real page.</strong> A
+    /// parallel page of 176 commands with a balloon at index 130 ran
+    /// those 130 commands over and over, once per call, and never the
+    /// other 46.
+    /// </strong>
+    /// </para>
+    /// </remarks>
+    public bool KannFortgesetztWerden => IsRunning
+        && Stopped != MzStep.Finished
+        && Stopped != MzStep.Truncated;
+
+    /// <summary>
     /// The number of the command at this index, or zero when the index is
     /// outside the list.
     /// </summary>
