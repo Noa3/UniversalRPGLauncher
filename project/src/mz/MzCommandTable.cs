@@ -276,6 +276,31 @@ public static class MzCommandTable
     public const int ChangeParameter = 317;
 
     /// <summary>
+    /// <c>command103</c> -- <c>$gameMessage.setNumberInput(params[0],
+    /// params[1])</c>, and it waits for the answer.
+    /// </summary>
+    public const int InputNumber = 103;
+
+    /// <summary>
+    /// <c>command281</c> -- <c>if (this._params[0] === 0) {
+    /// $gameMap.enableNameDisplay(); } else {
+    /// $gameMap.disableNameDisplay(); }</c>
+    /// </summary>
+    public const int ChangeMapNameDisplay = 281;
+
+    /// <summary>
+    /// <c>command282</c> -- <c>$gameMap.changeTileset(this._params[0])</c>,
+    /// and it waits for the tileset images.
+    /// </summary>
+    public const int ChangeTileset = 282;
+
+    /// <summary>
+    /// <c>command284</c> -- <c>$gameMap.changeParallax(params[0], params[1],
+    /// params[2], params[3], params[4])</c>.
+    /// </summary>
+    public const int ChangeParallax = 284;
+
+    /// <summary>
     /// The goods line under a <c>302</c>, and not a command.
     /// </summary>
     /// <remarks>

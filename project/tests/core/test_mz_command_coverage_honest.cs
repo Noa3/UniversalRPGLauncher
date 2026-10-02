@@ -130,7 +130,10 @@ public partial class TestMzCommandCoverageHonest : TestBase
             // **Und `302` stand hier und ist jetzt raus** -- **und
             // `TestMvScrollTintShop` beweist es an `VHMV`, dem groessten
             // MV-Projekt auf dieser Maschine.**
-            103, 109,
+            // **Und `103`, `281`, `282` und `284` standen hier und sind
+            // jetzt raus** -- **und `TestMvMapDisplay` beweist alle vier
+            // an `VHMV`.**
+            109,
         })
         {
             AssertTrue(nicht.Contains(erwartet),

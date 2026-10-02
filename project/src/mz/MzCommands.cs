@@ -117,6 +117,10 @@ public static class MzCommands
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
+            MzCommandTable.InputNumber,
+            MzCommandTable.ChangeMapNameDisplay,
+            MzCommandTable.ChangeTileset,
+            MzCommandTable.ChangeParallax,
             MzCommandTable.ScrollMap,
             MzCommandTable.TintPicture,
             MzCommandTable.ShopProcessing,
@@ -1483,6 +1487,139 @@ public static class MzCommands
                     + " and " + At(pCommand, 4) + " as the buying kind, "
                     + "and " + zeilen.Count + " of them came from the "
                     + "605 lines that followed"));
+                return true;
+            }
+
+            case MzCommandTable.InputNumber:
+            {
+                // **Und `command103`:**
+                //
+                // ```js
+                // if (!$gameMessage.isBusy()) {
+                //     this.setupNumInput(this._params);
+                //     this._index++;
+                //     this.setWaitMode('message');
+                // }
+                // return false;
+                // ```
+                //
+                // **Und `return false` steht ausserhalb der Bedingung**,
+                // **also gibt der Befehl in jedem Bild `false`
+                // zurueck** -- **und die Nachricht belegt erst dann Platz,
+                // wenn sie nicht mehr belegt ist.** **Das ist dasselbe
+                // Muster wie `104` und `261`.**
+                //
+                // **Und `setupNumInput(params)` ist
+                // `$gameMessage.setNumberInput(params[0], params[1])`**
+                // -- **eine Zahl von Ziffern und eine Art, und keine
+                // Zahl von Stellen.** **Und `this._index++` heisst, dass
+                // der Befehl beim naechsten Lesen nicht wieder derselbe
+                // ist** -- **das ist der Unterschied zu `104`, das
+                // denselben Schritt auch tut, und zu beiden wird der
+                // Befehl erst beim zweiten Lesen gesehen.**
+                if (pFacts.MessageBusy)
+                {
+                    // **Und `return false` steht auch bei
+                    // belegter Nachricht ausserhalb der
+                    // Bedingung** -- **und ein Leser, der
+                    // dort `true` gibt, laesst die Seite
+                    // weiterlaufen, waehrend die
+                    // Nachricht noch offen ist.**
+                    pInterpreter.WaitFor(MzWaitMode.Message);
+                    return false;
+                }
+
+                pFacts.LastPrompt = new MzPrompt.Number
+                {
+                    Digits = At(pCommand, 0),
+                    Type = At(pCommand, 1),
+                };
+                pActions.Add(new MzAction(pCommand,
+                    "the player is asked for a number of "
+                    + At(pCommand, 0) + " digits, type " + At(pCommand, 1)
+                    + ", and the page waits for the answer"));
+                pInterpreter.WaitFor(MzWaitMode.Message);
+                return false;
+            }
+
+            case MzCommandTable.ChangeMapNameDisplay:
+            {
+                // **Und `command281` ist ein Vergleich und zwei
+                // Zuweisungen:**
+                //
+                // ```js
+                // if (this._params[0] === 0) {
+                //     $gameMap.enableNameDisplay();
+                // } else {
+                //     $gameMap.disableNameDisplay();
+                // }
+                // return true;
+                // ```
+                //
+                // **Und null heisst anzeigen**, **und das ist
+                // gegenueber `134` und `135` genau umgekehrt**, **und
+                // dort ist null "sperren".** **Und beide Schalter dort
+                // starten erlaubt** -- **und dieser auch:
+                // `Game_Map.prototype.initialize` sagt
+                // `this._nameDisplay = true;`.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Anzeige.SetzeNamenAnzeige(At(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.ChangeTileset:
+            {
+                // **Und `command282` laedt erst die Bilder und wechselt
+                // dann:**
+                //
+                // ```js
+                // const tileset = $dataTilesets[this._params[0]];
+                // if (!this._imageReservationId) {
+                //     this._imageReservationId = Utils.generateRuntimeId();
+                // }
+                // const allReady = tileset.tilesetNames.map(tilesetName =>
+                //     ImageManager.reserveTileset(tilesetName, 0,
+                //         this._imageReservationId)
+                // ).every(bitmap => bitmap.isReady());
+                // if (allReady) {
+                //     $gameMap.changeTileset(this._params[0]);
+                //     ImageManager.releaseReservation(this._imageReservationId);
+                //     this._imageReservationId = null;
+                // }
+                // return true;
+                // ```
+                //
+                // **Und `return true` steht wieder ausserhalb**, **und
+                // der Befehl wird also bei jedem Bild neu gelesen, bis
+                // die Bilder da sind** -- **und genau das ist der
+                // Unterschied zu `101`, das sich einmal wegzählt und
+                // dann wartet.**
+                //
+                // **Und `changeTileset` selbst ist eine Zuweisung und
+                // ein `refresh()`**, **und dieses Repository laed keine
+                // Kachelbilder und wartet darum nicht.**
+                pFacts.BilderReserviert = true;
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Anzeige.SetzeTileset(At(pCommand, 0))
+                    + ", and this reader holds no tileset images and so "
+                    + "does not wait for them"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeParallax:
+            {
+                // **Und `command284` ist eine Zeile** -- **und der
+                // Aufruf hat fuenf Parameter** -- **und `changeParallax`
+                // ist nicht nur fuenf Zuweisungen**, **denn zwei
+                // Schleifen, die abgeschaltet werden, setzen den
+                // Versatz auf null.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Anzeige.SetzeParallax(
+                        Text(pCommand, 0),
+                        At(pCommand, 1) != 0,
+                        At(pCommand, 2) != 0,
+                        At(pCommand, 3),
+                        At(pCommand, 4))));
                 return true;
             }
 

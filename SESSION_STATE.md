@@ -16689,6 +16689,42 @@ TestMvScrollTintShop: 3/3
 All 2310 tests passed
 ```
 
+## 2026-10-02 — Vier Befehle, die nur das Aussehen der Karte aendern
+
+**Gemessen an `VHMV`:**
+
+```text
+103 Input Number          16x, 13 Formen, haeufigste [940, 6] 4x
+281 Change Map Name Dis.   2x,  1 Form,  und sie ist [1]
+282 Change Tileset         8x,  5 Formen
+284 Change Parallax       15x,  9 Formen
+```
+
+**Vier Befunde, die keine Coverage-Zahl zeigt:**
+
+* **`281` steht genau zweimal da und beide Male als `[1]`** — **also
+  sagt dieses Spiel einmal „Namen verstecken" und nie „Namen
+  zeigen"**, **und `enableNameDisplay` ist nie gelaufen.** **Und
+  `_nameDisplay` startet auf `true`.**
+* **`284`s haeufigste Form ist ein Name mit beiden Schleifen an und
+  Geschwindigkeit `-1`** — **und ein negativer Speed heisst, dass die
+  Parallax rueckwaerts laeuft.** **Und drei der 15 haben einen leeren
+  Namen und beide Schleifen aus, und das ist „Parallax aus".**
+* **`changeParallax` setzt den Versatz auf null, wenn eine Schleife
+  abgeschaltet wird, die vorher an war** — **und ein Leser, der nur
+  Name und Schleifen setzt, laesst einen Versatz stehen, den die
+  Engine geloescht hat.**
+* **`103` gibt `false` in jedem Bild zurueck, auch wenn die Nachricht
+  noch belegt ist** — **`return false` steht ausserhalb des `if`**
+  — **und meine erste Fassung gab dort `true` und liess die Seite
+  weiterlaufen, waehrend die Nachricht offen war.**
+
+```text
+MZ: 83 von 114 dispatchbar (72%), 31 ohne
+TestMvMapDisplay: 3/3
+All 2313 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

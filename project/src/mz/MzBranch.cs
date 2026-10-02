@@ -519,6 +519,31 @@ public sealed class MzBranchFacts
     public MzMapScroll Rollen { get; } = new();
 
     /// <summary>
+    /// How the map looks, and not what is on it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>281</c>, <c>282</c> und <c>284</c> schreiben
+    /// hierhin</strong> -- <strong>und das sind die ersten drei Befehle
+    /// dieser Reihe, die kein Darsteller und kein Kartenstand
+    /// anfassen.</strong>
+    /// </remarks>
+    public MzMapDisplay Anzeige { get; } = new();
+
+    /// <summary>
+    /// Whether the run is holding a reservation on tileset images, and the
+    /// engine's own <c>_imageReservationId</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is what makes <c>282</c> different from every
+    /// other command.</strong> <strong><c>command282</c> reserves the
+    /// images, returns, and is read again next frame until they are
+    /// ready</strong> -- <strong>and <c>return true</c> is outside the
+    /// <c>if</c></strong>, <strong>so the engine never waits and never
+    /// gives up</strong>.
+    /// </remarks>
+    public bool BilderReserviert { get; set; }
+
+    /// <summary>
     /// The goods the last <c>302</c> was given, and its own parameters
     /// first.
     /// </summary>
