@@ -81,34 +81,22 @@ public partial class TestRealVxAceArchive : TestBase
     }
 
     /// <summary>
-    /// An entry list that cannot be followed is refused with a reason, and
-    /// not with a crash.
+    /// Every entry of the archive lists, and the game's own files are in it.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And this test exists because the first version of it took the
-    /// archive reader down.</strong> On this archive <c>ListEntries</c> threw
-    /// <c>OverflowException</c> out of <c>new char[nameLength]</c>,
-    /// <strong>because a decoded length above <c>int.MaxValue</c> becomes a
-    /// negative <c>int</c> and the guard that followed only tested the upper
-    /// bound.</strong>
-    /// </para>
-    /// <para>
-    /// <strong>And the crash is gone, and the failure is a sentence.</strong>
-    /// </para>
-    /// <para>
-    /// <strong>What is not in, and is not claimed:</strong> this archive's
-    /// entries do not list. The key derivation is not understood, and four
-    /// materially different hypotheses were tried and all four were wrong
-    /// -- <strong>the generator does not advance as this reader advances it at
-    /// this point in the stream.</strong> So <strong>the RGSS archive reader
-    /// remains unmeasured against a real finished VX Ace game</strong>, and
-    /// the ninety-three loose scripts stay the only VX Ace evidence this
-    /// repository has. <strong>See the BLOCKED entry in
-    /// SESSION_STATE.md for the exact unblock condition.</strong>
+    /// <strong>And this is the measurement with teeth, because version three
+    /// is not version one with another number.</strong> Version one walks a
+    /// generator across name and size; <strong>version three reads one key
+    /// from the file, transforms it, never advances it, and writes four
+    /// fields before every name.</strong> <strong>So either the names come
+    /// out as <c>Data/Actors.rvdata2</c> and
+    /// <c>Data/Animations.rvdata2</c>, or nothing here works at
+    /// all</strong> -- <strong>and there is no state in between, where
+    /// names look like names.</strong>
     /// </para>
     /// </remarks>
-    public void Test_EineNichtFolgbareEintragslisteWirdAbgelehntUndNichtAbgestuerzt()
+    public void Test_JederEintragLaesstSichAufzaehlen()
     {
         if (!Vorhanden())
         {
@@ -117,22 +105,155 @@ public partial class TestRealVxAceArchive : TestBase
 
         var bytes = File.ReadAllBytes(Wurzel + "/Game.rgss3a");
         var gelistet = new RgssArchiveReader().ListEntries(bytes, "Game.rgss3a");
+        AssertTrue(gelistet.Success,
+            "**and the archive lists** -- " + gelistet.Error?.Message);
+        var eintraege = gelistet.Value!;
+        System.Console.WriteLine(
+            "VXAce Archiv: " + eintraege.Count + " Eintraege, "
+            + bytes.Length / 1e6 + " MB");
 
-        // **Und beides ist zulaessig: eine Liste oder eine Ablehnung mit
-        // Grund. Ein Absturz ist es nicht mehr, und das ist der Punkt.**
-        if (!gelistet.Success)
+        // **Und 138 ist die Zahl dieses Spiels, gemessen, und nicht eine
+        // gerundete Erwartung.** **Es hat kein Audio im Archiv**, weil es
+        // keins hat -- **und ein Test, der Audio verlangt, haette ein
+        // Spiel beschrieben, das es nicht gibt.**
+        AssertTrue(eintraege.Count > 100,
+            "**and it holds a game's worth of files** -- " + eintraege.Count
+                + " entries, and this game carries thirty-one database files "
+                + "and a hundred and seven images");
+
+        foreach (var erwartet in new[]
         {
-            AssertTrue(gelistet.Error != null,
-                "**and a refusal names its reason**");
-            System.Console.WriteLine(
-                "VXAce Archiv: nicht lesbar -- "
-                + gelistet.Error!.Message);
+            "Data/Scripts.rvdata2", "Data/Actors.rvdata2",
+            "Data/MapInfos.rvdata2", "Data/Map001.rvdata2",
+        })
+        {
+            AssertTrue(eintraege.Any(pE => pE.Name == erwartet),
+                "**and it carries " + erwartet + "**");
+        }
+
+        // **Und der Bildbestand ist der, den das Spiel wirklich traegt,
+        // und er ist gross: ein sieben-Megabyte-Bild, weil es eine
+        // Endsequenz ist.**
+        var bilder = eintraege.Count(pE => pE.Name.EndsWith(".png",
+                StringComparison.OrdinalIgnoreCase));
+        System.Console.WriteLine(
+            "VXAce Archiv: " + bilder + " Bilder, "
+            + eintraege.Count(pE => pE.Name.StartsWith("Data/",
+                StringComparison.Ordinal)) + " Datendateien");
+        AssertTrue(bilder > 90,
+            "**and it carries the game's images** -- " + bilder);
+        AssertTrue(eintraege.Any(pE => pE.Name.EndsWith("$end.png",
+                StringComparison.Ordinal)),
+            "**and it carries the game's own art, not a stock set** -- and "
+                + "this game's characters are named after its own characters");
+    }
+
+    /// <summary>
+    /// The scripts inside the archive are the game's own, and they
+    /// decompress to Ruby.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this closes the gap criterion 6 had.</strong> The
+    /// ninety-three loose scripts were real game scripts, <strong>and they
+    /// were not what the engine loads</strong> -- <strong>and a game can and
+    /// does replace every script in here.</strong> This takes
+    /// <c>Data/Scripts.rvdata2</c> out of the archive, parses it as Marshal
+    /// and decompresses every script in it.
+    /// </para>
+    /// </remarks>
+    public void Test_DasSkriptarchivAusDemArchivLiestUndEntpackt()
+    {
+        if (!Vorhanden())
+        {
             return;
         }
 
-        var eintraege = gelistet.Value!;
-        AssertTrue(eintraege.Count > 500,
-            "**and a listing that succeeds lists the whole game** -- "
-                + eintraege.Count);
+        var bytes = File.ReadAllBytes(Wurzel + "/Game.rgss3a");
+        var gelistet = new RgssArchiveReader().ListEntries(bytes, "Game.rgss3a");
+        AssertTrue(gelistet.Success, "**and the archive lists**");
+        var eintrag = gelistet.Value!
+            .FirstOrDefault(pE => pE.Name == "Data/Scripts.rvdata2");
+        AssertTrue(eintrag != null,
+            "**and it carries the script archive** -- and Game.ini names that "
+                + "file as its scripts, so an archive without it cannot start "
+                + "the game");
+        AssertTrue(eintrag!.Size > 100_000,
+            "**and the script archive is a game's worth** -- " + eintrag.Size
+                + " bytes, and VX Ace's default set compressed is around "
+                + "two hundred kilobytes, so this game thinned it");
+
+        var roh = new RgssArchiveReader().ReadEntry(bytes, eintrag, "Game.rgss3a");
+        AssertTrue(roh.Success, "**and the entry reads** -- " + roh.Error?.Message);
+
+        MarshalValue archiv;
+        try
+        {
+            archiv = new MarshalReader(roh.Value!).Read();
+        }
+        catch (Exception pAusnahme)
+        {
+            AssertTrue(false,
+                "**and the script archive reads as Marshal** -- "
+                    + pAusnahme.GetType().Name + " " + pAusnahme.Message);
+            return;
+        }
+
+        AssertTrue(archiv != null, "**and the script archive reads as Marshal**");
+        var skripte = archiv!.Items.Where(pE => pE.Items.Count == 3).ToList();
+        AssertTrue(skripte.Count > 120,
+            "**and it carries the whole default script set** -- "
+                + skripte.Count + " entries");
+
+        var namen = skripte.Select(pE => pE.Items[1].Text ?? "")
+            .Where(pT => pT.Length > 0).ToList();
+        System.Console.WriteLine(
+            "VXAce Archiv: " + skripte.Count + " Skripte, " + namen.Count
+            + " Namen");
+
+        long entpackt = 0;
+        var fehler = 0;
+        foreach (var e in skripte)
+        {
+            var blob = e.Items[2].Bytes;
+            if (blob == null || blob.Length < 3 || blob[0] != 0x78)
+            {
+                fehler++;
+                continue;
+            }
+
+            try
+            {
+                using var ein = new MemoryStream(blob, 2, blob.Length - 2);
+                using var aus = new MemoryStream();
+                using (var d = new DeflateStream(ein, CompressionMode.Decompress))
+                {
+                    d.CopyTo(aus);
+                }
+
+                entpackt += aus.Length;
+            }
+            catch (Exception)
+            {
+                fehler++;
+            }
+        }
+
+        System.Console.WriteLine(
+            "VXAce Archiv: entpackt " + entpackt + " Bytes Ruby, " + fehler
+            + " Fehler");
+        AssertTrue(fehler == 0,
+            "**and every script decompresses** -- " + fehler + " of "
+                + skripte.Count);
+        AssertTrue(entpackt > 800_000,
+            "**and what comes out is Ruby** -- " + entpackt + " bytes, and "
+                + "VX Ace's default set is the largest of the four "
+                + "generations that carry scripts");
+
+        foreach (var name in new[] { "Game_Map", "Window_Base", "Main" })
+        {
+            AssertTrue(namen.Any(pN => pN.Contains(name)),
+                "**and it carries " + name + "**");
+        }
     }
 }

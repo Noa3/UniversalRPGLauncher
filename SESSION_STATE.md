@@ -15038,3 +15038,96 @@ runtime, or the `mkxp` / `open-rpg-maker-vx-ace` implementations -- and take
 the key derivation from there instead of reconstructing it.** **Four attempts
 from memory is enough; this repository's rule is three materially different
 attempts and then a recorded BLOCKED, and this is that point.**
+
+
+## The BLOCKED is lifted: version 3 of the RGSS archive is a different format,
+## and it is now read out of a finished VX Ace game
+
+### And the source, not the memory
+
+**Four attempts at reconstructing version 3 from memory failed, so the rule
+was followed and the source was read:**
+
+```text
+mkxp-z/src/crypto/rgssad.cpp   14802 Bytes
+```
+
+**And it says, in `RGSS3_openArchive`:**
+
+```text
+verifyHeader(3) -> baseMagic = readUint32(); baseMagic = baseMagic * 9 + 3;
+while (true) {
+    readUint32AndXor(io, offset, baseMagic);   if (offset == 0) break;
+    readUint32AndXor(io, size,   baseMagic);
+    readUint32AndXor(io, magic,  baseMagic);
+    readUint32AndXor(io, nameLen, baseMagic);
+    for (i = 0; i < nameLen; ++i)
+        nameBuf[i] ^= ((baseMagic >> 8*(i%4)) & 0xFF);
+}
+```
+
+**And the three things that made four attempts fail, each of which alone is
+enough:**
+
+1. **The key is read from the file and transformed by `* 9 + 3`.** Version 1
+   starts at `0xDEADCAFE` and walks. **Version 3 reads `0x4657` from byte 8
+   and becomes `0x27912`, and that one value stands for the whole
+   archive.**
+2. **It never advances.** Four fields per entry, all with the same key.
+3. **A name's bytes are xor ed with the four bytes of that value, cyclically**
+   -- not with a walking generator.
+
+### And measured
+
+```text
+baseMagic = 0x00004657 -> (0x4657 * 9) + 3 = 0x00027912
+138 Eintraege, 35 Datendateien, 97 Bilder, 28636429 Bytes
+Data/Actors.rvdata2       1341 B
+Data/Scripts.rvdata2   138982 B
+126 Skripte, entpackt 813654 Bytes Ruby, 0 Fehler
+TestRealVxAceArchive: 3/3
+```
+
+**And the whole game is reachable now: twenty maps, the database, and the
+scripts.** `Data/Map001.rvdata2` through `Map020.rvdata2`, `Actors`,
+`Animations`, `Tilesets` 66 KB, and a `Graphics/Characters/$end.png` of
+seven and a half megabytes, because this game ends with an animated sequence.
+
+### And three defects the real archive found, all real
+
+**One, the crash.** A decoded length above `int.MaxValue` becomes a negative
+`int`, the guard only tested the upper bound, and `new char[nameLength]`
+threw `OverflowException` out of the reader. **Fixed in `DecodeLength`.**
+
+**Two, the body was never decrypted.** `ReadEntry` copied bytes out of the
+file. **And an entry's body is xor ed over double words with the entry's own
+`magic` field** -- **and `MagicAtEntry` was stored but never used**, and it
+sat one step off, because the writer consumed an extra `NextKey` that the
+reference reader does not. **That was the defect
+`Test_AnEntryBodyIsReadBackByteForByte` caught, and it would have made every
+byte of every XP and VX body wrong, silently, with no error at all.**
+
+**Three, the writer knew only version 1.** `Write(3, ...)` produced a file the
+version 3 reader cannot follow, and `Write(1, ...)` produced bodies the
+reader now decrypts correctly but which the writer left in plain text.
+
+### And one hypothesis that was wrong, kept because it is instructive
+
+**The twelve bytes between the end marker and the first payload were read as
+a second, zero-valued entry marker, and made a sixteen-byte marker.** **That
+is padding to a four-byte boundary, and the source says `if (offset == 0)
+break;` after a single field.** **Both readings are wrong in the same way:
+they replace one rule with a guessed one.** The measurements:
+
+```text
+end marker at 6022, first payload at 6038, difference 16 = 4 + 12 padding
+```
+
+### And what the VX Ace criterion now has
+
+**Before this: ninety-three loose `.rb` files from a mod directory, which are
+real game scripts but are not what the engine loads.** **Now: the finished
+game's own archive, its own `Scripts.rvdata2`, its own hundred and twenty-six
+scripts, decompressed.**
+
+**All 2233 tests passed.**

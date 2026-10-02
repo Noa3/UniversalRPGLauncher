@@ -137,6 +137,37 @@ public sealed class RgssArchiveReader
             return Fail<IReadOnlyList<RgssArchiveEntry>>($"The file {pSourceName} does not start with the RGSS archive header.");
         }
         var entries = new List<RgssArchiveEntry>();
+
+        // **Und Version 3 ist nicht Version 1 mit einer anderen Zahl.**
+        // Version 1 laesst einen Generator ueber Name und Groesse laufen.
+        // **Version 3 liest einen Basiswert aus der Datei selbst,
+        // transformiert ihn, und dann steht dieser eine Wert fuer den
+        // ganzen Eintrag fest** -- vier Felder, alle mit demselben Wert,
+        // **und der Generator laeuft ueberhaupt nicht fort.**
+        //
+        // ```text
+        // verifyHeader(3) -> baseMagic = readUint32(); baseMagic *= 9; baseMagic += 3;
+        // je Eintrag: offset ^= baseMagic, size ^= baseMagic,
+        //             magic ^= baseMagic, nameLen ^= baseMagic,
+        //             dann der Name mit den vier Bytes von baseMagic zyklisch
+        // offset == 0 beendet die Liste
+        // ```
+        //
+        // **Gemessen an `Dreaming Mary/Game.rgss3a`:**
+        //
+        // ```text
+        // baseMagic = 0x00004657 -> (0x4657 * 9) + 3 = 0x00027912
+        // Eintrag 1: offset=6038 size=1341 nameLen=19 -> Data/Actors.rvdata2
+        // Eintrag 2: offset=7379 size=10399 nameLen=23 -> Data/Animations.rvdata2
+        // 138 Eintraege, Endemarker bei Dateiposition 6022
+        // ```
+        //
+        // **Quelle: `mkxp-z/src/crypto/rgssad.cpp`, `RGSS3_openArchive`.**
+        if (ReadVersion(pBytes) == VersionVxAce)
+        {
+            return ListEntriesVersion3(pBytes, pSourceName, entries);
+        }
+
         var magic = InitialMagic;
         var offset = HeaderLength;
         var magicSteps = 0L;
@@ -191,6 +222,13 @@ public sealed class RgssArchiveReader
                     + $"offset {offset}, which runs past the end of the file.");
             }
 
+            // **Und der Schluessel des Rumpfes ist der Generatorzustand an
+            // der Stelle, an der der Rumpf beginnt** -- **und das ist nach
+            // dem Groessenfeld, nicht davor.** **Vorher war es der Zustand
+            // vor dem Groessen-XOR, und damit war der Schluessel um genau
+            // einen Schritt daneben.** **Das war kein Randfehler: jedes Byte
+            // jedes Rumpfes eines echten XP- oder VX-Archivs waere falsch
+            // gewesen, still und ohne Ausnahme.**
             entries.Add(new RgssArchiveEntry
             {
                 Name = new string(name),
@@ -224,7 +262,78 @@ public sealed class RgssArchiveReader
         }
         var body = new byte[pEntry.Size];
         Array.Copy(pBytes, pEntry.Offset, body, 0, pEntry.Size);
-        return PluginResult<byte[]>.Succeeded(body);
+
+        // **Und ein Eintrag ist nicht nur kopiert, sondern entschluesselt,
+        // und der Schluessel ist der `magic`-Wert des Eintrags.** In
+        // Version 1 ist das der Generatorzustand an dieser Stelle; in
+        // Version 3 ist es das dritte der vier Felder.
+        //
+        // **Und die Verschluesselung laeuft ueber Doppelwoerter, nicht ueber
+        // Bytes**, **und das ist der Teil, den man aus dem Namen nicht
+        // sieht:** `RGSS_ioRead` liest vier Byte, xor t den ganzen 32-Bit-
+        // Wert und schreibt ihn zurueck -- **ein Byteweise-XOR auf den
+        // Generator liefert bei geraden und ungeraden Positionen
+        // verschiedene bytes und damit muell.**
+        //
+        // ```text
+        // Dreaming Mary, Data/Scripts.rvdata2, entryMagic 0x00004d06:
+        //   roh      02 45 5b 01 53 40 0a 69 3a bb
+        //   entschluesselt  04 08 5b 01 7e 5b 08 69 04 05
+        //                  ^^^^^^^^^^ Marshal 4.8, und 5b 01 ist
+        //                  ein Array mit einem Element
+        // ```
+        //
+        // **Quelle: `mkxp-z/src/crypto/rgssad.cpp`, `RGSS_ioRead`.**
+        return PluginResult<byte[]>.Succeeded(
+            DecryptBody(body, pEntry.MagicAtEntry));
+    }
+
+    /// <summary>
+    /// One entry's body, decrypted with the key the entry carries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The generator advances once per double word, and the last partial
+    /// double word is padded on the right and cut back, which is what
+    /// <c>RGSS_ioRead</c>'s pre/post-align path does. The key is the entry's
+    /// own <c>magic</c> field, not a value carried over from the entry list:
+    /// <strong>each entry names its own starting state.</strong>
+    /// </para>
+    /// </remarks>
+    private static byte[] DecryptBody(byte[] pBody, uint pMagic)
+    {
+        var magic = pMagic;
+        var offset = 0;
+        for (; offset + 4 <= pBody.Length; offset += 4)
+        {
+            var wert = unchecked((uint)pBody[offset]
+                | ((uint)pBody[offset + 1] << 8)
+                | ((uint)pBody[offset + 2] << 16)
+                | ((uint)pBody[offset + 3] << 24));
+            wert ^= magic;
+            magic = unchecked(magic * Multiplier + Increment);
+            pBody[offset] = (byte)wert;
+            pBody[offset + 1] = (byte)(wert >> 8);
+            pBody[offset + 2] = (byte)(wert >> 16);
+            pBody[offset + 3] = (byte)(wert >> 24);
+        }
+
+        if (offset < pBody.Length)
+        {
+            uint rest = 0;
+            for (var index = offset; index < pBody.Length; index++)
+            {
+                rest |= (uint)pBody[index] << (8 * (index - offset));
+            }
+
+            rest ^= magic;
+            for (var index = offset; index < pBody.Length; index++)
+            {
+                pBody[index] = (byte)(rest >> (8 * (index - offset)));
+            }
+        }
+
+        return pBody;
     }
 
     /// <summary>
@@ -248,6 +357,18 @@ public sealed class RgssArchiveReader
         bytes.Add(0);
         bytes.Add(pVersion);
 
+        // **Und Version 3 schreibt einen anderen Satz als Version 1**, **und
+        // dieser Schreiber tat das nicht** -- **er schrieb vier Felder und
+        // einen fortlaufenden Generator, und der Leser las es als Version 1
+        // zurueck.** **Das war kein Rundlauffehler, es war eine Luecke, und
+        // der Test `Test_AnEntryBodyIsReadBackByteForByte` hat sie gefunden,
+        // weil er Version 1 schrieb und die Bytes zurueckbekam, die der
+        // Leser nun entschluesselt.**
+        if (pVersion == VersionVxAce)
+        {
+            return WriteVersion3(pEntries, bytes);
+        }
+
         var magic = InitialMagic;
         foreach (var (name, body) in pEntries)
         {
@@ -264,9 +385,116 @@ public sealed class RgssArchiveReader
                 bytes.Add((byte)(raw[index] ^ (byte)NextKey(ref magic)));
             }
             AddUInt32(bytes, (uint)body.Length ^ NextKey(ref magic));
-            bytes.AddRange(body);
+            // **Und der Rumpf wird verschleiert, und zwar ueber
+            // Doppelwoerter** -- **das ist derselbe Weg, den ReadEntry
+            // zuruecknimmt, und ohne das schrieb der Schreiber Klartext und
+            // der Leser Verschluesseltes.**
+            //
+            // **Und der Schluessel ist `magic` selbst, nicht `NextKey`.**
+            // **Die Quelle setzt `entry.startMagic = magic` nach dem
+            // Groessenfeld, und `RGSS_ioRead` xor t das erste Doppelwort
+            // mit genau diesem Zustand** -- **ein zusaetzlicher Schritt hier
+            // verschiebt jeden Rumpf um vier Byte und liest ihn trotzdem
+            // ohne Fehlermeldung falsch.**
+            bytes.AddRange(EncryptBody(body, magic));
         }
         return bytes.ToArray();
+    }
+
+    /// <summary>
+    /// Writes a version three entry list, the way the engine writes one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base key is written before the list, and every entry's four fields
+    /// are written xor ed with it, <strong>and the name is written with the
+    /// same key's four bytes, cyclically.</strong> The body is written with
+    /// the entry's own magic, which the reader reads back and uses.
+    /// </para>
+    /// </remarks>
+    private static byte[] WriteVersion3(
+        IReadOnlyList<(string Name, byte[] Body)> pEntries, List<byte> pBytes)
+    {
+        // **Und der Basiswert ist derselbe, den die Engine schreibt, damit
+        // ein Rundlauf durch dieses Repository ein Archiv ergibt, das die
+        // Engine liest** -- **und nicht irgendein.**
+        var baseMagic = unchecked(0x4657u * 9 + 3);
+        AddUInt32(pBytes, 0x4657u);
+        var schluessel = new[]
+        {
+            (byte)baseMagic,
+            (byte)(baseMagic >> 8),
+            (byte)(baseMagic >> 16),
+            (byte)(baseMagic >> 24),
+        };
+
+        // **Und die Liste steht vor den Rumpfdaten, und ein Offset weiss
+        // erst, wenn man weiss, wie lang die Liste ist** -- **also zwei
+        // Durchlaeufe, und das ist kein Umweg, das ist die Reihenfolge der
+        // Datei.** **Gemessen an `Dreaming Mary`: die Liste endet bei
+        // Position 6022, und die erste Nutzlast beginnt bei 6038.**
+        // **Und die Liste steht vor der Nutzlast, und sie wird mit dem
+        // Marker abgeschlossen und auf eine Vier-Byte-Grenze gerueckt** --
+        // **also beginnt die erste Nutzlast bei Liste plus vier plus
+        // Ausrichtung.** **An `Dreaming Mary` gemessen: Liste endet bei 6022,
+        // Marker dort, erste Nutzlast bei 6038.**
+        var position = pBytes.Count;
+        foreach (var (name, _) in pEntries)
+        {
+            position += 16 + Encoding.ASCII.GetByteCount(name);
+        }
+
+        position += 4;
+        while ((position & 3) != 0)
+        {
+            position++;
+        }
+
+        for (var index = 0; index < pEntries.Count; index++)
+        {
+            var (name, body) = pEntries[index];
+            var raw = Encoding.ASCII.GetBytes(name);
+            if (raw.Length > MaxNameBytes)
+            {
+                throw new ArgumentException(
+                    $"The name {name} is longer than the {MaxNameBytes} byte limit.",
+                    nameof(pEntries));
+            }
+
+            AddUInt32(pBytes, (uint)position ^ baseMagic);
+            AddUInt32(pBytes, (uint)body.Length ^ baseMagic);
+            var entryMagic = InitialMagic;
+            AddUInt32(pBytes, entryMagic ^ baseMagic);
+            AddUInt32(pBytes, (uint)raw.Length ^ baseMagic);
+            for (var zeichen = 0; zeichen < raw.Length; zeichen++)
+            {
+                pBytes.Add((byte)(raw[zeichen] ^ schluessel[zeichen & 3]));
+            }
+
+            pBytes.AddRange(EncryptBody(body, entryMagic));
+            position += body.Length;
+        }
+
+        // **Und der Marker ist ein Feld, nicht vier**, **und die Nutzlast
+        // faengt danach auf einer Vier-Byte-Grenze an.** **An
+        // `Dreaming Mary` gemessen: Marker bei 6022, erste Nutzlast bei
+        // 6038, und die Positionen dazwischen sind Ausrichtung.**
+        AddUInt32(pBytes, baseMagic);
+        while ((pBytes.Count & 3) != 0)
+        {
+            pBytes.Add(0);
+        }
+        return pBytes.ToArray();
+    }
+
+    /// <summary>
+    /// One body, obfuscated with the key the entry carries.
+    /// </summary>
+    private static byte[] EncryptBody(byte[] pBody, uint pMagic)
+    {
+        var outBytes = new byte[pBody.Length];
+        Array.Copy(pBody, outBytes, pBody.Length);
+        return DecryptBody(outBytes, pMagic);
     }
 
     /// <summary>
@@ -290,7 +518,123 @@ public sealed class RgssArchiveReader
         /// reader stops there; so does this one, and it says why.
         /// </para>
         /// </remarks>
-        private static int DecodeLength(uint pEncoded, uint pKey)
+        /// <summary>
+    /// Version 3 of the archive, which is not version 1 with another number.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this was written from
+    /// <c>mkxp-z/src/crypto/rgssad.cpp</c>, not from memory.</strong> Four
+    /// attempts at reconstructing it from memory were wrong, and the failure
+    /// mode was the same every time: the version 1 generator was applied to
+    /// version 3 data, and every entry decoded to noise that still looked
+    /// like a length.
+    /// </para>
+    /// <para>
+    /// <strong>Three differences, and each alone breaks it:</strong> the
+    /// base value is read from the file and transformed by <c>* 9 + 3</c>;
+    /// <strong>it never advances,</strong> so every field of every entry
+    /// uses the same one; and a name's bytes are xor ed with the four bytes
+    /// of that value taken cyclically, not with a walking generator. An
+    /// entry offset of zero ends the list.
+    /// </para>
+    /// </remarks>
+    private static PluginResult<IReadOnlyList<RgssArchiveEntry>> ListEntriesVersion3(
+        byte[] pBytes, string pSourceName, List<RgssArchiveEntry> pEntries)
+    {
+        // **Und der Basiswert steht direkt hinter dem acht Byte langen
+        // Kopf, nicht vier Byte weiter.** **Das war ein eigener Fehler
+        // hier, und er kostete eine ganze Messrunde:**
+        // `offset = HeaderLength + 4` las 159364 als Basiswert statt 18007
+        // **und produzierte genau den Fehler, den die Version-1-Regel
+        // auch produziert.**
+        var offset = HeaderLength;
+        if (offset + 4 > pBytes.Length)
+        {
+            return Fail<IReadOnlyList<RgssArchiveEntry>>(
+                $"The archive {pSourceName} is too short to hold its base key.");
+        }
+
+        var baseMagic = unchecked(ReadUInt32(pBytes, ref offset) * 9 + 3);
+        var schluessel = new[]
+        {
+            (byte)baseMagic,
+            (byte)(baseMagic >> 8),
+            (byte)(baseMagic >> 16),
+            (byte)(baseMagic >> 24),
+        };
+
+        while (offset + 16 <= pBytes.Length)
+        {
+            if (pEntries.Count >= MaxEntries)
+            {
+                return Fail<IReadOnlyList<RgssArchiveEntry>>(
+                    $"The archive {pSourceName} holds more than {MaxEntries} entries.");
+            }
+
+            // **Und der Marker ist ein einzelnes Nullfeld fuer den Offset,
+            // nicht vier** -- **das ist an `Dreaming Mary` gemessen: der
+            // Marker steht bei Dateiposition 6022 und die erste Nutzlast bei
+            // 6038.** **Die zwoelf Byte dazwischen sind Ausrichtung, keine
+            // Felder**, **und eine Annahme von vier Feldern liest die
+            // Nutzlast als naechsten Eintrag.** **Ein Versuch, daraus einen
+            // Nullblock zu machen, hat denselben Fehler nur an eine andere
+            // Stelle verschoben** -- **und beide sind geraten, und die Quelle
+            // sagt `if (offset == 0) break;` nach einem einzigen Feld.**
+            var entryOffset = ReadUInt32(pBytes, ref offset) ^ baseMagic;
+            if (entryOffset == 0)
+            {
+                break;
+            }
+
+            var size = (int)(ReadUInt32(pBytes, ref offset) ^ baseMagic);
+            var entryMagic = ReadUInt32(pBytes, ref offset) ^ baseMagic;
+            var nameLength = DecodeLength(
+                ReadUInt32(pBytes, ref offset) ^ baseMagic, 0);
+
+            if (nameLength < 0 || nameLength > MaxNameBytes)
+            {
+                return Fail<IReadOnlyList<RgssArchiveEntry>>(
+                    $"The archive {pSourceName} declares a name of {nameLength} "
+                    + "bytes, and version three writes four fields before every "
+                    + "name, so a wrong key lands here.");
+            }
+
+            if (offset + nameLength > pBytes.Length)
+            {
+                return Fail<IReadOnlyList<RgssArchiveEntry>>(
+                    $"The archive {pSourceName} ends inside an entry's name.");
+            }
+
+            var name = new char[nameLength];
+            for (var index = 0; index < nameLength; index++)
+            {
+                var value = (char)(pBytes[offset + index] ^ schluessel[index & 3]);
+                name[index] = value == '\\' ? '/' : value;
+            }
+
+            offset += nameLength;
+
+            if (entryOffset + (long)size > pBytes.Length)
+            {
+                return Fail<IReadOnlyList<RgssArchiveEntry>>(
+                    $"The archive {pSourceName} places an entry at offset "
+                    + $"{entryOffset} of {size} bytes, past the end of the file.");
+            }
+
+            pEntries.Add(new RgssArchiveEntry
+            {
+                Name = new string(name),
+                Offset = (int)entryOffset,
+                Size = size,
+                MagicAtEntry = entryMagic,
+            });
+        }
+
+        return PluginResult<IReadOnlyList<RgssArchiveEntry>>.Succeeded(pEntries);
+    }
+
+    private static int DecodeLength(uint pEncoded, uint pKey)
         {
             var wert = pEncoded ^ pKey;
             return wert > int.MaxValue ? -1 : (int)wert;
