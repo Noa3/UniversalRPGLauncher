@@ -18748,6 +18748,79 @@ Schritt, und es ist ein Objekt.**
 All 2402 tests passed
 ```
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 19: die Datenbank des Spiels, und ein vierter Fehler
+
+**Und `Game_Map#setup` schreibt 22 Felder und laedt genau zwei
+Dinge:**
+
+```text
+Game_Map#setup schreibt 22 Felder: map_id map tileset_name
+  autotile_names panorama_name panorama_hue fog_name fog_hue
+  fog_opacity fog_blend_type fog_zoom fog_sx fog_sy battleback_name
+  passages priorities terrain_tags display_x display_y need_refresh
+  events events[i]
+  laedt: @map = load_data(sprintf("Data/Map%03d.rxdata", @map_id))
+        | tileset = $data_tilesets[@map.tileset_id]
+```
+
+**Und `$data_tilesets` kommt aus `Scene_Title`, und dort steht
+derselbe Satz neunmal fuer die neun Datenbankdateien:**
+
+```text
+Scene_Title: $data_actors  = load_data("Data/Actors.rxdata")
+Scene_Title: $data_classes = load_data("Data/Classes.rxdata")
+... neun Zeilen, alle ueber load_data
+```
+
+**Und alle zehn Dateien sind auf der Platte und werden jetzt
+geliefert:**
+
+```
+Geliefert: 10 von 10
+Fehlend: (keine)
+Tileset[1]: Object / RPG::Tileset, Felder: 17
+```
+
+### Und der vierte Fehler war ein Feld und kein Member
+
+**Und `RPG::Tileset` kam mit NULL Feldern zurueck**, -- **und der
+Grund war:  `OfObject` nimmt einen `Members`-Satz, und `Felder` ist
+ein anderer Speicher.**
+
+```csharp
+var objekt = RubyValue.OfObject(pWert.ClassName, felder);
+foreach (var paar in felder)
+{
+    if (paar.Key.Name.StartsWith("@"))
+    {
+        objekt.Felder[paar.Key.Name] = paar.Value;   //  <-- hier
+    }
+}
+```
+
+**Und `@name` ist `"Gralssland"`** -- **ein Name aus dem Spiel
+selbst.**
+
+### Und MicroQuest erwartet ein Feld, das seine Datei nicht hat
+
+**Und `Game_Map#setup` schreibt `@tileset_name =
+tileset.tileset_name`**, -- **und `RPG::Tileset` in MicroQuest hat
+KEIN Feld `tileset_name`**, -- **und es hat `@name`.**
+
+**Und das ist keine Eigenschaft dieses Lesers**, -- **denn
+`MarshalReader` liefert `@name` und `@panorama_name` und alle
+anderen korrekt**, -- **und es ist eine Tatsache ueber
+MicroQuest.**
+
+**Und es heisst:  `Game_Map#setup` schreibt fuer dieses Spiel einen
+leeren `@tileset_name`**, -- **und ein Leser, der stattdessen den
+richtigen Namen eintraege, wuerde dem Spiel eine Karte geben, die
+anders aussieht als in MicroQuest.**
+
+```
+All 2406 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

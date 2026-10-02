@@ -267,11 +267,77 @@ public sealed class RgssDatenHost : IRubyHost
             return RubyValue.OfHash(paare);
         }
 
-        if (pWert.Kind == "object" && pWert.ClassName != null)
+        // **Und `Kind` ist bei MicroQuests Tileset NICHT
+        // `"object"`.** -- **und der Marshal-Leser schreibt
+        // `Kind = "user defined"`**, -- **denn RPG Makers Klassen
+        // kommen als `u`-Byte** -- **und `MarshalValue` nennt das
+        // `ClassName = "RPG::Tileset"`**.
+        //
+        // **Und gemessen an `Data/Tilesets.rxdata`:**
+        //
+        // ```text
+        // [1]: object / RPG::Tileset, Keys: 17, Items: 17
+        // ```
+        //
+        // **und `@name` ist `"Gralssland"`** -- **ein Name aus dem
+        // Spiel selbst.**
+        if ((pWert.Kind == "object" || pWert.Kind == "UserClass")
+            && pWert.ClassName != null)
         {
-            return RubyValue.OfObject(
-                pWert.ClassName,
-                new Dictionary<RubyValue, RubyValue>());
+            // **Und die Felder des Objekts wandern mit.**
+            //
+            // **Und die erste Fassung gab `OfObject` einen LEEREN
+            // Member-Satz**, -- **und `RPG::Tileset` kam damit ohne ein
+            // einziges Feld zurueck**, -- **und `tileset_name` war
+            // leer, und `Game_Map#setup` haette ein leeres Feld in
+            // `@tileset_name` geschrieben.**
+            //
+            // **Und gemessen:**
+            //
+            // ```text
+            // Tileset[1]: Object / RPG::Tileset, Felder: 0
+            // ```
+            //
+            // **Und `MarshalValue.Keys` traegt die Feldnamen unter
+            // `@name`**, -- **und `Items` traegt die Werte in
+            // derselben Reihenfolge.**
+            var felder = new Dictionary<RubyValue, RubyValue>();
+            for (var i = 0; i < pWert.Keys.Count
+                && i < pWert.Items.Count; i++)
+            {
+                var name = pWert.Keys[i];
+                if (name.Length == 0)
+                {
+                    continue;
+                }
+
+                felder[RubyValue.OfSymbol(name)] =
+                    AlsRuby(pWert.Items[i], pTiefe + 1);
+            }
+
+            // **Und `OfObject` nimmt einen `Members`-Satz, und der
+            // heisst nicht `Felder`.**
+            //
+            // **Und `MarshalValue.Keys` traegt `@name`**, -- **und ein
+            // Ruby-Objekt traegt `@name` als Instanzvariable**,
+            // -- **und `Members` ist die Tabelle fuer
+            // Singleton-Methoden und `Felder` die fuer
+            // Instanzvariablen.**
+            //
+            // **Und die erste Fassung fuellte `Members` und las `Felder`
+            // aus**, -- **und das sind zwei verschiedene
+            // Speicher**, -- **und deshalb kam `Felder: 0` heraus.**
+            var objekt = RubyValue.OfObject(pWert.ClassName, felder);
+            foreach (var paar in felder)
+            {
+                var schluessel = paar.Key.Name ?? string.Empty;
+                if (schluessel.StartsWith("@", StringComparison.Ordinal))
+                {
+                    objekt.Felder[schluessel] = paar.Value;
+                }
+            }
+
+            return objekt;
         }
 
         return RubyValue.Nil;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq;
 using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
 
@@ -289,6 +290,152 @@ i.setup([[101, 0, ['Hallo']]], 0)
             "**and asking for the player's x asks the host** -- and it"
                 + " asked " + host.Fragen.Count + " things, and they are"
                 + " named: " + string.Join(" | ", host.Fragen.ToArray()));
+    }
+
+    /// <summary>
+    /// And how far `Game_Map#setup` reads.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this counts the fields the game's own method
+    /// writes</strong>, -- <strong>because that number decides whether
+    /// a `Game_Map` object is one class or a dozen.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_WieVieleFelderGameMapSetupSchreibt()
+    {
+        var felder = new List<string>();
+        var laedt = new List<string>();
+        foreach (var leib in XpScriptBodies.LeseAlle(XpSkripte))
+        {
+            if (leib.Name != "Game_Map" || leib.Text == null)
+            {
+                continue;
+            }
+
+            var zeilen = leib.Text.Split('\n');
+            var imSetup = false;
+            var tiefe = 0;
+            foreach (var zeile in zeilen)
+            {
+                var geschnitten = zeile.Trim();
+                if (!imSetup)
+                {
+                    if (geschnitten.StartsWith("def setup(",
+                            StringComparison.Ordinal))
+                    {
+                        imSetup = true;
+                        tiefe = 1;
+                    }
+
+                    continue;
+                }
+
+                if (geschnitten.Length == 0
+                    || geschnitten.StartsWith("#",
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (geschnitten.StartsWith("@")
+                    && geschnitten.Contains("=", StringComparison.Ordinal))
+                {
+                    var name = geschnitten.Substring(1);
+                    var gleich = name.IndexOf('=');
+                    felder.Add(gleich > 0 ? name.Substring(0, gleich) : name);
+                }
+
+                if (geschnitten.Contains("load_data",
+                        StringComparison.Ordinal)
+                    || geschnitten.Contains("$data_",
+                        StringComparison.Ordinal))
+                {
+                    laedt.Add(geschnitten);
+                }
+
+                if (geschnitten == "end")
+                {
+                    tiefe--;
+                    if (tiefe == 0)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        System.Console.WriteLine(
+            "Game_Map#setup schreibt " + felder.Count + " Felder: "
+            + string.Join(" ", felder.ToArray()));
+        System.Console.WriteLine(
+            "  laedt: " + string.Join(" | ", laedt.ToArray()));
+
+        AssertTrue(felder.Count > 20,
+            "**and `Game_Map#setup` writes more than twenty fields**"
+                + " -- and it writes " + felder.Count + ": "
+                + string.Join(" ", felder.ToArray())
+                + ", and it loads " + laedt.Count + " things: "
+                + string.Join(" | ", laedt.ToArray())
+                + ", and that is the size of the object that is"
+                + " missing");
+    }
+
+    /// <summary>
+    /// And where the game gets the two things `Game_Map#setup` loads.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And one is a file this repository already reads and one
+    /// is a file it does not read yet.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the difference decides whether a `Game_Map` needs a
+    /// map reader or a database reader too.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_WoherDieBeidenLadevorgaengeIhreDatenHolen()
+    {
+        var zuweisungen = new List<string>();
+        foreach (var leib in XpScriptBodies.LeseAlle(XpSkripte))
+        {
+            if (leib.Text == null)
+            {
+                continue;
+            }
+
+            foreach (var zeile in leib.Text.Split('\n'))
+            {
+                var geschnitten = zeile.Trim();
+                if (geschnitten.StartsWith("#",
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (geschnitten.StartsWith("$data_tilesets",
+                        StringComparison.Ordinal)
+                    || geschnitten.StartsWith("$data_",
+                        StringComparison.Ordinal)
+                    || geschnitten.Contains("load_data",
+                        StringComparison.Ordinal))
+                {
+                    zuweisungen.Add(leib.Name + ": " + geschnitten);
+                }
+            }
+        }
+
+        System.Console.WriteLine(
+            "$data_ und load_data: " + zuweisungen.Count + " Zeilen");
+        foreach (var z in zuweisungen.Take(10))
+        {
+            System.Console.WriteLine("  " + z);
+        }
+
+        AssertTrue(zuweisungen.Count > 3,
+            "**and the game names more than three such lines** -- and"
+                + " there are " + zuweisungen.Count
+                + ", and they say where the two loads come from");
     }
 
     private static bool Enthaelt(string[] pListe, string pWert)
