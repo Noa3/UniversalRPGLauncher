@@ -16598,6 +16598,61 @@ TestMvSystemSwitches: 3/3
 All 2305 tests passed
 ```
 
+## 2026-10-02 — `VHMV`, und eine Deutung, die um eine Stelle danebenlag
+
+**Befund.** Ich habe die Projekte unter `D:/Itch` und `E:/RPGMakerGames`
+gezählt und vergessen, dass `D:/NextCloud` eines hat:
+
+```text
+D:/NextCloud/Games/Android Games/vhmv/VHMV
+  838 Karten, 521262 Befehle, js/rpg/objects/Game_Interpreter.js
+```
+
+**Das ist mehr als das Dreifache des zweitgrößten** — **und die 461
+`317`, die ich vorher gemeldet hatte, waren echt und ich hatte nur
+vergessen, woher.**
+
+**Und `317` liest seine Rechnung eine Stelle weiter rechts als alle
+seine Geschwister:**
+
+```js
+// MV rpg_objects.js und MZ Game_Interpreter.js, beide
+command317: this.operateValue(this._params[3], this._params[4],
+                             this._params[5]);
+           actor.addParam(this._params[2], value);
+command311: this.operateValue(this._params[2], this._params[3],
+                             this._params[4]);
+```
+
+**Und der Grund ist die Parameternummer im dritten Platz** — **`311`
+hat dort nichts, `317` hat dort `params[2]`.** **Meine erste Fassung
+las ab Platz zwei**, **und dann ist `[0, 1, 2, 1, 0, 1]` "Attribut zwei,
+plus eine Variable eins"** — **und der Test fand null Aufträge, und
+das war der Befund und nicht der Test.**
+
+**Und zwei weitere Befunde aus den echten Formen:**
+
+```text
+317 Change Parameter   461x, 128 Formen, haeufigste [0,1,0,1,0,1] 13x
+312 Change MP           72x,  32 Formen, haeufigste [1,397,1,0,2] 11x
+315 Change EXP          46x,  15 Formen, 44 davon [1,397,...]
+316 Change Level         2x,   2 Formen
+```
+
+* **44 von 46 `315` nennen Variable 397** — **und die 46 schreiben
+  `false` im sechsten Wert, und die 2 `316` auch.** **`show` ist hier
+  nie wahr**, **und `changeExp(exp, show)` braucht es nur fuer
+  `displayLevelUp`.**
+* **Und `paramMax` gibt 999999 / 9999 / 999** — **und `addParam`
+  klemmt nicht**, **und `refresh` klemmt HP, MP und TP und nicht
+  `_paramPlus`.**
+
+```text
+MZ: 76 von 114 dispatchbar (66%), 38 ohne
+TestMvActorNumbers: 2/2
+All 2307 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

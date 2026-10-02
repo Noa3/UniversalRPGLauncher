@@ -137,6 +137,48 @@ public sealed class MzSystem
     public const int FramesPerSecond = 60;
 
     /// <summary>
+    /// <c>Game_Actor.prototype.paramMax</c>, and the three numbers it
+    /// returns.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the whole of it:</strong>
+    /// </para>
+    /// <code>
+    /// paramMax(paramId) {
+    ///     if (paramId === 0) {
+    ///         return 999999;  // MHP
+    ///     } else if (paramId === 1) {
+    ///         return 9999;    // MMP
+    ///     } else {
+    ///         return 999;
+    ///     }
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And <c>addParam</c> klemmt nicht</strong> -- <strong>es
+    /// ist <c>this._paramPlus[paramId] += value</c> und sonst
+    /// nichts</strong> -- <strong>und <c>refresh</c> klemmt nur HP, MP
+    /// und TP auf 0..Maximum, und die kommen aus
+    /// <c>paramMax</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Und das heisst: ein Spieler kann durch wiederholtes `317`
+    /// mehr MP haben als sein Maximum, weil es keine Grenze
+    /// gibt.</strong> <strong>Das ist eine Eigenschaft des Spiels und
+    /// kein Fehler, und dieses Repository fuehrt sie nicht aus.</strong>
+    /// </para>
+    /// </remarks>
+    /// <param name="pParameterId">Zero is MHP, one MMP, anything else.</param>
+    /// <returns>The engine's own ceiling.</returns>
+    public static int ParameterMax(int pParameterId) => pParameterId switch
+    {
+        0 => 999999,
+        1 => 9999,
+        _ => 999,
+    };
+
+    /// <summary>
     /// <c>disableSave</c> and <c>enableSave</c>, and which of the two the
     /// command's parameter picks.
     /// </summary>

@@ -481,6 +481,26 @@ public sealed class MzBranchFacts
     /// </remarks>
     public List<MzHpOrder> HpOrders { get; } = new();
 
+    /// <summary>The MP orders the run gave, in order.</summary>
+    public List<MzActorOrder<string>> MpOrders { get; } = new();
+
+    /// <summary>The experience orders the run gave, in order.</summary>
+    public List<MzActorOrder<string>> ExpOrders { get; } = new();
+
+    /// <summary>The level orders the run gave, in order.</summary>
+    public List<MzActorOrder<string>> LevelOrders { get; } = new();
+
+    /// <summary>
+    /// The parameter orders the run gave, with the parameter's own id.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>317</c>s zweiter Platz ist die Nummer des
+    /// Parameters</strong> -- <strong>0 ist MHP, 1 MMP, alles andere
+    /// ein Attribut</strong>, <strong>und <c>paramMax</c> gibt 999999,
+    /// 9999 und 999.</strong>
+    /// </remarks>
+    public List<MzActorOrder<int>> ParamOrders { get; } = new();
+
     /// <summary>
     /// Where the game is showing, and what it can go back to.
     /// </summary>

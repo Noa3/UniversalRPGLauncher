@@ -155,6 +155,54 @@ public sealed class MzMapState
 /// repository does not keep a party's health.</b>
 /// </para>
 /// </remarks>
+/// <summary>
+/// One order to an actor's numbers that this repository records and does
+/// not carry out.
+/// </summary>
+/// <typeparam name="TWert">What the command adds.</typeparam>
+/// <remarks>
+/// <para>
+/// <strong>And <c>312</c>, <c>315</c>, <c>316</c> and <c>317</c> are
+/// <c>311</c> with a different one-word method</strong>, <strong>and
+/// this is that record without the flag.</strong>
+/// </para>
+/// <para>
+/// <code>
+/// command312: const value = this.operateValue(this._params[2],
+///            this._params[3], this._params[4]);
+///            this.iterateActorEx(this._params[0], this._params[1],
+///                actor =&gt; { actor.gainMp(value); });
+/// command315: ... actor.changeExp(actor.currentExp() + value, this._params[5]);
+/// command316: ... actor.changeLevel(actor.level + value, this._params[5]);
+/// command317: ... actor.addParam(this._params[2], value);
+/// </code>
+/// <para>
+/// <strong>And two of the four read the actor's own state and add to
+/// it</strong> -- <strong><c>currentExp()</c> and <c>level</c></strong>
+/// -- <strong>and this repository keeps neither</strong>, <strong>so it
+/// records the change and not the sum.</strong>
+/// </para>
+/// <para>
+/// <strong>And <c>315</c> and <c>316</c> take a sixth parameter that
+/// <c>317</c> does not have at all</strong>, <strong>and it is
+/// <c>show</c></strong> -- <strong><c>changeExp(exp, show)</c> and
+/// <c>changeLevel(level, show)</c> use it for <c>displayLevelUp</c>.</strong>
+/// </para>
+/// </remarks>
+/// <param name="Actor">Which actor it was given to.</param>
+/// <param name="Was">What it changed.</param>
+/// <param name="Value">What it added.</param>
+/// <param name="Show">The engine's own <c>show</c> flag, and zero when the
+/// command has no sixth parameter.</param>
+public readonly record struct MzActorOrder<TWas>(
+    int Actor, TWas Was, int Value, bool Show)
+{
+    /// <summary>One line, for an action and for a log.</summary>
+    public override string ToString() =>
+        "actor " + Actor + " " + Was + (Value < 0 ? " loses " : " gains ")
+        + Math.Abs(Value) + (Show ? ", and shows it" : "");
+}
+
 public readonly record struct MzHpOrder(
     int Actor, int Value, bool AllowDeath)
 {

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace UniversalRPG.Web;
@@ -116,6 +117,10 @@ public static class MzCommands
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
+            MzCommandTable.ChangeMp,
+            MzCommandTable.ChangeExp,
+            MzCommandTable.ChangeLevel,
+            MzCommandTable.ChangeParameter,
             MzCommandTable.ChangeBattleBgm,
             MzCommandTable.ChangeSaveAccess,
             MzCommandTable.ChangeMenuAccess,
@@ -1420,6 +1425,126 @@ public static class MzCommands
                 return true;
             }
 
+            case MzCommandTable.ChangeMp:
+            {
+                // **Und `command312` ist `311` mit `gainMp`:**
+                //
+                // ```js
+                // const value = this.operateValue(this._params[2],
+                //     this._params[3], this._params[4]);
+                // this.iterateActorEx(this._params[0], this._params[1],
+                //     actor => { actor.gainMp(value); });
+                // return true;
+                // ```
+                //
+                // **Und `gainMp(value)` ist `this._result.mpDamage =
+                // -value; this.setMp(this.mp + value);`** -- **und
+                // `setMp` ist nur `this._mp = mp; this.refresh();`**.
+                //
+                // **Und die Klemmung sitzt in `refresh`, und nicht im
+                // Befehl**: `this._mp = this._mp.clamp(0, this.mmp);`
+                pActions.Add(new MzAction(pCommand,
+                    AufTraeger(pCommand, pFacts, 2, (ziel, wert) =>
+                        pFacts.MpOrders.Add(new MzActorOrder<string>(
+                            ziel, "magic points", wert, false)),
+                        "magic points")));
+                return true;
+            }
+
+                        case MzCommandTable.ChangeParameter:
+            {
+                // **Und `command317` in beiden Engines:**
+                //
+                // ```js
+                // const value = this.operateValue(this._params[3],
+                //     this._params[4], this._params[5]);
+                // this.iterateActorEx(this._params[0], this._params[1],
+                //     actor => { actor.addParam(this._params[2], value); });
+                // return true;
+                // ```
+                //
+                // **Und `operateValue` beginnt hier bei `params[3]` und
+                // nicht bei `params[2]`** -- **und das ist der einzige
+                // Unterschied zu `311`, `312`, `315` und `316`, die alle
+                // `operateValue(params[2], params[3], params[4])`
+                // sagen.**
+                //
+                // **Gelesen in beiden Engines**: MV in
+                // `rpg_objects.js`, MZ in
+                // `js/rpg/objects/Game_Interpreter.js`, **und beide
+                // sagen `[3], [4], [5]`.**
+                //
+                // **Und der Grund ist die Parameternummer im dritten
+                // Platz**: **`311` hat dort nichts, `317` hat dort
+                // `params[2]`.** **Und meine erste Fassung las die
+                // Rechnung ab Platz zwei**, **und dann ist `[0, 1, 2,
+                // 1, 0, 1]` "Attribut zwei, plus eine Variable eins",
+                // und das ergibt fuer die haeufigste Form dieses Spiels
+                // keinen Sinn** -- **und der Test hat null Auftrage
+                // gefunden, und das war der Befund, nicht der Test.**
+                //
+                // **Und `addParam` ist `this._paramPlus[paramId] +=
+                // value; this.refresh();` -- und KEINE Klemmung**,
+                // **und `refresh` klemmt HP, MP und TP und nicht
+                // `_paramPlus`.** **Und `paramMax` gibt 999999 fuer 0,
+                // 9999 fuer 1 und 999 fuer alles andere.**
+                pActions.Add(new MzAction(pCommand,
+                    AufTraeger(pCommand, pFacts, 3, (ziel, wert) =>
+                        pFacts.ParamOrders.Add(new MzActorOrder<int>(
+                            ziel, At(pCommand, 2), wert, false)),
+                        "parameter " + At(pCommand, 2))));
+                return true;
+            }
+case MzCommandTable.ChangeExp:
+            {
+                // **Und `command315` liest den Darsteller und rechnet
+                // darauf:**
+                //
+                // ```js
+                // actor.changeExp(actor.currentExp() + value,
+                //     this._params[5]);
+                // ```
+                //
+                // **Und `currentExp()` ist `this._exp[this._classId]`**,
+                // **und das gehoert zum Darsteller**, **und dieses
+                // Repository fuehrt keinen** -- **also wird der Auftrag
+                // aufgezeichnet und nicht die Summe.**
+                //
+                // **Und `changeExp` ist `Math.max(exp, 0)` und dann
+                // steigt der Darsteller so lange auf, bis die Stufe
+                // passt** -- **und beides braucht die Klassenstufen aus
+                // <c>Classes.json</c>.**
+                pActions.Add(new MzAction(pCommand,
+                    AufTraeger(pCommand, pFacts, 2, (ziel, wert) =>
+                        pFacts.ExpOrders.Add(new MzActorOrder<string>(
+                            ziel, "experience", wert,
+                            At(pCommand, 5) != 0)),
+                        "experience")));
+                return true;
+            }
+
+            case MzCommandTable.ChangeLevel:
+            {
+                // **Und `command316` ist dasselbe mit `level`:**
+                //
+                // ```js
+                // actor.changeLevel(actor.level + value,
+                //     this._params[5]);
+                // ```
+                //
+                // **Und `changeLevel(level, show)` beginnt `level =
+                // level.clamp(1, this.maxLevel());`** -- **und
+                // `maxLevel()` kommt aus <c>Classes.json</c>**,
+                // **und auch das fuehrt dieses Repository nicht
+                // aus.**
+                pActions.Add(new MzAction(pCommand,
+                    AufTraeger(pCommand, pFacts, 2, (ziel, wert) =>
+                        pFacts.LevelOrders.Add(new MzActorOrder<string>(
+                            ziel, "levels", wert, At(pCommand, 5) != 0)),
+                        "levels")));
+                return true;
+            }
+
             case MzCommandTable.ChangeHp:
             {
                 // **Und `command311`:**
@@ -1466,34 +1591,18 @@ public static class MzCommands
                 // vierzehn `[0, 1, ...]`**, **also Konstante, also
                 // Darsteller eins** -- **und `313` und `314` lesen
                 // dieselben zwei Plaetze genauso.**
-                var hpZiel = At(pCommand, 0) == 0
-                    ? At(pCommand, 1)
-                    : pFacts.Variable(At(pCommand, 1));
-                var hpPartei = hpZiel == 0;
-                if (!TryOperateValue(
-                    pCommand, pFacts, 2, out var hpWert,
-                    out var hpFehlt))
-                {
-                    pInterpreter.Stop(MzStep.Refused, hpFehlt);
-                    return false;
-                }
-
+                // **Und der sechste Wert ist `allowDeath`**, und er
+                // ist der ganze Befehl -- **denn `changeHp` ist
+                // `if (!allowDeath && target.hp <= -value)
+                // { value = 1 - target.hp; }`**.
                 var sterbenDarf = At(pCommand, 5) != 0;
-                foreach (var darsteller in GeordneteZahlen(
-                    pFacts.PartyMembers))
-                {
-                    if (hpPartei || darsteller == hpZiel)
-                    {
-                        pFacts.HpOrders.Add(new MzHpOrder(
-                            darsteller, hpWert, sterbenDarf));
-                    }
-                }
-
                 pActions.Add(new MzAction(pCommand,
-                    (hpPartei ? "every actor, " : "actor " + hpZiel + ", ")
-                    + (hpWert < 0 ? "loses " : "gains ")
-                    + System.Math.Abs(hpWert) + " hp"
-                    + (sterbenDarf ? "" : ", and may not die of it")));
+                    AufTraeger(pCommand, pFacts, 2,
+                        (ziel, wert) => pFacts.HpOrders.Add(
+                            new MzHpOrder(ziel, wert, sterbenDarf)),
+                        "hp"
+                        + (sterbenDarf ? "" : ", and may not "
+                            + "die of it"))));
                 return true;
             }
 
@@ -2587,6 +2696,65 @@ public static class MzCommands
     /// <c>operateValue(operation, operandType, operand)</c> at the slot it
     /// starts in.
     /// </summary>
+    /// <summary>
+    /// The one shape four actor commands share, and what it costs to
+    /// read twice more.
+    /// </summary>
+    /// <param name="pCommand">The command.</param>
+    /// <param name="pFacts">The engine's one set of facts.</param>
+    /// <param name="pStart">
+    /// The slot <c>operateValue</c> starts in, which is 2 in all four.
+    /// </param>
+    /// <param name="pNotiere">
+    /// What to record for each actor, and it is given the actor and the
+    /// value <c>operateValue</c> produced.
+    /// </param>
+    /// <param name="pWas">What the command changes, for the action's text.</param>
+    /// <returns>One line, for the action.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>311</c>, <c>312</c>, <c>315</c>, <c>316</c> and
+    /// <c>317</c> are the same ten lines five times over</strong>:
+    /// <c>operateValue(params[2], params[3], params[4])</c>,
+    /// <c>iterateActorEx(params[0], params[1], callback)</c>, and a
+    /// one-word method in the callback.
+    /// </para>
+    /// <para>
+    /// <strong>And the first two slots are not "the party" and not
+    /// "this event"</strong> -- <strong>they are whether the actor is a
+    /// constant or a variable, and then which one</strong>, <strong>and
+    /// <c>iterateActorEx</c> is <c>if (param1 === 0) {
+    /// iterateActorId(param2) } else { iterateActorId(
+    /// $gameVariables.value(param2)) }</c>.
+    /// </para>
+    /// </remarks>
+    private static string AufTraeger(
+        MzCommandEntry pCommand, MzBranchFacts pFacts, int pStart,
+        Action<int, int> pNotiere, string pWas)
+    {
+        var ziel = At(pCommand, 0) == 0
+            ? At(pCommand, 1)
+            : pFacts.Variable(At(pCommand, 1));
+        if (!TryOperateValue(
+            pCommand, pFacts, pStart, out var wert, out var fehlt))
+        {
+            pFacts.Notices.Add(fehlt);
+            return pWas + " was asked for and could not be worked out";
+        }
+
+        foreach (var darsteller in GeordneteZahlen(pFacts.PartyMembers))
+        {
+            if (ziel == 0 || darsteller == ziel)
+            {
+                pNotiere(darsteller, wert);
+            }
+        }
+
+        return (ziel == 0 ? "every actor, " : "actor " + ziel + ", ")
+            + (wert < 0 ? "loses " : "gains ")
+            + System.Math.Abs(wert) + " " + pWas;
+    }
+
     private static bool TryOperateValue(
         MzCommandEntry pCommand, MzBranchFacts pFacts, int pStart,
         out int pValue, out string pMissing)

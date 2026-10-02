@@ -253,6 +253,29 @@ public static class MzCommandTable
     /// <c>changeHp</c>.
     /// </summary>
     /// <summary>
+    /// <c>command312</c> -- <c>operateValue(params[2], params[3],
+    /// params[4])</c> then <c>actor.gainMp(value)</c>.
+    /// </summary>
+    public const int ChangeMp = 312;
+
+    /// <summary>
+    /// <c>command315</c> -- <c>actor.changeExp(actor.currentExp() +
+    /// value, params[5])</c>.
+    /// </summary>
+    public const int ChangeExp = 315;
+
+    /// <summary>
+    /// <c>command316</c> -- <c>actor.changeLevel(actor.level + value,
+    /// params[5])</c>.
+    /// </summary>
+    public const int ChangeLevel = 316;
+
+    /// <summary>
+    /// <c>command317</c> -- <c>actor.addParam(params[2], value)</c>.
+    /// </summary>
+    public const int ChangeParameter = 317;
+
+    /// <summary>
     /// <c>command124</c> -- <c>if (this._params[0] === 0) {
     /// $gameTimer.start(this._params[1] * 60); } else { $gameTimer.stop(); }</c>
     /// </summary>
