@@ -15609,3 +15609,86 @@ condition type 12, a JavaScript expression inside the project.** **And that
 is refused by `AGENTS.md` and not by this repository's convenience.**
 
 **All 2250 tests passed.**
+
+
+## How much of MZ this repository can run, counted where the dispatch happens,
+## and it is thirty-five percent
+
+### And the eighth count of the command set, and the first that asks
+
+**Counted at the two dispatchers:**
+
+```text
+MZ Befehlssatz: 114 Befehle, 41 in einem Auspraechер (35%), 73 ohne
+```
+
+**`MzCommands.TryExecute` dispatches thirty-one,
+`MzControlFlow.TryExecute` dispatches ten.** **The seven counts before this
+one asked a different question each time** -- constants, dictionary entries,
+engine functions, a name lookup over a range, and `TryExecute`'s switch on its
+own.
+
+### And the part that is not a percentage
+
+**A command in neither dispatcher falls through to `default: return true`,
+and that is reported as finished and as not refused.** **Measured, one
+command per run:**
+
+```text
+ 101  Finished  Index=1/1  Refused=False
+ 111  Finished  Index=1/1  Refused=False
+ 117  Finished  Index=1/1  Refused=False
+ 119  Finished  Index=1/1  Refused=False
+ 355  Finished  Index=1/1  Refused=False
+ 401  Finished  Index=1/1  Refused=False
+ 412  Finished  Index=1/1  Refused=False
+```
+
+**`111 Conditional Branch` does not open a branch. `119 Jump to Label` does
+not find a label. `117 Common Event` does not call a common event. Each of
+them reports "finished", which is what a command that did nothing
+reports.**
+
+**And that is a deliberate decision and not an oversight, and the reason is
+worth keeping: stopping on a command the interpreter does not model would be
+worse than stepping over it, because it ends the game.** **So the honest
+place to record it is a test, and not a refusal.**
+
+### And the number that matters, which is not thirty-five
+
+```text
+MV sister:       133484 Befehle, 59 Arten, 116937 gedeckt (87%)
+MV LegalTruck:      730 Befehle, 29 Arten,    720 gedeckt (98%)
+MZ Camellia:       2432 Befehle, 30 Arten,   2076 gedeckt (85%)
+```
+
+**Thirty-five percent of the command set is eighty-five to ninety-eight
+percent of what finished games actually write.** **The uncovered commands are
+the ones a game uses rarely or never** -- `261 Play Movie`, `302 Shop
+Processing`, `303 Name Input`, the whole battle-command range above 331.
+
+### And the gap, written out, and it is a list rather than a sentence
+
+```text
+103 104 108 109 117 124 125 127 128 132 133 134 135 136 137 138 139 140
+202 204 206 211 212 214 216 217 223 224 233 234 236 243 244 261 281 282
+283 284 285 302 303 311 312 313 315 316 317 318 319 320 321 323 324 325
+326 331 332 333 334 335 336 337 339 340 342 352 353 354 356 403 601 602 603
+```
+
+**And two mistakes in that list are worth recording, because both were found
+by the test and not by reading:**
+
+- **`106` and `107` were named as missing.** **They are not commands in MZ
+  at all -- they are continuation lines under `105`.** **A list of the gap
+  containing numbers no engine has is a list of the gap with two lies in
+  it.**
+- **`351 Open Menu Screen` was named as missing and is dispatched.** **It was
+  written down twice, once in each list.**
+
+**Both are the same mistake as the hand-kept engine table and the count of
+named constants: a list beside the code instead of a reading from it.**
+
+**And the next concrete step is not ambiguous: `108 Comment`, `117 Common
+Event`, `125 Change Gold` and `261 Play Movie` are the four that a finished
+game leans on and this repository does not run.**
