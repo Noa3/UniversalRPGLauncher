@@ -18383,6 +18383,62 @@ Leser her?** -- **und `Describe` faellt bei einem Objekt auf
 Meldung nicht, dass der Empaenger `Object` war, sondern dass der
 Leser es nicht unterscheidet.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 13: die offene Frage ist beantwortet
+
+**Und `@list` traegt nicht `Object`.**
+
+**Und `@list` ist `nil`.**
+
+```
+l.class   -> Symbol / NilClass
+l.inspect -> String / nil
+l.size    -> Integer / 0
+l[0].class -> Symbol / NilClass
+```
+
+**Und `Object` in der Protokollzeile war `Describe`s Rueckfall auf
+`ClassName ?? "a value"`** -- **und nicht der Name eines
+Empfaengers.**
+
+**Und damit ist der Lauf an einer Stelle und nur an einer Stelle
+gestoppt:**
+
+```ruby
+def setup(list, event_id)
+  clear                       # 1.  kam beim Host an
+  @map_id = $game_map.map_id  # 2.  $game_map ist nil
+  @event_id = event_id        # 3.  nie erreicht
+  @list = list                # 4.  nie erreicht
+end
+```
+
+**Und die Welt, die MicroQuest braucht, ist also EIN Name:
+`$game_map`** -- **und nicht zwei unabhaengige Fragen.**
+
+**Und `Game_Map` ist ein Typ aus den 90 Skripten des Spiels**, --
+**und es fehlt ein Objekt davon, und nicht eine Klasse.**
+
+### Und dieser Test war die ganze Zeit falsch aufgestellt
+
+**Und die Assertion las `art`**, -- **und `art` war das Ergebnis des
+Ausdrucks `l[0][2][0]` und nicht `l.class`** -- **und sie verglich
+dann eine Feldzahl mit einem Klassennamen.**
+
+**Und der Test war rot, und der Test hatte recht, und die Assertion
+hatte nicht.**
+
+**Und jetzt liest er den gemessenen Wert aus der Liste der
+gemessenen Elemente**, -- **und er ist gruen, weil der Istwert
+`NilClass` ist und nicht weil eine Behauptung stimmt.**
+
+```
+All 2392 tests passed
+```
+
+**Und die Reihenfolge, in der MicroQuest laeuft, ist damit genau
+bekannt:** -- **`clear`, dann `$game_map`, dann `@list`, dann
+`@branch`, dann der erste Befehl.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

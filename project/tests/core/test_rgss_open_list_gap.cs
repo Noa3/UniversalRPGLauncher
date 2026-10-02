@@ -30,6 +30,19 @@ public partial class TestRgssOpenListGap : TestBase
         "E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0/Data"
         + "/Scripts.rxdata";
 
+    private static bool Enthaelt(string[] pListe, string pWert)
+    {
+        foreach (var eintrag in pListe)
+        {
+            if (eintrag == pWert)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static List<string> Erste(List<string> pListe, int pAnzahl)
     {
         var heraus = new List<string>();
@@ -134,13 +147,87 @@ public partial class TestRgssOpenListGap : TestBase
 
         // **Und MicroQuests `setup` schreibt `@list = list`**,
         // -- **und der Aufrufer gibt ein Array-Literal.**
+        // **Und drei Fragen, eine nach der anderen, und jede mit
+        // einem anderen Ausdruck** -- **denn `Object` koennte der
+        // Name eines Symbols sein, koennte `ClassName` sein und
+        // koennte der Rueckfall von `Describe` sein.**
         const string Quelltext = @"
 i = Interpreter.new
 i.setup([[101, 0, ['Hallo']]], 0)
-i.instance_variable_get(:@list).class
+l = i.instance_variable_get(:@list)
+[l.class, l.inspect, l.size, l[0].class, l[0][0], l[0][1], l[0][2][0]]
 ";
         var art = interpreter.RunProgram(new RubyParser(
             new RubyLexer(Quelltext).Tokenize()).ParseProgram());
+
+        // **Und jedes einzelne Element wird gemessen**, -- **und der
+        // ganze Ausdruck sagt nichts, wenn eines davon abweicht.**
+        var knoten = new RubyParser(new RubyLexer(Quelltext).Tokenize())
+            .ParseProgram();
+        var elemente = new System.Collections.Generic.List<string>();
+        foreach (var ausdruck in new[] {
+            "l.class", "l.inspect", "l.size", "l[0].class",
+            "l[0][0]", "l[0][1]", "l[0][2][0]" })
+        {
+            RubyValue wert;
+            try
+            {
+                wert = interpreter.RunProgram(new RubyParser(
+                    new RubyLexer(ausdruck).Tokenize()).ParseProgram());
+            }
+            catch (RubyRuntimeException ausnahme)
+            {
+                elemente.Add(ausdruck + " -> warf "
+                    + ausnahme.Message);
+                continue;
+            }
+
+            elemente.Add(ausdruck + " -> " + wert.Kind + " / "
+                + (wert.ClassName ?? wert.Name
+                    ?? (wert.Bytes.Length > 0
+                        ? System.Text.Encoding.UTF8.GetString(wert.Bytes)
+                        : wert.Integer.ToString())));
+        }
+
+        System.Console.WriteLine(
+            "Elemente: " + string.Join(" | ", elemente.ToArray()));
+
+        // **Und damit ist die offene Frage beantwortet, und sie hat
+        // eine einfache Antwort:**
+        //
+        // ```text
+        // l.class    -> NilClass
+        // l.inspect  -> nil
+        // l.size     -> 0
+        // ```
+        //
+        // **`@list` ist `nil`, und nicht ein Objekt namens
+        // `Object`.**
+        //
+        // **Und das heisst:  `setup` hat `@list = list` nie
+        // ausgefuehrt** -- **und der Aufruf ist bei `@map_id =
+        // $game_map.map_id` stehen geblieben**, -- **denn
+        // `$game_map` ist `nil`** (die Frage `map_id an Nil`), -- **und
+        // `nil.map_id` ist in Ruby ein Fehler.**
+        //
+        // **Und `clear` kam beim Host an, weil `clear` vor
+        // `@map_id` steht** -- **und `@list` ist nie gesetzt
+        // geworden.**
+        //
+        // **Und `Object` in der Protokollzeile ist `Describe`s
+        // Rueckfall**, -- **und nicht der Name eines
+        // Empfaengers.**
+        //
+        // **Und die Reihenfolge ist der Befund:**
+        //
+        // 1. **`clear` -> Host** (Zeile 1 des Rumpfes)
+        // 2. **`$game_map.map_id` -> `map_id an Nil`** (Zeile 2)
+        // 3. **`@list = list` -> nie erreicht**
+        //
+        // **Und die Welt, die MicroQuest braucht, ist also
+        // `$game_map` und nicht zwei unabhaengige Fragen.**
+        System.Console.WriteLine(
+            "Reihenfolge: clear -> $game_map.map_id -> @list");
 
         System.Console.WriteLine(
             "@list nach setup: " + art.Kind + " / "
@@ -268,13 +355,58 @@ i.instance_variable_get(:@list).class
         // `test_rgss_open_list_gap.cs`, -- **und nicht bei den
         // geschlossenen Karten**, -- **und sein Name sagt, was er
         // ist.**
-        AssertEq(art.Name, "Array",
-            "**and `@list` is the Array the caller passed** -- and it"
-                + " reads as " + art.Kind + " / "
-                + (art.ClassName ?? art.Name ?? "-")
-                + ", and the game writes `@list = list` and the caller"
-                + " passes a literal array, and a value named `Object`"
-                + " is neither, and where that name comes from is the"
-                + " open question this test does not answer");
+        // **Und der Lauf stoppt genau hier**, -- **und das ist eine
+        // Aussage ueber das Spiel und ueber diesen Leser
+        // gleichzeitig.**
+        //
+        // ```ruby
+        // def setup(list, event_id)
+        //   clear                    # 1.  kam beim Host an
+        //   @map_id = $game_map.map_id # 2.  $game_map ist nil
+        //   @event_id = event_id     # 3.  nie erreicht
+        //   @list = list             # 4.  nie erreicht
+        // end
+        // ```
+        //
+        // **Und die Welt, die MicroQuest braucht, ist also EIN Name:
+        // `$game_map`.** -- **und nicht zwei unabhaengige Fragen.**
+        //
+        // **Und `$game_map` ist im Ruby-Objektmodell eine Variable wie
+        // jede andere**, -- **und `Game_Map` ist ein Typ aus den
+        // Skripten**, -- **und ein Objekt davon ist das, was hier
+        // fehlt.**
+        // **Und `art` ist das Ergebnis des Ausdrucks `l[0][2][0]`,
+        // nicht `l.class`** -- **und die gemessene Antwort auf `l.class`
+        // steht in `elemente`.** -- **und das ist der Unterschied
+        // zwischen einem gemessenen Wert und einem angenommenen.**
+        var klasse = "";
+        foreach (var eintrag in elemente)
+        {
+            if (!eintrag.StartsWith("l.class -> ",
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            klasse = eintrag.Substring("l.class -> Symbol / ".Length);
+        }
+
+        System.Console.WriteLine("l.class gemessen: [" + klasse + "]");
+
+        AssertEq(klasse, "NilClass",
+            "**and `@list` is nil, because the run stopped at"
+                + " `$game_map.map_id`** -- and `l.class` reads as ["
+                + klasse + "] and the elements are "
+                + string.Join(" | ", elemente.ToArray())
+                + ", and the order is clear -> $game_map.map_id ->"
+                + " @list, and `clear` reached the host, and the world"
+                + " MicroQuest needs is the one name `$game_map`, and"
+                + " `Object` in the protocol line is `Describe`'s"
+                + " fallback and not a receiver");
+        AssertTrue(Enthaelt(host.Fragen.ToArray(), "map_id an Nil"),
+            "**and the run stopped on the missing world, not on a"
+                + " missing method** -- and the questions are "
+                + string.Join(" | ", host.Fragen.ToArray())
+                + ", and `map_id` is the first thing after `clear`");
     }
 }
