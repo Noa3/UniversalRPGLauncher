@@ -18064,6 +18064,70 @@ All 2382 tests passed
 dabei `message_text` beobachten** -- **und das ist eine Kette aus
 drei Aufrufen, die alle im Skript des Spiels stehen.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 8: `setup` ist da und laeuft nicht
+
+**Und ich hatte in Stufe 7 geschrieben, `setup` werde aufgerufen und
+der Grund fuer das Scheitern sei nicht gemessen.**
+
+**Und jetzt ist er gemessen.**
+
+### Und die Methode steht im Skript des Spiels, mit derselben Signatur
+
+```text
+def setup: Game_Actor: def setup(actor_id)
+  Game_Troop: def setup(troop_id)
+  Game_Map: def setup(map_id)
+  Interpreter 1: def setup(list, event_id)
+  Interpreter 1: def setup_starting_event
+  Interpreter 1: def setup_choices(parameters)
+```
+
+**Und `Interpreter 1: def setup(list, event_id)` hat genau die zwei
+Parameter, die mein Aufruf ubergibt.**
+
+### Und der Aufruf erreicht den Host
+
+```text
+Fragen: Konstante Graphics | freeze an Nil (Block) | setup an Interpreter
+Ergebnis: Nil
+Am Typ: Nil, neue Fragen: (keine)
+```
+
+**Und `Interpreter.setup(...)` erzeugt gar keine Frage**, -- **und
+beides zusammen heisst:  die Methode liegt nicht in der Tabelle des
+Typs.**
+
+**Und der Grund steht in diesem Repository an Zeile 10008 und der
+Kommentar dort benennt es selbst:**
+
+> *Und das ist keine Verzoegerung, sondern die Zeile, an der jede
+> RPG-Maker-Skriptdatei scheitert: `def setup` auf oberster Ebene ist
+> in VX, VX Ace und XP in jeder zweiten Datei*
+
+**Und `def` auf oberster Ebene landet auf `Object`**, -- **und die
+Instanz von `Interpreter` sieht diese Methode nicht.**
+
+### Und was das ueber meine Behauptungen sagt
+
+**Und die Diagnose des Interpreters war richtig und meine Deutung war
+es nicht** -- **zum zweiten Mal in dieser Folge.**
+
+**Und `Test_SetupNimmtEineListeUndEineNummer` behauptet jetzt nicht
+mehr, `setup` habe geantwortet.** **Er behauptet, der Aufruf ist als
+`setup an Interpreter` beim Host angekommen, und der Host ist kein
+Spiel, und deshalb kann er nicht antworten**, -- **und `setup` selbst
+ist in `Interpreter 1` als `def setup(list, event_id)`.**
+
+**Und der naechste Schritt ist damit ein anderer als gedacht:**
+**nicht den Aufrufweg bauen, sondern die Frage stellen, warum eine
+Instanz von `Interpreter` eine Methode nicht sieht, die auf
+`Object` liegt** -- **und das ist eine Frage an die Kette dieses
+Lesers, und nicht an das Spiel.**
+
+```
+All 2385 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
