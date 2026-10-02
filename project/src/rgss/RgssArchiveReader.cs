@@ -155,12 +155,15 @@ public sealed class RgssArchiveReader
                 return Fail<IReadOnlyList<RgssArchiveEntry>>(
                     $"The archive {pSourceName} ends inside an entry's name length.");
             }
-            var nameLength = (int)(encodedLength ^ NextKey(ref magic));
-            if (nameLength > MaxNameBytes)
+            var nameLength = DecodeLength(encodedLength, NextKey(ref magic));
+            if (nameLength < 0 || nameLength > MaxNameBytes)
             {
                 return Fail<IReadOnlyList<RgssArchiveEntry>>(
                     $"The archive {pSourceName} declares a name of {nameLength} bytes, "
-                    + $"over the {MaxNameBytes} limit.");
+                    + (nameLength < 0
+                        ? "which cannot be a length at all, and the stream is not "
+                            + "an archive this reader can follow."
+                        : $"over the {MaxNameBytes} limit."));
             }
             if (offset + nameLength + 4 > pBytes.Length)
             {
@@ -180,7 +183,7 @@ public sealed class RgssArchiveReader
             offset += nameLength;
 
             var encodedSize = ReadUInt32(pBytes, ref offset);
-            var size = (int)(encodedSize ^ NextKey(ref magic));
+            var size = DecodeLength(encodedSize, NextKey(ref magic));
             if (size < 0 || (long)offset + size > pBytes.Length)
             {
                 return Fail<IReadOnlyList<RgssArchiveEntry>>(
@@ -266,7 +269,34 @@ public sealed class RgssArchiveReader
         return bytes.ToArray();
     }
 
-    private static uint ReadUInt32(byte[] pBytes, ref int pOffset)
+    /// <summary>
+        /// A decoded length, and -1 when the value cannot be one.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And this exists because of a real crash on a real archive.</strong>
+        /// The stream carries an obfuscated <see cref="uint"/>, and casting the
+        /// xor result to <see cref="int"/> turns any value above
+        /// <c>int.MaxValue</c> into a negative length. <strong>The guard that
+        /// followed only tested the upper bound, so a negative length reached
+        /// <c>new char[nameLength]</c> and threw
+        /// <see cref="OverflowException"/> out of the reader</strong> -- <strong>and
+        /// that is what happened on <c>Dreaming Mary/Game.rgss3a</c>, the first
+        /// finished VX Ace archive this repository was pointed at.</strong>
+        /// </para>
+        /// <para>
+        /// <strong>And a negative length is not an obfuscation mistake to be
+        /// retried, it is the end of the archive.</strong> The engine's own
+        /// reader stops there; so does this one, and it says why.
+        /// </para>
+        /// </remarks>
+        private static int DecodeLength(uint pEncoded, uint pKey)
+        {
+            var wert = pEncoded ^ pKey;
+            return wert > int.MaxValue ? -1 : (int)wert;
+        }
+
+        private static uint ReadUInt32(byte[] pBytes, ref int pOffset)
     {
         var value = (uint)(pBytes[pOffset]
             | (pBytes[pOffset + 1] << 8)

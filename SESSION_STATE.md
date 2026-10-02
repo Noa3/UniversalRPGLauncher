@@ -14962,3 +14962,79 @@ had already been rewritten and rebuilt.** The DLL timestamp was newer than
 the source and the run was correct; **the stale text came from a `grep`
 against a log that had been overwritten by the previous run.** Verify the
 raw log, not the filtered one.
+
+
+## BLOCKED: the RGSS archive reader cannot list a real VX Ace archive, and
+## the crash it caused is fixed while the cause is not
+
+### And what happened
+
+**`Dreaming Mary` is a finished VX Ace game and all of its data is inside
+`Game.rgss3a`, twenty-eight megabytes, and there is no `Data` directory.**
+
+```text
+Game.ini:  RTP=, Library=System\RGSS301.dll, Scripts=Data\Scripts.rvdata2
+Kopf:      52 47 53 53 41 44 00 03  ->  "RGSSAD", Version 3
+Header:    True    Version: 3
+```
+
+**The first run of the test threw `OverflowException` out of
+`ListEntries`, line 171, at `new char[nameLength]`.**
+
+### And the crash, fixed
+
+**A decoded length is a `uint` in the stream. Casting the xor result to `int`
+turns any value above `int.MaxValue` into a negative length, and the guard
+that followed only tested `> MaxNameBytes` -- so a negative length walked
+straight past it into the array allocation.**
+
+**The fix is `DecodeLength`, which returns -1 for a value that cannot be a
+length, and a guard that tests both bounds.** The refusal is now a sentence:
+
+```text
+The archive Game.rgss3a declares a name of -1 bytes, which cannot be a
+length at all, and the stream is not an archive this reader can follow.
+```
+
+**This is a real defect that a real archive found, and it is fixed.**
+
+### And the cause, not fixed, and why it stops here
+
+**The entries still do not list.** Four materially different hypotheses were
+tried:
+
+1. **The generator is `(7, 3)` from `DEADCAFE`** -- the reader's own
+   constants. **Gave `-1`.**
+2. **The first name is a known path** (`Graphics/System/Iconset.png`), so
+   the key is derivable from the ciphertext. **Gave no consistent length.**
+3. **The generator advances bytewise rather than wordwise**, which is what
+   `NextKey` returns. **Gave no ASCII name for any of 60 candidate lengths.**
+4. **The blocks are sizes, not lengths.** The values after the header are
+   `18007`, `159364`, `162863`, `162107`, `162049` -- **162 KB entries
+   adjacent to each other is an imageset, not a name**, **and `18007` is
+   neither a length nor a plausible name length.**
+
+**And the plain bytes at offset 28 read `vaN8at}...faN8li`, which is not
+plain text -- it is ciphertext that happens to be printable ASCII**, and
+an eye that reads it as `Vault` and `Vaili` is reading a coincidence.
+
+### And what is claimed, and what is not
+
+```text
+TestRealVxAceArchive: 2/2 passed
+All 2232 tests passed
+```
+
+**Claimed: the header and version are read correctly from a real VX Ace
+archive, and the reader refuses an unfollowable stream with a reason instead
+of crashing. Not claimed: that the archive's contents are reachable.**
+**The ninety-three loose VX Ace scripts remain this repository's only VX Ace
+evidence.**
+
+### And the exact unblock condition
+
+**Read `RGSSAD` version 3 from a published source -- the RPG Maker VX Ace
+runtime, or the `mkxp` / `open-rpg-maker-vx-ace` implementations -- and take
+the key derivation from there instead of reconstructing it.** **Four attempts
+from memory is enough; this repository's rule is three materially different
+attempts and then a recorded BLOCKED, and this is that point.**
