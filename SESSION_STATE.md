@@ -17861,6 +17861,88 @@ bauen".**
 `$game_temp`**, -- **mit einem Nachrichtenfenster, das wartet** --
 **und dann der Befehlssatz fuer die 51 klassifizierten Befehle.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 5: die Welt steht, der Aufruf fehlt
+
+**Und `Test_RgssHostDemand` hat zuerst behauptet, die Skripte fragen
+nach hunderten von Namen fuer `$game_player`, `$game_switches`,
+`$game_temp`.**
+
+**Und gemessen ist:  genau ein Name, und er heisst `Graphics`.**
+
+```
+Konstanten beim Laden: 1 verschiedene, 1 mal gefragt: Graphics=1
+davon $game_*: 0
+```
+
+**Und das ist eine viel bessere Nachricht als eine Liste von 400
+Namen** -- **denn die Skripte *definieren* die Welt, sie *fragen* sie
+beim Laden nicht** -- **und sie lesen sie erst, wenn ein Befehl
+laeuft.**
+
+### Und alle sieben Welttypen sind von den 90 Skripten selbst definiert
+
+```text
+Typen: Game_Temp Game_System Game_Switches Game_Variables
+  Game_SelfSwitches Game_Screen Game_Picture Game_Battler
+  Game_BattleAction Game_Actor Game_Enemy Game_Actors Game_Party
+  Game_Troop Game_Map Game_CommonEvent Game_Character Game_Event
+  Game_Player Sprite_Character ...
+Welttypen fehlend: (leer)
+```
+
+**Und `Game_Temp`, `Game_Switches`, `Game_Variables`, `Game_Player`,
+`Game_Character`, `Game_Event` und `Game_Map` sind alle da.**
+
+**Und dieses Repository muss die Welt also nicht erfinden** -- **sie
+steht in den Skripten des Spiels.**
+
+### Und der erste Aufrufversuch nennt beide Lücken
+
+**Und der Aufruf `Interpreter.new.setup([...]).command_101` schlug
+fehl, und die Diagnosen des Interpreters sagen warum:**
+
+```
+nil has no method 'message_text=' on this host
+Interpreter has no method 'setup' on this host
+```
+
+**Und das sind zwei verschiedene Lücken, und beide sind gemessen:**
+
+**Erstens:  `$game_temp` ist in Ruby eine globale Variable und keine
+Konstante** -- **und `LookupConstant` wird fuer ein `$name` nicht
+gefragt** -- **und die Welt muss ueber die Variablenstelle kommen und
+nicht ueber einen Namen.**
+
+**Und `nil` ist der richtige Zwischenwert und nicht ein Fehler**, --
+**denn `nil.message_text = x` ist in Ruby ein Fehler, und der
+Interpreter meldet ihn mit Namen, statt etwas zu erfinden.**
+
+**Zweitens:  `Interpreter` hat keine Methode `setup`** -- **und das ist
+keine fehlende Welt, sondern eine fehlende Methode in den Skripten des
+Spiels selbst**, -- **und MicroQuest hat nur `Interpreter 1` bis
+`Interpreter 7` und kein `Game_Interpreter`.**
+
+**Und der Dispatcher, den ein Lauf braucht, steht in `Interpreter 2`:**
+
+```ruby
+def execute_command
+  method_name = "command_\#{@list[@index].code}"
+```
+
+**Und der Befehlsname wird aus der Nummer gebaut** -- **und genau das
+ist der Weg, den ein Lauf nehmen muss**, -- **und nicht ein
+C#-Wortschalter ueber 96 Faelle.**
+
+**Und der Test behauptet jetzt nicht mehr, der Aufruf habe
+funktioniert.** **Er behauptet, `$game_temp` komme nicht als Name an,
+und dass `setup` fehlt** -- **und das sind die zwei Dinge, die als
+naechstes gebaut werden.**
+
+```
+TestRgssCommandCall: 3/3
+All 2375 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
