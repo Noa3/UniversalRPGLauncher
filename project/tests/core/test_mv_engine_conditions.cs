@@ -153,6 +153,15 @@ public partial class TestMvEngineConditions : TestBase
             return;
         }
 
+        // **Und die Ordner, in denen das Spiel nach den
+        // Platzhalterdateien sieht** -- **denn sonst zaehlt dieser Test
+        // vier Bedingungen weniger**, **und die Zahl waere dann die Zahl
+        // eines leeren Ordners und nicht die des Spiels.**
+        MzEngineCondition.PlatzhalterDateien = new[]
+        {
+            Projekt, System.IO.Path.GetDirectoryName(Projekt),
+        };
+
         var beantwortbar = 0;
         var alle = 0;
         var nicht = new Dictionary<string, int>();
@@ -180,6 +189,7 @@ public partial class TestMvEngineConditions : TestBase
                 // **Und die Rechnung zuerst**, **denn sie ist der
                 // Weg, den der Auswerter auch geht.**
                 var geprueft = false;
+
                 if (MzArithmetic.KenntAlleVariablen(ausdruck, fakten)
                     && MzArithmetic.TryRead(ausdruck, fakten, out _)
                         .HasValue)
@@ -196,8 +206,8 @@ public partial class TestMvEngineConditions : TestBase
 
                 if (!geprueft)
                 {
-                    nicht.TryGetValue(ausdruck, out var n);
-                    nicht[ausdruck] = n + 1;
+                    nicht.TryGetValue(ausdruck ?? "<null>", out var n);
+                    nicht[ausdruck ?? "<null>"] = n + 1;
                 }
                 }
             }
@@ -386,5 +396,120 @@ public partial class TestMvEngineConditions : TestBase
                 yield return ps[1].GetString() ?? "";
             }
         }
+    }
+    /// <summary>
+    /// And the platform flags are decided by a file, so they can be
+    /// answered.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the condition that stopped the real
+    /// run.</strong> <code>Map002</code>'s first event asks
+    /// <c>!ConfigManager.isJapanesePlatform</c>, and this repository
+    /// refused it and stopped.
+    /// </para>
+    /// <para>
+    /// <strong>And the game itself says where the flag comes
+    /// from:</strong>
+    /// </para>
+    /// <code>
+    /// const [isSFW, isDLsite, isCien, isFanza, isImouto] = await Promise.all([
+    ///     DataManager.checkPlaceholderExists("SFW.json"),
+    ///     DataManager.checkPlaceholderExists("DLsite.json"),
+    ///     ...
+    /// ]);
+    /// if (isDLsite || isCien || isFanza) {
+    ///     ConfigManager.isJapanesePlatform = true;
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And <c>checkPlaceholderExists</c> is
+    /// <c>fs.existsSync(...)</c> under NW.js</strong> -- <strong>a file
+    /// check and not a script</strong>, <strong>so answering it runs no
+    /// JavaScript at all.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DiePlattformkennzeichenSindEineDatefrage()
+    {
+        if (!System.IO.Directory.Exists(Projekt + "/data"))
+        {
+            GD.Print("    (skipped: no " + Projekt + ")");
+            return;
+        }
+
+        // **Und die Ordner, in denen das Spiel sucht.**
+        MzEngineCondition.PlatzhalterDateien = new[]
+        {
+            Projekt, System.IO.Path.GetDirectoryName(Projekt),
+        };
+
+        var fakten = new MzBranchFacts();
+        var antwort = MzEngineCondition.Answer(
+            "ConfigManager.isJapanesePlatform", fakten,
+            out var fehlt);
+
+        AssertTrue(antwort.HasValue,
+            "**and the platform question is answered** -- it is "
+            + fehlt + ", and a refusal that names the file it wanted "
+            + "would be a better one than this");
+
+        // **Und es ist falsch, und nicht unbekannt.**
+        AssertEq(antwort.GetValueOrDefault(), false,
+            "**and the answer is false** -- and that is measured: "
+            + "the files `SFW.json`, `DLsite.json`, `Cien.json`, "
+            + "`Fanza.json` and `Imouto.json` are in none of "
+            + "this project's folders, and a desktop build of this game "
+            + "has none of them either");
+
+        // **Und mit der Datei da ist es wahr** -- **und das ist der
+        // Beweis, dass es eine Datefrage ist und keine Vermutung.**
+        // **Und der Name enthaelt die Suite**, **damit kein zweiter Lauf
+        // auf dieselbe Datei trifft.**
+        var temp = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "urpg-platzhalter-" + nameof(TestMvEngineConditions)
+                .Replace("Test", string.Empty));
+        System.IO.Directory.CreateDirectory(temp + "/data");
+        System.IO.File.WriteAllText(temp + "/data/DLsite.json", "{}");
+        MzEngineCondition.PlatzhalterDateien = new[] { temp };
+        var mitDatei = MzEngineCondition.Answer(
+            "ConfigManager.isJapanesePlatform", fakten, out var fehlt2);
+        AssertEq(mitDatei.GetValueOrDefault(), true,
+            "**and with the file there the answer is true** -- it is "
+            + fehlt2 + ", and that is what makes it a file check and not "
+            + "a guess");
+
+        // **Und `!` davor dreht um** -- **und `isImouto` bleibt
+        // unbeantwortet**, **weil es auch aus dem Spielstand
+        // kommt.**
+        MzEngineCondition.PlatzhalterDateien = new[] { Projekt };
+        var verneint = MzEngineCondition.Answer(
+            "!ConfigManager.isJapanesePlatform", fakten, out var fehlt3);
+        AssertEq(verneint.GetValueOrDefault(), true,
+            "**and the negated form is the other way round** -- and that "
+            + "is what the game wrote, and it is the branch the run "
+            + "takes");
+        AssertEq(
+            MzEngineCondition.Answer(
+                "ConfigManager.isImouto", fakten,
+                out var fehltImouto),
+            null,
+            "**and `isImouto` stays unanswered** -- it said '"
+            + fehltImouto + "', and the game writes it from a file "
+            + "and then overwrites it from game state, and a flag that "
+            + "can be either is not a fact about the machine");
+
+        // **Und ein Aufruf ist kein Flag.**
+        AssertEq(
+            MzEngineCondition.Answer(
+                "ConfigManager.isJapanesePlatform()", fakten, out var fehlt4),
+            null,
+            "**and a call is not a flag** -- it said '" + fehlt4 + "'");
+
+        // **Und der Ordner bekommt einen eigenen Namen** -- **denn
+        // `GetTempPath` ist derselbe fuer jeden Test**, **und ein Test,
+        // der ihn leert, raeumt einem anderen die Beweisdatei weg.**
+        System.IO.Directory.Delete(temp, true);
+        MzEngineCondition.PlatzhalterDateien = Array.Empty<string>();
     }
 }

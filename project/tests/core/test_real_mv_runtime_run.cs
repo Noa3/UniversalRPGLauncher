@@ -287,20 +287,44 @@ public partial class TestRealMvRuntimeRun : TestBase
         // Speicherfrage des Browsers und keine Spielmechanik.** **Und
         // dahinter steht `$gameMap.event(2).start()`, also laeuft der
         // Lauf jetzt in die Seite mit den 117 Befehlen hinein.**
+        // **Und der Stopp hat sich zweimal geaendert, und beide Male
+        // dadurch, dass eine Bedingung beantwortbar wurde und nicht
+        // durch irgendeinen Umbau:**
+        //
+        // ```text
+        // 1 Frames,  2 Aktionen  Grund=a branch on the author's own script
+        //                   !Utils.isMobileDevice()          <- war
+        //                       beantwortbar und war nicht der Stopp
+        //
+        // 1 Frames, 13 Aktionen  Grund=the author's own own script
+        //                   !localStorage.getItem(...)        <- Browser-
+        //                       speicher, keine Spielmechanik
+        //
+        // 2 Frames, 27 Aktionen  Grund=a dialogue is not shown
+        //                   !ConfigManager.isJapanesePlatform <- Plattform,
+        //                       und das Spiel liest die Datei DLsite.json
+        // ```
+        //
+        // **Und `ConfigManager.isJapanesePlatform` ist keine
+        // Spielmechanik und kein JavaScript:** **das Spiel selbst sagt,
+        // woher das Kennzeichen kommt** -- **und es ist
+        // `DataManager.checkPlaceholderExists("DLsite.json")`, und das ist
+        // `fs.existsSync(...)`** -- **eine Dateifrage.**
         AssertEq(lauf.Stopped, MzStep.Refused,
-            "**and the run still stops, and now on a condition that reads "
-            + "the game's own state** -- and it stopped at " + lauf.Stopped
-            + " with '" + lauf.StopReason + "'");
-        AssertTrue(lauf.StopReason.Contains("script", StringComparison.OrdinalIgnoreCase),
-            "**and the reason names the script** -- and it said '"
-                + lauf.StopReason + "', and a refusal that does not say what "
-                + "it would need to run is a refusal nobody can act on");
-        AssertTrue(lauf.Actions.Count >= 13,
-            "**and the run got thirteen commands further than it did** -- "
-            + lauf.Actions.Count + ", and it walked past the Steam "
-            + "advertisement, past both of the parallel pages' plugin "
-            + "calls, and into the page of a hundred and seventeen "
-            + "commands");
+            "**and the run still stops, and now on a dialogue nobody is "
+            + "shown** -- and it stopped at " + lauf.Stopped + " with '"
+            + lauf.StopReason + "'");
+        AssertTrue(lauf.StopReason.Contains("dialogue",
+                StringComparison.OrdinalIgnoreCase),
+            "**and the reason says what is missing** -- it said '"
+                + lauf.StopReason + "', and a refusal that does not say "
+                + "what it would need says nothing anybody can act on");
+        AssertTrue(lauf.Actions.Count >= 27,
+            "**and the run got twenty-seven commands further than it did** "
+            + "-- " + lauf.Actions.Count + ", and it walked past the Steam "
+            + "advertisement, past both pages' plugin calls, through a "
+            + "screen tint, and into a real dialogue with a name and three "
+            + "lines of text");
 
         System.Console.WriteLine(
             "MV Lauf: " + lauf.SimulationTicks + " Frames, "
@@ -310,9 +334,19 @@ public partial class TestRealMvRuntimeRun : TestBase
             + ", Grund=" + lauf.StopReason
             + ", Seiten=" + lauf.PagesRun
             + ", Ereignis=" + lauf.LastPage);
+        // **Und jeder Stopp wird einzeln genannt** -- **denn ein
+        // Grund, der abgeschnitten wird, ist kein Grund.**
+        System.Console.WriteLine("MV Stops: " + lauf.Stops.Count);
         foreach (var stop in lauf.Stops)
         {
             System.Console.WriteLine("   Stop: " + stop);
+        }
+
+        // **Und die Seiten, die gelaufen sind.**
+        foreach (var aktion in lauf.Actions)
+        {
+            System.Console.WriteLine(
+                "   " + aktion.Code + "|" + aktion.What);
         }
 
         foreach (var aktion in lauf.Actions)

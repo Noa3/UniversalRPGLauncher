@@ -16874,6 +16874,57 @@ TestMvBattleOutcomes: 5/5
 All 2330 tests passed
 ```
 
+## 2026-10-02 — Der Lauf ging von 13 auf 27 Aktionen
+
+**Der Stopp war `!ConfigManager.isJapanesePlatform` in `Map002`, und
+das ist keine Spielmechanik.** Das Spiel sagt selbst, woher das
+Kennzeichen kommt:
+
+```js
+const [isSFW, isDLsite, isCien, isFanza, isImouto] = await Promise.all([
+    DataManager.checkPlaceholderExists("SFW.json"),
+    DataManager.checkPlaceholderExists("DLsite.json"),
+    ...
+]);
+if (isDLsite || isCien || isFanza) {
+    ConfigManager.isJapanesePlatform = true;
+}
+```
+
+**Und `checkPlaceholderExists` ist unter NW.js `fs.existsSync(...)` —
+eine Dateifrage und keine Skriptausführung.** Die fünf Dateien
+existieren in diesem Projekt keine, also ist das Kennzeichen falsch,
+und nicht unbekannt.
+
+**Drei Stopps in dieser Reihenfolge, und keiner davon war ein Umbau:**
+
+```text
+1 Frames,  2 Aktionen  a branch on the author's own script
+                     !Utils.isMobileDevice()   <- war beantwortbar und
+                     war nicht der Stopp
+1 Frames, 13 Aktionen  the author's own own script
+                     !localStorage.getItem(...)  <- Browserspeicher
+2 Frames, 27 Aktionen  a dialogue is not shown
+                     !ConfigManager.isJapanesePlatform  <- Plattform
+```
+
+**Und der neue Stopp ist der erste, der keine Skriptausführung
+verlangt** — **er verlangt, dass jemand auf einen Bildschirm schaut.**
+
+**Und `isImouto` und `harmonyMode` bleiben verweigert**, **weil das
+Spiel sie erst aus einer Datei liest und dann aus dem Spielstand
+überschreibt** (`if (isImouto || DrillUp.g_COSt_list[119]["context"] !==
+"Mio") { isImouto = true; }`) — **und ein Kennzeichen, das beides
+sein kann, ist keine Tatsache über die Maschine.**
+
+```text
+MV Skript-Bedingungen: 321 von 4952 beantwortbar (6 %)
+  vorher 320, und vier ConfigManager-Felder kommen dazu und zwei fallen
+  weg, weil sie verweigert bleiben
+MV Lauf: 2 Frames, 27 Aktionen, 61 Karten
+All 2331 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
