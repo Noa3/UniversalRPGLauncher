@@ -103,3 +103,33 @@ public sealed class MzMapState
     public override string ToString() =>
         _ereignisse.Count + " events, " + _entfernt.Count + " erased";
 }
+
+/// <summary>
+/// One state going onto one actor or coming off, and which of the two.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>And this is what <c>313 Change Actor State</c> records.</b>
+/// </para>
+/// <para>
+/// The engine calls <c>actor.addState(id)</c> or <c>actor.removeState(id)</c>
+/// <b>on each actor it walks</b>, and the walk comes from
+/// <c>iterateActorEx(target, wholeParty, fn)</c> -- <b>so the same state goes
+/// onto every actor of the party when the second parameter says
+/// so</b>, <b>and that is not the same as one actor getting it.</b>
+/// </para>
+/// <para>
+/// <b>And nothing here decides whether the actor is dead.</b> The engine
+/// reads <c>alreadyDead</c> before the change and collapses only an actor
+/// who was alive and is now dead, <b>and this record keeps the change and not
+/// the consequence</b> -- <b>because the consequence is a fact about the
+/// party and the change is a fact about the command.</b>
+/// </para>
+/// </remarks>
+public readonly record struct MzStateChange(
+    int Actor, int State, bool Added)
+{
+    /// <summary>One line, for an action and for a log.</summary>
+    public override string ToString() =>
+        "actor " + Actor + (Added ? " gains " : " loses ") + "state " + State;
+}
