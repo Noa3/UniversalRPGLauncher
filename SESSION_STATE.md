@@ -17638,6 +17638,83 @@ und Befehlslisten lesen ist nicht ausfuehren.** **Und der naechste
 Schritt ist `command101` bis `command355` gegen die RGSS-Skripte der
 Spiele selbst**, -- **und nicht gegen eine Erinnerung an RPG Maker.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 2: der Befehlssatz aus dem Spiel selbst
+
+**Und `Scripts.rxdata` liegt im XP-Spiel: 90 Skripte, 109 299 Bytes.**
+
+**Und `XpScriptBodies.LeseAlle` liest Namen und Quelltext bereits aus
+dem Marshal heraus, und entpackt zlib, und fuehrt nichts aus.**
+
+**Und daraus liest `RgssQuellBefehle` jetzt den Befehlssatz des Spiels
+selbst -- mit dem Ruby-Koerper jedes Befehls.**
+
+```
+XP: 90 Skripte, 96 Befehle gelesen
+MicroQuest - Beneath Brimestone 1.0: 23 Karten, 51 verschiedene Befehlsnummern
+Random Dungeon -English Version-: 656 Karten, 78 verschiedene Befehlsnummern
+XP 401: 281x, VX 401: 68462x; XP 509: 840x, VX 509: 0x
+```
+
+### Und drei falsche Annahmen standen zwischen dem Leser und der 96
+
+**Und alle drei waren Vermutungen darueber, wo der Code sein wird:**
+
+| Annahme | Wirklichkeit |
+|---|---|
+| `Game_Interpreter` | XP hat `Interpreter 1` bis `Interpreter 7` |
+| `def command101` | XP schreibt `def command_101` mit Unterstrich |
+| `^def` | XP rueckt Methoden mit zwei Leerzeichen ein |
+
+**Und die erste Fassung lieferte null Treffer in 10 064 lesbaren
+Zeichen** -- **und ein Muster, das an einer Stelle falsch ist, findet
+in der anderen Generation nichts.**
+
+**Und der Befehlssatz ist ueber sieben Skripte verteilt**, -- **und
+`Interpreter 1` enthaelt gar keine Befehle**, -- **sondern den
+Aufbau**, -- **und wer nur Teil eins liest, liest ein XP-Spiel und
+findet nichts.**
+
+### Und der Koerper ist der Grund, warum man ihn liest
+
+```text
+command101 aus Interpreter 3, 47 Zeilen
+command102 aus Interpreter 3, 14 Zeilen
+command121 aus Interpreter 4,  9 Zeilen:
+  # Loop for group control
+  for i in @parameters[0] .. @parameters[1]
+  # Change switch
+  $game_switches[i] = (@parameters[2] == 0)
+```
+
+**Und `command_121` ist nicht "Schalter setzen"**, -- **es ist eine
+Schleife ueber mehrere Schalter**, -- **und das steht so im Skript des
+Spiels** -- **und eine Tabelle aus dem Gedaechtnis haette die Form des
+Befehls falsch gehabt.**
+
+### Und meine eigene Behauptung war wieder falsch
+
+**Und ich hatte geschrieben, XP habe kein 401.**
+
+**Und MicroQuest hat es 281-mal und VX 68462-mal.**
+
+**Und die Zahl, die sich wirklich unterscheidet, ist 509** -- **840
+mal in XP und null mal in VX**, -- **und 509 ist ein XP-Befehl fuer
+Zufallsereignisse.**
+
+**Und eine Behauptung ueber zwei Engine-Generationen, die nicht
+gemessen ist, ist geraten** -- **und das ist in drei Sitzungen
+dreimal passiert.**
+
+```
+TestRgssCommandSurvey: 4/5 -> 5/5
+All 2359 tests passed
+```
+
+**Und was fehlt:** **die 96 Koerper sind gelesen, aber keiner ist
+ausgefuehrt.** **Der naechste Schritt ist ein Befehlssatz, der
+`command_101` bis `command_355` gegen diese Koerper implementiert und
+der bei jedem Test mit dem Ruby des Spiels verglichen wird.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
