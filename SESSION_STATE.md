@@ -15191,3 +15191,52 @@ every VX file two commits ago. **The repository's own `MarshalReader` and its
 `AlsText` were used instead, and the two scripts came out in one run.**
 **`AlsText` is documented as "the only way a script body becomes text in this
 repository", and that comment was the instruction.**
+
+
+## XP: the engine's own default set, and the first XP archive ever read
+
+### And two shapes of the same generation
+
+```text
+MicroQuest - Beneath Brimestone 1.0
+    Data/Scripts.rxdata      109299 Bytes, clear text
+    Game.ini  Library=RGSS104E.dll, Scripts=Data\Scripts.rxdata
+    90 Skripte, 90 mit Code, 538811 Bytes Ruby
+
+Heartache 101 v2.5
+    Game.rgssad              72.3 MB, "RGSSAD" Version 1, no Data/ at all
+    Game.ini  Library=RGSS102E.dll
+    243 Eintraege
+```
+
+**And both are XP, and they differ in the way this repository's archive
+reader was extended two commits ago** -- **one ships its scripts in clear
+text and one ships the whole game in a version one archive.**
+
+### And the standard set
+
+```text
+XP Standardsatz geparst: 90/90
+TestRealXpEngineScripts: 3/3
+All 2238 tests passed
+```
+
+**And XP's set is 538811 bytes against VX's 1721226** -- **about a third,
+and that ratio is the difference between two Ruby 1.8 engines three years
+apart.** **Both parse whole, which is the point: one of them parsing does not
+mean the other does, because XP has runtime scripts VX does not and lacks
+ones VX has.**
+
+### And the archive, which is the first XP archive ever read here
+
+**`Game.rgssad` of `Heartache 101`, seventy-two megabytes, two hundred and
+forty-three entries, version one.** **And its `Data/Scripts.rxdata` reads
+back as a marshal stream with major version four at the first byte** -- which
+is the assertion that matters, because an undecrypted body starts with noise
+and a decrypted one starts with the header.
+
+**And that is the defect the round trip test caught two commits ago being
+used as evidence:** `ReadEntry` used to copy bytes out of the file and the
+writer used to write plain text. **Neither showed an error. Every body of
+every XP and VX archive was wrong, silently.** Now the same archive is the
+test that proves it is right.
