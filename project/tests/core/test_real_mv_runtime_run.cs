@@ -5,6 +5,7 @@ using System.Linq;
 using Godot;
 
 using UniversalRPG.Plugins;
+using UniversalRPG.Web;
 using UniversalRPG.Tests.Framework;
 
 namespace UniversalRPG.Tests.Core;
@@ -181,15 +182,34 @@ public partial class TestRealMvRuntimeRun : TestBase
         // **Das ist die eigentliche Beobachtung dieses Tests: nicht
         // "MV laeuft nicht", sondern "MV verlangt, dass der Spieler zuerst
         // handelt".**
-        var begruendung = lauf.RunPage(
-            MzEngineRuntime.StartMode.ActionButton);
-        System.Console.WriteLine("MV RunPage: " + begruendung);
-        AssertTrue(begruendung.Length > 0,
-            "**and asking for a page gives an answer** -- and an answer is a "
-                + "sentence saying why nothing ran, which is what the engine "
-                + "does and what silence does not");
-
-        for (var i = 0; i < 120 && lauf.State == PluginRuntimeState.Running; i++)
+        // **Und der Weg, den dieses Spiel beim Start nimmt, ist der
+        // Aktionenknoopf** -- **und nicht die Beruehrung und nicht der
+        // Autorun.** Gemessen an `Map002`:
+        //
+        // ```text
+        // Event 2 Seite 1: trigger=0, selfSwitchValid=false, 117 Befehle
+        // Event 2 Seite 2: trigger=0, selfSwitchValid=true,   13 Befehle
+        // ```
+        //
+        // **Und Seite 2 wird zuerst gesehen und uebersprungen, weil ihr
+        // Selbstschalter A am Anfang nicht gesetzt ist, und Seite 1 hat
+        // keine Bedingung.** **Das ist die Regel der Engine:**
+        //
+        // ```text
+        // findProperPageIndex() {
+        //     for (let i = pages.length - 1; i >= 0; i--) {
+        //         if (this.meetsConditions(page)) { return i; }
+        //     }
+        //     return -1;
+        // }
+        // ```
+        //
+        // **Und `Update` ist der Weg, den die Anwendung nimmt**, **und er
+        // laeuft ueber `PageOf`, das jede Seite der Karte gibt** -- **und
+        // nicht ueber `RunPage`, das eine Seite einmal startet.** **Das
+        // ist der Unterschied zwischen "ein Ereignis wird ausgeloest" und
+        // "das Spiel laeuft", und der Test misst den zweiten Fall.**
+        for (var i = 0; i < 600 && lauf.State == PluginRuntimeState.Running; i++)
         {
             lauf.Update(1.0 / 60.0);
         }
@@ -205,10 +225,43 @@ public partial class TestRealMvRuntimeRun : TestBase
                     + lauf.Actions[k].What);
         }
 
+        // **Und der Lauf endet hier an einer Grenze, die keine ist, sondern
+        // eine Grenze des Projekts** -- **und sie ist gemessen und nicht
+        // geraten:**
+        //
+        // ```text
+        // 111 Conditional Branch
+        //   parameters[0] = 12        <- "Script" als Bedingungstyp
+        //   parameters[1] = "!Utils.isMobileDevice()"
+        // ```
+        //
+        // **Bedingungstyp 12 ist in MZ und MV gleich: die Bedingung ist ein
+        // Ausdruck im JavaScript des Projekts.** **Und `AGENTS.md` sagt, dass
+        // kein JavaScript eines importierten Spiels ausgefuehrt wird** --
+        // **also wird die Bedingung nicht geraten und nicht ausgefuehrt,
+        // sondern der Lauf sagt, woran er steht.**
+        //
+        // **Und das ist der Unterschied zwischen "das Spiel laeuft nicht"
+        // und "das Spiel verlangt, dass sein eigenes JavaScript laeuft":
+        // vor diesem Befehl hat der Lauf ausgefuehrt, was ausfuehrbar war.**
+        AssertEq(lauf.Stopped, MzStep.Refused,
+            "**and the run stops where the project asks for its own "
+            + "JavaScript** -- and it stopped at " + lauf.Stopped + " with "
+            + "'" + lauf.StopReason + "', and a condition of type 12 is a "
+                + "JavaScript expression in the project, and this repository "
+                + "does not run a project's JavaScript");
+        AssertTrue(lauf.StopReason.Contains("script", StringComparison.OrdinalIgnoreCase),
+            "**and the reason names the script** -- and it said '"
+                + lauf.StopReason + "', and a refusal that does not say what "
+                + "it would need to run is a refusal nobody can act on");
+
         System.Console.WriteLine(
             "MV Lauf: " + lauf.SimulationTicks + " Frames, "
             + lauf.Actions.Count + " Aktionen, "
-            + lauf.MapCount + " Karten, Zustand " + lauf.State);
+            + lauf.MapCount + " Karten, Zustand " + lauf.State
+            + ", Stopped=" + lauf.Stopped
+            + ", Grund=" + lauf.StopReason
+            + ", Seiten=" + lauf.PagesRun);
     }
 
     // ---------------------------------------------------------------------

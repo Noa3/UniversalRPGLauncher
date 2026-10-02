@@ -739,9 +739,42 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 if (!MzMapFigureReader.Meets(
                     seite.Member("conditions"), Facts, CurrentMapId, id))
                 {
-                    return $"event {id} page {index} is the page the engine"
-                        + " would run, and its conditions this reader cannot"
-                        + " answer, so it is not run";
+                    // **Und weiter zur naechsten Seite, und nicht
+                    // zurueck.** Das ist nicht eine Feinheit, sondern die
+                    // Regel der Engine, woertlich aus `rpg_objects.js`:
+                    //
+                    // ```text
+                    // findProperPageIndex() {
+                    //     const pages = this.event().pages;
+                    //     for (let i = pages.length - 1; i >= 0; i--) {
+                    //         const page = pages[i];
+                    //         if (this.meetsConditions(page)) {
+                    //             return i;
+                    //         }
+                    //     }
+                    //     return -1;
+                    // };
+                    // ```
+                    //
+                    // **Eine Seite, deren Bedingung nicht zutrifft, ist keine
+                    // Seite, die startet. Sie ist eine Seite, die uebersprungen
+                    // wird.**
+                    //
+                    // **Und das hat ein echtes Spiel gefunden.** Gemessen an
+                    // `D:/Itch/sister/www`, Karte 2, Ereignis 2:
+                    //
+                    // ```text
+                    // Seite 1: trigger=0, selfSwitchValid=false, 117 Befehle
+                    // Seite 2: trigger=0, selfSwitchValid=true,  13 Befehle
+                    // ```
+                    //
+                    // **Die Schleife laeuft von hinten, also sieht sie Seite 2
+                    // zuerst, deren Selbstschalter A am Anfang nicht gesetzt
+                    // ist** -- **und ein `return` dort hat den ganzen Lauf
+                    // beendet, mit der Meldung, die Bedingung sei nicht zu
+                    // beantworten. Seite 1 hat keine Bedingung und 117
+                    // Befehle und wurde nie erreicht.**
+                    continue;
                 }
 
                 // **Und die Liste wird aus der Datei gelesen, und nicht

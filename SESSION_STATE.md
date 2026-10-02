@@ -15442,3 +15442,93 @@ which is the fourth kind of condition and the one with no measured rule.**
 code shared by two generations is found by the game that exercises the
 generation with less regular files** -- **and MZ's own project has no `VN`
 folder, and no `GameLanguage` folders, and never would have found this.**
+
+
+## A page whose condition does not hold is skipped, not fatal, and only a
+## second engine's game could say so
+
+### And the rule, from the engine
+
+```text
+findProperPageIndex() {
+    const pages = this.event().pages;
+    for (let i = pages.length - 1; i >= 0; i--) {
+        const page = pages[i];
+        if (this.meetsConditions(page)) {
+            return i;
+        }
+    }
+    return -1;
+}
+```
+
+**A page whose conditions do not hold is a page that is skipped.** **And
+this repository returned from the loop instead, with a sentence saying the
+conditions could not be answered.**
+
+### And what that cost, measured
+
+```text
+D:/Itch/sister/www, Map002, Event 2:
+    Seite 1: trigger=0, selfSwitchValid=false, 117 Befehle
+    Seite 2: trigger=0, selfSwitchValid=true,   13 Befehle
+
+vorher:  "event 2 page 1 is the page the engine would run, and its
+          conditions this reader cannot answer, so it is not run"
+          -> 0 Aktionen
+nachher: Seite 1 laeuft, 7 Befehle ausgefuehrt, dann Wartezeit 60 Frames
+```
+
+**The loop runs from the back, so page 2 is seen first, and its self switch
+A is not set at the start, and the `return` ended the whole run there.**
+**Page 1 has no condition and a hundred and seventeen commands and was
+never reached.**
+
+### And then the boundary, named rather than guessed
+
+```text
+MV Lauf: 1 Frames, 1 Aktionen, 81 Karten, Zustand Stopped,
+         Stopped=Refused, Grund=a branch on the author's own script: ,
+         Seiten=0
+```
+
+**And the command it stopped at, read out of the project's own file:**
+
+```text
+111 Conditional Branch
+    parameters[0] = 12                       <- "Script"
+    parameters[1] = "!Utils.isMobileDevice()"
+```
+
+**Condition type 12 is a JavaScript expression inside the project**, and
+`AGENTS.md` says no imported game's JavaScript is executed. **So the run
+does not guess it and does not run it, and it says which command and which
+reason.** **That is the difference between "the game does not run" and "the
+game asks for its own JavaScript", and before this the two were the same
+message.**
+
+**And the self switch needed no new work at all.** `Meets` already took
+`mapId` and `eventId` and built `mapId_eventId_ch`, exactly as
+`command123` does:
+
+```text
+if (this._eventId > 0) {
+    const key = [this._mapId, this._eventId, params[0]];
+    $gameSelfSwitches.setValue(key, params[1] === 0);
+}
+```
+
+**And the project's own scale, which is why this mattered:**
+
+```text
+2724 Seiten, davon
+  1311 ohne Bedingung
+  1378 mit Selbstschalter
+    12 mit Variablenwert
+     0 mit Akteur
+     0 mit Gegenstand
+```
+
+**And this repository writes the self switches: 957 `123` and 2400 `122`
+and 1197 `121` in this game alone.** **So the one condition this game leans
+on hardest is the one that was unreachable.**
