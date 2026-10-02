@@ -142,7 +142,17 @@ public sealed class MzArithmetic
                 // zurueckgegeben hat.** **Und `LeseOder` nimmt ihn, und
                 // wenn er nicht `||` ist, ist er nichts, was diese Ebene
                 // verstehen kann.**
-                if (op.Length > 0 && _fehler.Length == 0)
+                // **Und ein Vergleich ist auch hier nicht der
+                // Fehler**, **denn `LeseVergleich` hat ihn schon
+                // gegessen und ist zurueckgekehrt.**
+                //
+                // ```text
+                // gemessen: "0 <= -1" gab 0 und kein "fehlt",
+                // und der Grund war ein '<' where && belongs,
+                // das nie jemand gelesen hat
+                // ```
+                if (op.Length > 0 && !GehoertEinerHoeheren(op)
+                    && _fehler.Length == 0)
                 {
                     _fehler = "a '" + op + "' where && belongs, at \""
                         + BisHier() + "\"";
@@ -235,6 +245,27 @@ public sealed class MzArithmetic
         while (true)
         {
             var op = NaechsteOperator();
+
+            // **Und ein `+` oder `-` direkt hinter einem
+            // Vergleichszeichen ist kein Rechenzeichen, sondern das
+            // Vorzeichen der rechten Seite.**
+            //
+            // ```text
+            // gemessen an sister/www, 193 Vorkommen:
+            // $gameSelfVariables.get(this, 'frames') <= -1
+            // ```
+            //
+            // **Und ohne diese Regel ist `0 <= -1` gleich `0 <= 0 - 1`,
+            // und `LeseProdukt` liest rechts die `1` und zieht sie vom
+            // Wert der linken Seite ab** -- **und das Ergebnis ist eine
+            // falsche Antwort und keine Verweigerung.**
+            if ((op == "+" || op == "-") && GeradeVergleich())
+            {
+                var vorzeichen = op == "-" ? -1 : 1;
+                _stelle += op.Length;
+                return wert + (vorzeichen * LeseProdukt());
+            }
+
             if (op != "+" && op != "-")
             {
                 if (op.Length > 0 && !IstVergleich(op) && op != "&&"
@@ -254,7 +285,50 @@ public sealed class MzArithmetic
         }
     }
 
-    /// <summary><c>*</c>, <c>/</c> and <c>%</c>.</summary>
+    /// <summary>
+    /// Whether the operator just before this place was a comparison, and a
+    /// sign after one is a sign and not a sum.
+    /// </summary>
+    /// <returns>Whether a comparison stands behind the index.</returns>
+    private bool GeradeVergleich()
+    {
+        // **Und der Index steht auf dem Vorzeichen, und es kann ein
+        // Leerzeichen davor stehen.**
+        //
+        // ```text
+        // "0 <= -1"
+        //  0 1 2 3 4 5
+        //  0 ' ' '<' '=' ' ' '-'
+        // ```
+        //
+        // **Und meine erste Fassung sprang vom Leerzeichen auf das `=`
+        // und pruefte dort `<=` und `"="`** -- **und `<=` steht eine
+        // Stelle weiter links**, **und beide Pruefungen scheiterten.**
+        var i = _stelle - 1;
+        while (i >= 0 && char.IsWhiteSpace(_text[i]))
+        {
+            i--;
+        }
+
+        if (i < 0)
+        {
+            return false;
+        }
+
+        // **Und ein zweizeichiger Operator steht als Paar**, **und `<=`,
+        // `>=`, `==` und `!=` sind alle vier zweizeichig.**
+        if (i >= 1)
+        {
+            var paar = _text.Substring(i - 1, 2);
+            if (IstVergleich(paar))
+            {
+                return true;
+            }
+        }
+
+        return IstVergleich(_text[i].ToString());
+    }
+
     private double LeseProdukt()
     {
         var wert = LesePotenz();
@@ -366,6 +440,59 @@ public sealed class MzArithmetic
         // **Und `$gameVariables.value(N)` ist der einzige Aufruf, den
         // dieser Leser kennt** -- **und gemessen an `command122` ist es
         // auch der, den das Spiel schreibt.**
+        // **Und der Frame-Zaehler des Ereignisses ist der haeufigste
+        // Ausdruck in den Bedingungen eines fertigen Spiels** -- **und
+        // er kommt vor `$gameVariables.value(n)`**, **weil er mit `$`
+        // beginnt wie jede andere Spielvariable.**
+        //
+        // ```text
+        // gemessen an sister/www:
+        // 193x  $gameSelfVariables.get(this, 'frames') <= -1
+        //  75x  $gameSelfVariables.get(this, 'frames') >= 7
+        // 661 Bedingungen im ganzen Spiel fragen danach
+        // ```
+        //
+        // **Und das ist Spielzustand und nicht Maschinenzustand**, **und
+        // trotzdem entscheidet er sich aus einer Zahl, die das Spiel
+        // selbst mit `355` geschrieben hat.**
+        //
+        // ```js
+        // $.prototype.value = function(key) { return this._data[key] || 0; };
+        // $.prototype.get = function(interpreter, key) {
+        //     return this.value(_createKey(interpreter, key));
+        // };
+        // ```
+        // **Und der Frame-Zaehler des Ereignisses ist eine Zahl, die
+        // dieser Leser kennt** -- **und er ist der haeufigste Ausdruck
+        // in den Bedingungen eines fertigen Spiels.**  **Und er ist
+        // Spielzustand und nicht Maschinenzustand**, **und trotzdem
+        // entscheidet er sich aus einer Zahl, die der Interpreter selbst
+        // geschrieben hat.**
+        //
+        // ```js
+        // $.prototype.value = function(key) { return this._data[key] || 0; };
+        // $.prototype.get = function(interpreter, key) {
+        //     return this.value(_createKey(interpreter, key));
+        // };
+        // ```
+        //
+        // **Und `_createKey(interpreter, key)` macht aus Ereignisnummer
+        // und Schluessel einen Schluessel** -- **und ohne den
+        // Ereignisschluessel ist der Wert nicht der des laufenden
+        // Ereignisses.**
+        //
+        // ```text
+        // gemessen an sister/www, Map002, Befehl 22ff:
+        // 355 "$gameSelfVariables.set(this, 'frames', 0);"
+        // 111 [12, "$gameSelfVariables.get(this, 'frames') >= 7"]
+        // ```
+        var eigen = EigenesFenster();
+        if (eigen > 0)
+        {
+            _stelle += eigen.Value;
+            return _fakten == null ? 0 : _fakten.EigenesFenster;
+        }
+
         if (_text[_stelle] == '$')
         {
             return LeseAufruf();
@@ -497,6 +624,41 @@ public sealed class MzArithmetic
     /// comparison</strong> -- <strong>which is 33 of the 44 forms in this
     /// game.</strong>
     /// </remarks>
+    /// <summary>
+    /// The frame counter this event keeps, if that is what is written
+    /// here.
+    /// </summary>
+    /// <returns>
+    /// The text that was consumed, or nothing when it is a different call.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the counter is per event, not per map.</strong> The
+    /// plugin's own words:
+    /// </para>
+    /// <code>
+    /// var storedKey = key.split(','); // [mapId, eventId, variableKey]
+    /// </code>
+    /// <para>
+    /// <strong>And the key carries the map and the event as well</strong>,
+    /// <strong>so one number is not enough</strong> -- <strong>and a
+    /// reader that stored one counter for the whole game would answer
+    /// a question about the wrong event.</strong>
+    /// </para>
+    /// </remarks>
+    private int? EigenesFenster()
+    {
+        const string aufruf = "$gameSelfVariables.get(this, 'frames')";
+        if (_text.Length < _stelle + aufruf.Length
+            || string.CompareOrdinal(
+                _text, _stelle, aufruf, 0, aufruf.Length) != 0)
+        {
+            return null;
+        }
+
+        return aufruf.Length;
+    }
+
     private static bool GehoertEinerHoeheren(string pOp) =>
         pOp is "+" or "-" or "*" or "/" or "%" or "**" or "&&" or "||";
 
@@ -599,6 +761,7 @@ public sealed class MzArithmetic
         {
             "<" => pLinks < pRechts ? 1 : 0,
             "<=" => pLinks <= pRechts ? 1 : 0,
+
             ">" => pLinks > pRechts ? 1 : 0,
             ">=" => pLinks >= pRechts ? 1 : 0,
             "==" or "===" => pLinks == pRechts ? 1 : 0,

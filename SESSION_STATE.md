@@ -16925,6 +16925,67 @@ MV Lauf: 2 Frames, 27 Aktionen, 61 Karten
 All 2331 tests passed
 ```
 
+## 2026-10-02 — Der Ereignis-Zaehler: 321 auf 982 beantwortbar
+
+**Der groesste Block in den Bedingungen dieses Spiels war ueberhaupt
+kein Spielzustand, sondern eine Zahl, die das Spiel selbst schreibt.**
+
+```text
+193x  $gameSelfVariables.get(this, 'frames') <= -1
+ 75x  $gameSelfVariables.get(this, 'frames') >= 7
+ 58x  ... >= 5    38x ... >= 6
+661 Bedingungen im ganzen Spiel fragen danach
+```
+
+**Und der Zaehler wird mit `355` geschrieben, in drei Formen, und
+alle drei sind Zuweisungen und keine Aufrufe:**
+
+```js
+$gameSelfVariables.set(this, 'frames', 0);
+$gameSelfVariables.set(this, 'frames', $gameVariables.value(3));
+$gameSelfVariables.add(this, 'frames', 1)
+```
+
+**Und die dritte Form traegt kein `;`** -- **und ein Formleser, der
+eines verlangt, wuerde die haeufigste Form nach der ersten ablehnen.**
+
+**Und der Schluessel des Plugins sagt, woher die Zahl kommt:**
+
+```js
+$.prototype.value = function(key) { return this._data[key] || 0; };
+$.prototype.get = function(interpreter, key) {
+    return this.value(_createKey(interpreter, key));
+};
+// und: var storedKey = key.split(','); // [mapId, eventId, variableKey]
+```
+
+**Und er ist pro Ereignis und pro Karte** -- **und ein Leser, der
+einen Zaehler fuer das ganze Spiel haelt, beantwortet eine Frage ueber
+das falsche Ereignis.**
+
+**Und `0 <= -1` ist FALSCH** -- **und ich habe drei Schritte lang den
+Leser fuer falsch gehalten**, **und er hatte die ganze Zeit recht.**
+**Und die haeufigste Form fragt also nach einem Zaehler, der
+negativ geworden ist.**
+
+**Zwei eigene Fehler, beide vom `TrimEnd`:**
+
+* **`TrimEnd(';', ' ')` liess die schliessende Klammer von `set(...)`
+  stehen** -- **und `int.TryParse("0)")` ist falsch** -- **und damit
+  haben die ersten drei Formen alle nichts getan.**
+* **`TrimEnd(';', ' ')` frisst aber auch die Klammer von
+  `value(3)` mit** -- **und es bleibt `value(3` ohne Klammer** -- **und
+  das kann der Leser nicht lesen.** **Und was beide Formen brauchen,
+  ist ein Abschneiden an der Klammer, die zu `set(...)` gehoert** --
+  **und das ist nicht dieselbe wie `TrimEnd`.**
+
+```text
+MV Skript-Bedingungen: 982 von 4952 beantwortbar (19 %)
+  vorher 321, also 6 %
+TestMvArithmeticConditions: 7/7
+All 2332 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

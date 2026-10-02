@@ -230,8 +230,8 @@ public partial class TestMvEngineConditions : TestBase
         // Spielers auf einer Karte, die es nicht laedt, ist eine Frage
         // ueber etwas, das es nicht gibt** -- **und sie wird nicht
         // geraten und nicht mit null beantwortet.**
-        AssertTrue(beantwortbar >= 320,
-            "**and three hundred and twenty of them this reader can "
+        AssertTrue(beantwortbar >= 980,
+            "**and nine hundred and eighty of them this reader can "
             + "answer** -- " + beantwortbar + " of " + alle + ", and that is "
             + "the engine's two questions and the arithmetic together, "
             + "and it was 142 before either of the two");
@@ -243,7 +243,7 @@ public partial class TestMvEngineConditions : TestBase
         // unten und damit zu streng** -- **denn 320 mal 15 ist 4800 und
         // 4800 ist kleiner als 4952.** **Und es ist gemessen und nicht
         // gerundet: 320 sind mehr als ein Sechzehntel.**
-        AssertTrue(beantwortbar * 16 > alle,
+        AssertTrue(beantwortbar * 6 > alle,
             "**and more than a sixteenth of them** -- one in "
             + (alle / Math.Max(1, beantwortbar)) + ", and "
             + (beantwortbar * 1000 / alle) + " of a thousand, and every "

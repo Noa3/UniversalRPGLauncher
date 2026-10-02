@@ -407,6 +407,31 @@ public sealed class MzInterpreter
             // **Und `355` hat eine Seite ohne `655`: dann ist der Block
             // leer, und `this._index++` fuehrt auf den Index nach dem
             // Block, und genau das macht diese Regel.**
+            // **Und drei Formen dieses Blocks sind kein JavaScript,
+            // sondern eine Zahl, die der Interpreter selbst
+            // fuehrt** -- **und `355` ist in diesem Spiel der
+            // haeufigste aller Befehle**, **und `661` Bedingungen
+            // fragen nach dem, was er schreibt.**
+            //
+            // ```text
+            // $gameSelfVariables.set(this, 'frames', 0);
+            // $gameSelfVariables.set(this, 'frames', $gameVariables.value(3));
+            // $gameSelfVariables.add(this, 'frames', 1)
+            // ```
+            //
+            // **Und das sind drei Zuweisungen und kein Aufruf** --
+            // **und die dritte Form traegt kein `;`** -- **und beides
+            // steht so in den Dateien des Spiels.**
+            var eigenerZaehler =
+                SetzeEigenenZaehler(zeilen, pBranchFacts);
+            System.Console.WriteLine(
+                "MV 355 " + zeilen.Count + " Zeilen -> "
+                + (eigenerZaehler ?? "(nichts)"));
+            if (eigenerZaehler != null)
+            {
+                Hinweise.Add(eigenerZaehler);
+            }
+
             Hinweise.Add(
                 "the page runs the author's own JavaScript, and this"
                 + " repository does not run it; the block is"
@@ -897,5 +922,159 @@ public sealed class MzInterpreter
         WaitFrames = 0;
         Stopped = MzStep.Stepped;
         return true;
+    }
+    /// <summary>
+    /// The three forms of the block that are not JavaScript but one number
+    /// this interpreter keeps itself.
+    /// </summary>
+    /// <param name="pZeilen">The block's lines, as the game wrote them.</param>
+    /// <param name="pFakten">Where the counter is kept.</param>
+    /// <returns>
+    /// What happened, or nothing when the block really is the author's own
+    /// code.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a block that writes the counter is not a script
+    /// call.</strong> Measured at <c>sister/www</c>:
+    /// </para>
+    /// <code>
+    /// $gameSelfVariables.set(this, 'frames', 0);
+    /// $gameSelfVariables.set(this, 'frames', $gameVariables.value(3));
+    /// $gameSelfVariables.add(this, 'frames', 1)
+    /// </code>
+    /// <para>
+    /// <strong>And the third form carries no semicolon</strong>, <strong>and
+    /// a form matcher that demands one would refuse the form that follows
+    /// the first most often.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the number after <c>set</c> may come out of a
+    /// variable</strong>, <strong>and that variable is the game's own and
+    /// this interpreter holds it.</strong>
+    /// </para>
+    /// </remarks>
+    private static string? SetzeEigenenZaehler(
+        IReadOnlyList<string> pZeilen, MzBranchFacts pFakten)
+    {
+        string? gemeldet = null;
+        foreach (var zeile in pZeilen)
+        {
+            var text = zeile.Trim();
+            const string set = "$gameSelfVariables.set(this, 'frames', ";
+            const string add = "$gameSelfVariables.add(this, 'frames', ";
+
+            if (text.StartsWith(set, StringComparison.Ordinal))
+            {
+                var rest = ZahlOderAufruf(text.Substring(set.Length));
+                if (int.TryParse(rest, System.Globalization.NumberStyles
+                    .Integer, System.Globalization.CultureInfo
+                        .InvariantCulture, out var wert))
+                {
+                    pFakten.EigenesFenster = wert;
+                    gemeldet = "the event's own frame counter is set to "
+                        + wert + ", and that is the number 661 conditions "
+                        + "in this game ask about";
+                }
+                else
+                {
+                    var ausVar = MzArithmetic.TryRead(
+                        rest, pFakten, out _);
+                    if (ausVar.HasValue)
+                    {
+                        pFakten.EigenesFenster = (int)ausVar.Value;
+                        gemeldet = "the event's own frame counter is set "
+                            + "to " + (int)ausVar.Value
+                            + ", which came out of the game's own variable";
+                    }
+                }
+
+                continue;
+            }
+
+            if (text.StartsWith(add, StringComparison.Ordinal))
+            {
+                var rest = ZahlOderAufruf(text.Substring(add.Length));
+                if (int.TryParse(rest, System.Globalization.NumberStyles
+                    .Integer, System.Globalization.CultureInfo
+                        .InvariantCulture, out var schritt))
+                {
+                    pFakten.EigenesFenster += schritt;
+                    gemeldet = "the event's own frame counter moves by "
+                        + schritt + " and stands at "
+                        + pFakten.EigenesFenster;
+                }
+            }
+        }
+
+        return gemeldet;
     }
+
+    /// <summary>
+    /// The value after the comma, without the call's own closing bracket.
+    /// </summary>
+    /// <param name="pText">Everything after the comma.</param>
+    /// <returns>
+    /// A plain number, or the call itself, and both are read.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>TrimEnd</c> is the wrong tool here, and both
+    /// forms prove it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>At <c>0);</c> it eats the bracket</strong>, <strong>the
+    /// number is <c>0</c>, and that works</strong> -- <strong>and at
+    /// <c>$gameVariables.value(3))</c> it eats the bracket of
+    /// <c>value(3)</c></strong>, <strong>what is left is <c>value(3</c>
+    /// without its closing bracket</strong>, <strong>and the reader
+    /// cannot read that.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And what both forms need is to cut at the bracket that
+    /// belongs to <c>set(...)</c></strong>, <strong>and that is the last
+    /// one before the semicolon</strong> -- <strong>and at <c>0);</c> it
+    /// is the same bracket.</strong>
+    /// </para>
+    /// </remarks>
+    private static string ZahlOderAufruf(string pText)
+    {
+        var rest = pText.TrimEnd(';', ' ', '\r', '\n', '\t');
+
+        // **Und `0)` hat keine oeffnende Klammer**, **und meine erste
+        // Fassung hat nur auf eine geprueft** -- **und bei `0)` fand sie
+        // keine**, **und gab `0)` zurueck**, **und `int.TryParse("0)")`
+        // ist falsch.**  **Und bei `$gameVariables.value(3))` fand sie
+        // die von `value(3)`**, **und schnitt dort**, **und gab
+        // `$gameVariables.value(3` zurueck** -- **und das kann der
+        // Leser nicht lesen.**
+        //
+        // **Und die Regel ist einfach: die letzte Klammer gehoert zu
+        // `set(...)`, und was davor steht, ist der Wert** -- **und
+        // eine Zahl hat ueberhaupt keine Klammer**, **und dann ist
+        // die letzte Klammer einfach weg.**
+        var letzte = rest.LastIndexOf(')');
+        if (letzte < 0)
+        {
+            return rest;
+        }
+
+        // **Und wenn davor eine runde Klammer steht, dann gehoert die
+        // letzte zu einem Aufruf darin und nicht zu `set(...)`.**
+        // **Das ist der Fall bei `$gameVariables.value(3)`**: dort ist
+        // die letzte `)` die von `value(3)`, **und die von `set(...)`
+        // ist die zweite.**
+        if (letzte > 0 && rest[letzte - 1] == '(')
+        {
+            // **Und dann ist die vorletzte die von `set(...)`.**
+            var vorletzte = rest.LastIndexOf(')', letzte - 1);
+            return vorletzte < 0
+                ? rest.Substring(0, letzte).TrimEnd(' ', '\r', '\n')
+                : rest.Substring(0, vorletzte).TrimEnd(' ', '\r', '\n');
+        }
+
+        // **Und sonst ist die letzte Klammer die von `set(...)`.**
+        return rest.Substring(0, letzte).TrimEnd(' ', '\r', '\n');
+    }
+
 }

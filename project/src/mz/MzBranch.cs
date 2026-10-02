@@ -627,6 +627,31 @@ public sealed class MzBranchFacts
     public int Begegnungszaehler { get; set; }
 
     /// <summary>
+    /// The frame counter of the event that is running, and it is the
+    /// plugin's own <c>frames</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is written by the game itself</strong>, **and with
+    /// <c>355</c>**:
+    /// </para>
+    /// <code>
+    /// {"code":355,"indent":0,"parameters":[
+    ///     "$gameSelfVariables.set(this, 'frames', 0);"]}
+    /// </code>
+    /// <para>
+    /// <strong>And measured at <c>sister/www</c>: 362 such blocks are
+    /// followed by a <c>111</c> that compares the counter against a
+    /// number</strong> -- <strong><c>&gt;= 7</c>, <c>&gt;= 5</c>,
+    /// <c>&lt;= -1</c></strong> -- <strong>and 661 conditions in the
+    /// whole game ask about it.</strong> <strong>And it starts at
+    /// zero</strong>, <strong>because <c>value(key)</c> is
+    /// <c>this._data[key] || 0</c>.</strong>
+    /// </para>
+    /// </remarks>
+    public int EigenesFenster { get; set; }
+
+    /// <summary>
     /// The nickname, and it is not the name.
     /// </summary>
     /// <remarks>
