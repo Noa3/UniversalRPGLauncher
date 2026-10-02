@@ -570,32 +570,49 @@ public sealed class MzScreen
     public const int MaxAudioFadeFrames = 3600;
 
     /// <summary>
-    /// How long a balloon icon stays when the command did not say.
+    /// How long a balloon stays when the command did not say.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And this is a number this repository chose, and the code
-    /// says so twice.</strong> The official help for
-    /// <c>213 Show Balloon Icon</c> names three settings — the
-    /// character, the icon, and whether to wait — <strong>and no fourth
-    /// one, and no duration anywhere in the command.</strong>
+    /// <strong>And this number is measured, and it was 60 before, and 60
+    /// was a choice dressed as a constant.</strong> Measured at
+    /// <c>Sprite_Balloon</c> in <c>rpg_sprites.js</c>:
+    /// <c>setup(balloonId) { this._duration = 8 * this.speed() +
+    /// this.waitTime(); }</c> with <c>speed() { return 8; }</c> and
+    /// <c>waitTime() { return 12; }</c> -- that is <c>8 * 8 + 12 =
+    /// 76</c> frames, and <c>isPlaying() { return this._duration &gt; 0;
+    /// }</c> counts them down in <c>update()</c>.
     /// </para>
     /// <para>
-    /// <strong>And without a duration, "wait for the icon to disappear"
-    /// is a wait that never ends</strong> — the event would sit on its
-    /// branch for ever, and the player would see a game that stopped.
-    /// <strong>A second is the shortest span a player perceives as
-    /// "it was there", and a minute is longer than any balloon in any
-    /// game of that time.</strong>
+    /// <strong>And the chain that ends the balloon is four long</strong>
+    /// and <strong>none of it is in the command</strong> --
+    /// <c>213</c> only asks -- <c>command213</c> sets
+    /// <c>setWaitMode('balloon')</c> -- <c>updateWaitMode</c> asks
+    /// <c>this._character.isBalloonPlaying()</c> -- and that is
+    /// <c>this._balloonId &gt; 0 || this._balloonPlaying</c> on
+    /// <c>Game_CharacterBase</c> -- and only
+    /// <c>Sprite_Character.updateAnimation</c> calls
+    /// <c>this._character.endBalloon()</c>, and only once the sprite
+    /// says <c>!isBalloonPlaying()</c>.
     /// </para>
     /// <para>
-    /// <strong>And a game whose balloon is meant to stay until something
-    /// else erases it will lose that here</strong>, **and the honest
-    /// thing is to say the number is a choice rather than to hide it in
-    /// a constant whose name does not admit it.**
+    /// <strong>And the game's own plugin replaces the sprite's answer
+    /// and not its clock</strong> --
+    /// <c>Drill_CoreOfEventFrame.js</c> writes
+    /// <c>Sprite_Character.prototype.isBalloonPlaying = function() { return
+    /// !!this._balloonSprite; }</c>, -- <strong>and it does not touch
+    /// <c>Sprite_Balloon.speed()</c> or <c>waitTime()</c></strong>, so
+    /// the seventy-six are the game's own and not the engine's.
+    /// </para>
+    /// <para>
+    /// <strong>And sixty was defensible for an animation and not for
+    /// this</strong>, because a balloon is <c>8 * 8 + 12</c> and nothing
+    /// else, and a reader that guesses it waits a quarter of a second
+    /// too short or too long depending on which way it guessed.
+    /// </strong>
     /// </para>
     /// </remarks>
-    public const int MaxBalloonFrames = 60;
+public const int MaxBalloonFrames = 76;
 
     /// <summary>
     /// How long an animation stays when the command did not say.

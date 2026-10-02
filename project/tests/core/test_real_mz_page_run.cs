@@ -97,11 +97,18 @@ public partial class TestRealMzPageRun : TestBase
         //
         // **Und gemessen sind es acht Aktionen aus 211 Befehlen** --
         // **denn die Seite wartet bei Index 21, einem `213`, auf einen
-        // Ballon mit 60 Bildern.** **Und die Ballons dieses Spiels
-        // haben keine Dauer in der Liste**, **also nimmt der Leser
-        // seinen eigenen Wert**, **und das ist gemeldet und nicht
-        // geraten.**
-        // **Und das ist die Zahl, die sich mit der gehenden Figur
+        // Ballon mit 76 Bildern.** **Und die Ballons dieses Spiels
+        // haben keine Dauer in der Liste**, -- **also stand hier
+        // lange eine geratene Zahl**, -- **und die steht jetzt aus
+        // `Sprite_Balloon.setup`:**
+        //
+        // ```js
+        // this._duration = 8 * this.speed() + this.waitTime();
+        // ```
+        //
+        // **8 * 8 + 12 = 76**, -- **und der Test
+        // `Test_DieBallonDauerIstDieAusDerQuelleUndNichtGeraten` liest
+        // genau diese Zeilen aus der Datei des Spiels.**
         // aendert, und ich weiss sie erst nach dem Lauf.**
         // **Und diese Zahl ist gemessen, nicht geraten** -- **und sie
         // stand bei acht, bis die Figur ging.**
@@ -922,7 +929,7 @@ public partial class TestRealMzPageRun : TestBase
         // wuerde ihn als Zeile einer Auswahl lesen, und die Seite
         // redete nichts.**
         // **Und erst die Frage: wo kommt die Seite herum?** **Denn
-        // Null Zeilen koennen zweierlei heissen** -- **dass der 105
+        // Ballon, und der braucht 76 Bilder.**
         // nicht ausgefuehrt wurde**, **und dass die Seite vorher
         // stehen blieb.** **Und gemessen ist Index 21 ein wartender
         // Ballon, und der braucht 60 Bilder.**

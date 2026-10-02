@@ -259,7 +259,7 @@ public partial class TestMzPartyAndSwitches : TestBase
         // Zustand, und ein Takt, der nur den Spieler zaehlte, liess
         // jedes andere Icon auf der Karte fuer den Rest des Spiels
         // stehen.**
-        fakten.TickBalloons(59);
+        fakten.TickBalloons(75);
         AssertTrue(fakten.Player.HasBalloon && fakten.Characters[4].HasBalloon,
             "**and it is still there after fifty-nine frames** -- and the "
                 + "figure's icon is counted on the same clock as the "
@@ -268,7 +268,7 @@ public partial class TestMzPartyAndSwitches : TestBase
         fakten.TickBalloons(1);
         AssertTrue(!fakten.Player.HasBalloon
                 && !fakten.Characters[4].HasBalloon,
-            "**and it is gone on the sixtieth** -- and a balloon that "
+            "**and it is gone on the seventy-seventh** -- and a balloon that "
                 + "stayed would sit over a head for ever, and the manual "
                 + "calls that field *wait for the icon to disappear*");
 
@@ -308,7 +308,7 @@ public partial class TestMzPartyAndSwitches : TestBase
         {
             new(213, ["-1", "2", "false"], 0),
         };
-        for (var i = 0; i < 61; i++)
+        for (var i = 0; i < 77; i++)
         {
             // **Und 122 Change Variables wartet auf nichts** --
             // **das war der erste Versuch, und er ist mit 101 Show Text

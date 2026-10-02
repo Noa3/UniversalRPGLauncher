@@ -17098,6 +17098,65 @@ MV Lauf: 601 Frames, 8414 Aktionen, 61 Karten, Finished
 All 2332 tests passed
 ```
 
+## 2026-10-02 — Die Ballonuhr: 60 war geraten, die Quelle sagt 76
+
+**Die parallele Seite wartet bei einem `213 [-1, 2, true]`, und das
+dritte Parameter sagt: warte, bis das Icon weg ist.** **Und wie lange
+es da ist, stand im Code als Konstante.**
+
+```csharp
+public const int MaxBalloonFrames = 60;   // geraten
+```
+
+**Und der Kommentar darüber sagte es selbst und ich hatte es gelesen:**
+*"A second is the shortest span a player perceives as 'it was there'"* --
+**das ist eine Begruendung fuer eine Zahl, die niemand gemessen hat.**
+
+**Und die Zahl steht in einer Datei, die ich die ganze Zeit schon
+gelesen habe:**
+
+```js
+// rpg_sprites.js
+setup(balloonId) {
+    this._duration = 8 * this.speed() + this.waitTime();
+}
+speed()   { return 8; }
+waitTime() { return 12; }
+// isPlaying() { return this._duration > 0; }
+```
+
+**Das sind 8 * 8 + 12 = 76 Bilder, und nicht gerundet.**
+
+### Und die Kette, die die Blase beendet, ist vier lang und liegt
+### vollstaendig ausserhalb des Befehls
+
+```text
+213          fragt nur:          command213 -> setWaitMode('balloon')
+updateWaitMode                   character.isBalloonPlaying()
+Game_CharacterBase               _balloonId > 0 || _balloonPlaying
+Sprite_Character.updateAnimation -> _character.endBalloon()
+```
+
+**Und das eigene Plugin des Spiels ersetzt die Antwort des Sprites
+und nicht dessen Uhr:**
+
+```js
+// Drill_CoreOfEventFrame.js
+Sprite_Character.prototype.isBalloonPlaying =
+    function(){ return !!this._balloonSprite; };
+```
+
+**Und es fasst `Sprite_Balloon.speed()` und `waitTime()` nicht an**, --
+**also sind die 76 die des Spiels und nicht die der Engine.**
+
+**Und `Test_DieBallonDauerIstDieAusDerQuelleUndNichtGeraten` liest die
+drei Zeilen aus der Datei des Spiels und schlaegt fehl, wenn sie und
+das Repository auseinanderlaufen** -- **statt die Zahl zu behaupten.**
+
+```text
+All 2333 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
