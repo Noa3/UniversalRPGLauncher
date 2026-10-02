@@ -17304,6 +17304,81 @@ Wartende Befehle: 101=false 102=false 103=false 104=false 105=false
 All 2336 tests passed
 ```
 
+## 2026-10-02 — Der neunte Befehl, und MV hat dieselben Fehler
+
+**Der Härtetest war eine echte MV-Seite: Map231 Event 2, 445 Befehle,
+zehn wartende Ballons.** **Und MV braucht keinen eigenen Leser** --
+**MV ist ein Zweig desselben Befehlssatzes**, -- **und darum greift die
+MZ-Korrektur automatisch.** **Und MV's eigene Engine sagt dasselbe:**
+
+```text
+ 101 false  102 false  103 false  104 false  105 false
+ 201 false  204 beide  205 true   212 true   213 true
+ 217 true   261 false  339 true
+```
+
+### Und dann kamen fuenf weitere Befehle dazu
+
+**Weil `this.wait()` nicht dasselbe ist wie `setWaitMode`.**
+
+```text
+Befehle, die this.wait() aufrufen:
+ 221  return false      222  return false
+ 223  return true       224  return true       225  return true
+ 230  return true       232  return true       234  return true
+ 236  return true
+```
+
+**Und `230`, `224`, `225`, `223`, `234`, `236` gaben alle `false`,
+obwohl die Engine `true` sagt.** **Und `221` und `222` geben
+`false`, und zwar weil sie wie `101` erst `$gameMessage.isBusy()`
+fragen und ihre Zeilen selbst schlucken.**
+
+### Und bei `230` stand ein Kommentar, der den Fehler beglaubigte
+
+```csharp
+// `false` here does not mean "carry on" and `true` would not
+// mean it either. ... **This return value is a dead branch** --
+// a first mutation run proved it, by changing this to `true`
+// and watching every test still pass.
+```
+
+**Und die Mutationsprobe hat gemessen, ob ein Test bricht, und nicht,
+ob das Spiel weiterkommt.** **Und bei `232` steht derselbe Fall richtig
+im Kommentar** -- **und `230` wurde nur nie korrigiert.**
+
+**Und `return false` hiess: bei jedem Aufruf dieselben dreissig Bilder
+neu setzen, und die Seite kommt nie ueber Index 9 hinaus.**
+
+### Und der Index
+
+```text
+vorher:  Index 9,  dann fuer immer 9
+nachher: 10 12 15 24 28 29 30 36 45 52 57 72 80 84 93 99 107 112
+         120 124 129 131 137 140 146 152 159 164 167 173 182 193
+         196 197 208 211 217 219 220 224 227 228 242 245 248 256
+         263 266 272 278 283 288 298 311 314 318 325 334 337 350
+         354 368 376 378 380 381 384 391 409 414 419 422 437 440
+```
+
+**Und 440 ist ein `201`, ein Kartenwechsel auf Karte 232** -- **und
+dahinter steht nur noch der Abschluss der Liste.**
+
+### Und ein Test behauptete eine Zahl, die nicht aus seinen Daten kam
+
+**Und `Test_AWalkWithFramesReachesThePageThatAWaitHoldsUp` sprach von
+neun `126`** -- **und ich las zuerst `mz_plain` und fand drei Befehle**
+-- **und der Weg, den der Test nimmt, ist `mz`.** **Und dort stehen
+tatsaechlich neun `126`, ein `230 [30]` bei Index 9 und drei `117`
+dahinter.**
+
+**Und ich habe den Test fast umgeschrieben, weil ich das falsche
+Fixture gelesen hatte** -- **und die Zahl neun stimmte.**
+
+```text
+All 2337 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

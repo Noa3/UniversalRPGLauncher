@@ -886,15 +886,39 @@ public static class MzCommands
                 var frames = At(pCommand, 0);
                 pActions.Add(MzAction.Wait(pCommand, frames));
                 pInterpreter.Wait(frames);
-                // `false` here does not mean "carry on" and `true` would not
-                // mean it either. `ExecuteOne` finishes with
-                // `return Stopped == MzStep.Stepped`, and `Wait` has just set
-                // `Stopped` to `Waiting`, so the run stops either way. **This
-                // return value is a dead branch** — a first mutation run proved
-                // it, by changing this to `true` and watching every test still
-                // pass. It is left as `false` because it says what the command
-                // meant, and the next branch in this switch is a real one.
-                return false;
+                // **Und `230` gibt `true` zurueck.**
+                //
+                // **Gemessen an `command230`, und das ist der ganze
+                // Befehl:**
+                //
+                // ```js
+                // Game_Interpreter.prototype.command230 = function() {
+                //     this.wait(this._params[0]);
+                //     return true;
+                // };
+                // ```
+                //
+                // **Und `executeCommand` hebt den Index danach hoch**,
+                // **und `this._waitCount` zaeht im naechsten
+                // `updateWaitCount` herunter.**
+                //
+                // **Und `return false` hiess: der Index bleibt auf dem
+                // `230` stehen**, -- **und damit wird jede Runde
+                // dieselben sechzig Bilder neu gesetzt**, -- **und
+                // eine Seite mit einem `230 [60]` bei Index 9 kommt
+                // nie ueber diese neun Befehle hinaus.**
+                //
+                // **Und das war derselbe Fehler wie bei `212`,
+                // `213` und `217`**, -- **und er wurde hier mit
+                // einem Kommentar gerechtfertigt, der behauptete, der
+                // Rueckgabewert sei ein toter Zweig**, -- **und die
+                // Mutationsprobe, die das belegen sollte, hat
+                // gemessen, ob ein Test bricht, und nicht, ob das
+                // Spiel weiterkommt.**
+                //
+                // **Und dieselbe Form steht jetzt bei `232`**,
+                // **und der Kommentar dort sagt es richtig.**
+                return true;
             }
 
             case MzCommandTable.PlayBgm:
@@ -1036,7 +1060,19 @@ public static class MzCommands
                 if (Flag(pCommand, 3))
                 {
                     pInterpreter.Wait(dauer);
-                    return false;
+                    // **Und dieser Befehl gibt `true` zurueck.**
+                    //
+                    // **Gemessen an der Quelle:** `commandNNN` ruft
+                    // `this.wait(...)` und endet in `return true;`
+                    // -- **und also geht der Index ueber ihn hinweg**, --
+                    // **und die Wartezeit gehoert dem Interpreter**, --
+                    // **und nicht diesem Befehl.**
+                    //
+                    // **Und `return false` hiess: der Index bleibt
+                    // stehen**, -- **und damit wird dieselbe Wartezeit
+                    // bei jedem Aufruf neu gesetzt**, -- **und die Seite
+                    // kommt nie ueber diese Befehle hinaus.**
+                    return true;
                 }
 
                 return true;
@@ -1123,7 +1159,19 @@ public static class MzCommands
                 if (warten)
                 {
                     pInterpreter.Wait(dauer);
-                    return false;
+                    // **Und dieser Befehl gibt `true` zurueck.**
+                    //
+                    // **Gemessen an der Quelle:** `commandNNN` ruft
+                    // `this.wait(...)` und endet in `return true;`
+                    // -- **und also geht der Index ueber ihn hinweg**, --
+                    // **und die Wartezeit gehoert dem Interpreter**, --
+                    // **und nicht diesem Befehl.**
+                    //
+                    // **Und `return false` hiess: der Index bleibt
+                    // stehen**, -- **und damit wird dieselbe Wartezeit
+                    // bei jedem Aufruf neu gesetzt**, -- **und die Seite
+                    // kommt nie ueber diese Befehle hinaus.**
+                    return true;
                 }
 
                 return true;
@@ -1170,7 +1218,19 @@ public static class MzCommands
                 if (warten)
                 {
                     pInterpreter.Wait(dauer);
-                    return false;
+                    // **Und dieser Befehl gibt `true` zurueck.**
+                    //
+                    // **Gemessen an der Quelle:** `commandNNN` ruft
+                    // `this.wait(...)` und endet in `return true;`
+                    // -- **und also geht der Index ueber ihn hinweg**, --
+                    // **und die Wartezeit gehoert dem Interpreter**, --
+                    // **und nicht diesem Befehl.**
+                    //
+                    // **Und `return false` hiess: der Index bleibt
+                    // stehen**, -- **und damit wird dieselbe Wartezeit
+                    // bei jedem Aufruf neu gesetzt**, -- **und die Seite
+                    // kommt nie ueber diese Befehle hinaus.**
+                    return true;
                 }
 
                 return true;
@@ -2259,7 +2319,19 @@ public static class MzCommands
                 if (wartenWetter)
                 {
                     pInterpreter.Wait(At(pCommand, 2));
-                    return false;
+                    // **Und dieser Befehl gibt `true` zurueck.**
+                    //
+                    // **Gemessen an der Quelle:** `commandNNN` ruft
+                    // `this.wait(...)` und endet in `return true;`
+                    // -- **und also geht der Index ueber ihn hinweg**, --
+                    // **und die Wartezeit gehoert dem Interpreter**, --
+                    // **und nicht diesem Befehl.**
+                    //
+                    // **Und `return false` hiess: der Index bleibt
+                    // stehen**, -- **und damit wird dieselbe Wartezeit
+                    // bei jedem Aufruf neu gesetzt**, -- **und die Seite
+                    // kommt nie ueber diese Befehle hinaus.**
+                    return true;
                 }
 
                 return true;
@@ -2588,7 +2660,19 @@ public static class MzCommands
                 if (warten234)
                 {
                     pInterpreter.Wait(dauer234);
-                    return false;
+                    // **Und dieser Befehl gibt `true` zurueck.**
+                    //
+                    // **Gemessen an der Quelle:** `commandNNN` ruft
+                    // `this.wait(...)` und endet in `return true;`
+                    // -- **und also geht der Index ueber ihn hinweg**, --
+                    // **und die Wartezeit gehoert dem Interpreter**, --
+                    // **und nicht diesem Befehl.**
+                    //
+                    // **Und `return false` hiess: der Index bleibt
+                    // stehen**, -- **und damit wird dieselbe Wartezeit
+                    // bei jedem Aufruf neu gesetzt**, -- **und die Seite
+                    // kommt nie ueber diese Befehle hinaus.**
+                    return true;
                 }
 
                 return true;

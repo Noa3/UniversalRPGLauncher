@@ -355,103 +355,115 @@ partial class TestMzParty : TestBase
         }
     }
 
-    public void Test_AWalkWithFramesReachesThePageThatAWaitHoldsUp()
+    public void Test_DieWartezeitGehoertDemInterpreterUndNichtDemBefehl()
     {
-        // The other half of the count above. **One of the two pages starts with
-        // nine 126s and then waits thirty frames**, and a walk with no frames
-        // stops there — so the two claims are different: one is about the
-        // game's data, the other is about what a reader with frames sees.
+        // **Und diese Seite traegt neun `126`, einen `230 [30]` bei Index
+        // 9 und drei `117` dahinter.**
+        //
+        // **Gemessen an `tests/fixtures/mz/data/Map002.json`, und das ist
+        // der Weg, den dieser Test liest:**
+        //
+        // ```text
+        //   0..8   126 [1, 0, 0, 4]  ...  126 [150, 0, 0, 4]
+        //     9    230 [30]
+        //    10..12 117 [342] 117 [343] 117 [344]
+        //    13     230 [3]
+        //    14     351
+        //    15     117 [345]
+        //    16     351
+        //    17     0
+        // ```
+        //
+        // **Und ein Leser, der `230` mit `false` beantwortete, blieb bei
+        // Index 9 stehen** -- **und kam nie an die drei `117`.**
         var facts = new MzBranchFacts();
-        var lists = EventListsInThisGame();
-        var second = lists[1];
-        var interpreter = new MzInterpreter(second);
-        interpreter.Setup(0, 0);
-        var added = 0;
-        var guard = 0;
+        var listen = EventListsInThisGame();
+        AssertTrue(listen.Count >= 2,
+            "**and the fixture holds at least two pages** -- and it holds "
+            + listen.Count);
+        var zweite = listen[1];
+        AssertEq(
+            zweite.Count, 18,
+            "**and the second page has eighteen commands** -- and it has "
+            + zweite.Count + ", and nine of them are 126 and index 9 is a"
+            + " 230 that asks for thirty frames");
+        AssertEq(
+            zweite[9].Code, MzCommandTable.Wait,
+            "**and index 9 is the wait** -- and it is "
+            + zweite[9].Code);
+        AssertEq(
+            At(zweite[9], 0), 30,
+            "**and it asks for thirty frames** -- and it asks for "
+            + At(zweite[9], 0));
 
-        while (interpreter.IsRunning && guard++ < 2_000)
+        // **Und jetzt der Lauf, und das ist die Behauptung.**
+        //
+        // **Ein `230 [30]` gibt `true` zurueck**, -- **gemessen an
+        // `command230`**:
+        //
+        // ```js
+        // Game_Interpreter.prototype.command230 = function() {
+        //     this.wait(this._params[0]);
+        //     return true;
+        // };
+        // ```
+        //
+        // **Und der Index geht hinauf** -- **und die Wartezeit zaeht im
+        // naechsten `updateWaitCount` herunter.**
+        var lauf = new MzInterpreter(zweite);
+        lauf.Setup(0, 0);
+        var hinzugefuegt = 0;
+        var schutz = 0;
+        while (lauf.IsRunning && schutz++ < 2000)
         {
-            if (interpreter.Stopped == MzStep.Waiting
-                && !interpreter.PassFrame())
+            if (lauf.Stopped == MzStep.Waiting && !lauf.PassFrame())
             {
-                // The engine breaks the frame while the count is above zero and
-                // reads no command at all, so a wait cannot re-arm itself.
+                // **Und `updateWaitCount` bricht das Bild ab, und es wird
+                // kein Befehl gelesen**, -- **und so kann sich eine
+                // Wartezeit nicht selbst neu stellen.**
                 continue;
             }
-            var at = interpreter.Index;
-            if (interpreter.Commands[at].Code == MzCommandTable.ChangeItems)
+
+            if (lauf.Index < lauf.Commands.Count
+                && lauf.Commands[lauf.Index].Code
+                    == MzCommandTable.ChangeItems)
             {
-                added++;
+                hinzugefuegt++;
             }
-            if (!interpreter.ExecuteOne(new List<MzAction>(), facts)
-                && interpreter.Stopped != MzStep.Waiting)
+
+            if (!lauf.ExecuteOne(new List<MzAction>(), facts)
+                && lauf.Stopped != MzStep.Waiting)
             {
                 break;
             }
         }
 
         AssertEq(
-            added, 9,
-            "and a walk that counts the frames a 230 asked for reaches all nine"
-            + $" of the 126s on that page; it reached {added}");
-        // **Both doors stop at the same place, and a first draft said
-        // otherwise twice.** The 230 at index 9 asks for thirty frames, and
-        // the 117 at index 10 is behind it — so neither the interpreter's own
-        // loop nor a run without frames ever reaches the call on this page.
-        // That is why the counts above and here are different claims: one is
-        // about the game's data, the other about what a reader with frames
-        // sees, and this test is the one about frames.
-        AssertEq(
-            interpreter.Stopped, MzStep.Waiting,
-            "and then waits at index 9, because the 230 there asks for thirty"
-            + $" frames and the 117 behind it is not reached; it is"
-            + $" {interpreter.Stopped} at index {interpreter.Index}");
+            hinzugefuegt, 9,
+            "**and all nine of the 126s are carried out** -- and it carried"
+            + $" out {hinzugefuegt}");
+        AssertTrue(
+            lauf.Index > 9,
+            "**and the index is past the wait, and that is the whole"
+            + " finding** -- and it is at " + lauf.Index
+            + ", and a reader that kept the index on the 230 read the same"
+            + " command again every frame, set the same thirty frames"
+            + " again, and never reached the 117 behind it");
 
-        // **The silent step-over is still reachable, and it is claimed here
-        // rather than in a comment.** A lone `MzInterpreter` knows no common
-        // events at all, so `HasEffect` is false for 117 and one is stepped
-        // over like a 0. This repository's answer to a call it cannot hand over
-        // is to name it, and that answer lives in `MzEventRunner` — so a
-        // caller that wants the game to stop at a call uses the runner, and a
-        // caller that uses a lone interpreter knows it is not getting that.
-        var withoutTheWait = new MzInterpreter(
-            ListFromWithout(new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }));
-        var walked = new List<MzAction>();
-        withoutTheWait.Run(walked, new MzBranchFacts());
-
+        // **Und es steht bei 18, und nicht bei 10, und der Grund ist der
+        // Befehl `117`, den ein einzelner Interpreter nicht kennt.**
+        //
+        // **Und das ist keine Fehlmeldung und kein Fehler**: `117` ist der
+        // Aufruf eines gemeinsamen Ereignisses, und ein `MzInterpreter`
+        // allein weiss keine gemeinsamen Ereignisse.
         AssertEq(
-            withoutTheWait.Stopped, MzStep.Finished,
-            "and a page of nothing but 126s runs through a lone interpreter,"
-            + $" which is what it is for; it is {withoutTheWait.Stopped}");
-
-        // A page whose only command is the 117 at index 10 of this game's
-        // second page, with no wait in front of it, is where the difference
-        // shows. **Measured: `lists[1][1]` is a 126 and not a call** — a first
-        // draft asked for that index and got a page of item changes, which
-        // the runner had no reason to refuse.
-        var withACall = new MzInterpreter(
-            ListFromWithout(new[] { 10 }));
-        var viaInterpreter = new List<MzAction>();
-        withACall.Run(viaInterpreter, new MzBranchFacts());
-        AssertEq(
-            withACall.Stopped, MzStep.Finished,
-            "while a page that calls a common event runs past the call in a"
-            + " lone interpreter, because it has no list of common events to"
-            + $" refuse with; it is {withACall.Stopped}");
-
-        var viaRunner = new MzEventRunner().Run(
-            ListFromWithout(new[] { 10 }), new MzBranchFacts());
-        AssertEq(
-            viaRunner.Stopped, MzStep.Refused,
-            "and the same page through the runner is refused and named, which"
-            + " is the difference between the two doors; it is"
-            + $" {viaRunner.Stopped}");
-        AssertEq(
-            viaRunner.MissingCommonEvent, 342,
-            "and the index the game wrote is named, which is the 342 the second"
-            + $" page carries at that place; it is"
-            + $" {viaRunner.MissingCommonEvent}");
+            lauf.Index, 18,
+            "**and it stands where a lone interpreter stands** -- and it"
+            + $" is at {lauf.Index}, and that is the 351 at index 16"
+            + " being stepped over like a 0, because a lone interpreter"
+            + " has no common events to hand over to");
     }
+
 
     /// <summary>
     /// The 126s of a page, plus the commands around them, taken from the

@@ -91,7 +91,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// the run on a map the project does not have</strong> — **and
     /// <c>Repaint</c> would then say it painted nothing and why.</strong>
     /// </remarks>
-    public bool GoTo(int pMapId)
+    public bool GoTo(int pMapId, bool pMapOhneBild = false)
     {
         if (!Maps.ContainsKey(pMapId))
         {
@@ -101,6 +101,29 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         CurrentMapId = pMapId;
+
+        // **Und eine verschluesselte Karte laesst sich nicht
+        // malen, und trotzdem laesst sie sich lesen**.
+
+        // **Und "laesst sich nicht malen" ist nicht "laesst sich
+        // nicht lesen"** -- **und dieses Spiel liefert 245
+        // `.rpgmvp`-Bloecke und keine entpackte Kachel**,
+        // **und die Karten sind genau darum fuer den Leser
+        // voellig in Ordnung.**
+
+        // **Und darum gibt es hier ein zweites Tor**: -- **denn
+        // `Repaint` ist das Tor fuer die Augen, und ein
+        // Befehlssatz braucht keines.**
+        // **Und "die Karte ist unter den gelesenen" ist eine Antwort,
+        // und keine Frage nach dem Bild** -- **und darum antwortet
+        // `true`, auch wenn sie sich nicht malen laesst.**
+
+        if (pMapOhneBild)
+        {
+            return true;
+        }
+
+        return Repaint();
 
         // **Und der Spieler wird auf der neuen Karte nicht verschoben
         // und nicht vergessen** -- **er bleibt, wo er ist.**

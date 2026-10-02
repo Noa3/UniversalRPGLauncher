@@ -219,11 +219,31 @@ partial class TestMzEventRunner : TestBase
 
     public void Test_AWaitStopsTheRunAndIsCountedDownByTheCaller()
     {
-        // `command230` is `this._waitCount = params[0]`, and `updateWaitCount`
-        // takes one off it per frame and breaks the frame while it is above
-        // zero. **The command is read again the frame after, so the index does
-        // not move**, and a reader that stepped over the wait would run the rest
-        // of the list three frames early.
+        // **Und `command230` gibt `true` zurueck, und der Index geht
+        // hoch** -- **und das stand hier lange anders, und der Fehler
+        // war messbar.**
+        //
+        // ```js
+        // Game_Interpreter.prototype.command230 = function() {
+        //     this.wait(this._params[0]);
+        //     return true;
+        // };
+        // ```
+        //
+        // **Und `executeCommand` sagt `if (!this[methodName]()) { return
+        // false; } this._index++; }`** -- **und also geht der Index
+        // hinauf, und `this._waitCount` zaeht im naechsten
+        // `updateWaitCount` herunter.**
+        //
+        // **Und `return false` hiess: der Index bleibt auf dem `230`,
+        // und beim naechsten Frame wird dasselbe `230` wieder gelesen**
+        // -- **und `this._waitCount` wird dabei wieder auf drei
+        // gesetzt** -- **und die Wartezeit beginnt von vorn.**
+        //
+        // **Und das kostete eine echte MV-Seite ihre ersten 439
+        // Befehle**, -- **denn sie beginnt mit einem `205`, und dann
+        // kommt bei Index 9 ein `230 [60]`, und ein Leser, der hier
+        // `false` zurueckgibt, steht dort fuer immer.**
         var commands = ListFrom(
             (230, 0, ["3"]),
             (122, 0, ["1", "1", "0", "0", "20"]),
@@ -238,9 +258,11 @@ partial class TestMzEventRunner : TestBase
             "a wait leaves the interpreter waiting, not finished; it is"
             + $" {interpreter.Stopped}");
         AssertEq(
-            interpreter.Index, 0,
-            "and the index stays on the wait, because the engine reads the same"
-            + $" command again next frame; it is {interpreter.Index}");
+            interpreter.Index, 1,
+            "and the index steps over the wait, because `command230` answers"
+            + $" true and `executeCommand` moves it on; it is {interpreter.Index}"
+            + ", and a reader that kept it on the wait read the same 230"
+            + " again next frame and set the same three frames again");
         AssertEq(
             interpreter.WaitFrames, 3,
             "and the count the game asked for is kept, so a caller can count it"
