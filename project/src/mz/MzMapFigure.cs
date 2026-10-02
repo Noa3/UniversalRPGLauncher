@@ -371,10 +371,71 @@ public static class MzMapFigureReader
                 $"{pMapId}_{pEventId}_{ch[0]}", out var an) && an;
         }
 
-        // **Und die Felder, die dieses Projekt nicht setzt.**
-        foreach (var feld in new[] { "actorValid", "itemValid", "variableValid" })
+        // **Und `variableValid`, `itemValid` und `actorValid` sind keine
+        // Felder, die dieses Projekt nicht setzt.** Sie sind Felder, die
+        // dieser Leser nicht beantwortet hat, und das ist ein Unterschied,
+        // der hier behoben ist.
+        //
+        // **Die Regel steht woertlich in `rpg_objects.js`, in
+        // `Game_Event.meetsConditions`:**
+        //
+        // ```text
+        // if (c.variableValid) {
+        //     if ($gameVariables.value(c.variableId) < c.variableValue) {
+        //         return false;
+        //     }
+        // }
+        // if (c.itemValid) {
+        //     const item = $dataItems[c.itemId];
+        //     if (!$gameParty.hasItem(item)) { return false; }
+        // }
+        // if (c.actorValid) {
+        //     const actor = $gameActors.actor(c.actorId);
+        //     if (!$gameParty.members().contains(actor)) { return false; }
+        // }
+        // ```
+        //
+        // **Und alle drei Werte liegen in `MzBranchFacts`, denn `122` schreibt
+        // `Variables`, `126` schreibt `KnownItems` und `129` schreibt
+        // `PartyMembers`.** **Also sind sie keine Grenze, sondern eine
+        // Frage, die dieser Leser nicht gestellt hat.**
+        if (Gilt(pConditions, "variableValid"))
         {
-            if (Gilt(pConditions, feld))
+            // **Und der Vergleich ist `gefunden < gefragt`, und nicht
+            // `gefunden != gefragt`.** **Gemessen an `command111`: die
+            // Seite zeigt sich ab einem Wert, nicht bei genau einem.**
+            var id = pConditions.Member("variableId")?.IntOr(-1) ?? -1;
+            var wert = pConditions.Member("variableValue")?.IntOr(0) ?? 0;
+            if (pFacts == null
+                || !pFacts.Variables.TryGetValue(id, out var gefunden)
+                || gefunden < wert)
+            {
+                return false;
+            }
+        }
+
+        if (Gilt(pConditions, "itemValid"))
+        {
+            // **Und `hasItem` fragt die Zahl im Inventar, und die
+            // Mindestmenge steht in `parameters[1]` der Seite.** **Der
+            // einfache Fall ist die Zahl groesser als null.**
+            var id = pConditions.Member("itemId")?.IntOr(-1) ?? -1;
+            // **Und `hasItem` fragt, ob der Gegenstand im Inventar ist, und
+            // `Items` ist ein Woerterbuch aus Nummer und Menge** -- **und
+            // das ist die Form, die `126 Change Items` schreibt und die
+            // Form, in der `command126` zurueckgibt, was es tat.**
+            if (pFacts == null
+                || !pFacts.Items.TryGetValue(id, out var anzahl)
+                || anzahl <= 0)
+            {
+                return false;
+            }
+        }
+
+        if (Gilt(pConditions, "actorValid"))
+        {
+            var id = pConditions.Member("actorId")?.IntOr(-1) ?? -1;
+            if (pFacts == null || !pFacts.PartyMembers.Contains(id))
             {
                 return false;
             }

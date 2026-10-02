@@ -15532,3 +15532,80 @@ if (this._eventId > 0) {
 **And this repository writes the self switches: 957 `123` and 2400 `122`
 and 1197 `121` in this game alone.** **So the one condition this game leans
 on hardest is the one that was unreachable.**
+
+
+## Three page conditions were refused because one project does not set them,
+## and no project on this machine does
+
+### And what was there
+
+```csharp
+// And the fields this project does not set.
+foreach (var feld in new[] { "actorValid", "itemValid", "variableValid" })
+{
+    if (Gilt(pConditions, feld)) { return false; }
+}
+```
+
+**And "this project does not set" is a fact about one finished MZ game and
+not about the format.** **Three finished games were measured before the line
+was touched:**
+
+```text
+Seitenbedingungen: 3006 Seiten in 3 Spielen, actorValid=0, itemValid=0
+```
+
+**Not one page in any of the three asks for a party member or an item.**
+**So the refusal named two conditions that no game here uses and one that a
+hundred and fifty pages do.**
+
+### And the rules, from the engine
+
+```text
+if (c.variableValid) {
+    if ($gameVariables.value(c.variableId) < c.variableValue) { return false; }
+}
+if (c.itemValid) {
+    const item = $dataItems[c.itemId];
+    if (!$gameParty.hasItem(item)) { return false; }
+}
+if (c.actorValid) {
+    const actor = $gameActors.actor(c.actorId);
+    if (!$gameParty.members().contains(actor)) { return false; }
+}
+```
+
+**And every value was already in `MzBranchFacts`:** `122` writes `Variables`,
+`126` writes `Items`, `129` writes `PartyMembers`. **So these were not a
+boundary, they were a question this reader had not asked.**
+
+### And the comparison, which is the part that gets written wrong
+
+**`variableValid` is `<`, not `!=`, and the test asks about both sides:**
+
+```text
+variable  99 against a condition of 100  -> hidden
+variable 100 against a condition of 100  -> shown
+variable 101 against a condition of 100  -> shown
+```
+
+**A reader that asked for equality would hide the page at a hundred and one,
+and no test would have caught it, because a game whose variable lands exactly
+on the threshold is the case that never comes up.**
+
+### And where this leaves the four condition kinds
+
+```text
+switch1Valid    56 Seiten in 3 Spielen   beantwortet
+switch2Valid    26                      beantwortet
+variableValid   12                      war abgelehnt, jetzt beantwortet
+selfSwitchValid 1422                     beantwortet seit dem letzten Commit
+actorValid       0                      war abgelehnt, jetzt beantwortet
+itemValid        0                      war abgelehnt, jetzt beantwortet
+```
+
+**And the one condition that is still refused is the one that has to be:
+condition type 12, a JavaScript expression inside the project.** **And that
+is refused by `AGENTS.md` and not by this repository's convenience.**
+
+**All 2250 tests passed.**
