@@ -18003,6 +18003,67 @@ Interpreter richtig macht und nicht diese Welt.**
 All 2379 tests passed
 ```
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 7: der Dispatcher, und zwei Korrekturen
+
+**Und ich hatte geschrieben:  der Dispatcher baue den Methodennamen aus
+der Befehlsnummer.**
+
+**Und ich hatte geschrieben:  `Interpreter` habe keine Methode
+`setup`.**
+
+**Und beides ist falsch, und beides steht in MicroQuests Skripten.**
+
+### Und `setup` existiert und wird aufgerufen
+
+```text
+Interpreter 1: setup(event.list, event.id)
+Interpreter 1: setup(common_event.list, 0)
+Interpreter 1: setup($data_common_events[$game_temp.common_event_id].list, 0)
+Interpreter 3: @child_interpreter = Interpreter.new(@depth + 1)
+```
+
+**Und `setup` ist der Name, mit dem das Spiel seinen eigenen
+Interpreter eine Befehlsliste gibt** -- **und `event.id` ist das
+zweite Argument.**
+
+**Und die Diagnose des Interpreters war also richtig und meine
+Deutung war es nicht**: -- **das Spiel hat die Methode, und der Grund,
+warum sie fehlschlagt, ist nicht gemessen.**
+
+### Und der Dispatcher nennt jeden Befehl einzeln
+
+```text
+Interpreter 2: 98 when-Zweige, 96 mal `return command_`
+```
+
+**Und 96 ist genau die Zahl, die `RgssQuellBefehle` aus diesem Spiel
+gelesen hat.**
+
+**Und die zwei fehlenden Zweige sind das Ende der Liste und ein
+Rueckfall** -- **und keiner davon nennt einen Befehl.**
+
+**Und das ist eine bessere Antwort, nicht nur eine andere:**
+
+- **Er nennt jeden Befehl ausdruecklich** -- **und ein Dispatcher, der
+  Namen bildet, wuerde fuer eine Nummer, die das Spiel nicht kennt,
+  einen Aufruf bauen, den es nicht gibt.**
+- **Er uebersetzt die Nummern nicht** -- **und genau darum
+  unterscheiden sich XP, VX und VX Ace an dieser Stelle.**
+
+**Und mein Test hatte beide Male geraten und wurde zweimal durch die
+Messung korrigiert** -- **das ist das vierte Mal in dieser Folge,
+und es ist das Muster, nicht der Zufall.**
+
+```
+TestRgssDispatcherRead: 3/3
+All 2382 tests passed
+```
+
+**Und der naechste Schritt ist damit benannt:** **den Weg von
+`setup(event.list, event.id)` bis zu `command_101` laufen lassen und
+dabei `message_text` beobachten** -- **und das ist eine Kette aus
+drei Aufrufen, die alle im Skript des Spiels stehen.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
