@@ -3006,8 +3006,27 @@ case MzCommandTable.ChangeExp:
                     return true;
                 }
 
-                pInterpreter.WaitFor(MzWaitMode.Gather);
-                return false;
+                // **Und `217` gibt immer `true` zurueck** -- **und es gibt `true`,
+                // egal ob die Begleiter kommen.**
+
+                // **Gemessen an `command217`:**
+
+                // ```js
+                // command217() {
+                //     if (!$gameParty.inBattle()) {
+                //         $gamePlayer.gatherFollowers();
+                //         this.setWaitMode('gather');
+                //     }
+                //     return true;
+                // }
+                // ```
+
+                // **Und `return false` hiess: der Index bleibt
+                // stehen**, -- **und `gatherFollowers` wird bei
+                // jedem Bild erneut gerufen**, -- **und damit
+                // sammelt eine Seite ihre Begleiter endlos neu ein
+                // und kommt nie weiter.**
+                return true;
             }
 
             case MzCommandTable.ShowItemChoice:
@@ -3156,7 +3175,15 @@ case MzCommandTable.ChangeExp:
                     if (warten)
                     {
                         pInterpreter.WaitFor(MzWaitMode.Animation);
-                        return false;
+
+                        // **Und `212` gibt `true` zurueck**, --
+                        // **und `command212` gibt es fuer den
+                        // Spieler und fuer eine Figur gleich**, --
+                        // **und die Wartezeit steht in
+                        // `setWaitMode('animation')`**, -- **und
+                        // die wird im naechsten `updateWait()`
+                        // ausgefragt.**
+                        return true;
                     }
                 }
                 else

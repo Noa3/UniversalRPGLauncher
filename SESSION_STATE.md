@@ -17240,6 +17240,70 @@ geprueft hatte** -- **denn sie fragten `TryExecute` nach `true` oder
 ist eine Aussage ueber `MzStep.Waiting`, nicht ueber den
 Rueckgabewert eines Befehls.**
 
+## 2026-10-02 — Alle zwölf wartenden Befehle gegen die Quelle geprueft
+
+**Und nach dem `213` blieben noch zwei mit derselben Verwechslung.**
+
+```text
+ 217  return ['true']  gather      <- gab false
+ 212  return ['true']  animation   <- gab false, zweite Stelle
+ 204  return ['false','true']  scroll   <- korrekt, siehe unten
+```
+
+**Und `command217` gibt immer `true` zurueck**, -- **und `return false`
+hiess: der Index bleibt stehen, und `gatherFollowers()` wird bei jedem
+Bild erneut gerufen** -- **und damit sammelt eine Seite ihre Begleiter
+endlos neu ein und kommt nie weiter.**
+
+### Und der Test liest jetzt die Quelle statt eine Tabelle
+
+**Und `Test_JederWartendeBefehlGibtZurueckWasDieEngineGibt` liest alle
+zwoelf Befehlsrumpfe aus `rpg_objects.js`** -- **und `204` hat zwei
+Antworten, und das ist der eine Sonderfall:**
+
+```js
+command204() {
+    if (!$gameParty.inBattle()) {
+        if ($gameMap.isScrolling()) {
+            this.setWaitMode('scroll');
+            return false;      // <- auf den laufenden Scroll warten
+        }
+        $gameMap.startScroll(this._params[0], ...);
+    }
+    return true;               // <- der Scroll laeuft jetzt
+}
+```
+
+**Und mein Test las vorher die *letzte* Rueckgabe eines Rumpfes und
+nannte das gemessen** -- **und bei `204` ist das die falsche.**
+
+### Und `TryExecute` ist nicht `executeCommand`
+
+**Und das war der dritte Fund im selben Test:**
+
+```js
+executeCommand() {
+    const command = this.currentCommand();
+    if (command) {
+        ...
+        if (!this[methodName]()) { return false; }
+        this._index++;
+    }
+    return true;
+}
+```
+
+**Und in diesem Repository heisst die Datei `MzInterpreter.ExecuteOne`
+und nicht `TryExecute`** -- **und `TryExecute` fuehrt nur einen Befehl
+aus und hebt den Index nicht.**
+
+```text
+Wartende Befehle: 101=false 102=false 103=false 104=false 105=false
+                  201=false 204=beide 205=true 212=true 213=true
+                  217=true 261=false
+All 2336 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
