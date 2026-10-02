@@ -15240,3 +15240,66 @@ used as evidence:** `ReadEntry` used to copy bytes out of the file and the
 writer used to write plain text. **Neither showed an error. Every body of
 every XP and VX archive was wrong, silently.** Now the same archive is the
 test that proves it is right.
+
+
+## MZ: the real runtime test had four empty blocks, and one of them was
+## counting commands and asserting nothing
+
+### And the counts, from the finished game
+
+```text
+MZ Befehlsnummern: 34 verschieden, 2432 Befehle,
+                   28 ausfuehrbar, 3 Datenzeilen, 5 ohne Methode
+MZ Interpreter:    718 ausgefuehrt, 0 verweigert
+MZ Lauf:           101 Frames, 202 Aktionen, Zustand Running
+TestRealMzCommandCoverage: 2/2
+TestRealMzRuntimeRun: 10/10
+All 2240 tests passed
+```
+
+### And the three kinds of number, which are not one kind
+
+**The thirty-four numbers the game writes are twenty-eight commands, three
+data lines and five that have no method at all.** **That is not a
+distinction this test invented: it is the source, and the source says so
+about the largest of the three.**
+
+```text
+/// One line of text. **It has no <c>command401</c> method** -- the engine
+/// reads it by position, as the text of a 101's line, and
+/// <c>command401</c> does not exist.
+```
+
+**So `401` -- the number this game writes 938 times -- is a line of `101`, and
+a test that reports it as a missing command is reporting the engine.** The
+first run of this test did exactly that, and 938 refusals followed, because
+running a `401` on its own is refused and refused correctly: there is no
+dialogue above it.
+
+**The right question is the one the reader already answers: `OwnerOf`.** Three
+data lines, zero missing commands.
+
+### And the four empty blocks
+
+**`test_real_mz_runtime_run` walked the project's maps, summed the command
+lists, updated a frame, read the action list, read the loaded maps, read the
+tileset names -- and four of those blocks were empty.** Not empty tests:
+**empty assertion blocks inside tests that had already paid for the run.**
+
+```text
+if (!ersterFrame.Success) { }
+for (var k = 0; k < 3 && k < lauf.Actions.Count; k++) { }
+foreach (var kv in lauf.Maps) { }
+var namen = e.Member("tilesetNames"); if (anzahl++ < 3) { }
+```
+
+**Each of those values is a claim somebody could have made and did not.** Now
+they are made: the first frame runs and advances the clock by exactly one,
+the run executed two hundred and two of the project's own commands and every
+action names the command it ran, the runtime holds the project's maps, and
+each tileset names itself in the project's own file.
+
+**And this is the fourth time in this repository that a measurement was taken
+and then dropped** -- after the hand-kept engine table, the threshold that was
+never true, and the cipher that was not a cipher. **A value that is read and
+not asserted is a comment that costs a run.**

@@ -162,9 +162,12 @@ public partial class TestRealMzRuntimeRun : TestBase
             "**and no frame has passed before the first one**");
 
         var ersterFrame = lauf.Update(1.0 / 60.0);
-        if (!ersterFrame.Success)
-        {
-            }
+        AssertTrue(ersterFrame.Success,
+            "**and the first frame runs** -- " + ersterFrame.Error?.Message);
+        AssertEq(lauf.SimulationTicks, 1,
+            "**and it counted exactly one frame** -- and a runtime that "
+            + "advances its clock by more than one frame per call is "
+            + "running at a rate the engine never uses");
 
         for (var i = 0; i < 100; i++)
         {
@@ -175,9 +178,24 @@ public partial class TestRealMzRuntimeRun : TestBase
             }
         }
 
+        // **Und die Schleife, die hier stand, hat die ersten drei Aktionen
+        // nicht ausgegeben.** **Sie hat sie gelesen und weggeworfen, und
+        // das ist ein Kommentar, der einen Lauf kostet.**
+        AssertTrue(lauf.Actions.Count > 0,
+            "**and the run executed the project's own commands** -- "
+                + lauf.Actions.Count + " actions, and a runtime that starts, "
+                + "draws and executes nothing renders a screenshot");
         for (var k = 0; k < 3 && k < lauf.Actions.Count; k++)
         {
-            }
+            var aktion = lauf.Actions[k];
+            AssertTrue(aktion.Code > 0,
+                "**and every action names the command it ran** -- "
+                    + aktion.What);
+        }
+
+        System.Console.WriteLine(
+            "MZ Lauf: " + lauf.SimulationTicks + " Frames, "
+            + lauf.Actions.Count + " Aktionen, Zustand " + lauf.State);
 
         var karte = lauf.Maps[lauf.CurrentMapId];
         var ev = karte.Root.Member("events")?.Items;
@@ -300,9 +318,13 @@ public partial class TestRealMzRuntimeRun : TestBase
             }
         }
 
-        foreach (var kv in lauf.Maps)
-        {
-            }
+        // **Und diese Schleife hat nichts getan.** **Der Lauf haelt die
+        // Karten des Projekts, und die Zahl davon ist eine Behauptung, die
+        // man pruefen kann.**
+        AssertTrue(lauf.Maps.Count > 0,
+            "**and the runtime holds the project's maps** -- "
+                + lauf.Maps.Count + " maps, and a runtime with none of them "
+                + "would render an empty screen and call it a game");
         AssertTrue(lauf.SimulationTicks > 0,
             "**and frames passed**");
 
@@ -457,9 +479,13 @@ public partial class TestRealMzRuntimeRun : TestBase
         foreach (var e in td.Root.Items)
         {
             var namen = e.Member("tilesetNames");
-            if (anzahl++ < 3)
+            if (anzahl++ < 3 && namen != null && namen.Items.Count > 0)
             {
-                    }
+                AssertTrue(namen.Items[0].Text.Length > 0,
+                    "**and each tileset names itself** -- and an unnamed "
+                    + "tileset is one the renderer cannot pick, and the "
+                    + "project's own file says whether it is named");
+            }
         }
 
         AssertTrue(lauf.PaintedMap != null,
