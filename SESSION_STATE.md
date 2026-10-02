@@ -18190,6 +18190,65 @@ All 2387 tests passed
 **Und der naechste Schritt ist damit ein Fehlersuche in der
 Typ-Tabelle des Lesers**, -- **und nicht mehr im Spiel.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 10: der Fehler ist gefunden
+
+**Und `RubyInterpreter.cs` Zeile 9907 macht `typ.Methods.Clear()` bei
+jeder zweiten Definition einer Klasse.**
+
+**Und XP schreibt `class Interpreter` siebenmal.**
+
+**Und das heisst:  am Ende steht in der Typ-Tabelle nur der Inhalt
+von `Interpreter 7`** -- **und `command_101` steht in `Interpreter 3`
+und `setup` in `Interpreter 1`.**
+
+### Und die Messung, die es beweist
+
+```text
+Interpreter.method_defined?(:setup)           = Boolean (nein)
+Interpreter.method_defined?(:execute_command)  = Boolean (nein)
+Interpreter.method_defined?(:command_101)      = Boolean (nein)
+Game_Temp.method_defined?(:message_text)      = Boolean (ja)
+Object.method_defined?(:setup)                = Boolean (nein)
+Kernel.method_defined?(:setup)                = Boolean (nein)
+class Interpreter: 7x, class Game_Temp: 1x
+```
+
+**Und `Game_Temp` steht ohne Basis da wie `Interpreter`** -- **und
+`Game_Temp` wird genau einmal geoeffnet, und deshalb bleibt seine
+Tabelle stehen, und deshalb findet `message_text` sich.**
+
+**Und `Interpreter` wird siebenmal geoeffnet, und deshalb steht am Ende
+nur der Inhalt des letzten Skripts in seiner Tabelle.**
+
+### Und warum das kein Spielfehler ist
+
+**Und XP schreibt seinen Interpreter in sieben Dateien** -- **`Interpreter
+1` bis `Interpreter 7`** -- **und jede beginnt mit `class
+Interpreter`**, -- **und Ruby 1.8.1 fuegt bei einer zweiten
+Klassendefinition hinzu und loescht nichts.**
+
+**Und dieser Leser loescht.**
+
+**Und das ist ein Fehler in diesem Repository und nicht im Spiel**,
+-- **und er ist der erste in dieser Folge, der einen Weg zerstoert,
+der vorher funktioniert hat** -- **und vorher hat niemand diese
+Klasse ausgefuehrt, weil niemand ein XP-Spiel geladen hat.**
+
+**Und der Unterschied zwischen `Game_Temp` und `Interpreter` ist
+nicht die Basis, nicht der Ort und nicht die Reihenfolge, sondern die
+Anzahl der Definitionen.**
+
+```
+All 2389 tests passed
+```
+
+**Und der naechste Schritt ist eine Aenderung an Zeile 9907** --
+**und sie braucht eine Messung an der Ruby-Quelle, und nicht eine
+Annahme:** -- **Ruby 1.8.1 `rb_add_includable_module` und
+`rb_define_class` -- und die Regel lautet, dass die zweite Definition
+hinzufuegt und das Leeren von `Methods` nur fuer `undef_method`
+gilt.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
