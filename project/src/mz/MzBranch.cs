@@ -544,6 +544,32 @@ public sealed class MzBranchFacts
     public bool BilderReserviert { get; set; }
 
     /// <summary>
+    /// The names <c>320</c> gave the actors, and the actor as the key.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>setName(name)</c> ist <c>this._name =
+    /// name;</c></strong> -- <strong>und <c>actor.setName</c> macht
+    /// noch etwas</strong>, <strong>das davon abhaengt, ob der
+    /// Darsteller im Helden steht oder nicht**, <strong>und das
+    /// braucht die <c>Actors.json</c> dieses Spiels.</strong>
+    /// </remarks>
+    public Dictionary<int, string> Namen { get; } = new();
+
+    /// <summary>
+    /// Who the name editor was opened for, and what it was given.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And these are <c>SceneManager.prepareNextScene(
+    /// params[0], params[1])</c>'s two arguments</strong> -- <strong>the
+    /// actor's number and the new name</strong> -- <strong>and not a
+    /// field slot and a text.</strong>
+    /// </remarks>
+    public int NamensZiel { get; set; }
+
+    /// <summary>And the name it was given, in whatever the game wrote.</summary>
+    public string NamensText { get; set; } = "";
+
+    /// <summary>
     /// The goods the last <c>302</c> was given, and its own parameters
     /// first.
     /// </summary>

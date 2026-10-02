@@ -16725,6 +16725,46 @@ TestMvMapDisplay: 3/3
 All 2313 tests passed
 ```
 
+## 2026-10-02 — Wetter, Kampfgrund, und zwei Arten, einen Namen zu geben
+
+**Gemessen an `VHMV`:**
+
+```text
+236 Set Weather Effect   2x, und eine davon ist ["none", 5, 1, true]
+320 Change Name         14x, alle {CE-...} in geschweiften Klammern
+233 Rotate Picture       0x
+283 Change Battleback    0x
+303 Change Actor Name    0x
+```
+
+**Drei Befunde:**
+
+* **`changeWeather` hat eine Regel, die man nicht sieht** — **`if
+  (type !== 'none' || duration === 0) { this._weatherType = type; }`**
+  — **und `none` mit einer Dauer über null lässt den Typ
+  stehen.** **Das heißt: „der Regen soll in zwei Sekunden aufhören"
+  schreibt `none` und löscht den Regen nicht sofort.** **Und dieses
+  Spiel schreibt `none` mit einer Dauer von *einem* — ein Bild ist
+  nicht null, also wird der Typ gesetzt und der Regen hört sofort
+  auf.**
+* **Und die Kraft geht bei `none` immer auf null** — **auch wenn der
+  Typ stehen bleibt**, **weil `type === 'none' ? 0 : power` nicht
+  unter derselben Bedingung steht.**
+* **`320` speichert den Namen als geschriebenen String** — **und alle
+  vierzehn heißen `{CE-VirginBlood-1}` und so weiter**, **das sind
+  Escape-Codes des Text-Renderers**, **und `Game_Actor.prototype.setName`
+  ist genau `this._name = name;`** — **eine Zuweisung, und meine erste
+  Fassung behauptete im Kommentar, es bräuchte `Actors.json`.**
+
+```text
+MZ: 88 von 114 dispatchbar (77%), 26 ohne
+  und die 26 sind 109,133,136,137,139,140,202,206,285,323,324,325,
+  326,331,332,333,334,335,336,337,339,340,342,601,602,603
+  -- also Kampf-, Partie- und Battlemanagerausgaben
+TestMvWeatherAndNames: 3/3
+All 2316 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

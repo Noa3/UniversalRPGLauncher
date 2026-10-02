@@ -276,6 +276,35 @@ public static class MzCommandTable
     public const int ChangeParameter = 317;
 
     /// <summary>
+    /// <c>command233</c> -- <c>$gameScreen.rotatePicture(params[0],
+    /// params[1])</c>.
+    /// </summary>
+    public const int RotatePicture = 233;
+
+    /// <summary>
+    /// <c>command236</c> -- <c>$gameScreen.changeWeather(params[0],
+    /// params[1], params[2])</c>, and the fourth says whether to wait.
+    /// </summary>
+    public const int SetWeatherEffect = 236;
+
+    /// <summary>
+    /// <c>command283</c> -- <c>$gameMap.changeBattleback(params[0],
+    /// params[1])</c>.
+    /// </summary>
+    public const int ChangeBattleback = 283;
+
+    /// <summary>
+    /// <c>command303</c> -- the name editor, and it checks
+    /// <c>$dataActors[params[0]]</c> first.
+    /// </summary>
+    public const int ChangeActorName = 303;
+
+    /// <summary>
+    /// <c>command320</c> -- <c>actor.setName(this._params[1])</c>.
+    /// </summary>
+    public const int ChangeName = 320;
+
+    /// <summary>
     /// <c>command103</c> -- <c>$gameMessage.setNumberInput(params[0],
     /// params[1])</c>, and it waits for the answer.
     /// </summary>

@@ -117,6 +117,11 @@ public static class MzCommands
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
+            MzCommandTable.RotatePicture,
+            MzCommandTable.SetWeatherEffect,
+            MzCommandTable.ChangeBattleback,
+            MzCommandTable.ChangeActorName,
+            MzCommandTable.ChangeName,
             MzCommandTable.InputNumber,
             MzCommandTable.ChangeMapNameDisplay,
             MzCommandTable.ChangeTileset,
@@ -1487,6 +1492,181 @@ public static class MzCommands
                     + " and " + At(pCommand, 4) + " as the buying kind, "
                     + "and " + zeilen.Count + " of them came from the "
                     + "605 lines that followed"));
+                return true;
+            }
+
+            case MzCommandTable.RotatePicture:
+            {
+                // **Und `command233` ist eine Zeile:**
+                //
+                // ```js
+                // $gameScreen.rotatePicture(this._params[0], this._params[1]);
+                // return true;
+                // ```
+                //
+                // **Und `rotatePicture` prueft `if (picture)`,** **und
+                // `picture.rotate(speed)` ist eine Zuweisung an
+                // `_rotationTarget`** -- **und der Winkel laeuft ueber
+                // `_rotation`, nicht ueber eine Zahl von Bildern.**
+                var drehBild = At(pCommand, 0);
+                var gedreht = pFacts.Screen.At(
+                    pFacts.Screen.RealPictureId(drehBild));
+                if (gedreht != null)
+                {
+                    gedreht.Drehung = At(pCommand, 1);
+                    pActions.Add(new MzAction(pCommand,
+                        $"picture {drehBild} turns to "
+                        + $"{At(pCommand, 1)} degrees"));
+                }
+                else
+                {
+                    pActions.Add(new MzAction(pCommand,
+                        $"picture {drehBild} was asked to turn and is "
+                        + "not on the screen, which is what the engine's "
+                        + "`if (picture)` does and is not an error"));
+                }
+
+                return true;
+            }
+
+            case MzCommandTable.SetWeatherEffect:
+            {
+                // **Und `command236`:**
+                //
+                // ```js
+                // if (!$gameParty.inBattle()) {
+                //     $gameScreen.changeWeather(this._params[0],
+                //         this._params[1], this._params[2]);
+                //     if (this._params[3]) {
+                //         this.wait(this._params[2]);
+                //     }
+                // }
+                // return true;
+                // ```
+                //
+                // **Und der vierte Parameter ist ein Wahrheitswert und
+                // keine Zahl**, **und die Wartezeit ist der dritte und
+                // nicht der vierte.**
+                //
+                // **Und `changeWeather` hat eine Regel, die man nicht
+                // sieht: `none` mit einer Dauer ueber null aendert den
+                // Typ nicht.** **Das ist "das Wetter soll in drei
+                // Sekunden aufhoeren".**
+                if (pFacts.InBattle)
+                {
+                    pFacts.Notices.Add(
+                        "236 Set Weather Effect was asked for in a "
+                        + "battle, and the engine's own `if (!$gameParty"
+                        + ".inBattle())` does nothing at all");
+                    return true;
+                }
+
+                var wartenWetter = Flag(pCommand, 3);
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Screen.Wetter.Setze(
+                        Text(pCommand, 0), At(pCommand, 1),
+                        At(pCommand, 2))
+                    + (wartenWetter
+                        ? ", and the page waits for it"
+                        : ", and the page does not wait")));
+                if (wartenWetter)
+                {
+                    pInterpreter.Wait(At(pCommand, 2));
+                    return false;
+                }
+
+                return true;
+            }
+
+            case MzCommandTable.ChangeBattleback:
+            {
+                // **Und `command283` ist zwei Zuweisungen:**
+                //
+                // ```js
+                // $gameMap.changeBattleback(this._params[0], this._params[1]);
+                // return true;
+                // ```
+                //
+                // **Und ein Kampfgrund ist kein Kachelsatz und keine
+                // Parallax**, **und alle drei stehen mit eigenem Namen
+                // auf der Karte.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Anzeige.SetzeKampfgrund(
+                        Text(pCommand, 0), Text(pCommand, 1))));
+                return true;
+            }
+
+            case MzCommandTable.ChangeActorName:
+            {
+                // **Und `command303` prueft zuerst nach, ob es den
+                // Darsteller ueberhaupt gibt:**
+                //
+                // ```js
+                // if (!$gameParty.inBattle()) {
+                //     if ($dataActors[this._params[0]]) {
+                //         SceneManager.push(Scene_Name);
+                //         SceneManager.prepareNextScene(this._params[0],
+                //             this._params[1]);
+                //     }
+                // }
+                // return true;
+                // ```
+                //
+                // **Und `prepareNextScene` bekommt die Darstellernummer
+                // und den neuen Namen** -- **und der zweite Parameter
+                // ist der Name und nicht die Nummer eines
+                // Namensfeldes.**
+                if (pFacts.InBattle)
+                {
+                    pFacts.Notices.Add(
+                        "303 Change Actor Name was asked for in a battle, "
+                        + "and the engine's own `if (!$gameParty"
+                        + ".inBattle())` does nothing at all");
+                    return true;
+                }
+
+                pFacts.Szene.Schiebe("Scene_Name");
+                pFacts.NamensZiel = At(pCommand, 0);
+                pFacts.NamensText = Text(pCommand, 1);
+                pActions.Add(new MzAction(pCommand,
+                    $"actor {At(pCommand, 0)} is asked for a new name, "
+                    + "and it reads as '"
+                    + pFacts.NamensText + "'"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeName:
+            {
+                // **Und `command320`:**
+                //
+                // ```js
+                // const actor = $gameActors.actor(this._params[0]);
+                // if (actor) {
+                //     actor.setName(this._params[1]);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und `Game_Actor.prototype.setName` ist genau
+                // `this._name = name;`** -- **eine Zuweisung und sonst
+                // nichts.**
+                //
+                // **Und der erste Parameter ist ein Darsteller und
+                // keine Laufvariable** -- **das ist der Unterschied zu
+                // `201`, wo es `Eigene Figur oder eine andere` gibt.**
+                var zuBenennen = At(pCommand, 0);
+                if (!pFacts.PartyMembers.Contains(zuBenennen))
+                {
+                    pFacts.Notices.Add(
+                        $"name asked for actor {zuBenennen}, and this "
+                        + "party does not hold them");
+                    return true;
+                }
+
+                pFacts.Namen[zuBenennen] = Text(pCommand, 1);
+                pActions.Add(new MzAction(pCommand,
+                    $"actor {zuBenennen} is called "
+                    + $"'{Text(pCommand, 1)}'"));
                 return true;
             }
 

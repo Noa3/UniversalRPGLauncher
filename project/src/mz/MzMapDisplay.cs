@@ -114,6 +114,23 @@ public sealed class MzMapDisplay
     /// <summary>And the other one.</summary>
     public int ParallaxSy { get; private set; } = 0;
 
+    /// <summary>
+    /// The two battleback pictures, and <c>changeBattleback</c> is two
+    /// assignments.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the engine's own:</strong> <c>changeBattleback(
+    /// battleback1Name, battleback2Name) { this._battleback1Name =
+    /// battleback1Name; this._battleback2Name = battleback2Name; }</c> --
+    /// <strong>and a battle background is not a tileset and not a
+    /// parallax</strong>, <strong>and all three are named separately on
+    /// the map.</strong>
+    /// </remarks>
+    public string Kampfgrund1 { get; private set; } = "";
+
+    /// <summary>And the second one.</summary>
+    public string Kampfgrund2 { get; private set; } = "";
+
     /// <summary>The tileset the map draws with, and zero for none.</summary>
     public int TilesetId { get; private set; }
 
@@ -156,6 +173,21 @@ public sealed class MzMapDisplay
                 ? ", and the offset went back to zero because a loop was "
                     + "turned off"
                 : "");
+    }
+
+    /// <summary>
+    /// <c>changeBattleback</c>, and the two assignments are all of it.
+    /// </summary>
+    /// <param name="pErste">The first picture's name.</param>
+    /// <param name="pZweite">And the second's.</param>
+    /// <returns>One line, for an action and for a log.</returns>
+    public string SetzeKampfgrund(string pErste, string pZweite)
+    {
+        Kampfgrund1 = pErste;
+        Kampfgrund2 = pZweite;
+        return "the battle background is " + (pErste.Length > 0 ? pErste
+            : "nothing")
+            + " behind " + (pZweite.Length > 0 ? pZweite : "nothing");
     }
 
     /// <summary>

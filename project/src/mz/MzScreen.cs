@@ -125,6 +125,20 @@ public sealed class MzScreen
         /// <summary>Whether this picture is on its way somewhere.</summary>
         public bool IsMoving => Duration > 0;
 
+        /// <summary>
+        /// The angle the picture turns to, and <c>rotatePicture</c> sets
+        /// it.
+        /// </summary>
+        /// <remarks>
+        /// <strong>And <c>Game_Picture.prototype.rotate(rotateSpeed)</c>
+        /// ist <c>this._rotationSpeed = rotateSpeed;</c></strong> --
+        /// <strong>und <c>updateRotation</c> rechnet
+        /// <c>this._rotation += this._rotationSpeed</c> mit einem Vorzeichen
+        /// nach der Drehrichtung</strong>, <strong>und dieses
+        /// Repository haelt den Winkel, weil es kein Bild bewegt.</strong>
+        /// </remarks>
+        public int Drehung { get; set; }
+
 
         /// <summary>
         /// The tint the picture is moving toward, and the engine's own
@@ -349,6 +363,42 @@ public sealed class MzScreen
 
 
     private readonly Dictionary<int, Picture> _pictures = new();
+
+    /// <summary>
+    /// What <c>$gameScreen</c> carries about the weather, and it is not a
+    /// number.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>changeWeather</c> is not four assignments but four
+    /// with a condition.</strong>
+    /// </para>
+    /// <code>
+    /// changeWeather(type, power, duration) {
+    ///     if (type !== 'none' || duration === 0) {
+    ///         this._weatherType = type;
+    ///     }
+    ///     this._weatherPowerTarget = type === 'none' ? 0 : power;
+    ///     this._weatherDuration = duration;
+    ///     if (duration === 0) {
+    ///         this._weatherPower = this._weatherPowerTarget;
+    ///     }
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And the rule is that <c>none</c> with a duration above
+    /// zero does not change the type.</strong> <strong>That is: "the rain
+    /// should stop in three seconds" writes <c>none</c> and leaves the
+    /// type standing until the duration has run out.</strong> <strong>And
+    /// a reader that always sets the type clears the weather at once and
+    /// makes the duration do nothing.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the power goes to zero at <c>none</c> either
+    /// way</strong> -- <strong>even when the type stands.</strong>
+    /// </para>
+    /// </remarks>
+    public MzWeather Wetter { get; } = new();
 
     /// <summary>Something a command asked for and could not do, in order.</summary>
     /// <summary>
