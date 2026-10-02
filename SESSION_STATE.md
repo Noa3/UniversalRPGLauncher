@@ -15692,3 +15692,90 @@ named constants: a list beside the code instead of a reading from it.**
 **And the next concrete step is not ambiguous: `108 Comment`, `117 Common
 Event`, `125 Change Gold` and `261 Play Movie` are the four that a finished
 game leans on and this repository does not run.**
+
+
+## Three commands the coverage test named, run, and the gate that hid them
+
+### And what changed
+
+```text
+vorher:  MZ Befehlssatz: 114 Befehle, 41 in einem Auspraecher (35%), 73 ohne
+nachher: MZ Befehlssatz: 114 Befehle, 44 in einem Auspraecher (38%), 70 ohne
+
+MV sister:       133484 Befehle, 59 Arten, 123733 gedeckt (92%)   <- war 87%
+MV LegalTruck:      730 Befehle, 29 Arten,    724 gedeckt (99%)   <- war 98%
+MZ Camellia:       2432 Befehle, 30 Arten,   2076 gedeckt (85%)   <- unveraendert
+```
+
+**Three commands, and the whole of the MV gain is 6750 comments plus 60
+gold changes plus two films.**
+
+### And the gate that hid them, which is the part worth keeping
+
+**`MzCommands.HasEffect` is the door, and a command not in it is never
+handed to `TryExecute`.** **So the three branches were written, compiled,
+and never reached**, **and the run reported all three as finished and as not
+refused** -- **because that is what the `default:` branch does.**
+
+**And that is the same shape as everything else this session: a real
+implementation behind a gate nobody checked.** **The engine's
+`executeCommand` asks `typeof this[methodName] === "function"` and steps over
+what it does not find; **this repository's gate is a list of numbers, and a
+number missing from it is invisible.**
+
+### And the rules, from `Game_Interpreter` of a finished MV game
+
+```text
+command108  this._comments = [this._params[0]];
+            while (this.nextEventCode() === 408) { this._index++;
+                this._comments.push(this.currentCommand().parameters[0]); }
+
+command125  const value = this.operateValue(params[0], params[1], params[2]);
+            $gameParty.gainGold(value);
+
+command261  if (!$gameMessage.isBusy()) {
+                const name = this._params[0];
+                if (name.length > 0) {
+                    Graphics.playVideo('movies/' + name + ext);
+                    this.setWaitMode('video');
+                }
+                this._index++;
+            }
+            return false;
+
+operateValue(operation, operandType, operand) {
+    const value = operandType === 0 ? operand : $gameVariables.value(operand);
+    return operation === 0 ? value : -value;
+}
+```
+
+### And three things that are easy to get wrong and were
+
+**One: `operateValue`'s first parameter is the operation, not the kind.**
+**`125` is `[operation, kind, value]`, and `operation === 0` means take and
+anything else means take away.** **This game's sixty `125` are all
+`[1, 0, N]`, which is *take away a constant* -- and a reader that read the
+first slot as the kind hands the party its own money back.**
+
+**Two: a comment's lines are `408` and this reader was making commands of
+them.** **Measured at `D:/Itch/sister/www`: 6750 `108` and 1908 `408`, and
+the longest block is six lines.**
+
+**Three: a film waits for the film to end and not for a number of frames**,
+**because no frame count appears anywhere in the command** -- **the only
+thing it carries is the name.**
+
+### And what is still not run
+
+```text
+117 Common Event   1787 uses in this game   needs a child interpreter
+103 Input Number    the one prompt no finished game here uses
+302 Shop Processing
+303 Name Input Processing
+311-326 the whole party-member range
+331-342 the whole enemy range
+```
+
+**And `117` is the next one, and it is the largest: a `117` inside a page
+runs a different list, on the same interpreter, with its own index, and the
+engine's `setupChild` is what carries it.**

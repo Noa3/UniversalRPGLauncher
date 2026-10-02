@@ -119,6 +119,56 @@ public static class MzCommandTable
     public const int ShowDialogue = 101;
 
     /// <summary>
+    /// A block of the author's own notes. **It runs nothing.**
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And its continuation lines are <c>408</c>, not
+    /// <c>0</c>.</strong> That is the measurement, and it is why the command
+    /// table has an owner for <c>408</c> and not for <c>0</c>:
+    /// <c>0</c> is a comment, and a comment is <c>0</c> in MZ and MV and
+    /// <c>108</c> elsewhere.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>108</c> was not in this table until a finished game's
+    /// command list asked for it.</strong> Measured at
+    /// <c>D:/Itch/sister/www</c>: 6750 <c>108</c> and 1908 <c>408</c>, **and
+    /// those are the two commonest numbers in the whole game after
+    /// <c>355</c>.</strong>
+    /// </para>
+    /// </remarks>
+    public const int Comment = 108;
+
+    /// <summary>One line of a comment block, under <see cref="Comment"/>.</summary>
+    public const int CommentLine = 408;
+
+    /// <summary>
+    /// The party's money, by whatever route.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>command125</c> is three lines:</strong>
+    /// <code>
+    /// const value = this.operateValue(params[0], params[1], params[2]);
+    /// $gameParty.gainGold(value);
+    /// </code>
+    /// <strong>and the operand is the same reader <c>122</c> uses</strong>,
+    /// because the engine has one <c>operateValue</c> and not three.
+    /// </remarks>
+    public const int ChangeGold = 125;
+
+    /// <summary>
+    /// A film from the <c>movies</c> folder, and the run waits for it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>command261</c> returns <c>false</c> in every
+    /// frame</strong>, <strong>so it is called again and again until the
+    /// video has ended, and <c>this._index++</c> is inside the
+    /// <c>if</c> -- which means the wait is only armed when a name is
+    /// there.</strong>
+    /// </remarks>
+    public const int PlayMovie = 261;
+
+    /// <summary>
     /// One line of text. **It has no <c>command401</c> method** — the engine
     /// reads it by position, as the text of a 101's line, and
     /// <c>command401</c> does not exist.

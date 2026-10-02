@@ -94,4 +94,26 @@ public enum MzWaitMode
     /// twice.
     /// </remarks>
     Message = 3,
+
+    /// <summary>
+    /// Held while a film plays — the engine's <c>"video"</c>, set by a
+    /// <c>261</c> whose first parameter names a film.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a condition and not a clock.</strong>
+    /// <c>command261</c> is
+    /// <c>Graphics.playVideo('movies/' + name + ext);
+    /// this.setWaitMode('video');</c>
+    /// <strong>and the engine's <c>updateWaitMode</c> asks whether the
+    /// video is still playing, every frame, until it is not.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that waited a fixed number of frames would
+    /// either cut a long film short or hold a short one</strong>, **and no
+    /// number of frames appears anywhere in the command** -- **the only
+    /// thing it carries is the name.**
+    /// </para>
+    /// </remarks>
+    Video = 5,
 }

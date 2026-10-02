@@ -193,7 +193,33 @@ public sealed class MzBranchFacts
     /// </para>
     /// </remarks>
     public Dictionary<string, bool> SelfSwitches { get; init; } = new();
-    public int Gold { get; init; }
+    /// <summary>
+    /// The party's money, and how it got there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this was <c>init</c> and is not any more</strong>, **because
+    /// <c>125 Change Gold</c> writes it** and <strong>a finished game uses it
+    /// --- measured at <c>D:/Itch/sister/www</c>: the party of that game is
+    /// funded by its own events.</strong>
+    /// </para>
+    /// </remarks>
+    public int Gold { get; set; }
+
+    /// <summary>
+    /// The film currently playing, and nothing when none is.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is a name and not a number of frames</strong>, because
+    /// <c>command261</c> sets <c>setWaitMode('video')</c> and the engine's
+    /// <c>updateWaitMode</c> asks <c>Graphics.isVideoPlaying()</c> every frame
+    /// until it says no. **A frame count would be a guess about a film
+    /// nobody has measured.**
+    /// </remarks>
+    public string MoviePlaying { get; set; } = "";
+
+    /// <summary>Whether a film has ended and the run may carry on.</summary>
+    public void FilmEnded() => MoviePlaying = "";
 
     /// <summary>Which of the party's members are in it, by actor number.</summary>
     public HashSet<int> PartyMembers { get; init; } = new();

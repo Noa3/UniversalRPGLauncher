@@ -136,6 +136,63 @@ public sealed class MzInterpreter
     /// <summary>Is there anything left to run, as the engine asks it.</summary>
     public bool IsRunning => Index < _commands.Count;
 
+    /// <summary>
+    /// The number of the command at this index, or zero when the index is
+    /// outside the list.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this exists because <c>command108</c> looks ahead.</strong>
+    /// The engine's comment reader is
+    /// <c>while (this.nextEventCode() === 408)</c>, **and that is a question
+    /// about the command after this one without moving the index.**
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that moved the index to ask would skip a
+    /// comment's own lines</strong>, **and a reader that copied the list
+    /// would be a second copy of a list that can be a hundred and twenty
+    /// entries long.**
+    /// </para>
+    /// </remarks>
+    public int PeekCode(IReadOnlyList<MzCommandEntry> pCommands, int pIndex)
+    {
+        return pIndex >= 0 && pIndex < pCommands.Count
+            ? pCommands[pIndex].Code
+            : 0;
+    }
+
+    /// <summary>
+    /// Steps the index over a comment's own lines and says how many there
+    /// were.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine does this in the command, not after it:</strong>
+    /// <c>while (this.nextEventCode() === 408) { this._index++;
+    /// this._comments.push(this.currentCommand().parameters[0]); }</c>.
+    /// <strong>And a reader that does not do it runs every line as a
+    /// command of its own</strong> -- **and measured at
+    /// <c>D:/Itch/sister/www</c> that is 1908 commands of a game whose
+    /// writer wrote none of them.**
+    /// </para>
+    /// <para>
+    /// <strong>And the index is moved before the command itself, so the
+    /// comment's lines are not counted again as commands.</strong>
+    /// </para>
+    /// </remarks>
+    public int SkipCommentLines()
+    {
+        var zeilen = 0;
+        while (Index + 1 < Commands.Count
+            && Commands[Index + 1].Code == MzCommandTable.CommentLine)
+        {
+            Index++;
+            zeilen++;
+        }
+
+        return zeilen;
+    }
+
     public void Setup(int pMapId, int pEventId)
     {
         MapId = pMapId;

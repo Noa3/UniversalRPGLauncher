@@ -65,9 +65,9 @@ public partial class TestMzCommandCoverageHonest : TestBase
         };
         var befehle_ = new HashSet<int>
         {
-            101, 105, 121, 122, 123, 126, 129, 201, 203, 205, 213, 221, 222,
-            225, 230, 231, 232, 235, 241, 242, 245, 246, 249, 250, 251, 301,
-            314, 322, 351, 355, 357,
+            101, 105, 108, 121, 122, 123, 125, 126, 129, 201, 203, 205, 213,
+            221, 222, 225, 230, 231, 232, 235, 241, 242, 245, 246, 249, 250,
+            251, 261, 301, 314, 322, 351, 355, 357,
         };
 
         var gedeckt = befehle_.Union(steuerung).ToHashSet();
@@ -95,7 +95,7 @@ public partial class TestMzCommandCoverageHonest : TestBase
         // nachschlagen kann.**
         foreach (var erwartet in new[]
         {
-            103, 104, 108, 117, 125, 127, 128, 214, 261, 311,
+            103, 104, 109, 117, 124, 127, 128, 214, 302, 311,
         })
         {
             AssertTrue(nicht.Contains(erwartet),
@@ -178,10 +178,10 @@ public partial class TestMzCommandCoverageHonest : TestBase
     {
         var gedeckt = new HashSet<int>
         {
-            101, 102, 105, 111, 112, 113, 115, 118, 119, 121, 122, 123, 126,
-            129, 201, 203, 205, 213, 221, 222, 225, 230, 231, 232, 235, 241,
-            242, 245, 246, 249, 250, 251, 301, 314, 322, 351, 355, 357, 402,
-            411, 413,
+            101, 102, 105, 108, 111, 112, 113, 115, 118, 119, 121, 122, 123,
+            125, 126, 129, 201, 203, 205, 213, 221, 222, 225, 230, 231, 232,
+            235, 241, 242, 245, 246, 249, 250, 251, 261, 301, 314, 322, 351,
+            355, 357, 402, 411, 413,
         };
         var keineMethode = new HashSet<int>
         {

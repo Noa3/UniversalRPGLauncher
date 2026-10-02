@@ -132,6 +132,16 @@ public static class MzCommands
             or MzCommandTable.ChangeVehicleImage
             or MzCommandTable.ShowChoiceList
             or MzCommandTable.ChoicesOption
+            // **Und die drei, die ein fertiges Spiel benutzt und dieser
+            // Auspraecher nicht kannte** -- **und `HasEffect` ist das Tor,
+            // und ein Befehl, der nicht darin steht, wird nie in
+            // `TryExecute` gerufen.** **Gemessen an `D:/Itch/sister/www`:
+            // 6750 `108`, 60 `125`, 2 `261`.** **Ohne diese drei Zeilen
+            // waeren die Zwoege geschrieben und nie erreicht, und der
+            // Lauf haette sie wie alle anderen als ausgefuehrt gemeldet.**
+            or MzCommandTable.Comment
+            or MzCommandTable.ChangeGold
+            or MzCommandTable.PlayMovie
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -1309,6 +1319,115 @@ public static class MzCommands
                 return true;
             }
 
+            case MzCommandTable.Comment:
+            {
+                // `command108` is
+                //   this._comments = [this._params[0]];
+                //   while (this.nextEventCode() === 408) {
+                //     this._index++;
+                //     this._comments.push(this.currentCommand().parameters[0]);
+                //   }
+                //
+                // **Und ein Kommentar tut nichts, und das ist die ganze
+                // Sache.** **Und die Folgezeilen sind `408` und nicht `0`,
+                // und sie gehoeren zum Kommentar und nicht zum Befehl
+                // darunter.**
+                //
+                // **Und die Zeilen sind fuer den Leser nicht belanglos, weil
+                // `MzCommandEntry.From` aus jeder Zeile einen Befehl macht** --
+                // **und so steht in jedem echten Spiel hinter einem Kommentar
+                // eine Zahl, die kein Befehl ist.** **Gemessen an
+                // `D:/Itch/sister/www`: 6750 `108` und 1908 `408`.**
+                // **Und die Zeilen werden nicht ueber einen Blick nach
+                // vorn gezahlt, sondern der Interpreter ueberspringt sie
+                // selbst** -- **denn `command108` erhoeht `this._index` in
+                // der Schleife, und wenn dieser Leser das nicht tut, laeuft
+                // jede Folgezeile als eigener Befehl durch.**
+                var zeilen = pInterpreter.SkipCommentLines();
+                pActions.Add(new MzAction(pCommand,
+                    "comment " + zeilen + " lines"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeGold:
+            {
+                // `command125` is
+                //   const value = this.operateValue(params[0], params[1],
+                //                                        params[2]);
+                //   $gameParty.gainGold(value);
+                //
+                // **Und alle drei Parameter werden gelesen**, **denn der
+                // Operand kann eine Variable, eine Konstante, ein
+                // Spielerschalter, ein Gegenstand oder ein Zufall sein** --
+                // **und derselbe Operandleser steht in `Control Variables`
+                // und wird hier wieder gebraucht, weil es derselbe ist.**
+                // **Und `operateValue` liest drei Parameter, und nicht
+                // fuenf** -- **und das ist der Unterschied zu `122`, das
+                // dieselbe Methode mit einem Id-Bereich davor aufruft.**
+                //
+                // ```text
+                // command125: this.operateValue(params[0], params[1], params[2])
+                // command122: this.operateValue(params[3], params[4], params[5])
+                // ```
+                //
+                // **Und die Form ist damit `[art, rechnung, wert]` und nicht
+                // `[von, bis, rechnung, art, wert]`.** **Ein Leser, der
+                // `TryOperand` unveraendert aufruft, laesst drei Parameter
+                // fehlen, liest statt dessen den vierten und fuenften -- und
+                // die sind nicht da, und beide ergeben null.** **Gemessen an
+                // `D:/Itch/sister/www`: 60 `125`, alle in der Form
+                // `[1, 0, N]` oder `[1, 1, N]`.**
+                if (!TryGoldOperand(
+                    pCommand, pFacts, out var wert, out var fehlt))
+                {
+                    pInterpreter.Stop(MzStep.Refused, fehlt);
+                    return false;
+                }
+
+                var vorher = pFacts.Gold;
+                pFacts.Gold += wert;
+                pActions.Add(new MzAction(pCommand,
+                    "gold " + vorher + " -> " + pFacts.Gold));
+                return true;
+            }
+
+            case MzCommandTable.PlayMovie:
+            {
+                // `command261` is
+                //   if (!$gameMessage.isBusy()) {
+                //     const name = this._params[0];
+                //     if (name.length > 0) {
+                //       const ext = this.videoFileExt();
+                //       Graphics.playVideo('movies/' + name + ext);
+                //       this.setWaitMode('video');
+                //     }
+                //     this._index++;
+                //   }
+                //   return false;
+                //
+                // **Und es gibt `return false`, weil der Befehl in jedem
+                // Frame aufgerufen wird, bis das Video vorbei ist.** **Und
+                // `this._index++` passiert auch dann, wenn gar kein Film
+                // laeuft** -- **und ohne Namen wird ueberhaupt nicht gewartet.**
+                if (pFacts.MessageBusy)
+                {
+                    return false;
+                }
+
+                var name = Text(pCommand, 0);
+                pActions.Add(new MzAction(pCommand,
+                    name.Length > 0 ? "movie " + name : "movie (no name)"));
+                if (name.Length > 0)
+                {
+                    // **Und die Endung kommt aus der Engine und nicht aus
+                    // der Liste**, **denn die Liste nennt sie nicht.**
+                    pFacts.MoviePlaying = name;
+                    pInterpreter.WaitFor(MzWaitMode.Video);
+                }
+
+                return true;
+            }
+
             default:
                 return true;
         }
@@ -1319,7 +1438,97 @@ public static class MzCommands
     /// operands are read here; the sixth is the author's own script and is
     /// refused, because this repository does not evaluate a game's JavaScript.
     /// </summary>
-    private static bool TryOperand(
+    /// <summary>
+    /// The operand of a <c>125 Change Gold</c>, which is
+    /// <c>[kind, operation, value]</c> and not the five parameters a
+    /// <c>122</c> carries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is a separate reader and not an offset.</strong>
+    /// <c>operateValue(operationType, operandType, operand)</c> takes three
+    /// <strong>by position</strong>, <strong>and <c>122</c> passes its own
+    /// fourth, fifth and sixth</strong> -- <strong>so one reader cannot serve
+    /// both without being told where to start.</strong>
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// The value of a <c>125 Change Gold</c>, read the way the engine reads
+    /// it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>operateValue</c> is four lines long, and every one of
+    /// them changes the answer:</strong>
+    /// </para>
+    /// <code>
+    /// operateValue(operation, operandType, operand) {
+    ///     const value = operandType === 0 ? operand
+    ///                                     : $gameVariables.value(operand);
+    ///     return operation === 0 ? value : -value;
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>So <c>125</c>'s three parameters are
+    /// <c>[operation, kind, value]</c></strong> -- **and the first is the
+    /// operation and not the kind, which is the reading that costs an
+    /// afternoon.** <strong>And <c>operation === 0</c> is <em>take</em> and
+    /// anything else is <em>take away</em>, which is not a six-valued
+    /// enumeration at all.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>kind === 0</c> is a constant</strong>, <strong>and that
+    /// is the same zero that <c>MzOperand.Constant</c> already names.</strong>
+    /// Measured at <c>D:/Itch/sister/www</c>: sixty <c>125</c>, every one
+    /// <c>[1, 0, N]</c> or <c>[1, 1, N]</c> -- **which is <em>subtract</em>,
+    /// <em>constant</em>, and the amount**, **and a reader that read the
+    /// first slot as the kind would look for a constant and find an
+    /// operation, and hand the party its own money back.**
+    /// </para>
+    /// </remarks>
+    private static bool TryGoldOperand(
+        MzCommandEntry pCommand, MzBranchFacts pFacts,
+        out int pValue, out string pMissing)
+    {
+        pValue = 0;
+        pMissing = "";
+        var operation = At(pCommand, 0);
+        var wert = 0;
+        switch ((MzOperand)At(pCommand, 1))
+        {
+            case MzOperand.Constant:
+                wert = At(pCommand, 2);
+                break;
+
+            case MzOperand.Variable:
+            {
+                var id = At(pCommand, 2);
+                if (!pFacts.HasVariable(id))
+                {
+                    pMissing = $"variable {id}, which the command works with";
+                    return false;
+                }
+
+                wert = pFacts.Variable(id);
+                break;
+            }
+
+            case MzOperand.Script:
+                pMissing = "the author's own script, which this repository "
+                    + "does not run";
+                return false;
+
+            default:
+                pMissing = $"an operand of kind {At(pCommand, 1)}, which is "
+                    + "a count of something this reader has not opened";
+                return false;
+        }
+
+        pValue = operation == 0 ? wert : -wert;
+        return true;
+    }
+
+static bool TryOperand(
         MzCommandEntry pCommand, MzBranchFacts pFacts,
         out int pValue, out string pMissing)
     {
