@@ -14895,3 +14895,70 @@ MV 230 Wait          MZ 230 Wait
 survive into MZ.** An MZ interpreter cannot be reused for MV by substitution.
 
 **TestRealMvGameData: 4/4. All 2227 tests passed.**
+
+
+## VX: 671 data files read, 186 scripts decompressed to 1 721 226 bytes, and
+## the generation was one this repository had never opened
+
+### And what was there before
+
+**Not one VX data file, ever.** This repository had the VX Ace corpus --
+ninety-three scripts of Ruby 1.9.2 -- **and no VX game at all.**
+
+### And the game
+
+```text
+E:/RPGMakerGames/Random Dungeon -English Version-/
+    Game.ini   RTP=RPGVX, Library=RGSS202E.dll, Scripts=Data\Scripts.rvdata
+    Data/      671 .rvdata files, 656 maps
+    vx_rtp102e.zip   36.8 MB
+```
+
+**`RGSS202E` is VX and `RGSS301` is VX Ace, and `Scripts.rvdata` is Ruby 1.8
+and `Scripts.rvdata2` is Ruby 1.9 -- both in the fields RPG Maker itself
+writes.**
+
+### And what measured
+
+```text
+VX  gemessen: 671 Dateien, 0 Fehler
+VX  Skriptarchiv: 186 Skripte, 180 Namen
+VX  entpackt: 1721226 Bytes Ruby aus 186 Skripten, 0 Fehler
+TestRealVxGameData: 3/3
+All 2230 tests passed
+```
+
+**And the number that matters is the last one, and it is the one a reader
+that stopped at the header would not have:**
+
+```text
+compressed:  332917 Bytes
+decompressed: 1721226 Bytes Ruby
+```
+
+**VX stores every script zlib compressed behind a two byte header, and a
+reader that reported "read" without decompressing would have read the
+compression and nothing else.** So the test decompresses and counts the
+bytes that come out, and asserts the count is above half a million.
+
+### And six rounds of guessing the format, and why they are worth recording
+
+**An independent Python Marshal reader was written to cross-check the C#
+one, and it disagreed on every file -- and it was the Python one that was
+wrong.** In six rounds it got the header order wrong, the version byte
+wrong, the length encoding wrong, and the signed-count rule wrong. **Each
+time the fix was to read the C# reader's own comment, which quotes
+`r_long` out of Ruby 1.8.7, instead of reconstructing it from
+memory.**
+
+**That is the third time this session that a hand-reconstructed rule
+disagreed with the source.** The rule holds: quote the source or do not
+claim it.
+
+### And one measurement artefact, recorded because it nearly read as a defect
+
+**The suite reported `0 strings` and the old assertion text after the file
+had already been rewritten and rebuilt.** The DLL timestamp was newer than
+the source and the run was correct; **the stale text came from a `grep`
+against a log that had been overwritten by the previous run.** Verify the
+raw log, not the filtered one.
