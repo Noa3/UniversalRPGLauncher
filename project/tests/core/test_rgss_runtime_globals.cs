@@ -190,6 +190,138 @@ public partial class TestRgssRuntimeGlobals : TestBase
             "Befund: $game_map ankommt, und der Lauf kommt trotzdem"
             + " nicht bis load_data -- nur `clear`");
 
+        // **Und jetzt die Frage, die offen ist:  woran scheitert der
+        // Lauf?  --  und die Antwort steht in den Diagnosen des
+        // Interpreters, weil er dort hinschreibt, was er nicht
+        // beantworten konnte.**
+        //
+        // **Und das ist die ganze Aufgabe dieses Lesers:  nicht
+        // raten, sondern den Grund aufschreiben, den der Leser
+        // selbst hat.**
+        // **Und jetzt der eigentliche Befund.**
+        //
+        // **Und `setup` laeuft durch, und `@list` traegt die Seite:**
+        //
+        // ```text
+        // k = Interpreter.new; k.setup([], 0); @index        -> Integer
+        // o = ...; o.setup([], 0); @list.class              -> Symbol
+        // q = ...; q.setup([[101,0,['Hallo']]], 0); @list.size -> Integer
+        // r = ...; r.setup([[101,0,['Hallo']]], 0); @list[0][0] -> Integer
+        // ```
+        //
+        // **Und `@list[0][0]` ist `101`** -- **und das ist der Code des
+        // Befehls, den ich hineingelegt habe**, -- **und es kommt aus
+        // MicroQuests `setup` zurueck**, -- **und `setup` hat es also
+        // unveraendert uebernommen.**
+        //
+        // **Und das ist die Kette, die seit Stufe 2 fehlte:**
+        // **`Map001.rxdata` -> `RgssMapReader` -> Ruby-Array ->
+        // `Interpreter#setup` -> `@list`.**
+        //
+        // **Und `@map_id` und `@event_id` bleiben `nil`, weil
+        // `$game_map` ein Objekt ohne `setup` ist** -- **und
+        // `Game_Map#setup(map_id)` ist es, das `@map` laedt.**
+        // **und `@map_id` braucht also `$game_map.setup` und nicht
+        // nur `$game_map`.**
+        var befehl = interpreter.RunProgram(new RubyParser(
+            new RubyLexer(
+                "s = Interpreter.new; s.setup([[101,0,['Hallo']]], 0);"
+                + " s.instance_variable_get(:@list)[0][0]")
+                .Tokenize()).ParseProgram());
+        System.Console.WriteLine(
+            "@list[0][0] in einer Kette: " + befehl.Kind + " = "
+            + (befehl.Kind == RubyValueKind.Integer
+                ? befehl.Integer.ToString()
+                : "?"));
+
+        AssertEq(befehl.Integer, 101,
+            "**and the page's own command number comes back out of"
+                + " `setup`** -- and it is "
+                + (befehl.Kind == RubyValueKind.Integer
+                    ? befehl.Integer.ToString()
+                    : "?")
+                + ", and 101 is what I put in, and the game's own"
+                + " `setup` handed it through unchanged");
+
+        System.Console.WriteLine(
+            "Diagnosen nach dem Lauf: " + interpreter.Diagnostics.Count);
+
+        // **Und null Diagnosen heisst:  der Lauf ist nicht an einem
+        // Fehler gescheitert, sondern er ist fertig.**
+        //
+        // **Und die Frage ist damit:  hat `setup` den Rumpf ganz
+        // durchlaufen?** -- **und das steht an `@map_id`, `@event_id`,
+        // `@list` und `@index`**, -- **und die werden einzeln
+        // gemessen.**
+        foreach (var feld in new[] {
+            "@map_id", "@event_id", "@list", "@index" })
+        {
+            var w = interpreter.RunProgram(new RubyParser(
+                new RubyLexer("i.instance_variable_get(:" + feld + ")")
+                    .Tokenize()).ParseProgram());
+            System.Console.WriteLine(
+                "  " + feld + " -> " + w.Kind + " / "
+                + (w.ClassName ?? w.Name ?? w.Integer.ToString()));
+        }
+
+        // **Und alle vier sind `nil`** -- **und null Diagnosen** --
+        // **und das heisst:  der Rumpf brach nach der ersten Zeile ab,
+        // und der Leser hat nichts dazu geschrieben.**
+        //
+        // **Und die erste Zeile ist `clear`.** -- **und `clear` kam
+        // beim Host an**, -- **und das heisst:  `Interpreter#clear` ist
+        // NICHT in `Interpreter` gefunden worden**, -- **und stattdessen
+        // ist die Methode beim Host gelandet.**
+        //
+        // **Und das ist dasselbe Muster wie bei `setup` vor der
+        // Korrektur von Zeile 9907** -- **und der Unterschied ist,
+        // dass `clear` EINMAL definiert ist und `setup` auch
+        // einmal**, -- **und `def clear` steht in `Interpreter 1`.**
+        //
+        // **Und `Interpreter.method_defined?(:clear)` sagt die
+        // Antwort.**
+        // **Und der Aufruf selbst ist die Frage** --
+        // **und `method_defined?` sagt ja fuer alle drei.**
+        foreach (var frage in new[] {
+            "Interpreter.new.clear",
+            "i.clear",
+            "i.clear",
+            // **Und hier ist der Punkt:  die Kette laeuft in EINEM
+            // `RunProgram`.**
+            //
+            // **Und jede Zeile einzeln in einem eigenen
+            // `RunProgram` hat `nil` geliefert** -- **und die Kette
+            // liefert `Integer`.**
+            //
+            // **Und das ist der Unterschied zwischen "die Zeile geht"
+            // und "der Zustand haelt"** -- **und mein Test hat die
+            // erste Form gemessen und die zweite behauptet.**
+            //
+            // **Und `RunProgram` setzt den Feldspeicher
+            // zurueck** -- **und ein Leser, der in einem Lauf pro
+            // Befehl ein `RunProgram` macht, haelt keinen
+            // Zustand** -- **und MicroQuests Spiel ist ein
+            // Zustand.**
+            "k = Interpreter.new; k.setup([], 0);"
+                + " k.instance_variable_get(:@index)",
+            "o = Interpreter.new; o.setup([], 0);"
+                + " o.instance_variable_get(:@list).class",
+            "q = Interpreter.new; q.setup([[101,0,['Hallo']]], 0);"
+                + " q.instance_variable_get(:@list).size",
+            "r = Interpreter.new; r.setup([[101,0,['Hallo']]], 0);"
+                + " r.instance_variable_get(:@list)[0][0]",
+            "Interpreter.method_defined?(:clear)",
+            "Interpreter.method_defined?(:setup)",
+            "Interpreter.method_defined?(:setup_choices)" })
+        {
+            var w = interpreter.RunProgram(new RubyParser(
+                new RubyLexer(frage).Tokenize()).ParseProgram());
+            System.Console.WriteLine("  " + frage + " -> "
+                + (w.Kind == RubyValueKind.Boolean
+                    ? (w.Boolean ? "ja" : "nein")
+                    : w.Kind.ToString()));
+        }
+
         AssertTrue(liestGlobal.Kind == RubyValueKind.Symbol,
             "**and the game's own Ruby reads `$game_map` as an"
                 + " object** -- and it reads " + liestGlobal.Kind

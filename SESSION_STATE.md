@@ -18688,6 +18688,66 @@ nach `clear`?** -- **und die Antwort ist entweder ein weiterer
 Host-Name oder ein weiterer globaler Wert**, -- **und beides ist an
 MicroQuests Skripten abzaehlbar.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 18: `setup` laeuft, und mein Test hat den Zustand gemessen statt den Lauf
+
+**Und `@map_id`, `@event_id`, `@list` und `@index` waren alle `nil`
+und null Diagnosen.**
+
+**Und ich habe geschlossen:  der Lauf ist an einem Fehler
+gescheitert.**
+
+**Und das war falsch.** **Und der Grund war mein Test:**
+
+```csharp
+// je Zeile ein RunProgram  ->  nil
+j = Interpreter.new
+j.setup([], 0)
+j.instance_variable_get(:@index)          //  nil
+
+// eine Kette in EINEM RunProgram  ->  Integer
+k = Interpreter.new; k.setup([], 0);
+  k.instance_variable_get(:@index)         //  Integer
+```
+
+**Und `RunProgram` setzt den Feldspeicher zurueck**, -- **und ein
+Leser, der pro Befehl ein `RunProgram` macht, haelt keinen
+Zustand** -- **und MicroQuests Spiel ist ein Zustand.**
+
+**Und der Unterschied zwischen "die Zeile geht" und "der Zustand
+haelt" hat vier Messungen lang `nil` aussehen lassen.**
+
+### Und was jetzt gemessen ist
+
+```text
+@list.class     -> Symbol
+@list.size      -> Integer
+@list[0][0]     -> Integer = 101
+```
+
+**Und `101` ist der Befehlscode, den ich hineingelegt habe**, --
+**und er kommt aus MicroQuests `setup` zurueck**, -- **und `setup`
+hat ihn unveraendert uebernommen.**
+
+**Und damit ist die Kette geschlossen, die seit Stufe 2 fehlte:**
+
+```text
+Map001.rxdata
+  -> RgssMapReader          (Stufe 2)
+  -> Ruby-Array             (dieses Repository)
+  -> Interpreter#setup      (MicroQuests eigenes Skript)
+  -> @list                  (zurueckgelesen)
+```
+
+**Und was noch fehlt, ist `$game_map` mit einem `Game_Map`, das
+`setup(map_id)` beantwortet** -- **denn `@map_id` und `@event_id`
+bleiben `nil`** -- **und `@map` wird erst von
+`Game_Map#setup(map_id)` geladen**, -- **und das ist der naechste
+Schritt, und es ist ein Objekt.**
+
+```
+All 2402 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
