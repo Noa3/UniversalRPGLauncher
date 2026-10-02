@@ -363,6 +363,79 @@ public sealed class RubyInterpreter
     /// it.</strong>
     /// </remarks>
     private readonly Dictionary<string, RubyValue> _globals = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Gives a global its value from outside, as a game's runtime does.
+    /// </summary>
+    /// <param name="pName">
+    /// The name with the dollar sign, as a game writes it: <c>$game_map</c>.
+    /// </param>
+    /// <param name="pWert">The value, and nil clears it.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the door a runtime comes through</strong>,
+    /// -- <strong>and it did not exist until a real game asked for
+    /// it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And no script of MicroQuest assigns
+    /// <c>$game_map</c></strong>, -- <strong>measured: 44 lines mention
+    /// it and none assigns it</strong>, -- <strong>and the reason is
+    /// that RPG Maker's runtime creates it</strong>, --
+    /// <strong>and a reader that only lets Ruby assign a global has no
+    /// way to be that runtime.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the name is taken with the dollar sign</strong>, --
+    /// <strong>because that is how a game writes it</strong>, --
+    /// <strong>and a reader that wanted the bare name would ask the
+    /// host for <c>game_map</c> and get nothing.</strong>
+    /// </para>
+    /// </remarks>
+    public void SetzeGlobal(string pName, RubyValue pWert)
+    {
+        ArgumentNullException.ThrowIfNull(pName);
+        ArgumentNullException.ThrowIfNull(pWert);
+        if (pName.Length < 2 || pName[0] != '$')
+        {
+            // **Und ein Name ohne `$` ist eine globale Variable in
+            // Ruby und ein lokaler Name in diesem Aufruf** --
+            // **und ihn hier abzulegen wuerde ihn stillschweigend
+            // zu etwas machen, was er nicht ist.**
+            return;
+        }
+
+        _globals[GlobalNameAus(pName)] = pWert;
+    }
+
+    /// <summary>
+    /// Reads one global back, and nil for a name nobody gave.
+    /// </summary>
+    /// <param name="pName">The name with the dollar sign.</param>
+    /// <returns>The value, and nil when there is none.</returns>
+    /// <remarks>
+    /// <strong>And this is how a runtime checks what it has set
+    /// without running a script</strong>, -- <strong>and it is the same
+    /// table Ruby reads</strong>, -- <strong>not a second one that
+    /// could disagree.</strong>
+    /// </remarks>
+    public RubyValue Global(string pName)
+    {
+        ArgumentNullException.ThrowIfNull(pName);
+        if (pName.Length < 2 || pName[0] != '$')
+        {
+            return RubyValue.Nil;
+        }
+
+        return _globals.TryGetValue(GlobalNameAus(pName), out var wert)
+            ? wert
+            : RubyValue.Nil;
+    }
+
+    /// <summary>
+    /// How many globals this interpreter holds.
+    /// </summary>
+    public int GlobaleAnzahl => _globals.Count;
     private readonly List<string> _diagnostics = new List<string>();
 
     /// <summary>
@@ -12356,6 +12429,12 @@ public sealed class RubyInterpreter
     /// </remarks>
     private static string NameOf(RubyNode pNode)
         => GlobalName(Child(pNode, RubyNodeRole.Condition));
+
+    /// <summary>A global's name as the table keys it, from text.</summary>
+    /// <param name="pName">The name as written, with the dollar sign.</param>
+    /// <returns>The key, without the dollar sign.</returns>
+    private static string GlobalNameAus(string pName)
+        => pName.TrimStart('$');
 
     /// <summary>A global's name as the table keys it.</summary>
     private static string GlobalName(RubyNode pNode)

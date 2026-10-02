@@ -18638,6 +18638,56 @@ finden", sondern:  eine RPG-Maker-Laufzeitumgebung bauen**, --
 **und die beginnt mit genau drei globalen Werten**, --
 **und welche, ist in MicroQuests Skripten abzaehlbar.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 17: die Tür ist da, und sie reicht noch nicht
+
+**Und `IRubyHost` hatte keine Stelle fuer globale Werte** -- **und
+`RubyInterpreter._globals` ist privat und nur aus Ruby erreichbar.**
+
+**Und jetzt gibt es `SetzeGlobal`, `Global` und `GlobaleAnzahl`.**
+
+### Und die Liste, die eine Laufzeit beantworten muss, ist abgezaehlt
+
+```
+Globale: 25 verschiedene
+$game_temp=253  $game_system=232  $data_system=191  $game_party=180
+$game_map=123  $scene=77  $data_armors=73  $game_player=52
+$game_variables=46  $data_states=45  $game_troop=43  $game_screen=30
+$data_enemies=28  $data_weapons=27  $game_actors=27  $data_actors=19
+```
+
+**Und `$data_*` sind die Datenbankdateien des Spiels** -- **und
+`$game_*` sind die Spielobjekte**, -- **und die beiden Familien
+brauchen zwei verschiedene Antworten.**
+
+### Und meine Behauptung "mit `$game_map` kommt der Lauf weiter" war falsch
+
+```text
+Fragen nach $game_map: clear an Object, gelesen: 0
+```
+
+**Und `$game_map` kommt an** -- **und `Global("$game_map")` gibt ein
+`Game_Map` zurueck**, -- **und der Lauf kommt trotzdem nicht bis
+`load_data`.**
+
+**Und `$game_map.class` gibt `Symbol / Object`** -- **und das ist die
+richtige Antwort**, -- **denn `Object` ist der Ruby-Name fuer ein
+Objekt ohne Ruby-Rumpf**, -- **und ein Objekt, das aus C# kommt, hat
+in Ruby die Klasse `Object`.**
+
+**Und der Unterschied zwischen "das Global ist da" und "der Lauf
+kommt weiter" ist genau die Sache, die in Stufe 14 bis 16 drei
+Behauptungen gekostet hat.**
+
+```
+All 2402 tests passed
+```
+
+**Und der naechste Schritt ist damit nicht mehr eine Vermutung,
+sondern eine Messung:** -- **woran scheitert `Interpreter#setup`
+nach `clear`?** -- **und die Antwort ist entweder ein weiterer
+Host-Name oder ein weiterer globaler Wert**, -- **und beides ist an
+MicroQuests Skripten abzaehlbar.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
