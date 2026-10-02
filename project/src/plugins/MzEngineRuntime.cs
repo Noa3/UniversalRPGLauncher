@@ -293,9 +293,105 @@ public sealed class MzEngineRuntime : IEngineRuntime
         MapCount = gelesen;
         SkippedMaps = verweigert;
         _tilesets = ReadTilesets();
+        _commonEvents = ReadCommonEvents();
         ReadCharacters();
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded();
+    }
+
+    /// <summary>
+    /// The project's common events, read the way the engine reads them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>$dataCommonEvents[params[0]]</c> is an array lookup,
+    /// and the array's own position is the index</strong>, <strong>with
+    /// position zero unused because RPG Maker writes it that
+    /// way</strong>. <strong>And a reader that keyed the entries by their own
+    /// <c>id</c> field instead would be right for a project whose ids run
+    /// from one and wrong for one whose first entry has id zero.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the path is <c>data/</c> for MZ and <c>www/data/</c> for
+    /// MV</strong>, <strong>and the reader tries both</strong> -- **because
+    /// <c>IsMap</c> learned that lesson two commits ago in the other
+    /// direction.</strong>
+    /// </para>
+    /// </remarks>
+    private Dictionary<int, List<MzCommandEntry>> ReadCommonEvents()
+    {
+        var ergebnis = new Dictionary<int, List<MzCommandEntry>>();
+        var pfad = DataPfad("CommonEvents.json");
+        if (pfad.Length == 0)
+        {
+            CommonEventProblem =
+                "The project has no data/CommonEvents.json and no "
+                + "www/data/CommonEvents.json, and a 117 Common Event "
+                + "names a list this reader does not have.";
+            return ergebnis;
+        }
+
+        MzDataFile tabelle;
+        try
+        {
+            tabelle = MzDataFile.Read("data/CommonEvents.json",
+                File.ReadAllBytes(pfad));
+        }
+        catch (MzDataException ausnahme)
+        {
+            CommonEventProblem = ausnahme.Message;
+            return ergebnis;
+        }
+
+        for (var index = 0; index < tabelle.Root.Items.Count; index++)
+        {
+            var eintrag = tabelle.Root.Items[index];
+            if (eintrag.Kind != MzKind.Object)
+            {
+                continue;
+            }
+
+            var liste = new List<MzCommandEntry>();
+            foreach (var befehl in eintrag.Member("list")?.Items
+                ?? new List<MzValue>())
+            {
+                liste.Add(MzCommandEntry.From(befehl));
+            }
+
+            if (liste.Count > 0)
+            {
+                ergebnis[index] = liste;
+            }
+        }
+
+        CommonEventCount = ergebnis.Count;
+        return ergebnis;
+    }
+
+    /// <summary>
+    /// A project's data file, and it is under <c>data/</c> for MZ and under
+    /// <c>www/data/</c> for MV.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the two engines put the same file in two places, and a
+    /// reader that guessed one of them would find nothing for the
+    /// other.</strong>
+    /// </remarks>
+    private string DataPfad(string pDatei)
+    {
+        foreach (var unter in new[] { "data", "www/data" })
+        {
+            var kandidat = Path.Combine(
+                _game.GameDirectory,
+                unter.Replace('/', Path.DirectorySeparatorChar),
+                pDatei);
+            if (File.Exists(kandidat))
+            {
+                return kandidat;
+            }
+        }
+
+        return "";
     }
 
     /// <summary>
@@ -405,6 +501,23 @@ public sealed class MzEngineRuntime : IEngineRuntime
     }
 
     /// <summary>How many maps this runtime read.</summary>
+    /// <summary>
+    /// How many common events the project carries, and what was wrong with
+    /// the file when there was one.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a count and not nothing, because "the project has no
+    /// common events" and "this reader could not read the file" are two
+    /// different facts</strong> -- <strong>and only the second one is a
+    /// defect of this repository.</strong>
+    /// </remarks>
+    public int CommonEventCount { get; private set; }
+
+    /// <summary>
+    /// Why the common events are not there, and empty when they are.
+    /// </summary>
+    public string CommonEventProblem { get; private set; } = "";
+
     public int MapCount { get; private set; }
 
     /// <summary>The maps it could not read, and why.</summary>
@@ -440,7 +553,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         CurrentMapId = start;
         Repaint();
-        _runner = new MzEventRunner();
+        _runner = new MzEventRunner(_commonEvents);
         _facts = Facts;
         _clock.Reset();
         State = PluginRuntimeState.Running;
@@ -2842,6 +2955,29 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         return liste;
     }
+
+    /// <summary>
+    /// The common events the project stores, by the index a <c>117</c> names.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this was handed to the runner as nothing at all</strong>,
+    /// <strong>and a <c>117</c> is how a page calls anything that is not a
+    /// page</strong>: the engine's <c>setupChild</c> makes a new
+    /// interpreter on the common event's own list, <strong>and this
+    /// repository's runner was built with an empty
+    /// dictionary</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And measured at <c>D:/Itch/sister/www</c>: five hundred
+    /// common events, and seventeen hundred and eighty-seven calls on
+    /// thirty-nine of them.</strong> <strong>And every one of those calls
+    /// stopped with "this repository has no list for it", and every one of
+    /// them was reported as a refusal rather than as a call that
+    /// happened.</strong>
+    /// </para>
+    /// </remarks>
+    private Dictionary<int, List<MzCommandEntry>> _commonEvents = new();
 
     private Dictionary<int, List<Rm2kIndexedImage?>> _tilesets = new();
 

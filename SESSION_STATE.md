@@ -15779,3 +15779,80 @@ thing it carries is the name.**
 **And `117` is the next one, and it is the largest: a `117` inside a page
 runs a different list, on the same interpreter, with its own index, and the
 engine's `setupChild` is what carries it.**
+
+
+## The runner for 117 was complete and had an empty dictionary, and the
+## runtime never read CommonEvents.json
+
+### And what was already there
+
+**`Called` in `MzEventRunner` is the whole of a common event call**: a child
+interpreter, a depth limit of a hundred read out of the engine's own
+`setupChild`, the caller's event id carried only when the caller is on the
+map, and a refusal by name when the index is not in the dictionary.
+
+**And the dictionary was empty, because nothing ever filled it.**
+
+```csharp
+_runner = new MzEventRunner();
+```
+
+### And what that cost
+
+```text
+D:/Itch/sister/www:
+    501 Eintraege in CommonEvents.json, 500 mit einer Liste
+    873 bis 1787 Aufrufe eines 117, je nach Zaehlung
+    39 verschiedene Indizes, der groesste 138
+    und 117 steht in 2 Aktionen auf der Startkarte
+```
+
+**Every one of those calls stopped with "this repository has no list for
+it", and the run reported a refusal rather than a call.**
+
+### And the fix, and the two places it belongs
+
+**The engine's line is `const commonEvent = $dataCommonEvents[this._params[0]]`**
+-- **an array lookup by position, with position zero unused because RPG
+Maker writes it that way.** **Measured: five hundred entries with an
+`id`, and not one of them differs from its own position.**
+
+**And the file is under `data/` for MZ and `www/data/` for MV**, **which is
+the same lesson `IsMap` learned two commits ago in the other direction**, and
+the reader tries both.
+
+### And after
+
+```text
+MV gemeinsame Ereignisse: 500
+MV CommonEvents: 500 Eintraege mit id, 0 mit einer anderen als ihrer Position
+MV Lauf: 1 Frames, 2 Aktionen, 81 Karten   <- war 1 Aktion
+TestRealMvCommonEvents: 3/3
+TestRealMvRuntimeRun: 2/2
+All 2259 tests passed
+```
+
+### And two numbers in that measurement that disagree, and both are right
+
+**873 and 1787 are the same thing counted two ways.** **The first counts
+occurrences of the shape in the files, and the second counts calls across
+every trigger, and a page may carry the same call under several
+conditions.** **And a test that asserted the larger number against the
+smaller measurement failed for a reason that was the test's and not the
+reader's -- and the fix was to assert what the regex actually counts, and
+to say so in the assertion.**
+
+**And `Max()` is 138, not "three hundred and something"** -- **which is
+what I wrote before I read the number, and the project's own file carries
+five hundred.** **A reader that stopped at a hundred and thirty would stop
+early and would not say so.**
+
+### And the boundary is where it was
+
+```text
+Stopped=Refused, Grund=a branch on the author's own script:
+```
+
+**Condition type 12, a JavaScript expression inside the project, which
+`AGENTS.md` forbids this repository from running.** **And that is not a gap
+in the reader; it is the answer.**
