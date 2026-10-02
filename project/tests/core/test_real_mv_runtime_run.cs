@@ -244,16 +244,37 @@ public partial class TestRealMvRuntimeRun : TestBase
         // **Und das ist der Unterschied zwischen "das Spiel laeuft nicht"
         // und "das Spiel verlangt, dass sein eigenes JavaScript laeuft":
         // vor diesem Befehl hat der Lauf ausgefuehrt, was ausfuehrbar war.**
+        // **Und die Grenze, die hier stand, ist keine mehr** -- **und sie
+        // stand nicht dort, wo ich sie hingeschrieben hatte.**
+        //
+        // ```text
+        // vorher:  1 Frames, 2 Aktionen
+        //          Grund=a branch on the author's own script
+        //          !Utils.isMobileDevice()          <- beantwortbar, war aber nicht der Stopp
+        //
+        // nachher: 1 Frames, 13 Aktionen
+        //          Grund=the author's own script, and this repository runs no JavaScript
+        // ```
+        //
+        // **Und der Stopp war `!localStorage.getItem("hasShownSteamLink")`
+        // in der parallelen Seite von Ereignis 1** -- **und das ist eine
+        // Speicherfrage des Browsers und keine Spielmechanik.** **Und
+        // dahinter steht `$gameMap.event(2).start()`, also laeuft der
+        // Lauf jetzt in die Seite mit den 117 Befehlen hinein.**
         AssertEq(lauf.Stopped, MzStep.Refused,
-            "**and the run stops where the project asks for its own "
-            + "JavaScript** -- and it stopped at " + lauf.Stopped + " with "
-            + "'" + lauf.StopReason + "', and a condition of type 12 is a "
-                + "JavaScript expression in the project, and this repository "
-                + "does not run a project's JavaScript");
+            "**and the run still stops, and now on a condition that reads "
+            + "the game's own state** -- and it stopped at " + lauf.Stopped
+            + " with '" + lauf.StopReason + "'");
         AssertTrue(lauf.StopReason.Contains("script", StringComparison.OrdinalIgnoreCase),
             "**and the reason names the script** -- and it said '"
                 + lauf.StopReason + "', and a refusal that does not say what "
                 + "it would need to run is a refusal nobody can act on");
+        AssertTrue(lauf.Actions.Count >= 13,
+            "**and the run got thirteen commands further than it did** -- "
+            + lauf.Actions.Count + ", and it walked past the Steam "
+            + "advertisement, past both of the parallel pages' plugin "
+            + "calls, and into the page of a hundred and seventeen "
+            + "commands");
 
         System.Console.WriteLine(
             "MV Lauf: " + lauf.SimulationTicks + " Frames, "
@@ -261,7 +282,17 @@ public partial class TestRealMvRuntimeRun : TestBase
             + lauf.MapCount + " Karten, Zustand " + lauf.State
             + ", Stopped=" + lauf.Stopped
             + ", Grund=" + lauf.StopReason
-            + ", Seiten=" + lauf.PagesRun);
+            + ", Seiten=" + lauf.PagesRun
+            + ", Ereignis=" + lauf.LastPage);
+        foreach (var stop in lauf.Stops)
+        {
+            System.Console.WriteLine("   Stop: " + stop);
+        }
+
+        foreach (var aktion in lauf.Actions)
+        {
+            System.Console.WriteLine("   Aktion: " + aktion.What);
+        }
     }
 
     // ---------------------------------------------------------------------

@@ -229,10 +229,56 @@ public static class MzBranchEvaluator
             }
 
             case MzBranchKind.Script:
+            {
                 // The engine writes `result = !!eval(params[1])` here. This
                 // repository does not evaluate a game's JavaScript, and the one
                 // thing it may not do is pretend to have.
-                return MzBranchResult.Of(MzBranchOutcome.ScriptNotRun);
+                //
+                // **Und trotzdem gibt es jetzt eine Ausnahme**, und sie ist
+                // eine Liste und keine Aufhebung:
+                //
+                // ```text
+                // Utils.isOptionValid("test")        118x
+                // Utils.isMobileDevice()              50x
+                // -- und in den Bedingungen selbst:
+                // Utils.isOptionValid("test")         95x
+                // !Utils.isOptionValid("test")          6x
+                // Utils.isMobileDevice()              32x
+                // !Utils.isMobileDevice()              9x
+                // -- von 4952 Bedingungen des Typs 12 in einem
+                //    fertigen Spiel
+                // ```
+                //
+                // **Und beide stehen in `rpg_core.js` und nicht in einem
+                // Plugin und nicht im Skript des Autors** -- **und diese
+                // Datei liest dieses Repository fuer jede andere Regel
+                // bereits.** **Und beide haben auf einem Desktop genau eine
+                // Antwort, und es ist jedes Mal dieselbe, und keine von
+                // beiden liest ein Spiel, einen Spielstand oder eine
+                // Variable.**
+                //
+                // **Und alles andere bleibt eine Verweigerung** -- **und
+                // `Utils.isOptionValid("test") || $gameVariables.value(25) >
+                // 50` bleibt eine, denn die Haelfte davon ist das Skript
+                // des Autors, und ein Leser, der die erste Haelfte
+                // beantwortete, behauptete ein Ergebnis, das er nicht
+                // berechnet hat.** **Und dieses Spiel schreibt genau das,
+                // einmal.**
+                var antwort = MzEngineCondition.Answer(
+                    pBranch.ScriptText, out var warum);
+                if (antwort.HasValue)
+                {
+                    return antwort.Value
+                        ? MzBranchResult.Of(MzBranchOutcome.True)
+                        : MzBranchResult.Of(MzBranchOutcome.False);
+                }
+
+                // **Und es ist `ScriptNotRun` und nicht `Unknown`**, **denn
+                // es fehlt nichts: es wird nur nichts gerechnet.** **Und
+                // `Unknown` sagt "da ist etwas, das dieser Leser noch
+                // nicht hat", und das waere hier falsch.**
+                return MzBranchResult.ScriptNotRun(warum);
+            }
 
             case MzBranchKind.Enemy:
             case MzBranchKind.Character:

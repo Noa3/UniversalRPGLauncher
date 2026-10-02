@@ -146,6 +146,17 @@ public sealed class MzBranchResult
     public string Comparison { get; }
     public bool HasComparison { get; }
 
+    /// <summary>
+    /// The author's own script was not run, and why it was not.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is not <see cref="Unknown"/>.</strong>
+    /// <strong><c>Unknown</c> says there is something this reader does not
+    /// have yet; here there is nothing missing and nothing computed.</strong>
+    /// </remarks>
+    internal static MzBranchResult ScriptNotRun(string pMissing) =>
+        new(MzBranchOutcome.ScriptNotRun, pMissing, "", false);
+
     internal static MzBranchResult Of(MzBranchOutcome pOutcome) =>
         new(pOutcome, "", "", false);
 

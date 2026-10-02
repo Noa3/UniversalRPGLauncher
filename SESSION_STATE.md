@@ -16308,3 +16308,124 @@ All 2280 tests passed
 
 **The run is stopped at the same place** -- **a branch on the author's own
 JavaScript** -- **and everything this session added sits behind that line.**
+
+
+## The boundary I named for hours was not the boundary, and two engine
+## questions and one browser store were standing behind it
+
+### And what the boundary was actually made of
+
+```text
+D:/Itch/sister/www, 4952 Skript-Bedingungen:
+    143 davon sind genau eine von zwei Fragen aus rpg_core.js
+      Utils.isOptionValid("test")    95x,  6x mit "!"
+      Utils.isMobileDevice()          32x,  9x mit "!"
+    4809 davon lesen echten Spielzustand:
+      $gameSelfVariables, $gameScreen.picture, $gameActors.actor().equips(),
+      Math.random(), $gameVariables.value(...)
+```
+
+**Und die 4809 bleiben eine Verweigerung**, **denn sie brauchen eine
+JavaScript-Maschine und keine Liste.** **Die Grenze war also an der
+richtigen Stelle -- aber ich hatte sie an der falschen Marke gezogen.**
+
+### And the two questions, and where they live
+
+```javascript
+// rpg_core.js, nicht ein Plugin, nicht das Skript des Autors
+static isMobileDevice() {
+    const isDesktopApp = typeof require === 'function'
+        && typeof process === 'object';
+    const isMobile = !isDesktopApp && (...);
+    Utils.isMobileDevice = () => isMobile;
+    return isMobile;
+}
+
+static isOptionValid(name) {
+    const args = location.search.slice(1);
+    if (args.split("&").includes(name)) { return true; }
+    if (this.isNwjs() && nw.App.argv.length > 0) {
+        return nw.App.argv[0].split("&").includes(name);
+    }
+    return false;
+}
+```
+
+**Keine der beiden liest ein Spiel, einen Spielstand oder eine Variable.**
+**Das ist der ganze Grund, warum sie beantwortbar sind: es sind Fragen
+ueber die Maschine, und ueber die Maschine weiss ein Launcher etwas.**
+
+### And the boundary was not where I wrote it down
+
+**Und `!Utils.isMobileDevice()` war die Bedingung, an der ich die Grenze
+festgemacht hatte -- und sie war nicht die, an der der Lauf stand.**
+
+**Der Lauf stand an `!localStorage.getItem("hasShownSteamLink")` in der
+parallelen Seite von Ereignis 1** -- **und das ist eine Speicherfrage des
+Browsers**, **und das Spiel benutzt sie fuer genau eine Sache: um sich zu
+merken, dass es den Steam-Link schon gezeigt hat.**
+
+```js
+if (!localStorage.getItem("hasShownSteamLink")) {
+    QJ.MPMZ.tl.steamStorePageAdvertisement?.();
+    localStorage.setItem("hasShownSteamLink", "true");
+}
+```
+
+**Und dahinter steht `$gameMap.event(2).start()`** -- **und der Block
+laeuft auf einer Maschine ohne Steam ueberhaupt nicht, weil `?.()` auf
+`undefined` nichts tut.**
+
+### And what that bought
+
+```text
+vorher:  1 Frames, 2 Aktionen
+         Grund=a branch on the author's own script: !Utils.isMobileDevice()
+
+nachher: 1 Frames, 13 Aktionen
+         Grund=the author's own script, and this repository runs no JavaScript
+
+Die 13 Aktionen:
+  comment 0 lines
+  branch True                                   <- !localStorage.getItem(...)
+  comment 0 lines
+  plugin hide_actor_hud ...                      <- 356, gemeldet
+  plugin >金钱固定框 : 隐藏 ...
+  plugin >地图永久漂浮文字 : 漂浮文字[3] : 清除 ...
+  plugin >高级变量框 : 框设置[1] : 隐藏 ...
+```
+
+**Der Lauf ist an der parallelen Seite vorbei, durch beide Plugin-Bloecke
+und in die Seite mit den 117 Befehlen hinein.**
+
+### And one mistake in the whitelist
+
+**`Utils.isOptionValid("a" && "b")` wurde in der ersten Fassung
+beantwortet**, **weil der Leser nur auf die Anfuehrungszeichen sah und
+nicht auf den Inhalt** -- **und `"a" && "b"` ist in JavaScript `"b"`, und
+`includes(name)` vergleicht ganze Abschnitte der Argumentliste.** **Ein
+Optionsname muss ein einziges Wort sein, und das wird jetzt geprueft.**
+
+### And one contract that had to be kept
+
+**Ein alter Test verlangte `ScriptNotRun` und mein Zweig lieferte
+`Unknown`.** **Beides sagt dasselbe -- dass nichts ausgefuehrt wurde.**
+**`Unknown` sagt aber "da ist etwas, das dieser Leser noch nicht hat",
+und das waere hier falsch.** **Also gibt es jetzt
+`MzBranchResult.ScriptNotRun(warum)`, und die Verweigerung traegt wieder
+ihren Grund und keine erfundene Luecke.**
+
+### And what is still not run
+
+```text
+4809 Bedingungen, die echten Spielzustand lesen
+  $gameSelfVariables.get(this, 'Type') === 0   1032x
+  $gameScreen.picture(40)                        331x
+  $gameActors.actor(2).equips()[1]              263x
+  Math.random() > 0.8                           257x
+```
+
+**Das ist der naechste Schritt und er ist eine echte Arbeit: eine
+abgesicherte Auswertung fuer Ausdruecke ueber Dinge, die dieser Leser
+hat.** **Und kein `eval` und keine fremde Bibliothek und kein
+JavaScript aus dem Spiel.**
