@@ -16510,6 +16510,43 @@ Arbeit** -- **beide hat der Leser, und beide brauchen eine echte
 Auswertung der Formen, die dieses Spiel schreibt.**
 
 
+## 2026-10-02 — `403`, und die zwei Wächter, die sich widersprechen
+
+**Befund.** `403 End Loop` war in `MzControlFlow` verdrahtet, stand aber in
+der Liste der nicht dispatchbaren Befehle — dieselbe doppelte Wahrheit wie
+bei `117`.
+
+**Die Wächter, gemessen an `rpg_objects.js`:**
+
+```text
+command111: this._branch[this._indent] = result;      // false oder true
+            if (this._branch[this._indent] === false) { this.skipBranch(); }
+jumpTo:     this._branch[indent] = null;              // jeder gekreuzte Einzug
+command403: if (this._branch[this._indent] >= 0) { this.skipBranch(); }
+command411: if (this._branch[this._indent] !== false) { this.skipBranch(); }
+```
+
+**Und `>= 0` ist in JavaScript nicht eine Wache, sondern zwei.** `ToNumber(null)`
+ist `+0`, also `null >= 0` ist **wahr**; `ToNumber(undefined)` ist `NaN`, also
+`undefined >= 0` ist **falsch**. Der Slot ist `undefined`, bis ein Zweig ihn
+schreibt, `null` nachdem ein `jumpTo` den Einzug gekreuzt hat, und `false` oder
+`true` nach einer `111`.
+
+**Der Fehler in diesem Repository:** `BranchAt` gab in beiden Fällen `null`
+zurück, und `!= false` ist in beiden wahr — also hat der Leser bei jedem `403`
+übersprungen, das die Engine stehen lässt. Neu ist `MzBranchState` mit drei
+Zuständen (`Undecided`, `Crossed`, `Decided`), und `403` prüft den Zustand.
+
+**Und `403` heißt im Editor „End Loop", schließt aber bei allen 26 Vorkommen
+eine Wahl** (alle tragen `[6, null]`, alle folgen einem `402`), und alle 26
+stehen auf den 61 Hauptkarten.
+
+```text
+TestMvEndLoop: 3/3
+MZ Befehlssatz: 114 Befehle, 67 in einem Auspraecher (58%), 47 ohne
+All 2302 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

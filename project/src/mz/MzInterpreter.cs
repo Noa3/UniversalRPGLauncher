@@ -468,6 +468,47 @@ public sealed class MzInterpreter
     public bool? BranchAt(int pIndent) =>
         _branch.TryGetValue(pIndent, out var value) ? value : null;
 
+    /// <summary>
+    /// Whether the slot holds nothing at all, and how <c>403</c> reads
+    /// that.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this exists because JavaScript's <c>ToNumber</c> makes
+    /// two different things out of the same <c>null</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong><c>undefined &gt;= 0</c> is false</strong> -- <strong>because
+    /// <c>undefined</c> becomes <c>NaN</c> and every comparison with
+    /// <c>NaN</c> is false</strong> -- <strong>and <c>null &gt;= 0</c> is
+    /// true</strong>, <strong>because <c>null</c> becomes <c>+0</c>.</strong>
+    /// <strong>So <c>command403</c> skips after a <c>jumpTo</c> crossed
+    /// the indent and does not skip on an indent no branch ever
+    /// wrote.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this reader's branch slot is <c>bool?</c>, where
+    /// <c>null</c> means both of those.</strong> <strong>A guard of
+    /// <c>!= false</c> therefore skips in both, and that is the wrong
+    /// answer for the first of them</strong> -- <strong>and it is
+    /// measurable: a <c>403</c> at an indent no branch decided stepped
+    /// over the command after it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>So the slot carries three states and not two</strong>:
+    /// <c>MzBranch.Undecided</c> for the slot nothing wrote,
+    /// <c>MzBranch.Crossed</c> for the one a <c>jumpTo</c> left,
+    /// <strong>and <c>true</c> or <c>false</c> for the one a
+    /// <c>111</c> decided.</strong>
+    /// </para>
+    /// </remarks>
+    public MzBranchState StateAt(int pIndent) =>
+        _branch.TryGetValue(pIndent, out var wert)
+            ? wert.HasValue
+                ? MzBranchState.Decided
+                : MzBranchState.Crossed
+            : MzBranchState.Undecided;
+
     public void SetBranch(int pIndent, bool? pValue) => _branch[pIndent] = pValue;
 
     /// <summary>

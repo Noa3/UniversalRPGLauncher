@@ -185,23 +185,55 @@ public static class MzControlFlow
                 }
                 return MzControlOutcome.Ran;
 
-            // Loop does nothing at all. It is a marker for break and repeat to
-            // find, and the engine's method is `return true`.
-            // **Und `403` ist das Ende eines Schleifenrumpfes und nicht
-            // `412`.** **`412` ist das Ende eines Zweiges und hat keine
-            // Methode; `403` hat eine und ueberspringt.**
-            // **Und die Wache ist `>= 0` und nicht `== -1`**, **denn ein
-            // Zweig, den der Interpreter nicht entschieden hat, ist `0`,
-            // und einer, der wahr war, ist `1`.**
-            case MzCommandTable.EndLoop:
-                if (pInterpreter.BranchAt(pCommand.Indent) != false
+            // **Und `403` ist das Ende eines Schleifenrumpfes und
+            // nicht `412`.** **`412` ist das Ende eines Zweiges und hat
+            // keine Methode; `403` hat eine und ueberspringt.**
+            //
+            // ```js
+            // command403() {
+            //     if (this._branch[this._indent] >= 0) {
+            //         this.skipBranch();
+            //     }
+            //     return true;
+            // }
+            // ```
+            //
+            // **Und `_branch[indent]` ist -1, wenn dort kein Zweig steht,
+            // und 0 oder 1, wenn einer steht.** **Und `BranchAt` gibt
+            // `null` zurueck, wenn dort nichts gesetzt wurde** -- **und
+            // `null != false` ist wahr, wie `null >= 0` es auch waere.**
+            //
+            // **Und die Wache ist damit in beiden Faellen dasselbe** --
+            // **und das ist keine Zufallsuebereinstimmung, sondern die
+            // Folge davon, dass diese drei Zustaende in der Engine -1,
+            // 0 und 1 heissen und in diesem Leser `null`, `false` und
+            // `true`.** **Und mein Kommentar behauptete eine andere
+            // Zuordnung** -- **und ein Kommentar, der die falsche
+            // nennt, ist schlimmer als keiner.**
+                        case MzCommandTable.EndLoop:
+                // **Und `>= 0` in JavaScript ist `null >= 0` und nicht
+                // `undefined >= 0`.** **`null` wird `+0` und
+                // `undefined` wird `NaN`, und jeder Vergleich mit `NaN`
+                // ist falsch.** **Also ueberspringt die Engine, wenn ein
+                // `jumpTo` diesen Einzug gekreuzt hat (`null`), und
+                // nicht, wenn noch nie ein Zweig hier war
+                // (`undefined`).**
+                //
+                // **Und `BranchAt` gab in beiden Faellen `null`
+                // zurueck**, **und `!= false` ist in beiden wahr** --
+                // **also hat dieser Leser bei jedem `403` uebersprungen,
+                // das die Engine stehen laesst.** **Und das ist gemessen:
+                // ein `403` bei Einzug null, ohne dass ein `111` dort
+                // etwas geschrieben hatte, sprang ueber den Befehl
+                // dahinter.**
+                if (pInterpreter.StateAt(pCommand.Indent)
+                        != MzBranchState.Undecided
                     && !pInterpreter.SkipBranch())
                 {
                     return MzControlOutcome.Stopped;
                 }
 
                 return MzControlOutcome.Ran;
-
             case MzCommandTable.Loop:
                 return MzControlOutcome.Ran;
 

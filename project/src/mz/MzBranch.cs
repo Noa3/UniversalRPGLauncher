@@ -108,6 +108,50 @@ public enum MzComparison
 }
 
 /// <summary>What a branch came to.</summary>
+/// <summary>
+/// The three things a branch slot can hold, and they are not two.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>And this exists because <c>command403</c> and
+/// <c>command411</c> do not agree.</strong>
+/// </para>
+/// <para>
+/// <strong>Measured at <c>rpg_objects.js</c>:</strong>
+/// </para>
+/// <code>
+/// this._branch[this._indent] = result;              // command111
+/// if (this._branch[this._indent] === false) { ... } // command111
+/// this._branch[indent] = null;                      // jumpTo
+/// if (this._branch[this._indent] &gt;= 0) { ... }    // command403
+/// if (this._branch[this._indent] !== false) { ... } // command411
+/// </code>
+/// <para>
+/// <strong>And the slot is <c>undefined</c> until one of those writes
+/// it</strong>, <strong>and <c>null</c> after a <c>jumpTo</c> crossed
+/// the indent</strong>, <strong>and <c>false</c> or <c>true</c> after a
+/// <c>111</c> decided it.</strong> <strong>JavaScript tells those last
+/// two apart by number</strong> -- <strong><c>ToNumber(null)</c> is
+/// <c>0</c> and <c>ToNumber(undefined)</c> is <c>NaN</c> -- <strong>and
+/// that is why <c>403</c> skips after a jump and <c>411</c> skips on an
+/// untouched indent, and why both skip on a decision.</strong>
+/// </para>
+/// </remarks>
+public enum MzBranchState
+{
+    /// <summary>Nothing ever wrote this indent. <c>undefined</c>.</summary>
+    Undecided = 0,
+
+    /// <summary>
+    /// A <c>jumpTo</c> crossed this indent and set it to nothing on
+    /// purpose. <c>null</c>.
+    /// </summary>
+    Crossed = 1,
+
+    /// <summary>A <c>111</c> wrote <c>true</c> or <c>false</c> here.</summary>
+    Decided = 2,
+}
+
 public enum MzBranchOutcome
 {
     /// <summary>The test came to true.</summary>

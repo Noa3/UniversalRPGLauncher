@@ -233,7 +233,7 @@ public static class MzCommands
     /// </remarks>
     public static IReadOnlyList<int> SteuerungsBefehle() => new[]
     {
-        102, 111, 112, 113, 115, 118, 117, 355, 401, 413, 655, 657,
+        102, 111, 112, 113, 115, 118, 117, 355, 401, 403, 413, 655, 657,
     };
 
     /// <summary>
