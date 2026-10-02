@@ -210,13 +210,45 @@ public static class MzCommandSet
         && NoMethodCodes.Contains(pCode) == false;
 
     /// <summary>
-    /// The nine numbers this reader has measured as having no
+    /// The eleven numbers this reader has measured as having no
+    /// <c>commandNNN</c> method in MZ 1.9.1.
+    ///
+    /// <para>
+    /// <strong>And nine of them lie outside the hundred and fourteen
+    /// above.</strong> <strong>Two do not: <c>109 Skip</c> and
+    /// <c>357 Plugin Command</c> are declared commands with no
+    /// method at all</strong> -- <strong>and that is measured, not
+    /// asserted</strong>:
+    /// </para>
+    /// <code>
+    /// var methodName = 'command' + command.code;
+    /// if (typeof this[methodName] === 'function') {
+    ///     if (!this[methodName]()) { return false; }
+    /// }
+    /// this._index++;
+    /// </code>
+    /// <para>
+    /// <strong>And that <c>typeof</c> guard is the whole
+    /// difference.</strong> <strong>A command with no method is
+    /// stepped over and not reported as an error</strong> -- <strong>
+    /// and so <c>109 Skip</c> does nothing and is still valid.</strong>
+    /// </para>
     /// <c>commandNNN</c> method in MZ 1.9.1. <b>All nine lie outside the
     /// hundred and fourteen above</b>, which is why the check has two terms.
     /// </summary>
     public static readonly IReadOnlyCollection<int> NoMethodCodes = new[]
     {
-        0, 401, 404, 405, 412, 505, 604, 605, 657,
+        // **Und `109 Skip` und `357 Plugin Command` sind jetzt
+        // auch hier** -- **und sie waren es nicht.**  **Und
+        // beide stehen in den einhundertvierzehn darunter**,
+        // **und trotzdem gibt es kein `command109` und kein
+        // `command357`** -- **und das ist gemessen, nicht
+        // behauptet.**  **Und `executeCommand` sagt `if
+        // (typeof this[methodName] === 'function')`, und dieses
+        // `typeof` ist der ganze Unterschied:**
+        // **ein Befehl ohne Methode wird uebersprungen und
+        // nicht als Fehler gemeldet.**
+        0, 109, 357, 401, 404, 405, 412, 505, 604, 605, 657,
     };
 
     /// <summary>Every command, in the order the engine declares them.</summary>

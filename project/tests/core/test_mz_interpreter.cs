@@ -493,11 +493,30 @@ partial class TestMzInterpreter : TestBase
         AssertTrue(
             MzCommandSet.HasMethod(603),
             $"and so does 603; it has {MzCommandSet.HasMethod(603)}");
+        // **Und neun war die Zahl von gestern** -- **und sie ist elf**,
+        // **denn `109 Skip` und `357 Plugin Command` liegen INNERHALB der
+        // einhundertvierzehn und haben trotzdem keine Methode.**
+        //
+        // ```js
+        // var methodName = 'command' + command.code;
+        // if (typeof this[methodName] === 'function') { ... }
+        // this._index++;
+        // ```
+        //
+        // **Und `executeCommand` macht mit beiden nichts und meldet
+        // keinen Fehler** -- **und das ist der Grund, warum `109` kein
+        // fehlender Befehl ist, sondern ein gültiger, der nichts tut.**
+        var ohneMethode = new List<int>(MzCommandSet.NoMethodCodes);
         AssertEq(
-            MzCommandSet.NoMethodCodes.Count, 9,
-            "and the numbers without a method are nine, not the twelve a"
-            + $" first draft wrote, and all nine lie outside the hundred and"
-            + $" fourteen; there are {MzCommandSet.NoMethodCodes.Count}");
+            ohneMethode.Count, 11,
+            "and the numbers without a method are eleven, and two of them"
+            + $" lie inside the hundred and fourteen; there are"
+            + $" {ohneMethode.Count}: "
+            + string.Join(", ", ohneMethode));
+        AssertTrue(
+            ohneMethode.Contains(109) && ohneMethode.Contains(357),
+            "and they are 109 Skip and 357 Plugin Command, which are"
+            + " declared commands with no body at all");
 
         // **And where the line ends up.** The engine reads a 401 by position
         // inside a 101's block: `command101` runs
@@ -825,7 +844,7 @@ partial class TestMzInterpreter : TestBase
         var decisions = 0;
         foreach (var action in actions)
         {
-            if (action.Code == MzCommandTable.ShowText)
+            if (action.Code == MzCommandTable.ConditionalBranch)
             {
                 decisions++;
             }

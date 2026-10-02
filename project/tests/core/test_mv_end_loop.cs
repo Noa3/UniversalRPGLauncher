@@ -136,7 +136,7 @@ public partial class TestMvEndLoop : TestBase
         // schreibt, wenn es einen anderen Einzug ueberspringt.**
         var interp = new MzInterpreter(new List<MzCommandEntry>
         {
-            Befehl(MzCommandTable.ShowText, "0"),
+            Befehl(MzCommandTable.ConditionalBranch, "0"),
         });
         interp.Setup(1, 1);
 
@@ -161,7 +161,7 @@ public partial class TestMvEndLoop : TestBase
         // **Und `JumpTo` schreibt `null`, und `null` ist `Crossed`.**
         var spring = new MzInterpreter(new List<MzCommandEntry>
         {
-            Bei(MzCommandTable.ShowText, 0, "\"a\""),
+            Bei(MzCommandTable.ConditionalBranch, 0, "\"a\""),
             Bei(108, 1, "\"b\""),
             Bei(0, 0, "\"\""),
         });

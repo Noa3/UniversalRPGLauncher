@@ -285,10 +285,10 @@ public partial class TestMvStatesAnimationArmor : TestBase
 
         var interp = new MzInterpreter(new List<MzCommandEntry>
         {
-            Befehl(MzCommandTable.ShowAnimation2, "0", "157", "false"),
-            Befehl(MzCommandTable.ShowAnimation2, "-1", "182", "false"),
+            Befehl(MzCommandTable.ShowAnimation, "0", "157", "false"),
+            Befehl(MzCommandTable.ShowAnimation, "-1", "182", "false"),
             // **Und ein Darsteller, den es nicht gibt.**
-            Befehl(MzCommandTable.ShowAnimation2, "-9", "3", "false"),
+            Befehl(MzCommandTable.ShowAnimation, "-9", "3", "false"),
         });
         interp.Setup(0, 0);
         interp.Run(new List<MzAction>(), fakten);

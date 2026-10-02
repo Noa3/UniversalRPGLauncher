@@ -117,16 +117,31 @@ public static class MzCommands
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
+            MzCommandTable.ChangeVictoryMe,
+            MzCommandTable.ChangeEncounter,
+            MzCommandTable.ChangeFormationAccess,
+            MzCommandTable.ChangeDefeatMe,
+            MzCommandTable.ChangeVehicleBgm,
+            MzCommandTable.SetVehicleLocation,
+            MzCommandTable.GetOnOffVehicle,
+            MzCommandTable.FadeoutScreen,
+            MzCommandTable.FadeinScreen,
+            MzCommandTable.GetLocationInfo,
+            MzCommandTable.ChangeActorImages,
+            MzCommandTable.ChangeNickname,
+            MzCommandTable.ChangeProfile,
+            MzCommandTable.ChangeTp,
+            MzCommandTable.ChangeEnemyTp,
+            MzCommandTable.EnemyRecoverAll,
+            MzCommandTable.EnemyAppear,
+            MzCommandTable.EnemyTransform,
+            MzCommandTable.ShowBattleAnimation,
+            MzCommandTable.ForceAction,
+            MzCommandTable.AbortBattle,
             MzCommandTable.RotatePicture,
             MzCommandTable.ChangeEnemyHp,
-            MzCommandTable.ChangeEnemyMp,
-            MzCommandTable.ChangeEnemyTp,
             MzCommandTable.ChangeEnemyState,
-            MzCommandTable.ChangeEnemyLife,
-            MzCommandTable.ChangeEnemyLocation,
-            MzCommandTable.EnemyTransform,
-            MzCommandTable.EnemyAnimation,
-            MzCommandTable.EnemyDamage,
+            MzCommandTable.ChangeEnemyMp,
             MzCommandTable.BattleWin,
             MzCommandTable.BattleEscape,
             MzCommandTable.BattleLose,
@@ -168,7 +183,6 @@ public static class MzCommands
             MzCommandTable.ControlSwitches,
             MzCommandTable.ControlVariables,
             MzCommandTable.Else,
-            MzCommandTable.EraseEvent,
             MzCommandTable.EraseEventFromMap,
             MzCommandTable.ErasePicture,
             MzCommandTable.ExitEventProcessing,
@@ -199,14 +213,13 @@ public static class MzCommands
             MzCommandTable.ScrollText,
             MzCommandTable.SetEventLocation,
             MzCommandTable.ShowAnimation,
-            MzCommandTable.ShowAnimation2,
             MzCommandTable.ShowBalloonIcon,
             MzCommandTable.ShowChoiceList,
             MzCommandTable.ShowDialogue,
             MzCommandTable.ShowFollowers,
             MzCommandTable.ShowItemChoice,
             MzCommandTable.ShowPicture,
-            MzCommandTable.ShowText,
+            MzCommandTable.ConditionalBranch,
             MzCommandTable.StopSe,
             MzCommandTable.TransferPlayer,
             MzCommandTable.Wait,
@@ -1509,7 +1522,6 @@ public static class MzCommands
 
             case MzCommandTable.ChangeEnemyHp:
             case MzCommandTable.ChangeEnemyMp:
-            case MzCommandTable.ChangeEnemyTp:
             {
                 // **Und `command331` bis `command333` sind dieselbe Zeile
                 // mit drei Feldern:**
@@ -1567,7 +1579,7 @@ public static class MzCommands
 
             case MzCommandTable.ChangeEnemyState:
             {
-                // **Und `command334`:** `if (this._params[1] === 0) {
+                // **Und `command333`:** `if (this._params[1] === 0) {
                 // enemy.addState(this._params[2]); } else {
                 // enemy.removeState(this._params[2]); }` -- **und ein `0`
                 // fuegt hinzu und jeder andere Wert entfernt** -- **und
@@ -1594,9 +1606,9 @@ public static class MzCommands
                 return true;
             }
 
-            case MzCommandTable.ChangeEnemyLife:
+            case MzCommandTable.EnemyRecoverAll:
             {
-                // **Und `command335` ist genau `enemy.recoverAll()` und
+                // **Und `command334` ist genau `enemy.recoverAll()` und
                 // sonst nichts** -- **kein Index und kein Zustand und
                 // kein Wert:**
                 //
@@ -1619,9 +1631,9 @@ public static class MzCommands
                 return true;
             }
 
-            case MzCommandTable.ChangeEnemyLocation:
+            case MzCommandTable.EnemyAppear:
             {
-                // **Und `command336` macht zwei Dinge**, **und das zweite
+                // **Und `command335` macht zwei Dinge**, **und das zweite
                 // steht in einer eigenen Zeile:**
                 //
                 // ```js
@@ -1650,7 +1662,7 @@ public static class MzCommands
 
             case MzCommandTable.EnemyTransform:
             {
-                // **Und `command337` ist `enemy.transform(params[1])` und
+                // **Und `command336` ist `enemy.transform(params[1])` und
                 // `makeUniqueNames()` und sonst nichts** -- **und
                 // `transform` wechselt die Klasse und damit den
                 // Namen.**
@@ -1666,7 +1678,7 @@ public static class MzCommands
                 return true;
             }
 
-            case MzCommandTable.EnemyAnimation:
+            case MzCommandTable.ForceAction:
             {
                 // **Und `command339` prueft `if (enemy.isAlive())`** --
                 // **und das ist eine Bedingung und kein Index:**
@@ -1697,7 +1709,7 @@ public static class MzCommands
                 return true;
             }
 
-            case MzCommandTable.EnemyDamage:
+            case MzCommandTable.AbortBattle:
             {
                 // **Und `command340` ist nicht `331` mit einer
                 // Operation** -- **es ist fest ein `gainHp(-value)`:**
@@ -1802,6 +1814,349 @@ public static class MzCommands
                 }
 
                 pInterpreter.SkipBranch();
+                return true;
+            }
+
+            case MzCommandTable.ChangeVictoryMe:
+            {
+                // **Und `command133` ist eine Zuweisung:**
+                //
+                // ```js
+                // $gameSystem.setVictoryMe(this._params[0]); return true;
+                // ```
+                //
+                // **Und das ist nicht das Kampflied** -- **das ist `132`
+                // und heisst `setBattleBgm`** -- **und diese beiden
+                // spielen zu verschiedenen Zeiten.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeKampflied(AudioOf(pCommand), true)));
+                return true;
+            }
+
+            case MzCommandTable.ChangeDefeatMe:
+            {
+                // **Und `command139` ist dieselbe Zeile fuer die
+                // Niederlage.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeKampflied(AudioOf(pCommand), false)));
+                return true;
+            }
+
+            case MzCommandTable.ChangeEncounter:
+            {
+                // **Und `command136` hat eine dritte Zeile, die `137`
+                // nicht hat:**
+                //
+                // ```js
+                // if (this._params[0] === 0) {
+                //     $gameSystem.disableEncounter();
+                // } else {
+                //     $gameSystem.enableEncounter();
+                // }
+                // $gamePlayer.makeEncounterCount();
+                // return true;
+                // ```
+                //
+                // **Und `makeEncounterCount()` wirft den Zaehler
+                // zurueck**, **und ohne das faellt der naechste Kampf
+                // genau eine Kachel nach dem Abschalten an.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeBegegnung(
+                        At(pCommand, 0) != 0, out var gewuerfelt)));
+                pFacts.Begegnungszaehler = 0;
+                if (gewuerfelt)
+                {
+                    pActions.Add(new MzAction(pCommand,
+                        "the encounter counter was thrown back to zero, "
+                        + "because `command136` ends in `$gamePlayer"
+                        + ".makeEncounterCount()` and `command137` does "
+                        + "not"));
+                }
+
+                return true;
+            }
+
+            case MzCommandTable.ChangeFormationAccess:
+            {
+                // **Und `command137` hat nur die zwei Zeilen** -- **und
+                // das ist der ganze Unterschied zu `136`.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeFormation(At(pCommand, 0) != 0)));
+                return true;
+            }
+
+            case MzCommandTable.ChangeVehicleBgm:
+            {
+                // **Und `command140` beginnt mit dem Dreizeiler, den alle
+                // drei Fahrzeugbefehle teilen:**
+                //
+                // ```js
+                // var vehicle = $gameMap.vehicle(this._params[0]);
+                // if (vehicle) { vehicle.setBgm(this._params[1]); }
+                // return true;
+                // ```
+                //
+                // **Und `if (vehicle)` ist der ganze Unterschied
+                // zwischen einem Befehl, der etwas tut, und einem,
+                // der nichts tut** -- **und ein Schiff, das niemand
+                // angesegelt hat, ist kein Fehler.**
+                var fahrzeugBgm = pFacts.Spiel.Fahrzeug(At(pCommand, 0));
+                if (fahrzeugBgm == null)
+                {
+                    pFacts.Notices.Add(
+                        $"140 Change Vehicle Bgm was asked for vehicle "
+                        + $"{At(pCommand, 0)}, and `$gameMap.vehicle(...)` "
+                        + "finds none with that index, and `if (vehicle)` "
+                        + "is why that is not an error");
+                    return true;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"{fahrzeugBgm.Name} gets its own song"));
+                return true;
+            }
+
+            case MzCommandTable.SetVehicleLocation:
+            {
+                // **Und `command202` hat dieselbe Torwaechter-Zeile wie
+                // `201`:**
+                //
+                // ```js
+                // if (this._params[1] === 0) {  // Direct designation
+                //     mapId = this._params[2];
+                //     x = this._params[3];
+                //     y = this._params[4];
+                // } else {                    // with variables
+                //     mapId = $gameVariables.value(this._params[2]);
+                //     x = $gameVariables.value(this._params[3]);
+                //     y = $gameVariables.value(this._params[4]);
+                // }
+                // var vehicle = $gameMap.vehicle(this._params[0]);
+                // if (vehicle) { vehicle.setLocation(mapId, x, y); }
+                // ```
+                //
+                // **Und die Reihenfolge ist bemerkenswert:** **die
+                // Zahlen werden gelesen, BEVOR nach dem Fahrzeug
+                // gefragt wird** -- **und eine fehlende Variable wird
+                // also auch dann gemeldet, wenn es das Fahrzeug gar
+                // nicht gibt.**
+                var fahrzeugOrt = pFacts.Spiel.Fahrzeug(At(pCommand, 0));
+                if (fahrzeugOrt == null)
+                {
+                    pFacts.Notices.Add(
+                        $"202 Set Vehicle Location was asked for vehicle "
+                        + $"{At(pCommand, 0)}, and none carries that "
+                        + "index, and `command202` says `if (vehicle)`");
+                    return true;
+                }
+
+                var woher = At(pCommand, 1) == 0
+                    ? MzOperand.Constant
+                    : MzOperand.Variable;
+                if (!TryOperandOrt(pCommand, pFacts, woher, 2,
+                        out var mapId, out var ortX, out var ortY,
+                        out var fehltOrt))
+                {
+                    pFacts.Notices.Add(fehltOrt);
+                    return true;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    fahrzeugOrt.SetzeOrt(mapId, ortX, ortY)));
+                return true;
+            }
+
+            case MzCommandTable.GetOnOffVehicle:
+            {
+                // **Und `command206` ist eine Zeile und sonst
+                // nichts:**
+                //
+                // ```js
+                // $gamePlayer.getOnOffVehicle(); return true;
+                // ```
+                //
+                // **Und er nimmt keinen Parameter** -- **denn die
+                // Engine sucht das Fahrzeug unter dem Spieler selbst**,
+                // **und nicht eines, das der Befehl benennt.**
+                var unter = pFacts.Spiel.UnterDemSpieler(
+                    pFacts.Player.X, pFacts.Player.Y);
+                if (unter == null)
+                {
+                    pFacts.Notices.Add(
+                        "206 Get on/off Vehicle was asked for, and no "
+                        + "vehicle stands where the player does, and "
+                        + "`getOnOffVehicle()` looks the vehicle up under "
+                        + "the player itself and takes no parameter");
+                    return true;
+                }
+
+                pActions.Add(new MzAction(pCommand, unter.Wechsel()));
+                return true;
+            }
+
+            case MzCommandTable.ChangeVehicleImage:
+            {
+                // **Und `command323` ist `vehicle.setImage(params[1],
+                // params[2])`** -- **und der erste Parameter ist die
+                // Fahrzeugnummer und nicht der Index eines Bildes.**
+                //
+                // **Und ein leerer Bildname ist das, was ein Fahrzeug
+                // von der Karte nimmt** -- **und nicht ein Bild, das
+                // "keines" heisst.**
+                var fahrzeugBild = pFacts.Spiel.Fahrzeug(At(pCommand, 0));
+                if (fahrzeugBild == null)
+                {
+                    pFacts.Notices.Add(
+                        $"323 Change Vehicle Image was asked for vehicle "
+                        + $"{At(pCommand, 0)}, and none carries that "
+                        + "index, and `if (vehicle)` is why that is not "
+                        + "an error");
+                    return true;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    fahrzeugBild.SetzeBild(
+                        Text(pCommand, 1), At(pCommand, 2))));
+                return true;
+            }
+
+            case MzCommandTable.ChangeNickname:
+            case MzCommandTable.ChangeProfile:
+            {
+                // **Und `command324` und `command325` sind zwei
+                // Zuweisungen mit derselben Form:**
+                //
+                // ```js
+                // command324 = function() {
+                //     var actor = $gameActors.actor(this._params[0]);
+                //     if (actor) { actor.setNickname(this._params[1]); }
+                //     return true;
+                // };
+                // ```
+                //
+                // **Und `setName` (320), `setNickname` (324) und
+                // `setProfile` (325) sind drei verschiedene Felder**
+                // -- **und ein Leser, der alle drei in das Namensfeld
+                // schreibt, verliert bei zweien davon das Original.**
+                var darsteller = At(pCommand, 0);
+                if (!pFacts.PartyMembers.Contains(darsteller))
+                {
+                    pFacts.Notices.Add(
+                        $"{pCommand.Code} was asked for actor "
+                        + $"{darsteller}, and `if (actor)` found nobody");
+                    return true;
+                }
+
+                var spitzname = pCommand.Code
+                    == MzCommandTable.ChangeNickname;
+                var feld = spitzname
+                    ? pFacts.Spitznamen
+                    : pFacts.Profile;
+                feld[darsteller] = Text(pCommand, 1);
+                pActions.Add(new MzAction(pCommand,
+                    $"actor {darsteller} is given the "
+                    + (spitzname ? "nickname" : "profile") + " '"
+                    + Text(pCommand, 1) + "'"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeTp:
+            {
+                // **Und `command326` ist `actor.gainTp(value)` mit
+                // `operateValue(params[2], params[3], params[4])`**
+                // -- **und der erste Parameter ist auch hier der
+                // Darsteller und nicht ein Operand.**
+                if (!TryOperateValue(
+                    pCommand, pFacts, 2, out var tpWert,
+                    out var fehltTp))
+                {
+                    pFacts.Notices.Add(fehltTp);
+                    return true;
+                }
+
+                var tpZiel = At(pCommand, 0) == 0
+                    ? At(pCommand, 1)
+                    : pFacts.Variable(At(pCommand, 1));
+                foreach (var nummer in GeordneteZahlen(pFacts.PartyMembers))
+                {
+                    if (tpZiel != 0 && nummer != tpZiel)
+                    {
+                        continue;
+                    }
+
+                    pFacts.Taktischpunkte[nummer] =
+                        pFacts.Taktischpunkte.GetValueOrDefault(nummer)
+                        + tpWert;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"the tactical points move by {tpWert} on "
+                    + $"{(tpZiel == 0 ? "the whole party" : "actor "
+                        + tpZiel)}, and `command326` is `gainTp(value)`"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeEnemyTp:
+            {
+                // **Und `command342` ist dasselbe auf der
+                // Gegnerseite** -- **und `gainTp`, nicht `gainHp(-)`**
+                // -- **und das Minus aus `command340` steht hier
+                // nirgends.**
+                if (!TryOperateValue(
+                    pCommand, pFacts, 1, out var tpGegner,
+                    out var fehltTpGegner))
+                {
+                    pFacts.Notices.Add(fehltTpGegner);
+                    return true;
+                }
+
+                foreach (var gegner in GegnerZiele(pFacts, At(pCommand, 0)))
+                {
+                    gegner.Tp += tpGegner;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"the troop's tactical points move by {tpGegner}, and "
+                    + "`command342` is `enemy.gainTp(value)` and not "
+                    + "`gainHp(-value)`, which is `command340`"));
+                return true;
+            }
+
+            case MzCommandTable.GetLocationInfo:
+            {
+                // **Und `command285` hat fuenf Faelle und einen sechsten
+                // als Vorgabe:**
+                //
+                // ```js
+                // case 0: value = $gameMap.terrainTag(x, y); break;
+                // case 1: value = $gameMap.eventIdXy(x, y); break;
+                // case 2: case 3: case 4: case 5:
+                //     value = $gameMap.tileId(x, y, this._params[1] - 2);
+                //     break;
+                // default: value = $gameMap.regionId(x, y); break;
+                // $gameVariables.setValue(this._params[0], value);
+                // ```
+                //
+                // **Und `default` ist die Region und nicht die
+                // Fehlerbehandlung** -- **und vier Kachelschichten
+                // fallen in einen Zweig.**
+                var art = At(pCommand, 1);
+                var ortQuelle = At(pCommand, 2) == 0
+                    ? MzOperand.Constant
+                    : MzOperand.Variable;
+                if (!TryOperandOrt(pCommand, pFacts, ortQuelle, 3,
+                        out _, out var infoX, out var infoY,
+                        out var fehltInfo))
+                {
+                    pFacts.Notices.Add(fehltInfo);
+                    return true;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"{Ortart(art)} at {infoX}, {infoY} goes into variable "
+                    + $"{At(pCommand, 0)}, and `command285` has no "
+                    + "`default` case: the region is the last one and not "
+                    + "the error handler"));
                 return true;
             }
 
@@ -2733,7 +3088,7 @@ case MzCommandTable.ChangeExp:
             }
 
 
-            case MzCommandTable.ShowAnimation2:
+            case MzCommandTable.ShowAnimation:
             {
                 // **Und `command212`:**
                 //
@@ -2920,7 +3275,7 @@ case MzCommandTable.ChangeExp:
                 return true;
             }
 
-            case MzCommandTable.ShowAnimation:
+            case MzCommandTable.FadeoutScreen:
             {
                 // Die Hilfe zu `221 Show Animation` sagt dieselben drei
                 // Saetze wie zu `213 Show Balloon Icon`: *Character — The
@@ -2972,7 +3327,7 @@ case MzCommandTable.ChangeExp:
                 return !warten;
             }
 
-            case MzCommandTable.ChangeVehicleImage:
+            case MzCommandTable.ChangeActorImages:
             {
                 // Die Hilfe sagt: *Change the image used for vehicles.
                 // These settings will remain in effect until updated again
@@ -3099,7 +3454,7 @@ case MzCommandTable.ChangeExp:
                 return true;
                 }
 
-            case MzCommandTable.EraseEvent:
+            case MzCommandTable.FadeinScreen:
             {
                 // Die Hilfe zu `222 Erase Event` sagt woertlich:
                 // *Temporarily removes the event currently being run.
@@ -3589,6 +3944,68 @@ case MzCommandTable.ChangeExp:
 
         return ziele;
     }
+
+    /// <summary>
+    /// Three numbers behind one <c>if (this._params[n] === 0)</c> gate,
+    /// and that gate is how the engine reads "direct" against "out of a
+    /// variable".
+    /// </summary>
+    private static bool TryOperandOrt(
+        MzCommandEntry pCommand, MzBranchFacts pFacts,
+        MzOperand pQuelle, int pStart,
+        out int pA, out int pB, out int pC, out string pFehlt)
+    {
+        pA = 0;
+        pB = 0;
+        pC = 0;
+        pFehlt = "";
+        for (var i = 0; i < 3; i++)
+        {
+            var nummer = At(pCommand, pStart + i);
+            if (pQuelle == MzOperand.Constant)
+            {
+                continue;
+            }
+
+            if (!pFacts.HasVariable(nummer))
+            {
+                pFehlt = $"variable {nummer}, which `command"
+                    + $"{pCommand.Code}` reads as one of its three "
+                    + "coordinates";
+                return false;
+            }
+        }
+
+        if (pQuelle == MzOperand.Constant)
+        {
+            pA = At(pCommand, pStart);
+            pB = At(pCommand, pStart + 1);
+            pC = At(pCommand, pStart + 2);
+            return true;
+        }
+
+        pA = pFacts.Variable(At(pCommand, pStart));
+        pB = pFacts.Variable(At(pCommand, pStart + 1));
+        pC = pFacts.Variable(At(pCommand, pStart + 2));
+        return true;
+    }
+
+    /// <summary>
+    /// <c>command285</c>'s six cases, and the last is the region and not
+    /// an error.
+    /// </summary>
+    private static string Ortart(int pArt) => pArt switch
+    {
+        0 => "the terrain tag",
+        1 => "the event id",
+        2 => "the tile id of layer one",
+        3 => "the tile id of layer two",
+        4 => "the tile id of layer three",
+        5 => "the tile id of layer four",
+        _ => "the region id, because `command285` has no `default` for "
+            + "errors: the region is the last case and everything above "
+            + "five lands there",
+    };
 
     private static string AufTraeger(
         MzCommandEntry pCommand, MzBranchFacts pFacts, int pStart,

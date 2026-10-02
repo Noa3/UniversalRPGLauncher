@@ -43,7 +43,7 @@ public static class MzControlFlow
     {
         switch (pCommand.Code)
         {
-            case MzCommandTable.ShowText:
+            case MzCommandTable.ConditionalBranch:
             {
                 var branch = MzBranch.FromParameters(pCommand.Parameters);
                 var result = MzBranchEvaluator.Evaluate(branch, pFacts);

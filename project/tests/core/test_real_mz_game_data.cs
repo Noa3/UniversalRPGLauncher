@@ -183,71 +183,17 @@ public partial class TestRealMzGameData : TestBase
         // steht hier und nicht im Interpreter, **denn der Test soll
         // fragen, was der Interpreter kann, und nicht mit ihm
         // dasselbe sagen.**
-        var ausfuehrbar = new HashSet<int>
-        {
-            UniversalRPG.Web.MzCommandTable.ShowText,        // 101
-            UniversalRPG.Web.MzCommandTable.Loop,             // 112
-            UniversalRPG.Web.MzCommandTable.BreakLoop,        // 113
-            UniversalRPG.Web.MzCommandTable.ExitEventProcessing, // 115
-            UniversalRPG.Web.MzCommandTable.Label,            // 118
-            UniversalRPG.Web.MzCommandTable.JumpToLabel,      // 119
-            UniversalRPG.Web.MzCommandTable.ControlSwitches,  // 121
-            UniversalRPG.Web.MzCommandTable.ControlVariables, // 122
-            UniversalRPG.Web.MzCommandTable.Else,             // 411
-            UniversalRPG.Web.MzCommandTable.RepeatAbove,      // 413
-            UniversalRPG.Web.MzCommandTable.ShowPicture,      // 231
-            UniversalRPG.Web.MzCommandTable.MovePicture,      // 232
-            UniversalRPG.Web.MzCommandTable.ErasePicture,     // 235
-            UniversalRPG.Web.MzCommandTable.ShowDialogue,     // 401
-            UniversalRPG.Web.MzCommandTable.ShowTextLine,     // 401 continuation
-            UniversalRPG.Web.MzCommandTable.MoveRoute,        // 205
-            UniversalRPG.Web.MzCommandTable.TransferPlayer,   // 201
-            UniversalRPG.Web.MzCommandTable.OpenMenu,         // 351
-            UniversalRPG.Web.MzCommandTable.PluginCommand,    // 357
-            UniversalRPG.Web.MzCommandTable.ChangeItems,      // 126
-            UniversalRPG.Web.MzCommandTable.Wait,             // 350
-            UniversalRPG.Web.MzCommandTable.PlayBgm,           // 241
-            UniversalRPG.Web.MzCommandTable.FadeOutBgm,        // 242
-            UniversalRPG.Web.MzCommandTable.PlayBgs,           // 245
-            UniversalRPG.Web.MzCommandTable.FadeOutBgs,        // 246
-            UniversalRPG.Web.MzCommandTable.PlayMe,            // 249
-            UniversalRPG.Web.MzCommandTable.PlaySe,            // 250
-            UniversalRPG.Web.MzCommandTable.StopSe,            // 251
-            UniversalRPG.Web.MzCommandTable.ControlSelfSwitch,  // 123
-            UniversalRPG.Web.MzCommandTable.ChangePartyMember,  // 129
-            UniversalRPG.Web.MzCommandTable.ShowBalloonIcon,    // 213
-            UniversalRPG.Web.MzCommandTable.ShowAnimation,     // 221
-            UniversalRPG.Web.MzCommandTable.EraseEvent,       // 222
-            UniversalRPG.Web.MzCommandTable.SetEventLocation,  // 203
-            UniversalRPG.Web.MzCommandTable.BattleProcessing,  // 301
-            UniversalRPG.Web.MzCommandTable.ChangeVehicleImage, // 322
-            UniversalRPG.Web.MzCommandTable.ShowChoiceList,   // 102
-            UniversalRPG.Web.MzCommandTable.ChoicesOption,   // 402
-            // **Und diese drei standen in keiner Liste, obwohl alle drei
-            // in `MzCommands.TryExecute` einen Fall haben und alle drei
-            // eine Konstante in `MzCommandTable` tragen** -- **und
-            // gemessen ist das an `rmmz_objects.js` eines fertigen
-            // MZ-Projekts auf dieser Maschine:**
-            //
-            // ```js
-            // Game_Interpreter.prototype.command105 = function(params) {
-            //     if ($gameMessage.isBusy()) { return false; }
-            //     $gameMessage.setScroll(params[0], params[1]);
-            //     while (this.nextEventCode() === 405) { this._index++;
-            //         $gameMessage.add(this.currentCommand().parameters[0]); }
-            //     this.setWaitMode("message");
-            //     return true;
-            // };
-            // ```
-            //
-            // **Und die Liste war handgepflegt, und eine handgepflegte
-            // Liste zaehlt eine Ausfuehrung, die es gibt, als fehlend** --
-            // **und `Map003` Event 9 hat ein `105` mit vier `405`-Zeilen,
-            // und die vier wurden als "nicht ausfuehrbar" gemeldet.**
-            UniversalRPG.Web.MzCommandTable.ScrollText,      // 105
-            UniversalRPG.Web.MzCommandTable.ScreenShake,     // 225
-            UniversalRPG.Web.MzCommandTable.RecoverAll,      // 314
-        };
+        // **Und diese Liste ist handgepflegt, und das war schon einmal
+        // ein Fehler** -- **denn `105`, `225` und `314` standen
+        // hier nicht, obwohl sie laufen.** **Und jetzt steht hier
+        // genau das, was `UniversalRPG.Web.MzCommands.GateBefehle()` behauptet**, **und
+        // `test_mz_command_coverage_honest` vergleicht beides**, **und
+        // eine Liste, die auseinanderlaufen kann, wird nicht mehr
+        // gepflegt, sondern gelesen.**
+        var ausfuehrbar = new HashSet<int>(
+            UniversalRPG.Web.MzCommands.GateBefehle()
+                .Concat(UniversalRPG.Web.MzCommands.SteuerungsBefehle()));
+
 
         var nicht = vorkommen
             .Where(pKvp => !ausfuehrbar.Contains(pKvp.Key))

@@ -273,27 +273,52 @@ public partial class TestMvEraseAndTint : TestBase
     }
 
     /// <summary>
-    /// <c>222</c> and <c>214</c> are not the same command.
+    /// <c>222</c> and <c>214</c> are not the same command, and the first
+    /// is not an erase at all.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And both carry no parameters at all</strong>, <strong>so
-    /// nothing in the command's own shape tells them apart</strong> — <strong>
-    /// and a reader that gave them one meaning would remove a chest with
-    /// <c>222</c> and have it come back when the party left the
-    /// map.</strong>
+    /// <strong>And this test compared one name with itself for a
+    /// while</strong> -- <strong>it said
+    /// <c>MzCommandTable.EraseEventFromMap != MzCommandTable.EraseEventFromMap</c></strong>
+    /// -- <strong>and that is false for ever and for any reason, and a
+    /// test that can never pass should be deleted rather than
+    /// repaired.</strong> <strong>It was here because the old name
+    /// <c>EraseEvent</c> stood for <c>222</c>, and <c>222</c> is not an
+    /// erase.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>222</c> is <c>Fadein Screen</c>:</strong>
+    /// </para>
+    /// <code>
+    /// command222 = function() {
+    ///     if (!$gameMessage.isBusy()) {
+    ///         $gameScreen.startFadeIn(this.fadeSpeed());
+    ///         this.wait(this.fadeSpeed());
+    ///         this._index++;
+    ///     }
+    ///     return false;
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>And <c>214</c> is <c>Erase Event</c>, and it takes the
+    /// event off the map for good:</strong> <strong><c>if
+    /// (this.isOnCurrentMap() &amp;&amp; this._eventId &gt; 0) {
+    /// $gameMap.eraseEvent(this._eventId); }</c></strong> <strong>and the
+    /// first of those two lines is what keeps it from erasing something
+    /// on another map.</strong>
     /// </para>
     /// </remarks>
     public void Test_ZweiundVierzehnIstNichtZweiZwoelf()
     {
-        AssertTrue(MzCommandTable.EraseEventFromMap != MzCommandTable.EraseEvent,
+        AssertTrue(MzCommandTable.FadeinScreen != MzCommandTable.EraseEventFromMap,
             "**and they are two numbers**");
-        AssertEq(MzCommandTable.EraseEvent, 222,
-            "**and 222 is the one that lasts until the party leaves the "
-            + "map**");
+        AssertEq(MzCommandTable.FadeinScreen, 222,
+            "**and 222 is Fadein Screen, not an erase**");
         AssertEq(MzCommandTable.EraseEventFromMap, 214,
             "**and 214 is the one that takes it off the map**");
     }
+
 
     /// <summary>
     /// A command out of its own JSON, and the parameters are values and not

@@ -231,7 +231,7 @@ public partial class TestMvBattleOutcomes : TestBase
         // `gainHp(value)` ruft, heilt.**
         var interp = new MzInterpreter(new List<MzCommandEntry>
         {
-            Befehl(MzCommandTable.EnemyDamage, "-1", "0", "0", "500"),
+            Befehl(MzCommandTable.AbortBattle, "-1", "0", "0", "500"),
         });
         interp.Setup(1, 1);
         var fakten = DreiGegner(true);
@@ -249,7 +249,7 @@ public partial class TestMvBattleOutcomes : TestBase
         // wuerde zwei gleiche Namen hinterlassen.**
         var versteckt = new MzInterpreter(new List<MzCommandEntry>
         {
-            Befehl(MzCommandTable.ChangeEnemyLocation, "-1"),
+            Befehl(MzCommandTable.EnemyAppear, "-1"),
         });
         versteckt.Setup(1, 1);
         var faktenVersteckt = DreiGegner(true);

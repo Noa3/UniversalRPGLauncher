@@ -29,10 +29,6 @@ namespace UniversalRPG.Web;
 /// </remarks>
 public static class MzCommandTable
 {
-    // The numbers the interpreter's own movement depends on. These are the ones
-    // that appear in more than one place in the engine's control flow, so a
-    // reader that spelled them out twice would be able to disagree with itself.
-    public const int ShowText = 111;
     public const int Loop = 112;
     public const int BreakLoop = 113;
     public const int ExitEventProcessing = 115;
@@ -317,37 +313,41 @@ public static class MzCommandTable
     /// <summary>
     /// <c>command333</c> -- enemy.gainTp(value).
     /// </summary>
-    public const int ChangeEnemyTp = 333;
+    public const int ChangeEnemyState = 333;
 
     /// <summary>
-    /// <c>command334</c> -- enemy.addState / enemy.removeState, and collapse on death.
+    /// <c>command334</c> -- <c>enemy.recoverAll()</c> and nothing else:
+    /// no index, no state, no value.
     /// </summary>
-    public const int ChangeEnemyState = 334;
+    public const int EnemyRecoverAll = 334;
 
     /// <summary>
-    /// <c>command335</c> -- enemy.recoverAll().
+    /// <c>command335</c> -- <c>enemy.appear();</c> and then
+    /// <c>$gameTroop.makeUniqueNames();</c>, and that is two calls.
     /// </summary>
-    public const int ChangeEnemyLife = 335;
+    public const int EnemyAppear = 335;
 
-    /// <summary>
-    /// <c>command336</c> -- enemy.appear(), and makeUniqueNames().
-    /// </summary>
-    public const int ChangeEnemyLocation = 336;
+
+
 
     /// <summary>
     /// <c>command337</c> -- enemy.transform(params[1]).
     /// </summary>
-    public const int EnemyTransform = 337;
+    public const int ShowBattleAnimation = 337;
 
     /// <summary>
-    /// <c>command339</c> -- enemy.startAnimation(params[1], false, 0), and only if alive.
+    /// <c>command339</c> -- <c>iterateBattler</c>, and it asks
+    /// <c>isDeathStateAffected()</c> before forcing an action.
     /// </summary>
-    public const int EnemyAnimation = 339;
+    public const int ForceAction = 339;
 
     /// <summary>
-    /// <c>command340</c> -- enemy.gainHp(-value).
+    /// <c>command340</c> -- <c>BattleManager.abort();</c> and nothing
+    /// else, and it is not a damage command.
     /// </summary>
-    public const int EnemyDamage = 340;
+    public const int AbortBattle = 340;
+
+
 
     /// <summary>
     /// <c>command601</c> -- _branch !== 0.
@@ -482,6 +482,100 @@ public static class MzCommandTable
     public const int ChangeEquipment = 319;
 
     public const int ChangeHp = 311;
+    /// <summary>
+    /// <c>command111</c> -- the branch itself, and the engine calls it `Conditional Branch`.
+    /// </summary>
+    public const int ConditionalBranch = 111;
+
+    /// <summary>
+    /// <c>command221</c> -- $gameScreen.startFadeOut(this.fadeSpeed()).
+    /// </summary>
+    public const int FadeoutScreen = 221;
+
+    /// <summary>
+    /// <c>command222</c> -- $gameScreen.startFadeIn(this.fadeSpeed()).
+    /// </summary>
+    public const int FadeinScreen = 222;
+
+
+
+    /// <summary>
+    /// <c>command336</c> -- enemy.transform(params[1]).
+    /// </summary>
+    public const int EnemyTransform = 336;
+
+
+
+
+    /// <summary>
+    /// <c>command133</c> -- $gameSystem.setVictoryMe(params[0]), and that is the song after a won fight and not the battle song.
+    /// </summary>
+    public const int ChangeVictoryMe = 133;
+
+    /// <summary>
+    /// <c>command136</c> -- disableEncounter / enableEncounter, and then $gamePlayer.makeEncounterCount(), and that third line is the whole difference from command137.
+    /// </summary>
+    public const int ChangeEncounter = 136;
+    /// <summary>
+    /// <c>command137</c> -- <c>disableFormation()</c> when the parameter
+    /// is zero and <c>enableFormation()</c> otherwise, and there is no
+    /// third line, which is the whole difference from
+    /// <see cref="ChangeEncounter"/>.
+    /// </summary>
+    public const int ChangeFormationAccess = 137;
+
+
+
+    /// <summary>
+    /// <c>command139</c> -- $gameSystem.setDefeatMe(params[0]).
+    /// </summary>
+    public const int ChangeDefeatMe = 139;
+
+    /// <summary>
+    /// <c>command140</c> -- vehicle.setBgm(params[1]).
+    /// </summary>
+    public const int ChangeVehicleBgm = 140;
+
+    /// <summary>
+    /// <c>command202</c> -- vehicle.setLocation(mapId, x, y), and all three numbers can come out of variables.
+    /// </summary>
+    public const int SetVehicleLocation = 202;
+
+    /// <summary>
+    /// <c>command206</c> -- $gamePlayer.getOnOffVehicle(), and it takes no parameter at all.
+    /// </summary>
+    public const int GetOnOffVehicle = 206;
+
+    /// <summary>
+    /// <c>command285</c> -- terrainTag / eventIdXy / tileId / regionId into a variable.
+    /// </summary>
+    public const int GetLocationInfo = 285;
+
+    /// <summary>
+    /// <c>command323</c> -- vehicle.setImage(params[1], params[2]).
+    /// </summary>
+    public const int ChangeVehicleImage = 323;
+
+    /// <summary>
+    /// <c>command324</c> -- actor.setNickname(params[1]), and that is not the name.
+    /// </summary>
+    public const int ChangeNickname = 324;
+
+    /// <summary>
+    /// <c>command325</c> -- actor.setProfile(params[1]).
+    /// </summary>
+    public const int ChangeProfile = 325;
+
+    /// <summary>
+    /// <c>command326</c> -- actor.gainTp(operateValue(2, 3, 4)).
+    /// </summary>
+    public const int ChangeTp = 326;
+
+    /// <summary>
+    /// <c>command342</c> -- enemy.gainTp(operateValue(1, 2, 3)), and the minus of command340 is nowhere in it.
+    /// </summary>
+    public const int ChangeEnemyTp = 342;
+
 
     public const int ChangeActorState = 313;
 
@@ -748,7 +842,7 @@ public static class MzCommandTable
     public const int ChangeArmor = 128;
 
 
-    public const int ShowAnimation2 = 212;
+    public const int ShowAnimation = 212;
 
 
     public const int ScreenTint = 223;
@@ -1013,43 +1107,7 @@ public static class MzCommandTable
     /// </remarks>
     public const int ShowBalloonIcon = 213;
 
-    /// <summary>Shows an animation over a character, from
-    /// <c>command221</c>.</summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>And this is <c>213</c> with a different name.</strong> The
-    /// official help for both says the same three sentences: *Character —
-    /// The display location will be based on the position of the player or
-    /// event. … Wait for Completion — When enabled, the event will be
-    /// paused until the … being displayed has …*.
-    /// </para>
-    /// <para>
-    /// <strong>And so it carries the same state and the same
-    /// limits</strong>, **and the help names no duration here either**,
-    /// **which is the second place a reader has to make a choice and say
-    /// which.**
-    /// </para>
-    /// </remarks>
-    public const int ShowAnimation = 221;
 
-    /// <summary>Erases the running event, from <c>command222</c>.</summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>And this command has no parameters at all.</strong> The
-    /// official help: *Temporarily removes the event currently being run.
-    /// There are no parameters to set. The event will remain erased until
-    /// the party moves to another map.* Measured on a finished project:
-    /// sixteen of them, every one with an empty list.
-    /// </para>
-    /// <para>
-    /// <strong>And "until the party moves to another map" is the part a
-    /// reader gets wrong.</strong> It is not for ever, and it is not until
-    /// something else erases it — **it ends at a map change**, and a
-    /// reader that set the flag to false again on the next frame brought
-    /// the event back while the player was still looking at it.
-    /// </para>
-    /// </remarks>
-    public const int EraseEvent = 222;
 
     /// <summary>Moves an event to a tile, from <c>command203</c>.</summary>
     /// <remarks>
@@ -1096,25 +1154,12 @@ public static class MzCommandTable
     /// </remarks>
     public const int BattleProcessing = 301;
 
-    /// <summary>Sets a vehicle's image, from <c>command322</c>.</summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>And the help names two settings, and the second has a
-    /// value that is not a file.</strong> *Change the image used for
-    /// vehicles. These settings will remain in effect until updated again
-    /// by using this event command. Vehicle — Specify the target vehicle.
-    /// Images — Double-click the box to specify the image to be displayed.
-    /// Setting this to <c>[(None)]</c> will result in no image being
-    /// displayed.*
-    /// </para>
-    /// <para>
-    /// <strong>And the measured form is
-    /// <c>[1, "MC_Sprite_sheet", 1, "SlimeActors", 5, "Actor1_1"]</c></strong>
-    /// — six values, <strong>and the first is the vehicle, which is 1 in
-    /// all six, and that is the ship.</strong>
-    /// </para>
-    /// </remarks>
-    public const int ChangeVehicleImage = 322;
+    /// <summary>
+    /// <c>command322</c> -- `actor.setCharacterImage`, 
+    /// `setFaceImage` and `setBattlerImage`, and it takes six
+    /// parameters and no vehicle at all.
+    /// </summary>
+    public const int ChangeActorImages = 322;
 
     private static readonly Dictionary<int, string> Names = BuildNames();
 

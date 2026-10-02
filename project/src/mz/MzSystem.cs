@@ -272,4 +272,160 @@ public sealed class MzSystem
     /// <c>Game_Timer.seconds()</c>, and the engine's own floor.
     /// </summary>
     public int UhrSekunden() => TimerFrames / FramesPerSecond;
+
+    /// <summary>
+    /// Whether random encounters happen, and it starts off.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>Game_System.prototype.initialize</c> says
+    /// <c>this._encounterEnable = true;</c></strong> -- <strong>and a
+    /// game that has said nothing is a game with encounters.</strong>
+    /// </remarks>
+    public bool BegegnungMoeglich { get; private set; } = true;
+
+    /// <summary>
+    /// Whether the party may be rearranged, and it starts off too.
+    /// </summary>
+    public bool FormationMoeglich { get; private set; } = true;
+
+    /// <summary>
+    /// The song after a won fight, and it is not <see cref="Kampflied"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And these two are not the battle song.</strong>
+    /// <strong><c>132 Change Battle Bgm</c> writes <see cref="Kampflied"/>
+    /// </strong>, <strong>which plays <em>during</em> the fight</strong>
+    /// -- <strong>and <c>133</c> and <c>139</c> write these two</strong>,
+    /// <strong>which play after it.</strong>
+    /// </para>
+    /// <code>
+    /// command133 = function() { $gameSystem.setVictoryMe(this._params[0]); return true; };
+    /// command139 = function() { $gameSystem.setDefeatMe(this._params[0]); return true; };
+    /// </code>
+    /// </remarks>
+    public string SiegLied { get; private set; } = "";
+
+    /// <summary>And the song after a lost one.</summary>
+    public string NiederlageLied { get; private set; } = "";
+
+    /// <summary>Has either been set at all, or is the default still standing.</summary>
+    public bool SiegLiedGesetzt { get; private set; }
+
+    /// <summary>And the same for the other one.</summary>
+    public bool NiederlageLiedGesetzt { get; private set; }
+
+    /// <summary>
+    /// The vehicles on this map, and it is what <c>$gameMap.vehicle</c>
+    /// walks.
+    /// </summary>
+    public List<MzVehicle> Fahrzeuge { get; } = new();
+
+    /// <summary>
+    /// <c>$gameMap.vehicle(i)</c>, and it finds the event whose
+    /// <c>vehicleIndex</c> matches.
+    /// </summary>
+    /// <param name="pIndex">Which vehicle.</param>
+    /// <returns>The vehicle, or null when none carries that index.</returns>
+    /// <remarks>
+    /// <strong>And the <c>if (vehicle)</c> that all three vehicle
+    /// commands guard themselves with is this null.</strong>
+    /// </remarks>
+    public MzVehicle? Fahrzeug(int pIndex)
+    {
+        foreach (var fahrzeug in Fahrzeuge)
+        {
+            if (fahrzeug.Index == pIndex)
+            {
+                return fahrzeug;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// <c>$gamePlayer.getOnOffVehicle()</c> and the vehicle it finds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine looks under the player itself</strong> --
+    /// <strong>which is why <c>command206</c> takes no parameter.</strong>
+    /// </para>
+    /// <code>
+    /// Game_Player.prototype.getOnOffVehicle = function() {
+    ///     if (this._vehicleType === "airship") { this.unboard(); }
+    ///     else if (this.isInVehicle()) { this.leaveVehicle(); }
+    ///     else { this.getOnVehicle(); }
+    /// };
+    /// </code>
+    /// </remarks>
+    /// <param name="pX">Where the player stands.</param>
+    /// <param name="pY">And where, downwards.</param>
+    /// <returns>The vehicle under the player, or null.</returns>
+    public MzVehicle? UnterDemSpieler(int pX, int pY)
+    {
+        foreach (var fahrzeug in Fahrzeuge)
+        {
+            if (fahrzeug.X == pX && fahrzeug.Y == pY)
+            {
+                return fahrzeug;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// <c>command136</c>, and its third line is the whole command.
+    /// </summary>
+    /// <param name="pAn">Zero disables and anything else enables.</param>
+    /// <param name="pZaehlerGewuerfelt">What
+    /// <c>$gamePlayer.makeEncounterCount()</c> is worth.</param>
+    /// <returns>One line, for an action and for a log.</returns>
+    public string SetzeBegegnung(bool pAn, out bool pZaehlerGewuerfelt)
+    {
+        BegegnungMoeglich = pAn;
+        pZaehlerGewuerfelt = true;
+        return "random encounters are " + (pAn ? "on" : "off")
+            + ", and the encounter counter was thrown back, because "
+            + "`command136` ends in `$gamePlayer.makeEncounterCount()` "
+            + "and `command137` does not";
+    }
+
+    /// <summary>
+    /// <c>command137</c>, and it has no third line.
+    /// </summary>
+    /// <param name="pAn">Zero disables and anything else enables.</param>
+    /// <returns>One line, for an action and for a log.</returns>
+    public string SetzeFormation(bool pAn)
+    {
+        FormationMoeglich = pAn;
+        return "rearranging the party is "
+            + (pAn ? "allowed" : "not allowed");
+    }
+
+    /// <summary>
+    /// <c>command133</c> and <c>command139</c>, and both are one
+    /// assignment with an audio object.
+    /// </summary>
+    /// <param name="pLied">The audio object, and an empty one clears it.</param>
+    /// <param name="pSieg">True for <c>133</c>, false for <c>139</c>.</param>
+    /// <returns>One line, for an action and for a log.</returns>
+    public string SetzeKampflied(
+        (string Name, int Volume, int Pitch, int Pan) pLied, bool pSieg)
+    {
+        if (pSieg)
+        {
+            SiegLied = pLied.Name;
+            SiegLiedGesetzt = true;
+            return "the song after a won fight is now "
+                + (pLied.Name.Length > 0 ? pLied.Name : "nothing");
+        }
+
+        NiederlageLied = pLied.Name;
+        NiederlageLiedGesetzt = true;
+        return "the song after a lost fight is now "
+            + (pLied.Name.Length > 0 ? pLied.Name : "nothing");
+    }
 }

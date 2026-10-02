@@ -616,6 +616,51 @@ public sealed class MzBranchFacts
     public MzSystem Spiel { get; } = new();
 
     /// <summary>
+    /// <c>$gamePlayer.makeEncounterCount()</c>, and <c>136</c> throws it
+    /// back.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And that throw is the whole difference between
+    /// <c>136</c> and <c>137</c></strong> -- <strong>a reader that only
+    /// flips the flag makes the next fight start one tile later.</strong>
+    /// </remarks>
+    public int Begegnungszaehler { get; set; }
+
+    /// <summary>
+    /// The nickname, and it is not the name.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine's three are three separate
+    /// assignments:</strong>
+    /// </para>
+    /// <code>
+    /// setName(name)       { this._name = name; }       // command320
+    /// setNickname(nick)   { this._nickname = nick; }   // command324
+    /// setProfile(profile) { this._profile = profile; } // command325
+    /// </code>
+    /// <para>
+    /// <strong>And a reader that put a nickname in the name field would
+    /// lose both.</strong>
+    /// </para>
+    /// </remarks>
+    public Dictionary<int, string> Spitznamen { get; } = new();
+
+    /// <summary>And the third one, which is a face rather than a name.</summary>
+    public Dictionary<int, string> Profile { get; } = new();
+
+    /// <summary>
+    /// <c>$gameActors.actor(n)._tp</c>, and it is a number per actor.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it starts at zero</strong> -- <strong>and
+    /// <c>Game_Actor.prototype.initialize</c> says
+    /// <c>this._tp = 0;</c></strong> -- <strong>and a game gains
+    /// tactical points from skills, not from the start.</strong>
+    /// </remarks>
+    public Dictionary<int, int> Taktischpunkte { get; } = new();
+
+    /// <summary>
     /// The class each actor stands in, as a 321 ordered it.
     /// </summary>
     /// <remarks>

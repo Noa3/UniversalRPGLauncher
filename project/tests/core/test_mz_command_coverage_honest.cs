@@ -81,7 +81,19 @@ public partial class TestMzCommandCoverageHonest : TestBase
         // **Und sie kommen aus dem Nenner heraus**, **denn eine
         // Abdeckung von 62 unter 114 waere eine andere Aussage als eine
         // von 62 unter 111, und beide Zahlen sind nicht wahr.**
-        var keinBefehl = new HashSet<int> { 401, 655, 657 };
+        // **Und die Liste war handgeschrieben** -- **und zwei ihrer
+        // Zahlen gehoeren nicht hierher**, **denn `657` steht
+        // bereits in `MzCommandName.NoMethodCodes`.**  **Und
+        // `109 Skip` und `357 Plugin Command` kommen aus dem
+        // Nenner heraus**, **denn die Engine hat kein
+        // `command109` und kein `command357`** -- **und
+        // `executeCommand` ueberspringt beides mit `if (typeof
+        // this[methodName] === 'function')`.**
+        var keinBefehl = new HashSet<int>
+        {
+            401, 655,
+            109, 357,
+        };
         var befehleZahlen = zahlen.Except(keinBefehl).ToHashSet();
         var steuerung = MzCommands.SteuerungsBefehle()
             .Except(keinBefehl).ToHashSet();
@@ -120,42 +132,12 @@ public partial class TestMzCommandCoverageHonest : TestBase
         // den der Code fuehrt, sagt das Gegenteil von dem, was der Code
         // tut.** **Und `TestRealMvRuntimeRun` und
         // `TestMvActorOrders` sind die beiden Beweise.**
-        foreach (var erwartet in new[]
-        {
-            // **Und `124`, `132`, `134`, `135` und `138` standen hier
-            // und sind jetzt raus** -- **und `TestMvSystemSwitches`
-            // beweist alle fuenf an
-            // `Fatal Fantasy`, dem groessten MV-Projekt auf dieser
-            // Maschine.**
-            // **Und `302` stand hier und ist jetzt raus** -- **und
-            // `TestMvScrollTintShop` beweist es an `VHMV`, dem groessten
-            // MV-Projekt auf dieser Maschine.**
-            // **Und `103`, `281`, `282` und `284` standen hier und sind
-            // jetzt raus** -- **und `TestMvMapDisplay` beweist alle vier
-            // an `VHMV`.**
-            //
-            // **Und mit dem Kampfblock fehlt kein Kampf- und
-            // kein Partiebefehl mehr** -- **und was bleibt, ist eine
-            // kleine Liste mit erkennbarem Grund:**
-            //
-            // ```text
-            // 109 Change Skills       323 Change Skill Learn
-            // 133 Change Equipment    324 Change Class Learn
-            // 136/137/139/140 State  325 Change Skill Forget
-            // 202 Show Balloon        326 Change Exp
-            // 206 Move Actor          342 Recover HP
-            //                         285 Show Balloon Icon
-            // ```
-            109, 133, 136, 137, 139, 140, 202, 206, 285, 323, 324,
-            325, 326, 342,
-        })
-        {
-            AssertTrue(nicht.Contains(erwartet),
-                "**and " + erwartet + " " + MzCommandTable.NameOf(erwartet)
-                    + " is on the list of what is not dispatched** -- and the "
-                    + "list is the work, and every number in it is one that "
-                    + "MzCommandSet knows and this repository does not run");
-        }
+        AssertTrue(nicht.Count == 0,
+            "**and nothing is missing any more** -- it is "
+            + string.Join(", ", nicht) + ", and the hundred and fourteen "
+            + "commands of the engine are one hundred and twelve, because "
+            + "`109 Skip` and `357 Plugin Command` have no method in it, "
+            + "and the other hundred and twelve all run");
 
         AssertTrue(!nicht.Contains(128) && !nicht.Contains(214),
             "**and 128 and 214 are not on it** -- and they are not, because "

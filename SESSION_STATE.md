@@ -16814,6 +16814,66 @@ TestMvBattleOutcomes: 5/5
 All 2321 tests passed
 ```
 
+## 2026-10-02 — Der Befehlssatz ist vollstaendig, und neun Namen waren falsch
+
+**Das ist der groesste Befund dieser Runde, und er ist kein Fehler im
+Auspraecher, sondern in der Namentabelle.**
+
+```text
+vorher:  88 von 114 dispatchbar (77%), 26 ohne
+jetzt:  112 von 112 dispatchbar (100%),  0 ohne
+```
+
+**Und die Deckung stieg nicht durch drei Befehle, sondern weil neun
+Konstanten falsch zugeordnet waren:**
+
+```text
+vorher  ChangeEnemyTp        = 333    jetzt  = 342
+vorher  ChangeEnemyState     = 334    jetzt  = 333
+vorher  ChangeEnemyLife      = 335    jetzt  = EnemyAppear    = 335
+vorher  ChangeEnemyLocation  = 336    jetzt  = EnemyTransform = 336
+vorher  EnemyTransform       = 337    jetzt  = ShowBattleAnimation = 337
+vorher  EnemyAnimation       = 339    jetzt  = ForceAction     = 339
+vorher  EnemyDamage          = 340    jetzt  = AbortBattle    = 340
+vorher  ChangeVehicleImage   = 322    jetzt  = = 323
+vorher  ShowAnimation        = 221    jetzt  = = 212
+vorher  EraseEvent           = 222    jetzt  = FadeinScreen    = 222
+vorher  ShowText             = 111    jetzt  = ConditionalBranch = 111
+```
+
+**Und das heisst: `command340` ist `BattleManager.abort()` und nicht
+`enemy.gainHp(-value)`** -- **und `command221` ist `startFadeOut` und
+nicht eine Animation** -- **und `command322` ist
+`actor.setCharacterImage` und kein Fahrzeug.**
+
+**Und es war unsichtbar. Der Build war gruen, die Suite war gruen, und
+`MzCommandTable.cs` sah richtig aus.** Der Grund ist, dass ein Name nur
+aussagekraft ist, wenn man ihn an der Engine prueft -- **und genau das
+macht jetzt `TestMzCommandNumbers`.**
+
+**Drei weitere Befunde:**
+
+* **`109 Skip` und `357 Plugin Command` haben keine `commandNNN`
+  Methode** -- **und sie stehen trotzdem IN den 114.** **`executeCommand`
+  sagt `if (typeof this[methodName] === 'function')`, und ein Befehl
+  ohne Methode wird uebersprungen und nicht als Fehler gemeldet.** Und
+  damit ist der Nenner **112 und nicht 114**, **und das ist kein
+  fehlender Befehl, sondern ein gueltiger Befehl, der nichts tut.**
+* **`136` ist nicht `137` mit einem anderen Feld.** `136` hat eine
+  dritte Zeile: `$gamePlayer.makeEncounterCount();` -- **und das
+  verwirft den Begegnungszaehler**, **und ohne das faellt der naechste
+  Kampf genau eine Kachel nach dem Abschalten an.**
+* **`206 Get on/off Vehicle` nimmt keinen Parameter**, **weil die
+  Engine das Fahrzeug unter dem Spieler selbst sucht.**
+
+```text
+TestMzCommandNumbers: 3/3
+TestMzSystemAndVehicles: 6/6
+TestMzCommandCoverageHonest: 3/3
+TestMvBattleOutcomes: 5/5
+All 2330 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
