@@ -15303,3 +15303,66 @@ each tileset names itself in the project's own file.
 and then dropped** -- after the hand-kept engine table, the threshold that was
 never true, and the cipher that was not a cipher. **A value that is read and
 not asserted is a comment that costs a run.**
+
+
+## MV: a hundred and twelve commands, and the finding is the opposite of the
+## one this repository started with
+
+### And the table, transcribed from the engine
+
+**Every name is the comment RPG Maker MV puts above its own `commandNNN`
+function, read out of `js/rpg_objects.js` of a finished game on this
+machine.** **The test re-reads that file at run time**, so a number RPG Maker
+adds later makes it fail rather than pass unnoticed.
+
+```text
+MV Befehle: 112 in der Engine, 112 in der Tabelle, 0 fehlend
+MV Namen geprueft: 111 von 112
+TestMvCommandTableAgainstTheEngine: 3/3
+All 2243 tests passed
+```
+
+### And the wrong belief, which was mine
+
+**The first reading of this test compared the MZ table's forty-eight public
+`const` fields with MV's hundred and twelve and wrote down that seventy of
+MV's commands were missing.** **That was false.**
+
+```text
+ 48    die oeffentlichen const-Felder
+114   MzCommandSet.Commands, was MzCommandTable.Count sagt
+112   MV-Befehlsfunktionen in rpg_objects.js
+```
+
+**Forty-eight is the number of named constants. One hundred and fourteen is
+the number the interpreter runs.** **And every one of MV's hundred and
+twelve is among the hundred and fourteen.**
+
+**So MV is a branch of the same command set and not a second one, and MV
+needs no command table of its own** -- **it needs one interpreter for both,
+and this repository already has it.**
+
+### And three numbers say where the two engines really differ
+
+```text
+109 Skip                         MZ's, and MV's engine has no method for it
+111  MZ "Conditional Branch"     MV "Continuation" (a line of a 101)
+356  MZ "Plugin Command MV (deprecated)"   MV "Plugin Command"
+```
+
+**And MZ's text lines, choice lines, branch end and script lines -- 401,
+405, 412, 655, 657 -- are MZ's and carry no MV method either.**
+
+### And this is the seventh count of one thing, each from a different source
+
+**Forty-eight from the constants, one hundred and fourteen from the command
+set, one hundred and twelve from the engine, one hundred and twenty-two from
+`NameOf` over the range.** **Four numbers for one set, and three of them
+right for three different questions, and only one of them answers "how many
+can the interpreter run".**
+
+**The rule this repository keeps relearning has now a seventh instance: the
+number you report must come from the thing you are counting.** Counting named
+constants and reporting "the interpreter knows N commands" is the same shape
+as the hand-kept engine table, the never-true threshold and the cipher that
+was not a cipher -- **a real measurement attached to the wrong question.**
