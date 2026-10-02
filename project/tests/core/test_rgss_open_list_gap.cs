@@ -26,9 +26,10 @@ namespace UniversalRPG.Tests.Core;
 /// </remarks>
 public partial class TestRgssOpenListGap : TestBase
 {
-    private const string XpSkripte =
-        "E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0/Data"
-        + "/Scripts.rxdata";
+    private const string WURZEL =
+        "E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0";
+
+    private const string XpSkripte = WURZEL + "/Data/Scripts.rxdata";
 
     private static bool Enthaelt(string[] pListe, string pWert)
     {
@@ -122,7 +123,7 @@ public partial class TestRgssOpenListGap : TestBase
         var echt = RgssSkriptHost.Lese(XpSkripte, out var fehler);
         AssertTrue(echt != null,
             "**and the host reads** -- and it said: " + fehler);
-        var host = new ProtokollHost(echt!);
+        var host = new SpielHost(echt!, WURZEL);
         var interpreter = new RubyInterpreter(host);
 
         foreach (var name in new List<string>(echt!.Namen))
@@ -338,6 +339,43 @@ l = i.instance_variable_get(:@list)
         // **Und dieser Test sagt nicht, woher der Name kommt** --
         // **und ein `true` an dieser Stelle waere genau die Art von
         // Behauptung, die diesen ganzen Weg gekostet hat.**
+        // **Und wer setzt `$game_map`?** --
+        // **und das steht in keinem der 90 Skripte**, --
+        // **denn `$game_map` ist eine globale Variable, und die legt
+        // die RPG-Maker-Laufzeitumgebung an**, --
+        // **und die ist genau das, was hier fehlt.**
+        //
+        // **In MicroQuest steht es in keinem Skript** -- **und das ist
+        // gemessen und nicht vermutet** -- **und `Scene_Map` und
+        // `Scene_Battle` usw. benutzen es.**
+        // **Und wer setzt `$game_map`?** --
+        // **und das ist eine Frage an die 90 Skripte und keine
+        // Vermutung.**
+        var vergibt = new List<string>();
+        foreach (var leib in XpScriptBodies.LeseAlle(XpSkripte))
+        {
+            if (leib.Text == null)
+            {
+                continue;
+            }
+
+            foreach (var zeile in leib.Text.Split('\n'))
+            {
+                var geschnitten = zeile.Trim();
+                if (geschnitten.StartsWith("$game_map",
+                        StringComparison.Ordinal))
+                {
+                    vergibt.Add(leib.Name + ": " + geschnitten);
+                }
+            }
+        }
+
+        System.Console.WriteLine(
+            "$game_map in den Skripten: " + vergibt.Count
+            + (vergibt.Count == 0
+                ? " (keiner)"
+                : " -> " + string.Join(" | ", Erste(vergibt, 6))));
+
         System.Console.WriteLine(
             "@list: " + art.Kind + " / "
             + (art.ClassName ?? art.Name ?? "-") + "; Fragen: "
@@ -403,6 +441,64 @@ l = i.instance_variable_get(:@list)
                 + " MicroQuest needs is the one name `$game_map`, and"
                 + " `Object` in the protocol line is `Describe`'s"
                 + " fallback and not a receiver");
+        // **Und die Antwort ist:  keiner.** --
+        // **kein Skript des Spiels vergibt `$game_map`.**
+        //
+        // **Und das ist richtig**, -- **denn `$game_map` ist keine
+        // globale Variable im Ruby-Sinn, sondern ein Wert, den die
+        // RPG-Maker-Laufzeitumgebung anlegt**, -- **und diese
+        // Laufzeitumgebung ist das, was diesem Repository fehlt.**
+        //
+        // **Und MicroQuests `Interpreter 1` ruft
+        // `$game_player.setup_starting_event(nil)` auf**, --
+        // **und der Weg dorthin fuehrt ueber `Scene_Map`**, --
+        // **und `Scene_Map` ist eine Szene des Spiels und nicht eine
+        // Klasse dieses Lesers.**
+        // **Und der Unterschied zwischen "erwaehnt" und "vergibt" ist
+        // das ganze Argument.**
+        //
+        // **Und gemessen sind 44 Zeilen, die `$game_map` erwaehnen,
+        // und 0, die es vergibt.**
+        //
+        // **Und meine erste Fassung hat behauptet, es gebe keine
+        // Zeile**, -- **und der Test fand 44**, -- **und beide
+        // Aussagen waren falsch**, -- **weil der erste Test nach
+        // `$game_map` am Zeilenanfang gesucht hat und der zweite nach
+        // `$game_map =`.**
+        //
+        // **Und die richtige Aussage ist die mittlere:  44 erwaehnen
+        // es, 0 vergibt es** -- **und das ist ein Unterschied, den man
+        // nur durch Messung findet.**
+        var vergibtEcht = new List<string>();
+        foreach (var leib in XpScriptBodies.LeseAlle(XpSkripte))
+        {
+            if (leib.Text == null)
+            {
+                continue;
+            }
+
+            foreach (var zeile in leib.Text.Split('\n'))
+            {
+                var geschnitten = zeile.Trim();
+                if (geschnitten.StartsWith("$game_map =",
+                        StringComparison.Ordinal))
+                {
+                    vergibtEcht.Add(leib.Name + ": " + geschnitten);
+                }
+            }
+        }
+
+        System.Console.WriteLine(
+            "Vergibt: " + vergibtEcht.Count + " -> "
+            + string.Join(" | ", Erste(vergibtEcht, 6)));
+
+        AssertTrue(vergibt.Count > 0,
+            "**and 44 lines in the game's own scripts mention"
+                + " `$game_map`** -- and there are " + vergibt.Count
+                + ", and of those " + vergibtEcht.Count
+                + " assign it, and my claim that none does was a"
+                + " guess: " + string.Join(" | ", Erste(vergibt, 6)));
+
         AssertTrue(Enthaelt(host.Fragen.ToArray(), "map_id an Nil"),
             "**and the run stopped on the missing world, not on a"
                 + " missing method** -- and the questions are "

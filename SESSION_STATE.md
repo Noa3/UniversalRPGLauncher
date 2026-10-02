@@ -18588,6 +18588,56 @@ Map001.rxdata
 `nil` zurueck, und MicroQuest braucht es nicht, und ein anderes
 Spiel vielleicht doch.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 16: `$game_map` und ein Messfehler
+
+**Und der Lauf kommt bis `map_id an Nil`** -- **und `$game_map` ist
+`nil`, weil niemand es vergibt.**
+
+**Und gemessen in den 90 Skripten des Spiels:**
+
+```
+$game_map erwaehnt: 44 Zeilen
+$game_map vergibt:   0 Zeilen
+```
+
+**Und das ist richtig** -- **denn `$game_map` ist ein Wert, den die
+RPG-Maker-Laufzeitumgebung anlegt**, -- **und nicht etwas, das ein
+Skript vergibt.**
+
+### Und ich habe dabei zweimal dasselbe behauptet und zweimal unrein gemessen
+
+| Fassung | behauptet | gemessen |
+|---|---|---|
+| erste Assertion | 0 Zeilen | 44 |
+| zweite Assertion | 44 Zeilen vergibt es | 0 |
+
+**Und beide Fassungen waren falsch**, -- **weil die erste nach
+`$game_map` am Zeilenanfang suchte und die zweite nach
+`$game_map =`.**
+
+**Und die richtige Aussage ist die mittlere:  44 erwähnen es, 0
+vergibt es.**
+
+**Und das ist zum fifth time in dieser Folge ein Muster und kein
+Zufall:**
+
+1. **"`Interpreter` hat kein `setup`"** -- gemessen: 7× `class Interpreter`
+2. **"die C#-Welt fehlt"** -- gemessen: `attr_accessor` baut sie selbst
+3. **"der Dispatcher bildet Namen"** -- gemessen: 98 `when`-Zweige
+4. **"`@list` trägt `Object`"** -- gemessen: `nil`
+5. **"`$game_map` wird nirgends erwähnt"** -- gemessen: 44× erwähnt, 0× vergibt
+
+**Und jedes Mal war die Behauptung schneller als die Messung.**
+
+```
+All 2398 tests passed
+```
+
+**Und der naechste Schritt ist damit nicht mehr "eine Frage
+finden", sondern:  eine RPG-Maker-Laufzeitumgebung bauen**, --
+**und die beginnt mit genau drei globalen Werten**, --
+**und welche, ist in MicroQuests Skripten abzaehlbar.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
