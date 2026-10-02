@@ -17793,6 +17793,74 @@ ausgefuehrt.** **Der naechste Schritt ist ein Interpreter, der
 `@parameters` setzt, `@index` erhoeht und bei `return false` wartet** --
 **und der Befehlssatz, der das fuer die 51 bekannten Befehle tut.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 4: 90 von 90 Skripten laufen
+
+**Und ich habe in diesem Repository geschrieben, XP, VX und VX Ace
+wuerden nichts ausfuehren.**
+
+**Und das war die halbe Wahrheit mit der falschen Richtung.**
+
+**Und `RubyInterpreter.cs` hat 12 736 Zeilen und 45 Testdateien.**
+
+**Und XP- und VX-Ereignisbefehle sind Methoden auf einer
+Ruby-Klasse.**
+
+```
+XP: 90 Skripte, 90 geparst und ausgefuehrt, 0 nicht
+Konstanten nach dem Lauf: Game_Battler Game_Picture Game_Screen
+  Game_SelfSwitches Game_Switches Game_System Game_Temp Game_Variables
+TestRgssSkriptHost: 4/4 passed
+All 2368 tests passed
+```
+
+**Und es fehlte nicht die Sprache, sondern die Tuer.**
+
+### Und ein Ruby-Maker-Projekt hat keinen Skriptordner
+
+**Und `IRubyHost.ReadScript` ist alles, was zwischen dem Interpreter
+und den 90 Skripten stand.**
+
+**Und ein Host, der einen Ordner sucht, findet nichts** -- **und ein
+Host, der `.rb` anhaengt, sucht ein Layout, das kein Spiel dieser
+Generation hat.**
+
+**Und `RgssSkriptHost` liest `Data/Scripts.rxdata`, haelt die 90
+Skripte nach ihrem Editornamen und lehnt alles ab, was dort nicht
+steht.**
+
+**Und `Interpreter 4` ist ein gueltiger Name, und er hat ein
+Leerzeichen.**
+
+### Und das geschlossene Tor ist jetzt als Tor benannt
+
+**Und `Test_XpVxAndVxAceRemainDetectionOnly` behauptete jahrelang, XP,
+VX und VX Ace seien nur Erkennung** -- **als waere das eine Eigenschaft
+der Engines.**
+
+**Und es ist eine Eigenschaft des Runtime-Selektors dieses
+Repositorys.**
+
+**Und das Tor bleibt zu**, -- **denn ein Selektor, der es oeffnete,
+uebergaebe einem Launcher eine Runtime, die 90 Skripte laeuft und dann
+am ersten `$game_player` stehenbleibt** -- **und ein Launcher, der ein
+Spiel verspricht und einen schwarzen Bildschirm zeigt, ist schlechter
+als einer, der sagt: die Engine wird nicht unterstuetzt.**
+
+**Und `command_101` verlangt `$game_temp.message_text`, ein
+Nachrichtenfenster und eine WarteAntwort** -- **und keines davon hat
+heute einen Bildschirm.**
+
+```
+All 2368 tests passed
+```
+
+**Und der naechste Schritt ist damit nicht mehr "einen Interpreter
+bauen".**
+
+**Und er ist:  eine Spielwelt fuer `$game_player`, `$game_switches` und
+`$game_temp`**, -- **mit einem Nachrichtenfenster, das wartet** --
+**und dann der Befehlssatz fuer die 51 klassifizierten Befehle.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

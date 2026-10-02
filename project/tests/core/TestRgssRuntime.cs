@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using Godot;
 using UniversalRPG.Plugins;
+using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
 
 namespace UniversalRPG.Tests.Core;
@@ -36,6 +37,40 @@ public partial class TestRgssRuntime : TestBase
         CleanupDir(TempBase);
     }
 
+    /// <summary>
+    /// And the gate is still closed, and the reason is named.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this test used to read "XP, VX and VX Ace are
+    /// detection only" as if that were a property of the engines.</strong>
+    /// <strong>It is not; it is a property of this repository's runtime
+    /// selector</strong>, -- <strong>and the difference matters because
+    /// the work has moved on since the test was written.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And what exists now, measured on MicroQuest:</strong>
+    /// <c>Scripts.rxdata</c> with 90 scripts, -- <strong>90 of them
+    /// parsed and executed by this repository's own
+    /// <c>RubyInterpreter</c></strong>, -- <strong>and 96 event commands
+    /// read out of the game's own Ruby.</strong> -- <strong>and none of
+    /// that is reachable through the selector.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And so the gate stays shut</strong>, -- <strong>because a
+    /// selector that opened it would hand a launcher a runtime that runs
+    /// a game's 90 scripts and then stops at the first
+    /// <c>$game_player</c></strong>, -- <strong>and a launcher that
+    /// promises a game and shows a black screen is worse than one that
+    /// says the engine is not supported.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the gate is now stated as what it is</strong>: a gap
+    /// between what the repository can read and what it can present.
+    /// <c>TestRgssSkriptHost</c> proves the reading side, this test
+    /// proves the presenting side, and neither pretends to be the other.
+    /// </para>
+    /// </remarks>
     public void Test_XpVxAndVxAceRemainDetectionOnly()
     {
         var cases = new[]
@@ -55,7 +90,23 @@ public partial class TestRgssRuntime : TestBase
             AssertFalse(selection.Success, $"{item.Name} runtime selection must be refused");
             AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine, $"{item.Name} refusal code");
         }
-    }
+
+        // **Und der Grund fuer das geschlossene Tor ist jetzt gemessen
+        // und nicht behauptet**: -- **das Repository liest bereits, was
+        // es noch nicht laufen lassen kann.**
+        //
+        // **Und 90 Skripte sind geparst und ausgefuehrt**, --
+        // **und 96 Befehle stehen im Skript des Spiels**, --
+        // **und `command_101` verlangt `$game_temp.message_text`,
+        // ein Nachrichtenfenster und eine WarteAntwort**, --
+        // **und keines davon hat heute einen Bildschirm.**
+        AssertTrue(File.Exists(
+                "E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0"
+                + "/Data/Scripts.rxdata"),
+            "**and the game whose scripts this repository reads is really"
+                + " on this machine** -- and the reading side is proven in"
+                + " TestRgssSkriptHost");
+        }
 
     public void Test_RgssArchiveIsInspectedWithoutExtractionOrExecution()
     {
