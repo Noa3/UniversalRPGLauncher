@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace UniversalRPG.Web;
@@ -126,6 +127,44 @@ public sealed class MzMapState
 /// party and the change is a fact about the command.</b>
 /// </para>
 /// </remarks>
+/// <summary>
+/// One HP order, the way <c>311 Change Actor HP</c> gives it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <c>command311</c> is <c>iterateActorEx(params[0], params[1], actor =&gt;
+/// this.changeHp(actor, value, params[5]))</c>, and
+/// <c>changeHp</c> is
+/// <c>if (target.isAlive()) { if (!allowDeath &amp;&amp; target.hp &lt;= -value)
+/// { value = 1 - target.hp; } target.gainHp(value); ... }</c>.
+/// </para>
+/// <para>
+/// <b>And two of those five parameters are not what their names
+/// suggest.</b> <b>The second is a variable when the first is not
+/// zero</b> -- <c>iterateActorEx</c> is <c>if (param1 === 0)
+/// { iterateActorId(param2) } else { iterateActorId($gameVariables.value(param2))
+/// }</c> -- <b>and the third and fourth are the operation and its
+/// operand</b>, <b>so <c>[0, 2, 1, 500]</c> is "every actor, minus
+/// five hundred".</b>
+/// </para>
+/// <para>
+/// <b>And the sixth is <c>allowDeath</c>, and it is the one that
+/// decides whether a big loss is the loss or one point short of
+/// death.</b> <b>This record keeps the order and not the result</b> --
+/// <b>the result is a fact about the party's health, and this
+/// repository does not keep a party's health.</b>
+/// </para>
+/// </remarks>
+public readonly record struct MzHpOrder(
+    int Actor, int Value, bool AllowDeath)
+{
+    /// <summary>One line, for an action and for a log.</summary>
+    public override string ToString() =>
+        "actor " + Actor + (Value < 0 ? " loses " : " gains ")
+        + Math.Abs(Value) + " hp"
+        + (AllowDeath ? "" : ", and may not die of it");
+}
+
 public readonly record struct MzStateChange(
     int Actor, int State, bool Added)
 {

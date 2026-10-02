@@ -248,6 +248,12 @@ public static class MzCommandTable
     /// him dead".</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// <c>command311</c> -- <c>iterateActorEx</c> plus
+    /// <c>changeHp</c>.
+    /// </summary>
+    public const int ChangeHp = 311;
+
     public const int ChangeActorState = 313;
 
     /// <summary>The end of a loop's body, and it is not <c>412</c>.</summary>

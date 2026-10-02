@@ -114,9 +114,15 @@ public partial class TestMzCommandCoverageHonest : TestBase
         // **Und 128 und 214 sind nicht mehr darauf** -- **die sind im
         // vorigen Commit verdrahtet worden, und eine Liste, die sie noch
         // fuehrt, sagt das Gegenteil von dem, was der Code tut.**
+        // **Und `117` und `311` standen hier und sind jetzt raus**:
+        // **`117` laeuft ueber `MzEventRunner` und `311` ueber
+        // `MzCommands`** -- **und eine Liste, die einen Befehl fuehrt,
+        // den der Code fuehrt, sagt das Gegenteil von dem, was der Code
+        // tut.** **Und `TestRealMvRuntimeRun` und
+        // `TestMvActorOrders` sind die beiden Beweise.**
         foreach (var erwartet in new[]
         {
-            103, 109, 124, 302, 311,
+            103, 109, 124, 302,
         })
         {
             AssertTrue(nicht.Contains(erwartet),

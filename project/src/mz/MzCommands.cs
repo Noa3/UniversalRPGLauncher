@@ -115,6 +115,7 @@ public static class MzCommands
             MzCommandTable.BattleProcessing,
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
+            MzCommandTable.ChangeHp,
             MzCommandTable.ChangeActorState,
             MzCommandTable.ChangeArmor,
             MzCommandTable.ChangeGold,
@@ -1101,6 +1102,83 @@ public static class MzCommands
                 return true;
             }
 
+
+            case MzCommandTable.ChangeHp:
+            {
+                // **Und `command311`:**
+                //
+                // ```js
+                // const value = this.operateValue(this._params[2],
+                //     this._params[3], this._params[4]);
+                // this.iterateActorEx(this._params[0], this._params[1],
+                //     actor => { this.changeHp(actor, value,
+                //     this._params[5]); });
+                // return true;
+                // ```
+                //
+                // **Und `changeHp` ist** `if (target.isAlive()) { if
+                // (!allowDeath && target.hp <= -value) { value = 1 -
+                // target.hp; } target.gainHp(value); if (target.isDead())
+                // { target.performCollapse(); } }` -- **und die zweite
+                // Zeile ist der ganze Befehl**: **ein Schaden, der toeten
+                // darf, wird auf einen Punkt vor dem Tod gekuerzt, und
+                // einer, der es darf, nicht.**
+                //
+                // **Und der zweite Parameter ist eine Variable, wenn der
+                // erste nicht null ist** -- **denn `iterateActorEx` ist**
+                // `if (param1 === 0) { iterateActorId(param2) } else
+                // { iterateActorId($gameVariables.value(param2)) }` **--
+                // **und `313` wertet ihn genauso aus.**
+                // **Und der erste Parameter ist nicht die
+                // ganze Partei und auch nicht das Ziel**, **sondern
+                // ob das Ziel eine Nummer oder eine Variable
+                // ist**:
+                //
+                // ```js
+                // iterateActorEx(param1, param2, callback) {
+                //     if (param1 === 0) {
+                //         this.iterateActorId(param2, callback);
+                //     } else {
+                //         this.iterateActorId(
+                //             $gameVariables.value(param2), callback);
+                //     }
+                // }
+                // ```
+                //
+                // **Und gemessen an `D:/Itch/sister/www` sind alle
+                // vierzehn `[0, 1, ...]`**, **also Konstante, also
+                // Darsteller eins** -- **und `313` und `314` lesen
+                // dieselben zwei Plaetze genauso.**
+                var hpZiel = At(pCommand, 0) == 0
+                    ? At(pCommand, 1)
+                    : pFacts.Variable(At(pCommand, 1));
+                var hpPartei = hpZiel == 0;
+                if (!TryOperateValue(
+                    pCommand, pFacts, 2, out var hpWert,
+                    out var hpFehlt))
+                {
+                    pInterpreter.Stop(MzStep.Refused, hpFehlt);
+                    return false;
+                }
+
+                var sterbenDarf = At(pCommand, 5) != 0;
+                foreach (var darsteller in GeordneteZahlen(
+                    pFacts.PartyMembers))
+                {
+                    if (hpPartei || darsteller == hpZiel)
+                    {
+                        pFacts.HpOrders.Add(new MzHpOrder(
+                            darsteller, hpWert, sterbenDarf));
+                    }
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    (hpPartei ? "every actor, " : "actor " + hpZiel + ", ")
+                    + (hpWert < 0 ? "loses " : "gains ")
+                    + System.Math.Abs(hpWert) + " hp"
+                    + (sterbenDarf ? "" : ", and may not die of it")));
+                return true;
+            }
 
             case MzCommandTable.ChangeActorState:
             {

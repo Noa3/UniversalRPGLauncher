@@ -425,6 +425,19 @@ public sealed class MzBranchFacts
     public List<MzStateChange> States { get; } = new();
 
     /// <summary>
+    /// The HP orders the run gave, in order, and no party's health.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is what <c>311</c> records</strong> -- <strong>and
+    /// not an HP total</strong>, <strong>because the engine's own
+    /// <c>gainHp</c> clamps to <c>_hp</c> and <c>_mhp</c></strong>,
+    /// <strong>and those two numbers come from
+    /// <c>Actors.json</c> and <c>Classes.json</c></strong>, <strong>and
+    /// this repository does not keep an actor.</strong>
+    /// </remarks>
+    public List<MzHpOrder> HpOrders { get; } = new();
+
+    /// <summary>
     /// Which characters were asked for an animation.
     /// </summary>
     /// <remarks>
