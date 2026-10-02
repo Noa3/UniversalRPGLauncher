@@ -18821,6 +18821,57 @@ anders aussieht als in MicroQuest.**
 All 2406 tests passed
 ```
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 20: `Game_Map#setup(1)` laeuft
+
+**Und die Laufzeitumgebung kann dem Spiel sein eigenes `Game_Map`
+geben**, -- **denn `Game_Map` ist eine Klasse aus den 90 Skripten des
+Spiels, und `Game_Map.new` laeuft `Game_Map#initialize`.**
+
+**Und der Lauf ist gemessen, und er hat genau 22 Schritte:**
+
+```text
+Fragen bei setup(1): 22
+  1. load_data an Symbol          <- @map = load_data(...)
+  2. tileset_id an RPG::Map       <- @map.tileset_id
+  3. tileset_name an Nil          <- $data_tilesets[nil] ist nil
+  4. autotile_names an Nil
+  5. panorama_name an Nil
+  ... 18 weitere an Nil
+gelesen: 1
+```
+
+**Und Schritt 2 liest `tileset_id` aus `RPG::Map`** -- **das ist der
+echte Wert aus `Map001.rxdata`** -- **und Schritt 3 fragt ein Feld
+an `nil`.**
+
+**Und das heisst genau eine Sache:  `$data_tilesets` fehlt.**
+
+### Und `$data_tilesets` ist ein Satz in MicroQuest
+
+```ruby
+$data_tilesets = load_data("Data/Tilesets.rxdata")
+```
+
+**Und dieser Satz steht in `Scene_Title`, und er ist derselbe Name,
+den `RgssDatenHost` bereits beantwortet** -- **und die Datei ist
+gemessen:  51 Eintraege, `RPG::Tileset`, `@name = "Gralssland"`.**
+
+**Und der naechste Schritt ist damit eine Zeile:**
+
+```csharp
+interpreter.SetzeGlobal("$data_tilesets", daten.CallMethod(...));
+```
+
+**Und danach stellt sich die MicroQuest-Frage von Stufe 19
+wieder:** -- **`Game_Map#setup` liest `@tileset_name =
+tileset.tileset_name`**, -- **und `RPG::Tileset` hat `@name`**,
+-- **und ein Leser, der stattdessen `@name` eintraege, wuerde dem
+Spiel eine Karte geben, die anders aussieht als in MicroQuest.**
+
+```
+All 2407 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Linq;
 using System.Linq;
 using UniversalRPG.Rgss;
@@ -98,9 +100,10 @@ public sealed class ProtokollHost : IRubyHost
 /// </remarks>
 public partial class TestRgssSetupRun : TestBase
 {
-    private const string XpSkripte =
-        "E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0/Data"
-        + "/Scripts.rxdata";
+    private const string Wurzel =
+        "E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0";
+
+    private const string XpSkripte = Wurzel + "/Data/Scripts.rxdata";
 
     /// <summary>
     /// Runs a game's own scripts and then this repository's Ruby on top.
@@ -436,6 +439,147 @@ i.setup([[101, 0, ['Hallo']]], 0)
             "**and the game names more than three such lines** -- and"
                 + " there are " + zuweisungen.Count
                 + ", and they say where the two loads come from");
+    }
+
+    /// <summary>
+    /// And what happens when the runtime hands the game its own
+    /// `Game_Map`.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the pair that shows whether the door works:</strong>
+    /// -- <strong>a bare <c>Game_Map.new</c> against
+    /// <c>$game_map = Game_Map.new</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the expectation is not "it works".</strong> The
+    /// game's own <c>setup</c> copies 22 fields out of a map file and a
+    /// tileset, -- <strong>and if the world is right the question
+    /// <c>load_data</c> is asked</strong>, -- <strong>and if the world is
+    /// wrong the run stops earlier and this test says where.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_MitGameMapObjektFragtDasSpielNachDerKarte()
+    {
+        var skripte = RgssSkriptHost.Lese(
+            Path.Combine(Wurzel, "Data", "Scripts.rxdata"), out var f2);
+        AssertTrue(skripte != null,
+            "**and the scripts read** -- and it said: " + f2);
+        var host = new SpielHost(skripte!, Wurzel);
+        var interpreter = new RubyInterpreter(host);
+
+        foreach (var name in new List<string>(skripte!.Namen))
+        {
+            var bytes = skripte.ReadScript(name, true);
+            if (bytes == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                interpreter.RunProgram(new RubyParser(
+                    new RubyLexer(System.Text.Encoding.UTF8
+                        .GetString(bytes)).Tokenize()).ParseProgram());
+            }
+            catch (RubyParseException)
+            {
+                // **Und siehe `TestRgssSkriptHost`.**
+            }
+        }
+
+        var vorher = host.Fragen.Count;
+
+        // **Und `$game_map` bekommt ein Objekt vom Typ, den die
+        // 90 Skripte des Spiels selbst definiert haben** --
+        // **und nicht von einem C#-Typ**, --
+        // **und `Game_Map.new` laeuft `Game_Map#initialize`** --
+        // **und das ist der Unterschied.**
+        // **Und `$game_map` wird von der Laufzeit gesetzt, nicht von
+        // einem Aufruf im Spiel.** -- **und `Game_Map.new` ist die
+        // Art, wie die Klasse des Spiels zu einem Objekt wird**, --
+        // **und es laeuft `Game_Map#initialize`, und das ist der
+        // Unterschied zu einem C#-Objekt.**
+        interpreter.RunProgram(new RubyParser(new RubyLexer(
+            "$game_map = Game_Map.new")
+            .Tokenize()).ParseProgram());
+
+        System.Console.WriteLine(
+            "$game_map nach new: "
+            + (interpreter.Global("$game_map").ClassName ?? "-")
+            + ", Fragen bei new: "
+            + host.Fragen.Skip(vorher).ToArray().Length);
+
+        // **Und jetzt der Aufruf, den `Scene_Title` und `Scene_Map`
+        // machen.**
+        var vorher2 = host.Fragen.Count;
+        interpreter.RunProgram(new RubyParser(new RubyLexer(
+            "$game_map.setup(1)")
+            .Tokenize()).ParseProgram());
+
+        var neueFragen = host.Fragen.Skip(vorher2).ToArray();
+        System.Console.WriteLine(
+            "Fragen bei setup(1): " + neueFragen.Length + " -> "
+            + string.Join(" | ", neueFragen));
+        System.Console.WriteLine(
+            "gelesen: " + host.Gelesen);
+
+        // **Und die Reihenfolge ist der ganze Befund:**
+        //
+        // ```text
+        // 1. load_data an Symbol        <- @map = load_data(...)
+        // 2. tileset_id an RPG::Map     <- @map.tileset_id
+        // 3. tileset_name an Nil        <- $data_tilesets[nil] ist nil
+        // 4. ... 18 weitere an Nil
+        // ```
+        //
+        // **Und Schritt 2 liest `tileset_id` aus `RPG::Map`** --
+        // **das ist der echte Wert aus `Map001.rxdata`**, --
+        // **und Schritt 3 fragt ein Feld an `nil`**, --
+        // **und das heisst:  `$data_tilesets` fehlt.**
+        //
+        // **Und `$data_tilesets` ist ein globaler Wert**, --
+        // **und `Scene_Title` vergibt ihn mit genau einem Satz:**
+        //
+        // ```ruby
+        // $data_tilesets   = load_data("Data/Tilesets.rxdata")
+        // ```
+        //
+        // **Und dieser Satz ist gemessen, und er ist derselbe Name,
+        // den der Host bereits beantwortet.**
+        var fragtNachTilesets = false;
+        foreach (var f in neueFragen)
+        {
+            if (f.StartsWith("tileset_id an", StringComparison.Ordinal))
+            {
+                fragtNachTilesets = true;
+            }
+        }
+
+        AssertTrue(fragtNachTilesets,
+            "**and `Game_Map#setup(1)` reads the real map's"
+                + " `tileset_id`** -- and the questions are "
+                + string.Join(" | ", neueFragen)
+                + ", and the host read " + host.Gelesen
+                + " files, and every field after `tileset_id` is asked"
+                + " of `nil`, and that is `$data_tilesets`, and that"
+                + " is the next global this repository has to set");
+
+        AssertEq(interpreter.Global("$game_map").ClassName, "Game_Map",
+            "**and the runtime can give the game its own `Game_Map`**"
+                + " -- and it is "
+                + (interpreter.Global("$game_map").ClassName ?? "-")
+                + ", and that class comes out of the game's own 90"
+                + " scripts");
+        AssertTrue(host.Gelesen > 0,
+            "**and `Game_Map#setup(1)` reads the game's own map"
+                + " file** -- and the host read " + host.Gelesen
+                + " files and the questions are " + string.Join(" | ",
+                    host.Fragen.Skip(vorher2).ToArray())
+                + ", and that sentence is written in MicroQuest's"
+                + " `Game_Map.setup` as"
+                + " `load_data(sprintf(\"Data/Map%03d.rxdata\","
+                + " @map_id))`");
     }
 
     private static bool Enthaelt(string[] pListe, string pWert)
