@@ -172,7 +172,13 @@ public partial class TestMvEngineConditions : TestBase
             foreach (var ausdruck in SkriptBedingungen(datei))
             {
                 alle++;
-                if (MzEngineCondition.Answer(ausdruck, out _).HasValue)
+                var fakten = new MzBranchFacts
+                {
+                    MapId = 2,
+                    EventId = 2,
+                };
+                if (MzEngineCondition.Answer(
+                    ausdruck, fakten, out _).HasValue)
                 {
                     beantwortbar++;
                 }

@@ -265,7 +265,7 @@ public static class MzBranchEvaluator
                 // berechnet hat.** **Und dieses Spiel schreibt genau das,
                 // einmal.**
                 var antwort = MzEngineCondition.Answer(
-                    pBranch.ScriptText, out var warum);
+                    pBranch.ScriptText, pFacts, out var warum);
                 if (antwort.HasValue)
                 {
                     return antwort.Value

@@ -16429,3 +16429,82 @@ ihren Grund und keine erfundene Luecke.**
 abgesicherte Auswertung fuer Ausdruecke ueber Dinge, die dieser Leser
 hat.** **Und kein `eval` und keine fremde Bibliothek und kein
 JavaScript aus dem Spiel.**
+
+
+## The 4809, counted by what they read, and the 208 that changed hands
+
+### And what the boundary is made of, by the first thing each asks about
+
+```text
+4952 Skript-Bedingungen, nach dem ersten Muster:
+   1598x  $gameSelfVariables, $gameActors, $gameNumberArray, Plugin
+   1363x  gemischt oder ohne erkennbares Muster
+    509x  $gameParty / $gamePlayer / $gameMap.event / $gameSystem
+    449x  $gameVariables.value          <- der Leser hat Variablen
+    359x  $gameScreen.picture           <- der Leser hat Bilder
+    259x  Math.random()                 <- nicht deterministisch
+    207x  $gameSelfSwitches.value       <- der Leser hat Selbstschalter
+     65x  Plugin ($gameMap.drill_, chahui)
+     59x  $gameSwitches.value
+     57x  $gameMessage.isBusy
+```
+
+### And the 208, which is the commonest of them
+
+```js
+$gameSelfSwitches.value([$gameMap.mapId(), 22, 'B'])     34x
+$gameSelfSwitches.value([$gameMap.mapId(), this._eventId, 'F'])  15x
+!$gameSelfSwitches.value([$gameMap.mapId(), 9, 'D'])      15x
+```
+
+**And the key is three things** -- **the map, the event and a
+letter** -- **because `command123` writes
+`[this._mapId, this._eventId, params[0]]`, and this repository already
+stores it under `karte_ereignis_Buchstabe`.**
+
+**And `$gameMap.mapId()` is the map the run is on and `this._eventId` is
+the event the run is in** -- **both are facts about where the run
+stands and not a computation over the game.** **And
+`this._eventId` is `undefined` in a common event**, **and a self switch
+belongs to an event on a map**, **so there the answer is that there is
+none** -- **which is the engine's own guard, `if (this._eventId > 0)`.**
+
+### And the facts had to learn where they stand
+
+**`MzBranchFacts` had no `MapId` and no `EventId`,** **and a script
+condition reads both.** **And the interpreter knows both**, **so
+`ExecuteOne` writes them on** -- **and it does that by making a copy,
+because the facts are shared between a page and its child interpreter and
+a child on a common event has no event of its own and must be able to say
+zero where its parent said seven.**
+
+### And what that bought
+
+```text
+vorher:  4952 Skript-Bedingungen, 142 beantwortbar (2%)
+nachher: 4952 Skript-Bedingungen, 320 beantwortbar (6%)
+
+MV Lauf: 1 Frames, 13 Aktionen   <- unveraendert, und das ist ehrlich
+TestMvEngineConditions: 5/5
+All 2285 tests passed
+```
+
+**Und der Lauf hat sich nicht bewegt, und das ist die richtige
+Antwort:** **die Selbstschalter dieser Karte sind nicht gesetzt, und ein
+gelesener Zustand von null stimmt mit der Verweigerung nicht ueberein --
+aber die Bedingung laeuft jetzt und entscheidet.**
+
+### And what is left, and it is not a list any more
+
+**1598 lesen Dinge, die dieser Leser nicht hat** -- **und davon sind
+1032 allein `$gameSelfVariables`, ein Speicher, den sich ein Plugin
+selbst legt.** **Das ist keine JS-Maschine und keine Liste, das ist ein
+spezieller Speicher fuer ein Plugin.**
+
+**Und die 259 `Math.random()` bleiben fuer immer eine Verweigerung**,
+**denn eine Zufallszahl zu behaupten ist Behauptung und keine
+Rechnung.**
+
+**Und die 449 ueber Variablen und die 359 ueber Bilder sind ehrliche
+Arbeit** -- **beide hat der Leser, und beide brauchen eine echte
+Auswertung der Formen, die dieses Spiel schreibt.**

@@ -180,6 +180,41 @@ public sealed class MzBranchResult
 public sealed class MzBranchFacts
 {
     public Dictionary<int, bool> Switches { get; init; } = new();
+
+    /// <summary>
+    /// The same facts, with the place the run stands written on them.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a copy and not a mutation</strong>, <strong>because
+    /// the facts are shared between a page and its child interpreter</strong>
+    /// -- <strong>and a child on a common event has no event of its
+    /// own</strong>, <strong>so it must be able to say zero where its parent
+    /// said seven.</strong>
+    /// </remarks>
+    public MzBranchFacts At(int pMapId, int pEventId)
+    {
+        if (MapId == pMapId && EventId == pEventId)
+        {
+            return this;
+        }
+
+        return new MzBranchFacts
+        {
+            MapId = pMapId,
+            EventId = pEventId,
+            Switches = Switches,
+            Variables = Variables,
+            SelfSwitches = SelfSwitches,
+            Gold = Gold,
+            PartyMembers = PartyMembers,
+            Items = Items,
+            KnownItems = KnownItems,
+            Screen = Screen,
+            Characters = Characters,
+            Player = Player,
+            InBattle = InBattle,
+        };
+    }
     public Dictionary<int, int> Variables { get; init; } = new();
     /// <summary>The self switches, and where each one belongs.</summary>
     /// <remarks>
@@ -204,6 +239,30 @@ public sealed class MzBranchFacts
     /// </para>
     /// </remarks>
     public Dictionary<string, bool> SelfSwitches { get; init; } = new();
+
+    /// <summary>
+    /// Where the run stands, and a self switch belongs to that place.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the map and the event the interpreter is
+    /// in</strong>, <strong>and a script condition reads both of them</strong>
+    /// -- <strong>measured at <c>D:/Itch/sister/www</c>:
+    /// <c>$gameSelfSwitches.value([$gameMap.mapId(), this._eventId, 'F'])</c>
+    /// fifteen times</strong>, <strong>which is the form that names both
+    /// instead of writing them down.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And zero for both is a common event</strong>, <strong>and a
+    /// common event has no self switch and cannot set one</strong> --
+    /// <strong>which is the engine's own guard, <c>if (this._eventId &gt;
+    /// 0)</c>.</strong>
+    /// </para>
+    /// </remarks>
+    public int MapId { get; init; }
+
+    /// <summary>The event the run is in, or zero for a common event.</summary>
+    public int EventId { get; init; }
     /// <summary>
     /// The party's money, and how it got there.
     /// </summary>

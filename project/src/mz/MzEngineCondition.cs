@@ -118,7 +118,8 @@ public static class MzEngineCondition
     /// once.</b>
     /// </para>
     /// </remarks>
-    public static bool? Answer(string pText, out string pMissing)
+    public static bool? Answer(
+        string pText, MzBranchFacts pFacts, out string pMissing)
     {
         pMissing = "";
         var text = (pText ?? "").Trim();
@@ -141,6 +142,43 @@ public static class MzEngineCondition
         if (text == "Utils.isMobileDevice()")
         {
             wert = IsMobileDevice;
+        }
+        else if (text.StartsWith("$gameSelfSwitches.value(",
+            StringComparison.Ordinal))
+        {
+            // **Und `$gameSelfSwitches` ist Spielzustand und keine
+            // Maschine** -- **und es ist der haeufigste Ausdruck in den
+            // Bedingungen eines fertigen Spiels, und dieser Leser hat
+            // ihn.**
+            //
+            // ```js
+            // $gameSelfSwitches.value([$gameMap.mapId(), 22, 'B'])
+            // ```
+            //
+            // **Und gemessen an `D:/Itch/sister/www`: 208mal, und alle
+            // mit derselben Form.** **Und der Schluessel besteht aus der
+            // Karte, dem Ereignis und einem Buchstaben** -- **denn
+            // `command123` schreibt `[this._mapId, this._eventId,
+            // params[0]]`, und dieser Leser legt sie unter demselben
+            // Namen ab: `karte_ereignis_Buchstabe`.**
+            //
+            // **Und `$gameMap.mapId()` ist die Karte, auf der der Lauf
+            // steht, und `this._eventId` das Ereignis, auf dem er
+            // steht** -- **und beide sind Tatsachen ueber den Lauf und
+            // keine Rechnung ueber das Spiel.** **Und `this._eventId` ist
+            // null in einem gemeinsamen Ereignis**, **und dann fragt der
+            // Ausdruck nach einem Schalter, den es nicht gibt.**
+            var schluessel = SelfSwitchKey(text, pFacts);
+            if (schluessel == null)
+            {
+                pMissing = "the self switch in '" + text + "', because "
+                    + "the run stands on no event and a self switch "
+                    + "belongs to an event on a map";
+                return null;
+            }
+
+            wert = pFacts.SelfSwitches.TryGetValue(schluessel, out var an)
+                && an;
         }
         else if (text.StartsWith("localStorage.", StringComparison.Ordinal))
         {
@@ -218,6 +256,100 @@ public static class MzEngineCondition
         }
 
         return verneint ? !wert : wert;
+    }
+
+    /// <summary>
+    /// The same questions without any game state, for a caller that has none.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this answers only the two machine questions.</strong>
+    /// <strong>A condition about a self switch needs to know where the run
+    /// stands</strong>, <strong>and a caller that does not know that is
+    /// told so rather than answered.</strong>
+    /// </remarks>
+    public static bool? Answer(string pText, out string pMissing) =>
+        Answer(pText, null, out pMissing);
+
+    /// <summary>
+    /// The self switch a <c>$gameSelfSwitches.value([...])</c> asks about,
+    /// as the key this repository stores it under.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine's key is a list of three and this
+    /// repository's is a text</strong>, <strong>and the text is built from
+    /// all three</strong> -- <c>karte_ereignis_Buchstabe</c> -- <strong>so
+    /// two switches of two events cannot be the same.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>$gameMap.mapId()</c> is the map the run is on and
+    /// <c>this._eventId</c> is the event the run is in</strong>, <strong>and
+    /// both are facts about where the run stands and not a computation over
+    /// the game.</strong> <strong>And <c>this._eventId</c> is
+    /// <c>undefined</c> in a common event</strong>, <strong>and a self
+    /// switch belongs to an event on a map</strong>, <strong>so there the
+    /// answer is that there is none.</strong>
+    /// </para>
+    /// </remarks>
+    private static string? SelfSwitchKey(
+        string pText, MzBranchFacts pFacts)
+    {
+        // `$gameSelfSwitches.value([` ... `])`
+        const string praefix = "$gameSelfSwitches.value([";
+        if (!pText.StartsWith(praefix, StringComparison.Ordinal)
+            || !pText.EndsWith("])", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var inhalt = pText.Substring(
+            praefix.Length, pText.Length - praefix.Length - 2);
+        var teile = inhalt.Split(',');
+        if (teile.Length != 3)
+        {
+            return null;
+        }
+
+        string kartenTeil = teile[0].Trim();
+        string ereignisTeil = teile[1].Trim();
+        string buchstabeTeil = teile[2].Trim();
+
+        // **Und `$gameMap.mapId()` ist die Karte des Laufs.**
+        var kartenId = 0;
+        if (kartenTeil == "$gameMap.mapId()")
+        {
+            kartenId = pFacts?.MapId ?? 0;
+        }
+        else if (!int.TryParse(kartenTeil, out kartenId))
+        {
+            return null;
+        }
+
+        // **Und `this._eventId` ist null in einem gemeinsamen Ereignis,
+        // und das heisst: es gibt keinen Schalter.**
+        var ereignisId = 0;
+        if (ereignisTeil == "this._eventId")
+        {
+            ereignisId = pFacts?.EventId ?? 0;
+        }
+        else if (!int.TryParse(ereignisTeil, out ereignisId))
+        {
+            return null;
+        }
+
+        if (kartenId <= 0 || ereignisId <= 0)
+        {
+            return null;
+        }
+
+        var gross = buchstabeTeil.Trim('\'', '"');
+        if (gross.Length != 1 || !char.IsLetter(gross[0]))
+        {
+            return null;
+        }
+
+        return kartenId + "_" + ereignisId + "_"
+            + char.ToUpperInvariant(gross[0]);
     }
 
     /// <summary>
