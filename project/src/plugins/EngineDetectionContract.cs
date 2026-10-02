@@ -401,16 +401,56 @@ public static class SafeGameInspector
     private static bool IsMetadataPath(string pRelativePath)
     {
         var fileName = Path.GetFileName(pRelativePath);
-        return fileName.Equals("System.json", StringComparison.OrdinalIgnoreCase)
-            || fileName.Equals("MapInfos.json", StringComparison.OrdinalIgnoreCase)
-            || fileName.Equals("Actors.json", StringComparison.OrdinalIgnoreCase)
-            || fileName.Equals("Game.ini", StringComparison.OrdinalIgnoreCase)
+                return fileName.Equals("System.json", StringComparison.OrdinalIgnoreCase)
+                    || fileName.Equals("MapInfos.json", StringComparison.OrdinalIgnoreCase)
+                    || fileName.Equals("Actors.json", StringComparison.OrdinalIgnoreCase)
+                    // **Und die sieben Datenbanksektionen, die der MV-Leser selbst
+                    // zaehlt** -- **und die Absicht ist die, dass jede Datei, deren
+                    // Eintraege jemand wissen will, auch ganz gelesen wird.** Sie
+                    // fehlten hier, bekamen darum nur ein 4-KB-Praefix und wurden
+                    // daraufhin als abgeschnitten gemeldet -- **und gemessen an zwei
+                    // fertigen Spielen:**
+                    //
+                    // ```text
+                    // sister/www: Classes.json  13710, Items.json  171578,
+                    //             Skills.json  77015, Enemies.json  104741
+                    // ```
+                    //
+                    // **Keine dieser Dateien ist auch nur annaehernd an der
+                    // Megabyte-Grenze, und alle vier wurden als abgeschnitten
+                    // gemeldet.** Die Grenze war nie das Problem.
+                    || IsDatabaseSection(fileName)
+                    || fileName.Equals("Game.ini", StringComparison.OrdinalIgnoreCase)
             || fileName.Equals("RPG_RT.ini", StringComparison.OrdinalIgnoreCase)
             || fileName.Equals("package.json", StringComparison.OrdinalIgnoreCase)
             || fileName.Equals("plugins.js", StringComparison.OrdinalIgnoreCase)
             || fileName.Equals("RPG_RT.ldb", StringComparison.OrdinalIgnoreCase)
             || fileName.Equals("RPG_RT.lmt", StringComparison.OrdinalIgnoreCase)
             || fileName.EndsWith(".lmu", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The MV/MZ database sections, whose entry counts a reader reports.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the list is the reader's own, not a copy of it.</strong>
+    /// <c>BuiltInEnginePlugins.MvDataDirectoryResult</c> counts entries in
+    /// exactly these seven files, <strong>and a file whose entries are
+    /// counted must be read whole or the count is a count of a
+    /// prefix.</strong>
+    /// </para>
+    /// </remarks>
+    private static bool IsDatabaseSection(string pFileName)
+    {
+        return pFileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            && (pFileName.Equals("Classes.json", StringComparison.OrdinalIgnoreCase)
+                || pFileName.Equals("Skills.json", StringComparison.OrdinalIgnoreCase)
+                || pFileName.Equals("Items.json", StringComparison.OrdinalIgnoreCase)
+                || pFileName.Equals("Weapons.json", StringComparison.OrdinalIgnoreCase)
+                || pFileName.Equals("Armors.json", StringComparison.OrdinalIgnoreCase)
+                || pFileName.Equals("Enemies.json", StringComparison.OrdinalIgnoreCase)
+                || pFileName.Equals("Troops.json", StringComparison.OrdinalIgnoreCase));
     }
 
     private static int DirectoryPriority(string pName)

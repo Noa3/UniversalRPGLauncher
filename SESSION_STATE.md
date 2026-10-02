@@ -14821,3 +14821,77 @@ C:/Program Files (x86)/RPG Maker 2003/RTP          refused: no write access
 **And the registry takes its root path from the outside**, so the mount
 point is the caller's decision and not this repository's -- **and that is
 the same separation the archive reader has, and it is deliberate.**
+
+
+## MV: three finished games, and the first measurement found a real defect in
+## the shared reader
+
+### And the numbers, counted out of the games
+
+```text
+LegalTruck_v1.1                     8 Karten    730 Befehle    33 Codes (29 Befehle)
+A Simple Life with My Unobtrusive Sister  61 Karten  55548 Befehle  64 Codes (59 Befehle)
+MapInfos.json: 9 named / 8 on disk        66 named / 61 on disk
+```
+
+**And `MapInfos.json` names more maps than exist in both games, and that is
+not a defect of the games** -- a copied and trimmed project leaves entries
+behind, **and a reader that took its map count from `MapInfos.json` would
+report nine maps where the folder holds eight.**
+
+### And the defect
+
+**And the first run of the new test failed with two diagnostics, and one of
+them was this repository's fault:**
+
+```text
+ERROR: data/Classes.json is truncated beyond the bounded inspection limit.
+ERROR: data/Items.json is truncated beyond the bounded inspection limit.
+```
+
+**And `IsMetadataPath` knew `Actors.json` and did not know the seven
+database sections that `MvDataDirectoryResult` itself counts** -- so those
+files got `MaxPrefixBytes` of 4 KB instead of `MaxFileBytes` of 1 MB, and
+were then reported as truncated.
+
+**And the measured file sizes show the limit was never the problem:**
+
+```text
+sister/www:  Classes.json  13710   Items.json  171578
+             Skills.json   77015   Enemies.json  104741
+```
+
+**None of these is within an order of magnitude of the limit, and all four
+were reported as truncated.** The fix is `IsDatabaseSection`, listing the
+same seven files the reader counts.
+
+**And the other diagnostic is not a defect and was left as it is:**
+
+```text
+Encrypted assets detected (.rpgmv*); names come from unencrypted JSON only.
+```
+
+**Both games carry `.rpgmvo` audio, and the reader says so, and that is what
+it should say.**
+
+### And what criterion 3 does and does not have
+
+**The reader is an inspector and not an interpreter**, and the class name
+says so. **There is no MV interpreter here and a test that said "MV runs"
+would be false.** What exists and is measured now: the data directory is
+read, the maps are counted against two places the games state them, and the
+command numbers are counted from the games rather than from a table.
+
+**And the command numbers are the finding worth having:**
+
+```text
+MV 655 Script      MZ 355 Script
+MV 355 Script      -- the code 355 does not exist in MZ
+MV 231 Show Picture  MZ 231 Show Picture
+MV 230 Wait          MZ 230 Wait
+```
+
+**MV and MZ share the generation's command set and the numbers did not all
+survive into MZ.** An MZ interpreter cannot be reused for MV by substitution.
+
+**TestRealMvGameData: 4/4. All 2227 tests passed.**
