@@ -17474,6 +17474,73 @@ Map006 Event 7:   26 Befehle, Index 21,  und  21 ist das `0`
 All 2342 tests passed
 ```
 
+## 2026-10-02 — Kriterium 8: der RTP-Plan, und er laedt nichts
+
+**Und `RtpRegistry` sagt es selbst:**
+
+> *"The registry never ships or downloads RTP data."*
+
+**Und die Regel des Benutzers lautet woertlich: automatic download and
+unextract the needed RTP if needed (ask user before doing this).**
+
+**Und die erste Haelfte dieser Regel ist die, die vergessen wird:**
+**nicht handeln ohne zu fragen, nicht nicht fragen.**
+
+**Und darum ist `UniversalRPG.Rtp` ein Plan und sonst nichts.**
+
+```csharp
+public sealed class RtpFetchPlanEntry { ... }
+public sealed class RtpFetchPlan      { Entries, TargetDirectory, FullySourced }
+public static class RtpFetchPlanner  { Build(pProjectDirectory, pTargetDirectory) }
+public static class RtpNennungen     { Bekannt, Nennungen(pPath), ProfilFuer(pName) }
+```
+
+**Und dieser Namensraum hat keinen Netzwerkcode, keinen Entpacker und
+keine Methode, die etwas tut** -- **und das steht nicht in einem
+Kommentar, sondern in einem Test, der die Versammlung nachsieht:**
+
+```csharp
+foreach (var methode in typ.GetMethods())
+    AssertTrue(!(methode.Name.Contains("Download") || ...));
+```
+
+**Und ein Versprechen in einem Kommentar ist nichts wert an dem Tag,
+an dem jemand will, dass es etwas wert ist.**
+
+### Und die Namen sind gemessen, und vier davon waren vorher falsch
+
+```ini
+Dreaming Mary       RTP=       Library=RGSS301.dll
+Random Dungeon      RTP=RPGVX  Library=RGSS202E.dll
+Heartache 101 v2.5  RTP1=      Library=RGSS102E.dll
+MicroQuest          RTP1=      Library=RGSS104E.dll
+(VX Ace)                       Library=RGSS3A.dll
+RM2K                RPG_RT.ini mit Abschnitt RPG_RT
+```
+
+**Und XP ist `RGSS102E` und `RGSS104E`** -- **und nicht `RGSS202E`,
+denn das ist VX** -- **und die Tabelle stand vorher auf `RGSS202E` fuer
+XP**, **und ein Benutzer haette das falsche Archiv bekommen.**
+
+**Und VX hat zwei Formen** -- **`RGSS202E` und `RGSS301`** -- **und ein
+Praefix-Abgleich haette einem XP-Benutzer das VX-Archiv gegeben.**
+
+```text
+RTP-Plan: Benoetigt: 5 Laufzeitumgebung(en), und keine davon ist geladen.
+  - rpgmaker_vx / vx: RGSS202E.dll   - rpgmaker_xp / xp: RGSS102E.dll
+  - rpgmaker_rm2k / rm2k: RPG_RT     - rpgmaker_vxace / vxace: RGSS3A.dll
+  - rpgmaker_xp / xp: RGSS104E.dll
+All 2345 tests passed
+```
+
+### Und die Seiten lesen jetzt ihr Ende
+
+```text
+Map003 Event 9:  211 Befehle, Index 210, und 210 ist das `0`
+Map006 Event 7:   26 Befehle, Index  21, und  21 ist das `0`
+MV Map231 E2:    445 Befehle, Index 440, und 440 ist ein `201`
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
