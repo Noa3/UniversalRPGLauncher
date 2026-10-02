@@ -168,6 +168,83 @@ public sealed class MzPlayer
     public MzCharacter? Figur { get; private set; }
 
     /// <summary>
+    /// Whether the player walks through walls and off the map, which is
+    /// <c>211</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine's line is
+    /// <c>$gamePlayer.setTransparent(this._params[0] === 0)</c></strong>
+    /// -- <strong>and <c>setTransparent(true)</c> walks through
+    /// walls.</strong> <strong>So zero is "through walls" and anything else
+    /// is solid, and the parameter is the opposite of the editor's
+    /// checkbox.</strong>
+    /// </para>
+    /// </remarks>
+    public bool Transparent { get; private set; }
+
+    /// <summary>
+    /// Whether the followers are on the screen, which is <c>216</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this one is not inverted against its name</strong> --
+    /// <strong><c>params[0] === 0</c> shows them and anything else hides
+    /// them</strong> -- <strong>and it sits next to
+    /// <see cref="Transparent"/>, which is inverted.</strong>
+    /// </remarks>
+    public bool FollowersShown { get; private set; } = true;
+
+    /// <summary>
+    /// Whether the followers are walking up to the player, which is
+    /// <c>217</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is a walk and not a teleport</strong>, <strong>and
+    /// the engine waits for it with <c>setWaitMode('gather')</c> and not
+    /// with a frame count.</strong>
+    /// </remarks>
+    public bool FollowersGathering { get; private set; }
+
+    /// <summary>
+    /// Set the player walking through walls, the way the engine's
+    /// <c>setTransparent</c> does.
+    /// </summary>
+    public string SetTransparent(bool pTransparent)
+    {
+        Transparent = pTransparent;
+        return pTransparent
+            ? "the player walks through walls and off the map"
+            : "the player is solid again";
+    }
+
+    /// <summary>
+    /// Show or hide the followers, and not inverted: zero shows.
+    /// </summary>
+    public string SetFollowers(bool pShown)
+    {
+        FollowersShown = pShown;
+        return pShown
+            ? "the followers are on the screen"
+            : "the followers are taken off the screen";
+    }
+
+    /// <summary>
+    /// Walk the followers up to the player, and the engine's own guard is
+    /// that this does nothing in a battle.
+    /// </summary>
+    public string GatherFollowers(bool pImKampf)
+    {
+        if (pImKampf)
+        {
+            return "the followers were asked to walk up and did not, because "
+                + "the engine's own guard is !$gameParty.inBattle()";
+        }
+
+        FollowersGathering = true;
+        return "the followers walk up to the player";
+    }
+
+    /// <summary>
     /// Builds the player’s figure from where the player stands.
     /// </summary>
     /// <returns>The figure, or nothing when there is no player.</returns>

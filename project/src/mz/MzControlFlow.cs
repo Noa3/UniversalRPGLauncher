@@ -187,6 +187,21 @@ public static class MzControlFlow
 
             // Loop does nothing at all. It is a marker for break and repeat to
             // find, and the engine's method is `return true`.
+            // **Und `403` ist das Ende eines Schleifenrumpfes und nicht
+            // `412`.** **`412` ist das Ende eines Zweiges und hat keine
+            // Methode; `403` hat eine und ueberspringt.**
+            // **Und die Wache ist `>= 0` und nicht `== -1`**, **denn ein
+            // Zweig, den der Interpreter nicht entschieden hat, ist `0`,
+            // und einer, der wahr war, ist `1`.**
+            case MzCommandTable.EndLoop:
+                if (pInterpreter.BranchAt(pCommand.Indent) != false
+                    && !pInterpreter.SkipBranch())
+                {
+                    return MzControlOutcome.Stopped;
+                }
+
+                return MzControlOutcome.Ran;
+
             case MzCommandTable.Loop:
                 return MzControlOutcome.Ran;
 

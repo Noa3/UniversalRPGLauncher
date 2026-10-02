@@ -845,6 +845,47 @@ public sealed class MzBranchFacts
     public List<string> Notices { get; } = new();
 
     public Dictionary<int, int> Weapons { get; init; } = new();
+
+    /// <summary>
+    /// Which skills actors have learned, and which they have forgotten.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a third container and not the state's
+    /// list.</strong> <c>command318</c> is <c>actor.learnSkill(id)</c> --
+    /// <strong>and a skill is a thing an actor has and not a thing the
+    /// party has.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the key is both sides of it</strong>, <strong>because
+    /// "actor one learns skill three" and "actor three learns skill one"
+    /// are different facts and one number cannot hold both.</strong>
+    /// </para>
+    /// </remarks>
+    public HashSet<(int Darsteller, int Skill)> Skills { get; } = new();
+
+    /// <summary>
+    /// The music that <c>243</c> put aside, and <c>244</c> puts back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the whole of what <c>243</c> does</strong>:
+    /// <c>$gameSystem.saveBgm()</c> <strong>copies the current track into a
+    /// slot and changes nothing the player can see.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader with no such slot has nowhere to put
+    /// anything</strong>, <strong>and every 243 in a game would be reported
+    /// as finished and have changed nothing.</strong>
+    /// </para>
+    /// </remarks>
+    public string RememberedBgm { get; set; } = "";
+
+    /// <summary>
+    /// Whether <c>243</c> has put a track aside, and a flag and not the
+    /// empty string because an empty name is a real answer.
+    /// </summary>
+    public bool HasRememberedBgm { get; set; }
     public Dictionary<int, int> Armors { get; init; } = new();
 
     /// <summary>

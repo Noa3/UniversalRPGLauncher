@@ -164,6 +164,20 @@ public static class MzCommands
             // nicht** -- **und ein Befehl, der nicht im Tor steht, wird
             // nie ausgefuehrt und als ausgefuehrt gemeldet.**
             or MzCommandTable.PluginCommandCall
+            // **Und `127`, `318`, `243`, `244`, `211`, `216`, `217`
+            // und `104` standen hier nicht** -- **und ein Befehl, der
+            // nicht im Tor steht, wird nie in `TryExecute` gerufen
+            // und als ausgefuehrt gemeldet.** **Und gemessen an
+            // `D:/Itch/sister/www`: 15 `127`, 18 `318`, 15 `243`,
+            // 12 `244`, 10 `211`, je 1 `216` und `217`, 23 `104`.**
+            or MzCommandTable.ChangeWeapon
+            or MzCommandTable.ChangeActorSkill
+            or MzCommandTable.SaveBgm
+            or MzCommandTable.RestoreBgm
+            or MzCommandTable.PlayerTransparency
+            or MzCommandTable.ShowFollowers
+            or MzCommandTable.GatherFollowers
+            or MzCommandTable.ShowItemChoice
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -1084,6 +1098,229 @@ public static class MzCommands
                     + (hinzu ? " gains state " : " loses state ")
                     + zustand));
                 return true;
+            }
+
+            case MzCommandTable.ChangeWeapon:
+            {
+                // **Und `command127` ist `command128` mit einer Waffe**, und
+                // `operateValue` beginnt auch hier bei `params[1]`:**
+                //
+                // ```js
+                // const value = this.operateValue(this._params[1],
+                //                                  this._params[2],
+                //                                  this._params[3]);
+                // $gameParty.gainItem($dataWeapons[this._params[0]],
+                //                    value, this._params[4]);
+                // ```
+                //
+                // **Und das ist der dritte Befehl dieser Reihe, in dem der
+                // erste Platz etwas anderes ist als die Rechnung.**
+                var waffe = At(pCommand, 0);
+                if (!TryOperateValue(
+                    pCommand, pFacts, 1, out var wert, out var fehlt))
+                {
+                    pInterpreter.Stop(MzStep.Refused, fehlt);
+                    return false;
+                }
+
+                var vorher = pFacts.Weapons.TryGetValue(
+                    waffe, out var alt) ? alt : 0;
+                var nachher = vorher + wert;
+                var grenze = pFacts.MaxItems;
+                nachher = nachher > grenze ? grenze
+                    : (nachher < 0 ? 0 : nachher);
+                if (nachher == 0)
+                {
+                    pFacts.Weapons.Remove(waffe);
+                }
+                else
+                {
+                    pFacts.Weapons[waffe] = nachher;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"weapon {waffe} {vorher} -> {nachher}"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeActorSkill:
+            {
+                // **Und `command318` ist `command313` mit einer Fertigkeit
+                // fuer einen Zustand**, **und die Form ist in jedem Platz
+                // gleich.**
+                var ziel = At(pCommand, 0);
+                var ganzePartei = At(pCommand, 1) != 0;
+                var hinzu = At(pCommand, 2) == 0;
+                var fertigkeit = At(pCommand, 3);
+                foreach (var darsteller in GeordneteZahlen(pFacts.PartyMembers))
+                {
+                    if (ganzePartei || darsteller == ziel)
+                    {
+                        if (hinzu)
+                        {
+                            pFacts.Skills.Add((darsteller, fertigkeit));
+                        }
+                        else
+                        {
+                            pFacts.Skills.Remove((darsteller, fertigkeit));
+                        }
+                    }
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    (ganzePartei ? "every actor" : $"actor {ziel}")
+                    + (hinzu ? " learns skill " : " forgets skill ")
+                    + fertigkeit));
+                return true;
+            }
+
+            case MzCommandTable.SaveBgm:
+            {
+                // **Und `command243` ist eine Zeile:**
+                //
+                // ```js
+                // $gameSystem.saveBgm();
+                // return true;
+                // ```
+                //
+                // **Und `saveBgm` kopiert den Kanal**, **und der Kanal
+                // traegt einen Namen und drei Zahlen**, **und ein Leser, der
+                // nur den Namen merkt, verliert die Lautstaerke und den
+                // Ton.** **Und alle fuenfzehn in diesem Spiel tragen keine
+                // Parameter.**
+                var kanal = pFacts.Screen.Bgm;
+                pFacts.RememberedBgm = kanal.Name;
+                pFacts.HasRememberedBgm = true;
+                pActions.Add(new MzAction(pCommand,
+                    "the background music is put aside: "
+                    + (kanal.Name.Length > 0
+                        ? kanal.Name + " at " + kanal.Volume
+                        : "nothing was playing")));
+                return true;
+            }
+
+            case MzCommandTable.RestoreBgm:
+            {
+                // **Und `command244` holt ihn wieder** -- **und ein Leser,
+                // der `243` einmal und `244` zweimal laufen laesst, legt
+                // einen Track zweimal in die Hand.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.HasRememberedBgm
+                        ? "the remembered music comes back: "
+                            + (pFacts.RememberedBgm.Length > 0
+                                ? pFacts.RememberedBgm
+                                : "nothing was put aside")
+                        : "the remembered music was asked for and there was "
+                            + "none, because the engine's own saveBgm slot "
+                            + "is empty"));
+                return true;
+            }
+
+            case MzCommandTable.PlayerTransparency:
+            {
+                // **Und `command211` liest seinen Parameter verkehrt herum
+                // gegen seinen eigenen Namen:**
+                //
+                // ```js
+                // $gamePlayer.setTransparent(this._params[0] === 0);
+                // return true;
+                // ```
+                //
+                // **Und der Nachbar `216` ist nicht verkehrt**, **und das
+                // ist das Paar, das man falsch liest.**
+                var durch = At(pCommand, 0) == 0;
+                pFacts.Player.SetTransparent(durch);
+                pActions.Add(new MzAction(pCommand,
+                    durch
+                        ? "the player walks through walls and off the map"
+                        : "the player is solid"));
+                return true;
+            }
+
+            case MzCommandTable.ShowFollowers:
+            {
+                // **Und `command216` ist nicht verkehrt:**
+                //
+                // ```js
+                // if (this._params[0] === 0) {
+                //     $gamePlayer.showFollowers();
+                // } else {
+                //     $gamePlayer.hideFollowers();
+                // }
+                // $gamePlayer.refresh();
+                // return true;
+                // ```
+                var gezeigt = At(pCommand, 0) == 0;
+                pFacts.Player.SetFollowers(gezeigt);
+                pActions.Add(new MzAction(pCommand,
+                    gezeigt
+                        ? "the followers are on the screen"
+                        : "the followers are taken off the screen"));
+                return true;
+            }
+
+            case MzCommandTable.GatherFollowers:
+            {
+                // **Und `command217`:**
+                //
+                // ```js
+                // if (!$gameParty.inBattle()) {
+                //     $gamePlayer.gatherFollowers();
+                //     this.setWaitMode('gather');
+                // }
+                // return true;
+                // ```
+                var gesagt = pFacts.Player.GatherFollowers(pFacts.InBattle);
+                pActions.Add(new MzAction(pCommand, gesagt));
+                if (pFacts.InBattle)
+                {
+                    return true;
+                }
+
+                pInterpreter.WaitFor(MzWaitMode.Gather);
+                return false;
+            }
+
+            case MzCommandTable.ShowItemChoice:
+            {
+                // **Und `command104`:**
+                //
+                // ```js
+                // if (!$gameMessage.isBusy()) {
+                //     this.setupItemChoice(this._params);
+                //     this._index++;
+                //     this.setWaitMode('message');
+                // }
+                // return false;
+                // ```
+                //
+                // **Und es gibt <c>false</c> in jedem Bild zurueck**, **also
+                // wird es immer wieder gefragt, bis die Nachricht nicht
+                // mehr belegt ist.**
+                //
+                // **Und `setupItemChoice(params)` ist
+                // `$gameMessage.setItemChoice(params[0], params[1] || 2)`
+                // -- eine Gegenstandsnummer und eine Kategorie, und keine
+                // Spaltenzahl**, **und der Vorgabe ist ZWEI und nicht
+                // null**, **weil `0 || 2` in JavaScript auch zwei ist.**
+                //
+                // **Und gemessen: 23 Stueck, und die haeufigste Form
+                // nennt Nummer 90, und Nummer 90 in diesem Projekt ist
+                // das Fleisch, das ein Haustierautomat frisst.**
+                var gegenstand = At(pCommand, 0);
+                var kategorie = At(pCommand, 1) == 0
+                    ? 2
+                    : At(pCommand, 1);
+                pFacts.LastPrompt = new MzPrompt.Item
+                {
+                    ItemId = gegenstand,
+                    Category = kategorie,
+                };
+                pActions.Add(new MzAction(pCommand,
+                    $"the player is asked to hand over item {gegenstand}"
+                    + $" of category {kategorie}"));
+                pInterpreter.WaitFor(MzWaitMode.Message);
+                return false;
             }
 
             case MzCommandTable.ChangeArmor:

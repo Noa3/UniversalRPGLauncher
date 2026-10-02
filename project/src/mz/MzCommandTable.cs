@@ -250,6 +250,199 @@ public static class MzCommandTable
     /// </remarks>
     public const int ChangeActorState = 313;
 
+    /// <summary>The end of a loop's body, and it is not <c>412</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command403() {
+    ///     if (this._branch[this._indent] &gt;= 0) {
+    ///         this.skipBranch();
+    ///     }
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And the guard is <c>&gt;= 0</c> and not
+    /// <c>== -1</c></strong>: <strong>a branch the interpreter has not
+    /// decided is <c>0</c>, one it decided true is <c>1</c>, and only one
+    /// it decided false is <c>-1</c>.</strong> <strong>So a <c>403</c> whose
+    /// branch is still <c>0</c> skips, and one whose branch is <c>-1</c>
+    /// does nothing.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <see cref="EndBranch"/> is <c>412</c>, which is the end
+    /// of a branch and has no method of its own.</strong>
+    /// </para>
+    /// </remarks>
+    public const int EndLoop = 403;
+
+    /// <summary>Let the player hand over an item.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command104() {
+    ///     if (!$gameMessage.isBusy()) {
+    ///         this.setupItemChoice(this._params);
+    ///         this._index++;
+    ///         this.setWaitMode('message');
+    ///     }
+    ///     return false;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And it returns <c>false</c> in every frame</strong>, <strong>
+    /// so it is asked again until the message is not busy any more</strong>,
+    /// <strong>and the <c>this._index++</c> sits inside the
+    /// <c>if</c></strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>setupItemChoice(params)</c> is
+    /// <c>$gameMessage.setItemChoice(params[0], params[1] || 2)</c>
+    /// -- an item id and a category, not a column count</strong>, <strong>
+    /// and the default is <c>2</c> and not <c>0</c></strong>, <strong>
+    /// because <c>0 || 2</c> is <c>2</c> in JavaScript.</strong>
+    /// </para>
+    /// </remarks>
+    public const int ShowItemChoice = 104;
+
+    /// <summary>A skill goes onto an actor or comes off.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command318() {
+    ///     this.iterateActorEx(this._params[0], this._params[1], actor => {
+    ///         if (this._params[2] === 0) {
+    ///             actor.learnSkill(this._params[3]);
+    ///         } else {
+    ///             actor.forgetSkill(this._params[3]);
+    ///         }
+    ///     });
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And this is <c>313</c> with a skill for a state</strong>,
+    /// <strong>and the form is the same in every slot.</strong>
+    /// </para>
+    /// </remarks>
+    public const int ChangeActorSkill = 318;
+
+    /// <summary>Put the background music aside so a later one can come
+    /// back.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>command243() { $gameSystem.saveBgm(); return true; }</code>
+    /// </para>
+    /// <para>
+    /// <strong>And it carries no parameters at all</strong> -- <strong>and
+    /// it changes no number a reader can check</strong>, <strong>and what
+    /// it changes is that there is a remembered track.</strong>
+    /// </para>
+    /// </remarks>
+    public const int SaveBgm = 243;
+
+    /// <summary>Put the remembered music back, and it is <c>244</c>.</summary>
+    /// <remarks>
+    /// <strong>And <c>243</c> and <c>244</c> are a pair with no numbers in
+    /// either</strong> -- <strong>and a reader that ran one and not the
+    /// other leaves a track that the game can put back twice.</strong>
+    /// </remarks>
+    public const int RestoreBgm = 244;
+
+    /// <summary>How many of a weapon the party has, and it is <c>128</c>
+    /// with a weapon.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command127() {
+    ///     const value = this.operateValue(this._params[1],
+    ///                                  this._params[2],
+    ///                                  this._params[3]);
+    ///     $gameParty.gainItem($dataWeapons[this._params[0]],
+    ///                        value, this._params[4]);
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>operateValue</c> starts at <c>params[1]</c>
+    /// again</strong> -- <strong>the third command in this row where the
+    /// first slot is something else</strong> -- <strong>and the container
+    /// is <c>$dataWeapons</c>, which is neither <c>$dataItems</c> nor
+    /// <c>$dataArmors</c>.</strong>
+    /// </para>
+    /// </remarks>
+    public const int ChangeWeapon = 127;
+
+    /// <summary>The player walks through walls and off the map.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command211() {
+    ///     $gamePlayer.setTransparent(this._params[0] === 0);
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And the parameter is inverted against its own
+    /// name</strong>: <strong>zero makes the player transparent and
+    /// anything else makes it solid</strong>, <strong>because the editor's
+    /// checkbox says "Through Walls" and the engine reads the
+    /// opposite.</strong>
+    /// </para>
+    /// </remarks>
+    public const int PlayerTransparency = 211;
+
+    /// <summary>Show the followers or take them off the screen.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command216() {
+    ///     if (this._params[0] === 0) {
+    ///         $gamePlayer.showFollowers();
+    ///     } else {
+    ///         $gamePlayer.hideFollowers();
+    ///     }
+    ///     $gamePlayer.refresh();
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And this one is not inverted</strong> -- <strong>zero shows
+    /// and anything else hides</strong> -- <strong>and it is the command
+    /// right next to <see cref="PlayerTransparency"/>, which is
+    /// inverted.</strong> <strong>Two neighbours and two directions is the
+    /// pair a reader gets wrong.</strong>
+    /// </para>
+    /// </remarks>
+    public const int ShowFollowers = 216;
+
+    /// <summary>Walk the followers up to the player.</summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command217() {
+    ///     if (!$gameParty.inBattle()) {
+    ///         $gamePlayer.gatherFollowers();
+    ///         this.setWaitMode('gather');
+    ///     }
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And it carries no parameters</strong>, <strong>it does
+    /// nothing in a battle</strong>, <strong>and it waits for the walk with
+    /// the engine's own <c>'gather'</c> and not with a frame count.</strong>
+    /// </para>
+    /// </remarks>
+    public const int GatherFollowers = 217;
+
     /// <summary>
     /// An animation over a character, and the other one: <c>221</c> is over
     /// an event, this is over whatever character the page names.

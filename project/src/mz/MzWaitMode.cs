@@ -137,4 +137,16 @@ public enum MzWaitMode
     /// </para>
     /// </remarks>
     Animation = 6,
+
+    /// <summary>
+    /// Held while the followers walk up to the player -- the engine's
+    /// <c>"gather"</c>, set by a <c>217</c> outside a battle.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a walk and not a teleport.</strong> <strong>The
+    /// engine moves each follower over its own frames and then
+    /// stops</strong>, <strong>and a reader that placed them at once would
+    /// be a different game.</strong>
+    /// </remarks>
+    Gather = 7,
 }

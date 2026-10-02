@@ -16215,3 +16215,96 @@ Stopped=Refused, Grund=a branch on the author's own script:
 on a `355` block, and `AGENTS.md` forbids running a project's JavaScript.**
 **Six hundred and eleven commands are now behind that line instead of a
 handful.**
+
+
+## Eight more, and a git stash that threw away the work of the hour
+
+### And what was left
+
+```text
+D:/Itch/sister/www, Karten und gemeinsame Ereignisse:
+    403 End Loop Body        64x
+    104 Show Item Choice     23x
+    318 Change Actor Skill   18x
+    243 Save Bgm             15x
+    127 Change Weapon        15x
+    311 Change Skill         14x   <- noch nicht verdrahtet
+    244 Restore Bgm          12x
+    211 Player Transparency  10x
+    216 Show Followers        1x
+    217 Gather Followers      1x
+
+    52% gedeckt, 75520 von 142921 Befehlen
+```
+
+### And the two neighbours with opposite parameters
+
+```javascript
+command211() { $gamePlayer.setTransparent(this._params[0] === 0); }
+command216() { if (this._params[0] === 0) { $gamePlayer.showFollowers(); }
+               else { $gamePlayer.hideFollowers(); }
+               $gamePlayer.refresh(); }
+```
+
+**And `setTransparent(true)` walks through walls, so zero is the transparent
+one** -- **and that is the opposite of the editor's checkbox** -- **and the
+command right below it is not inverted at all.** **One number, two
+commands, two directions.**
+
+### And three more traps
+
+**One: `127` is `128` with a weapon, and `operateValue` starts at
+`params[1]` again.** **That is the third command in this row where the
+first slot is something else** -- **and `126` is not one of them.**
+**And `$dataWeapons` is neither `$dataItems` nor `$dataArmors`.**
+
+**Two: `104`'s second parameter defaults to two, and a written zero is also
+two**, **because `params[1] || 2` and zero is falsy in JavaScript.** **So
+"nothing" and "no second parameter" both mean "the whole party".**
+
+**And the first parameter is an item id and not a column count** --
+**measured: `[90, 2]` nine times, `[90, 1]` nine times, `[90, 4]` twice,
+and `[75, 2]`, `[76, 2]`, `[77, 2]` once each.** **And item 90 in this
+project's `Items.json` is `小块兽肉`, the meat a pet machine eats.**
+
+**Three: `403`'s guard is `>= 0` and not `== -1`.** **A branch the
+interpreter has not decided is `0`, one it decided true is `1`, and only one
+it decided false is `-1`.** **And all sixty-four are `[6, null]`** -- **and
+that `null` arrives as an empty string here, because
+`MzCommandEntry.From` keeps a value it has no name for as empty text.**
+
+### And the stash
+
+**I ran `git stash` to undo one bad edit and it took the whole hour with
+it** -- **the eight constants, the branches, the facts, the player's three
+states and the wait mode all went**, **and 46 build errors said so.**
+
+**And the recovery was to rebuild from the engine's own lines with text
+anchors and a build check after every single step**, **which is slower and
+is the only thing that worked**, **because a line index into a file that
+had just been re-read is a guess.**
+
+### And a counting mistake worth writing down
+
+**`.Keys.Count` counts FORMS and not occurrences.** **The first assertion
+said "twenty of the twenty-three name item ninety" and computed it as
+`.Keys.Count(...)`, which is three.** **And the raw files say twenty, and
+the fix was to sum the values instead of counting the keys.**
+
+### And after
+
+```text
+MZ Befehlssatz: 114 Befehle, 58 in einem Auspraecher (50%), 56 ohne
+MV sister:      133484 Befehle, 124543 gedeckt (93%)
+MV LegalTruck:     730 Befehle,    724 gedeckt (99%)
+MZ Camellia:     2432 Befehle,   2076 gedeckt (85%)
+
+MV die letzten acht: 403=64 104=23 318=18 243=15 127=15 211=10 216=1 217=1 244=12
+TestMvTheLastEight: 7/7
+All 2280 tests passed
+```
+
+### And what is still not run
+
+**The run is stopped at the same place** -- **a branch on the author's own
+JavaScript** -- **and everything this session added sits behind that line.**

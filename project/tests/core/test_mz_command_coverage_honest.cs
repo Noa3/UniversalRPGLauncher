@@ -65,10 +65,10 @@ public partial class TestMzCommandCoverageHonest : TestBase
         };
         var befehle_ = new HashSet<int>
         {
-            101, 105, 108, 121, 122, 123, 125, 126, 128, 129, 201, 203, 205,
-            212, 213, 214, 221, 222, 223, 224, 225, 230, 231, 232, 235, 241,
-            242, 245, 246, 249, 250, 251, 261, 301, 313, 314, 322, 351, 355,
-            357,
+            101, 104, 105, 108, 121, 122, 123, 125, 126, 127, 128, 129, 201,
+            203, 205, 211, 212, 213, 214, 216, 217, 221, 222, 223, 224, 225,
+            230, 231, 232, 235, 241, 242, 243, 244, 245, 246, 249, 250, 251,
+            261, 301, 313, 314, 318, 322, 351, 355, 357,
         };
 
         var gedeckt = befehle_.Union(steuerung).ToHashSet();
@@ -82,7 +82,7 @@ public partial class TestMzCommandCoverageHonest : TestBase
         AssertTrue(gedeckt.All(zahlen.Contains),
             "**and every number a dispatcher claims is a command**");
         AssertTrue(gedeckt.Count >= 40,
-            "**and the dispatch covers fifty commands** -- " + gedeckt.Count
+            "**and the dispatch covers fifty-eight commands** -- " + gedeckt.Count
                 + ", and this is the number to compare against next time, "
                 + "because a coverage that is not written down is a coverage "
                 + "that cannot grow");
@@ -94,7 +94,7 @@ public partial class TestMzCommandCoverageHonest : TestBase
         // fuehrt, sagt das Gegenteil von dem, was der Code tut.**
         foreach (var erwartet in new[]
         {
-            103, 104, 109, 117, 124, 127, 302, 311,
+            103, 109, 117, 124, 302, 311,
         })
         {
             AssertTrue(nicht.Contains(erwartet),
@@ -182,10 +182,11 @@ public partial class TestMzCommandCoverageHonest : TestBase
     {
         var gedeckt = new HashSet<int>
         {
-            101, 102, 105, 108, 111, 112, 113, 115, 118, 119, 121, 122, 123,
-            125, 126, 128, 129, 201, 203, 205, 212, 213, 214, 221, 222, 223,
-            224, 225, 230, 231, 232, 235, 241, 242, 245, 246, 249, 250, 251,
-            261, 301, 313, 314, 322, 351, 355, 357, 402, 411, 413,
+            101, 102, 104, 105, 108, 111, 112, 113, 115, 118, 119, 121, 122,
+            123, 125, 126, 127, 128, 129, 201, 203, 205, 211, 212, 213, 214,
+            216, 217, 221, 222, 223, 224, 225, 230, 231, 232, 235, 241, 242,
+            243, 244, 245, 246, 249, 250, 251, 261, 301, 313, 314, 318, 322,
+            351, 355, 357, 402, 403, 411, 413,
         };
         var keineMethode = new HashSet<int>
         {
