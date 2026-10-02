@@ -253,6 +253,35 @@ public static class MzCommandTable
     /// <c>changeHp</c>.
     /// </summary>
     /// <summary>
+    /// <c>command124</c> -- <c>if (this._params[0] === 0) {
+    /// $gameTimer.start(this._params[1] * 60); } else { $gameTimer.stop(); }</c>
+    /// </summary>
+    public const int ControlTimer = 124;
+
+    /// <summary>
+    /// <c>command132</c> -- <c>$gameSystem._battleBgm properties and
+    /// $gameSystem.saveBgm()</c>.
+    /// </summary>
+    public const int ChangeBattleBgm = 132;
+
+    /// <summary>
+    /// <c>command134</c> -- <c>if (this._params[0] === 0) {
+    /// $gameSystem.disableSave(); } else { $gameSystem.enableSave(); }</c>
+    /// </summary>
+    public const int ChangeSaveAccess = 134;
+
+    /// <summary>
+    /// <c>command135</c> -- <c>if (this._params[0] === 0) {
+    /// $gameSystem.disableMenu(); } else { $gameSystem.enableMenu(); }</c>
+    /// </summary>
+    public const int ChangeMenuAccess = 135;
+
+    /// <summary>
+    /// <c>command138</c> -- <c>$gameSystem.setWindowTone(this._params[0])</c>
+    /// </summary>
+    public const int ChangeWindowColor = 138;
+
+    /// <summary>
     /// <c>command352</c> -- <c>if (!$gameParty.inBattle()) {
     /// SceneManager.push(Scene_Save); } return true;</c>
     /// </summary>

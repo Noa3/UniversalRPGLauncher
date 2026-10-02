@@ -116,6 +116,11 @@ public static class MzCommands
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
+            MzCommandTable.ChangeBattleBgm,
+            MzCommandTable.ChangeSaveAccess,
+            MzCommandTable.ChangeMenuAccess,
+            MzCommandTable.ChangeWindowColor,
+            MzCommandTable.ControlTimer,
             MzCommandTable.SaveGame,
             MzCommandTable.ReturnToTitle,
             MzCommandTable.GameOver,
@@ -1107,6 +1112,149 @@ public static class MzCommands
                 return true;
             }
 
+
+            case MzCommandTable.ChangeBattleBgm:
+            {
+                // **Und `command132` ist eine Zeile:**
+                //
+                // ```js
+                // $gameSystem.setBattleBgm(this._params[0]);
+                // return true;
+                // ```
+                //
+                // **Und `setBattleBgm` ist `this._battleBgm = value`** --
+                // **und es SPIELT nichts**, **das ist der Unterschied zu
+                // `241`, das `AudioManager.playBgm(this._params[0])` sagt
+                // und sofort hoert.** **Und `132` sagt, was der Kampf
+                // benutzen wird, und `241` sagt, was jetzt laeuft.**
+                //
+                // **Und gemessen an `Fatal Fantasy`: 148 davon, und 62
+                // tragen `(Regular Battle)`, 39 `(Boss Battle)` und 12
+                // `(Bad Situation)`** -- **und alle drei sind Klammern in
+                // Anfuehrungszeichen, also Platzhalter, die der Kampf
+                // selbst einsetzt.** **Und `saveBgm()` ist die Kopie
+                // fuer den naechsten Kampf** -- **und das ist
+                // `132`s zweiter Schritt im Ablauf des Spiels, und es
+                // wird hier nicht ausgefuehrt, weil es ein zweiter
+                // Befehl waere.**
+                // **Und der erste Parameter ist ein Objekt, und
+                // nicht ein Text** -- **`setBattleBgm(value)` legt
+                // `value` ab**, **und `value` ist
+                // `{name, volume, pitch, pan}`** -- **und
+                // `AudioManager` liest `.name`, `.volume`,
+                // `.pitch` und `.pan`.**
+                //
+                // **Und 18 verschiedene Formen davon in diesem
+                // Spiel**, **und die haeufigste ist
+                // `(Regular Battle)` 62mal.**
+                var kampflied = Text(pCommand, 0);
+                pFacts.Spiel.Kampflied = kampflied;
+                pFacts.Spiel.HatKampflied = true;
+                pActions.Add(new MzAction(pCommand,
+                    kampflied.Length > 0
+                        ? "the battle music is set to " + kampflied
+                            + ", and nothing plays yet, which is what "
+                            + "`setBattleBgm` does"
+                        : "the battle music is set to nothing"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeSaveAccess:
+            {
+                // **Und `command134` ist vier Zeilen:**
+                //
+                // ```js
+                // if (this._params[0] === 0) {
+                //     $gameSystem.disableSave();
+                // } else {
+                //     $gameSystem.enableSave();
+                // }
+                // return true;
+                // ```
+                //
+                // **Und beide Setter sind eine Zuweisung** -- **und null
+                // sperrt und alles andere erlaubt** -- **und gemessen an
+                // `Fatal Fantasy`: 133 `[1]` und 122 `[0]`.**
+                //
+                // **Und es heisst nicht "kein Menepunkt", sondern "der
+                // Speicherpunkt nimmt nichts an"** -- **der Menuepunkt
+                // bleibt sichtbar, und das ist `135`s Sache.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeSpeichern(At(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.ChangeMenuAccess:
+            {
+                // **Und `command135` ist derselbe Befehl an anderer
+                // Stelle:**
+                //
+                // ```js
+                // if (this._params[0] === 0) {
+                //     $gameSystem.disableMenu();
+                // } else {
+                //     $gameSystem.enableMenu();
+                // }
+                // return true;
+                // ```
+                //
+                // **Und `disableMenu` nimmt dem Spiel den Menuepunkt und
+                // nicht den Speicherpunkt** -- **und beide Schalter
+                // starten in der Engine auf `true`**,
+                // `Game_System.prototype.initialize` ist
+                // `this._saveEnabled = true; this._menuEnabled = true;`
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeMenue(At(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.ChangeWindowColor:
+            {
+                // **Und `command138` ist eine Zeile:**
+                //
+                // ```js
+                // $gameSystem.setWindowTone(this._params[0]);
+                // return true;
+                // ```
+                //
+                // **Und der erste Parameter ist eine Liste aus vier
+                // Zahlen**, **und nicht eine Zahl und nicht eine
+                // Farbangabe** -- **und gemessen an `Fatal Fantasy`: 69
+                // `[[-255, -255, -35, 0]]` und 65
+                // `[[-255, -255, -255, 0]]`, also ein Bernsteinton und
+                // ein Schwarzton, und beide mit einer Null am Ende.**
+                //
+                // **Und `setWindowTone` ist `this._windowTone = value`**
+                // -- **und der Startwert ist `(0, 0, 0, 0)`.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeFensterTon(Vier(pCommand, 0))));
+                return true;
+            }
+
+            case MzCommandTable.ControlTimer:
+            {
+                // **Und `command124`:**
+                //
+                // ```js
+                // if (this._params[0] === 0) {  // Start
+                //     $gameTimer.start(this._params[1] * 60);
+                // } else {  // Stop
+                //     $gameTimer.stop();
+                // }
+                // return true;
+                // ```
+                //
+                // **Und die Engine multipliziert mit sechzig**, **und
+                // `Game_Timer` zaehlt Bilder** -- **und
+                // `seconds()` ist `Math.floor(this._frames / 60)`.**
+                // **Und gemessen an `Fatal Fantasy`: 17 `[1]` und 18
+                // `[0, N]`, und der erste Wert unterscheidet Start von
+                // Stopp und ist null fuer Start.**
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Spiel.SetzeUhr(
+                        At(pCommand, 0), At(pCommand, 1))));
+                return true;
+            }
 
             case MzCommandTable.SaveGame:
             {

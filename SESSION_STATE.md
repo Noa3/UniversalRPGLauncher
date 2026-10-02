@@ -16547,6 +16547,57 @@ MZ Befehlssatz: 114 Befehle, 67 in einem Auspraecher (58%), 47 ohne
 All 2302 tests passed
 ```
 
+## 2026-10-02 — Die Reihenfolge kam aus `Fatal Fantasy`, nicht aus einer Liste
+
+**Befund.** Die 47 fehlenden Befehle nach Hand geordnet sind eine
+Ordnung ohne Maß. Über alle fünf lokalen MV/MZ-Projekte gezählt:
+
+```text
+Quelle                          Befehle
+Fatal Fantasy Update/www      122278
+MV sister (D:/Itch)           142921 (mit Sprachpaketen)
+MZ Camellia                       2436
+MV LegalTruck                     1862
+```
+
+**Und `Fatal Fantasy` benutzt 29 der 47 fehlenden Befehle, und
+`D:/Itch/sister` keinen einzigen** — **die bisherige Abnahmequelle
+enthielt also keinen dieser Befehle.**
+
+**Häufigste, alle aus `Fatal Fantasy`:**
+
+```text
+317 Change Parameter   461x
+134 Change Save Access 255x
+204 Scroll Map         228x
+135 Change Menu Access 111x
+132 Change Battle BGM  148x
+138 Change Window Color 135x
+302 Shop Processing     87x
+316 Change Level        75x
+312 Change MP           72x
+124 Control Timer       35x
+```
+
+**Umgesetzt in dieser Runde: `134`, `135`, `138`, `132`, `124`** —
+alle vier bis auf `132` eine Zeile Engine-Code, alle gemessen.
+
+**Und `MzSystem` ist neu, mit `_saveEnabled`, `_menuEnabled`,
+`_windowTone` und dem Timer.** **Zwei echte Befunde dabei:**
+
+* **Ein Feld `System` in `MzBranchFacts` schattiert den Namensraum
+  `System`** — **`System.Array.Empty<string>()` in einer Zeile 20
+  darüber brach.** **Das Feld heisst jetzt `Spiel`.**
+* **`124` multipliziert mit sechzig** — **`$gameTimer.start(
+  params[1] * 60)`, und `Game_Timer` zaehlt Bilder** — **und ein Leser,
+  der 45 speichert, hat nach drei Viertelsekunden nichts mehr.**
+
+```text
+MZ: 72 von 114 dispatchbar (63%), 42 ohne
+TestMvSystemSwitches: 3/3
+All 2305 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

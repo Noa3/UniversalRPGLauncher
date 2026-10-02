@@ -493,6 +493,25 @@ public sealed class MzBranchFacts
     public MzSceneStack Szene { get; } = new();
 
     /// <summary>
+    /// What <c>$gameSystem</c> and <c>$gameTimer</c> carry.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>134</c>, <c>135</c>, <c>138</c> and <c>124</c> all
+    /// write here</strong> -- <strong>and this game writes them 255, 111,
+    /// 135 and 35 times.</strong>
+    ///
+    /// <strong>And it is called <c>Spiel</c> and not <c>System</c></strong>
+    /// -- <strong>because a field called <c>System</c> inside this class
+    /// shadows the <c>System</c> namespace for every member that reads
+    /// it</strong>, <strong>and the first thing that broke was
+    /// <c>System.Array.Empty&lt;string&gt;()</c> nine lines further
+    /// up</strong> -- <strong>which is this repository's own
+    /// <c>128 Change Armor</c> neighbour reading an empty option
+    /// list.</strong>
+    /// </remarks>
+    public MzSystem Spiel { get; } = new();
+
+    /// <summary>
     /// The class each actor stands in, as a 321 ordered it.
     /// </summary>
     /// <remarks>

@@ -122,7 +122,12 @@ public partial class TestMzCommandCoverageHonest : TestBase
         // `TestMvActorOrders` sind die beiden Beweise.**
         foreach (var erwartet in new[]
         {
-            103, 109, 124, 302,
+            // **Und `124`, `132`, `134`, `135` und `138` standen hier
+            // und sind jetzt raus** -- **und `TestMvSystemSwitches`
+            // beweist alle fuenf an
+            // `Fatal Fantasy`, dem groessten MV-Projekt auf dieser
+            // Maschine.**
+            103, 109, 302,
         })
         {
             AssertTrue(nicht.Contains(erwartet),
