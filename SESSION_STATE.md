@@ -17943,6 +17943,66 @@ TestRgssCommandCall: 3/3
 All 2375 tests passed
 ```
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 6: eine C#-Welt ist nicht die fehlende Sache
+
+**Und ich habe `RgssWelt` gebaut und gedacht, es fehle die Welt.**
+
+**Und `RgssWelt` funktioniert** -- **ein Feldschreiben landet, der
+Schreibvorgang wird gezaehlt, `nil` ist eine Ablehnung und keine
+Null** -- **und der Test `Test_DerEigeneTextbefehlSchreibtInDieWelt`
+sagte danach:  der Host wird nicht gefragt.**
+
+### Und der Grund steht in einer Zeile von MicroQuests Skripten
+
+```text
+Angefragt: Konstante Graphics | freeze an Nil (mit Block)
+Welt: 0 Schreibvorgaenge, Felder: , unbeantwortet: 1, Text: (null)
+```
+
+**Und `Game_Temp` traegt ein `attr_accessor :message_text`.**
+
+**Und der Interpreter legt sich Getter und Setter aus dieser einen
+Zeile selbst an** (`Attribute()`, Zeile 11846), -- **und deshalb
+kommt `IRubyHost.CallMethod` nie an.**
+
+**Und das ist kein Defekt, sondern die Regel des Spiels:** -- **der
+Interpreter haelt die Instanzvariablen des Ruby-Objekts, und
+`message_text` ist eine davon.**
+
+**Und es heisst:  die Luecke, die ich in Stufe 5 als "zuerst
+`$game_temp` braucht eine Variablenstelle" benannt habe, war als
+Fehlstelle falsch.**
+
+**Und `$game_temp` war die ganze Zeit eine Ruby-Variable, und die
+hat der Interpreter.** -- **Und der Host wurde genau einmal gefragt,
+von einem der 90 Skripte, mit `freeze` auf einem `Nil`**, --
+**und nicht von meinem Quelltext.**
+
+### Und die zweite Lücke steht noch
+
+**Und `Interpreter` hat keine Methode `setup`.**
+
+**Und das ist keine Besonderheit von MicroQuest** -- **und ich habe es
+nicht gemessen, warum.** **Und der Dispatcher, den ein Lauf braucht,
+steht in `Interpreter 2` als `execute_command`** -- **und das ist der
+naechste Schritt, nicht diese Zeile hier.**
+
+### Und `RgssWelt` bleibt trotzdem
+
+**Und nicht, weil sie unnoetig waere, sondern weil sie eine
+Faehigkeit hat, die es vorher nicht gab:** -- **sie zaehlt, ob die
+Welt ueberhaupt gefragt wurde** (`Schreibvorgaenge`,
+`Lesevorgaenge`), -- **und genau damit kann ein Lauf
+unterscheiden, ob er die Welt erreicht hat oder nicht.**
+
+**Und die Zuweisung in Ruby antwortet mit dem String, und nicht mit
+`nil`** -- **weil Ruby-Zuweisung ihren Wert liefert**, -- **und der
+Interpreter richtig macht und nicht diese Welt.**
+
+```
+All 2379 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
