@@ -2815,9 +2815,57 @@ public sealed class MzEngineRuntime : IEngineRuntime
     private static bool IsMap(string pRelativePath)
     {
         var name = Path.GetFileName(pRelativePath);
-        return name.StartsWith("Map", StringComparison.OrdinalIgnoreCase)
-            && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            && !name.Equals("MapInfos.json", StringComparison.OrdinalIgnoreCase);
+        if (!name.StartsWith("Map", StringComparison.OrdinalIgnoreCase)
+            || !name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // **Und der Rest muss Ziffern sein und sonst nichts.** Das ist keine
+        // Regel, die dieses Repository sich ausgedacht hat, sondern die
+        // Zeile der Engine, wo sie eine Karte laedt:
+        //
+        // ```text
+        // static loadMapData(mapId) {
+        //     if (mapId > 0) {
+        //         const filename = 'Map%1.json'.format(mapId.padZero(3));
+        //         this.loadDataFile('$dataMap', filename);
+        //     } else {
+        //         this.makeEmptyMap();
+        //     }
+        // }
+        // ```
+        //
+        // **Und `IsMap` sah vorher nur auf Anfang und Ende, und das hat ein
+        // echtes Spiel erwischt.** Gemessen an `D:/Itch/sister/www`:
+        //
+        // ```text
+        // data/VN/MapEventDialogueVN002.json   <- ein Dialogskript
+        // MapCount: 290 bei 81 Dateien und 61 echten Karten
+        // CurrentMapId: 2 -> Pfad data/VN/MapEventDialogueVN002.json
+        //                -> Root.Member("events") == null
+        // ```
+        //
+        // **Und die Karte mit der Nummer 2 war ueberschrieben, und der Lauf
+        // stand auf einer Datei, die keine Karte ist** -- **und die Meldung
+        // lautete "the map has no events", was richtig war und an der
+        // falschen Karte gemessen.** `MapIdOf` nahm die ersten Ziffern des
+        // Namens und fand die "002" in "VN002".
+        var ziffern = name.AsSpan("Map".Length, name.Length - "Map".Length - 5);
+        if (ziffern.IsEmpty)
+        {
+            return false;
+        }
+
+        foreach (var zeichen in ziffern)
+        {
+            if (!char.IsDigit(zeichen))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static int MapIdOf(MzDataFile pMap)

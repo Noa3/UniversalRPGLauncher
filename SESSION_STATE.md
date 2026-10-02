@@ -15366,3 +15366,79 @@ number you report must come from the thing you are counting.** Counting named
 constants and reporting "the interpreter knows N commands" is the same shape
 as the hand-kept engine table, the never-true threshold and the cipher that
 was not a cipher -- **a real measurement attached to the wrong question.**
+
+
+## MV has a runtime, and it found a reader bug in the shared code that only
+## a second engine could find
+
+### And the one line that was missing
+
+**`RpgMakerMvPlugin` existed and detected the engine and read
+`System.json`, and it had no `CreateRuntime`.** **One method, and MV went
+from "detects and counts" to "starts and runs".**
+
+**And the reason it was missing was a belief that the previous commit had
+already disproved:** the two engines were taken to be two runtimes. **They
+are one, and this repository had measured it.**
+
+### And the bug, which was in MZ's code and not in MV's
+
+```text
+IsMap(pRelativePath)  vorher:  name.StartsWith("Map") && name.EndsWith(".json")
+                               && name != "MapInfos.json"
+```
+
+**And this repository's MV game has a folder of dialogue scripts:**
+
+```text
+data/VN/MapEventDialogueVN002.json
+```
+
+```text
+MapCount: 290 bei 81 Dateien und 61 echten Karten
+CurrentMapId: 2 -> Pfad data/VN/MapEventDialogueVN002.json
+                -> Root.Member("events") == null
+MV RunPage: "the map has no events, and a map with no events has no pages to run"
+```
+
+**And the message was true and was measured on the wrong file.** `MapIdOf`
+takes the first digits in the name and found the `002` inside `VN002`, **so
+the map with number 2 was overwritten by a dialogue script, and the run stood
+on a file that is not a map.**
+
+### And the rule, from the engine
+
+```text
+static loadMapData(mapId) {
+    if (mapId > 0) {
+        const filename = 'Map%1.json'.format(mapId.padZero(3));
+        this.loadDataFile('$dataMap', filename);
+    } else {
+        this.makeEmptyMap();
+    }
+}
+```
+
+**`Map` and nothing but digits. `IsMap` now says exactly that.**
+
+### And after
+
+```text
+MapCount: 81
+CurrentMapId: 2 -> data/Map002.json, 6 Events
+MV Lauf: 1 Frames, 1 Aktionen, 81 Karten
+MV RunPage: event 2 page 1 is the page the engine would run, and its
+            conditions this reader cannot answer, so it is not run
+TestRealMvRuntimeRun: 2/2
+All 2245 tests passed
+```
+
+**And the refusal is the runtime being honest.** It found the page the engine
+would run, could not answer its conditions, and said so instead of running
+nothing quietly. **And the condition it could not answer is a self switch,
+which is the fourth kind of condition and the one with no measured rule.**
+
+**And this is the point of the second engine.** **A reader bug that lives in
+code shared by two generations is found by the game that exercises the
+generation with less regular files** -- **and MZ's own project has no `VN`
+folder, and no `GameLanguage` folders, and never would have found this.**

@@ -532,6 +532,36 @@ public sealed class RpgMakerMvPlugin : WebRpgPlugin
     public RpgMakerMvPlugin() : base(EnginePluginIds.RpgMakerMv, "RPG Maker MV", "mv", "rpg_core.js", "js/rpg_core.js", 30) { }
 
     /// <summary>
+    /// Builds the same runtime MZ gets, with the generation named MV.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the one line that was missing, and it was
+    /// missing because the two engines were assumed to be two
+    /// runtimes.</strong> The base class already recognises MV's own
+    /// layout -- <c>nestedRuntime</c> looks for <c>www/</c> and
+    /// <c>rpg_core.js</c>, and MV puts its data in <c>www/data</c> where MZ
+    /// puts it in <c>data</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And they are one runtime.</strong> MV's hundred and twelve
+    /// commands are all among MZ's hundred and fourteen, <strong>which is
+    /// measured by <c>TestMvCommandTableAgainstTheEngine</c> against the
+    /// engine's own <c>rpg_objects.js</c> and not against a table written
+    /// beside either of them.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And what stays refused is the same as for MZ:</strong> a
+    /// plugin command is reported and not run, and no project's JavaScript is
+    /// executed.
+    /// </para>
+    /// </remarks>
+    public override PluginResult<IEngineRuntime> CreateRuntime(
+        EnginePluginRuntimeContext pContext)
+        => PluginResult<IEngineRuntime>.Succeeded(new MzEngineRuntime(
+            Metadata.Id, "MV", pContext.Game));
+
+    /// <summary>
     /// Extracts the small, useful subset of MV System.json metadata without
     /// loading the browser runtime or evaluating plugin JavaScript.
     /// </summary>
