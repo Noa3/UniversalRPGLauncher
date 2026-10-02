@@ -116,6 +116,11 @@ public static class MzCommands
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
+            MzCommandTable.SaveGame,
+            MzCommandTable.ReturnToTitle,
+            MzCommandTable.GameOver,
+            MzCommandTable.ChangeClass,
+            MzCommandTable.ChangeEquipment,
             MzCommandTable.ChangeActorState,
             MzCommandTable.ChangeArmor,
             MzCommandTable.ChangeGold,
@@ -1102,6 +1107,170 @@ public static class MzCommands
                 return true;
             }
 
+
+            case MzCommandTable.SaveGame:
+            {
+                // **Und `command352` ist eine Zeile und eine Bedingung:**
+                //
+                // ```js
+                // if (!$gameParty.inBattle()) {
+                //     SceneManager.push(Scene_Save);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und `push` ist nicht `goto`** -- **`push` merkt sich
+                // die Szene, von der es ging**, **und `goto` tut das
+                // nicht**, **und `pop` laeuft nur ueber den Stapel, den
+                // `push` gebaut hat.**
+                //
+                // **Und `!inBattle()` heisst: es wird nichts getan und
+                // es ist kein Fehler** -- **denn die Engine prueft es
+                // selbst und geht weiter.**
+                if (pFacts.InBattle)
+                {
+                    pFacts.Notices.Add(
+                        "352 Save was asked for in a battle, and the "
+                        + "engine's own `if (!$gameParty.inBattle())` "
+                        + "does nothing at all");
+                    return true;
+                }
+
+                pFacts.Szene.Schiebe("Scene_Save");
+                pActions.Add(new MzAction(pCommand,
+                    "the save screen is shown, and the scene it came from "
+                    + "is remembered so the player can come back out of "
+                    + "it"));
+                return true;
+            }
+
+            case MzCommandTable.ReturnToTitle:
+            {
+                // **Und `command354` ist `goto` und nicht `push`:**
+                //
+                // ```js
+                // SceneManager.goto(Scene_Title);
+                // return true;
+                // ```
+                //
+                // **Und das ist der ganze Unterschied** -- **und ein Leser,
+                // der beides gleichsetzt, wuerde dem Spieler einen
+                // Titelschirm anbieten, aus dem er zurueck auf die
+                // Karte kann, und die Engine bietet das nicht.**
+                pFacts.Szene.GeheZu("Scene_Title");
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Szene.CanPop
+                        ? "the title screen comes up, and whatever was "
+                            + "under it is gone, because `goto` does not "
+                            + "push and this reader will not pretend "
+                            + "otherwise"
+                        : "the title screen comes up, and there was "
+                            + "nothing under it to begin with"));
+                return true;
+            }
+
+            case MzCommandTable.GameOver:
+            {
+                // **Und `command353` ist wieder eine Zeile** -- **`goto`,
+                // nicht `push`** -- **und dieses Spiel schreibt es
+                // nullmal, also gibt es hier nichts zu messen, und die
+                // Form ist die von `354`.**
+                pFacts.Szene.GeheZu("Scene_Gameover");
+                pActions.Add(new MzAction(pCommand,
+                    "the game-over screen comes up"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeClass:
+            {
+                // **Und `command321`:**
+                //
+                // ```js
+                // const actor = $gameActors.actor(this._params[0]);
+                // if (actor && $dataClasses[this._params[1]]) {
+                //     actor.changeClass(this._params[1], this._params[2]);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und beide Bedingungen sind echte** -- **`if (actor)`
+                // gegen eine Actor-Id, die es nicht gibt, und
+                // `$dataClasses[params[1]]` gegen eine Klasse, die es
+                // nicht gibt** -- **und `changeClass` nimmt einen dritten
+                // Wert, und der ist `init` in MZ und nicht in MV.**
+                var held = At(pCommand, 0);
+                var klasse = At(pCommand, 1);
+                if (!pFacts.PartyMembers.Contains(held))
+                {
+                    pFacts.Notices.Add(
+                        $"class change asked for actor {held}, and this "
+                        + "party does not hold them");
+                    return true;
+                }
+
+                pFacts.Classes.Add((held, klasse));
+                pActions.Add(new MzAction(pCommand,
+                    $"actor {held} changes to class {klasse}"));
+                return true;
+            }
+
+            case MzCommandTable.ChangeEquipment:
+            {
+                // **Und `command319`:**
+                //
+                // ```js
+                // const actor = $gameActors.actor(this._params[0]);
+                // if (actor) {
+                //     actor.changeEquipById(this._params[1],
+                //         this._params[2]);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und `changeEquipById` nimmt die Nummer der
+                // Ausruestung und eine Richtung** -- **und die Richtung
+                /// ist eins fuer anlegen und null fuer ablegen, und das
+                // ist die Reihenfolge von `changePartyMember` und nicht
+                // die von `121 Control Switches`.**
+                var traeger = At(pCommand, 0);
+                var ausruestungstyp = At(pCommand, 1);
+                var stueck = At(pCommand, 2);
+                if (!pFacts.PartyMembers.Contains(traeger))
+                {
+                    pFacts.Notices.Add(
+                        $"equipment asked for actor {traeger}, and this "
+                        + "party does not hold them");
+                    return true;
+                }
+
+                // **Und `changeEquipById` hat keine Richtung.** **Es ist
+                // `const slotId = etypeId - 1; if
+                // (this.equipSlots()[slotId] === 1) { this.changeEquip(
+                // slotId, $dataWeapons[itemId]); } else {
+                // this.changeEquip(slotId, $dataArmors[itemId]); }`**
+                // -- **der zweite Parameter ist der Typ des
+                // Ausruestungsplatzes und der dritte die Nummer des
+                // Stuecks.**
+                //
+                // **Und meine erste Fassung las den dritten als
+                // "anlegen oder ablegen"** -- **und das ist die Lesart
+                // von `129` und von `313`, und von keinem der beiden
+                // Nachbarn dieses Befehls.**
+                //
+                // **Und welche der beiden Tabellen es ist, entscheidet
+                // `equipSlots()` des Platzes** -- **und das steht im
+                // Darsteller, und nicht im Befehl**, **und es wird hier
+                // nicht geraten: der Platz und das Stueck werden
+                // aufgezeichnet.**
+                pFacts.Equipment.Add((traeger, stueck));
+                pActions.Add(new MzAction(pCommand,
+                    $"actor {traeger} wears item {stueck} in slot type "
+                    + ausruestungstyp
+                    + ", and whether that is a weapon or armour is "
+                    + "decided by the actor's own equipSlots(), which "
+                    + "this repository does not keep"));
+                return true;
+            }
 
             case MzCommandTable.ChangeHp:
             {

@@ -438,6 +438,60 @@ public sealed class MzBranchFacts
     public List<MzHpOrder> HpOrders { get; } = new();
 
     /// <summary>
+    /// Where the game is showing, and what it can go back to.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>352</c>, <c>354</c> and <c>351</c> all push or
+    /// goto a scene</strong>, <strong>and <c>push</c> and <c>goto</c>
+    /// are different operations</strong> -- <strong>so this is a stack
+    /// and not a flag.</strong>
+    /// </remarks>
+    public MzSceneStack Szene { get; } = new();
+
+    /// <summary>
+    /// The class each actor stands in, as a 321 ordered it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the order, not the class.</strong> <strong>MV's
+    /// <c>changeClass</c> takes the class id and a flag, and the class's
+    /// own levels come from <c>Classes.json</c></strong>, <strong>and
+    /// this repository keeps no actor</strong> -- <strong>so it keeps
+    /// that a change was asked for and by whom.</strong>
+    /// </remarks>
+    public List<(int Actor, int Class)> Classes { get; } = new();
+
+    /// <summary>
+    /// What each actor wears, as a 319 ordered it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>changeEquipById</c> takes a slot type and an item
+    /// id, and no direction at all.</strong> Measured at
+    /// <c>rpg_objects.js</c>:
+    /// </para>
+    /// <code>
+    /// changeEquipById(etypeId, itemId) {
+    ///     const slotId = etypeId - 1;
+    ///     if (this.equipSlots()[slotId] === 1) {
+    ///         this.changeEquip(slotId, $dataWeapons[itemId]);
+    ///     } else {
+    ///         this.changeEquip(slotId, $dataArmors[itemId]);
+    ///     }
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And that is the whole of it</strong> -- <strong>a slot, a
+    /// type decided by that slot's own <c>equipSlots()</c> entry, and an
+    /// item id.</strong> <strong>My first version read the third
+    /// parameter as "equip or unequip"</strong> -- <strong>which is the
+    /// reading of <c>129 Change Party Members</c>, and of
+    /// <c>313</c>'s third parameter</strong>, <strong>and of neither of
+    /// the two neighbours of this command.</strong>
+    /// </para>
+    /// </remarks>
+    public HashSet<(int Actor, int Item)> Equipment { get; } = new();
+
+    /// <summary>
     /// Which characters were asked for an animation.
     /// </summary>
     /// <remarks>

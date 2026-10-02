@@ -3034,7 +3034,27 @@ public sealed class MzEngineRuntime : IEngineRuntime
             }
         }
 
-        return true;
+        // **Und die Karte muss direkt unter `data/` liegen.**
+        //
+        // **Und das ist gemessen, und es ist ein zweiter Fall von der
+        // Sache mit `data/VN/`:** `D:/Itch/sister/www/data` enthaelt
+        // neben seinen 62 Karten **vier `GameLanguage`-Pakete** mit je
+        // fuenf Karten -- **GameLanguage0 bis GameLanguage3** -- **und
+        // jede dieser 20 Karten ist eine Kopie einer Hauptkarte mit
+        // uebersetzten Texten und ohne Feld `id`.**
+        //
+        // **Und `MapIdOf` faellt auf den Dateinamen zurueck**, **wenn
+        // `id` fehlt** -- **und `GameLanguage0/Map003.json` gibt ihm
+        // 003 und damit genau die Karte, die `data/Map003.json` auch
+        // beansprucht.** **Und alle 20 Paare haben verschiedene
+        // `events`.**
+        //
+        // **Und `IsMap` sieht bisher nur auf den Dateinamen**, **also hat
+        // jede Sprachkarte eine echte Karte ueberschrieben** -- **und
+        // welches gewinnt, entscheidet die Sortierung des Pfades.**
+        var ordner = Path.GetDirectoryName(pRelativePath)?
+            .Replace('\\', '/');
+        return string.IsNullOrEmpty(ordner) || !ordner.Contains('/');
     }
 
     private static int MapIdOf(MzDataFile pMap)

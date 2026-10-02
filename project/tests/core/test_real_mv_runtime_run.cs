@@ -96,6 +96,31 @@ public partial class TestRealMvRuntimeRun : TestBase
             "**and none of them was skipped** -- " + lauf.SkippedMaps.Count
                 + " skipped, and a reader that quietly skipped a map leaves "
                 + "a game with a hole in it and no word about it");
+
+        // **Und ein genauer Wert und nicht "mehr als null"** -- **denn
+        // "81 Karten" war gemessen, und die Zahl war falsch.**
+        //
+        // **Und `data/` enthaelt neben seinen 62 Dateien vier
+        // `GameLanguage`-Pakete mit je fuenf Karten**: **das sind 20
+        // Kopien echter Karten mit uebersetzten Texten und ohne Feld
+        // `id`**, **und `MapIdOf` faellt auf den Dateinamen zurueck**,
+        // **wenn `id` fehlt** -- **und `GameLanguage0/Map003.json` gibt
+        // ihm 003 und damit genau die Karte, die `data/Map003.json`
+        // auch beansprucht.** **Und alle 20 Paare haben verschiedene
+        // `events`.**
+        //
+        // **Und `IsMap` sah nur auf den Dateinamen**, **also hat
+        // `GameLanguage2/Map003.json` die Karte 3 ueberschrieben**, **und
+        // `MapCount` zaehlte beide.**
+        //
+        // **Und das ist derselbe Fehler wie bei `data/VN/`**, **und er
+        // ist die zweite Fassung derselben Sache:** **eine Karte, die
+        // nicht unter `data/` liegt, ist keine Karte dieses Spiels.**
+        AssertEq(lauf.MapCount, 61,
+            "**and sixty-one maps, and not eighty-one** -- "
+            + lauf.MapCount + " read, and the twenty extra ones were the "
+            + "language packs' copies of maps 3, 7, 18, 19 and 20, each "
+            + "of which overwrote the real map of that number");
         AssertTrue(lauf.CurrentMapId > 0, "**and it is on a map**");
         AssertEq(lauf.CurrentMapId, StartMapAusSystem(),
             "**and it is the one the project's own System.json names** -- "

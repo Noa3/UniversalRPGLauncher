@@ -252,6 +252,38 @@ public static class MzCommandTable
     /// <c>command311</c> -- <c>iterateActorEx</c> plus
     /// <c>changeHp</c>.
     /// </summary>
+    /// <summary>
+    /// <c>command352</c> -- <c>if (!$gameParty.inBattle()) {
+    /// SceneManager.push(Scene_Save); } return true;</c>
+    /// </summary>
+    public const int SaveGame = 352;
+
+    /// <summary>
+    /// <c>command354</c> -- <c>SceneManager.goto(Scene_Title); return
+    /// true;</c>, and a <c>goto</c> and not a <c>push</c>.
+    /// </summary>
+    public const int ReturnToTitle = 354;
+
+    /// <summary>
+    /// <c>command353</c> -- <c>SceneManager.goto(Scene_Gameover);
+    /// return true;</c>
+    /// </summary>
+    public const int GameOver = 353;
+
+    /// <summary>
+    /// <c>command321</c> -- <c>const actor = $gameActors.actor(params[0]);
+    /// if (actor &amp;&amp; $dataClasses[params[1]]) { actor.changeClass(
+    /// params[1], params[2]); } return true;</c>
+    /// </summary>
+    public const int ChangeClass = 321;
+
+    /// <summary>
+    /// <c>command319</c> -- <c>const actor = $gameActors.actor(params[0]);
+    /// if (actor) { actor.changeEquipById(params[1], params[2]); } return
+    /// true;</c>
+    /// </summary>
+    public const int ChangeEquipment = 319;
+
     public const int ChangeHp = 311;
 
     public const int ChangeActorState = 313;
