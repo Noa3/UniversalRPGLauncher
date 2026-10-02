@@ -15131,3 +15131,63 @@ game's own archive, its own `Scripts.rvdata2`, its own hundred and twenty-six
 scripts, decompressed.**
 
 **All 2233 tests passed.**
+
+
+## The VX engine's own default script set, and the one lexer rule the mod
+## corpus could not have found
+
+### And what this corpus is
+
+**Not a mod directory this time.** **This is the engine's own default set,
+unmodified, read out of `Random Dungeon/Data/Scripts.rvdata`** -- 186
+entries, 173 with code, 1 721 226 bytes of Ruby 1.8.
+
+**And it is the common denominator.** A player with a VX game and no mod has
+exactly these files. **So a parser that reads them reads what almost every VX
+player actually runs, and one that does not fails on the first unmodified
+game in the wild.**
+
+### And it found a real hole, on two of 173
+
+```text
+VX Standardsatz geparst: 171/173
+  カウンターステート:     A regular expression opened at offset 1358 is never closed.
+  スリップダメージ拡張:   A regular expression opened at offset 1005 is never closed.
+```
+
+**And both are the same thing: a `/.../ix` pattern that runs over more than
+one line.**
+
+### And the source, in `v1_8_1/parse.y`, `tokadd_string`:
+
+```c
+tokadd_string(func, term, paren, nest)
+    while ((c = nextc()) != -1) { ... }
+```
+
+**The only exit is EOF.** **A regular expression in Ruby runs over newlines,
+and this repository's lexer treated a newline as the end of one** -- and
+reported `never closed`, which is the message for an entirely different
+problem.
+
+### And after
+
+```text
+VX Standardsatz geparst: 173/173
+TestRealVxEngineScripts: 2/2
+All 2236 tests passed
+```
+
+**And the ninety-three mod scripts were not enough, and the reason is worth
+saying: a mod is written by whoever wrote the mod, and the engine's default
+set is written by nobody in particular, over twenty years.** It holds the
+shapes a mod never needs, because a mod never replaces `Window_Base`.
+
+### And one detour recorded because it nearly cost the diagnosis
+
+**The two failing scripts were extracted with a hand-written Python Marshal
+reader, which returned nothing at all** -- the same reader that disagreed on
+every VX file two commits ago. **The repository's own `MarshalReader` and its
+`AlsText` were used instead, and the two scripts came out in one run.**
+**`AlsText` is documented as "the only way a script body becomes text in this
+repository", and that comment was the instruction.**

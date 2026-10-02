@@ -2864,7 +2864,30 @@ public sealed class RubyLexer
         var klassenStart = -1;
         while (true)
         {
-            if (AtEnd || Current == '\n')
+            // **Und nur das Dateiende beendet einen Ausdruck, nicht der
+            // Zeilenumbruch.** **Gemessen an Rubys `tokadd_string` aus
+            // `v1_8_1/parse.y`:**
+            //
+            // ```text
+            // tokadd_string(func, term, paren, nest)
+            //     while ((c = nextc()) != -1) { ... }
+            // ```
+            //
+            // **Der einzige Ausstieg ist `EOF`.** **Ein `/.../x` ueber
+            // mehrere Zeilen ist in Ruby ein ganz normales Muster**, und
+            // zwei Skripte des VX-Standardsatzes schreiben genau das:
+            //
+            // ```text
+            // カウンターステート:    /<(?:COUNTER|カウンター)\s*([ASI])?...
+            //                       (\s+\d+[%％])?(\s*\/)?>/ix
+            // スリップダメージ拡張:  /<(?:SLIP|スリップ)\s*([HM]P)?...
+            //                       (?:\s*,\s*([\-\+]?\d+))?>/ix
+            // ```
+            //
+            // **Und 171 von 173 Skripten lasen sich, und genau diese zwei
+            // brachen ab** -- **mit `never closed`, was die Meldung fuer
+            // ein anderes Problem ist.**
+            if (AtEnd)
             {
                 // **Und endet der Text in einer offenen Klasse, ist das
                 // ein gueltiges Muster und kein halbes.** `/a[/` ist eins,
