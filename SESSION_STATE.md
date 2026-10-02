@@ -18872,6 +18872,62 @@ Spiel eine Karte geben, die anders aussieht als in MicroQuest.**
 All 2407 tests passed
 ```
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 21: eine Laufzeit, drei globale Werte
+
+**Und `RgssLaufzeit` setzt genau die drei, die MicroQuest vor der
+ersten Szene braucht**, -- **und alle drei sind gemessen:**
+
+```text
+Gesetzt: $data_tilesets aus Data/Tilesets.rxdata
+       | $game_map als Game_Map.new
+       | $game_player als Game_Player.new
+geladen: 1, verweigert: 0
+```
+
+**Und die beiden anderen sind KEINE Dateien**, -- **und sie entstehen
+mit `Game_Map.new` und `Game_Player.new`**, -- **denn die Klassen
+stehen in den 90 Skripten des Spiels**, -- **und `initialize` laeuft
+mit.**
+
+### Und MicroQuests eigenes `Game_Map#setup(1)` hat gearbeitet
+
+```text
+@map_id: 1
+@map: RPG::Map
+```
+
+**Und `@map` ist ein `RPG::Map` aus `Data/Map001.rxdata`**,
+-- **und das ist MicroQuests Code, der MicroQuests Datei liest.**
+
+**Und `@tileset_name` ist leer** -- **und das ist der Befund aus
+Stufe 19:** -- **`Game_Map#setup` liest
+`tileset.tileset_name`**, -- **und MicroQuests `RPG::Tileset` hat
+`@name`**.
+
+### Und ein Befund ueber MEINEN Testaufbau
+
+```text
+vor setup:  Laufzeit-Host 1, SpielHost 0
+nach setup: Laufzeit-Host 1, SpielHost 1
+```
+
+**Und es sind zwei Datenhosts** -- **die Laufzeit hat ihren eigenen,
+und `SpielHost` oeffnet beim Bauen einen zweiten.**
+
+**Und beide lesen dieselbe Platte und zaehlen fuer sich.**
+
+**Und das ist kein Fehler des Spiels und keiner des Lesers**,
+-- **es ist eine Eigenschaft meines Testaufbaus**,
+-- **und die richtige Form ist EIN Host fuer beides.**
+
+**Und das ist die fifth time in dieser Folge, dass die Messung nicht
+das zeigte, was ich erwartet hatte** -- **und die fifth time hat sie
+etwas gezeigt, das ich gebraucht habe.**
+
+```
+All 2409 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

@@ -393,6 +393,33 @@ public sealed class RgssDatenHost : IRubyHost
     }
 
     /// <summary>
+    /// Loads one data file the way the game asks for it.
+    /// </summary>
+    /// <param name="pName">The name as written, e.g. <c>Data/Tilesets.rxdata</c>.</param>
+    /// <returns>The value, and null when the host refuses the name.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the door a runtime comes through.</strong>
+    /// <c>Scene_Title</c> writes nine lines and <c>Game_Map#setup</c>
+    /// writes one, -- <strong>and all ten say
+    /// <c>load_data("Data/…")</c></strong>, -- <strong>and a runtime
+    /// that assembles its own world has to be able to ask for those
+    /// ten files before the game's first scene runs.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the name is taken as written</strong>, -- because
+    /// that is how <c>load_data</c> is called, -- <strong>and a
+    /// helper that took a bare name would have to guess an extension
+    /// the caller already wrote.</strong>
+    /// </para>
+    /// </remarks>
+    public RubyValue? Lade(string pName) => CallMethod(
+        RubyValue.OfSymbol("Kernel"),
+        "load_data",
+        new[] { RubyValue.OfBytes(System.Text.Encoding.UTF8
+            .GetBytes(pName ?? string.Empty)) });
+
+    /// <summary>
     /// The name the game writes for a map file.
     /// </summary>
     /// <param name="pMapId">The map's own number.</param>
