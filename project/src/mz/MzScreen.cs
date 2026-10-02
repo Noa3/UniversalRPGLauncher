@@ -150,6 +150,145 @@ public sealed class MzScreen
     /// <c>realPictureId</c> asks before it decides.</summary>
     public bool InBattle { get; init; }
 
+    /// <summary>
+    /// The colour the screen is washed in, and how long it takes to get
+    /// there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>223 Screen Tint</c>, and the engine keeps four
+    /// numbers and not one</strong>: <c>$gameScreen.startTint(params[0],
+    /// params[1])</c> <strong>copies the whole list and gives it a
+    /// duration</strong>, <strong>and a reader that kept only the three
+    /// channels it expected would drop the fourth the editor wrote
+    /// alongside them.</strong>
+    /// </para>
+    /// <para>
+    /// <code>
+    /// startTint(tone, duration) {
+    ///     this._toneTarget = tone.clone();
+    ///     this._toneDuration = duration;
+    ///     if (this._toneDuration === 0) {
+    ///         this._tone = this._toneTarget.clone();
+    ///     }
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And a duration of zero copies the target straight
+    /// over</strong>, <strong>which is the one case where the tint is there
+    /// at once.</strong>
+    /// </para>
+    /// </remarks>
+    public int[] Tone { get; private set; } = new int[] { 0, 0, 0, 0 };
+
+    /// <summary>Where the tint is going, and the same tone when it is not
+    /// moving.</summary>
+    public int[] TargetTone { get; private set; } = new int[] { 0, 0, 0, 0 };
+
+    /// <summary>Frames of tint left, as the engine's
+    /// <c>_toneDuration</c>.</summary>
+    public int ToneDuration { get; private set; }
+
+    /// <summary>Whether a tint is on its way, which is what a wait asks
+    /// about.</summary>
+    public bool ToneIsMoving => ToneDuration > 0;
+
+    /// <summary>
+    /// Begin a tint, the way the engine's <c>startTint</c> does.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the tone starts where it is and not at
+    /// nothing.</strong> <strong>The engine moves the existing colour toward
+    /// the new one and keeps the old one until the first frame runs</strong>
+    /// -- <strong>and a reader that set the tone to the target here would
+    /// skip every frame of the change.</strong>
+    /// </remarks>
+    public string StarteTon(int[] pTon, int pDauer)
+    {
+        TargetTone = Vier(pTon);
+        ToneDuration = pDauer > 0 ? pDauer : 0;
+        if (ToneDuration == 0)
+        {
+            Tone = new int[] { TargetTone[0], TargetTone[1],
+                               TargetTone[2], TargetTone[3] };
+        }
+
+        return "tint " + Tone[0] + "," + Tone[1] + "," + Tone[2]
+            + "," + Tone[3]
+            + (ToneDuration > 0
+                ? " toward " + TargetTone[0] + "," + TargetTone[1] + ","
+                    + TargetTone[2] + "," + TargetTone[3]
+                    + " over " + ToneDuration + " frames"
+                : " at once");
+    }
+
+    /// <summary>
+    /// One frame of the tint, and the engine's <c>updateTone</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is not a fixed step toward the target.</strong> The
+    /// engine moves a <b>fraction</b> of the way on every frame, and the
+    /// fraction is the rest of the duration, so a tint covers most of its
+    /// distance in its first frames and eases into the last:
+    /// </para>
+    /// <code>
+    /// updateTone() {
+    ///     if (this._toneDuration &gt; 0) {
+    ///         const d = this._toneDuration;
+    ///         for (let i = 0; i &lt; 4; i++) {
+    ///             this._tone[i] =
+    ///                 (this._tone[i] * (d - 1) + this._toneTarget[i]) / d;
+    ///         }
+    ///         this._toneDuration--;
+    ///     }
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And a reader that stepped by <c>255 / duration</c> had the
+    /// wrong shape in two ways at once</strong> -- <strong>a fixed step is
+    /// not an easing one</strong>, <strong>and the engine's numbers are the
+    /// colour itself and not an opacity over it.</strong>
+    /// </para>
+    /// </remarks>
+    public void TickTon()
+    {
+        if (ToneDuration <= 0)
+        {
+            return;
+        }
+
+        var d = ToneDuration;
+        for (var i = 0; i < 4; i++)
+        {
+            Tone[i] = (Tone[i] * (d - 1) + TargetTone[i]) / d;
+        }
+
+        ToneDuration--;
+    }
+
+    /// <summary>
+    /// Four numbers out of a parameter that is a list, in the order the
+    /// engine reads them.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>updateTone</c> walks <c>i &lt; 4</c> and not
+    /// three</strong>, <strong>so the fourth number is read by the engine
+    /// and a reader that kept three would be one short.</strong>
+    /// </remarks>
+    private static int[] Vier(int[] pTon)
+    {
+        return new int[]
+        {
+            pTon.Length > 0 ? pTon[0] : 0,
+            pTon.Length > 1 ? pTon[1] : 0,
+            pTon.Length > 2 ? pTon[2] : 0,
+            pTon.Length > 3 ? pTon[3] : 0,
+        };
+    }
+
+
     private readonly Dictionary<int, Picture> _pictures = new();
 
     /// <summary>Something a command asked for and could not do, in order.</summary>
@@ -638,6 +777,12 @@ public sealed class MzScreen
     /// </summary>
     public void PassFrame()
     {
+        // **Und der Ton laeuft auf demselben Bild wie die Bilder**, **denn
+        // `Game_Screen.update` ruft `updateTone` zwischen `updatePicture`
+        // und `updateWeather`, und ein Lauf, der den Ton nicht mitnimmt,
+        // laesst eine Einfaerbung fuer unendlich stehen.**
+        TickTon();
+
         // **Und die Audio-Fades laufen auf demselben Bild wie die
         // Bilder** -- **denn ein Befehl, der ein Bild dreht und
         // gleichzeitig die Musik ausblaendet, hat beide mit derselben

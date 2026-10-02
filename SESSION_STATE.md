@@ -15971,3 +15971,116 @@ apart.**
 **`306` and `357` and `655` and `657` are all JavaScript, and `AGENTS.md`
 forbids this repository from executing a project's scripts.** **And that is
 not a gap in the reader; it is the answer.**
+
+
+## 214 and 223: the second most frequent command in the game, and a tint
+## whose rule I got from memory and the engine refuted
+
+### And what the measurement said
+
+```text
+Startkarte Map002: 179 Befehle
+  gedeckt 74 (41%), ohne Methode 84, UNGEDECKT 21 (11%)
+
+Die ungedeckten, haeufigste:
+  356 18x   <- im vorigen Commit behoben
+  223  1x
+  214  1x
+```
+
+**And over the whole game:**
+
+```text
+D:/Itch/sister/www:
+    214 Erase Event      165x   <- der zweithaeufigste Befehl ueberhaupt
+    223 Screen Tint        4x
+Map002: 223 = 1, 214 = 1     <- beide auf der Startkarte
+```
+
+### And the engine's own lines
+
+```javascript
+command214() {
+    if (this.isOnCurrentMap() && this._eventId > 0) {
+        $gameMap.eraseEvent(this._eventId);
+    }
+    return true;
+}
+
+command223() {
+    $gameScreen.startTint(this._params[0], this._params[1]);
+    if (this._params[2]) { this.wait(this._params[1]); }
+    return true;
+}
+
+startTint(tone, duration) {
+    this._toneTarget = tone.clone();
+    this._toneDuration = duration;
+    if (this._toneDuration === 0) {
+        this._tone = this._toneTarget.clone();
+    }
+}
+
+updateTone() {
+    if (this._toneDuration > 0) {
+        const d = this._toneDuration;
+        for (let i = 0; i < 4; i++) {
+            this._tone[i] = (this._tone[i] * (d - 1) + this._toneTarget[i]) / d;
+        }
+        this._toneDuration--;
+    }
+}
+```
+
+### And three things that were wrong and are now measured
+
+**One: four channels, not three.** **The first draft of the comment said
+"the engine reads three, the fourth is an alpha the editor counts."**
+**`updateTone` walks `for (let i = 0; i < 4; i++)` in the same file, thirty
+lines below.** **The editor's own help names three colour channels, and the
+help is not the engine.** **And a helper that returned three was one
+short.**
+
+**Two: the step is a fraction and not a fixed number.** **The first draft
+wrote `this._toneOpacity -= 255 / this._toneDuration` -- which is MZ's
+shaped rule, and in MV there is no `_toneOpacity` at all.** **The engine
+moves `(tone * (d - 1) + target) / d`, so the first frame of a sixty-frame
+tint covers one sixtieth of the way and the last covers one part in
+one.** **And it eases, which a fixed step does not.**
+
+**Three: `startTint` writes the target and not the tone.** **The first
+draft set the tone to the target and the opacity to zero, and a tint that
+appeared on the first frame would skip every frame the game asked
+for.** **This game's tint is nine hundred and ninety-nine frames long, and
+that is a colour the screen keeps on purpose.**
+
+### And 222 against 214, which is the pair that is easy to confuse
+
+```text
+222 Erase Event      removes the running event until the party leaves the map
+214 Erase Event      takes it off the map's own list
+```
+
+**And both carry no parameters at all**, **so nothing in the command's own
+shape tells them apart.** **And `214` needed state that did not exist: a
+map's event list, with the rule that `delete` is a delete and not an
+assignment, so a later page cannot run against it.**
+
+### And after
+
+```text
+MV sister: 133484 Befehle, 123902 gedeckt (92%)   <- 123733, +169 = 165x 214 + 4x 223
+TestMvEraseAndTint: 6/6
+TestRealMvRuntimeRun: 2/2
+All 2268 tests passed
+```
+
+**And the run is still stopped at the same place, and that is honest:**
+
+```text
+Stopped=Refused, Grund=a branch on the author's own script:
+```
+
+**Because Map002's second event spends its hundred and seventeen commands
+on a `355` block, and `AGENTS.md` forbids running a project's JavaScript.**
+**The tint and the erase are behind it.**

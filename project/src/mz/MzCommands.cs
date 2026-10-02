@@ -93,6 +93,13 @@ public static class MzCommands
     /// </remarks>
     public static bool HasEffect(int pCode) =>
         pCode is MzCommandTable.ScrollText
+            // **Und `214` und `223` standen nicht im Tor**, **und ein
+            // Befehl, der nicht im Tor steht, wird nie ausgefuehrt und
+            // als ausgefuehrt gemeldet** -- **und `214` ist der
+            // zweithaeufigste Befehl im ganzen MV-Spiel mit 165
+            // Verwendungen.**
+            or MzCommandTable.EraseEventFromMap
+            or MzCommandTable.ScreenTint
             or MzCommandTable.ScreenShake
             or MzCommandTable.RecoverAll
             or MzCommandTable.ShowText
@@ -880,6 +887,101 @@ public static class MzCommands
 
                 return true;
             }
+
+            case MzCommandTable.EraseEventFromMap:
+            {
+                // **Und `command214` in voller Laenge, und sie ist drei
+                // Zeilen:**
+                //
+                // ```js
+                // if (this.isOnCurrentMap() && this._eventId > 0) {
+                //     $gameMap.eraseEvent(this._eventId);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und die Wache ist `isOnCurrentMap() && _eventId > 0`
+                // und nicht eine Pruefung der Liste** -- **denn ein
+                // gemeinsames Ereignis hat keine Karte, und ein `214`
+                // darin waere ein Befehl ohne Ziel.**
+                //
+                // **Und gemessen an `D:/Itch/sister/www`: 165 Verwendungen,
+                // mehr als jeder andere Befehl ausser `355` und `108`** --
+                // **und es ist der Befehl, der eine Truhe oder eine Tuer
+                // wegnimmt, nachdem der Spieler sie genommen hat.**
+                if (pInterpreter.MapId > 0 && pInterpreter.EventId > 0)
+                {
+                    var da = pFacts.Map.Erase(pInterpreter.EventId);
+                    pActions.Add(new MzAction(pCommand,
+                        da == null
+                            ? $"event {pInterpreter.EventId} is erased from "
+                                + $"map {pInterpreter.MapId}"
+                            : da + " is erased from map "
+                                + pInterpreter.MapId));
+                }
+                else
+                {
+                    pFacts.Notices.Add(
+                        "214 Erase Event did nothing, because it ran without "
+                        + "a map and an event: MapId "
+                        + pInterpreter.MapId + ", EventId "
+                        + pInterpreter.EventId + ". The engine's own guard "
+                        + "is isOnCurrentMap() && this._eventId > 0.");
+                    pActions.Add(new MzAction(pCommand,
+                        "erasing an event was asked for without a map and "
+                        + "an event, and the engine's guard stops there too"));
+                }
+
+                return true;
+            }
+
+
+            case MzCommandTable.ScreenTint:
+            {
+                // **Und `command223` in voller Laenge:**
+                //
+                // ```js
+                // $gameScreen.startTint(this._params[0], this._params[1]);
+                // if (this._params[2]) { this.wait(this._params[1]); }
+                // return true;
+                // ```
+                //
+                // **Und `startTint` nimmt eine Farbe und eine Dauer, und
+                // der dritte Wert ist ein Wahrheitswert und keine Zahl.**
+                //
+                // **Und die Karte, die diesen Befehl traegt, schreibt
+                // `[[-68, -68, -68, 0], 999, false]` -- also eine
+                // Einfaerbung ueber neunhundertneunundneunzig Bilder und
+                // ohne Warten.** **Und eine Einfaerbung, die nie fertig
+                // wird, ist Absicht und kein Fehler.**
+                //
+                // **Und der erste Wert ist ein Vierer und steht in einem
+                // eigenen Array**, **und `updateTone` laeuft mit
+                // `for (let i = 0; i < 4; i++)` ueber vier Kanäle und
+                // nicht ueber drei** -- **das ist aus `rpg_objects.js`
+                // gelesen und nicht aus dem Gedächtnis, denn die erste
+                // Fassung dieses Kommentars behauptete, die Engine lese
+                // drei, und `updateTone` widerlegt das im selben
+                // Bildschirm.**
+                var ton = Vier(pCommand, 0);
+                var dauer = At(pCommand, 1);
+                var warten = Flag(pCommand, 2);
+                pFacts.Screen.StarteTon(ton, dauer);
+                pActions.Add(new MzAction(pCommand,
+                    $"the screen is tinted {ton[0]},{ton[1]},{ton[2]}"
+                    + $",{ton[3]}"
+                    + (dauer > 0
+                        ? $" over {dauer} frames"
+                        : " at once")));
+                if (warten)
+                {
+                    pInterpreter.Wait(dauer);
+                    return false;
+                }
+
+                return true;
+            }
+
 
             case MzCommandTable.RecoverAll:
             {
@@ -1826,6 +1928,70 @@ static bool TryOperand(
             System.Globalization.CultureInfo.InvariantCulture, out var value)
             ? value
             : 0;
+
+
+    /// <summary>
+    /// A parameter that is itself a list of numbers, read as four of them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a different shape from every other parameter in
+    /// this table.</strong> Measured on a finished project:
+    /// <c>223 [[-68, -68, -68, 0], 999, false]</c> -- <strong>and the
+    /// first parameter is a list and not a number.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And there are four numbers in it and the engine reads
+    /// four.</strong> <c>updateTone</c> <strong>walks
+    /// <c>for (let i = 0; i &lt; 4; i++)</c></strong>, <strong>and a first
+    /// draft of this helper read three because the editor's own help names
+    /// three colour channels -- and the help is not the engine.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a reader that used <see cref="At"/> here got
+    /// zero</strong> -- <strong>because <c>At</c> parses the parameter as
+    /// text and this one is a list</strong> -- <strong>and a screen that is
+    /// tinted to zero, zero, zero is a screen that is not tinted.</strong>
+    /// </para>
+    /// </remarks>
+    internal static int[] Vier(MzCommandEntry pCommand, int pIndex)
+    {
+        var ergebnis = new int[] { 0, 0, 0, 0 };
+        if (pIndex >= pCommand.Parameters.Count)
+        {
+            return ergebnis;
+        }
+
+        var roh = pCommand.Parameters[pIndex];
+        var offen = roh.IndexOf('[');
+        var zu = roh.LastIndexOf(']');
+        if (offen < 0 || zu <= offen)
+        {
+            ergebnis[0] = At(pCommand, pIndex);
+            return ergebnis;
+        }
+
+        // **Und `MzCommandEntry.From` schreibt einen verschachtelten Wert
+        // mit `MzJson.Write` und **ohne** Leerzeichen** -- **gemessen an
+        // `D:/Itch/sister/www`: `[-68,-68,-68,0]`**. **Und ein Leser, der
+        // an `", "` trennt, haette hier vier Teile mit je einem Minus und
+        // einem Leerzeichen und keine Zahl.**
+        var inhalt = roh.Substring(offen + 1, zu - offen - 1);
+        var teile = inhalt.Split(',');
+        for (var i = 0; i < 4 && i < teile.Length; i++)
+        {
+            if (int.TryParse(
+                teile[i].Trim(),
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var zahl))
+            {
+                ergebnis[i] = zahl;
+            }
+        }
+
+        return ergebnis;
+    }
 
     /// <summary>
     /// Every number from the first to the last, both ends in, which is what the

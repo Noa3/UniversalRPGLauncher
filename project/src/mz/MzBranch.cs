@@ -276,6 +276,35 @@ public sealed class MzBranchFacts
     /// </summary>
     public MzScreen Screen { get; init; } = new();
 
+    /// <summary>
+    /// The events the current map carries, and which of them are gone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is what <c>214</c> removes an event from</strong>,
+    /// <strong>and it is not the same thing as <c>222</c>, which removes
+    /// the running event until the party leaves the map</strong> -- <strong>
+    /// and both carry no parameters, so a reader that gave them one meaning
+    /// could not tell them apart.</strong>
+    /// </para>
+    /// <para>
+    /// <para>
+    /// <strong>And the engine's line is
+    /// <c>$gameMap.eraseEvent(this._eventId)</c></strong>, <strong>which
+    /// takes the event out of the map's own list and does not touch
+    /// anything else</strong> -- <strong>a treasure chest that was opened
+    /// and a door that was walked through are gone from the map and come
+    /// back when the party returns to it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it needs both the map and the event, and a common event
+    /// has neither</strong> -- <strong>which is why the engine guards it
+    /// with <c>isOnCurrentMap() &amp;&amp; this._eventId &gt; 0</c> and not
+    /// with a check on the list.</strong>
+    /// </para>
+    /// </remarks>
+    public MzMapState Map { get; init; } = new();
+
     /// <summary>How fast the scroll text runs, and what it says.</summary>
     /// <remarks>
     /// <strong>And these come from <c>105 Scroll Text</c>, measured at

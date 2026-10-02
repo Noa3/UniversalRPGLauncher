@@ -194,6 +194,51 @@ public static class MzCommandTable
     /// </para>
     /// </remarks>
     public const int PluginCommandCall = 356;
+    /// <summary>
+    /// The colour the screen is washed in, and how long that takes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the engine's line is
+    /// <c>$gameScreen.startTint(this._params[0], this._params[1])</c>, and
+    /// then <c>if (this._params[2]) { this.wait(this._params[1]); }</c>
+    /// -- so the third parameter is not a colour and not a duration but
+    /// <strong>whether the page waits for the tint</strong>.</strong>
+    /// <strong>And a reader that read it as a number would wait when the
+    /// game said not to and not wait when it said yes.</strong>
+    /// </para>
+    /// </remarks>
+    public const int ScreenTint = 223;
+
+    /// <summary>
+    /// Remove the event this page belongs to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command214() {
+    ///     if (this.isOnCurrentMap() &amp;&amp; this._eventId &gt; 0) {
+    ///         $gameMap.eraseEvent(this._eventId);
+    ///     }
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And it carries no parameters at all</strong>, <strong>and it
+    /// is the second most frequent command in the MV game this repository
+    /// reads: one hundred and sixty-five uses.</strong> <strong>And it is
+    /// the one that takes a chest or a sign or a door away after the player
+    /// has had what was behind it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>222</c> is a different command with a similar
+    /// name</strong> -- <strong>that one removes the running event
+    /// temporarily and until the party leaves the map</strong>, <strong>and
+    /// this one removes it from the map's own list.</strong>
+    /// </para>
+    /// </remarks>
+    public const int EraseEventFromMap = 214;
 
     /// <summary>
     /// One line of text. **It has no <c>command401</c> method** — the engine
