@@ -16986,6 +16986,51 @@ TestMvArithmeticConditions: 7/7
 All 2332 tests passed
 ```
 
+## 2026-10-02 — Die Kleidung: 982 auf 1166 beantwortbar
+
+**Der naechste Block waren Bildschirmnamen, und die kennt dieses
+Repository bereits.**
+
+```text
+232x  $gameScreen._pictures[7]._name === "yoru_itazura/shortpants_normal"
+```
+
+**Und das sind Kleidungsstuecke eines Spiels**, **und ihre
+Bedingungen entscheiden, was der Spieler anhat** -- **und der
+Feldname `_name` ist genau der, den `MzScreen.Picture.Name` fuehrt.**
+
+**Und es gibt drei Vergleichsformen** -- **und `===`, `==`, `!==`
+und `!=`** -- **und eine Formleser, die `!==` vergisst, verweigert
+jedes "nicht dieses Kleidungsstueck", das das Spiel schreibt.**
+
+**Und die zweite Form des Spiels ist zwei Fragen:**
+
+```
+$gameScreen.picture(4) && $gameScreen._pictures[6]._name === "..."
+```
+
+**Und ein Slot ohne Bild hat keinen Namen** -- **und ein Spiel, das ein
+Bild noch nie gezeigt hat, vergleicht also gegen `""`** -- **und das
+ist eine leere Ueberpruefung und kein Fehler.**
+
+**Und die vier Bloecke, die jetzt noch bleiben, sind alle Spielzustand
+aus Plugins und keiner davon ist Maschinenzustand:**
+
+```text
+ 295x  Math.random()                       Zufall, nicht beantwortbar
+ 284x  this.count                         Ereigniszaehler eines Plugins
+ 265x  $gameActors.actor(2).equips()[k]    Plugin-Ruestung
+ 124x  $gameActors.actor(2).isStateAffected(33)
+  69x  $gameSystem._drill_GFV_bindTank    Plugin-Zustand
+  46x  $gameScreen.zoomScale() == 1        Plugin-Bildschirm
+```
+
+```text
+MV Skript-Bedingungen: 1166 von 4952 beantwortbar (23 %)
+  vorher 982, also 19 %
+All 2332 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

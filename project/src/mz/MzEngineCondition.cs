@@ -174,6 +174,129 @@ public static class MzEngineCondition
     /// about the machine.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Whether the text asks about the name of one picture, and which.
+    /// </summary>
+    /// <param name="pText">The expression, without a leading bang.</param>
+    /// <param name="pFacts">Where the pictures are.</param>
+    /// <param name="pDa">Whether a picture stands in that slot.</param>
+    /// <param name="pName">And its name.</param>
+    /// <param name="pGleich">Whether the comparison holds.</param>
+    /// <returns>
+    /// Whether this is that expression at all, and not something else.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the three forms are <c>===</c>, <c>==</c> and
+    /// <c>!==</c></strong> -- <strong>and a form that forgets the third
+    /// one refuses every "not this outfit" the game writes.</strong>
+    /// </para>
+    /// <code>
+    /// $gameScreen._pictures[7]._name === "yoru_itazura/shortpants_normal"
+    /// $gameScreen.picture(4) &amp;&amp; $gameScreen._pictures[6]._name === "..."
+    /// </code>
+    /// <para>
+    /// <strong>And the second form is two questions with
+    /// <c>&amp;&amp;</c> between them</strong>, <strong>and
+    /// <c>$gameScreen.picture(4)</c> is the engine's own
+    /// <c>Game_Screen.prototype.picture(n)</c></strong>, <strong>which
+    /// answers whether the slot holds one.</strong>
+    /// </para>
+    /// </remarks>
+    private static bool LiesBildnamen(
+        string pText, MzBranchFacts pFacts,
+        out bool pDa, out string pName, out bool pGleich)
+    {
+        pDa = false;
+        pName = "";
+        pGleich = false;
+        const string kopf = "$gameScreen._pictures[";
+        var stelle = pText.IndexOf(kopf, StringComparison.Ordinal);
+        if (stelle < 0)
+        {
+            return false;
+        }
+
+        var klammer = pText.IndexOf(']', stelle + kopf.Length);
+        if (klammer < 0
+            || !int.TryParse(pText.Substring(
+                stelle + kopf.Length, klammer - stelle - kopf.Length),
+                System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var slot))
+        {
+            return false;
+        }
+
+        var rest = pText.Substring(klammer + 1).TrimStart();
+        if (!rest.StartsWith("._name", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        rest = rest.Substring("._name".Length).TrimStart();
+        (string Name, bool verkehrt)? gewuenscht = null;
+        if (rest.StartsWith("===", StringComparison.Ordinal))
+        {
+            gewuenscht = BeschneideAnfuehrungszeichen(
+                rest.Substring(3).Trim(), false);
+        }
+        else if (rest.StartsWith("==", StringComparison.Ordinal))
+        {
+            gewuenscht = BeschneideAnfuehrungszeichen(
+                rest.Substring(2).Trim(), false);
+        }
+        else if (rest.StartsWith("!==", StringComparison.Ordinal))
+        {
+            gewuenscht = BeschneideAnfuehrungszeichen(
+                rest.Substring(3).Trim(), true);
+        }
+        else if (rest.StartsWith("!=", StringComparison.Ordinal))
+        {
+            gewuenscht = BeschneideAnfuehrungszeichen(
+                rest.Substring(2).Trim(), true);
+        }
+
+        if (gewuenscht == null)
+        {
+            return false;
+        }
+
+        // **Und `picture(n)` sagt, ob ueberhaupt ein Bild da ist**, **und
+        // ein leerer Slot hat keinen Namen** -- **und ein Spiel, das ein
+        // Bild noch nie gezeigt hat, vergleicht also gegen `""`.**
+        pDa = false;
+        pName = "";
+        foreach (var paar in pFacts.Screen.Pictures)
+        {
+            if (paar.Key == slot)
+            {
+                pDa = true;
+                pName = paar.Value.Name;
+                break;
+            }
+        }
+
+        var gleich = pName == gewuenscht.Value.Name;
+        pGleich = gewuenscht.Value.verkehrt ? !gleich : gleich;
+        return true;
+    }
+
+    /// <summary>
+    /// A quoted name, and whether the question was a "not this one".
+    /// </summary>
+    private static (string Name, bool verkehrt)? BeschneideAnfuehrungszeichen(
+        string pText, bool pVerkehrt)
+    {
+        if (pText.Length < 2 || pText[0] != '"'
+            || pText[pText.Length - 1] != '"')
+        {
+            return null;
+        }
+
+        return (pText.Substring(1, pText.Length - 2), pVerkehrt);
+    }
+
     private static string PlatzhalterDateiFuer(string pFeld) => pFeld switch
     {
         "isDLsite" => "DLsite.json",
@@ -249,6 +372,29 @@ public static class MzEngineCondition
         if (text == "Utils.isMobileDevice()")
         {
             wert = IsMobileDevice;
+        }
+        else if (LiesBildnamen(text, pFacts, out var bildDa,
+            out var bildName, out var bildGleich))
+        {
+            // **Und `_pictures[n]._name` ist der Name, den dieses
+            // Repository dem Bild gegeben hat** -- **und es ist genau
+            // der Feldname, den das Plugin liest**, **und nicht eine
+            // Frage ueber den Spielstand.**
+            //
+            // ```js
+            // $gameScreen._pictures[7]._name === "yoru_itazura/
+            //                                     shortpants_normal"
+            // ```
+            //
+            // **Und gemessen an `sister/www`: 232mal** -- **und das
+            // sind Kleidungsstuecke dieses Spiels**, **und ihre
+            // Bedingungen entscheiden, was der Spieler anhat.**
+            //
+            // **Und ein Slot ohne Bild hat den leeren Namen**, **und
+            // ein Spiel, das `231` noch nicht gezeigt hat, vergleicht
+            // also gegen nichts** -- **und das ist eine leere
+            // Ueberpruefung und nicht ein Fehler.**
+            wert = bildDa && bildGleich;
         }
         else if (text.StartsWith("ConfigManager.",
             StringComparison.Ordinal))
