@@ -17541,6 +17541,103 @@ Map006 Event 7:   26 Befehle, Index  21, und  21 ist das `0`
 MV Map231 E2:    445 Befehle, Index 440, und 440 ist ein `201`
 ```
 
+## 2026-10-02 — Kriterien 4, 5, 6: XP und VX lesen ihre Karten
+
+**Und ich habe die ganze Zeit behauptet, XP/VX/VX Ace haetten nur
+Erkennung und Ruby-Marshalling.**
+
+**Und `RgssEngineRuntime` hat 334 Zeilen und fuehrt keinen einzigen
+Befehl aus.**
+
+**Und auf dieser Maschine liegen zwei vollstaendige Ruby-Maker-
+Projekte** -- **MicroQuest (XP, 24 Karten, 38 Data-Dateien)** und
+**Random Dungeon (VX, 657 Karten, 671 Dateien)** -- **und ihre Karten
+sind Marshal-Dateien, die der vorhandene `MarshalReader` bereits
+lesen kann.**
+
+**Und sie wurden nie gelesen.**
+
+### Und der erste Entwurf war falsch, und die Messung hat es gezeigt
+
+**Und ich habe zuerst geschrieben, eine Karte sei ein flaches Array.**
+
+**Und die Sonde gegen MicroQuest hat geantwortet:**
+
+```
+=== Map001.rxdata: Art=object, Elemente=11, Schluessel=11, Klasse=RPG::Map
+  @events = Art hash, Elemente 2, Schluessel 1
+  @width = 20    @height = 15    @data = Art user defined
+=== Map001.rvdata: Art=object, Elemente=18, Schluessel=18, Klasse=RPG::Map
+  @events = Art hash, Elemente 86, Schluessel 43
+  @width = 70    @height = 25
+```
+
+**Und XP hat elf Felder und VX achtzehn**, -- **und ein Index, der
+fuer den einen stimmt, ist fuer den anderen falsch.**
+
+**Und jetzt wird jedes Feld nach dem Namen der Engine gelesen.**
+**Und das ist der Unterschied zwischen einem Leser, der geht, und
+einem, der selbstbewusst falsch liegt.**
+
+### Und der Hash hat Schluessel und Wert in einer Liste
+
+**Und der zweite Fehler war derselbe Fehler: geraten statt gemessen.**
+
+```csharp
+var erstesEreignis = wert.Items[i].Items[ersterIndex];   //  falsch
+var erstesEreignis = wert.Items[i].Items[ersterIndex * 2 + 1];  //  richtig
+```
+
+**Und das Protokoll sagte `Art integer` fuer ein Ereignis, das ein
+`RPG::Event` ist** -- **und das war die richtige Antwort auf die
+falsche Frage.**
+
+### Und ein Befehl ist auch kein Array
+
+```text
+Befehl 0: Klasse RPG::EventCommand, 3 Felder
+  @code = 135    @indent = 0    @parameters = array, 6
+Befehl 1: Klasse RPG::EventCommand, 3 Felder
+  @code = 134    @indent = 0    @parameters = array, 8
+```
+
+**Und 135, 134, 209, 509, 223, 106, 201, 0 sind XP-Befehle**, --
+**das heisst MicroQuest liest jetzt zum ersten Mal seine eigenen
+Anweisungen.**
+
+### Und meine eigenen Testbehauptungen waren falsch
+
+```text
+XP Map001 GAME START: 8 Befehle, Codes: 135 134 209 509 223 106 201 0
+VX Map001: 31 EV-Namen, eigene: ENEMY2! x8
+VX Schalterbefehle: 128, Wortparameter: 128, Beispiele:
+  123: "A", 0 | 123: "B", 0 | 123: "A", 1 | 123: "B", 1
+```
+
+**Und ich hatte behauptet, alle 43 VX-Ereignisse hiessen `EV`**, --
+**und 31 tun das und 12 heissen `ENEMY2!`**, -- **und der Leser gibt
+beide unveraendert weiter.**
+
+**Und ich hatte behauptet, `"True"` sei der Wortparameter eines
+Schalters** -- **und gemessen sind es 121, 122 und 123**, und **123
+traegt "A", "B", "C" oder "D"**, -- **und genau das ist der Fall, an
+dem ein Leser, der Parameter als Zahlen liest, aus "A" die 0
+macht**, -- **und 0 ist kein gueltiger Selbstschalter.**
+
+**Und 128 Wortparameter bei 128 Befehlen** heisst: **kein einziger
+Selbstschalter dieser Karte ging verloren.**
+
+```
+TestRgssMapReader: 8/8 passed
+All 2354 tests passed
+```
+
+**Und was fehlt, ist ehrlich gesagt:** **es gibt noch keinen
+Befehlssatz fuer XP/VX.** **Karten, Ereignisse, Seiten, Bedingungen
+und Befehlslisten lesen ist nicht ausfuehren.** **Und der naechste
+Schritt ist `command101` bis `command355` gegen die RGSS-Skripte der
+Spiele selbst**, -- **und nicht gegen eine Erinnerung an RPG Maker.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
