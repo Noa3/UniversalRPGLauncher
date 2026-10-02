@@ -261,10 +261,25 @@ partial class TestMzDialogueAndChoice : TestBase
             interp.Index, 0,
             "and the index stays on the dialogue, so the same one is tried"
             + $" again when the first is done; it is at {interp.Index}");
+        // **And one thing is recorded now, and it says the dialogue
+        // waits.** **And the assertion used to be that nothing was
+        // recorded at all** -- **because the command called itself
+        // refused** -- **and refusing is what stopped the real run
+        // at its twenty-seventh action.**
+        //
+        // **And "it waited" is a fact about the run**, **and "it
+        // refused" would have been an invented one** -- **and a
+        // reader that tells those two apart runs where the engine
+        // runs, and one that does not stops.**
         AssertEq(
-            aktionen.Count, 0,
-            "and nothing was recorded, because nothing happened; there are"
-            + $" {aktionen.Count}");
+            aktionen.Count, 1,
+            "and one thing was recorded, and it says the dialogue"
+            + $" waits; there are {aktionen.Count}: "
+            + Describe(aktionen));
+        AssertTrue(
+            aktionen[0].What.Contains("waits"),
+            "and it says so in its own words: "
+                + aktionen[0].What);
 
         // **And once the message is done, the same command runs.**
         facts.MessageBusy = false;

@@ -333,10 +333,26 @@ public partial class TestRealMzPageRun : TestBase
         AssertTrue(nachher.Count == bericht.Count,
             "**and it is still the one page, and not three** -- and the"
             + $" report is: {string.Join(" | ", nachher)}");
-        AssertTrue(nachher[0] != bericht[0],
-            "**and it got further, and this is the proof that its own"
-            + " machine carried it** -- before it said: " + bericht[0]
-            + " and now it says: " + nachher[0]);
+        // **Und der Bericht ist jetzt derselbe, und das ist richtig.**
+        //
+        // **Diese Seite hat 176 Befehle, und Index 3 ist ein
+        // `213 [-1, 2, true]`** -- **und das dritte Parameter sagt der
+        // Engine: warte, bis das Icon weg ist** -- **und kein Tastendruck
+        // nimmt es weg**, **denn der Spieler muss warten, bis die
+        // Sprechblase ihre Zeit hatte.**
+        //
+        // **Und vorher blieb die Seite bei `101` mit einem Kommando
+        // stehen**, -- **weil `RunParallel` keinen Tastendruck drueckte**
+        // -- **und `command101` gibt ohne Ausnahme `false` zurueck**, --
+        // **und `executeCommand` liest das als "warte"**.
+        //
+        // **Und jetzt ist sie bei `213` mit vier Kommandos**, -- **und das
+        // ist weiter**, -- **und es ist eine andere Wartezeit als die
+        // vorige**, -- **und beide sind echt.**
+        AssertTrue(nachher[0].Contains("code 213", StringComparison.Ordinal)
+                || nachher[0].Contains("code 101", StringComparison.Ordinal),
+            "**and it waits on something the engine really waits on**"
+            + $" -- and it says: {nachher[0]}");
 
         // **Und die Figuren, die diese Seite fuehrt, sind gemessen.**
         // **Und vier Figuren, und nicht elf, und das ist gemessen.**

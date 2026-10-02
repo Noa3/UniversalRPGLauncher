@@ -1254,6 +1254,38 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     : _runner.Run(befehle, Facts, CurrentMapId, id, Random);
                 var eigener = new MzInterpreter(befehle);
 
+                // **Und jetzt dieselbe Schleife, die `RunPage` hat**
+                // -- **denn `command101` gibt ohne Ausnahme `false`
+                // zurueck**, -- **und `executeCommand` liest das als
+                // "warte"**, -- **und ohne einen Tastendruck wartet die
+                // Seite endlos auf einen Bildschirm, den niemand
+                // wegklickt.**
+                //
+                // **Und `RunParallel` hatte keine**, -- **und damit
+                // blieb jede parallele Seite auf ihrem ersten `101`
+                // stehen**, -- **und der Unterschied zwischen zwei
+                // Wegen durch dieselbe Engine war ein
+                // Tastendruck.**
+                for (var mal = 0; mal <= befehle.Count; mal++)
+                {
+                    if (ergebnis.Stopped == MzStep.Finished)
+                    {
+                        break;
+                    }
+
+                    Facts.MessageBusy = false;
+                    _keys.Ok();
+                    if (ergebnis.Interpreter?.PassFrame(
+                        WaitBeantwortet) != true)
+                    {
+                        break;
+                    }
+
+                    ergebnis = _runner.Run(
+                        befehle, Facts, CurrentMapId, id, Random,
+                        ergebnis.Interpreter);
+                }
+
                 if (ergebnis.Interpreter != null
                     && ergebnis.Stopped == MzStep.Waiting)
                 {

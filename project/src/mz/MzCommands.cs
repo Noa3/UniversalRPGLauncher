@@ -414,17 +414,39 @@ public static class MzCommands
                 // a command of its own would be running something the engine
                 // never runs.
                 //
-                // **And a dialogue that is already up is refused** —
-                // `isBusy()` is text *or* a choice *or* a number *or* an item
-                // to choose, so a 101 behind an unanswered choice is refused
-                // as firmly as one behind a line.
+                // **And a dialogue that is already up is not
+                // refused, and this was a real error in my reader.**
+                //
+                // `command101` ends in `return false;` and there is no
+                // path through it that returns anything else:
+                //
+                // ```js
+                // command101() {
+                //     if (!$gameMessage.isBusy()) {
+                //         ... this.setWaitMode('message');
+                //     }
+                //     return false;
+                // }
+                // ```
+                //
+                // **And `executeCommand` says `if (!this[methodName]())
+                // { return false; }`** -- **and that is the one place in
+                // the engine that means "wait"** -- **and `101` takes it
+                // on the frame it shows the text as well as on every frame
+                // after.**
+                //
+                // **So a reader that calls this a refusal stops a game
+                // at its first dialogue that follows another one, and
+                // says the engine refused something the engine never
+                // refuses.**
                 if (pFacts.MessageBusy)
                 {
-                    pInterpreter.Refuse(
-                        "a dialogue is not shown, because the engine puts"
-                        + " nobody's words on the screen while another"
-                        + " message is up, and the run stops at index"
-                        + $" {pInterpreter.Index} to try again later");
+                    pActions.Add(new MzAction(pCommand,
+                        "the dialogue waits, because a message is up, "
+                        + "and `command101` returns false in every "
+                        + "frame and `executeCommand` reads that as "
+                        + "\"wait\" and not as a refusal"));
+                    pInterpreter.WaitFor(MzWaitMode.Message);
                     return false;
                 }
 

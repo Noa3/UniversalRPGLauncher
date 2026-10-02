@@ -287,44 +287,59 @@ public partial class TestRealMvRuntimeRun : TestBase
         // Speicherfrage des Browsers und keine Spielmechanik.** **Und
         // dahinter steht `$gameMap.event(2).start()`, also laeuft der
         // Lauf jetzt in die Seite mit den 117 Befehlen hinein.**
-        // **Und der Stopp hat sich zweimal geaendert, und beide Male
-        // dadurch, dass eine Bedingung beantwortbar wurde und nicht
-        // durch irgendeinen Umbau:**
+        // **Und der Stopp hat sich dreimal geaendert, und keiner der
+        // drei war ein Umbau:**
         //
         // ```text
-        // 1 Frames,  2 Aktionen  Grund=a branch on the author's own script
+        // 1 Frames,  2 Aktionen  a branch on the author's own script
         //                   !Utils.isMobileDevice()          <- war
         //                       beantwortbar und war nicht der Stopp
         //
-        // 1 Frames, 13 Aktionen  Grund=the author's own own script
+        // 1 Frames, 13 Aktionen  the author's own script
         //                   !localStorage.getItem(...)        <- Browser-
         //                       speicher, keine Spielmechanik
         //
-        // 2 Frames, 27 Aktionen  Grund=a dialogue is not shown
-        //                   !ConfigManager.isJapanesePlatform <- Plattform,
-        //                       und das Spiel liest die Datei DLsite.json
+        // 2 Frames, 27 Aktionen  a dialogue is not shown
+        //                   !ConfigManager.isJapanesePlatform <- Plattform
+        //
+        // 601 Frames, 8414 Aktionen  Finished
+        //                   der Lauf laeuft durch
         // ```
         //
-        // **Und `ConfigManager.isJapanesePlatform` ist keine
-        // Spielmechanik und kein JavaScript:** **das Spiel selbst sagt,
-        // woher das Kennzeichen kommt** -- **und es ist
-        // `DataManager.checkPlaceholderExists("DLsite.json")`, und das ist
-        // `fs.existsSync(...)`** -- **eine Dateifrage.**
-        AssertEq(lauf.Stopped, MzStep.Refused,
-            "**and the run still stops, and now on a dialogue nobody is "
-            + "shown** -- and it stopped at " + lauf.Stopped + " with '"
-            + lauf.StopReason + "'");
-        AssertTrue(lauf.StopReason.Contains("dialogue",
-                StringComparison.OrdinalIgnoreCase),
-            "**and the reason says what is missing** -- it said '"
-                + lauf.StopReason + "', and a refusal that does not say "
-                + "what it would need says nothing anybody can act on");
-        AssertTrue(lauf.Actions.Count >= 27,
-            "**and the run got twenty-seven commands further than it did** "
-            + "-- " + lauf.Actions.Count + ", and it walked past the Steam "
-            + "advertisement, past both pages' plugin calls, through a "
-            + "screen tint, and into a real dialogue with a name and three "
-            + "lines of text");
+        // **Und der vierte Stopp war der schlimmste von allen**, **weil
+        // er die Engine falsch gelesen hat** -- **und `command101` gibt
+        // ohne Ausnahme `false` zurueck:**
+        //
+        // ```js
+        // command101() {
+        //     if (!$gameMessage.isBusy()) {
+        //         ... this.setWaitMode('message');
+        //     }
+        //     return false;
+        // }
+        // ```
+        //
+        // **Und `executeCommand` sagt `if (!this[methodName]()) { return
+        // false; }`** -- **und das ist die einzige Stelle der Engine,
+        // die "warte" bedeutet** -- **und mein Leser hat daraus eine
+        // Ablehnung gemacht**, **und damit jedes Spiel an seinem ersten
+        // Dialog angehalten, der auf einen anderen folgt.** **Und der
+        // Grund stand in der Nachricht, die er selbst schrieb.**
+        AssertEq(lauf.Stopped, MzStep.Finished,
+            "**and the run finishes** -- and it stopped at "
+            + lauf.Stopped + " after " + lauf.Actions.Count
+            + " actions and " + lauf.SimulationTicks + " frames");
+        AssertTrue(lauf.Actions.Count >= 1000,
+            "**and it ran the game's own commands all the way through** "
+            + "-- " + lauf.Actions.Count + ", and that is more than"
+            + " a thousand, and a reader that answered false where"
+            + " the engine says false-means-wait stopped it at"
+            + " twenty-seven");
+        AssertTrue(lauf.StopReason.Length == 0,
+            "**and there is nothing left to report** -- and it is '"
+            + lauf.StopReason + "', and a refusal is one thing and"
+            + " a wait the other, and this reader was making"
+            + " the first out of the second");
 
         System.Console.WriteLine(
             "MV Lauf: " + lauf.SimulationTicks + " Frames, "

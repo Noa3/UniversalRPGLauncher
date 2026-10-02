@@ -17031,6 +17031,73 @@ MV Skript-Bedingungen: 1166 von 4952 beantwortbar (23 %)
 All 2332 tests passed
 ```
 
+## 2026-10-02 — Der Lauf bricht durch: 601 Frames, und die Engine las ich falsch
+
+**Der Lauf ist zum ersten Mal durchgelaufen, und der Fehler war in
+meinem Leser und nicht im Spiel.**
+
+```js
+command101() {
+    if (!$gameMessage.isBusy()) {
+        ... this.setWaitMode('message');
+    }
+    return false;
+}
+```
+
+**Und `executeCommand` sagt `if (!this[methodName]()) { return
+false; }`** -- **und das ist die einzige Stelle der Engine, die
+"warte" bedeutet** -- **und mein Leser hat daraus eine Ablehnung
+gemacht.**
+
+| vorher        | jetzt      |
+|---------------|------------|
+| 2 Frames      | **601**    |
+| 27 Aktionen   | **8414**   |
+| `Refused`     | **`Finished`** |
+
+**Und die Regel war ueberall falsch, wo ich sie angewandt habe.**
+`command351` gibt `[true,false,true,false].at(index)` zurueck und
+`command355` `[false,false,false,true]`, -- **und beide sind
+Entscheidungen, kein Warten** -- **und `command101` gibt ohne Ausnahme
+`false` zurueck** -- **und das ist kein Zufall, sondern die Bauart der
+Engine: alle Befehle, die auf den Spieler warten, geben in dem Frame,
+in dem sie warten, `false` zurueck.**
+
+**Und meine Regel war an den Stellen richtig und an dieser falsch.**
+
+```js
+// Wo es Warten gibt:
+command101  return false;                       // immer
+command352  if (this._parameters[4]) { ... }    // Wahl
+command355  return false;                       // immer, im vierten
+```
+
+**Und ein `return false`, das ich als "unbekannt" las, haette diese
+Seite an ihrem ersten Dialog angehalten** -- **und das Spiel hat 8414
+Aktionen hinter diesem einen Zeichen.**
+
+### Und `RunParallel` drueckte keine Taste
+
+**Und dieselbe Regel hat mich ein zweites Mal gestoppt** -- **und
+diesmal habe ich es beim Suchen gefunden, nicht beim Raten:**
+
+```text
+RunPage       for (mal...) { Facts.MessageBusy = false; _keys.Ok();
+                             PassFrame(...); Run(...) }
+RunParallel   ein einziger Run
+```
+
+**Und `RunParallel` hat auf einer Seite mit 176 Befehlen genau ein
+Kommando gelesen.** **Und jetzt liest sie vier, und wartet bei einem
+`213 [-1, 2, true]`, und das dritte Parameter sagt der Engine: warte,
+bis das Ballon-Icon weg ist.**
+
+```text
+MV Lauf: 601 Frames, 8414 Aktionen, 61 Karten, Finished
+All 2332 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
