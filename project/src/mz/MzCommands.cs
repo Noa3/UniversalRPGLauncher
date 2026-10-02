@@ -142,6 +142,12 @@ public static class MzCommands
             or MzCommandTable.Comment
             or MzCommandTable.ChangeGold
             or MzCommandTable.PlayMovie
+            // **Und `356` ist MVs Pluginaufruf und `357` ist MZs, und
+            // dieses Spiel hat 5472 von der einen Sorte und keine von der
+            // anderen.** **Und der Zweig fuer 357 war da und der fuer 356
+            // nicht** -- **und ein Befehl, der nicht im Tor steht, wird
+            // nie ausgefuehrt und als ausgefuehrt gemeldet.**
+            or MzCommandTable.PluginCommandCall
             or MzCommandTable.Wait;
 
     /// <summary>
@@ -581,6 +587,58 @@ public static class MzCommands
                 }
                 pFacts.Menu = MzMenuState.Open;
                 pActions.Add(new MzAction(pCommand, "the menu is open"));
+                return true;
+            }
+
+            case MzCommandTable.PluginCommandCall:
+            {
+                // `command356` is
+                //   const args = this._params[0].split(" ");
+                //   const command = args.shift();
+                //   this.pluginCommand(command, args);
+                //   return true;
+                //
+                // **Und das ist ein einziger Parameter und kein
+                // Parameter-Array**, **und der Motor teilt ihn selbst an
+                // Leerzeichen** -- **und der erste Teil ist der Name des
+                // Aufrufs und der Rest sind seine Argumente.**
+                //
+                // **Und gemessen an `D:/Itch/sister/www`: 5472 `356`,
+                // alle mit genau einem Parameter, und keine `357` im
+                // ganzen Spiel.**
+                //
+                // ```text
+                // >持续动作 : 本事件 : 左右震动 : 持续时间[180] : 周期[6]
+                // SetSelectItemType 0
+                // >图片快捷操作 : 图片[30] : 修改单个图片: 坐标[12,3]
+                // ```
+                //
+                // **Und was der Aufruf tut, ist hier nicht zu erfahren und
+                // wird nicht geraten.** **Diese Spielereignisse setzen
+                // Bildersequenzen, schwebenden Text und eine
+                // Auswahlliste**, **und das steht in der Plugin-Datei, und
+                // die wird hier nicht ausgefuehrt.**
+                //
+                // **Und es wird auch nicht stillschweigend uebergangen**,
+                // **denn 5472 Befehle, die nichts tun, lassen ein Spiel
+                // aussehen, als laufe es.**
+                var roh = Text(pCommand, 0);
+                var teile = roh.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
+                var name = teile.Length > 0 ? teile[0] : "";
+                var argumente = teile.Length > 1
+                    ? string.Join(' ', teile[1..])
+                    : "";
+                pFacts.Notices.Add(
+                    $"plugin command \"{name}\""
+                    + (argumente.Length > 0 ? $" with \"{argumente}\"" : "")
+                    + " was not run, because this repository does not "
+                    + "execute a project's JavaScript");
+                pActions.Add(new MzAction(
+                    pCommand,
+                    $"plugin {name}"
+                    + (argumente.Length > 0 ? $" {argumente}" : "")
+                    + " was asked for and was not run; its JavaScript is "
+                    + "not executed here"));
                 return true;
             }
 

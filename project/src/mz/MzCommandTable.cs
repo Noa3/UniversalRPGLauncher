@@ -169,6 +169,33 @@ public static class MzCommandTable
     public const int PlayMovie = 261;
 
     /// <summary>
+    /// A call into a plugin, and one string carries the whole of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is not <see cref="PluginCommand"/> under another
+    /// number.</strong> <c>357</c> is MZ's numbered form with a plugin file
+    /// name, a command and its arguments as separate parameters;
+    /// <strong><c>356</c> is MV's and it is one string that the engine splits
+    /// itself:</strong>
+    /// </para>
+    /// <code>
+    /// command356() {
+    ///     const args = this._params[0].split(" ");
+    ///     const command = args.shift();
+    ///     this.pluginCommand(command, args);
+    ///     return true;
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And measured at <c>D:/Itch/sister/www</c>: five thousand four
+    /// hundred and seventy-two <c>356</c>, every one with exactly one
+    /// parameter, and not one <c>357</c> in the whole game.</strong>
+    /// </para>
+    /// </remarks>
+    public const int PluginCommandCall = 356;
+
+    /// <summary>
     /// One line of text. **It has no <c>command401</c> method** — the engine
     /// reads it by position, as the text of a 101's line, and
     /// <c>command401</c> does not exist.
@@ -327,7 +354,7 @@ public static class MzCommandTable
     /// params[3]);</c> — <strong>and <c>params[2]</c> is the number of
     /// <c>657</c> lines that follow.</strong>
     /// </remarks>
-    public const int PluginCommandLine = 657;
+    public const int ScriptLine2 = 657;
 
     /// <summary>Changes how many of an item the party has. The engine's
     /// <c>gainItem</c> clamps the count to <c>maxItems</c>, which is

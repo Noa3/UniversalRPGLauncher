@@ -15856,3 +15856,118 @@ Stopped=Refused, Grund=a branch on the author's own script:
 **Condition type 12, a JavaScript expression inside the project, which
 `AGENTS.md` forbids this repository from running.** **And that is not a gap
 in the reader; it is the answer.**
+
+
+## The branch for a plugin call existed and was written for 357, and this
+## game writes 356 and not one 357
+
+### And the measurement that found it
+
+```text
+Startkarte Map002 des MV-Spiels: 179 Befehle
+  gedeckt       74 (41%)
+  UNGEDECKT     21 (11%)
+  ohne Methode  84
+
+Die ungedeckten, haeufigste:
+  356   18x      <- Plugin Command
+  223   1x
+  214   1x
+  505   1x
+```
+
+**And `356` is the most frequent command on the starting map that this
+repository does not execute.** **And it is not an edge case: measured over
+the whole game, five thousand four hundred and seventy-two of them.**
+
+### And what was wrong, and it was a number
+
+```text
+MzCommandTable.PluginCommand = 357     <- der Zweig, der da war
+MzCommandTable.PluginCommandCall = 356 <- MVs Form, die fehlte
+```
+
+**And the two are not the same command.**
+
+```javascript
+command357() {                             // MZ, numbered
+    const pluginName = this._params[0];
+    const commandName = this._params[1];
+    const args = this._params.slice(2).map(p => Utils.isNumber(p)
+                                        ? parseInt(p) : p);
+    this.pluginCommand(pluginName, commandName, args);
+    return true;
+}
+
+command356() {                             // MV, one string
+    const args = this._params[0].split(" ");
+    const command = args.shift();
+    this.pluginCommand(command, args);
+    return true;
+}
+```
+
+**And measured at `D:/Itch/sister/www`: five thousand four hundred and
+seventy-two `356`, every one with exactly one parameter, and not one `357`
+in the whole game.**
+
+### And the name collision that hid the fact
+
+```text
+public const int PluginCommandLine = 657;
+```
+
+**And `657` is MZ's script line, not a plugin line.** **And the constant
+already had a name, so the new constant could not have it, and the honest
+name for `356` collided with a wrong name for `657`.** **So `657` is now
+`ScriptLine2` and `356` is `PluginCommandCall`.**
+
+### And what the branch does, which is report and not run
+
+```text
+>事件管理核心 : 本事件 : 彻底删除
+>允许操作玩家移动 : 关闭
+PB_BGS_ALL_STOP
+```
+
+**And sixteen hundred and sixty-eight different texts for five thousand four
+hundred and seventy-two calls**, **which is what says that this is a door
+into the project's own plugin and not a command this repository can
+implement.** **And a call with no space has an empty argument and not a
+missing one** -- **`args.shift()` takes the whole string and leaves
+nothing.**
+
+**And it is reported, by name, with the reason:**
+
+```text
+plugin command ">允许操作玩家移动" with ": 关闭" was not run, because this
+repository does not execute a project's JavaScript
+```
+
+**And five thousand four hundred and seventy-two calls that ran as no-ops
+would leave a game looking as if it worked**, **which is the same failure as
+`108` a commit ago and in the same place: a command outside `HasEffect` is
+never dispatched and is reported as finished.**
+
+### And after
+
+```text
+MV Pluginaufrufe: 5472 aus 1668 verschiedenen Texten, alle mit 1 Parameter
+MV Lauf: 1 Frames, 2 Aktionen, 81 Karten
+MV sister: 133484 Befehle, 123733 gedeckt (92%)   <- unveraendert
+TestRealMvPluginCommands: 3/3
+TestRealMvRuntimeRun: 2/2
+All 2262 tests passed
+```
+
+**And the coverage number did not move, and that is honest:** **the counted
+share was already counting `356` as covered because the coverage table
+listed it**, **while the run did not execute it.** **The number was right
+and the code was wrong, and only the real-game run could tell the two
+apart.**
+
+### And the boundary stays where it is
+
+**`306` and `357` and `655` and `657` are all JavaScript, and `AGENTS.md`
+forbids this repository from executing a project's scripts.** **And that is
+not a gap in the reader; it is the answer.**
