@@ -149,4 +149,42 @@ public enum MzWaitMode
     /// be a different game.</strong>
     /// </remarks>
     Gather = 7,
+
+    /// <summary>
+    /// Held until the map has finished scrolling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own state and not a number of
+    /// frames.</strong>
+    /// </para>
+    /// <para>
+    /// Measured at <c>command204</c>:
+    /// </para>
+    /// <code>
+    /// command204() {
+    ///     if (!$gameParty.inBattle()) {
+    ///         if ($gameMap.isScrolling()) {
+    ///             this.setWaitMode('scroll');
+    ///             return false;
+    ///         }
+    ///         $gameMap.startScroll(this._params[0], this._params[1],
+    ///             this._params[2]);
+    ///     }
+    ///     return true;
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And <c>updateWaitMode</c> sagt <c>case "scroll":
+    /// waiting = $gameMap.isScrolling();</c></strong>, <strong>und
+    /// <c>isScrolling</c> ist <c>return this._scrollRest &gt; 0;</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>Und <c>return false</c> heisst, dass der Befehl im
+    /// naechsten Bild noch einmal gelesen wird</strong> -- <strong>und
+    /// das ist der Unterschied zu einem <c>230</c>, das eine Zahl von
+    /// Bildern wartet.</strong>
+    /// </para>
+    /// </remarks>
+    Scroll = 8,
 }

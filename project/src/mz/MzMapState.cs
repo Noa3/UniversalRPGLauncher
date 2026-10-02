@@ -213,6 +213,136 @@ public readonly record struct MzHpOrder(
         + (AllowDeath ? "" : ", and may not die of it");
 }
 
+/// <summary>
+/// A map that is scrolling, and how much is left of it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>And this is <c>$gameMap._scrollRest</c>, and the whole of
+/// <c>command204</c> is three numbers and one condition.</strong>
+/// </para>
+/// <code>
+/// startScroll(direction, distance, speed) {
+///     this._scrollDirection = direction;
+///     this._scrollRest = distance;
+///     this._scrollSpeed = speed;
+/// }
+/// isScrolling() {
+///     return this._scrollRest > 0;
+/// }
+/// scrollDistance() {
+///     return Math.pow(2, this._scrollSpeed) / 256;
+/// }
+/// </code>
+/// <para>
+/// <strong>And <c>scrollDistance</c> is a dyadic fraction</strong> --
+/// <strong>speed one is a half, speed two a quarter, speed three an
+/// eighth</strong> -- <strong>and the editor's speeds run from one to
+/// eight</strong> -- <strong>and speed eight is 256/256, one whole tile
+/// a frame.</strong>
+/// </para>
+/// <para>
+/// <strong>And <c>updateScroll</c> stops when the display refuses to
+/// move</strong>: <c>if (this._displayX === lastX &amp;&amp; this._displayY
+/// === lastY) { this._scrollRest = 0; }</c> -- <strong>and that is
+/// the map's edge, and not a distance.</strong>
+/// </para>
+/// </remarks>
+public sealed class MzMapScroll
+{
+    /// <summary>The engine's own four directions, and its own values.</summary>
+    public const int Down = 2;
+    public const int Left = 4;
+    public const int Right = 6;
+    public const int Up = 8;
+
+    /// <summary>
+    /// <c>isScrolling</c>, and <c>this._scrollRest &gt; 0</c>.
+    /// </summary>
+    public bool Laeuft => _rest > 0;
+
+    /// <summary>How much is left, and the engine's own number.</summary>
+    public int Rest => _rest;
+
+    private int _rest;
+
+    private int _richtung;
+
+    private int _geschwindigkeit;
+
+    /// <summary>
+    /// <c>startScroll</c>, and the three assignments are all of it.
+    /// </summary>
+    /// <param name="pRichtung">Two, four, six or eight.</param>
+    /// <param name="pDistanz">How far, in tiles.</param>
+    /// <param name="pGeschwindigkeit">The speed, and <c>scrollDistance</c>
+    /// turns it into tiles per frame.</param>
+    /// <returns>One line, for an action and for a log.</returns>
+    public string Starte(int pRichtung, int pDistanz, int pGeschwindigkeit)
+    {
+        _richtung = pRichtung;
+        _rest = pDistanz;
+        _geschwindigkeit = pGeschwindigkeit;
+        return "the map scrolls " + Richtung(pRichtung) + " over "
+            + pDistanz + " tiles at speed " + pGeschwindigkeit
+            + ", which is " + Schritt() + " tiles a frame";
+    }
+
+    /// <summary>
+    /// <c>scrollDistance</c>, and <c>Math.pow(2, speed) / 256</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a fraction and not a whole number</strong> --
+    /// <strong>and a reader that rounded it to a tile would scroll one
+    /// tile a frame at every speed</strong>, <strong>and a reader that
+    /// kept it as a fraction has to say so</strong>, <strong>because
+    /// this reader does not move a display.</strong>
+    /// </remarks>
+    public double Schritt() =>
+        System.Math.Pow(2, _geschwindigkeit) / 256.0;
+
+    /// <summary>
+    /// <c>updateScroll</c> for one frame, and whether it stopped because
+    /// the display would not move.
+    /// </summary>
+    /// <param name="pBewegt">
+    /// Whether the display actually changed, and this reader does not
+    /// have one, so the caller says.
+    /// </param>
+    /// <returns>Whether it is still scrolling afterwards.</returns>
+    public bool EinBild(bool pBewegt)
+    {
+        if (!Laeuft)
+        {
+            return false;
+        }
+
+        if (!pBewegt)
+        {
+            // **Und `this._scrollRest = 0` ohne ein Subtrakt** -- **denn
+            // der Bildschirm stand still, und das ist die Kante der
+            // Karte und nicht eine Entfernung.**
+            _rest = 0;
+            return false;
+        }
+
+        _rest -= (int)Schritt();
+        return _rest > 0;
+    }
+
+    /// <summary>The engine's own direction names, or the number.</summary>
+    /// <param name="pRichtung">The direction.</param>
+    /// <returns>One word, or the number when it is not one of four.</returns>
+    public static string Richtung(int pRichtung) => pRichtung switch
+    {
+        Down => "down",
+        Left => "left",
+        Right => "right",
+        Up => "up",
+        _ => "direction " + pRichtung,
+    };
+}
+
 public readonly record struct MzStateChange(
     int Actor, int State, bool Added)
 {

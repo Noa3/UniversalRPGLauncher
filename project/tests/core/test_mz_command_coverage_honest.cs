@@ -127,7 +127,10 @@ public partial class TestMzCommandCoverageHonest : TestBase
             // beweist alle fuenf an
             // `Fatal Fantasy`, dem groessten MV-Projekt auf dieser
             // Maschine.**
-            103, 109, 302,
+            // **Und `302` stand hier und ist jetzt raus** -- **und
+            // `TestMvScrollTintShop` beweist es an `VHMV`, dem groessten
+            // MV-Projekt auf dieser Maschine.**
+            103, 109,
         })
         {
             AssertTrue(nicht.Contains(erwartet),

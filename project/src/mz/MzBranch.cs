@@ -513,6 +513,26 @@ public sealed class MzBranchFacts
     public MzSceneStack Szene { get; } = new();
 
     /// <summary>
+    /// What <c>$gameMap._scrollRest</c> holds, which is the whole of
+    /// <c>204</c>.
+    /// </summary>
+    public MzMapScroll Rollen { get; } = new();
+
+    /// <summary>
+    /// The goods the last <c>302</c> was given, and its own parameters
+    /// first.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own <c>goods</c> array</strong>:
+    /// <strong><c>const goods = [this._params]</c> und dann eine Zeile je
+    /// <c>605</c>.</strong> <strong>Und jede Zeile ist kein Befehl,
+    /// sondern eine Warenzeile</strong> -- <strong>und
+    /// <c>prepareNextScene(goods, this._params[4])</c> gibt beides an
+    /// die Ladenszene.</strong>
+    /// </remarks>
+    public List<List<string>> LetzterLaden { get; set; } = new();
+
+    /// <summary>
     /// What <c>$gameSystem</c> and <c>$gameTimer</c> carry.
     /// </summary>
     /// <remarks>

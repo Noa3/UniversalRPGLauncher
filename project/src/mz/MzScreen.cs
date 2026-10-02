@@ -125,6 +125,65 @@ public sealed class MzScreen
         /// <summary>Whether this picture is on its way somewhere.</summary>
         public bool IsMoving => Duration > 0;
 
+
+        /// <summary>
+        /// The tint the picture is moving toward, and the engine's own
+        /// four numbers.
+        /// </summary>
+        public int[] TargetPictureTone { get; set; } = new int[] { 0, 0, 0, 0 };
+
+        /// <summary>How long that move takes, in frames.</summary>
+        public int PictureToneDuration { get; set; }
+
+        /// <summary>
+        /// <c>Game_Picture.prototype.tint(tone, duration)</c>, and the
+        /// three lines are all of it.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>Measured at <c>rpg_objects.js</c>:</strong>
+        /// </para>
+        /// <code>
+        /// tint(tone, duration) {
+        ///     if (!this._tone) {
+        ///         this._tone = [0, 0, 0, 0];
+        ///     }
+        ///     this._toneTarget = tone.clone();
+        ///     this._toneDuration = duration;
+        ///     if (this._toneDuration === 0) {
+        ///         this._tone = this._toneTarget.clone();
+        ///     }
+        /// }
+        /// </code>
+        /// <para>
+        /// <strong>And a duration of zero sets the tone at once</strong> --
+        /// <strong>and a duration above zero only records the target</strong>
+        /// -- <strong>and a picture that was never tinted has
+        /// <c>_tone</c> undefined, and <c>if (!this._tone)</c> gives it
+        /// four zeros.</strong>
+        /// </para>
+        /// </remarks>
+        /// <param name="pTon">The four numbers, and they are kept as they
+        /// are.</param>
+        /// <param name="pDauer">The frames, and zero means at once.</param>
+        /// <returns>One line, for an action and for a log.</returns>
+        public string Ton(int[] pTon, int pDauer)
+        {
+            TargetPictureTone = Vier(pTon);
+            PictureToneDuration = pDauer > 0 ? pDauer : 0;
+            if (PictureToneDuration == 0)
+            {
+                TargetPictureTone = new int[] { pTon[0], pTon[1], pTon[2],
+                    pTon[3] };
+            }
+
+            return "tint " + TargetPictureTone[0] + ","
+                + TargetPictureTone[1] + "," + TargetPictureTone[2]
+                + "," + TargetPictureTone[3]
+                + (PictureToneDuration > 0
+                    ? " over " + PictureToneDuration + " frames"
+                    : " at once");
+        }
         /// <summary>One line, for an action and for a log.</summary>
         public override string ToString() =>
             $"{Name} at {X},{Y} scale {ScaleX},{ScaleY} opacity {Opacity}"

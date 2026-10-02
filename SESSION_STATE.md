@@ -16653,6 +16653,42 @@ TestMvActorNumbers: 2/2
 All 2307 tests passed
 ```
 
+## 2026-10-02 — `204`, `234`, `302`: warten, warten, und eine Szene
+
+**Gemessen an `VHMV`:**
+
+```text
+204 Scroll Map   227x,  88 Formen, haeufigste [6, 4, 4] 16x
+234 Tint Picture  102x,  27 Formen, haeufigste [30, [0,0,0,0], 6, false] 17x
+302 Shop          39x,  und nullmal 605 im ganzen Spiel
+```
+
+**Drei Befunde, die keine Coverage-Zahl zeigt:**
+
+* **`scrollDistance` ist `Math.pow(2, speed) / 256`** — **ein dyadischer
+  Bruch**, **also ein Sechzehntel Kachel pro Bild bei Stufe 4** — **und
+  ein Leser, der auf eine Kachel rundet, bewegt die Karte sechzehnmal
+  zu schnell.**
+* **`204` wartet auf einen Zustand und nicht auf eine Zahl von Bildern** —
+  **`if ($gameMap.isScrolling()) { this.setWaitMode('scroll');
+  return false; }`**, **und `updateScroll` setzt `_scrollRest` auf null,
+  wenn der Bildschirm nicht weiterkommt** — **das ist die Kante der
+  Karte und keine Entfernung.**
+* **`302` beginnt `const goods = [this._params]` und liest die `605`
+  erst danach** — **und dieses Spiel schreibt 39 Waren und keine einzige
+  Folgezeile**, **also ist die Warenliste immer genau eine lang, und ein
+  Leser, der mit einer leeren Liste beginnt, verkauft nichts.**
+
+**Und `234` wartet bei 16 seiner 102** — **`command234` sagt `if
+(params[3]) { this.wait(params[2]); }`, und der vierte Wert ist ein
+Wahrheitswert.**
+
+```text
+MZ: 79 von 114 dispatchbar (69%), 35 ohne
+TestMvScrollTintShop: 3/3
+All 2310 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

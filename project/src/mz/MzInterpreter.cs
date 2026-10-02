@@ -180,6 +180,47 @@ public sealed class MzInterpreter
     /// comment's lines are not counted again as commands.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Reads the goods lines under a <c>302</c> and steps over them.
+    /// </summary>
+    /// <returns>The lines' parameters, and each is one good's row.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>command302</c>s eigene Schleife</strong>:
+    /// </para>
+    /// <code>
+    /// const goods = [this._params];
+    /// while (this.nextEventCode() === 605) {
+    ///     this._index++;
+    ///     goods.push(this.currentCommand().parameters);
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And the index is moved before the line is read, exactly as
+    /// in <c>command108</c>'s comment loop</strong> -- <strong>and that
+    /// is why a <c>605</c> is never counted as a command of its
+    /// own.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the first good is the command itself</strong> -- <strong>so
+    /// a shop with one good has no <c>605</c> line at all.</strong>
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<List<string>> SkipShopLines()
+    {
+        var zeilen = new List<List<string>>();
+        while (Index + 1 < Commands.Count
+            && Commands[Index + 1].Code == MzCommandTable.GoodsLine)
+        {
+            Index++;
+            zeilen.Add(new List<string>(
+                Commands[Index].Parameters));
+
+        }
+
+        return zeilen;
+    }
+
     public int SkipCommentLines()
     {
         var zeilen = 0;

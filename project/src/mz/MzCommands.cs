@@ -117,6 +117,9 @@ public static class MzCommands
             MzCommandTable.BreakLoop,
             MzCommandTable.ChangeActorSkill,
             MzCommandTable.ChangeHp,
+            MzCommandTable.ScrollMap,
+            MzCommandTable.TintPicture,
+            MzCommandTable.ShopProcessing,
             MzCommandTable.ChangeMp,
             MzCommandTable.ChangeExp,
             MzCommandTable.ChangeLevel,
@@ -1422,6 +1425,168 @@ public static class MzCommands
                     + ", and whether that is a weapon or armour is "
                     + "decided by the actor's own equipSlots(), which "
                     + "this repository does not keep"));
+                return true;
+            }
+
+            case MzCommandTable.ShopProcessing:
+            {
+                // **Und `command302`:**
+                //
+                // ```js
+                // if (!$gameParty.inBattle()) {
+                //     const goods = [this._params];
+                //     while (this.nextEventCode() === 605) {
+                //         this._index++;
+                //         goods.push(this.currentCommand().parameters);
+                //     }
+                //     SceneManager.push(Scene_Shop);
+                //     SceneManager.prepareNextScene(goods, this._params[4]);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und die `605`-Zeilen sind Waren und keine
+                // Befehle** -- **denn `MzCommandSet.NoMethodCodes` nennt
+                // `604` und `605`**, **und die Schleife geht ueber
+                // `nextEventCode()`, also ueber die Befehle, die der
+                // Interpreter als naechstes liest.**
+                //
+                // **Und der fuenfte Parameter ist die Kaufart**, **und
+                // `prepareNextScene(goods, params[4])` uebergibt die
+                // Warenliste und diese Zahl.** **Und die Szene selbst
+                // baut dieses Repository nicht** -- **und `352 Save`
+                // schiebt auch eine Szene, und beides sagt warum.**
+                if (pFacts.InBattle)
+                {
+                    pFacts.Notices.Add(
+                        "302 Shop Processing was asked for in a battle, "
+                        + "and the engine's own `if (!$gameParty"
+                        + ".inBattle())` does nothing at all");
+                    return true;
+                }
+
+                // **Und die Warenliste beginnt mit dem Befehl selbst**,
+                // **und nicht mit einer leeren Liste.**
+                var waren = new List<List<string>>();
+                waren.Add(new List<string>(pCommand.Parameters));
+                var zeilen = pInterpreter.SkipShopLines();
+                foreach (var zeile in zeilen)
+                {
+                    waren.Add(new List<string>(zeile));
+                }
+
+                pFacts.Szene.Schiebe("Scene_Shop");
+                pFacts.LetzterLaden = waren;
+                pActions.Add(new MzAction(pCommand,
+                    $"the shop is shown with {waren.Count} "
+                    + (waren.Count == 1 ? "good" : "goods")
+                    + " and " + At(pCommand, 4) + " as the buying kind, "
+                    + "and " + zeilen.Count + " of them came from the "
+                    + "605 lines that followed"));
+                return true;
+            }
+
+            case MzCommandTable.ScrollMap:
+            {
+                // **Und `command204` ist fuenf Zeilen und eine
+                // Bedingung:**
+                //
+                // ```js
+                // if (!$gameParty.inBattle()) {
+                //     if ($gameMap.isScrolling()) {
+                //         this.setWaitMode('scroll');
+                //         return false;
+                //     }
+                //     $gameMap.startScroll(this._params[0], this._params[1],
+                //         this._params[2]);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und `return false` heisst, dass der Befehl im
+                // naechsten Bild wieder gelesen wird** -- **und der
+                // Unterschied zu einem `230` ist, dass dort eine Zahl
+                // von Bildern wartet und hier eine Bedingung der Karte.**
+                //
+                // **Und `isScrolling` ist `this._scrollRest > 0`**, **und
+                // `updateWaitMode` sagt `case "scroll": waiting =
+                // $gameMap.isScrolling();`**, **und `updateScroll` setzt
+                // `_scrollRest` auf null, wenn der Bildschirm nicht
+                // weiterkommt** -- **das ist die Kante der Karte und
+                // keine Entfernung.**
+                if (pFacts.InBattle)
+                {
+                    pFacts.Notices.Add(
+                        "204 Scroll Map was asked for in a battle, and the "
+                        + "engine's own `if (!$gameParty.inBattle())` "
+                        + "does nothing at all");
+                    return true;
+                }
+
+                if (pFacts.Rollen.Laeuft)
+                {
+                    pActions.Add(new MzAction(pCommand,
+                        "the map is already scrolling and the page waits "
+                        + "for it, and " + pFacts.Rollen.Rest
+                        + " tiles are left"));
+                    pInterpreter.WaitFor(MzWaitMode.Scroll);
+                    return false;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    pFacts.Rollen.Starte(
+                        At(pCommand, 0), At(pCommand, 1),
+                        At(pCommand, 2))));
+                return true;
+            }
+
+            case MzCommandTable.TintPicture:
+            {
+                // **Und `command234`:**
+                //
+                // ```js
+                // $gameScreen.tintPicture(this._params[0], this._params[1],
+                //     this._params[2]);
+                // if (this._params[3]) {
+                //     this.wait(this._params[2]);
+                // }
+                // return true;
+                // ```
+                //
+                // **Und es ist `223 Screen Tint` mit einem Bild
+                // davor** -- **und `tintPicture` ist
+                // `const picture = this.picture(pictureId); if (picture)
+                // { picture.tint(tone, duration); }`**, **und ein Bild,
+                // das es nicht gibt, wird uebersprungen und ist kein
+                // Fehler.**
+                var bild = At(pCommand, 0);
+                var ton = Vier(pCommand, 1);
+                var dauer234 = At(pCommand, 2);
+                var warten234 = Flag(pCommand, 3);
+                var zeichen = pFacts.Screen.At(
+                    pFacts.Screen.RealPictureId(bild));
+                if (zeichen != null)
+                {
+                    zeichen.Ton(ton, dauer234);
+                    pActions.Add(new MzAction(pCommand,
+                        $"picture {bild} is tinted {ton[0]},{ton[1]},"
+                        + $"{ton[2]},{ton[3]} over {dauer234} frames"
+                        + (warten234 ? ", waiting for it" : "")));
+                }
+                else
+                {
+                    pActions.Add(new MzAction(pCommand,
+                        $"picture {bild} was asked for a tint and is not "
+                        + "on the screen, which is what the engine's own "
+                        + "`if (picture)` does and is not an error"));
+                }
+
+                if (warten234)
+                {
+                    pInterpreter.Wait(dauer234);
+                    return false;
+                }
+
                 return true;
             }
 

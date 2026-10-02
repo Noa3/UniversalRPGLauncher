@@ -276,6 +276,37 @@ public static class MzCommandTable
     public const int ChangeParameter = 317;
 
     /// <summary>
+    /// The goods line under a <c>302</c>, and not a command.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>605</c> has no <c>command605</c> in the
+    /// engine</strong> -- <strong>and <c>MzCommandSet.NoMethodCodes</c>
+    /// says so</strong> -- <strong>and <c>command302</c> reads it
+    /// itself</strong>: <c>while (this.nextEventCode() === 605) {
+    /// this._index++; goods.push(this.currentCommand().parameters); }</c>.
+    /// </remarks>
+    public const int GoodsLine = 605;
+
+    /// <summary>
+    /// <c>command204</c> -- <c>if ($gameMap.isScrolling()) {
+    /// this.setWaitMode('scroll'); return false; } $gameMap.startScroll(
+    /// params[0], params[1], params[2]);</c>
+    /// </summary>
+    public const int ScrollMap = 204;
+
+    /// <summary>
+    /// <c>command234</c> -- <c>$gameScreen.tintPicture(params[0],
+    /// params[1], params[2])</c>, and the fourth says whether to wait.
+    /// </summary>
+    public const int TintPicture = 234;
+
+    /// <summary>
+    /// <c>command302</c> -- the shop, and it reads the <c>605</c> lines
+    /// that follow it.
+    /// </summary>
+    public const int ShopProcessing = 302;
+
+    /// <summary>
     /// <c>command124</c> -- <c>if (this._params[0] === 0) {
     /// $gameTimer.start(this._params[1] * 60); } else { $gameTimer.stop(); }</c>
     /// </summary>
