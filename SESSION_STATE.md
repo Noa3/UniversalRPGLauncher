@@ -18128,6 +18128,68 @@ Lesers, und nicht an das Spiel.**
 All 2385 tests passed
 ```
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 9: der Widerspruch ist der Befund
+
+**Und ich hatte in Stufe 8 geschrieben, `setup` lande auf `Object`
+und deshalb sei es fuer die Instanz unsichtbar.**
+
+**Und das ist falsch, und der Beleg steht in MicroQuests Skripten.**
+
+```
+mit <: 44, ohne <: 45
+  ohne: class Game_Temp | class Game_System | class Game_Switches
+        class Game_Variables | class Game_SelfSwitches | class Game_Screen
+        class Game_Picture | class Game_Battler | class Game_BattleAction
+        class Game_Actors
+  mit:  class Game_Actor < Game_Battler | class Game_Event < Game_Character
+        class Game_Player < Game_Character | class Sprite_Character < RPG::Sprite
+
+Interpreter 1 Struktur: class Interpreter
+  def initialize(depth = 0, main = false) | end | end
+  def clear | end
+  def setup(list, event_id) | end
+  def running? | end
+```
+
+**Und `def setup(list, event_id)` steht unmittelbar unter `class
+Interpreter`** -- **und nicht unter einem zweiten `class`**, -- **und
+nicht in einem `module`.**
+
+**Und derselbe Kommentar in `RubyInterpreter.cs` Zeile 10008 redet
+von etwas anderem** -- **er sagt:  ein `def` auf *oberster* Ebene,
+also ganz ohne `class`, gehoere auf `Object`** -- **und MicroQuest
+schreibt `class Interpreter`, also ausdruecklich nicht auf oberster
+Ebene.**
+
+**Und 44 Klassen nennen ihre Basis und 45 nicht** -- **und beide Formen
+stehen in einem einzigen Projekt**, -- **und das ist keine
+Eigenheit dieses Spiels, sondern die Schreibweise von XP.**
+
+### Und damit ist der Widerspruch der eigentliche Befund
+
+**Und `i.setup(...)` erreichte den Host und kam mit `nil` zurueck**,
+-- **und `Interpreter.setup(...)` erzeugte gar keine Frage**,
+-- **und beides ist mit einer Methode auf der eigenen Typ-Tabelle
+unvereinbar.**
+
+**Und die Tabelle, die dieser Leser gebaut hat, ist nicht die, die der
+Spieltext beschreibt.**
+
+**Und das ist die erste Stelle in diesem Repository, an der der
+Befund nicht "das Spiel fehlt" lautet, sondern "wir haben etwas
+gebaut, das nicht dem Spiel entspricht".**
+
+**Und diese Datei ist viermal an einem Anker geschnitten worden, bevor
+sie ganz geschrieben wurde** -- **und ab dem fuenften Anlass wird sie
+neu geschrieben und nicht mehr gepatcht.**
+
+```
+All 2387 tests passed
+```
+
+**Und der naechste Schritt ist damit ein Fehlersuche in der
+Typ-Tabelle des Lesers**, -- **und nicht mehr im Spiel.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
