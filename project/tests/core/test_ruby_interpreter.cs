@@ -1115,14 +1115,52 @@ public partial class TestRubyInterpreter : TestBase
     }
 
     /// <summary>
-    /// A second definition of a class replaces the first one's methods.
+    /// A second definition of a class adds to it and takes nothing away.
     /// </summary>
     /// <remarks>
-    /// <strong>That is what a reopened class does</strong>, and a game's
-    /// second file is a common way to patch the first. A reader that merged
-    /// the two would have kept a method the game meant to remove.
+    /// <para>
+    /// <strong>And this test used to assert the opposite</strong> --
+    /// <strong>it said a reopened class replaces the first one's
+    /// methods</strong>, -- <strong>and it justified that with "a
+    /// game's second file is a common way to patch the
+    /// first".</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And that justification is wrong, and the Ruby source
+    /// says so.</strong> <c>rb_define_class</c> in Ruby 1.8.6,
+    /// <c>class.c</c>:
+    /// </para>
+    /// <code>
+    /// if (rb_const_defined(rb_cObject, id)) {
+    ///     klass = rb_const_get(rb_cObject, id);
+    ///     if (TYPE(klass) != T_CLASS) { rb_raise(...); }
+    ///     if (rb_class_real(RCLASS(klass)->super) != super) {
+    ///         rb_name_error(id, "%s is already defined", name);
+    ///     }
+    ///     return klass;
+    /// }
+    /// </code>
+    /// <para>
+    /// <strong>And that <c>return klass</c> hands back the class that is
+    /// already there</strong>, -- <strong>with everything on
+    /// it</strong>, -- <strong>and there is no assignment to an empty
+    /// table anywhere in the function.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And how a game removes a method is
+    /// <c>undef_method</c></strong>, -- <strong>which is a different
+    /// sentence and is still implemented in this reader.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the cost of the wrong rule was not theoretical:</strong>
+    /// RPG Maker XP writes its interpreter across seven files,
+    /// <c>Interpreter 1</c> to <c>Interpreter 7</c>, -- <strong>and each
+    /// of them opens with <c>class Interpreter</c></strong>, -- <strong>and
+    /// with clearing, six sevenths of MicroQuest's interpreter was gone
+    /// by the time the last script had run.</strong>
+    /// </para>
     /// </remarks>
-    public void Test_ASecondDefinitionReplacesTheFirst()
+    public void Test_ASecondDefinitionAddsToTheFirst()
     {
         var mit = new RubyInterpreter(new RubyNullHost());
         mit.RunProgram(Statements(
@@ -1138,12 +1176,60 @@ public partial class TestRubyInterpreter : TestBase
             + "end\n"));
 
         AssertEq(mit.DefinedTypes.Count, 1,
-            "**there is still one class** — the second definition reopened it");
+            "**there is still one class** -- the second definition"
+                + " reopened it, and `rb_define_class` returns the class"
+                + " that is already there");
         AssertTrue(mit.FindMethod("A", "neu") != null,
             "**and the new method is there**");
-        AssertTrue(mit.FindMethod("A", "alt") == null,
-            "**and the old one is gone** — a reader that merged them would "
-                + "have kept a method the game's second file meant to remove");
+        AssertTrue(mit.FindMethod("A", "alt") != null,
+            "**and the old one is still there** -- because Ruby adds on a"
+                + " reopened class, and `rb_define_class` returns the"
+                + " existing class untouched, and a reader that merged"
+                + " them would have lost six sevenths of an XP"
+                + " interpreter");
+    }
+
+    /// <summary>
+    /// And a class that is genuinely reopened seven times keeps
+    /// everything all seven wrote.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the shape RPG Maker XP writes,</strong> --
+    /// <c>Interpreter 1</c> through <c>Interpreter 7</c>, -- <strong>and
+    /// the earlier version of this reader answered "one method left"
+    /// here.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_SiebenDefinitionenEinerKlasseBehaltenAlles()
+    {
+        var quelle = new System.Text.StringBuilder();
+        for (var teil = 1; teil <= 7; teil++)
+        {
+            quelle.Append("class Interpreter\n"
+                + "  def teil_" + teil + "\n"
+                + "    " + teil + "\n"
+                + "  end\n"
+                + "end\n");
+        }
+
+        var mit = new RubyInterpreter(new RubyNullHost());
+        mit.RunProgram(new RubyParser(
+            new RubyLexer(quelle.ToString()).Tokenize()).ParseProgram());
+
+        var fehlend = 0;
+        for (var teil = 1; teil <= 7; teil++)
+        {
+            if (mit.FindMethod("Interpreter", "teil_" + teil) == null)
+            {
+                fehlend++;
+            }
+        }
+
+        AssertEq(fehlend, 0,
+            "**and all seven parts survive** -- and " + fehlend + " are"
+                + " missing, and MicroQuest's own interpreter is written"
+                + " in exactly this shape");
     }
 
     /// <summary>

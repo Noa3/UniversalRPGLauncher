@@ -369,13 +369,21 @@ Interpreter.new.setup([[101, 0, ['Hallo Welt', 'Face']], [0, 1, []]])
             "**and `$game_temp` never arrives as a name** -- and that is"
                 + " the first of the two things this repository still"
                 + " has to build: a variable slot for the world");
-        AssertTrue(LetzteDiagnosen.Any(static d => d.Contains(
+        // **Und `setup` gibt es, seit die Typ-Tabelle nicht mehr
+        // geleert wird.**
+        //
+        // **Und diese Behauptung ("das Spiel hat kein `setup`") war
+        // zweimal falsch** -- -- **und sie ist aus dem Grund falsch
+        // gewesen, den `RubyInterpreter.cs` jetzt nicht mehr hat:**
+        // **sieben `class Interpreter` in einem Projekt, und bei jeder
+        // zweiten Definition wurde die Methodentabelle geloescht.**
+        AssertFalse(LetzteDiagnosen.Any(static d => d.Contains(
                 "Interpreter has no method 'setup'",
                 StringComparison.Ordinal)),
-            "**and the game's `Interpreter` has no `setup`** -- and"
-                + " that is the second thing to build, and the"
-                + " interpreter's own diagnostic says so rather than"
-                + " this test guessing it: "
+            "**and the game's `Interpreter` has `setup`** -- and no"
+                + " diagnostic says otherwise, and it did say so before"
+                + " the type table stopped being cleared, and the"
+                + " diagnostics now read: "
                 + string.Join(" || ", LetzteDiagnosen.ToArray()));
     }
 

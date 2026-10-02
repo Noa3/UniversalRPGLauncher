@@ -9904,7 +9904,45 @@ public sealed class RubyInterpreter
         {
             typ.Superclass = geschrieben;
         }
-        typ.Methods.Clear();
+        // **Und eine zweite Definition LEERTA NICHT.** Das ist keine
+        // Vermutung, sondern `rb_define_class` in Ruby 1.8.6,
+        // `class.c`:
+        //
+        // ```c
+        // if (rb_const_defined(rb_cObject, id)) {
+        //     klass = rb_const_get(rb_cObject, id);
+        //     if (TYPE(klass) != T_CLASS) { rb_raise(...); }
+        //     if (rb_class_real(RCLASS(klass)->super) != super) {
+        //         rb_name_error(id, "%s is already defined", name);
+        //     }
+        //     return klass;              <--  die vorhandene Klasse,
+        // }                               unangetastet
+        // ```
+        //
+        // **Und Ruby fuegt bei einer zweiten Definition hinzu**, --
+        // **und `undef_method` ist das, was einen Namen toetet** --
+        // **und das steht weiter unten in diesem Leser und bleibt
+        // dort.**
+        //
+        // **Und das Loeschen war ein Fehler mit Folgen:** -- **RPG
+        // Maker XP schreibt seinen Interpreter in sieben Dateien**,
+        // `Interpreter 1` bis `Interpreter 7`, -- **und jede beginnt
+        // mit `class Interpreter`**, -- **und mit dem Loeschen blieb am
+        // Ende nur der Inhalt von `Interpreter 7` uebrig.**
+        //
+        // **Gemessen an MicroQuest:**
+        //
+        // ```text
+        // Interpreter.method_defined?(:setup)           = nein
+        // Interpreter.method_defined?(:execute_command)  = nein
+        // Interpreter.method_defined?(:command_101)      = nein
+        // Game_Temp.method_defined?(:message_text)      = ja
+        // class Interpreter: 7x, class Game_Temp: 1x
+        // ```
+        //
+        // **Und `Game_Temp` wird einmal geoeffnet und behalt deshalb
+        // seine Tabelle, und `Interpreter` wird siebenmal geoeffnet
+        // und verlor sie sechsmal.**
         _types[name] = typ;
 
         var tiefe = _scopes.Count;

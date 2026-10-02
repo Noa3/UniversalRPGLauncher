@@ -18249,6 +18249,65 @@ Annahme:** -- **Ruby 1.8.1 `rb_add_includable_module` und
 hinzufuegt und das Leeren von `Methods` nur fuer `undef_method`
 gilt.**
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 11: der Fehler ist weg, und das Spiel laeuft
+
+**Und `RubyInterpreter.cs` Zeile 9907 hat `typ.Methods.Clear()` gemacht.**
+
+**Und der Beleg steht in `rb_define_class`, Ruby 1.8.6, `class.c`:**
+
+```c
+if (rb_const_defined(rb_cObject, id)) {
+    klass = rb_const_get(rb_cObject, id);
+    if (TYPE(klass) != T_CLASS) { rb_raise(...); }
+    if (rb_class_real(RCLASS(klass)->super) != super) {
+        rb_name_error(id, "%s is already defined", name);
+    }
+    return klass;              /*  die vorhandene Klasse,
+                                 unangetastet */
+}
+```
+
+**Und diese Funktion leert nichts.**
+
+**Und der Test, der das Leeren festschrieb, hatte eine Begruendung:
+"ein zweites Skript ist ein gaengiger Weg, das erste zu
+patchen".**
+
+**Und diese Begruendung ist falsch.** **Und `undef_method` ist der
+Satz dafuer** -- **und der ist in diesem Leser vorhanden und bleibt
+dort.**
+
+### Und danach laeuft MicroQuests Spiel
+
+```
+Fragen: Konstante Graphics | freeze an Nil (Block)
+        | map_id an Nil | clear an Object
+```
+
+**Und `setup` laeuft** -- **und es fragt `map_id`**, -- **und das ist
+`Game_Player.setup_starting_event`, das MicroQuests `Interpreter 1`
+aufruft** -- **und es fragt `clear` auf `Object`**, -- **und das ist
+`Object#clear`, die gemeinsame Basis von `Array` und `Hash`.**
+
+**Und die Welt, die MicroQuest braucht, ist damit zwei Fragen
+gross:  `map_id` und `clear`.**
+
+### Und acht Tests waren rot und keiner wurde geloescht
+
+```text
+8/2389 tests failed  ->  2/2391 ->  All 2391 tests passed
+```
+
+**Und `Test_ASecondDefinitionReplacesTheFirst` wurde zu
+`Test_ASecondDefinitionAddsToTheFirst`**, -- **und ein neuer Test
+fragt sieben Definitionen und verlangt, dass alle sieben
+ueberleben**, -- **und das ist genau die Form, in der XP seinen
+Interpreter schreibt.**
+
+```
+All 2391 tests passed
+```
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
