@@ -18308,6 +18308,81 @@ Interpreter schreibt.**
 All 2391 tests passed
 ```
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 12: `clear` gemessen, `@list` offen
+
+**Und Ruby 1.8.6 definiert `clear` nur auf `Hash` und `Array`.**
+
+**Und `object.c` fuehrt es gar nicht** -- **und ich habe es in der
+Quelle nachgeschlagen, nicht im Gedaechtnis.**
+
+```text
+hash.c   -> rb_define_method(rb_cHash,"clear", rb_hash_clear, 0);
+array.c  -> rb_define_method(rb_cArray, "clear", rb_ary_clear, 0);
+object.c -> KEINE
+```
+
+**Und MicroQuests `setup` sieht so aus** -- **und das ist Zeile fuer
+Zeile aus dem Skript:**
+
+```ruby
+def setup(list, event_id)
+  clear                          # <- nacktes clear
+  @map_id  = $game_map.map_id
+  @event_id = event_id
+  @list    = list
+  @index   = 0
+  @branch.clear                  # <- Feld, also Array
+end
+```
+
+**Und `Interpreter 1` definiert `def clear`** -- **also ist der
+nackte Aufruf berechtigt** -- **und er kam trotzdem beim Host an.**
+
+**Und der dritte Befund steht daneben:**
+
+```
+@list nach setup: Symbol / Object
+Fragen: Konstante Graphics | freeze an Nil (Block)
+        | map_id an Nil | clear an Object
+```
+
+**Und `@list` traegt den Namen `Object`** -- **und das Spiel schreibt
+`@list = list`, und `list` ist ein Array-Literal.**
+
+### Und der Test bleibt rot
+
+```
+TestRgssOpenListGap: Test_DieListeEinerSeiteIstNochNichtDasArray
+  **and `@list` is the Array the caller passed** -- and it reads as
+  Symbol / Object
+2/2392 tests failed
+```
+
+**Und er steht in einer eigenen Datei**, `test_rgss_open_list_gap.cs`,
+-- **und nicht bei den geschlossenen Karten.**
+
+**Und er bleibt rot.** **Und das ist die Regel dieses Repositorys:**
+**ein Test, der eine echte Luecke misst, bleibt rot** -- **und ein
+`true` an dieser Stelle wuerde eine Behauptung erzeugen, die es nicht
+gibt.**
+
+**Und genau drei solcher Behauptungen haben diesen Weg gekostet:**
+**"`Interpreter` hat kein `setup`", "die C#-Welt fehlt", und "der
+Dispatcher baut den Methodennamen aus der Nummer".**
+
+**Und die 2391 anderen Tests sind gruen, und keiner wurde geloescht.**
+
+```
+2/2392 tests failed  (1 Test, 3 Assertionen)
+```
+
+**Und die offene Frage ist eine einzige:** -- **warum traegt `@list`
+nach `setup` den Namen `Object`, und wo kommt dieser Name in diesem
+Leser her?** -- **und `Describe` faellt bei einem Objekt auf
+`ClassName ?? "a value"` zurueck**, -- **und deshalb heisst die
+Meldung nicht, dass der Empaenger `Object` war, sondern dass der
+Leser es nicht unterscheidet.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige

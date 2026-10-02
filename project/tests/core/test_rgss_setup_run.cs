@@ -182,6 +182,19 @@ i.setup([[101, 0, ['Hallo']]], 0)
         System.Console.WriteLine(
             "Fragen: " + string.Join(" | ", host.Fragen.ToArray()));
 
+        // **Und `clear` an `Object` ist ein Befund und kein Zufall.**
+        //
+        // **Und Ruby 1.8.6 definiert `clear` nur auf `Hash` und auf
+        // `Array`** (`object.c` kennt es nicht), -- **und MicroQuests
+        // `setup` ruft es auf einem Objekt auf.**
+        //
+        // **Und das heisst:  der Empfaenger war nicht das, was das
+        // Spiel meint** -- **und die Frage ist, was der Leser fuer
+        // `@list` haelt.**
+        System.Console.WriteLine(
+            "Ruby 1.8.6: clear nur auf Hash und Array, object.c kennt"
+            + " es nicht");
+
         AssertTrue(Enthaelt(host.Fragen.ToArray(), "map_id an Nil"),
             "**and `setup` runs and asks the world for `map_id`** -- and"
                 + " the questions are "
