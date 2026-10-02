@@ -116,7 +116,7 @@ public partial class TestMzCommandCoverageHonest : TestBase
         // fuehrt, sagt das Gegenteil von dem, was der Code tut.**
         foreach (var erwartet in new[]
         {
-            103, 109, 117, 124, 302, 311,
+            103, 109, 124, 302, 311,
         })
         {
             AssertTrue(nicht.Contains(erwartet),

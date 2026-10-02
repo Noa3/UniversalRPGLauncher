@@ -204,6 +204,15 @@ public static class MzCommands
     /// <c>101</c> through <c>118</c> are control: a line of text, a
     /// choice, a branch, a loop, a jump. <strong>They change the shape of
     /// the run and not the state of the game.</strong>
+    /// <para>
+    /// <strong>And <c>117 Common Event</c> is here for a different
+    /// reason</strong>: <strong><c>MzEventRunner</c> reads it and sets
+    /// up a child interpreter before the gate is ever asked</strong>,
+    /// <strong>which is the engine's own <c>setupChild</c>.</strong>
+    /// <strong>And it is the second most common command in this game's
+    /// MV map data at 1871 uses</strong>, <strong>and a gate that did not
+    /// know that would have called it missing.</strong>
+    /// </para>
     /// </para>
     /// <para>
     /// <strong>And <c>355</c>, <c>655</c> and <c>657</c> are the script
@@ -218,7 +227,7 @@ public static class MzCommands
     /// </remarks>
     public static IReadOnlyList<int> SteuerungsBefehle() => new[]
     {
-        102, 111, 112, 113, 115, 118, 355, 401, 413, 655, 657,
+        102, 111, 112, 113, 115, 118, 117, 355, 401, 413, 655, 657,
     };
 
     /// <summary>

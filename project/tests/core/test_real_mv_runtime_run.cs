@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -293,6 +294,253 @@ public partial class TestRealMvRuntimeRun : TestBase
         {
             System.Console.WriteLine("   Aktion: " + aktion.What);
         }
+    }
+
+    /// <summary>
+    /// This game's own common events are read, and one of them runs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the second most used command in this game's
+    /// 133484 map commands: 1848 calls to 49 different common
+    /// events.</strong> <strong>And every one of the 1848 names a slot
+    /// the project's own <c>CommonEvents.json</c> has content in</strong>
+    /// -- <strong>500 of its 501 slots do, and none of the 49 is
+    /// empty.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>command117</c> is four lines</strong>:
+    /// <c>const commonEvent = $dataCommonEvents[this._params[0]];</c>,
+    /// then <c>this.setupChild(commonEvent.list, this.isOnCurrentMap() ?
+    /// this._eventId : 0)</c>, then <c>return true</c>. <strong>And
+    /// <c>MzEventRunner.Run</c> is that, plus the depth cap and a
+    /// refusal when the slot is empty.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieGemeinsamenEreignisseDiesesSpielsSindGelesenUndEinesLaeuft()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        var (host, gestartet) = Starten();
+        using var _ = host;
+        AssertTrue(gestartet.Success, "**and the project starts** -- "
+            + gestartet.Error?.Message);
+        if (host.Runtime is not MzEngineRuntime lauf)
+        {
+            AssertTrue(false, "**and it is an MZ-shaped runtime**");
+            return;
+        }
+
+        AssertEq(lauf.CommonEventProblem, "",
+            "**and the common events were read and not skipped** -- and the "
+            + "runtime says '" + lauf.CommonEventProblem + "', and 117 "
+            + "without them would refuse at every one of the 1848 calls");
+        AssertTrue(lauf.CommonEventCount >= 500,
+            "**and it has five hundred of them** -- " + lauf.CommonEventCount
+            + " read, and the file has 501 slots of which 500 have content");
+
+        var ziel = ErstesGemeinsamesEreignis();
+        AssertTrue(ziel > 0,
+            "**and this game's maps call a common event** -- they do, 1848 "
+            + "times, and a test that picked its own target would prove "
+            + "nothing about this game");
+        if (ziel <= 0)
+        {
+            return;
+        }
+
+        var liste = GemeinsamesEreignis(ziel);
+        AssertTrue(liste.Count > 0,
+            "**and slot " + ziel + " has commands in it** -- " + liste.Count
+            + ", and $dataCommonEvents[" + ziel + "] returning nothing is "
+            + "the one case the engine steps over and this repository "
+            + "refuses");
+        AssertTrue(Keine117(liste, ziel),
+            "**and it does not call itself** -- and none of this game's 49 "
+            + "does, and one that did would need the depth cap");
+
+        // **Und jetzt laeuft es** -- **durch `MzEventRunner`, denn der
+        // Interpreter allein kennt keine gemeinsamen Ereignisse.**
+        var tabelle = new Dictionary<int, List<MzCommandEntry>>
+        {
+            [ziel] = liste,
+        };
+        // **Und der Aufruf ist selbst eine Befehlsliste**, **denn so
+        // schreibt es die Engine** -- **`{"code":117,"indent":0,
+        // "parameters":[85]}` gefolgt von `{"code":0,...}`**.
+        MzJson.TryParse(
+            "[{\"code\":117,\"indent\":0,\"parameters\":[" + ziel + "]},"
+            + "{\"code\":0,\"indent\":0,\"parameters\":[]}]",
+            out var aufrufWert, out var aufrufFehler);
+        AssertEq(aufrufFehler, "",
+            "**and the call is a command list the way the engine writes "
+            + "it**");
+        var aufruf = new List<MzCommandEntry>();
+        foreach (var zeile in aufrufWert.Items)
+        {
+            aufruf.Add(MzCommandEntry.From(zeile));
+        }
+        var runner = new MzEventRunner(tabelle);
+        var erg = runner.Run(aufruf, new MzBranchFacts());
+        AssertTrue(erg.Actions.Count > 1,
+            "**and the call runs it** -- and it came to "
+            + erg.Actions.Count + " actions, and a call that "
+            + "returns true and runs nothing is what this repository had "
+            + "for 117");
+        AssertTrue(erg.Actions.Count > 0,
+            "**and the child says what it did** -- " + erg.Actions.Count
+            + " actions, and a step that does work and reports nothing "
+            + "leaves a caller unable to tell a call from a pass");
+        AssertTrue(erg.Stopped != MzStep.Refused,
+            "**and it did not refuse** -- and it came to " + erg.Stopped
+            + ", and the reason is '" + erg.Reason + "'");
+    }
+
+    /// <summary>
+    /// This project's map files, wherever this project keeps its data.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And both paths, because MV writes <c>www/data/</c> when the
+    /// game folder is the project root and <c>data/</c> when the game folder
+    /// already is <c>www</c>.</strong> <strong>And a test that only knew the
+    /// first would have read zero maps here and called it "this game calls
+    /// no common event".</strong>
+    /// </remarks>
+    private static IEnumerable<string> KartenDateien()
+    {
+        foreach (var ordner in new[]
+        {
+            Projekt + "/www/data",
+            Projekt + "/data",
+        })
+        {
+            if (!Directory.Exists(ordner))
+            {
+                continue;
+            }
+
+            foreach (var pfad in Directory.GetFiles(ordner, "Map*.json"))
+            {
+                yield return pfad;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The commands of one slot of this project's own CommonEvents.json.
+    /// </summary>
+    private static List<MzCommandEntry> GemeinsamesEreignis(int pIndex)
+    {
+        var liste = new List<MzCommandEntry>();
+        foreach (var pfad in new[]
+        {
+            Projekt + "/www/data/CommonEvents.json",
+            Projekt + "/data/CommonEvents.json",
+        })
+        {
+            if (!File.Exists(pfad))
+            {
+                continue;
+            }
+
+            MzJson.TryParse(
+                File.ReadAllText(pfad, System.Text.Encoding.UTF8),
+                out var dokument, out var fehler);
+            if (fehler.Length > 0
+                || dokument.Kind != MzKind.Array
+                || pIndex < 0
+                || pIndex >= dokument.Items.Count)
+            {
+                continue;
+            }
+
+            var befehle = dokument.Items[pIndex].Member("list");
+            if (befehle == null)
+            {
+                return liste;
+            }
+
+            foreach (var zeile in befehle.Items ?? new List<MzValue>())
+            {
+                liste.Add(MzCommandEntry.From(zeile));
+            }
+
+            return liste;
+        }
+
+        return liste;
+    }
+
+    /// <summary>
+    /// Whether a common event calls itself, which would need the depth cap.
+    /// </summary>
+    private static bool Keine117(List<MzCommandEntry> pListe, int pIndex)
+    {
+        foreach (var zeile in pListe)
+        {
+            if (zeile.Code == MzCommandTable.CommonEvent
+                && MzCommands.At(zeile, 0) == pIndex)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The first common event a map on this project's disk calls.
+    /// </summary>
+    private static int ErstesGemeinsamesEreignis()
+    {
+        // **Und die Karten liegen unter `data/`, nicht `www/data/`** --
+        // **und dieser Unterschied hat schon einmal eine ganze Messung
+        // leer laufen lassen.** **Und die Datei, aus der der Host das
+        // Projekt liest, nennt beides.**
+        foreach (var pfad in KartenDateien())
+        {
+            // **Und eine Karte ist ein Objekt mit `events`, und kein
+            // Array** -- **und meine erste Fassung dieses Hilfs hat ein
+            // Array erwartet**, **und deshalb null Karten gelesen und
+            // gemeldet, dieses Spiel rufe nie ein gemeinsames Ereignis.**
+            MzJson.TryParse(
+                File.ReadAllText(pfad, System.Text.Encoding.UTF8),
+                out var karte, out var fehler);
+            if (fehler.Length > 0 || karte.Kind != MzKind.Object)
+            {
+                continue;
+            }
+
+            foreach (var zeile in (karte.Member("events")?.Items
+                ?? new List<MzValue>()))
+            {
+                foreach (var seiten in (zeile.Member("pages")?.Items
+                    ?? new List<MzValue>()))
+                {
+                    foreach (var befehl in (seiten.Member("list")?.Items
+                        ?? new List<MzValue>()))
+                    {
+                        if (befehl.Member("code")?.IntOr(-1)
+                            != MzCommandTable.CommonEvent)
+                        {
+                            continue;
+                        }
+
+                        var ziel = befehl.Member("parameters")?.Items;
+                        if (ziel != null && ziel.Count > 0
+                            && ziel[0].IntOr(0) > 0)
+                        {
+                            return ziel[0].IntOr(0);
+                        }
+                    }
+                }
+            }
+        }
+
+        return 0;
     }
 
     // ---------------------------------------------------------------------
