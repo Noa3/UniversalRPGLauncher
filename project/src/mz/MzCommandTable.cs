@@ -208,6 +208,121 @@ public static class MzCommandTable
     /// game said not to and not wait when it said yes.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// A state goes onto an actor or comes off.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command313() {
+    ///     this.iterateActorEx(this._params[0], this._params[1], actor => {
+    ///         const alreadyDead = actor.isDead();
+    ///         if (this._params[2] === 0) {
+    ///             actor.addState(this._params[3]);
+    ///         } else {
+    ///             actor.removeState(this._params[3]);
+    ///         }
+    ///         if (actor.isDead() &amp;&amp; !alreadyDead) {
+    ///             actor.performCollapse();
+    ///         }
+    ///         actor.clearResult();
+    ///     });
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And the third parameter is the direction and not a
+    /// number:</strong> <strong>zero adds the state and anything else takes
+    /// it away.</strong> <strong>And this game writes
+    /// <c>[0, 2, 0, 25]</c>, <c>[0, 2, 0, 26]</c>, <c>[0, 2, 0, 28]</c>
+    /// three hundred and nineteen times</strong> -- <strong>which are
+    /// poisons, sleep and illnesses, and every one of them is
+    /// added.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>alreadyDead</c> is read before the change</strong>,
+    /// <strong>so only an actor who was alive and is now dead
+    /// collapses</strong> -- <strong>and that is the difference between
+    /// "he just died" and "he was dead already and a state keeps
+    /// him dead".</strong>
+    /// </para>
+    /// </remarks>
+    public const int ChangeActorState = 313;
+
+    /// <summary>
+    /// An animation over a character, and the other one: <c>221</c> is over
+    /// an event, this is over whatever character the page names.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command212() {
+    ///     this._character = this.character(this._params[0]);
+    ///     if (this._character) {
+    ///         this._character.requestAnimation(this._params[1]);
+    ///         if (this._params[2]) {
+    ///             this.setWaitMode('animation');
+    ///         }
+    ///     }
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And the first parameter is a character and not an actor
+    /// id.</strong> Measured: <c>[0, 157, false]</c>, <c>[0, 182,
+    /// false]</c>, <c>[-1, 182, false]</c> -- <strong>and minus one is the
+    /// player, exactly as for <see cref="ShowBalloonIcon"/>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>requestAnimation</c> takes a number and no frame
+    /// count</strong> -- <strong>the length is in the project's own
+    /// <c>Animations.json</c> and is not invented here.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And when the character is not there nothing happens and it
+    /// is not an error</strong> -- <strong>the engine guards with <c>if
+    /// (this._character)</c> and goes on.</strong>
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// How many of a piece of armour the party has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <code>
+    /// command128() {
+    ///     const value = this.operateValue(this._params[1],
+    ///                                  this._params[2],
+    ///                                  this._params[3]);
+    ///     $gameParty.gainItem($dataArmors[this._params[0]],
+    ///                        value, this._params[4]);
+    ///     return true;
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>operateValue</c> starts at <c>params[1]</c> here and
+    /// at <c>params[0]</c> in <c>125</c></strong>, <strong>because the
+    /// first slot here is the armour and not the
+    /// operation.</strong> <strong>And one reader that always started at
+    /// zero would take the armour for the operation</strong> -- <strong>and
+    /// measured at <c>D:/Itch/sister/www</c>: <c>[150, 0, 0, 1, false]</c>,
+    /// <c>[27, 0, 0, 1, false]</c>, <c>[100, 0, 0, 1, false]</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the container is <c>$dataArmors</c> and not
+    /// <c>$dataItems</c></strong>, <strong>so the count belongs beside the
+    /// item count and not in it.</strong>
+    /// </para>
+    /// </remarks>
+    public const int ChangeArmor = 128;
+
+
+    public const int ShowAnimation2 = 212;
+
+
     public const int ScreenTint = 223;
 
     /// <summary>

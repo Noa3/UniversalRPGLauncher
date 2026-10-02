@@ -100,6 +100,15 @@ public static class MzCommands
             // Verwendungen.**
             or MzCommandTable.EraseEventFromMap
             or MzCommandTable.ScreenTint
+            or MzCommandTable.ScreenTint
+            or MzCommandTable.ScreenFlash
+            // Befehl, der nicht im Tor steht, wird nie ausgefuehrt und
+            // als ausgefuehrt gemeldet** -- **und `313` ist der
+            // haeufigste ungedeckte Befehl in diesem Spiel mit 319
+            // Verwendungen.**
+            or MzCommandTable.ChangeActorState
+            or MzCommandTable.ShowAnimation2
+            or MzCommandTable.ChangeArmor
             or MzCommandTable.ScreenShake
             or MzCommandTable.RecoverAll
             or MzCommandTable.ShowText
@@ -936,6 +945,46 @@ public static class MzCommands
             }
 
 
+            case MzCommandTable.ScreenFlash:
+            {
+                // **Und `command224`:**
+                //
+                // ```js
+                // $gameScreen.startFlash(this._params[0], this._params[1]);
+                // if (this._params[2]) { this.wait(this._params[1]); }
+                // return true;
+                // ```
+                //
+                // **Und das ist `223` mit einer Farbe und ohne Einfaerbung,
+                // und beide nehmen denselben dritten Wert als "warten"** --
+                // **und gemessen an `D:/Itch/sister/www`:
+                // `[[255, 255, 255, 119], 60, false]`**
+                // **[weiss, einhundertneunzehn staerke, sechzig Bilder,
+                // ohne Warten].**
+                //
+                // **Und die vierte Zahl ist die Staerke und keine
+                // Deckkraft** -- **und `updateFlash` laeuft mit `i < 4`
+                // ueber vier Kanäle**, **genauso wie `updateTone`.**
+                var farbe = Vier(pCommand, 0);
+                var dauer = At(pCommand, 1);
+                var warten = Flag(pCommand, 2);
+                pFacts.Screen.StarteBlitz(farbe, dauer);
+                pActions.Add(new MzAction(pCommand,
+                    $"the screen flashes {farbe[0]},{farbe[1]},{farbe[2]}"
+                    + $",{farbe[3]}"
+                    + (dauer > 0
+                        ? $" over {dauer} frames"
+                        : " at once")));
+                if (warten)
+                {
+                    pInterpreter.Wait(dauer);
+                    return false;
+                }
+
+                return true;
+            }
+
+
             case MzCommandTable.ScreenTint:
             {
                 // **Und `command223` in voller Laenge:**
@@ -977,6 +1026,180 @@ public static class MzCommands
                 {
                     pInterpreter.Wait(dauer);
                     return false;
+                }
+
+                return true;
+            }
+
+
+            case MzCommandTable.ChangeActorState:
+            {
+                // **Und `command313`:**
+                //
+                // ```js
+                // this.iterateActorEx(this._params[0], this._params[1],
+                //     actor => {
+                //         const alreadyDead = actor.isDead();
+                //         if (this._params[2] === 0) {
+                //             actor.addState(this._params[3]);
+                //         } else {
+                //             actor.removeState(this._params[3]);
+                //         }
+                //         if (actor.isDead() && !alreadyDead) {
+                //             actor.performCollapse();
+                //         }
+                //         actor.clearResult();
+                //     });
+                // return true;
+                // ```
+                //
+                // **Und der dritte Wert ist die Richtung und keine Zahl:**
+                // **Null fuegt den Zustand hinzu und alles andere nimmt
+                // ihn weg** -- **und gemessen an
+                // `D:/Itch/sister/www`: `[0, 2, 0, 25]`, `[0, 2, 0, 26]`,
+                // `[0, 2, 0, 28]`**, **also durchgehend "hinzufuegen" an
+                // den Zustandsnummern fuenfundzwanzig bis einunddreissig,
+                // und das sind Vergiftungen, Schlaf und Krankheiten.**
+                //
+                // **Und `alreadyDead` wird VOR dem Aendern gelesen**, **und
+                // nur wenn der Darsteller danach tot ist und vorher nicht
+                // war, bricht er zusammen** -- **das ist der Unterschied
+                // zwischen "er ist gerade gestorben" und "er war
+                // bereits tot und haelt einen Zustand, der ihn toetet".**
+                var ziel = At(pCommand, 0);
+                var ganzePartei = At(pCommand, 1) != 0;
+                var hinzu = At(pCommand, 2) == 0;
+                var zustand = At(pCommand, 3);
+                foreach (var darsteller in GeordneteZahlen(pFacts.PartyMembers))
+                {
+                    if (ganzePartei || darsteller == ziel)
+                    {
+                        pFacts.States.Add(new MzStateChange(
+                            darsteller, zustand, hinzu));
+                    }
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    (ganzePartei ? "every actor" : $"actor {ziel}")
+                    + (hinzu ? " gains state " : " loses state ")
+                    + zustand));
+                return true;
+            }
+
+            case MzCommandTable.ChangeArmor:
+            {
+                // **Und `command128`:**
+                //
+                // ```js
+                // const value = this.operateValue(this._params[1],
+                //                                  this._params[2],
+                //                                  this._params[3]);
+                // $gameParty.gainItem($dataArmors[this._params[0]],
+                //                    value, this._params[4]);
+                // return true;
+                // ```
+                //
+                // **Und `operateValue` faengt hier bei `params[1]` an und
+                // nicht bei `params[0]`** -- **denn der erste Platz ist die
+                // Ruecksuite und nicht die Rechnung.** **Ein Leser, der
+                // `operateValue` immer bei null beginnt, macht aus der
+                // Ruecksuite die Rechnung und aus der Rechnung die
+                // Operandart** -- **und gemessen an
+                // `D:/Itch/sister/www`: `[150, 0, 0, 1, false]`,
+                // `[27, 0, 0, 1, false]`, `[100, 0, 0, 1, false]`.**
+                //
+                // **Und der fuenfte Wert ist ob die Party es equippt**, und
+                // **er ist nicht bei allen Fuenfen false**, **sondern das
+                // ist eine Entscheidung des Spiels und keine Form.**
+                var ruestung = At(pCommand, 0);
+                if (!TryOperateValue(
+                    pCommand, pFacts, 1, out var wert, out var fehlt))
+                {
+                    pInterpreter.Stop(MzStep.Refused, fehlt);
+                    return false;
+                }
+
+                var vorher = pFacts.Armors.TryGetValue(ruestung,
+                    out var alt) ? alt : 0;
+                var nachher = vorher + wert;
+                // **Und `gainItem` klemmt auf neunzigneun und loescht den
+                // Eintrag, wenn er auf null landet** -- **und das ist
+                // `Game_Party.prototype.gainItem` und nicht etwas, was
+                // `128` selbst entscheidet.**
+                var grenze = pFacts.MaxItems;
+                nachher = nachher > grenze ? grenze
+                    : (nachher < 0 ? 0 : nachher);
+                if (nachher == 0)
+                {
+                    pFacts.Armors.Remove(ruestung);
+                }
+                else
+                {
+                    pFacts.Armors[ruestung] = nachher;
+                }
+
+                pActions.Add(new MzAction(pCommand,
+                    $"armour {ruestung} {vorher} -> {nachher}"));
+                return true;
+            }
+
+
+            case MzCommandTable.ShowAnimation2:
+            {
+                // **Und `command212`:**
+                //
+                // ```js
+                // this._character = this.character(this._params[0]);
+                // if (this._character) {
+                //     this._character.requestAnimation(this._params[1]);
+                //     if (this._params[2]) {
+                //         this.setWaitMode('animation');
+                //     }
+                // }
+                // return true;
+                // ```
+                //
+                // **Und der erste Wert ist ein Darsteller und kein
+                // Darstellernummer** -- **gemessen: `[0, 157, false]`,
+                // `[0, 182, false]`, `[-1, 182, false]`** -- **und minus
+                // eins ist der Spieler, genau wie bei `213`.**
+                //
+                // **Und `requestAnimation` nimmt eine Nummer und keine
+                // Bildzahl** -- **die Bildzahl steht in `Animations.json`
+                /// **und wird hier nicht geraten.**
+                //
+                // **Und wenn es den Darsteller nicht gibt, passiert nichts
+                // und es ist kein Fehler** -- **die Engine prueft `if
+                // (this._character)` und geht weiter.**
+                var wessen = At(pCommand, 0);
+                var animation = At(pCommand, 1);
+                var warten = Flag(pCommand, 2);
+                if (pFacts.Characters.TryGetValue(wessen, out var zeichen)
+                    && zeichen != null)
+                {
+                    // **Und die Bildzahl ist null, weil sie in der
+                    // Projektablage steht und nicht im Befehl** -- **und der
+                    // Befehl traegt sie nicht, also wird sie nicht
+                    // erfunden.**
+                    zeichen.ShowAnimation(animation, 0);
+                    pFacts.AnimationAsked.Add(zeichen.EventId);
+                    pActions.Add(new MzAction(pCommand,
+                        $"character {wessen} is asked for animation "
+                        + $"{animation}"
+                        + (warten ? ", and the page waits for it" : "")));
+                    if (warten)
+                    {
+                        pInterpreter.WaitFor(MzWaitMode.Animation);
+                        return false;
+                    }
+                }
+                else
+                {
+                    pActions.Add(new MzAction(pCommand,
+                        $"character {wessen} was asked for animation "
+                        + $"{animation} and is not on this map, which is "
+                        + "what the engine's own `if (this._character)` "
+                        + "does and is not an error"));
                 }
 
                 return true;
@@ -1646,23 +1869,53 @@ public static class MzCommands
     /// operation, and hand the party its own money back.**
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The engine's own <c>operateValue</c>, read out of whichever three
+    /// parameters the command carries them in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the position is not the same in every command.</strong>
+    /// <c>125</c> calls <c>this.operateValue(params[0], params[1],
+    /// params[2])</c> and <c>128</c> calls <c>this.operateValue(params[1],
+    /// params[2], params[3])</c> -- <strong>because <c>128</c> spends its
+    /// first slot on the armour.</strong> <strong>And one reader that
+    /// always started at zero would take the armour as the
+    /// operation</strong>, <strong>and the party's stock of plate would go
+    /// the wrong way.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this is that reader, with the start as an
+    /// argument</strong>, <strong>because the engine has one
+    /// <c>operateValue</c> and not several.</strong>
+    /// </para>
+    /// </remarks>
     private static bool TryGoldOperand(
         MzCommandEntry pCommand, MzBranchFacts pFacts,
+        out int pValue, out string pMissing)
+        => TryOperateValue(pCommand, pFacts, 0, out pValue, out pMissing);
+
+    /// <summary>
+    /// <c>operateValue(operation, operandType, operand)</c> at the slot it
+    /// starts in.
+    /// </summary>
+    private static bool TryOperateValue(
+        MzCommandEntry pCommand, MzBranchFacts pFacts, int pStart,
         out int pValue, out string pMissing)
     {
         pValue = 0;
         pMissing = "";
-        var operation = At(pCommand, 0);
+        var operation = At(pCommand, pStart);
         var wert = 0;
-        switch ((MzOperand)At(pCommand, 1))
+        switch ((MzOperand)At(pCommand, pStart + 1))
         {
             case MzOperand.Constant:
-                wert = At(pCommand, 2);
+                wert = At(pCommand, pStart + 2);
                 break;
 
             case MzOperand.Variable:
             {
-                var id = At(pCommand, 2);
+                var id = At(pCommand, pStart + 2);
                 if (!pFacts.HasVariable(id))
                 {
                     pMissing = $"variable {id}, which the command works with";

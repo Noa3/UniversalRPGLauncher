@@ -116,4 +116,25 @@ public enum MzWaitMode
     /// </para>
     /// </remarks>
     Video = 5,
+    /// <summary>
+    /// Held while an animation plays over a character -- the engine's
+    /// <c>"animation"</c>, set by a <c>212</c> or a <c>221</c> whose third
+    /// parameter says the page waits.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a condition and not a clock, for the same reason
+    /// <see cref="Video"/> is.</strong> The engine sets it with
+    /// <c>this.setWaitMode('animation')</c> and its <c>updateWaitMode</c>
+    /// asks whether the animation is still going, every frame, until it is
+    /// not.
+    /// </para>
+    /// <para>
+    /// <strong>And no number of frames appears in the command</strong> --
+    /// <strong>the length is in the project's own <c>Animations.json</c></strong>
+    /// -- <strong>so a reader that waited a fixed count would cut a long
+    /// animation short and hold a short one.</strong>
+    /// </para>
+    /// </remarks>
+    Animation = 6,
 }

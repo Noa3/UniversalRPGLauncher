@@ -16084,3 +16084,134 @@ Stopped=Refused, Grund=a branch on the author's own script:
 **Because Map002's second event spends its hundred and seventeen commands
 on a `355` block, and `AGENTS.md` forbids running a project's JavaScript.**
 **The tint and the erase are behind it.**
+
+
+## Four more commands, four more traps, and a claim I closed from six samples
+
+### And what the game asked for
+
+```text
+D:/Itch/sister/www, Karten und gemeinsame Ereignisse zusammen:
+    313 Change Actor State   319x
+    224 Screen Flash         155x
+    212 Show Animation        90x
+    128 Change Armor          47x
+                            ----
+                             611 Befehle, die als ausgefuehrt gemeldet
+                             wurden und nichts taten
+```
+
+### And the four engine lines
+
+```javascript
+command313() {
+    this.iterateActorEx(this._params[0], this._params[1], actor => {
+        const alreadyDead = actor.isDead();
+        if (this._params[2] === 0) { actor.addState(this._params[3]); }
+        else { actor.removeState(this._params[3]); }
+        if (actor.isDead() && !alreadyDead) { actor.performCollapse(); }
+        actor.clearResult();
+    });
+    return true;
+}
+
+command224() {
+    $gameScreen.startFlash(this._params[0], this._params[1]);
+    if (this._params[2]) { this.wait(this._params[1]); }
+    return true;
+}
+
+command212() {
+    this._character = this.character(this._params[0]);
+    if (this._character) {
+        this._character.requestAnimation(this._params[1]);
+        if (this._params[2]) { this.setWaitMode('animation'); }
+    }
+    return true;
+}
+
+command128() {
+    const value = this.operateValue(this._params[1], this._params[2],
+                                   this._params[3]);
+    $gameParty.gainItem($dataArmors[this._params[0]], value, this._params[4]);
+    return true;
+}
+```
+
+### And four traps, each a different kind
+
+**One: `313`'s third slot is a direction and not a number.** **Zero adds
+the state, anything else takes it away.** **And the second slot is not a
+second actor: it is `iterateActorEx`'s whole-party flag, and 248 of the 319
+are `0|2|0|N`.**
+
+**And `alreadyDead` is read before the change**, **so only an actor who was
+alive and is now dead collapses** -- **and that is the difference between
+"he just died" and "he was dead already and a state keeps him dead".**
+
+**Two: `224` is `223` with a colour**, **and `updateFlash` walks four
+channels with the same fraction-of-the-way arithmetic.** **And the fourth
+number is the strength and not an alpha: `[[255, 0, 0, 170], 120, false]`.**
+
+**Three: `212`'s first slot is a character and not an actor.** **`[0, 157,
+false]`, `[-1, 182, false]` -- and minus one is the player, exactly as for
+`213`.** **And `requestAnimation` takes a number and no frame count; the
+length is in the project's own `Animations.json` and is not invented here.**
+
+**Four: `128`'s `operateValue` starts at `params[1]`, not `params[0]`.**
+**The first slot is the armour.** **One reader that always started at zero
+would make `[150, 0, 0, 1, false]` add a hundred and fifty instead of one,
+and the party's stock of plate would go the wrong way.** **And
+`$dataArmors` is not `$dataItems`, so armour belongs in its own container.**
+
+### And a claim I made from six samples and the game refuted
+
+**The first draft of this test asserted that every `212` in this game waits
+for nothing.** **It was written from the six commonest forms and it was
+wrong:**
+
+```text
+13 der 31 Formen enden auf |true
+18 der 31 Formen enden auf |false
+```
+
+**And that is a fact about the game and not a rule -- and `MzWaitMode.Animation`
+is not a corner case, it is half of every `212` here.**
+
+### And two measurements that were wrong before they were right
+
+**The first pass counted 275 `313` and not 319**, **because a filter that
+only lets `Map*.json` through skips `CommonEvents.json`, which does not begin
+with "Map".** **And the second pass threw on it**, **because
+`CommonEvents.json` is an array of objects with a `list` and a map is an
+object with an `events`.** **Both were a reader that had been written for
+one of the two shapes.**
+
+**And a third assertion was about the *first* `313` form found rather than
+the commonest**, **which is a reading order and not a claim about the game.**
+
+### And after
+
+```text
+MZ Befehlssatz: 114 Befehle, 50 in einem Auspraecher (43%), 64 ohne
+MV sister:      133484 Befehle, 124409 gedeckt (93%)  <- 123902
+MV LegalTruck:     730 Befehle,    724 gedeckt (99%)
+MZ Camellia:     2432 Befehle,   2076 gedeckt (85%)
+
+MV haeufigste neue Befehle: 313=319 224=155 212=90 128=47
+TestMvStatesAnimationArmor: 5/5
+TestMvEraseAndTint: 6/6
+TestRealMvPluginCommands: 3/3
+All 2273 tests passed
+```
+
+### And the run is still stopped where it was
+
+```text
+Stopped=Refused, Grund=a branch on the author's own script:
+```
+
+**Because Map002's second event spends its hundred and seventeen commands
+on a `355` block, and `AGENTS.md` forbids running a project's JavaScript.**
+**Six hundred and eleven commands are now behind that line instead of a
+handful.**

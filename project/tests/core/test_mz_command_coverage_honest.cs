@@ -65,9 +65,10 @@ public partial class TestMzCommandCoverageHonest : TestBase
         };
         var befehle_ = new HashSet<int>
         {
-            101, 105, 108, 121, 122, 123, 125, 126, 129, 201, 203, 205, 213,
-            221, 222, 225, 230, 231, 232, 235, 241, 242, 245, 246, 249, 250,
-            251, 261, 301, 314, 322, 351, 355, 357,
+            101, 105, 108, 121, 122, 123, 125, 126, 128, 129, 201, 203, 205,
+            212, 213, 214, 221, 222, 223, 224, 225, 230, 231, 232, 235, 241,
+            242, 245, 246, 249, 250, 251, 261, 301, 313, 314, 322, 351, 355,
+            357,
         };
 
         var gedeckt = befehle_.Union(steuerung).ToHashSet();
@@ -81,21 +82,19 @@ public partial class TestMzCommandCoverageHonest : TestBase
         AssertTrue(gedeckt.All(zahlen.Contains),
             "**and every number a dispatcher claims is a command**");
         AssertTrue(gedeckt.Count >= 40,
-            "**and the dispatch covers forty commands** -- " + gedeckt.Count
+            "**and the dispatch covers fifty commands** -- " + gedeckt.Count
                 + ", and this is the number to compare against next time, "
                 + "because a coverage that is not written down is a coverage "
                 + "that cannot grow");
 
         // **Und die Luecke ist eine Liste und kein Satz**, **denn eine Liste
         // kann man abarbeiten und ein Satz nicht.**
-        // **Und 106 und 107 sind keine Befehle, sondern die Folgezeilen von
-        // 105**, **und ich hatte sie genommen, weil ich eine Liste aus dem
-        // Gedaechtnis schrieb statt sie abzulesen.** **Die Liste wird aus
-        // `nicht` gelesen, und jede Zahl darin ist eine Behauptung, die man
-        // nachschlagen kann.**
+        // **Und 128 und 214 sind nicht mehr darauf** -- **die sind im
+        // vorigen Commit verdrahtet worden, und eine Liste, die sie noch
+        // fuehrt, sagt das Gegenteil von dem, was der Code tut.**
         foreach (var erwartet in new[]
         {
-            103, 104, 109, 117, 124, 127, 128, 214, 302, 311,
+            103, 104, 109, 117, 124, 127, 302, 311,
         })
         {
             AssertTrue(nicht.Contains(erwartet),
@@ -104,6 +103,11 @@ public partial class TestMzCommandCoverageHonest : TestBase
                     + "list is the work, and every number in it is one that "
                     + "MzCommandSet knows and this repository does not run");
         }
+
+        AssertTrue(!nicht.Contains(128) && !nicht.Contains(214),
+            "**and 128 and 214 are not on it** -- and they are not, because "
+            + "the dispatch runs them now, and a list of the gap that "
+            + "still names a wired command is a list with a lie in it");
 
         AssertTrue(!nicht.Contains(106) && !nicht.Contains(107),
             "**and 106 and 107 are not on it** -- and they are not commands "
@@ -179,9 +183,9 @@ public partial class TestMzCommandCoverageHonest : TestBase
         var gedeckt = new HashSet<int>
         {
             101, 102, 105, 108, 111, 112, 113, 115, 118, 119, 121, 122, 123,
-            101, 102, 105, 108, 111, 112, 113, 115, 118, 119, 121,            122, 123, 125, 126, 129, 201, 203, 205, 213, 214, 221,            222, 223, 225, 230, 231, 232,
-            235, 241, 242, 245, 246, 249, 250, 251, 261, 301, 314,            322, 351,
-            355, 357, 402, 411, 413,
+            125, 126, 128, 129, 201, 203, 205, 212, 213, 214, 221, 222, 223,
+            224, 225, 230, 231, 232, 235, 241, 242, 245, 246, 249, 250, 251,
+            261, 301, 313, 314, 322, 351, 355, 357, 402, 411, 413,
         };
         var keineMethode = new HashSet<int>
         {

@@ -343,6 +343,29 @@ public sealed class MzBranchFacts
     public HashSet<int> Recovered { get; } = new();
 
     /// <summary>
+    /// The states that went onto actors and off them, in the order the
+    /// commands asked.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a list and not a set</strong>, <strong>because the same
+    /// state can go onto the same actor twice in a row</strong> -- <strong>
+    /// and a page that adds poison, takes it away and adds it again is three
+    /// commands and not one.</strong>
+    /// </remarks>
+    public List<MzStateChange> States { get; } = new();
+
+    /// <summary>
+    /// Which characters were asked for an animation.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the number of the animation is not here</strong> --
+    /// <strong>it lives in the character, which is where the engine keeps
+    /// it</strong>, <strong>and a second copy here would be a second place to
+    /// get it wrong.</strong>
+    /// </remarks>
+    public List<int> AnimationAsked { get; } = new();
+
+    /// <summary>
     /// Whether the party is in a battle, which is the one condition
     /// <c>command351</c> asks before it opens the menu.
     /// </summary>
@@ -614,6 +637,23 @@ public sealed class MzBranchFacts
         foreach (var darsteller in Recovered)
         {
             kopie.Recovered.Add(darsteller);
+        }
+
+        // **Und die Zustandswechsel kommen mit** -- **denn `313` darf in
+        // einem gemeinsamen Ereignis stehen, und ein Kindlauf, der seine
+        // Zustandswechsel verliert, wuerde ein Gift, das er gegeben hat,
+        // nicht mehr sehen.**
+        foreach (var wechsel in States)
+        {
+            kopie.States.Add(wechsel);
+        }
+
+        // **Und die angefragten Animationen auch**, **denn `212` mit
+        // Warten wartet in derselben Schleife, in der der Kindlauf
+        // laeuft.**
+        foreach (var wen in AnimationAsked)
+        {
+            kopie.AnimationAsked.Add(wen);
         }
 
         return kopie;

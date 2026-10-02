@@ -607,6 +607,86 @@ public sealed class MzScreen
     /// duration is one or less, and the direction flips at
     /// <c>±power * 2</c>.
     /// </remarks>
+    /// <summary>
+    /// The colour the screen is flashed in, and how long that takes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And <c>224 Screen Flash</c> is <c>223</c> with a colour and
+    /// not a tint</strong>, <strong>and the engine keeps it in
+    /// <c>_flashTarget</c> and moves <c>_flash</c> toward it exactly the
+    /// way it moves a tone</strong> -- <strong>same four channels, same
+    /// fraction of the way, same count of frames.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And measured on this game: <c>[[255, 255, 255, 119], 60,
+    /// false]</c></strong> -- <strong>a white flash of a hundred and
+    /// nineteen over sixty frames</strong>, <strong>and the fourth number is
+    /// the strength and not an alpha.</strong>
+    /// </para>
+    /// </remarks>
+    public int[] Flash { get; private set; } = new int[] { 0, 0, 0, 0 };
+
+    /// <summary>Where the flash is going, and the same colour when it is
+    /// not moving.</summary>
+    public int[] TargetFlash { get; private set; } = new int[] { 0, 0, 0, 0 };
+
+    /// <summary>Frames of flash left, as the engine's
+    /// <c>_flashDuration</c>.</summary>
+    public int FlashDuration { get; private set; }
+
+    /// <summary>Whether a flash is on its way, which is what a wait asks
+    /// about.</summary>
+    public bool FlashIsMoving => FlashDuration > 0;
+
+    /// <summary>
+    /// Begin a flash, the way the engine's <c>startFlash</c> does.
+    /// </summary>
+    public string StarteBlitz(int[] pFarbe, int pDauer)
+    {
+        TargetFlash = Vier(pFarbe);
+        FlashDuration = pDauer > 0 ? pDauer : 0;
+        if (FlashDuration == 0)
+        {
+            Flash = new int[] { TargetFlash[0], TargetFlash[1],
+                                TargetFlash[2], TargetFlash[3] };
+        }
+
+        return "flash " + Flash[0] + "," + Flash[1] + "," + Flash[2]
+            + "," + Flash[3]
+            + (FlashDuration > 0
+                ? " toward " + TargetFlash[0] + "," + TargetFlash[1] + ","
+                    + TargetFlash[2] + "," + TargetFlash[3]
+                    + " over " + FlashDuration + " frames"
+                : " at once");
+    }
+
+    /// <summary>
+    /// One frame of the flash, and the engine's <c>updateFlash</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is the same arithmetic as <see cref="TickTon"/>,
+    /// written twice in the engine</strong> -- <strong>once for the tone and
+    /// once for the flash</strong> -- <strong>and a reader that shared one
+    /// would have been right about both.</strong>
+    /// </remarks>
+    public void TickBlitz()
+    {
+        if (FlashDuration <= 0)
+        {
+            return;
+        }
+
+        var d = FlashDuration;
+        for (var i = 0; i < 4; i++)
+        {
+            Flash[i] = (Flash[i] * (d - 1) + TargetFlash[i]) / d;
+        }
+
+        FlashDuration--;
+    }
+
+
     public void TickWackeln()
     {
         if (ShakeFramesLeft <= 0 && ShakeOffset == 0)
@@ -782,6 +862,11 @@ public sealed class MzScreen
         // und `updateWeather`, und ein Lauf, der den Ton nicht mitnimmt,
         // laesst eine Einfaerbung fuer unendlich stehen.**
         TickTon();
+
+        // **Und der Blitz laeuft auf demselben Bild wie der Ton**,
+        // **denn `Game_Screen.update` ruft `updateFlash` zwischen
+        // `updateTone` und `updateWeather`.**
+        TickBlitz();
 
         // **Und die Audio-Fades laufen auf demselben Bild wie die
         // Bilder** -- **denn ein Befehl, der ein Bild dreht und
