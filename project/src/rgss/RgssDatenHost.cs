@@ -185,7 +185,12 @@ public sealed class RgssDatenHost : IRubyHost
             return RubyValue.Nil;
         }
 
-        if (pWert.Text != null)
+        if (pWert.Kind == "symbol" && pWert.Text != null)
+        {
+            return RubyValue.OfSymbol(pWert.Text);
+        }
+
+        if (pWert.Kind == "string" && pWert.Text != null)
         {
             return RubyValue.OfBytes(System.Text.Encoding.UTF8
                 .GetBytes(pWert.Text));
@@ -206,9 +211,36 @@ public sealed class RgssDatenHost : IRubyHost
             return RubyValue.OfBoolean(false);
         }
 
-        if (pWert.Integer.HasValue)
+        // **Und der Integer-Zweig kommt VOR dem Objekt-Zweig** --
+        // **und das war der Fehler.**
+        //
+        // **Und `MarshalValue.Integer` ist bei einem Objekt der
+        // *Objektindex* und nicht der Wert**, -- **denn
+        // `ReadHash`, `Lese` und `LeseObjekt` schreiben dort
+        // `Integer = objectIndex`** -- **und MicroQuests
+        // `RPG::Map` kam als `Integer` zurueck.**
+        //
+        // **Und die Reihenfolge ist nicht Geschmack, sondern
+        // Korrektheit:** -- **ein Objekt, ein Hash und ein String
+        // tragen alle eine Zahl in diesem Feld**, -- **und wer sie
+        // zuerst prueft, gibt Zahlen fuer Klassen zurueck.**
+        //
+        // **Und `MarshalValue` unterscheidet die Faelle ueber
+        // `Kind`**, -- **und das ist das Feld, das geprueft werden
+        // muss.**
+        if (pWert.Kind == "integer" && pWert.Integer.HasValue)
         {
             return RubyValue.OfInteger(pWert.Integer.Value);
+        }
+
+        if (pWert.Kind == "float" && pWert.Real.HasValue)
+        {
+            return RubyValue.OfReal(pWert.Real.Value);
+        }
+
+        if (pWert.Kind == "string" && pWert.Bytes.Length > 0)
+        {
+            return RubyValue.OfBytes(pWert.Bytes);
         }
 
         if (pWert.Kind == "array")

@@ -18509,6 +18509,85 @@ alle durch Messung ersetzt:**
 | "der Dispatcher baut Namen aus Nummern" | 98 `when`-Zweige, 96 `return command_` |
 | "`@list` trägt `Object`" | `@list` ist `nil`, `Describe`s Rückfall |
 
+## 2026-10-02 — Kriterien 4 bis 6, Stufe 15: der dritte Fehler, und er lag in meinem Host
+
+**Und der Verlust von `load_data` war in `RgssDatenHost.AlsRuby`.**
+
+**Und nicht im Aufrufpfad des Interpreters.**
+
+**Und der Grund war die Reihenfolge der Zweige:**
+
+```csharp
+if (pWert.Text != null)   { ... }      // Symbol und String
+if (pWert.Kind == "nil")  { ... }
+if (pWert.Kind == "true") { ... }
+if (pWert.Kind == "false"){ ... }
+if (pWert.Integer.HasValue) { return RubyValue.OfInteger(...); }   // <-- hier
+if (pWert.Kind == "array") { ... }
+if (pWert.Kind == "object" ...) { ... }                            // <-- nie
+```
+
+**Und `MarshalValue.Integer` ist bei einem Objekt der *Objektindex*
+und nicht der Wert** -- **denn `ReadHash`, `Lese` und die ObjektLesung
+schreiben dort `Integer = objectIndex`** -- **und MicroQuests
+`RPG::Map` kam als `Integer` zurueck.**
+
+**Und ein Objekt, ein Hash und ein String tragen alle eine Zahl in
+diesem Feld**, -- **und wer sie zuerst prueft, gibt Zahlen fuer
+Klassen zurueck.**
+
+**Und jetzt entscheidet `Kind`:**
+
+```csharp
+if (pWert.Kind == "integer" && pWert.Integer.HasValue) { ... }
+if (pWert.Kind == "float"   && pWert.Real.HasValue)    { ... }
+if (pWert.Kind == "string"  && pWert.Bytes.Length > 0) { ... }
+if (pWert.Kind == "symbol"  && pWert.Text != null)     { ... }
+if (pWert.Kind == "object"  && pWert.ClassName != null){ ... }
+```
+
+```text
+Direkt: Object / RPG::Map, gelesen: 1, verweigert: 0
+Direkt gelesen: object / RPG::Map, Datei: Data/Map001.rxdata
+```
+
+### Und der zweite Befund ist die Regel, nicht ein Fehler
+
+```text
+load_data("Data/Map001.rxdata").class   -> Symbol / Object
+Kernel.load_data("Data/Map001.rxdata").class -> Symbol / NilClass
+```
+
+**Und MicroQuest schreibt `load_data(...)` ohne `Kernel.`** --
+**und das ist der richtige Weg.**
+
+**Und `.class` sagt `Object`, weil ein Objekt mit einem fremden
+Klassennamen in Ruby ein `Object` mit einem Fremdkoerper ist**,
+-- **und `RPG::Map` erscheint nur im Host-Aufruf**, --
+**und das ist die Regel und kein Mangel.**
+
+```
+All 2398 tests passed
+```
+
+**Und damit ist die Kette von der Datei bis zum Ruby-Objekt
+geschlossen:**
+
+```text
+Map001.rxdata
+  -> MarshalReader      (dieses Repository, Stufe 1)
+  -> MarshalValue       (Klasse=RPG::Map, gemessen)
+  -> AlsRuby             (RubyValue, Stufe 15)
+  -> load_data(...)      (Host, Stufe 14)
+  -> Game_Map#setup      (@map = der Wert)
+  -> Game_Map#width      (@map.width)
+  -> Interpreter#setup   (@list = list)
+```
+
+**Und der naechste Schritt ist `Kernel.load_data` -- denn das gibt
+`nil` zurueck, und MicroQuest braucht es nicht, und ein anderes
+Spiel vielleicht doch.**
+
 ## 2026-10-02 — Die sichere Rechnung, und wovon sie sich weigert
 
 **Befund.** `MzArithmetic` konnte `1 + 2` nicht lesen. Vier unabhaengige
