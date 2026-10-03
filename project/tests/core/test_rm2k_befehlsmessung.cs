@@ -287,6 +287,13 @@ public partial class TestRm2kBefehlsmessung : TestBase
         kampf.Sort(StringComparer.Ordinal);
         Console.WriteLine("Kampfbereich: " + string.Join(" ", kampf));
 
+        // **Und  die  drei  Befehle,  die  liblcf  kennt  und  dieser
+        //  Interpreter  nicht.**
+        Console.WriteLine($"Fehlend im Interpreter: "
+            + $"1005 CallCommonEvent {V(1005)}"
+            + $"  1006 ForceFlee {V(1006)}"
+            + $"  1007 EnableCombo {V(1007)}");
+
         Console.WriteLine($"Kampf: 10710 Gegnerbegegnung {V(10710)}"
             + $"  20710 Sieg {V(20710)}  20712 Niederlage {V(20712)}"
             + $"  20713 Kampfende {V(20713)}  13310 Bedingung {V(13310)}"
