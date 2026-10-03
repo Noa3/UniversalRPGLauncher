@@ -68,14 +68,43 @@ public sealed class RtpAblauf
     /// <param name="pZiel">Where the files go.</param>
     /// <param name="pFortschritt">Called with what happened so far.</param>
     /// <param name="pAbbruch">Asked between steps and while downloading.</param>
+    /// <param name="pZustimmung">
+    /// <strong>The visible consent of the person in front of the
+    /// screen</strong>, -- <strong>and it is the first parameter and
+    /// not the last on purpose</strong>.
+    /// </param>
     /// <returns>What it did.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the consent is a parameter and not a convention.</strong>
+    /// -- <strong>A run that downloads 194 million bytes without asking
+    /// is the one thing this repository must never do quietly</strong>,
+    /// -- <strong>and a call site that has a boolean next to a string
+    /// is harder to get wrong than a call site that has to remember
+    /// an earlier <c>if</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this method has already done the right thing when
+    /// told no</strong>, -- <strong>and the test asserts that the
+    /// fetcher was not touched at all, because "no" that still
+    /// opens a connection is not consent.</strong>
+    /// </para>
+    /// </remarks>
     public Ergebnis FuehreAus(
+        bool pZustimmung,
         string pEngineId,
         string pZiel,
         Action<string>? pFortschritt = null,
         Func<bool>? pAbbruch = null)
     {
         var e = new Ergebnis { Ziel = pZiel };
+
+        if (!pZustimmung)
+        {
+            e.Meldung = "Ohne ausdrueckliche Zustimmung wurde nichts"
+                + " geholt und nichts entpackt.";
+            return e;
+        }
 
         if (!RtpArchivFakten.Alle().TryGetValue(pEngineId, out var fakt))
         {

@@ -58,7 +58,7 @@ public partial class TestRtpAblauf : TestBase
         var lauf = new RtpAblauf(new TestQuelle(
             Array.Empty<byte>(), true));
 
-        var e = lauf.FuehreAus("rmvxace", ziel);
+        var e = lauf.FuehreAus(true, "rmvxace", ziel);
 
         Console.WriteLine("Schritte: " + string.Join(" | ", e.Schritte));
         Console.WriteLine("Meldung:  " + e.Meldung);
@@ -94,7 +94,7 @@ public partial class TestRtpAblauf : TestBase
         var zaehler = new ZaehlerQuelle(() => aufrufe++);
         var lauf = new RtpAblauf(zaehler);
 
-        var e = lauf.FuehreAus("gibtsnicht", ziel);
+        var e = lauf.FuehreAus(true, "gibtsnicht", ziel);
 
         Console.WriteLine("Meldung: " + e.Meldung);
         Console.WriteLine("Aufrufe: " + aufrufe);
@@ -124,7 +124,7 @@ public partial class TestRtpAblauf : TestBase
         var lauf = new RtpAblauf(new TestQuelle(
             ZipMit("Audio/BGM/Theme1.ogg", "OggS-Test")));
 
-        var e = lauf.FuehreAus("rmvx", ziel);
+        var e = lauf.FuehreAus(true, "rmvx", ziel);
 
         Console.WriteLine("Schritte: " + string.Join(" | ", e.Schritte));
         Console.WriteLine("Meldung:  " + e.Meldung);
@@ -152,7 +152,7 @@ public partial class TestRtpAblauf : TestBase
     {
         var ziel = Basis("weg");
         new RtpAblauf(new TestQuelle(
-            ZipMit("Audio/SE/Cursor1.ogg", "OggS"))).FuehreAus("rmvx", ziel);
+            ZipMit("Audio/SE/Cursor1.ogg", "OggS"))).FuehreAus(true, "rmvx", ziel);
 
         var archiv = Directory.GetFiles(ziel, "*.zip");
         Console.WriteLine("Archive noch da: " + archiv.Length);
