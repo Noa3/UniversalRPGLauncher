@@ -157,42 +157,81 @@ public static class Rm2kAnimationZelle
                 return true;
             }
 
-            var zellenAnzahl = reader.ReadBer();
-            if (zellenAnzahl < 0 || zellenAnzahl > 4096)
-            {
-                pFehler = "frame " + frame + " claims "
-                    + zellenAnzahl + " cells, and that is outside"
-                    + " what a frame can hold";
-                return false;
-            }
-
+            // **Und  die  Zellen  kommen  als  Feld  `0x01`  des  Frames
+            //  und  nicht  als  nackte  Zahl.**
+            //
+            // **Und  das  ist  ueber  alle  sechs  Frames  des  Spiels
+            //  konsistent  gemessen:**
+            //
+            // <code>
+            // Frame 0: id 1
+            //   Feld 0x1 len 13: 1, 1, 3,1,32, 4,5,143,255,255,255,88, 0
+            ///     Zellen 1
+            ///     Zelle 1: id 1  Felder 0x3=32  0x4=(143,255,255,255,88)
+            ///   Ende
+            /// Frame 1: id 2
+            ///   Feld 0x1 len 19: 1, 1, 2,1,1, 3,1,16, 4,5,143,...,0
+            ///     Zelle 1: id 1  Felder 0x2=1  0x3=16  0x4=...  0x5=125
+            /// </code>
+            //
+            // **Und  meine  zwei  vorherigen  Leser  nahmen  die  Zellen
+            //  direkt  nach  der  Frame-Nummer  an**, -- **und  einer
+            //  las  die  erste  Zahl  als  Laenge  und  stolperte  bei
+            //  <c>0x8F</c>** -- **und  der  andere  las  sie  als  Feld-
+            //  Id  und  gab  7112  Zellen  ohne  Namen  zurueck.**
             var zellen = new Godot.Collections
                 .Array<Godot.Collections.Dictionary>();
-            for (var z = 0; z < zellenAnzahl; z++)
-            {
-                if (reader.IsEof())
-                {
-                    pFehler = "frame " + frame + " ended after "
-                        + z + " of " + zellenAnzahl + " cells";
-                    return false;
-                }
+            var gelesen = false;
 
-                var zelleId = reader.ReadBer();
-                if (zelleId == 0)
+            while (!reader.IsEof())
+            {
+                var feldId = reader.ReadBer();
+                if (feldId == 0)
                 {
                     break;
                 }
 
-                var zelle = ZelleAusFeldern(ref reader, zelleId,
-                    out var warum);
-                if (zelle == null)
+                var laenge = reader.ReadBer();
+                if (laenge < 0)
                 {
-                    pFehler = "frame " + frame + " cell " + z
-                        + ": " + warum;
+                    if (!Ueberspringe(ref reader))
+                    {
+                        pFehler = "frame " + frame
+                            + " has a field the file does not"
+                            + " close";
+
+                        return false;
+                    }
+
+                    continue;
+                }
+
+                var inhalt = reader.ReadBytes(laenge);
+                if (reader.HasError())
+                {
+                    pFehler = "frame " + frame
+                        + " has a field the file does not finish";
                     return false;
                 }
 
-                zellen.Add(zelle);
+                if (feldId != FieldCells)
+                {
+                    continue;
+                }
+
+                gelesen = true;
+                if (!ZellenAusKapsel(inhalt, zellen,
+                        out var warum))
+                {
+                    pFehler = "frame " + frame + ": " + warum;
+                    return false;
+                }
+            }
+
+            if (!gelesen)
+            {
+                pFehler = "frame " + frame + " names no cells";
+                return false;
             }
 
             pFrames.Add(zellen);
@@ -201,6 +240,67 @@ public static class Rm2kAnimationZelle
         return true;
     }
 
+    /// <summary>
+    /// And it reads the cells out of one frame's cell field.
+    /// </summary>
+    /// <param name="pInhalt">
+    /// The field's bytes: a count, then that many cells, and each
+    /// cell is its own number followed by its own fields.
+    /// </param>
+    /// <param name="pZellen">Where the cells go.</param>
+    /// <param name="pFehler">Why not, and empty on success.</param>
+    /// <returns>Whether the field was read.</returns>
+    private static bool ZellenAusKapsel(
+        byte[] pInhalt,
+        Godot.Collections.Array<Godot.Collections.Dictionary> pZellen,
+        out string pFehler)
+    {
+        pFehler = "";
+
+        var reader = new LcfBinaryReader(pInhalt);
+        var anzahl = reader.ReadBer();
+        if (reader.HasError())
+        {
+            pFehler = "the cell field names no count";
+            return false;
+        }
+
+        if (anzahl < 0 || anzahl > 4096)
+        {
+            pFehler = "the cell field claims " + anzahl
+                + " cells, and that is outside what a frame can"
+                + " hold";
+            return false;
+        }
+
+        for (var z = 0; z < anzahl; z++)
+        {
+            if (reader.IsEof())
+            {
+                pFehler = "the cell list ended after " + z
+                    + " of " + anzahl;
+                return false;
+            }
+
+            var zelleId = reader.ReadBer();
+            if (zelleId == 0)
+            {
+                return true;
+            }
+
+            var zelle = ZelleAusFeldern(ref reader, zelleId,
+                out var warum);
+            if (zelle == null)
+            {
+                pFehler = "cell " + z + ": " + warum;
+                return false;
+            }
+
+            pZellen.Add(zelle);
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// And it reads one cell's fields, which follow the cell's own
