@@ -7,7 +7,7 @@ using UniversalRPG.Tests.Framework;
 namespace UniversalRPG.Tests.Core;
 
 /// <summary>
-/// The four VX scripts that still fail, with the text at each place.
+/// Every VX script of Random Dungeon, and the text where one fails.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,7 +29,7 @@ public partial class TestRgssVxRestTexte : TestBase
         "E:/RPGMakerGames/Random Dungeon -English Version-";
 
     /// <summary>
-    /// And the four, each with its text and its line.
+    /// And every script, and for a failure its text and its line.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -108,11 +108,26 @@ public partial class TestRgssVxRestTexte : TestBase
             Console.WriteLine("  - " + f);
         }
 
-        AssertTrue(fehler.Count <= 4,
-            "**and at most four VX scripts still fail** -- and it were"
+        // **Und die Schranke ist null,  und nicht "hoechstens vier".**
+        //
+        // **Und der Weg dorthin ist gemessen und nicht geschaetzt:**
+        //
+        // ```text
+        // 13  alle,  bis auf  Scene_Battle und die drei Komma-Skripte
+        //  8  die einzeilige `for`-Form  --  InForCollection
+        //  4  die Ziellisten-Vorausschau  --  ZielAn
+        //  3  der Ternaer-Doppelpunkt  --  ReadWord
+        //  2  die op-Asgn-Kette  --  IsOpAssign
+        //  0  der Alias-Name  --  ReadAliasName
+        // ```
+        AssertTrue(fehler.Count == 0,
+            "**and no VX script fails any more** -- and it were"
                 + " thirteen, and the one-line `for` form took it to"
-                + " eight, and the assignment lookahead took it to"
-                + " four, -- and the four are named above");
+                + " eight, the assignment lookahead to four, the ternary"
+                + " colon to three, the op-assignment chain to two, and"
+                + " the alias name to none, -- and every one of those"
+                + " steps is a separate parser or lexer place with a"
+                + " test of its own");
     }
 
     /// <summary>And the offset out of the message, if it carries one.</summary>

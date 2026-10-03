@@ -19141,6 +19141,65 @@ keinem der drei Spiele auf diesem Rechner vor -- nullmal. Ersetzt durch
 `$gameSelfVariables.get(this, 'Type') === 0`, die haeufigste echte
 Autorzeile (1032x), plus ein neuer Test, dass eine Rechnung eine Rechnung
 bleibt.
+### Und VX laeuft:  alle 180 Skripte von Random Dungeon
+
+```text
+VX noch fehlgeschlagen: 0 von 180
+TestRgssVxRestTexte: 1/1 passed
+All 2423 tests passed
+UniversalRPG validation passed.
+```
+
+**Und der Weg dorthin ist in sechs Schritten gemessen,  und jeder
+Schritt ist eine eigene Stelle mit einem eigenen Test:**
+
+| von | auf | Stelle | Test |
+|---|---|---|---|
+| 13 | 8 | `for`-Sammlung trägt keinen Block | `TestRubyForGemessen` |
+| 8 | 4 | `ZielAn` liest ein ganzes Ziel | `TestRubyMlhsZiele` |
+| 4 | 3 | `ReadWord`: `:` ist kein Symbol im Ternaer | `TestRubyTernaerAlias` |
+| 3 | 2 | `IsOpAssign` in der `=`-Kette | `TestRubyOpAsgnKette` |
+| 2 | 1 | `ReadAliasName` kennt `[]=` | `TestRubyAliasZusammen` |
+| 1 | 0 | derselbe,  der letzte | dieselbe |
+
+**Und die beiden letzten Fehler waren je eine Zeile:**
+
+```csharp
+// Und `+=` gehoert in diese Kette,  und `%right '=' tOP_ASGN`
+// gibt beidem die lockerste Bindung von allen.
+while (Is("=") || Is("=>") || IsOpAssign())
+```
+
+```csharp
+// Und ein Indexname ist auch ein Methodenname,
+// und `def []=(x)` ging in diesem Leser schon.
+if (token.Kind == RubyTokenKind.Delimiter && token.Text == "[")
+```
+
+**Und der Alias-Fehler war eine Lücke und keine Fehlentscheidung**
+ -- **das hat `TestRubyAliasZusammen` entschieden:**
+
+```text
+1: def [](x); end        1 Anweisungen
+2: def []=(x); end       1 Anweisungen      <- geht
+6: alias a []=           an alias names two things ...   <- ging nicht
+```
+
+**Und wenn `def []=` geht,  kann der Parser die drei Token
+`[ ] =` bereits zu einem Namen fuehren**, --
+**und dann ist es `ReadAliasName`,  das es nicht tut.**
+
+### Und was das nicht heisst
+
+**Und 0 von 180 Skripten heisst:  die Skripte werden geparst
+und ausgefuehrt.**  **Und es heisst nicht:  das Spiel laeuft.**
+
+**Und MicroQuest (XP) steht unveraendert bei 90 von 90
+Skripten,  und dort stoppt `Interpreter.setup` an `$game_map`.**
+
+**Und VX Ace hat keinen Lauf,  und RM2K,  MV und MZ haben keinen
+End-to-End-Nachweis.**
+
 ### Und der Ternaer-Doppelpunkt war ein Hexteufel:  er steckte im Symbol
 
 **Und gemessen ist es mit der Token-Ausgabe,  nicht mit dem

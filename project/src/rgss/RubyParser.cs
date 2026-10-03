@@ -1001,6 +1001,38 @@ public sealed class RubyParser
     /// reader, because that is a binary expression and not a
     /// <c>mrhs</c>.**
     /// </remarks>
+    /// <summary>And whether the current token assigns in place.</summary>
+    /// <returns>True for <c>+=</c>, <c>-=</c> and the rest.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is one list and not a test per operator</strong>,
+    /// -- <strong>because Ruby 1.8.1 calls all of them one token
+    /// class</strong>, <c>tOP_ASGN</c>, -- <strong>and a reader that
+    /// listed them twice would let them drift apart.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And <c>!=</c> and friends are not in the list</strong>,
+    /// -- <strong>and <c>==</c> and <c>!=</c> are comparisons and not
+    /// assignments.</strong>
+    /// </para>
+    /// </remarks>
+    private bool IsOpAssign()
+    {
+        if (Current.Kind != RubyTokenKind.Operator)
+        {
+            return false;
+        }
+
+        var op = Current.Text;
+        if (op.Length < 2 || op[^1] != '=')
+        {
+            return false;
+        }
+
+        // **Und `==`, `>=` und `<=` sind keine Zuweisungen.**
+        return op != "==" && op != "!=" && op != ">=" && op != "<=";
+    }
+
     private RubyNode ReadEinWert()
     {
         if (Is("*") && !Is("**"))
@@ -1151,7 +1183,36 @@ public sealed class RubyParser
                 };
             }
 
-            while (Is("=") || Is("=>"))
+            // **Und `+=` gehoert in diese Schleife, und nicht in eine
+            // eigene.**
+            //
+            // **Und gemessen ist es:**
+            //
+            // ```text
+            // a += 1        1 Anweisungen      <- links geht
+            // a = b         1 Anweisungen
+            // a = b += 1    '+=' at offset 6 does not begin an expression
+            // ```
+            //
+            // **Und Rubys `parse.y` gibt beiden die lockerste
+            // Bindung von allen:**
+            //
+            // ```c
+            // %right '=' tOP_ASGN
+            // arg : lhs '=' arg_rhs
+            // arg_rhs : arg | tSTAR arg_rhs
+            // ```
+            //
+            // **Und `arg_rhs` kann wieder ein `arg` sein**, --
+            // **und ein `arg` kann wieder `lhs '=' arg_rhs` sein**,
+            // **und genau das ist die Kette, die hier fehlte.**
+            //
+            // **Und `Scene_Battle` Zeile 225 schreibt genau das:**
+            //
+            // ```ruby
+            // @status_window.index = @actor_index += 1
+            // ```
+            while (Is("=") || Is("=>") || IsOpAssign())
             {
                 var op2 = Take().Text;
                 var danach = ReadWertListe();
@@ -4513,6 +4574,45 @@ public sealed class RubyParser
         {
             _index++;
             return token.Text;
+        }
+
+        // **Und ein Indexname ist auch ein Methodenname.**
+        //
+        // **Und gemessen ist, dass `def []=(x)` in diesem Leser geht
+        // und `alias a []=` nicht** -- **und damit ist es eine Lücke
+        // hier und keine im Lexer**, --
+        // **weil der Parser die drei Token an anderer Stelle schon zu
+        // einem Namen zusammenfuegt.**
+        //
+        // **Und Rubys `parse.y` nennt die Tokenklasse `tFID`, und sie
+        // ist `operation2 tIDENTIFIER` mit `operation2 : '[' ']' '='`:**
+        //
+        // ```c
+        // fname : tIDENTIFIER | tCONSTANT | tFID
+        // operation2 : '[' | ']' | '='
+        // ```
+        //
+        // **Und `alias indexer_equal_KGC_MapLightening []=` schreibt
+        // genau das**, -- **und es ist Zeile 103 von Random Dungeons
+        // `マップ軽量化`.**
+        //
+        // **Und nur die drei Operationen sind erlaubt**, --
+        // **und `alias a [b` ist kein Name**, --
+        // **und ein Leser, der jede Klammer akzeptierte,  wuerde
+        // `alias a ( b` fuer einen Namen halten.
+        if (token.Kind == RubyTokenKind.Delimiter && token.Text == "[")
+        {
+            var start = token.Offset;
+            if (_index + 2 < _tokens.Count
+                && _tokens[_index + 1].Kind == RubyTokenKind.Delimiter
+                && _tokens[_index + 1].Text == "]"
+                && _index + 2 < _tokens.Count
+                && _tokens[_index + 2].Kind == RubyTokenKind.Operator
+                && _tokens[_index + 2].Text == "=")
+            {
+                _index += 3;
+                return "[]=";
+            }
         }
 
         throw new RubyParseException(
