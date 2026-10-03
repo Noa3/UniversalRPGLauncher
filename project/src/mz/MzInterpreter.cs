@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UniversalRPG.Mz;
 
 namespace UniversalRPG.Web;
 
@@ -463,14 +464,33 @@ public sealed class MzInterpreter
             // **Und das sind drei Zuweisungen und kein Aufruf** --
             // **und die dritte Form traegt kein `;`** -- **und beides
             // steht so in den Dateien des Spiels.**
-            var eigenerZaehler =
-                SetzeEigenenZaehler(zeilen, pBranchFacts);
-            System.Console.WriteLine(
-                "MV 355 " + zeilen.Count + " Zeilen -> "
-                + (eigenerZaehler ?? "(nichts)"));
-            if (eigenerZaehler != null)
+            // **Und der 355-Block laeuft durch denselben
+            //  Leser wie ein Test es tut**, --
+            // **und nicht durch einen eigenen Parser,
+            //  der nur `frames` kannte.**
+            // **Und der Zaehler  wird  nicht  bei  null  begonnen,
+            //  sondern  dort,  wo  er  steht** -- **und  das  ist
+            //  gemessen  am  Spiel:  es  schreibt  `add(this,
+            //  'frames', 1)`  und  `set(this, 'frames', 0)`  in
+            //  getrennten  Bloecken,  und  ein  Block,  der  bei
+            //  null  begann,  wuerde  den  zweiten  als  den
+            //  ersten  lesen.**
+            var block = new MzSkriptBlock();
+            block.Setze("frames", pBranchFacts.EigenesFenster);
+            foreach (var zeile in zeilen)
             {
-                Hinweise.Add(eigenerZaehler);
+                block.Verarbeite(zeile, pBranchFacts);
+            }
+
+            if (block.Verstanden > 0)
+            {
+                pBranchFacts.EigenesFenster = (int)block.Lese("frames");
+                Hinweise.Add(
+                    "the page 355 block has " + zeilen.Count
+                    + " line(s), and this reader understood "
+                    + block.Verstanden + " of them; the event own"
+                    + " frame counter stands at "
+                    + block.Lese("frames"));
             }
 
             Hinweise.Add(
@@ -995,62 +1015,6 @@ public sealed class MzInterpreter
     /// this interpreter holds it.</strong>
     /// </para>
     /// </remarks>
-    private static string? SetzeEigenenZaehler(
-        IReadOnlyList<string> pZeilen, MzBranchFacts pFakten)
-    {
-        string? gemeldet = null;
-        foreach (var zeile in pZeilen)
-        {
-            var text = zeile.Trim();
-            const string set = "$gameSelfVariables.set(this, 'frames', ";
-            const string add = "$gameSelfVariables.add(this, 'frames', ";
-
-            if (text.StartsWith(set, StringComparison.Ordinal))
-            {
-                var rest = ZahlOderAufruf(text.Substring(set.Length));
-                if (int.TryParse(rest, System.Globalization.NumberStyles
-                    .Integer, System.Globalization.CultureInfo
-                        .InvariantCulture, out var wert))
-                {
-                    pFakten.EigenesFenster = wert;
-                    gemeldet = "the event's own frame counter is set to "
-                        + wert + ", and that is the number 661 conditions "
-                        + "in this game ask about";
-                }
-                else
-                {
-                    var ausVar = MzArithmetic.TryRead(
-                        rest, pFakten, out _);
-                    if (ausVar.HasValue)
-                    {
-                        pFakten.EigenesFenster = (int)ausVar.Value;
-                        gemeldet = "the event's own frame counter is set "
-                            + "to " + (int)ausVar.Value
-                            + ", which came out of the game's own variable";
-                    }
-                }
-
-                continue;
-            }
-
-            if (text.StartsWith(add, StringComparison.Ordinal))
-            {
-                var rest = ZahlOderAufruf(text.Substring(add.Length));
-                if (int.TryParse(rest, System.Globalization.NumberStyles
-                    .Integer, System.Globalization.CultureInfo
-                        .InvariantCulture, out var schritt))
-                {
-                    pFakten.EigenesFenster += schritt;
-                    gemeldet = "the event's own frame counter moves by "
-                        + schritt + " and stands at "
-                        + pFakten.EigenesFenster;
-                }
-            }
-        }
-
-        return gemeldet;
-    }
-
     /// <summary>
     /// The value after the comma, without the call's own closing bracket.
     /// </summary>

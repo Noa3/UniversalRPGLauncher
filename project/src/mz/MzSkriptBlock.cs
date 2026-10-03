@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using UniversalRPG.Web;
 
 namespace UniversalRPG.Mz;
 
@@ -54,10 +55,11 @@ public sealed class MzSkriptBlock
         new(StringComparer.Ordinal);
 
     private static readonly Regex Form = new(
-        @"^\s*(?:(?:let|var|const)\s+\w+\s*=\s*)?" +
+        @"^[\s""]*(?:(?:let|var|const)\s+\w+\s*=\s*)?" +
         @"\$gameSelfVariables\.(get|set|add|value)\s*\(" +
-        @"\s*this\s*,\s*'(?<schluessel>\w+)'\s*,?\s*(?<rest>.*)\)" +
-        @"\s*(?<ende>[+-]\s*\d+\s*)?;?\s*$",
+        @"\s*this\s*,\s*'(?<schluessel>\w+)'\s*,?\s*" +
+        @"(?<rest>[^""]*?)\s*\)\s*" +
+        @"(?<ende>[+-]\s*\d+\s*)?;?\s*[\s""]*$",
         RegexOptions.Compiled);
 
     /// <summary>And the map the event is on.</summary>
@@ -94,7 +96,8 @@ public sealed class MzSkriptBlock
     /// above trustworthy.</strong>
     /// </para>
     /// </remarks>
-    public bool Verarbeite(string pZeile)
+    public bool Verarbeite(
+        string pZeile, MzBranchFacts? pFakten = null)
     {
         var m = Form.Match(pZeile);
         if (!m.Success)
@@ -138,6 +141,16 @@ public sealed class MzSkriptBlock
                 {
                     _werte[schluessel] = wert;
                 }
+                else if (pFakten != null
+                    && MzArithmetic.TryRead(
+                        rest, pFakten, out _) is double ausVar)
+                {
+                    // **Und  das  Spiel  schreibt  auch
+                    //  `set(this, 'frames', $gameVariables.value(3))`,
+                    //  und  das  ist  keine  Zahl  und  kein
+                    //  Ausdruck  ueber  `get(this, ...)`.**
+                    _werte[schluessel] = (long)ausVar;
+                }
                 else
                 {
                     NichtVerstanden++;
@@ -175,7 +188,23 @@ public sealed class MzSkriptBlock
     /// <summary>
     /// And the value of one key.
     /// </summary>
-    /// <param name="pSchluessel">The name the game wrote.</param>
+    /// <summary>And it starts from a number, not from zero.</summary>
+    /// <param name="pSchluessel">The name.</param>
+    /// <param name="pWert">Where it stands.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is what the interpreter needs.</strong> The
+    /// engine's counter is one number in one object, -- <strong>and
+    /// two 355 blocks in a row are that same number.</strong> --
+    /// <strong>And a block that began at zero would read the
+    /// second as the first.</strong>
+    /// </para>
+    /// </remarks>
+    public void Setze(string pSchluessel, long pWert) =>
+        _werte[pSchluessel] = pWert;
+
+    /// <summary>
+    /// And the value of one key.
     /// <returns>The number, and zero when there is none.</returns>
     /// <remarks>
     /// <para>
