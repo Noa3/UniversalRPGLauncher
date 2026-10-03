@@ -921,6 +921,19 @@ public static class MzCommands
                 return true;
             }
 
+            // **Und `241`, `245` und `249` fallen hier hinein.**
+            //
+            // **Und sie waren eigene, leere Zweige** --
+            // **eine Zeile ohne Rumpf, fuenfmal** --
+            // **während dieser Zweig die Kanalauswahl fuer alle vier
+            // schon im Rumpf trug.**
+            //
+            // **Und C# hat keinen Fallthrough.** **Und ein Zweig ohne
+            // Rumpf ist ein Zweig, der zur Bruecke springt, und nicht
+            // einer, der in den naechsten durchlaeuft.** -- **Und
+            // deshalb hat die Musik dieses Spiels nie einen Kanal
+            // erreicht**, -- **und ein Spiel ohne Musik ist ein Spiel
+            // ohne Musik, egal wie voll die Befehlstabelle ist.**
             case MzCommandTable.PlayBgm:
             case MzCommandTable.PlayBgs:
             case MzCommandTable.PlayMe:
@@ -954,6 +967,8 @@ public static class MzCommands
                 return true;
             }
 
+            // **Und `242` und `246` fallen hier hinein**, --
+            // **und der Grund ist derselbe.**
             case MzCommandTable.FadeOutBgm:
             case MzCommandTable.FadeOutBgs:
             case MzCommandTable.StopSe:
