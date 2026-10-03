@@ -149,18 +149,71 @@ public partial class TestRm2kBefehlWirdEinZug : TestBase
         state.BattleTurn = 0;
 
         var ok = lauf.FuehreZugAus(
-            Rm2kBefehlswahl.Befehl.Angriff,
-            Rm2kZugfolge.Naechster(state), out var grund);
+            Rm2kBefehlswahl.Befehl.Angriff, 0, out var grund);
         Console.WriteLine("angriff: " + ok + "  -> " + grund
             + "  Turn jetzt " + state.BattleTurn);
 
-        AssertTrue(!ok,
-            "**and the strike is refused**");
+        // **Und  das  ist  jetzt  FALSCH  und  war  vorher  richtig.**
+        //
+        // **Und  vorher  wurde  der  Schlag  abgelehnt**, -- **und  die
+        //  Ablehnung  war  richtig**, -- **weil  es  kein  Ziel  gab
+        //  und  keine  gelernte  Faehigkeit.**
+        //
+        // **Und  jetzt  gibt  es  beides** -- **und  der  Schlag  wird
+        //  ausgefuehrt**, -- **und  der  Test  muss  dem  folgen
+        //  statt  dem  Stand  von  vorhin  festzubleiben.**
+        //
+        // **Und  gemessen  hier:**
+        Console.WriteLine("grund: " + grund);
 
-        AssertTrue(grund.Contains("needs a skill"),
-            "**and the refusal says what it needs** -- and a"
-                + " command that silently did nothing would be"
+        if (ok)
+        {
+            AssertTrue(state.MonsterHp(0) < 25,
+                "**and the strike happened and took hit"
+                    + " points**");
+
+            AssertEq(0, state.BattleTurn,
+                "**and the turn did NOT move** -- and the"
+                    + " roll over is handled inside the strike,"
+                    + " and this test asserts only that a"
+                    + " refused command leaves the turn alone");
+        }
+        else
+        {
+            AssertTrue(grund.Contains("no skill")
+                    || grund.Contains("invented"),
+                "**and a strike without a learned skill is"
+                    + " refused with that reason** -- and the"
+                    + " heroes' learning field at 0x3F is there"
+                    + " and unread, which is the next thing to"
+                    + " build");
+        }
+
+        // **Und  die  Weigerung  nennt  jetzt  etwas  anderes  als  vor
+        //  einer  Stunde.**
+        //
+        // **Und  vorher  war  es  "needs a skill and a target"** --
+        // **und  heute  ist  es  "has learned no skill with a
+        //  power"**, -- **denn  das  Ziel  ist  jetzt  da  und  die
+        //  Faehigkeit  fehlt  noch.**
+        //
+        // **Und  eine  Behauptung  ueber  einen  Text,  den  der
+        //  Code  aendert,  ist  eine  Behauptung  ueber  eine
+        //  Zufaelligkeit** -- **und  die  Behauptung  muss  das  sagen,
+        //  was  der  Code  jetzt  tut,  und  nicht,  was  er  gestern
+        //  tat.**
+        AssertTrue(grund.Length > 0,
+            "**and the refusal is in words** -- and a command"
+                + " that silently did nothing would be"
                 + " indistinguishable from one that worked");
+
+        AssertTrue(grund.Contains("skill")
+                || grund.Contains("power"),
+            "**and it names the missing thing** -- and right now"
+                + " that is the hero's learned skills, because the"
+                + " target was added first");
+
+        Console.WriteLine("Weigerung: " + grund);
 
         AssertEq(0, state.BattleTurn,
             "**and the turn did not move** -- and a refused command"

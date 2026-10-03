@@ -1356,6 +1356,56 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     }
 
     /// <summary>
+    /// And the hero's first learned skill that carries a power.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is the first and not the best</strong>, --
+    /// <strong>because the reference's command window lists them in
+    /// the order the hero learned them</strong>, -- <strong>and a
+    /// reader that picked "the strongest" would be choosing for the
+    /// player.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it returns null rather than a default skill</strong>,
+    /// -- <strong>because a strike with an invented skill is a strike
+    /// the game never wrote.</strong>
+    /// </para>
+    /// </remarks>
+    private Godot.Collections.Dictionary? ErsteAngriffsfaehigkeit()
+    {
+        if (!Simulation.DatabaseData.ContainsKey("skills"))
+        {
+            return null;
+        }
+
+        var skills = (Godot.Collections
+            .Array<Godot.Collections.Dictionary>)
+            Simulation.DatabaseData["skills"];
+        foreach (var id in Rm2kBefehlswahl.FaehigkeitenVon(
+            Simulation, -1))
+        {
+            foreach (var skill in skills)
+            {
+                if (skill["id"].AsInt32() != id)
+                {
+                    continue;
+                }
+
+                if (skill.ContainsKey("power")
+                    && skill["power"].AsInt32() > 0
+                    && skill.ContainsKey("affect_hp")
+                    && skill["affect_hp"].AsInt32() != 0)
+                {
+                    return skill;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// And it lets a hero take its turn, and the command is the
     /// reference's own number.
     /// </summary>
@@ -1401,15 +1451,59 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         switch (pBefehl)
         {
             case Rm2kBefehlswahl.Befehl.Angriff:
-                // **Und  ein  Schlag  braucht  eine  Faehigkeit  und
-                //  eine  Zielkachel**, -- **und  beides  fragt  diese
-                //  Laufzeit  noch  nicht  ab** -- **denn  wer  zuerst
-                //  geladen  wird,  ist  eine  Frage  der
-                //  Bedienung,  und  eine  erfundene  Zufaelligkeit
-                //  waere  eine  erfundene  Spielregel.**
-                pFehler = "the strike needs a skill and a target,"
-                    + " and this runtime asks for neither yet";
-                return false;
+            {
+                // **Und  jetzt  hat  der  Schlag  ein  Ziel.**
+                //
+                // **Und  es  ist  das  Ziel,  das  der  Spieler
+                //  gewaehlt  hat**, -- **und  nicht  eines,  das  hier
+                //  erfunden  wird.**  **Und  wenn  noch  keines
+                //  gewaehlt  ist,  wird  der  Schlag  abgelehnt**,
+                // -- **denn  ein  Schlag  auf  ein  Zufallsziel  waere
+                //  eine  Spielregel,  die  erfunden  ist.**
+                if (pGegnerIndex < 0)
+                {
+                    pFehler = "no target is chosen, and a strike at"
+                        + " a target this runtime invented would be"
+                        + " a rule this repository made up";
+                    return false;
+                }
+
+                if (!Rm2kZielwahl.Waehle(
+                        Simulation, pGegnerIndex, false, out var zielFehler))
+                {
+                    pFehler = zielFehler;
+                    return false;
+                }
+
+                // **Und  jetzt  der  Schlag  selbst** -- **mit  der
+                //  Faehigkeit,  die  der  Held  gelernt  hat**,
+                // -- **und  ohne  eine  wird  nichts  getroffen.**
+                var skill = ErsteAngriffsfaehigkeit();
+                if (skill == null)
+                {
+                    pFehler = "the hero has learned no skill with a"
+                        + " power, and a strike without a number is"
+                        + " not a strike";
+                    return false;
+                }
+
+                var zufall = new Rm2kDamageRandom();
+                if (!Rm2kAngriffAusfuehren.FuehreAus(
+                        Simulation, skill, pGegnerIndex, zufall,
+                        out var schaden, out var angriffsFehler))
+                {
+                    pFehler = angriffsFehler;
+                    return false;
+                }
+
+                Simulation.BattlePhase = 2;
+                Rm2kZugfolge.Ruecke(Simulation);
+                Simulation.AddDiagnostic(
+                    "RM2K the hero strikes with \""
+                    + skill["name"].AsString() + "\" for "
+                    + schaden + " and the turn passes on");
+                return true;
+            }
 
             case Rm2kBefehlswahl.Befehl.Verteidigung:
                 Simulation.BattlePhase = 2;
