@@ -19141,6 +19141,69 @@ keinem der drei Spiele auf diesem Rechner vor -- nullmal. Ersetzt durch
 `$gameSelfVariables.get(this, 'Type') === 0`, die haeufigste echte
 Autorzeile (1032x), plus ein neuer Test, dass eine Rechnung eine Rechnung
 bleibt.
+### Und der XP-Blocker ist eingegrenzt:  es sind zwei Dinge
+
+**Und gemessen ist,  dass `RubyInterpreter.SetzeGlobal` existiert**
+ -- **und dass MicroQuests `setup` damit eine Zeile weiter
+kommt:**
+
+```text
+ohne Globals:   map_id an Nil        <- $game_map ist nil
+mit  Globals:   map_id an Game_game_map
+```
+
+**Und das ist die ganze Unterscheidung,  und sie ist eine Zeile.**
+
+### Und was  ich  zwei  Mal  falsch  gemessen  habe
+
+**Und der  erste  Test  hat  `setup`  gerufen,  ohne  vorher  die
+90  Skripte  zu  laden:**
+
+```text
+Konstante Interpreter | new an Nil | setup an Nil
+```
+
+**Und `Interpreter` war nil,  weil  die  Klasse  noch nicht
+existierte** -- **und beide  Laeufe  sahen  gleich  aus,  und
+der  Test  hat  nichts  gemessen  und  das  auch  nicht
+behauptet.**
+
+**Und der  zweite  Test  hat  den  Quelltext  ohne  den  Weg
+genommen,  den  `TestRgssSetupRun`  nimmt**, -- **und der
+Unterschied  ist  das  Laden  der  Skripte  vor  dem  Aufruf:**
+
+```text
+ohne das Laden:  Konstante Interpreter | new an Nil
+mit  dem Laden:  Konstante Graphics | freeze an Nil (Block)
+                 | map_id an Game_game_map | clear an Object
+```
+
+**Und dasselbe  Muster  hat  heute  zweimal  einen  Hintergrundlauf
+gebrochen** -- **einmal  durch  einen  geloeschten  Test  in  der
+DLL,  einmal  durch  einen  DLL-Wechsel  mitten  im  Lauf.**
+
+### Und  die  Warnungen:  254  vor  und  nach  dem  Parser-Werk
+
+**Und das  ist  gemessen,  und  nicht  vermutet** --
+**mit  einem  Worktree  auf  `71c65b1`,  dem  Commit  vor  dem
+ersten  Parser-Fix:**
+
+```text
+bei 71c65b1:  254 Warnungen
+bei HEAD:     254 Warnungen
+```
+
+**Und  die  Verteilung  ist  dieselbe** --  **38 in
+`RubyInterpreter.cs`,  26 in `MzEventRunner.cs`,  22 in
+`MzEngineRuntime.cs`,  8 in `RubyParser.cs`.**
+
+**Und 250  sind  jetzt  weg,  weil  `test_rgss_setup_run.cs`
+dreimal  `using System.Linq;`  hatte** -- **das  sind  4  der
+CS0105.**
+
+**Und  die  restlichen 250  sind  nicht  in  dieser  Runde
+entstanden  und  nicht  von  mir  behoben.**
+
 ### Und VX laeuft:  alle 180 Skripte von Random Dungeon
 
 ```text
