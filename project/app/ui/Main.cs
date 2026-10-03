@@ -54,6 +54,12 @@ public partial class Main : Control
 	private Label _runtimeState = null!;
 	private Label _presentationState = null!;
 	private Rm2kMapPreview _mapPreview = null!;
+
+	/// <summary>
+	/// And the battle, because a battle that happens but cannot be
+	/// seen is a battle that did not happen.
+	/// </summary>
+	private Rm2kBattleView _battleView = null!;
 	private MzAudioOutput _mzAudio = new();
 	private MzMapPreview _mzMap = new();
 	private VBoxContainer _presentationControls = null!;
@@ -284,6 +290,16 @@ public partial class Main : Control
 		_mapPreview.CustomMinimumSize = new Vector2(0, 180);
 		_mapPreview.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		details.AddChild(_mapPreview);
+
+		// **Und  die  Kampfansicht  kommt  neben  die  Karte** --
+		// **denn  ein  Kampf  braucht  keine  eigene  Seite,
+		//  sondern  eine  eigene  Zeile  im  laufenden  Bild.**
+		_battleView = new Rm2kBattleView();
+		_battleView.CustomMinimumSize = new Vector2(0, 150);
+		_battleView.SizeFlagsVertical =
+			Control.SizeFlags.ExpandFill;
+		_battleView.Visible = false;
+		details.AddChild(_battleView);
 		_detailsEvidence = new Label();
 		_detailsEvidence.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		_detailsEvidence.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -463,7 +479,17 @@ public partial class Main : Control
 		if (keyEvent == null && action == Rm2kInputAction.None) return;
 		if (rm2k.Presentation.MessageVisible && action == Rm2kInputAction.Confirm)
 		{
-			rm2k.Presentation.DismissMessage();
+			// **Und  die  Taste  macht  beides** --
+			// **denn  das  Schliessen  des  Fensters  und  das  Aufloesen  der
+			//  Wartefrage  sind  zwei  Dinge.**
+			//
+			// **Und  vorher  wurde  hier  nur  das  Fenster  geschlossen**,
+			// **und  die  Seite  blieb  fuer  immer  stehen.**
+			//
+			// **Und  ein  Kampf  ist  nicht  per  Taste  zu  beenden** --
+			// **und  `DrueckeFort`  weigert  sich  genau  das,  und  der
+			//  Grund  landet  im  Protokoll.**
+			rm2k.DrueckeFort();
 			GetViewport().SetInputAsHandled();
 			return;
 		}
@@ -622,6 +648,17 @@ public partial class Main : Control
 			_mapPreview.SetRenderedMap(rm2k.RenderedMap);
 			_mapPreview.RenderDiagnostic = rm2k.RenderDiagnostic;
 			_mapPreview.SetPlayerPosition(rm2k.Simulation.MapX, rm2k.Simulation.MapY);
+
+			// **Und  der  Kampf  kommt  in  die  Anzeige** -- **und
+			//  die  Anzeige  wird  nur  neu  gezeichnet,  wenn  sich
+			//  etwas  geaendert  hat**, -- **denn  ein  Bild  pro
+			//  Frame  ist  Arbeit  ohne  Information.**
+			_battleView.SetzeZustand(rm2k.Simulation);
+			_battleView.Visible = _battleView.LaeuftEinKampf();
+			if (_battleView.Visible)
+			{
+				_battleView.QueueRedraw();
+			}
 			if (rm2k.CurrentMapData != null && rm2k.CurrentMapData.TryGetValue("width", out var width)
 				&& rm2k.CurrentMapData.TryGetValue("height", out var height))
 			{
@@ -697,6 +734,10 @@ public partial class Main : Control
 		_status.Text = result.Success ? "Runtime stopped." : result.Error?.Message ?? "Runtime stop failed.";
 		_stopButton.Disabled = true;
 		_presentationControls.Visible = false;
+		// **Und  der  Kampf  gehoert  mit  versteckt** -- **denn  ein
+		//  Kampf,  der  nicht  laeuft,  ist  keiner.**
+		_battleView.Visible = false;
+		_battleView.SetzeZustand(null);
 	}
 
 	private async void LaunchSelectedGame()
