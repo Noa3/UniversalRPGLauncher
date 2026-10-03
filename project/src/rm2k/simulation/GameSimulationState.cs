@@ -2004,7 +2004,41 @@ public sealed class GameSimulationState
     /// lives here, and nothing else in the simulation needs it.
     /// </remarks>
     public System.Collections.Generic.Dictionary<int, int> BattleAnimationDurations
-    { get; init; } = new();
+    { get; private set; } = new();
+
+    /// <summary>
+    /// And it hands the table over from the parser.
+    /// </summary>
+    /// <param name="pTabelle">The durations, keyed by animation id.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this exists because the field was
+    /// <c>{ get; init; }</c></strong>, -- <strong>and an
+    /// <c>init</c> setter is only reachable while the object is being
+    /// built</strong>, -- <strong>so no host could ever fill it and all
+    /// 792 of the game's battle animations played nothing.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a table replaces rather than merges</strong>, --
+    /// <strong>because a second game's animations must not sit next to
+    /// the first one's</strong>, -- <strong>and two games in one
+    /// session would otherwise share ids.</strong>
+    /// </para>
+    /// </remarks>
+    public void SetBattleAnimationDurations(
+        System.Collections.Generic.Dictionary<int, int> pTabelle)
+    {
+        BattleAnimationDurations.Clear();
+        if (pTabelle == null)
+        {
+            return;
+        }
+
+        foreach (var eintrag in pTabelle)
+        {
+            BattleAnimationDurations[eintrag.Key] = eintrag.Value;
+        }
+    }
 
 
     public string BattleBackground { get; set; } = "";

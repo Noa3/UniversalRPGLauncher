@@ -118,6 +118,70 @@ public static class Rm2kHeldLaden
     }
 
     /// <summary>
+    /// And it fills the battle animation table from the bank.
+    /// </summary>
+    /// <param name="pZustand">The state.</param>
+    /// <param name="pBank">The database.</param>
+    /// <returns>
+    /// How many animations were read, and it is zero rather than a
+    /// fault when the bank carries none.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the eighth field of that shape</strong>, --
+    /// <strong>and Dragon Destiny names 792 battle animations</strong>,
+    /// -- <strong>and without this every one of them returns zero
+    /// frames and plays nothing.</strong>
+    /// </para>
+    /// </remarks>
+    public static int LadeAnimationen(
+        GameSimulationState pZustand,
+        Godot.Collections.Dictionary pBank)
+    {
+        if (pZustand == null || pBank == null
+            || !pBank.ContainsKey("animations"))
+        {
+            return 0;
+        }
+
+        var tabelle = new System.Collections.Generic
+            .Dictionary<int, int>();
+        var gelesen = 0;
+        var verweigert = 0;
+        foreach (var a in (Godot.Collections
+            .Array<Godot.Collections.Dictionary>)
+            pBank["animations"])
+        {
+            var felder = a.ContainsKey("unknown_fields")
+                ? (Godot.Collections.Array<Godot.Collections
+                    .Dictionary>)a["unknown_fields"] : null;
+            if (!Parser.Rm2kAnimationDecoder.TryDecode(
+                    felder!, out var frames, out var warum))
+            {
+                verweigert++;
+                continue;
+            }
+
+            tabelle[a["id"].AsInt32()] = frames;
+            gelesen++;
+        }
+
+        // **Und  `BattleAnimationDurations`  ist  `{ get; init; }`**,
+        // -- **und  deshalb  muss  der  Host  es  setzen**, -- **und
+        //  `init`  laesst  das  nur  bei  der  Erzeugung  zu.**
+        pZustand.SetBattleAnimationDurations(tabelle);
+
+        if (gelesen > 0)
+        {
+            pZustand.AddDiagnostic(
+                "RM2K " + gelesen + " battle animations read, "
+                + verweigert + " refused");
+        }
+
+        return gelesen;
+    }
+
+    /// <summary>
     /// And it puts every hero of the bank into the state.
     /// </summary>
     /// <param name="pZustand">The state.</param>

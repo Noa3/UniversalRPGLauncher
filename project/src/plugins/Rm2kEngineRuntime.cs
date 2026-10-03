@@ -130,6 +130,18 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 + " heroes carry their learned skills");
         }
 
+        // **Und  jetzt  die  Animationstabelle** -- **denn
+        //  `11210`  wird  792  Mal  geschrieben  und  ohne  diese
+        //  Tabelle  spielt  jede  dieser  Animationen  nichts.**
+        var anims = UniversalRPG.Rm2k.Simulation.Rm2kHeldLaden
+            .LadeAnimationen(Simulation, database.Data);
+        if (anims > 0)
+        {
+            Simulation.AddDiagnostic(
+                "RM2K " + anims
+                + " battle animations carry their timings");
+        }
+
         try
         {
             ConfigureSimulationMap(currentMap, mapTree.Data, mapPath);
