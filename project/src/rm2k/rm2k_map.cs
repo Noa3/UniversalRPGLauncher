@@ -75,6 +75,66 @@ public class Rm2kMap
 		/// </remarks>
 		public int Indent;
 
+	/// <summary>
+	/// And it builds a command out of the parser's own dictionary.
+	/// </summary>
+	/// <param name="pFeld">
+	/// One entry of <c>Rm2kEventCommandDecoder</c>'s output.
+	/// </param>
+	/// <remarks>
+	/// <para>
+	/// <strong>And this bridge is needed and not optional</strong>, --
+	/// <strong>because the decoder returns Godot dictionaries and the
+	/// interpreter takes <c>EventCommand</c></strong>, -- <strong>and
+	/// the two shapes have drifted apart.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And a troop page needs it exactly as a map page
+	/// does</strong>, -- <strong>which is the point: a battle is not a
+	/// second command dialect.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And the block number is carried</strong>, -- <strong>and
+	/// a converter that dropped it would break <c>20140</c> and
+	/// <c>20141</c> the same way it breaks them on a map.</strong>
+	/// </para>
+	/// </remarks>
+	public static EventCommand AusGelesenem(
+		Godot.Collections.Dictionary pFeld)
+	{
+		var befehl = new EventCommand();
+		if (pFeld == null)
+		{
+			return befehl;
+		}
+
+		befehl.Code = pFeld.ContainsKey("code")
+			? pFeld["code"].AsInt32() : 0;
+		befehl.Text = pFeld.ContainsKey("text")
+			? pFeld["text"].AsString() : "";
+
+		if (pFeld.ContainsKey("indent"))
+		{
+			var einrueckung = pFeld["indent"].AsInt32();
+			if (einrueckung > 0)
+			{
+				befehl.Indent = einrueckung;
+			}
+		}
+
+		if (pFeld.ContainsKey("parameters"))
+		{
+			foreach (var wert in (Godot.Collections
+				.Array<long>)pFeld["parameters"])
+			{
+				befehl.Parameters.Add((int)wert);
+			}
+		}
+
+		return befehl;
+	}
+
+
 		public EventCommand(
 			int pCode = 0, List<int>? pParams = null, string pText = "", int pIndent = 0)
 		{
