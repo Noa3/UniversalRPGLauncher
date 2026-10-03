@@ -613,8 +613,16 @@ public partial class TestRm2kRuntimeRendering : TestBase
             AssertEq(runtime.State, PluginRuntimeState.Running,
                 "a missing chipset image must not stop the runtime");
             AssertEq(runtime.RenderedMap == null, true, "no pixels without a chipset image");
-            AssertTrue(runtime.RenderDiagnostic.Contains("World.png"),
+            // **Und  der  Name  steht  jetzt  ohne  Endung  drin,
+            //  weil  der  Leser  beide  versucht** --
+            // **und  "main2.png is missing"  war  die  Nachricht,
+            //  die  Lisas  Startbild  verweigerte,  obwohl
+            //  `main2.bmp`  direkt  daneben  lag.**
+            AssertTrue(runtime.RenderDiagnostic.Contains("World"),
                 $"the diagnostic names the image but was '{runtime.RenderDiagnostic}'");
+            AssertTrue(runtime.RenderDiagnostic.Contains("neither a .png nor a .bmp"),
+                $"and it says that both forms were looked for, and the"
+                    + $" message was '{runtime.RenderDiagnostic}'");
             AssertEq(runtime.Framebuffer != null, true, "the tile id framebuffer still works");
         }
         finally
@@ -641,7 +649,7 @@ public partial class TestRm2kRuntimeRendering : TestBase
             var runtime = created.Value.Runtime;
             AssertEq(runtime.State, PluginRuntimeState.Running, "a broken image must not stop the runtime");
             AssertEq(runtime.RenderedMap == null, true, "no pixels from a broken image");
-            AssertTrue(runtime.RenderDiagnostic.Contains("decoded") || runtime.RenderDiagnostic.Contains("PNG"),
+            AssertTrue(runtime.RenderDiagnostic.Contains("decoded"),
                 $"the diagnostic explains the failure but was '{runtime.RenderDiagnostic}'");
         }
         finally

@@ -22,6 +22,7 @@ public sealed class Rm2kPixelBuffer
         Pixels = new byte[checked(pWidth * pHeight * 4)];
     }
 
+
     public int Width { get; }
     public int Height { get; }
 
@@ -154,6 +155,56 @@ public sealed class Rm2kIndexedImage
     /// <summary>Upper bound for a chipset image, so a malformed file cannot allocate freely.</summary>
     public const int MaxDimension = 4096;
 
+    /// <summary>
+    /// And it builds one out of a Windows bitmap.
+    /// </summary>
+    /// <param name="pBreite">The width in pixels.</param>
+    /// <param name="pHoehe">The height in pixels.</param>
+    /// <param name="pIndizes">One palette index per pixel.</param>
+    /// <param name="pPaletteVierBytes">
+    /// The palette as a Windows bitmap writes it: blue, green, red and
+    /// one spare byte per entry.
+    /// </param>
+    /// <returns>The image.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the two orders are written out here rather than
+    /// assumed.</strong> -- <strong>A bitmap writes B G R and a spare,
+    /// and this type holds R G B</strong>, -- <strong>and a reader
+    /// that skipped the swap produced a picture in which the red and
+    /// the blue chipsets of a game had traded
+    /// places.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the transparent index is not read out of the
+    /// palette.</strong> -- <strong>Index zero is transparent in every
+    /// RM2K asset format</strong>, -- <strong>and a Windows bitmap
+    /// writes zero as 0, 0, 0, 0</strong>, -- <strong>which means
+    /// black and not a colour</strong>, -- <strong>and taking the
+    /// transparency from the colour would make every black tile of a
+    /// chipset invisible.</strong>
+    /// </para>
+    /// </remarks>
+    public static Rm2kIndexedImage FromBmp(
+        int pBreite, int pHoehe, byte[] pIndizes,
+        byte[] pPaletteVierBytes)
+    {
+        var farben = new List<byte[]>();
+        for (var i = 0; i + 3 < pPaletteVierBytes.Length; i += 4)
+        {
+            // **Und  ein  Bitmap  schreibt  B  G  R  und  ein  Fuellbyte.**
+            farben.Add(new[]
+            {
+                pPaletteVierBytes[i + 2],
+                pPaletteVierBytes[i + 1],
+                pPaletteVierBytes[i],
+            });
+        }
+
+        return new Rm2kIndexedImage(
+            pBreite, pHoehe, pIndizes, farben.ToArray());
+    }
+
     /// <summary>Upper bound for palette entries, matching the 8 bit PNG limit.</summary>
     public const int MaxPaletteEntries = 256;
 
@@ -214,11 +265,39 @@ public sealed class Rm2kIndexedImage
             pError = "Chipset image is too small to be a PNG.";
             return false;
         }
+        // **Und  RPG  Maker  2000  schrieb  `.bmp`  und  2003  `.png`,
+        //  und  der  Leser  nah  nur  eins  von  beiden.**
+        //
+        // **Und das ist gemessen an drei fertigen Spielen:** Lisas
+        //  ChipSet  hat  zehn  BMP  und  sechs  PNG,  und  fuer
+        //  `main2`  gibt  es  dort  nur  `main2.bmp`,  --  und  das
+        //  Spiel  verweigerte  den  Dienst  mit  der  Meldung
+        //  "main2.png is missing",  --  und  die  Datei  lag  direkt
+        //  daneben.
+        if (Rm2kBmp.IstBitmap(pData))
+        {
+            if (!Rm2kBmp.TryParse(pData, out var bmpBreite,
+                out var bmpHoehe, out var bmpIndizes,
+                out var bmpPalette, out var bmpFehler))
+            {
+                pError = "The chipset is a Windows bitmap and could not"
+                    + " be read: " + bmpFehler;
+                return false;
+            }
+
+            pImage = Rm2kIndexedImage.FromBmp(
+                bmpBreite, bmpHoehe, bmpIndizes, bmpPalette);
+            pError = "";
+            return true;
+        }
+
         for (var index = 0; index < PngSignature.Length; index++)
         {
             if (pData[index] != PngSignature[index])
             {
-                pError = "Chipset image is not a PNG.";
+                    pError = "Chipset image is neither a PNG nor a"
+                    + " Windows bitmap.";
+                return false;
                 return false;
             }
         }

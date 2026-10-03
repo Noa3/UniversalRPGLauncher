@@ -638,7 +638,31 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             return;
         }
         // The Player reads the chipset from the ChipSet directory (cache.cpp).
-        var chipsetPath = Path.Combine(root, "ChipSet", _chipsetName + ".png");
+        // **Und die Endung  ist  nicht  `.png`.**
+        //
+        // **Und das ist gemessen an drei fertigen Spielen:**
+        // Dragon Destiny hat 22 Chipsets und **kein einziges** als
+        // BMP, -- Pom Gets Wi-Fi hat 17 und keins, -- **und Lisa hat
+        // 10 als BMP und 6 als PNG**, -- **und fuer `main2` gibt es
+        // in diesem Spiel nur `main2.bmp`.** --
+        // **Der Leser nimmt den Namen aus der Datenbank und haengt
+        // `.png` an, -- **und Lisas Startbild verweigerte den Dienst
+        // mit der Meldung "main2.png is missing in ChipSet", ---
+        // **und die Datei `main2.bmp` liegt direkt daneben.**
+        //
+        // **Und es ist nicht geraten:** der Name kommt aus der
+        // Datenbank und nennt keine Endung, -- **und in keinem der
+        // drei Spiele existiert ein Name in beiden Formen**, --
+        // **also ist die Suche eindeutig, sobald man beide versucht.**
+        var chipsetPath = FindChipset(root, _chipsetName);
+        if (chipsetPath == null)
+        {
+            RenderDiagnostic =
+                $"RM2K chipset image '{_chipsetName}' is missing in"
+                + " ChipSet, and it is neither a .png nor a .bmp"
+                + " there.";
+            return;
+        }
         if (!File.Exists(chipsetPath))
         {
             RenderDiagnostic = $"RM2K chipset image '{_chipsetName}.png' is missing in ChipSet.";
@@ -733,6 +757,62 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// And it finds a chipset in either of the two forms a real game
+    /// uses.
+    /// </summary>
+    /// <param name="pRoot">The game's own directory.</param>
+    /// <param name="pName">The name the database gives, without an
+    /// extension.</param>
+    /// <returns>The path, or null.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And RM2000 wrote <c>.bmp</c> and RM2003 wrote
+    /// <c>.png</c></strong>, -- <strong>and the database names neither,
+    /// so the name alone does not say which one a game
+    /// uses.</strong> -- <strong>And in all three finished games
+    /// measured here, no chipset name exists in both
+    /// forms.</strong> -- <strong>And the order is the newer one
+    /// first, because a game that was converted keeps its old files and
+    /// gains new ones.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a name that is already written with an extension is
+    /// taken as it is</strong>, -- <strong>because the game's own
+    /// text is more specific than this rule.</strong>
+    /// </para>
+    /// </remarks>
+    private static string? FindChipset(string pRoot, string pName)
+    {
+        if (string.IsNullOrEmpty(pName))
+        {
+            return null;
+        }
+
+        var ordner = Path.Combine(pRoot, "ChipSet");
+        if (!Directory.Exists(ordner))
+        {
+            return null;
+        }
+
+        if (Path.HasExtension(pName))
+        {
+            var direkt = Path.Combine(ordner, pName);
+            return File.Exists(direkt) ? direkt : null;
+        }
+
+        foreach (var endung in new[] { ".png", ".bmp" })
+        {
+            var kandidat = Path.Combine(ordner, pName + endung);
+            if (File.Exists(kandidat))
+            {
+                return kandidat;
+            }
+        }
+
+        return null;
     }
 
     private static string? FindRootFile(string pRoot, string pName)
