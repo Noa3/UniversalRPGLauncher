@@ -188,3 +188,6 @@ msgstr "Start anyway"
 
 msgid "RTP_DIALOG_CANCEL"
 msgstr "Cancel"
+
+msgid "RTP_STATUS_WORKING"
+msgstr "Getting the runtime ..."

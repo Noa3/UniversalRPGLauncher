@@ -689,10 +689,39 @@ public partial class Main : Control
 		// gefragt.**
 		var bedarf = RtpPruefer.Pruefe(
 			_selectedGame.Detection.RtpDependency);
-		if (bedarf.Fehlt
-			&& !await RtpDialog.Fragen(this, _selectedGame, bedarf))
+		if (bedarf.Fehlt)
 		{
-			return;
+			var gewaehlt = await RtpDialog.Fragen(
+				this, _selectedGame, bedarf);
+
+			if (gewaehlt == RtpDialog.Antwort.Laden)
+			{
+				// **Und hier laeuft der Download**, --
+				// **und er laeuft im Hintergrund, damit die
+				// Oberflaeche nicht einfriert.**
+				_status.Text = Tr("RTP_STATUS_WORKING");
+				var ziel = RtpAblage.Benutzer(bedarf.EngineId);
+				var geholt = await System.Threading.Tasks.Task.Run(
+					() => new RtpAblauf(new RtpHoler())
+						.FuehreAus(bedarf.EngineId, ziel,
+							teil => _status.Text = Tr(
+								"RTP_STATUS_WORKING") + " " + teil));
+
+				_status.Text = geholt.Meldung;
+				foreach (var schritt in geholt.Schritte)
+				{
+					_status.Text += "\n" + schritt;
+				}
+
+				if (!geholt.Erfolgreich)
+				{
+					return;
+				}
+			}
+			else if (gewaehlt == RtpDialog.Antwort.Abbrechen)
+			{
+				return;
+			}
 		}
 		var result = _launcher.Launch(_selectedGame);
 		_status.Text = result.Message;

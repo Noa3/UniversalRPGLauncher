@@ -188,3 +188,6 @@ msgstr "Demarrer quand meme"
 
 msgid "RTP_DIALOG_CANCEL"
 msgstr "Annuler"
+
+msgid "RTP_STATUS_WORKING"
+msgstr "Telechargement du paquet ..."

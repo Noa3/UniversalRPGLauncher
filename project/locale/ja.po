@@ -187,3 +187,6 @@ msgstr "このまま開始"
 
 msgid "RTP_DIALOG_CANCEL"
 msgstr "キャンセル"
+
+msgid "RTP_STATUS_WORKING"
+msgstr "ランタイムを取得しています ..."

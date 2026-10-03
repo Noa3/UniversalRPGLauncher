@@ -34,6 +34,7 @@ public partial class TestRtpDialogTexte : TestBase
     {
         "RTP_DIALOG_TITLE", "RTP_DIALOG_BODY", "RTP_DIALOG_DOWNLOAD",
         "RTP_DIALOG_START_WITHOUT", "RTP_DIALOG_CANCEL",
+        "RTP_STATUS_WORKING",
     };
 
     private static string Po(string pSprache) => File.ReadAllText(

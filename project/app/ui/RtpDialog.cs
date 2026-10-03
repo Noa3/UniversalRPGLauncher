@@ -38,7 +38,7 @@ public static class RtpDialog
 	/// <param name="pParent">Where the dialog goes.</param>
 	/// <param name="pSpiel">The game that needs it.</param>
 	/// <param name="pBedarf">What the check found.</param>
-	/// <returns>True when the game may start.</returns>
+	/// <returns>What the user chose.</returns>
 	/// <remarks>
 	/// <para>
 	/// <strong>And this returns a bool and not a result object</strong>,
@@ -46,10 +46,22 @@ public static class RtpDialog
 	/// and it is whether to start.</strong>
 	/// </para>
 	/// </remarks>
-	public static async System.Threading.Tasks.Task<bool> Fragen(
+	public enum Antwort
+	{
+		/// <summary>Und der Benutzer will die Laufzeit.</summary>
+		Laden,
+
+		/// <summary>Und der Benutzer startet ohne.</summary>
+		Trotzdem,
+
+		/// <summary>Und der Benutzer bricht ab.</summary>
+		Abbrechen,
+	}
+
+	public static async System.Threading.Tasks.Task<Antwort> Fragen(
 		Node pParent, GameLibrary.GameEntry pSpiel, RtpPruefer.Ergebnis pBedarf)
 	{
-		var schluss = false;
+		var gewaehlt = Antwort.Abbrechen;
 		var dialog = new ConfirmationDialog();
 		dialog.Title = Tr("RTP_DIALOG_TITLE");
 		dialog.DialogText = Text(pSpiel, pBedarf);
@@ -65,12 +77,12 @@ public static class RtpDialog
 		ohne.Pressed += () =>
 		{
 			dialog.Hide();
-			schluss = true;
+			gewaehlt = Antwort.Trotzdem;
 		};
 		dialog.AddChild(ohne);
 
-		dialog.Confirmed += () => schluss = true;
-		dialog.Canceled += () => schluss = false;
+		dialog.Confirmed += () => gewaehlt = Antwort.Laden;
+		dialog.Canceled += () => gewaehlt = Antwort.Abbrechen;
 
 		pParent.AddChild(dialog);
 		dialog.PopupCentered(new Vector2I(560, 260));
@@ -92,7 +104,7 @@ public static class RtpDialog
 
 		pParent.RemoveChild(dialog);
 		dialog.QueueFree();
-		return schluss;
+		return gewaehlt;
 	}
 
 	private static string Text(

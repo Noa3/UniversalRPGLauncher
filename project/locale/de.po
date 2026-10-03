@@ -194,3 +194,6 @@ msgstr "Trotzdem starten"
 
 msgid "RTP_DIALOG_CANCEL"
 msgstr "Abbrechen"
+
+msgid "RTP_STATUS_WORKING"
+msgstr "Laufzeit wird geholt ..."

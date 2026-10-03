@@ -187,3 +187,6 @@ msgstr "그대로 시작"
 
 msgid "RTP_DIALOG_CANCEL"
 msgstr "취소"
+
+msgid "RTP_STATUS_WORKING"
+msgstr "런타임을 받는 중 ..."

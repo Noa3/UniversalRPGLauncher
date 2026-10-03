@@ -187,3 +187,6 @@ msgstr "仍然开始"
 
 msgid "RTP_DIALOG_CANCEL"
 msgstr "取消"
+
+msgid "RTP_STATUS_WORKING"
+msgstr "正在获取运行库 ..."

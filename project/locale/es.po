@@ -188,3 +188,6 @@ msgstr "Iniciar de todos modos"
 
 msgid "RTP_DIALOG_CANCEL"
 msgstr "Cancelar"
+
+msgid "RTP_STATUS_WORKING"
+msgstr "Obteniendo el tiempo de ejecucion ..."
