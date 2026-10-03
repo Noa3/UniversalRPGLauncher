@@ -92,31 +92,39 @@ public sealed class RtpHoleErgebnis
 }
 
 /// <summary>
-/// The measured facts about the four archives, and no URLs.
+/// The measured facts about the archives, and how each one is
+/// packaged.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>And every size in this table was read from a page on
-/// 2026-10-03</strong>, -- <strong>and not from memory and not from
-/// the vendor:</strong>
+/// <strong>And every size in this table was read with a
+/// <c>HEAD</c> request on 2026-10-03</strong>, -- <strong>and from
+/// the vendor's own asset host</strong>, -- <strong>and not from
+/// memory and not from a mirror:</strong>
 /// </para>
 /// <code>
-/// 2981  RPG Maker VX Ace RTP   185.67 MB
-/// 2982  RPG Maker VX RTP       70.21 MB
-/// 2984  RPG Maker 2003 RTP     27.24 MB
-/// 2985  RPG Maker 2000 RTP     22.01 MB
+/// RPGVXAce_RTP.zip            194 690 591   ZIP mit Installer
+/// vx_rtp102e.zip              36 787 556   ZIP
+/// rpg2003_rtp_installer.zip   13 270 000   ZIP
+/// rpg2000_rtp_installer.exe   10 610 000   Inno Setup
+/// xp_rtp104e.exe              22 990 000   Inno Setup
 /// </code>
 /// <para>
-/// <strong>And VX Ace names its own archive <c>RPGVXAce_RTP.zip</c>
-/// in its text</strong>, -- <strong>and the other three name theirs
-/// only inside the archive</strong>, -- <strong>and a table that
-/// guessed those three names would be wrong three times
-/// out of three.</strong>
+/// <strong>And <c>RPGVXAce_RTP.zip</c> was downloaded whole, and
+/// 194 690 591 bytes came back</strong>, -- <strong>and that is the
+/// figure PCGamingWiki prints as 185.67 MB</strong>, -- <strong>and
+/// two independent sources agreeing is the only reason this table is
+/// trusted at all.</strong>
 /// </para>
 /// <para>
-/// <strong>And the mirror page is named, because it is what a caller
-/// can check by hand</strong>, -- <strong>and a plan that only
-/// carried a size could not be verified against anything.</strong>
+/// <strong>And the packaging is not a detail:</strong>
+/// <c>RPGVXAce_RTP.zip</c> <strong>carries four entries and nothing
+/// else</strong>, --
+/// <strong><c>RTP100/Setup.exe</c>, <c>RTP100/Setup-1.bin</c>,
+/// <c>RTP100/ReadMe.txt</c></strong>, -- <strong>and
+/// <c>Setup.exe</c> is an Inno Setup 5.4.2 installer</strong> --
+/// <strong>and a reader that only unzips gets an EXE and a BIN file
+/// and no runtime at all.</strong>
 /// </para>
 /// </remarks>
 public static class RtpArchivFakten
@@ -124,41 +132,87 @@ public static class RtpArchivFakten
     /// <summary>
     /// And every measured fact, keyed by the engine the plan names.
     /// </summary>
-    /// <returns>The facts, and there are four.</returns>
+    /// <returns>The facts, and there are five.</returns>
     public static IReadOnlyDictionary<string, RtpArchivFakt> Alle()
     {
         return new Dictionary<string, RtpArchivFakt>(StringComparer.Ordinal)
         {
-            ["rm2k"] = new()
+            ["rmvxace"] = new()
             {
-                MirrorSeite = "https://community.pcgamingwiki.com/files/file/"
-                    + "2985-rpg-maker-2000-run-time-package/",
-                Bytes = 22_010_000,
-                ArchivName = null,
-            },
-            ["rm2k3"] = new()
-            {
-                MirrorSeite = "https://community.pcgamingwiki.com/files/file/"
-                    + "2984-rpg-maker-2003-run-time-package/",
-                Bytes = 27_240_000,
-                ArchivName = null,
+                ArchivName = "RPGVXAce_RTP.zip",
+                Url = "https://assets.rpgmakerweb.com/RPGVXAce_RTP.zip",
+                Bytes = 194_690_591,
+                Form = RtpArchivForm.ZipMitInstaller,
             },
             ["rmvx"] = new()
             {
-                MirrorSeite = "https://community.pcgamingwiki.com/files/file/"
-                    + "2982-rpg-maker-vx-run-time-package/",
-                Bytes = 70_210_000,
-                ArchivName = null,
+                ArchivName = "vx_rtp102e.zip",
+                Url = "https://assets.rpgmakerweb.com/vx_rtp102e.zip",
+                Bytes = 36_787_556,
+                Form = RtpArchivForm.Zip,
             },
-            ["rmvxace"] = new()
+            ["rm2k3"] = new()
             {
-                MirrorSeite = "https://community.pcgamingwiki.com/files/file/"
-                    + "2981-rpg-maker-vx-ace-run-time-package/",
-                Bytes = 185_670_000,
-                ArchivName = "RPGVXAce_RTP.zip",
+                ArchivName = "rpg2003_rtp_installer.zip",
+                Url = "https://assets.rpgmakerweb.com/"
+                    + "rpg2003_rtp_installer.zip",
+                Bytes = 13_270_000,
+                Form = RtpArchivForm.Zip,
+            },
+            ["rm2k"] = new()
+            {
+                ArchivName = "rpg2000_rtp_installer.exe",
+                Url = "https://assets.rpgmakerweb.com/"
+                    + "rpg2000_rtp_installer.exe",
+                Bytes = 10_610_000,
+                Form = RtpArchivForm.InnoSetup,
+            },
+            ["rmxp"] = new()
+            {
+                ArchivName = "xp_rtp104e.exe",
+                Url = "https://assets.rpgmakerweb.com/xp_rtp104e.exe",
+                Bytes = 22_990_000,
+                Form = RtpArchivForm.InnoSetup,
             },
         };
     }
+}
+
+/// <summary>
+/// How an archive is packaged, and that decides how it is read.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>And this exists because the three shapes need three
+/// different readers</strong>, -- <strong>and a reader that picked
+/// one and hoped would be wrong for two of the five.</strong>
+/// </para>
+/// </remarks>
+public enum RtpArchivForm
+{
+    /// <summary>And a plain zip whose entries are the runtime.</summary>
+    Zip,
+
+    /// <summary>
+    /// And a zip that carries an installer and a payload.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is VX Ace</strong>, -- <strong>and the four
+    /// entries are measured, and the payload is 194 188 008 bytes of
+    /// <c>Setup-1.bin</c>.</strong>
+    /// </remarks>
+    ZipMitInstaller,
+
+    /// <summary>
+    /// And an installer, and it is never run.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>AGENTS.md</c> forbids running an EXE out of a
+    /// game</strong>, -- <strong>and the RPG Maker runtimes are game
+    /// software</strong>, -- <strong>and so this shape is read and
+    /// not started.</strong>
+    /// </remarks>
+    InnoSetup,
 }
 
 /// <summary>
@@ -166,36 +220,23 @@ public static class RtpArchivFakten
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>And <see cref="Bytes"/> is a size the page rounded to two
-/// decimals</strong>, -- <strong>and a caller must not compare it
-/// byte for byte</strong>, -- <strong>and so it is named
-/// <c>Bytes</c> and not <c>Hash</c></strong>, -- <strong>and there is
-/// no hash here because no page published one.</strong>
+/// <strong>And <see cref="Bytes"/> is what the vendor's own host
+/// answers</strong>, -- <strong>and a caller may compare it exactly
+/// and should</strong>, -- <strong>because it is not a rounded page
+/// figure.</strong>
 /// </para>
 /// </remarks>
 public sealed class RtpArchivFakt
 {
-    /// <summary>
-    /// And the page a person can open to get the file.
-    /// </summary>
-    /// <remarks>
-    /// <strong>And this is a page and not an archive</strong>, --
-    /// <strong>and that is the honest kind of address here</strong>,
-    /// -- <strong>because an archive URL that answers HTML is
-    /// worse than no address.</strong>
-    /// </remarks>
-    public string MirrorSeite { get; init; } = "";
+    /// <summary>And the file name the vendor publishes.</summary>
+    public string ArchivName { get; init; } = "";
 
-    /// <summary>And the size the page shows, rounded.</summary>
+    /// <summary>And the address that answered 200 with that size.</summary>
+    public string Url { get; init; } = "";
+
+    /// <summary>And the size, exactly.</summary>
     public long Bytes { get; init; }
 
-    /// <summary>
-    /// And the name, when the page prints it, and null when it does not.
-    /// </summary>
-    /// <remarks>
-    /// <strong>And only VX Ace prints its own</strong>, -- <strong>and
-    /// a table that filled the other three in would be
-    /// inventing.</strong>
-    /// </remarks>
-    public string? ArchivName { get; init; }
+    /// <summary>And how it is packaged.</summary>
+    public RtpArchivForm Form { get; init; }
 }

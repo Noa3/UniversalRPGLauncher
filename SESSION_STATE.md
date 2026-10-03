@@ -19141,6 +19141,73 @@ keinem der drei Spiele auf diesem Rechner vor -- nullmal. Ersetzt durch
 `$gameSelfVariables.get(this, 'Type') === 0`, die haeufigste echte
 Autorzeile (1032x), plus ein neuer Test, dass eine Rechnung eine Rechnung
 bleibt.
+### Und Kriterium 8 ist am 2026-10-03 real ausgefuehrt worden
+
+**Und die offiziellen Asset-URLs des Herstellers sind
+erreichbar** -- **und rpgmaker.net selbst ist es nicht:**
+
+```text
+https://www.rpgmakerweb.com/run-time-package          HTTP 200
+  https://assets.rpgmakerweb.com/RPGVXAce_RTP.zip    185.67 MB
+  https://assets.rpgmakerweb.com/vx_rtp102e.zip       35.09 MB
+  https://assets.rpgmakerweb.com/rpg2003_rtp_installer.zip  12.65 MB
+  https://assets.rpgmakerweb.com/rpg2000_rtp_installer.exe   10.12 MB
+  https://assets.rpgmakerweb.com/xp_rtp104e.exe      21.93 MB
+```
+
+**Und `RPGVXAce_RTP.zip` wurde geladen:  194 690 591 Bytes in
+0,87 s,  und das ist genau die Groesse,  die PCGamingWiki
+angibt.** -- **Und damit sind zwei unabhaengige Quellen
+identisch,  und die PCGW-Tabelle ist keine Behauptung
+sondern eine Bestaetigung.**
+
+### Und das Archiv ist kein ZIP-Inhalt,  und das aendert alles
+
+```text
+RPGVXAce_RTP.zip: 4 Eintraege
+  RTP100/Setup.exe       585 073
+  RTP100/Setup-1.bin   194 188 008
+  RTP100/ReadMe.txt        5 261
+```
+
+**Und `Setup.exe` ist ein Inno-Setup-Installer
+(`Inno Setup Setup Data (5.4.2) (u)`)**, --
+
+**und ein Entpacker, der nur ZIP kann,  liefert ein
+verzeichnis mit einer EXE und einer BIN-Datei  und sonst
+nichts.**  **Und das haette ich als "RTP installiert"
+gemeldet,  und es waere eine falsche Behauptung gewesen.**
+
+### Und `innoextract` liest es,  ohne etwas auszufuehren
+
+```text
+innoextract 1.9,  "Extracts installers created by
+                   Inno Setup 1.2.10 to 6.0.5"
+heraus/app:  780 Dateien,  193,3 MB,  in 9,9 s
+  407 .png   340 .ogg   22 .txt   10 Fonts
+  Audio/BGM 42   Audio/SE 275   Audio/ME 13
+  Graphics/Tilesets 44   Graphics/Characters 48
+```
+
+**Und die Ordner,  die VX-Ace-Spiele suchen,  sind alle
+da.**
+
+**Und es ist keine einzige DLL drin** -- **und das ist
+richtig**:  **die Laufzeitbibliothek ist kein RTP-Inhalt,
+sondern die DLL des Editors**, -- **und der RTP liefert
+Grafik,  Ton und Schriften.**
+
+### Und die Regel,  die daraus folgt
+
+**Und `RtpEntpacker` im Repo kann nur ZIP**, -- **und
+das ist fuer die beiden `application/octet-stream`-Archive
+falsch**:  **`xp_rtp104e.exe` und `rpg2000_rtp_installer.exe`
+sind EXE-Installer,  und `rpg2000_rtp_installer.exe` wird
+nie ausgefuehrt.**
+
+**Und `AGENTS.md` verbietet das Ausfuehren  --  und
+`innoextract` liest,  und das ist der erlaubte Weg.**
+
 ### Und Kriterium 8:  die Freigabe ist erteilt,  und die Grenze ist gemessen
 
 **Und  Noa3  hat  am  2026-10-03  ausdruecklich  gesagt:**
