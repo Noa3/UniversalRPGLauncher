@@ -1356,6 +1356,90 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     }
 
     /// <summary>
+    /// And it lets a hero take its turn, and the command is the
+    /// reference's own number.
+    /// </summary>
+    /// <param name="pBefehl">
+    /// The command, and it is liblcf's <c>BattleCommand</c> value.
+    /// </param>
+    /// <param name="pGegnerIndex">
+    /// Which monster, and it is ignored by the two commands that do
+    /// not name one.
+    /// </param>
+    /// <param name="pFehler">Why not, and empty on success.</param>
+    /// <returns>Whether the turn happened.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And three of the six are answered here and three are
+    /// not.</strong> --
+    /// <strong>Attack and defence are this repository's battle</strong>,
+    /// -- <strong>and escape is the encounter's own
+    /// result.</strong> --
+    /// <strong>And skill, item and special need a target and a
+    /// selection this runtime does not ask for yet</strong>, --
+    /// <strong>and a command that silently does nothing is worse
+    /// than one that is refused.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the turn advances only when the turn
+    /// happened</strong>, -- <strong>because a refused command is not
+    /// a turn.</strong>
+    /// </para>
+    /// </remarks>
+    public bool FuehreZugAus(
+        Rm2kBefehlswahl.Befehl pBefehl, int pGegnerIndex,
+        out string pFehler)
+    {
+        pFehler = "";
+
+        if (!Simulation.IsBattleActive)
+        {
+            pFehler = "no battle is running";
+            return false;
+        }
+
+        switch (pBefehl)
+        {
+            case Rm2kBefehlswahl.Befehl.Angriff:
+                // **Und  ein  Schlag  braucht  eine  Faehigkeit  und
+                //  eine  Zielkachel**, -- **und  beides  fragt  diese
+                //  Laufzeit  noch  nicht  ab** -- **denn  wer  zuerst
+                //  geladen  wird,  ist  eine  Frage  der
+                //  Bedienung,  und  eine  erfundene  Zufaelligkeit
+                //  waere  eine  erfundene  Spielregel.**
+                pFehler = "the strike needs a skill and a target,"
+                    + " and this runtime asks for neither yet";
+                return false;
+
+            case Rm2kBefehlswahl.Befehl.Verteidigung:
+                Simulation.BattlePhase = 2;
+                Rm2kZugfolge.Ruecke(Simulation);
+                Simulation.AddDiagnostic(
+                    "RM2K the hero defends and the turn passes on");
+                return true;
+
+            case Rm2kBefehlswahl.Befehl.Flucht:
+                if (!Rm2kBefehlswahl.FluchtErlaubt(Simulation))
+                {
+                    pFehler = "the encounter command forbade the"
+                        + " escape";
+                    return false;
+                }
+
+                BeendeKampf(false);
+                return true;
+
+            default:
+                pFehler = "the command "
+                    + pBefehl + " needs a target or a selection this"
+                    + " runtime does not ask for yet, and a command"
+                    + " that silently does nothing is worse than"
+                    + " one that is refused";
+                return false;
+        }
+    }
+
+    /// <summary>
     /// And it ends a battle with a result the events asked for.
     /// </summary>
     /// <param name="pSiegreich">

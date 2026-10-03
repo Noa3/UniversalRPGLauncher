@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using UniversalRPG.App.Launcher;
 using UniversalRPG.App.Library;
@@ -65,6 +66,18 @@ public partial class Main : Control
 	private VBoxContainer _presentationControls = null!;
 	private Button _dismissMessageButton = null!;
 	private HBoxContainer _choiceButtons = null!;
+
+	/// <summary>
+	/// And the battle's commands, because a battle the player cannot
+	/// enter is a battle that runs without them.
+	/// </summary>
+	private HBoxContainer _battleCommandButtons = null!;
+
+	/// <summary>
+	/// And which commands were shown last, so a new button is only
+	/// built when the list actually changed.
+	/// </summary>
+	private string _battleCommandSignature = "";
 	private SpinBox _inputSpinBox = null!;
 	private Button _submitInputButton = null!;
 	private string _choiceSignature = "";
@@ -320,6 +333,9 @@ public partial class Main : Control
 		_presentationControls.AddChild(_dismissMessageButton);
 		_choiceButtons = new HBoxContainer();
 		_presentationControls.AddChild(_choiceButtons);
+
+		_battleCommandButtons = new HBoxContainer();
+		_presentationControls.AddChild(_battleCommandButtons);
 		_inputSpinBox = new SpinBox();
 		_inputSpinBox.MinValue = 0;
 		_inputSpinBox.MaxValue = int.MaxValue;
@@ -706,6 +722,56 @@ public partial class Main : Control
 				}
 			}
 		}
+		// **Und  die  Kampfbefehle  kommen  daneben.**
+		//
+		// **Und  dieselbe  Signatur-Logik  wie  bei  der  Auswahl:**
+		// **ein  Knopf  entsteht  nur,  wenn  sich  die  Liste
+		//  geaendert  hat** -- **denn  ein  Knopf  pro  Bild  ist
+		//  Arbeit  ohne  Information.**
+		var befehlListe = _launcher.ActiveRuntime
+			is Rm2kEngineRuntime rm2kLauf
+			&& rm2kLauf.Simulation.IsBattleActive
+			? UniversalRPG.Rm2k.Simulation.Rm2kBefehlswahl
+				.Verfuegbar(rm2kLauf.Simulation, -1)
+			: new System.Collections.Generic.List<
+				UniversalRPG.Rm2k.Simulation.Rm2kBefehlswahl
+					.Befehl>();
+
+		_battleCommandButtons.Visible = befehlListe.Count > 0;
+		_presentationControls.Visible =
+			_presentationControls.Visible || befehlListe.Count > 0;
+
+		var befehlSignatur = string.Join(",",
+			befehlListe.Select(x => x.ToString()));
+		if (befehlSignatur != _battleCommandSignature)
+		{
+			foreach (var child in _battleCommandButtons.GetChildren())
+			{
+				child.QueueFree();
+			}
+
+			_battleCommandSignature = befehlSignatur;
+			foreach (var befehl in befehlListe)
+			{
+				var gewaehlt = befehl;
+				var knopf = new Button { Text = gewaehlt.ToString() };
+				knopf.Pressed += () =>
+				{
+					if (_launcher.ActiveRuntime
+						is Rm2kEngineRuntime lauf)
+					{
+						if (!lauf.FuehreZugAus(
+							gewaehlt, UniversalRPG.Rm2k.Simulation.Rm2kZugfolge.Naechster(
+								lauf.Simulation), out var grund))
+						{
+							_status.Text = grund;
+						}
+					}
+				};
+				_battleCommandButtons.AddChild(knopf);
+			}
+		}
+
 		if (presentation.PendingInputVariableId != null)
 		{
 			_inputSpinBox.Value = presentation.InputValue ?? 0;
