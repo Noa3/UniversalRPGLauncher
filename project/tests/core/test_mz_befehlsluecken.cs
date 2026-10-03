@@ -10,7 +10,7 @@ namespace UniversalRPG.Tests.Core;
 
 /// <summary>
 /// Which commands are named, which are carried out, and that the
-/// difference is five.
+/// difference is two.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,8 +20,8 @@ namespace UniversalRPG.Tests.Core;
 /// -- <strong>And the control flow lives in
 /// <c>MzControlFlow.cs</c></strong>, -- <strong>which carries
 /// eleven more</strong>, -- <strong>and the interpreter itself
-/// handles eight.</strong> -- <strong>And the real number is
-/// five.</strong>
+/// handles eight, -- <strong>and `MzEventRunner` handles `117`</strong>,
+/// -- <strong>-- <strong>and the real number is two.</strong>
 /// </para>
 /// <code>
 /// MzCommands     100
@@ -29,14 +29,30 @@ namespace UniversalRPG.Tests.Core;
 /// MzInterpreter    8
 /// </code>
 /// <para>
-/// <strong>And the five that are named and carried out nowhere are
-/// measured against the game's own data below</strong>, -- <strong>
-/// and one of them is 934 times.</strong>
+/// <strong>And the two that are named and used nowhere are
+/// `412 EndBranch` and `657 ScriptLine2</strong>, -- <strong>and the
+/// engine has no `command412`</strong>, -- <strong>and `SkipBranch`
+/// steps over it without naming it, exactly as the engine does.</strong>
 /// </para>
 /// </remarks>
 public partial class TestMzBefehlsluecken : TestBase
 {
     private const string Quelle = "E:/URPG/project/src/mz/";
+
+    private static HashSet<string> AlleNamenImOrdner()
+    {
+        var raus = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var datei in Directory.GetFiles(Quelle, "*.cs"))
+        {
+            foreach (Match m in Regex.Matches(File.ReadAllText(datei),
+                @"MzCommandTable\.(\w+)"))
+            {
+                raus.Add(m.Groups[1].Value);
+            }
+        }
+
+        return raus;
+    }
 
     private static HashSet<string> Faelle(string pDatei)
     {
@@ -70,7 +86,7 @@ public partial class TestMzBefehlsluecken : TestBase
 
     /// <summary>
     /// And the three places, and the five that fall through all of
-    /// them.
+    /// And the four places, and the two that fall through all of
     /// </summary>
     /// <remarks>
     /// <para>
@@ -86,38 +102,42 @@ public partial class TestMzBefehlsluecken : TestBase
         var fluss = Faelle("MzControlFlow.cs");
         var interp = File.ReadAllText(Path.Combine(Quelle, "MzInterpreter.cs"));
         var tabelle = Tabelle();
+        var ueberall = AlleNamenImOrdner();
 
         AssertEq(100, befehle.Count, "**and MzCommands carries a hundred**");
         AssertEq(11, fluss.Count,
             "**and MzControlFlow carries eleven more** -- and that is"
                 + " the file I did not look at when I said twenty-one");
+        AssertEq(118, ueberall.Count,
+            "**and one hundred and eighteen names are used somewhere"
+                + " in the folder** -- and `MzEventRunner` handles"
+                + " `117` without a case branch, and it is the file I"
+                + " did not look at when I said five");
 
         var offen = new List<string>();
         foreach (var eintrag in tabelle.OrderBy(x => x.Key))
         {
             var nr = eintrag.Key;
             var namen = eintrag.Value;
-        {
-            var irgendwo = namen.Any(n =>
-                befehle.Contains(n)
-                || fluss.Contains(n)
-                || interp.Contains("MzCommandTable." + n));
-            if (!irgendwo)
+            if (!namen.Any(n => ueberall.Contains(n)))
             {
                 offen.Add(nr + " " + string.Join("/", namen));
             }
         }
-        }
 
         Console.WriteLine("offen: " + string.Join("  ", offen));
-        AssertEq(5, offen.Count,
-            "**and five commands are named and carried out"
-                + " nowhere** -- and a list of them is worth more"
-                + " than a percentage that hides where the gap is");
-        AssertTrue(offen.Any(o => o.StartsWith("117 ", StringComparison.Ordinal)),
-            "**and `117 CommonEvent` is among them** -- and that one"
-                + " runs 934 times in this game and is the one that"
-                + " carries `CommonEvents.json`");
+        AssertEq(2, offen.Count,
+            "**and two commands are named and used nowhere** -- and"
+                + " a list of them is worth more than a percentage"
+                + " that hides where the gap is");
+        AssertTrue(!offen.Any(o =>
+                o.StartsWith("117 ", StringComparison.Ordinal)),
+            "**and `117 CommonEvent` is NOT among them** -- and I"
+                + " said it was, and that was the third wrong"
+                + " count: `MzEventRunner.Called` builds the child"
+                + " with `Depth + 1` and pushes a frame, and"
+                + " `MzEngineRuntime` hands it the list it reads"
+                + " out of `CommonEvents.json`");
         AssertTrue(offen.Any(o => o.StartsWith("412 ", StringComparison.Ordinal)),
             "**and `412 EndBranch` is among them** -- and the engine"
                 + " has no `command412`, and the comment in"
@@ -132,7 +152,7 @@ public partial class TestMzBefehlsluecken : TestBase
 
     /// <summary>
     /// And how often each of the five occurs in this game.
-    /// </summary>
+    /// And how often the two and their neighbours occur here.
     /// <remarks>
     /// <para>
     /// <strong>And this is what orders the work.</strong> -- <strong>
