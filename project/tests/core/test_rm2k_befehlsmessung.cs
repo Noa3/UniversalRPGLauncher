@@ -289,6 +289,9 @@ public partial class TestRm2kBefehlsmessung : TestBase
 
         // **Und  die  drei  Befehle,  die  liblcf  kennt  und  dieser
         //  Interpreter  nicht.**
+        Console.WriteLine("Kampfbefehle aendern: 1009 "
+            + V(1009) + "x  (ChangeBattleCommands)");
+
         Console.WriteLine($"Fehlend im Interpreter: "
             + $"1005 CallCommonEvent {V(1005)}"
             + $"  1006 ForceFlee {V(1006)}"
