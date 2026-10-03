@@ -117,6 +117,60 @@ public static class Rm2kSimulationSaveCodec
         /// that forgot them as healthy.</strong>
         /// </para>
         /// </remarks>
+        /// <summary>The warp points the game wrote, per map.</summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And a list and not a dictionary</strong>, --
+        /// <strong>because <c>JsonSerializer</c> writes
+        /// <c>Dictionary&lt;int, ...&gt;</c> as an empty object without
+        /// an error</strong>, -- <strong>and this was measured:
+        /// <c>JSON nennt TeleportTargets: False</c>.</strong>
+        /// </para>
+        /// <para>
+        /// <strong>And Dragon Destiny writes 2879 of them</strong>, --
+        /// <strong>and a save that drops them reloads a game whose
+        /// warps the author wrote are gone</strong>, -- <strong>and a
+        /// warp that needs a switch to be open is the sharpest case,
+        /// because dropping it makes a secret entrance
+        /// vanish.</strong>
+        /// </para>
+        /// </remarks>
+        public List<SavedWarpPoint> TeleportTargets { get; set; } = new();
+
+        /// <summary>
+        /// One map's warp point.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And <c>RequiresSwitchOn</c> is not "use a
+        /// switch"</strong>, -- <strong>it is "the switch must be
+        /// on"</strong>, -- <strong>and a reader that read it as the
+        /// first would make every conditional warp
+        /// unconditional</strong>, -- <strong>and a secret entrance
+        /// would open at the start of the game.</strong>
+        /// </para>
+        /// </remarks>
+        public sealed class SavedWarpPoint
+        {
+            /// <summary>Which map this point is on.</summary>
+            public int MapId { get; set; }
+
+            /// <summary>Where it leads.</summary>
+            public int TargetMapId { get; set; }
+
+            /// <summary>The column.</summary>
+            public int X { get; set; }
+
+            /// <summary>The row.</summary>
+            public int Y { get; set; }
+
+            /// <summary>Whether the switch has to be on for this to count.</summary>
+            public bool RequiresSwitchOn { get; set; }
+
+            /// <summary>The switch this point depends on.</summary>
+            public int SwitchId { get; set; }
+        }
+
         public sealed class SavedActorConditions
         {
             /// <summary>Which hero.</summary>
@@ -448,6 +502,23 @@ public static class Rm2kSimulationSaveCodec
             CommonEventCounter = pState.CommonEventCounter,
         };
         foreach (var id in pState.CommonEventIds) data.CommonEventIds.Add(id);
+
+        // **Und  die  Sprungpunkte  gehoeren  dazu.**
+        foreach (var eintrag in pState.TeleportTargets)
+        {
+            foreach (var punkt in eintrag.Value)
+            {
+                data.TeleportTargets.Add(new SaveData.SavedWarpPoint
+                {
+                    MapId = eintrag.Key,
+                    TargetMapId = punkt.MapId,
+                    X = punkt.X,
+                    Y = punkt.Y,
+                    RequiresSwitchOn = punkt.RequiresSwitchOn,
+                    SwitchId = punkt.SwitchId,
+                });
+            }
+        }
         foreach (var value in pState.PassableTiles) data.PassableTiles.Add(value);
         foreach (var value in pState.Switches) data.Switches.Add(value);
         foreach (var value in pState.Variables) data.Variables.Add(value);
@@ -596,6 +667,30 @@ public static class Rm2kSimulationSaveCodec
         }
 
         pState.CommonEventCounter = pData.CommonEventCounter;
+
+        // **Und  die  Sprungpunkte  kommen  zurueck**, -- **und  die
+        //  Liste  nach  Karte  wird  wieder  aufgebaut**, -- **denn
+        //  das  Woerterbuch  ist  die  Form,  die  die  Klasse
+        //  benutzt.**
+        pState.TeleportTargets.Clear();
+        foreach (var eintrag in pData.TeleportTargets)
+        {
+            if (!pState.TeleportTargets.TryGetValue(
+                    eintrag.MapId, out var liste))
+            {
+                liste = new List<GameSimulationState.TeleportTarget>();
+                pState.TeleportTargets[eintrag.MapId] = liste;
+            }
+
+            liste.Add(new GameSimulationState.TeleportTarget
+            {
+                MapId = eintrag.TargetMapId,
+                X = eintrag.X,
+                Y = eintrag.Y,
+                RequiresSwitchOn = eintrag.RequiresSwitchOn,
+                SwitchId = eintrag.SwitchId,
+            });
+        }
         pState.ActiveActorIndex = pData.ActiveActorIndex; pState.CurrentScene = pData.CurrentScene;
         pState.SaveTimestamp = pData.SaveTimestamp; pState.SaveComment = pData.SaveComment;
         // **The seconds first, and the running flag second.** A first draft
