@@ -19009,6 +19009,65 @@ maxPictures() { return 120; }
 widersprochen** -- **und das Spiel ruft die beiden 179x
 zusammen.**
 
+### Und meine Behauptung "MzParty hat keine Actors" war falsch
+
+**Und `MzParty` hat 6 Methoden und kennt keine Actors** -- **und
+`MzCommands` hat 102 case-Zweige**, -- **und darunter sind
+`ChangeClass`, `ChangeEquipment`, `ChangeName`,
+`ChangePartyMember`, `ChangeActorName` und `ChangeGold`** -- **und
+die schreiben in echten Zustand:**
+
+```
+case MzCommandTable.ChangeName:
+    if (!pFacts.PartyMembers.Contains(zuBenennen)) { ...Notices... }
+    pFacts.Namen[zuBenennen] = Text(pCommand, 1);
+
+case MzCommandTable.ChangePartyMember:
+    if (entfernen) { pFacts.PartyMembers.Remove(darsteller); }
+    else           { pFacts.PartyMembers.Add(darsteller); }
+```
+
+**Und `PartyMembers`, `Namen` und `Classes` sind ein lebender
+Zustand, nicht eine Notiz.** -- **Also ist der Party-Weg nicht
+offen, und die Behauptung "Actors fehlen" war eine
+Falschaussage.**
+
+**Und was wirklich fehlt, ist gemessen:**
+
+```
+MzCommandTable: 121 Konstanten
+MzCommands:     102 case-Zweige
+nicht ausgefuehrt (19):
+  102 ShowChoiceList   111 ConditionalBranch  112 Loop
+  113 BreakLoop        115 ExitEventProcessing 117 CommonEvent
+  118 Label            119 JumpToLabel          337 ShowBattleAnimation
+  355 Script           402 ChoicesOption       402 ContinueText
+  403 EndLoop          405 ShowChoices         408 CommentLine
+  411 Else             412 EndBranch           413 RepeatAbove
+  605 GoodsLine        655 ScriptLine
+```
+
+**Und 111, 112, 113, 118, 119, 411, 412 und 413 sind der ganze
+Kontrollfluss**, -- **und `355 Script` ist der 355er, den alle
+10111 Skriptbefehle benutzen.** -- **Und die neun uebrigen sind
+Dialog- und Shop-Einzelheiten.**
+
+### Und $gamePlayer brauchte drei Klassen Vererbung
+
+**Und `Game_Player extends Game_Character extends
+Game_CharacterBase`**, -- **und `direction()`, `screenX()` und
+`opacity()` sind Getter auf der Basisklasse.** -- **Ohne die
+Kette waeren es 7 statt 22 Engine-Aufrufe gewesen.**
+
+```
+Game_Player 72   Game_Character 34   Game_CharacterBase 100
+eindeutig 187     (Summe 206, die drei teilen sich 19)
+methoden 22  felder 19  plugin 61   = 102
+```
+
+**Und `_realX` wird ausser von der Engine noch in 32 Plugin-Dateien
+gelesen.**
+
 ### Und $gameSystem ist ein negatives Ergebnis
 
 **Und die 327 Aufrufe zerfallen in:**
