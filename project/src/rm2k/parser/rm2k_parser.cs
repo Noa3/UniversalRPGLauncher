@@ -925,6 +925,52 @@ public partial class Rm2kParser : RefCounted
 			foreach (var field in (Godot.Collections.Array<Godot.Collections.Dictionary>)pObject["fields"])
 			{
 				var fieldId = (int)field["id"];
+
+				// **Und  die  Klassenparameter  auch  bei  Helden.**
+				//
+				// **Und  `0x1F`  ist  `parameters`  --  liblcf  nennt
+				//  es  "Array x 6 - Short"  --  und  es  traegt
+				//  `maxhp`,  `maxsp`  und  `spirit`.**
+				//
+				// **Und  dieser  Decoder  hatte  den  Sonderfall  nur
+				//  bei  Klassen**, -- **und  deshalb  hat  kein  Held
+				//  Trefferpunkte  und  der  ganze  Kampf  hat  keine
+				//  Gegenpartei.**  **Und  die  Helden  tragen  das  Feld
+				//  messbar:  alle  sieben  mit  600  Bytes.**
+				//
+				// **Und  das  Rohfeld  bleibt  erhalten**, -- **wie
+				//  beim  Klassenpfad  auch**, -- **denn  die  Bytes,
+				//  die  das  Spiel  geliefert  hat,  bleiben
+				//  erreichbar.**
+				if (fieldId == LdbClassParametersChunk)
+				{
+					unknownFields.Add(field);
+					if (Rm2kClassParameterDecoder.TryDecode(
+						(byte[])field["data"],
+						out var heldenParameter, out var parameterFehler))
+					{
+						var into = new Godot.Collections.Dictionary();
+						foreach (var pair in heldenParameter)
+						{
+							var liste = new Godot.Collections.Array<int>();
+							foreach (var wert in (List<int>)pair.Value)
+							{
+								liste.Add(wert);
+							}
+
+							into[pair.Key] = liste;
+						}
+
+						entry["parameters"] = into;
+					}
+					else
+					{
+						entry["parameters_error"] = parameterFehler;
+					}
+
+					continue;
+				}
+
 				if (!LdbActorFieldNames.TryGetValue(fieldId, out var fieldName))
 				{
 					unknownFields.Add(field);
