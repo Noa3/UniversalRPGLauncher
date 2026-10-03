@@ -100,6 +100,32 @@ public static class Rm2kSimulationSaveCodec
 
         public List<SavedActorSkills> ActorSkills { get; set; } = new();
 
+        /// <summary>
+        /// One actor's condition ids.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And a list and not a dictionary</strong>, --
+        /// <strong>because a JSON key must be a string</strong>, --
+        /// <strong>and <c>JsonSerializer</c> writes
+        /// <c>Dictionary&lt;int, ...&gt;</c> as an empty object without
+        /// an error.</strong>
+        /// </para>
+        /// <para>
+        /// <strong>And conditions carry the story</strong>, -- <strong>
+/// a hero who is poisoned, asleep or dead comes back from a save
+        /// that forgot them as healthy.</strong>
+        /// </para>
+        /// </remarks>
+        public sealed class SavedActorConditions
+        {
+            /// <summary>Which hero.</summary>
+            public int ActorId { get; set; }
+
+            /// <summary>The condition ids he carries.</summary>
+            public List<int> ConditionIds { get; set; } = new();
+        }
+
         public int MapWidth { get; set; }
         public int MapHeight { get; set; }
         public List<bool> PassableTiles { get; set; } = new();
@@ -107,6 +133,44 @@ public static class Rm2kSimulationSaveCodec
         public List<int> Variables { get; set; } = new();
         public Dictionary<int, int> ItemCounts { get; set; } = new();
         public List<int> PartyMemberIds { get; set; } = new();
+
+        /// <summary>
+        /// The four access rights, and they travel together.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And <c>SetAccess</c> moves all four at once</strong>,
+        /// -- <strong>because a game that forbids the menu but allows
+        /// the save is one the author wrote on purpose.</strong>
+        /// </para>
+        /// <para>
+        /// <strong>And a save that dropped them reloads a game where
+        /// the author locked the player out of everything.</strong>
+        /// </para>
+        /// </remarks>
+        public bool AllowEscape { get; set; } = true;
+        public bool AllowSave { get; set; } = true;
+        public bool AllowMenu { get; set; } = true;
+        public bool AllowTeleport { get; set; } = true;
+
+        /// <summary>One actor's conditions, as ids.</summary>
+        public List<SavedActorConditions> ActorConditions { get; set; } = new();
+
+        /// <summary>The common events currently running, and their counter.</summary>
+        public List<int> CommonEventIds { get; set; } = new();
+
+        /// <summary>
+        /// How many common events have been started.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And this is a parallel-execution number, not a
+        /// name</strong>, -- <strong>and a save that dropped it would
+        /// restart the count at one and let two parallel copies of the
+        /// same event share a name.</strong>
+        /// </para>
+        /// </remarks>
+        public int CommonEventCounter { get; set; }
         public int ActiveActorIndex { get; set; }
         public string CurrentScene { get; set; } = "Menu";
         public List<string> SceneStack { get; set; } = new();
@@ -378,7 +442,12 @@ public static class Rm2kSimulationSaveCodec
             Actors = WriteActors(pState),
             ActiveActorIndex = pState.ActiveActorIndex, CurrentScene = pState.CurrentScene,
             SaveTimestamp = pState.SaveTimestamp, SaveComment = pState.SaveComment,
+            AllowEscape = pState.AllowEscape, AllowSave = pState.AllowSave,
+            AllowMenu = pState.AllowMenu,
+            AllowTeleport = pState.AllowTeleport,
+            CommonEventCounter = pState.CommonEventCounter,
         };
+        foreach (var id in pState.CommonEventIds) data.CommonEventIds.Add(id);
         foreach (var value in pState.PassableTiles) data.PassableTiles.Add(value);
         foreach (var value in pState.Switches) data.Switches.Add(value);
         foreach (var value in pState.Variables) data.Variables.Add(value);
@@ -414,6 +483,23 @@ public static class Rm2kSimulationSaveCodec
             {
                 ActorId = held,
                 SkillIds = new List<int>(menge),
+            });
+        }
+
+        // **Und  die  Bedingungen  eines  Helden  sind  genauso  ein
+        //  Fortschritt  wie  seine  Faehigkeiten.**
+        for (var held = 0; held < pState.ActorConditions.Length; held++)
+        {
+            var menge = pState.ActorConditions[held];
+            if (menge == null || menge.Count == 0)
+            {
+                continue;
+            }
+
+            data.ActorConditions.Add(new SaveData.SavedActorConditions
+            {
+                ActorId = held,
+                ConditionIds = new List<int>(menge),
             });
         }
 
@@ -481,6 +567,35 @@ public static class Rm2kSimulationSaveCodec
                 menge.Add(skill);
             }
         }
+
+        // **Und  die  Bedingungen  kommen  mit  dem  einen  Weg  zurueck,
+        //  den  es  fuer  Faehigkeiten  schon  gibt.**
+        for (var held = 0; held < pState.ActorConditions.Length; held++)
+        {
+            pState.ActorConditions[held]?.Clear();
+        }
+
+        foreach (var eintrag in pData.ActorConditions)
+        {
+            var menge = pState.ConditionsOf(eintrag.ActorId);
+            foreach (var zustand in eintrag.ConditionIds)
+            {
+                menge.Add(zustand);
+            }
+        }
+
+        // **Und  die  vier  Zugangsrechte  kommen  ueber  den  einen
+        //  Weg,  den  die  Klasse  dafuer  anbietet.**
+        pState.SetAccess(pData.AllowEscape, pData.AllowSave,
+            pData.AllowMenu, pData.AllowTeleport);
+
+        pState.CommonEventIds.Clear();
+        foreach (var id in pData.CommonEventIds)
+        {
+            pState.CommonEventIds.Add(id);
+        }
+
+        pState.CommonEventCounter = pData.CommonEventCounter;
         pState.ActiveActorIndex = pData.ActiveActorIndex; pState.CurrentScene = pData.CurrentScene;
         pState.SaveTimestamp = pData.SaveTimestamp; pState.SaveComment = pData.SaveComment;
         // **The seconds first, and the running flag second.** A first draft
