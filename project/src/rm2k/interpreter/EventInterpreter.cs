@@ -1125,6 +1125,100 @@ public sealed class EventInterpreter
 	private int _commandIndex;
 
 	/// <summary>
+	/// And where the battle began, and it is the position the page
+	/// resumes at once the battle is over.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And the reference resumes at the encounter's own
+	/// index.</strong> -- <strong>A reader that ran the page from the
+	/// start would re-enter the encounter and start a second
+	/// battle</strong>, -- <strong>and a reader that resumed at the
+	/// index after it would skip the arms a game wrote between the
+	/// encounter and the battle's end.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And -1 says "no battle running",</strong> -- <strong>and
+	/// a reader that wrote zero would jump into the middle of the
+	/// first command of the first page.</strong>
+	/// </para>
+	/// </remarks>
+	private int _battleStartIndex = -1;
+
+	/// <summary>
+	/// And where a message page resumes once the line is read.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And it is the same rule as the battle's.</strong> --
+	/// <strong>The page holds on the thing it waits for and carries on
+	/// at the command it was holding for.</strong>
+	/// </para>
+	/// </remarks>
+	private int _messageStartIndex = -1;
+
+	/// <summary>
+	/// And it lets a page continue once its line is read.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And the runtime calls this beside the battle's.</strong>
+	/// -- <strong>It decides nothing about the text</strong>, --
+	/// <strong>it says the page may go on.</strong>
+	/// </para>
+	/// </remarks>
+	public void DialogGelesen()
+	{
+		if (_messageStartIndex < 0)
+		{
+			return;
+		}
+
+		// **Und  es  geht  EINE  STELLE  WEITER  und  nicht
+		//  zurueck.**
+		//
+		// **Und  das  war  ein  Fehler  in  meiner  ersten  Fassung:**
+		// **ich  sprang  auf  den  Dialogbefehl  selbst**, --
+		// **und  damit  zeigte  der  naechste  Frame  die  Zeile
+		//  erneut  an**, -- **und  die  Seite  kam  nie  hinter  den
+		//  Dialog.**
+		//
+		// **Und  fuer  den  Kampf  gilt  dasselbe  und  dort  ist  es
+		//  richtig:**  die  Begegnung  hat  den  Index  schon  selbst
+		//  bewegt, -- **und  dieser  Aufruf  setzt  ihn  auf  die
+		//  Stelle  nach  dem  Befehl.**
+		_commandIndex = _messageStartIndex + 1;
+		_messageStartIndex = -1;
+		_state.AddDiagnostic(
+			"[Event " + _eventId + "] the line was read and the page"
+			+ " carries on at the command after it");
+	}
+
+	/// <summary>
+	/// And it lets the page continue once the battle is over.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And the runtime calls this.</strong> -- <strong>It does
+	/// not decide an outcome</strong>, -- <strong>it says the battle is
+	/// over and the page may go on</strong>.
+	/// </para>
+	/// </remarks>
+	public void KampfBeendet()
+	{
+		if (_battleStartIndex < 0)
+		{
+			return;
+		}
+
+		_commandIndex = _battleStartIndex;
+		_battleStartIndex = -1;
+		_state.AddDiagnostic(
+			"[Event " + _eventId + "] the battle ended and the page"
+			+ " carries on at the command it was holding for");
+	}
+
+	/// <summary>
 	/// The branch number of the option list being run, from the LCF indent.
 	/// </summary>
 	/// <remarks>
@@ -1263,6 +1357,63 @@ public sealed class EventInterpreter
 			case ShowMessage:
 			case Comment:
 				ExecuteMessageOrComment(cmd);
+				// **Und  jetzt  wird  gewartet** -- **und  das  war  der
+				//  Grund,  warum  eine  Seite  nach  einem  Dialog
+				//  nie  weiterlief.**
+				//
+				// **Und  `Advance()`  sprang  sofort  weiter  und  liess
+				//  `WaitingFor`  auf  `MessageOpen`  stehen** --
+				// **und  damit  war  die  Seite  durch  und  der
+				//  Wartezustand  ein  Zustand,  den  niemand  mehr
+				//  las.**
+				//
+				// **Und  gemessen  war  es  so:**  nach  vier  Frames
+				//  stand  der  Zustand  auf  `MessageOpen`,  und  nach
+				//  dem  Schliessen  des  Fensters  started  der  naechste
+				//  Befehl  trotzdem  nicht.
+				// **Und  die  Seite  haelt  nur,  wenn  ein  Fenster
+				//  wirklich  offen  ist.**
+				//
+				// **Und  das  ist  der  Unterschied,  den  meine  erste
+				//  Fassung  nicht  gemacht  hat:**  sie  liess  jeden
+				//  Dialogbefehl  warten,  **auch  ohne
+				//  Darstellungszustand** --
+				// **und  ohne  Fenster  gibt  es  nichts,  worauf  der
+				//  Spieler  wartet**, **und  ein  Test  ohne
+				//  `PresentationState`  haette  bei  jedem  Dialog
+				//  festgehangen.**
+				// **Und  das  ist  die  ganze  Regel  und  sie  ist
+				//  eine  Bedingung:**
+				//
+				//   Fenster offen  ->  Seite haelt
+				//   Fenster zu     ->  Seite laeuft weiter
+				//
+				// **Und  der  Index  wandert  in  KEINEM  der  beiden
+				//  Faelle  hier**, -- **das  macht  `DialogGelesen`
+				//  oder  `Advance()`.**
+				if (_presentation != null
+					&& _presentation.MessageVisible)
+				{
+					if (_messageStartIndex < 0)
+					{
+						_messageStartIndex = _commandIndex;
+						_state.WaitingFor =
+							GameSimulationState.WaitReason.MessageOpen;
+						_state.AddDiagnostic(
+							"[Event " + _eventId + "] the line is on"
+							+ " screen and the page holds until it"
+							+ " is read");
+					}
+
+					return true;
+				}
+
+				// **Und  das  Fenster  ist  zu  --  und  der  Befehl
+				//  ist  damit  erledigt.**
+				return Advance();
+
+				// **Und  kein  Fenster  und  keine  offene  Zeile
+				//  bedeutet:  der  Befehl  ist  erledigt.**
 				return Advance();
 
 			case ShowChoice:
@@ -1586,11 +1737,23 @@ public sealed class EventInterpreter
 				// nothing reached them — so a game's encounter command fell
 				// into the default arm and no battle ever started, while the
 				// state carried a battle phase of its own.
+				// **Und  die  Seite  wartet  --  aber  der  Befehl
+				//  selbst  ist  erledigt.**
+				//
+				// **Und  das  war  ein  Fehler,  und  er  ist  mir  erst
+				//  beim  Messen  aufgefallen:**  der  Aufruf  kehrte
+				//  zurueck,  ohne  `_commandIndex`  zu  bewegen, --
+				// **und  damit  startete  die  Begegnung  in  jedem
+				//  Frame  neu**  (gemessen:  die  Diagnose  wiederholte
+				//  sich  bis  F6  wortgleich).
+				//
+				// **Und  ein  Befehl,  der  sich  selbst  erneut
+				//  ausfuehrt,  ist  keine  Asynchronitaet,  sondern
+				//  eine  Endlosschleife  mit  einem  Gegner  darin.**
 				ExecuteEnemyEncounter(cmd);
-				// **And the page holds**, because the reference makes the
-				// battle an asynchronous operation: the arms after this
-				// command run when the battle ends, and not before.
-				return _state.WaitingFor != GameSimulationState.WaitReason.None;
+				_commandIndex++;
+				_battleStartIndex = _commandIndex;
+				return IsRunning;
 
 			case ChangeHeroTitle:
 				ExecuteChangeHeroTitle(cmd);
@@ -2275,6 +2438,25 @@ public sealed class EventInterpreter
 			{
 				_state.AddDiagnostic($"[Event {_eventId}] Presentation rejected message: exceeds bounds");
 			}
+
+			// **Und  der  Dialog  haelt  die  Seite  --  und  das  war
+			//  nie  gesetzt.**
+			//
+			// **Und  die  Referenz  prueft  am  Anfang  jedes  Befehls
+			//  `if (Game_Message::IsMessageActive()) return false;`** --
+			// **und  deshalb  steht  hinter  einer  Zeile  kein
+			//  Befehl,  bis  sie  gelesen  ist.**
+			//
+			// **Und  gemessen  war  es  so:**  `10110`  sprang  sofort
+			//  weiter  und  die  Seite  lief  durch  den  ganzen
+			//  Dialog  hindurch, -- **und  der  Wartezustand  stand
+			//  daneben  und  wurde  von  niemandem  gelesen.**
+			//
+			// **Und  die  Begegnung  hat  den  Zustand  selbst
+			//  gesetzt**, **weil  sie  an  einem  offenen  Fenster
+			//  vorbeikommen  musste** -- **und  damit  war  es  nur  an
+			//  einer  Stelle  der  Welt  richtig  und  an  allen
+			//  anderen  nicht.**
 		}
 		_state.AddDiagnostic($"[Event {_eventId}] {kind}: {Truncate(text)}");
 	}
@@ -6503,6 +6685,21 @@ public sealed class EventInterpreter
 			_state.DatabaseData, troopId,
 			out var begegnung, out var begegnungsFehler))
 		{
+			// **Und  die  Truppe  wird  ersetzt  und  nicht
+			//  angehaengt.**
+			//
+			// **Und  das  ist  mein  eigener  Fehler  gewesen:**
+			// **mit  `Add`  bekam  eine  Seite,  die  nach  dem
+			//  Kampf  nochmal  durchlief,  eine  zweite  Truppe** --
+			// **und  gemessen  war  1 -> 2  und  2 -> 4.**
+			//
+			// **Und  `Clear`  ist  hier  richtig  und  ein  Reset
+			//  waere  es  auch**:  die  Referenz  beendet  den
+			//  Kampf  und  laesst  die  Truppenliste  stehen, --
+			// **und  deshalb  muss  der  Aufbau  sie  ersetzen**,
+			// **denn  er  ist  der  Ort,  an  dem  eine  Truppe
+			//  entsteht.**
+			_state.TroopMembers.Clear();
 			foreach (var gegner in begegnung)
 			{
 				_state.TroopMembers.Add(gegner);

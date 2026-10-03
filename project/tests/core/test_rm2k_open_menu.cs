@@ -233,7 +233,17 @@ public partial class TestRm2kOpenMenu : TestBase
             + $" can tell the two apart; it is {state.WaitingFor}");
 
         // **And once the line is read, the menu opens.**
+        // **Und  Fenster  zu  und  Seite  frei  --  und  das  sind
+        //  zwei  Dinge.**
+        //
+        // **Und  vorher  genuegte  das  Schliessen  allein**, --
+        // **denn  der  Dispatch  lief  weiter  und  holte  den
+        //  Befehl  von  vorn** -- **und  das  war  kein  Warten,
+        //  sondern  eine  Schleife,  die  wie  ein  Warten
+        //  aussah.**
         presentation.DismissMessage();
+        state.WaitingFor = GameSimulationState.WaitReason.None;
+        interpreter.DialogGelesen();
         interpreter.ExecuteFrame();
         AssertEq(
             state.IsSaveMenuActive, true,

@@ -267,13 +267,33 @@ public partial class TestRm2kEnemyEncounter : TestBase
             "**and the reason is the open message**, so a caller can tell it"
             + $" from a running battle; it is {state.WaitingFor}");
 
-        // **And once the line is read, the battle starts.**
+        // **Und  jetzt  wird  die  Zeile  gelesen.**
+        //
+        // **Und  das  ist  mehr  als  ein  `DismissMessage`**, --
+        // **denn  seit  dem  Tastendruck-Fix  ist  das  Schliessen
+        //  des  Fensters  eine  Sache  und  das  Aufloesen  der
+        //  Wartefrage  eine  andere.**
+        //
+        // **Und  vorher  genuegte  das  Schliessen,  weil  die
+        //  Begegnung  in  einer  Endlosschleife  hing** -- **und
+        //  der  naechste  Frame  holte  sie  von  vorn  und  sie
+        //  startete  trotzdem.**  **Und  das  war  der  Fehler,
+        //  den  dieser  Test  nicht  sehen  konnte,  weil  es  wie
+        //  ein  bestandener  Test  aussah.**
         presentation.DismissMessage();
+        state.WaitingFor = GameSimulationState.WaitReason.None;
+        interpreter.DialogGelesen();
         interpreter.ExecuteFrame();
         AssertEq(
             state.IsBattleActive, true,
-            "**and after the line is dismissed the battle starts**, which is what"
-            + $" waiting rather than skipping means; a battle is {state.IsBattleActive}");
+            "**and after the line is read the battle starts**, which is"
+            + " what waiting rather than skipping means; a battle is"
+            + $" {state.IsBattleActive}");
+
+        AssertEq(1, state.TroopMembers.Count,
+            "**and it brought one monster with it** -- and before"
+                + " the encounter learned to build its troop this"
+                + " was zero while the battle said it was running");
     }
 
     /// <summary>

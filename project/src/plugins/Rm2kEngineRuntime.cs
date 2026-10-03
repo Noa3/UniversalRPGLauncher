@@ -1313,6 +1313,13 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             case GameSimulationState.WaitReason.MessageOpen:
                 Presentation.DismissMessage();
                 Simulation.WaitingFor = GameSimulationState.WaitReason.None;
+
+                // **Und  die  Seite  darf  weiter** -- **denn  der
+                //  Dialogbefehl  ist  getan**, -- **und  vorher  blieb
+                //  sie  fuer  immer  stehen**, **weil  er  den
+                //  Befehlszaehler  nie  bewegt  hat.**
+                _eventScheduler.DialogGelesen();
+
                 Simulation.AddDiagnostic(
                     "RM2K a key press closed the message window and the"
                     + " page carries on");
@@ -1393,6 +1400,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
         Simulation.IsBattleActive = false;
         Simulation.WaitingFor = GameSimulationState.WaitReason.None;
+
+        // **Und  jetzt  duerfen  die  Seiten  weiterlaufen** --
+        // **denn  der  Befehl,  der  sie  angehalten  hat,  ist
+        //  getan.**
+        _eventScheduler.KampfBeendet();
+
         Simulation.AddDiagnostic(
             "RM2K the battle ended with "
             + (pSiegreich ? "a victory" : "an escape or a defeat")

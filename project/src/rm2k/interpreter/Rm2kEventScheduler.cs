@@ -322,6 +322,79 @@ public sealed class Rm2kEventScheduler
         }
     }
 
+    /// <summary>
+    /// And it tells every running page that the battle is over.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the second half of the encounter's
+    /// rule.</strong> --
+    /// <strong>The page holds on an encounter and the arms behind it
+    /// run when the battle ends</strong>, -- <strong>and the scheduler
+    /// is what knows about the pages.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it says nothing about the outcome</strong>, --
+    /// <strong>because the outcome is in the state and the state is
+    /// the interpreter's to read.</strong>
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// And it puts one page under way, and it is what a test and a
+    /// host both need.
+    /// </summary>
+    /// <param name="pInterpreter">The page.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this exists because the battle needs a page to be
+    /// told.</strong> -- <strong>The scheduler owns the interpreters
+    /// and only the map path created them</strong>, --
+    /// <strong>and a host that starts an encounter needs to hand one
+    /// in.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is a narrow door on purpose</strong>, --
+    /// <strong>because a reader that let anyone register any
+    /// interpreter could register one for a different state and the
+    /// battle would end in a page nobody sees.</strong>
+    /// </para>
+    /// </remarks>
+    public void SeiteStarten(EventInterpreter pInterpreter)
+    {
+        if (pInterpreter == null)
+        {
+            return;
+        }
+
+        _active[pInterpreter.EventId] = pInterpreter;
+    }
+
+    public void KampfBeendet()
+    {
+        foreach (var entry in _active.ToArray())
+        {
+            entry.Value.KampfBeendet();
+        }
+    }
+
+    /// <summary>
+    /// And it tells every running page that its line was read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the third time the same shape appears</strong>,
+    /// -- <strong>and it is the shape of the reference's rule and not a
+    /// coincidence.</strong>
+    /// </para>
+    /// </remarks>
+    public void DialogGelesen()
+    {
+        foreach (var entry in _active.ToArray())
+        {
+            entry.Value.DialogGelesen();
+        }
+    }
+
     private void ExecuteActive()
     {
         foreach (var entry in _active.ToArray())
