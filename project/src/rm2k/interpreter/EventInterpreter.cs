@@ -6492,6 +6492,46 @@ public sealed class EventInterpreter
 			: GameSimulationState.BattleDefeatMode.CustomHandler;
 
 		_state.ActiveTroopId = troopId;
+
+		// **Und  jetzt  die  Gegner  aufbauen** -- **und  das  war
+		//  der  Schritt,  der  fehlte.**
+		//
+		// **Und  vorher  stand  hier  nur  `IsBattleActive = true`,
+		//  waehrend  `TroopMembers`  leer  blieb**, -- **und  sechs
+		//  Stellen  im  Interpreter  lesen  genau  diese  Liste.**
+		if (Rm2kBegegnungAufbauen.Versuche(
+			_state.DatabaseData, troopId,
+			out var begegnung, out var begegnungsFehler))
+		{
+			foreach (var gegner in begegnung)
+			{
+				_state.TroopMembers.Add(gegner);
+			}
+
+			_state.AddDiagnostic(
+				"[Event " + _eventId + "] Encounter troop " + troopId
+				+ " brought " + begegnung.Count
+				+ " monsters into the battle");
+		}
+		else
+		{
+			// **Und  ein  Kampf  ohne  Gegner  ist  kein  Kampf** --
+			// **und  deshalb  wird  er  nicht  gestartet  und  die
+			//  Seite  haelt  nicht.**
+			//
+			// **Und  der  Grund  steht  im  Protokoll**, -- **denn
+			//  ein  Befehl,  der  ohne  erklaerbaren  Grund  stehen
+			//  bleibt,  ist  die  Art  Fehler,  die  niemand  findet.
+			_state.AddDiagnostic(
+				"[Event " + _eventId + "] Encounter troop " + troopId
+				+ " was refused: " + begegnungsFehler);
+			_state.TroopMembers.Clear();
+			_state.IsBattleActive = false;
+			_state.BattleSubcommand = -1;
+			_state.WaitingFor = GameSimulationState.WaitReason.None;
+			return;
+		}
+
 		_state.IsBattleActive = true;
 		_state.BattleTurn = 0;
 		// **The first turn is the player's, and that is phase 1 in this

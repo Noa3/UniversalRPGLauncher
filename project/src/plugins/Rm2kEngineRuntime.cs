@@ -101,6 +101,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         DatabaseData = database.Data;
         MapTreeData = mapTree.Data;
         CurrentMapData = currentMap;
+
+        // **Und  der  Zustand  bekommt  dieselbe  Bank** -- **denn
+        //  `10710`  laeuft  im  Interpreter  und  nicht  im  Host**,
+        // **und  ohne  die  Bank  bleiben  seine  Gegner
+        //  leer.**
+        Simulation.DatabaseData = database.Data;
         try
         {
             ConfigureSimulationMap(currentMap, mapTree.Data, mapPath);

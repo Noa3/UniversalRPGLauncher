@@ -66,7 +66,17 @@ public partial class TestRm2kEnemyEncounter : TestBase
     private static (EventInterpreter Interpreter, PresentationState Presentation,
         GameSimulationState State) Run(params Rm2kMap.EventCommand[] pCommands)
     {
-        var state = new GameSimulationState { MapId = 1 };
+        // **Und  die  Bank  gehoert  in  den  Zustand** -- **denn
+        //  `10710`  baut  seine  Gegner  daraus**, --
+        // **und  vorher  stand  hier  eine  leere  Bank  und  der
+        //  Kampf  verweigerte  den  Start  und  die  Tests  schlugen
+        //  fehl.**  **Das  war  richtig  und  die  Tests  sind  das,
+        //  was  sich  aendern  musste.**
+        var state = new GameSimulationState
+        {
+            MapId = 1,
+            DatabaseData = Rm2kBegegnungsFixture.Bank(),
+        };
         var presentation = new PresentationState();
         var interpreter = new EventInterpreter(state, 1, pCommands, presentation);
         return (interpreter, presentation, state);

@@ -1881,6 +1881,27 @@ public sealed class GameSimulationState
 
     // Troop (active battle)
     public int ActiveTroopId { get; set; } = -1;
+
+    /// <summary>
+    /// And the game's own database, and the six places that read
+    /// <see cref="TroopMembers"/> had nothing to read it from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the field that makes an encounter
+    /// real.</strong> -- <strong>Without it
+    /// <c>10710</c> sets <c>ActiveTroopId</c> and an empty troop
+    /// list</strong>, -- <strong>and every battle command afterwards
+    /// refuses because it has no monster.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is a parsed dictionary and not a path</strong>,
+    /// -- <strong>because a path would be re-read per encounter</strong>,
+    /// -- <strong>and a 416 kilobyte file is read once at
+    /// initialisation.</strong>
+    /// </para>
+    /// </remarks>
+    public Godot.Collections.Dictionary DatabaseData { get; set; } = new();
     public Godot.Collections.Array<Godot.Collections.Dictionary> TroopMembers { get; init; } = new();
 
     /// <summary>

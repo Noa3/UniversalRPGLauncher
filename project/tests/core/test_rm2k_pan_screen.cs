@@ -54,7 +54,18 @@ public partial class TestRm2kPanScreen : TestBase
     private static (EventInterpreter Interpreter, GameSimulationState State) Start(
         params Rm2kMap.EventCommand[] pCommands)
     {
-        var state = new GameSimulationState { MapId = 1 };
+        // **Und  dieser  Test  benutzt  `10710`  nur  als
+        //  Beispielbefehl  --  und  nicht  als  Kampf.**
+        //
+        // **Und  seit  der  Begegnung  ihre  Gegner  aus  der  Bank
+        //  baut,  startet  sie  ohne  Bank  nicht  mehr** --
+        // **und  dann  prueft  der  Test  den  Kampf  statt  den
+        //  Pan.**  **Und  die  Bank  gehoert  dazu.**
+        var state = new GameSimulationState
+        {
+            MapId = 1,
+            DatabaseData = Rm2kBegegnungsFixture.Bank(),
+        };
         var interpreter = new EventInterpreter(
             state, 1, pCommands, new PresentationState());
         return (interpreter, state);
