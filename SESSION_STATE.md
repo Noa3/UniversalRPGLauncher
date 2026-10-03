@@ -19141,6 +19141,94 @@ keinem der drei Spiele auf diesem Rechner vor -- nullmal. Ersetzt durch
 `$gameSelfVariables.get(this, 'Type') === 0`, die haeufigste echte
 Autorzeile (1032x), plus ein neuer Test, dass eine Rechnung eine Rechnung
 bleibt.
+### Und Kriterium 8:  die Freigabe ist erteilt,  und die Grenze ist gemessen
+
+**Und  Noa3  hat  am  2026-10-03  ausdruecklich  gesagt:**
+
+- **Der Agent darf RTP-Archive jederzeit herunterladen und
+  entpacken**, -- **auch fuer Tests gegen `E:\RPGMakerGames`.**
+- **Und das ausgelieferte Tool fragt seinen eigenen Benutzer**,
+  -- **und nur, wenn das RTP fehlt.**
+
+**Und das steht jetzt in `AGENTS.md`,  denn es ist eine Regel und
+keine Tagesnotiz.**
+
+### Und beide Abrufwege sind gemessen und beide sind zu
+
+```text
+rpgmaker.net   HTTP 403   (Bot-Schutz,  nach 24 s nicht weg)
+PCGamingWiki   HTTP 200   (?do=download liefert HTML, kein Archiv)
+```
+
+**Und PCGamingWiki hat eine Seite pro Runtime,  und ihre Groessen
+sind lesbar:**
+
+```text
+2981  RPG Maker VX Ace RTP   185.67 MB
+2982  RPG Maker VX RTP        70.21 MB
+2984  RPG Maker 2003 RTP      27.24 MB
+2985  RPG Maker 2000 RTP      22.01 MB
+```
+
+**Und nur VX Ace nennt seinen Dateinamen selbst
+(`RPGVXAce_RTP.zip`)** -- **und die anderen drei nicht** --
+
+**und eine Tabelle, die die anderen drei ergaenzt haette, waere
+dreimal von dreimal geraten.**
+
+**Und `RtpArchivQuelle` ist deshalb ein Interface**, --
+**und die Fakten tragen eine Spiegel- *Seite* und keine
+Archiv-URL** --
+
+**und eine Archiv-URL, die HTML antwortet, ist schlimmer als
+keine.**
+
+### Und der Entpacker weigert sich, und das ist bewiesen
+
+```csharp
+var voll = Path.GetFullPath(ziel);
+if (!voll.StartsWith(wurzel, StringComparison.OrdinalIgnoreCase))
+{
+    verweigert.Add(eintrag.FullName + " (verlaesst das Ziel)");
+    continue;
+}
+```
+
+**Und zwei Ausbrueche  sind  gebaut  und  angeboten  und
+geschlossen** (`TestRtpEntpacken: 4/4 passed`):
+
+```text
+verweigert: C:/urpg_absolut_opfer.txt (verlaesst das Ziel)
+verweigert: ../draussen.txt (verlaesst das Ziel)
+Dateien: 3 Bytes: 8 verweigert: 0
+```
+
+**Und der  Test  prueft  durch  Zuruecklesen,  dass  nichts  draussen
+landete** -- **und nicht,  dass  der  Entpacker  sich  gemeldet
+hat.**  **Und ein schlechter  Eintrag  kostet  dem  Aufrufer  die
+uebrigen nicht.**
+
+**Und `Setup.exe` wird geschrieben und nicht ausgefuehrt**, --
+**denn `AGENTS.md` verbietet das Ausfuehren von EXE und DLL aus
+einem importierten Spiel.**
+
+### Und XP:  `@list` traegt endlich die Befehle
+
+```text
+Fragen: Konstante Graphics | freeze an Nil (Block)
+        | map_id an Game_game_map | clear an Object
+@list: 1 Elemente / [3]
+```
+
+**Und `map_id an Game_game_map` ist die Stelle,  an der `setup`
+vorher starb**, -- **und 2  von  6  Zeilen  von  `setup`  fragen
+den  Host**, -- **und beide  sind  beantwortet.**
+
+**Und  mein  erster  Entwurf  behauptete  `OhneAntwort == 0`,
+und die Messung sagte 2** -- **und `Graphics` und `freeze` kommen
+aus  dem  Laden  der  Skripte  und  nicht  aus  `setup`.**  **Der
+Test behauptet jetzt 2 und nennt  beide.**
+
 ### Und der XP-Blocker ist eingegrenzt:  es sind zwei Dinge
 
 **Und gemessen ist,  dass `RubyInterpreter.SetzeGlobal` existiert**

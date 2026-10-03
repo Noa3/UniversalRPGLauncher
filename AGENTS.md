@@ -25,6 +25,32 @@ Do not invent a parallel private roadmap and do not spend a session only rewriti
 - Godot 4.7.2 stable is the pinned engine line for this repository unless a deliberate upgrade card changes it.
 - Imported games are untrusted input. Never execute game EXEs, DLLs, Ruby, JavaScript, shell commands, or native plugins during detection/parsing tests.
 
+## RTP: what the agent may do, and what the tool must do
+
+**The agent may download and unpack RTP archives from rpgmaker.net at
+any time**, -- including to test against the games in `E:\RPGMakerGames`.
+This was asked for explicitly on 2026-10-03.
+
+**And the shipped launcher asks its own user before it fetches
+anything** -- and asks only when the RTP is missing:
+
+- **And an RTP that is already installed is never asked about**, --
+  because there is nothing to fetch.
+- **And the download is never silent**, -- because a game that runs
+  after an archive appeared on disk has to say so.
+
+**And these are two different rules for two different callers, and
+collapsing them would break one of them**: the agent has standing
+permission, the end user has a prompt.
+
+## Questions belong in a prompt, not in prose
+
+**And a decision this repository needs is asked through a real
+question**, -- **not as a sentence at the end of a status report** --
+because a question buried in a report is one the reader can scroll
+past, and it was asked four times in prose before it was asked
+properly.
+
 ## Autonomous work loop
 
 For each cycle:
