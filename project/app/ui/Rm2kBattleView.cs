@@ -126,10 +126,19 @@ public partial class Rm2kBattleView : Control
             y += ZeilenHoehe;
         }
 
+        // **Und  der  Zug  gehoert  in  die  Anzeige** -- **denn  ein
+        //  Kampf,  der  nicht  zeigt,  wessen  Zug  es  ist,  ist
+        //  ein  Kampf,  in  dem  der  Spieler  nicht  eingreifen
+        //  kann.**
+        var dran = Rm2kZugfolge.Naechster(_zustand);
+        var wer = dran >= 0 && dran < _zustand.TroopMembers.Count
+            ? _zustand.TroopMembers[dran]["name"].AsString()
+            : "(niemand)";
         DrawString(ThemeDB.FallbackFont, new Vector2(20, y + 6),
             $"Turn {_zustand.BattleTurn}   "
             + $"Troop {_zustand.ActiveTroopId}   "
-            + $"Outcome {_zustand.BattleSubcommand}",
+            + $"Outcome {_zustand.BattleSubcommand}   "
+            + $"Acting: {wer}",
             HorizontalAlignment.Left, -1, 13,
             new Color("b6b0c2"));
     }

@@ -109,6 +109,22 @@ public sealed class Rm2kBattleRunner
     }
 
     /// <summary>
+    /// And who acts now.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is the troop's own order</strong>, --
+    /// <strong>because the members array is the order the game wrote
+    /// and nothing in this repository may reorder it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it returns -1 when nobody acts</strong>, --
+    /// <strong>which is the round's end and not an error.</strong>
+    /// </para>
+    /// </remarks>
+    public int WerIstDran() => Rm2kZugfolge.Naechster(_zustand);
+
+    /// <summary>
     /// And one frame of the battle, and it is the same reader.
     /// </summary>
     /// <returns>Whether the battle page carries on.</returns>
