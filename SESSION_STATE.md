@@ -19141,6 +19141,67 @@ keinem der drei Spiele auf diesem Rechner vor -- nullmal. Ersetzt durch
 `$gameSelfVariables.get(this, 'Type') === 0`, die haeufigste echte
 Autorzeile (1032x), plus ein neuer Test, dass eine Rechnung eine Rechnung
 bleibt.
+### Und die Kette ist geschlossen:  es gab keinen Installationsstatus
+
+**Und gemessen ist,  dass  die  Erkennung  nur  einen  Namen
+traegt  und  keinen  Zustand:**
+
+```text
+RtpDependency   "welche Laufzeit die Datei des Spiels nennt"
+MissingRtp      (das Wort kommt in src/  nirgends vor)
+```
+
+**Und ein Name kann die Frage nicht beantworten,  die der Benutzer
+gestellt hat**, -- **und die lautet:  muss ich  etwas
+herunterladen** -- **und ein Launcher,  der immer fragen wuerde,
+fragt  nach  einer  Laufzeit,  die  er  bereits
+hat.**
+
+**Und `RtpPruefer`  beantwortet  sie,  und  die  beiden  Formen
+stehen in echten `Game.ini`-Dateien:**
+
+```text
+Random Dungeon (VX)   RTP=RPGVX
+MicroQuest (XP)       RTP1=Standard
+                     RTP2=
+                     RTP3=
+```
+
+**Und ein leerer Wert  ist  die  Form,  die  sagt  "such  nichts"
+** -- **und  ein  Launcher,  der  dort  fragen  wuerde,  wuerde
+nach  nichts  fragen.**
+
+**Und `Standard`  ist  ein  Name  ohne  gemessenes  Archiv**, --
+**und der wird gemeldet  und  nicht  aufgeloest:**
+
+```text
+Standard -> nennt=True fehlt=False
+Meldung: Die Dateien des Spiels nennen "Standard", -- und dafuer
+steht in der gemessenen Tabelle kein Archiv, -- und eine Zuordnung
+zu erfinden wuerde die falsche Laufzeit installieren.
+```
+
+**Und `fehlt=False`  ist  hier  die  ehrliche  Antwort** --
+**"ich weiss nicht,  was das ist"  und  "es fehlt"  sind
+verschiedene Antworten.**
+
+### Und diese Maschine hat gar keine RPG-Maker-Laufzeit
+
+```text
+HKLM/SOFTWARE/WOW6432Node/Enterbrain   existiert nicht
+HKCU/SOFTWARE/Enterbrain               existiert nicht
+"C:/Program Files (x86)/Common Files/"   kein XP, kein VX, kein VX Ace
+```
+
+**Und  darum  kommt  jede  benannte  Laufzeit  hier  als
+fehlend  zurueck** -- **und  das  ist  die  richtige
+Antwort  auf  dieser  Maschine.**
+
+**Und die Registry  wird  gar nicht  gelesen**, -- **und das steht
+als  `LiestRegistry() => false`  im  Code** -- **denn  ein
+veralteter  Eintrag  wuerde  eine  installierte  Laufzeit  als
+fehlend  melden.**
+
 ### Und Kriterium 8 ist am 2026-10-03 real ausgefuehrt worden
 
 **Und die offiziellen Asset-URLs des Herstellers sind
