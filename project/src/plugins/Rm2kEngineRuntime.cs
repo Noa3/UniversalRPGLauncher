@@ -947,6 +947,52 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _chipsetLower = ReadPassabilityArray(chipset, "passable_data_lower", Rm2kChipset.PassabilityLowerEntries);
         _chipsetUpper = ReadPassabilityArray(chipset, "passable_data_upper", Rm2kChipset.PassabilityUpperEntries);
         _chipsetTerrain = ReadTerrainData(chipset);
+
+        // **Und  die  Felder  kommen  aus  zwei  Quellen**, --
+        // **denn  der  Parser  legt  die  Bytearrays  unter  ihre
+        //  Namen  und  die  Kapsel  unter  `unknown_fields`.**
+        //
+        // **Und  die  Feldnummern  kommen  aus  liblcfs
+        //  `generator/csv/fields.csv`:**
+        //
+        // <code>
+        // Chipset  0x03  terrain_data         Vector&lt;Int16&gt;
+        // Chipset  0x04  passable_data_lower  Vector&lt;UInt8&gt;  162
+        /// Chipset  0x05  passable_data_upper  Vector&lt;UInt8&gt;  144
+        /// </code>
+        //
+        // **Und  gemessen  an  Chipset  drei:**
+        //
+        // <code>
+        // Chipset 3 Schluessel: chipset_name id name
+        ///   passable_data_lower passable_data_upper unknown_fields
+        ///   0x4  162b  Typ PackedByteArray
+        ///   0x5  144b  Typ PackedByteArray
+        /// </code>
+        //
+        // **Und  ohne  das  ist  jede  Kachel  der  Karte
+        //  unpassierbar**, -- **und  ein  Held,  der  sich  nirgends
+        //  hinbewegen  kann,  ist  kein  Lauf,  sondern  eine
+        //  Fehlermeldung.**
+        //
+        // **Und  die  Bedingung  schaut  auf  das  Ergebnis  und  nicht
+        //  auf  den  Schluesselnamen** -- **denn  der  Name  ist
+        //  vorhanden**, -- **und  `ReadPassabilityArray`  gibt  null
+        //  zurueck,  weil  es  ein  gepacktes  Integerarray  verlangt  und
+        //  das  Feld  ein  gepacktes  Bytearray  ist.**
+        if (_chipsetLower == null || _chipsetUpper == null)
+        {
+            _chipsetLower = ReadRawField(chipset, 0x04,
+                Rm2kChipset.PassabilityLowerEntries);
+            _chipsetUpper = ReadRawField(chipset, 0x05,
+                Rm2kChipset.PassabilityUpperEntries);
+        }
+
+        if (_chipsetTerrain == null)
+        {
+            _chipsetTerrain = ReadRawShorts(chipset, 0x03,
+                Rm2kChipset.TerrainDataEntries);
+        }
         if (TryReadInt(chipset, "animation_type", out var animationType))
         {
             _chipsetAnimationType = animationType != 0
@@ -1020,6 +1066,104 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             result[index] = values[index];
         }
         return result;
+    }
+
+    /// <summary>
+    /// And it reads one raw byte field out of a chipset's unknown
+    /// fields.
+    /// </summary>
+    /// <param name="pChipset">The chipset row.</param>
+    /// <param name="pFieldId">The field number, from liblcf's table.</param>
+    /// <param name="pExpectedLength">How many bytes it must carry.</param>
+    /// <returns>The bytes, or null when the field is absent or short.</returns>
+    private static byte[]? ReadRawField(
+        Godot.Collections.Dictionary pChipset,
+        int pFieldId,
+        int pExpectedLength)
+    {
+        if (!pChipset.TryGetValue("unknown_fields", out var raw)
+            || raw.VariantType != Godot.Variant.Type.Array)
+        {
+            return null;
+        }
+
+        foreach (var eintrag in raw.AsGodotArray())
+        {
+            if (eintrag.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+
+            var feld = eintrag.AsGodotDictionary();
+            if (feld["id"].AsInt32() != pFieldId
+                || feld["data"].VariantType
+                    != Godot.Variant.Type.PackedByteArray)
+            {
+                continue;
+            }
+
+            var werte = feld["data"].AsByteArray();
+            if (werte.Length != pExpectedLength)
+            {
+                return null;
+            }
+
+            return werte;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// And it reads the raw short field that holds the terrain data.
+    /// </summary>
+    /// <param name="pChipset">The chipset row.</param>
+    /// <param name="pFieldId">The field number, from liblcf's table.</param>
+    /// <param name="pExpectedLength">How many shorts it must carry.</param>
+    /// <returns>The values, or null when the field is absent.</returns>
+    private static int[]? ReadRawShorts(
+        Godot.Collections.Dictionary pChipset,
+        int pFieldId,
+        int pExpectedLength)
+    {
+        if (!pChipset.TryGetValue("unknown_fields", out var raw)
+            || raw.VariantType != Godot.Variant.Type.Array)
+        {
+            return null;
+        }
+
+        foreach (var eintrag in raw.AsGodotArray())
+        {
+            if (eintrag.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+
+            var feld = eintrag.AsGodotDictionary();
+            if (feld["id"].AsInt32() != pFieldId
+                || feld["data"].VariantType
+                    != Godot.Variant.Type.PackedByteArray)
+            {
+                continue;
+            }
+
+            var werte = feld["data"].AsByteArray();
+            if (werte.Length < pExpectedLength * 2)
+            {
+                return null;
+            }
+
+            var ergebnis = new int[pExpectedLength];
+            for (var index = 0; index < pExpectedLength; index++)
+            {
+                ergebnis[index] = (short)(werte[index * 2]
+                    | (werte[index * 2 + 1] << 8));
+            }
+
+            return ergebnis;
+        }
+
+        return null;
     }
 
     private static byte[]? ReadPassabilityArray(
