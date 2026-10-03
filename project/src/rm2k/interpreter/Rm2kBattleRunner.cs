@@ -55,13 +55,21 @@ public sealed class Rm2kBattleRunner
     /// <returns>Whether a page is running.</returns>
     /// <remarks>
     /// <para>
-    /// <strong>And the first page and not the best one</strong>, --
-    /// <strong>because a troop's page condition is the game's rule and
-    /// this runner does not read conditions.</strong> -- <strong>And
-    /// picking "the first" is a decision and not a
-    /// guess</strong>: -- <strong>a game that writes more than one
-    /// page writes them in an order, and the first is the one a
-    /// reader without condition support can name.</strong>
+    /// <strong>And the first page, and the measurement says that is
+    /// the whole of it.</strong> --
+    /// <strong>All one hundred and five troops of the measured game
+    /// carry exactly one page each</strong>, -- <strong>and exactly one
+    /// carries a condition at all</strong>, --
+    /// <strong>and with one page per troop a condition has nothing to
+    /// choose between.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And I wrote that taking the first page was "a decision
+    /// and not a guess" and that was weaker than the
+    /// truth.</strong> -- <strong>On this game it is not a decision:
+    /// there is no second page.</strong> -- <strong>And a runner that
+    /// meets a game with several pages must read their conditions,
+    /// which it does not do yet.</strong>
     /// </para>
     /// </remarks>
     public bool Lade(
