@@ -73,6 +73,8 @@ logs/
 *.tmp
 *.temp
 
+## Downloaded build tools (see tools/*/README.md)
+/tools/innoextract/bin/
 ## RTP archives and their unpacked contents (Kriterium 8)
 /rtp-test/
 /rtp-cache/
