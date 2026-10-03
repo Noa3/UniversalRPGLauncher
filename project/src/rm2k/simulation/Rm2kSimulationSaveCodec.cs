@@ -57,6 +57,49 @@ public static class Rm2kSimulationSaveCodec
         /// <summary>Every actor that has a base value or a current count.</summary>
         public List<SavedActor> Actors { get; set; } = new();
 
+        /// <summary>
+        /// The skills each actor has learned, keyed by actor id.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And this field was missing</strong>, --
+        /// <strong>and a save without it reloads a hero who learned
+        /// nothing</strong>, -- <strong>and the battle command list
+        /// comes back empty</strong>, -- <strong>and a hero in a game
+        /// with three hundred skills suddenly has none of
+        /// them.</strong>
+        /// </para>
+        /// <para>
+        /// <strong>And the base values were saved and these were
+        /// not</strong>, -- <strong>which is why the round trip looked
+        /// complete and was not.</strong>
+        /// </para>
+        /// </remarks>
+        /// <summary>
+        /// One actor's learned skills.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <strong>And this is an object in a list and not a
+        /// dictionary entry</strong>, -- <strong>because a JSON key
+        /// must be a string</strong>, -- <strong>and
+        /// <c>JsonSerializer</c> writes a
+        /// <c>Dictionary&lt;int, ...&gt;</c> as an empty object without
+        /// an error</strong>, -- <strong>and a silent loss of every
+        /// learned skill is worse than a refusal.</strong>
+        /// </para>
+        /// </remarks>
+        public sealed class SavedActorSkills
+        {
+            /// <summary>Which hero.</summary>
+            public int ActorId { get; set; }
+
+            /// <summary>The skill ids he has learned.</summary>
+            public List<int> SkillIds { get; set; } = new();
+        }
+
+        public List<SavedActorSkills> ActorSkills { get; set; } = new();
+
         public int MapWidth { get; set; }
         public int MapHeight { get; set; }
         public List<bool> PassableTiles { get; set; } = new();
@@ -342,6 +385,38 @@ public static class Rm2kSimulationSaveCodec
         foreach (var pair in pState.ItemCounts) data.ItemCounts[pair.Key] = pair.Value;
         foreach (var value in pState.PartyMemberIds) data.PartyMemberIds.Add(value);
         foreach (var value in pState.SceneStack) data.SceneStack.Add(value);
+
+        // **Und  die  gelernten  Faehigkeiten  gehoeren  dazu.**
+        for (var held = 0; held < pState.ActorSkills.Length; held++)
+        {
+            var menge = pState.ActorSkills[held];
+            if (menge == null || menge.Count == 0)
+            {
+                continue;
+            }
+
+            // **Und  eine  Liste  und  kein  Woerterbuch.**
+            //
+            // **Und  `JsonSerializer`  schreibt  ein
+            //  `Dictionary<int, ...>`  ohne  Fehler  und  ohne
+            //  Inhalt** -- **es  hat  `"ActorSkills":{}`  geliefert**
+            // -- **und  damit  waere  jede  gelernte  Faehigkeit  beim
+            //  Speichern  verloren  gegangen,  ohne  dass  irgendetwas
+            //  gemeldet  wurde.**
+            //
+            // **Und  JSON-Schluessel  muessen  Zeichen  sein**,
+            // -- **und  ganzzahlige  Schluessel  gehoeren  in  eine
+            //  Liste  aus  Objekten.**
+            // **Und  `SavedActorSkills`  ist  eine  verschachtelte  Klasse
+            //  von  `SaveData`** -- **und  diese  Stelle  liegt  in  der
+            //  Fabrik  und  nicht  in  der  Klasse.**
+            data.ActorSkills.Add(new SaveData.SavedActorSkills
+            {
+                ActorId = held,
+                SkillIds = new List<int>(menge),
+            });
+        }
+
         return data;
     }
 
@@ -391,6 +466,21 @@ public static class Rm2kSimulationSaveCodec
         pState.ItemCounts.Clear(); foreach (var pair in pData.ItemCounts) pState.ItemCounts[pair.Key] = pair.Value;
         pState.PartyMemberIds.Clear(); foreach (var value in pData.PartyMemberIds) pState.PartyMemberIds.Add(value);
         pState.SceneStack.Clear(); foreach (var value in pData.SceneStack) pState.SceneStack.Add(value);
+
+        // **Und  die  gelernten  Faehigkeiten  kommen  zurueck.**
+        for (var held = 0; held < pState.ActorSkills.Length; held++)
+        {
+            pState.ActorSkills[held]?.Clear();
+        }
+
+        foreach (var eintrag in pData.ActorSkills)
+        {
+            var menge = pState.SkillsOf(eintrag.ActorId);
+            foreach (var skill in eintrag.SkillIds)
+            {
+                menge.Add(skill);
+            }
+        }
         pState.ActiveActorIndex = pData.ActiveActorIndex; pState.CurrentScene = pData.CurrentScene;
         pState.SaveTimestamp = pData.SaveTimestamp; pState.SaveComment = pData.SaveComment;
         // **The seconds first, and the running flag second.** A first draft
