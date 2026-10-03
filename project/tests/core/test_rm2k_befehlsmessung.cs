@@ -243,6 +243,17 @@ public partial class TestRm2kBefehlsmessung : TestBase
             + " Namen; Spiel braucht " + zahler.Count
             + "; fehlend " + fehlend.Count);
 
+        // **Und  wie  oft  ein  Kartenwechsel  im  Spiel
+        //  wirklich  vorkommt.**  --
+        // **10810  Teleport  und  11810  Teleportziele** --
+        // **und  die  Zahl  ist  die  Antwort  auf  die  Frage,  ob
+        //  der  Host  einen  braucht.**
+        Console.WriteLine("Teleport " + (zahler.TryGetValue(10810, out var tele)
+            ? tele : 0) + "  Teleportziele "
+            + (zahler.TryGetValue(11810, out var tt) ? tt : 0)
+            + "  Kartenwechsel "
+            + (zahler.TryGetValue(11710, out var ct) ? ct : 0));
+
         AssertEq(0, fehlend.Count,
             "**and every command this game writes is dispatched** --"
                 + " and the eleven I first reported missing are all in"

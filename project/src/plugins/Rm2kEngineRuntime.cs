@@ -211,6 +211,22 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 _eventScheduler.ExecuteFrame();
             }
 
+            // **Und ein Teleport wechselt die Karte, und 2879 von
+            //  diesem Spiel tun genau das.**
+            //
+            // **Und der Interpreter setzt `IsTransferPending` und
+            // sonst nichts**, -- **und dieser Host las das Feld
+            // nie**, -- **und damit konnte kein Spiel ueber seine
+            //  eigene Map hinaus laufen.**
+            //
+            // **Und `Game_Player::SetTransferData` schreibt den
+            // Zielpunkt, und `Game_Map::Refresh` laedt die neue
+            // Karte** -- **und beides gehoert an dieselbe Stelle,
+            //  direkt nach dem Scheduler und vor dem Rendern**, --
+            // **denn die neue Karte braucht ein Frame, in dem sie
+            //  gezeichnet wird.**
+            TryCarryOutTransfer();
+
             // Game_Character::UpdateMoveRoute runs once per update for every
             // event with an active route, and it runs whether or not the player
             // is moving. A command that starts a step returns immediately, so
@@ -1111,6 +1127,134 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return erste;
     }
 
+
+    /// <summary>
+    /// And it carries out a transfer the events asked for.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the step that was missing.</strong> --
+    /// <strong>The interpreter sets
+    /// <c>IsTransferPending</c> with the target and the
+    /// position</strong>, -- <strong>and nothing read it</strong>,
+    /// -- <strong>and a finished game of this repository runs 2879
+    /// teleports across 743 maps</strong>, -- <strong>and a game that
+    /// cannot leave its first map is a game that
+    /// stops.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a transfer to the map the game is already on is
+    /// not a map change at all</strong>, -- <strong>it is the
+    /// player walking to a tile</strong>, -- <strong>and the engine
+    /// separates the two</strong>: <c>Game_Player::SetTransferData</c>
+    /// takes the map id, and <c>Game_Map::Refresh</c> loads it
+    /// only when the number differs.
+    /// </para>
+    /// <para>
+    /// <strong>And a map file that is not there is refused and
+    /// named</strong>, -- <strong>because a silent no-op would leave
+    /// the player on a map the event has already left in its own
+    /// bookkeeping.</strong>
+    /// </para>
+    /// </remarks>
+    private void TryCarryOutTransfer()
+    {
+        if (!Simulation.IsTransferPending)
+        {
+            return;
+        }
+
+        var ziel = Simulation.PendingMapId;
+        var x = Simulation.PendingX;
+        var y = Simulation.PendingY;
+
+        // **Und der Interpreter setzt die Flagge zurueck, und das
+        //  hier  geschieht  vor  dem  Zuruecksetzen.**
+        Simulation.IsTransferPending = false;
+
+        if (ziel == Simulation.MapId)
+        {
+            Simulation.MapX = x;
+            Simulation.MapY = y;
+            Simulation.AddDiagnostic(
+                $"RM2K transfer stays on map {ziel} at ({x}, {y}),"
+                + " because the player was already there");
+            return;
+        }
+
+        var root = ResolveGameDirectory();
+        if (root == null)
+        {
+            Simulation.AddDiagnostic(
+                $"RM2K transfer to map {ziel} was refused because the"
+                + " game directory is not resolvable");
+            return;
+        }
+
+        var pfad = Path.Combine(root,
+            "Map" + ziel.ToString("D4") + ".lmu");
+        if (ziel < 1 || !File.Exists(pfad))
+        {
+            Simulation.AddDiagnostic(
+                $"RM2K transfer to map {ziel} was refused because"
+                + $" {Path.GetFileName(pfad)} is not in the game");
+            return;
+        }
+
+        var karte = _parser.ParseMap(pfad);
+        if (!karte.Success)
+        {
+            Simulation.AddDiagnostic(
+                $"RM2K transfer to map {ziel} was refused because"
+                + $" {Path.GetFileName(pfad)} did not parse: "
+                + $"{karte.Error?.Describe() ?? "unknown"}");
+            return;
+        }
+
+        try
+        {
+            ConfigureSimulationMap(
+                karte.Data, MapTreeData, pfad);
+        }
+        catch (InvalidDataException exception)
+        {
+            Simulation.AddDiagnostic(
+                $"RM2K transfer to map {ziel} was refused because its"
+                + " dimensions are outside simulation bounds: "
+                + exception.Message);
+            return;
+        }
+
+        CurrentMapData = karte.Data;
+        Simulation.MapX = x;
+        Simulation.MapY = y;
+
+        // **Und  in  derselben  Reihenfolge  wie  beim  Start** --
+        // Framebuffer,  dann  Ereignisse,  dann  das  Bild.
+        var renderResult = _rendererAdapter.CreateFramebuffer(karte.Data);
+        if (!renderResult.Success || renderResult.Framebuffer == null)
+        {
+            Simulation.AddDiagnostic(
+                $"RM2K transfer to map {ziel} loaded the map but its"
+                + $" framebuffer could not be built: {renderResult.Error}");
+            return;
+        }
+
+        Framebuffer = renderResult.Framebuffer;
+        LoadCurrentMapEvents(karte.Data);
+        _currentMap = karte.Data;
+        _currentMapWidth = (int)karte.Data["width"];
+        _currentMapHeight = (int)karte.Data["height"];
+        RenderCurrentMap(karte.Data, _currentMapWidth, _currentMapHeight);
+
+        var spriteResult = _spriteAdapter.BuildDescriptors(
+            karte.Data, x, y);
+        SpriteDescriptors = spriteResult.Success
+            ? spriteResult.Descriptors : SpriteDescriptors;
+
+        Simulation.AddDiagnostic(
+            $"RM2K transfer carried out to map {ziel} at ({x}, {y})");
+    }
 
     private static int ParseMapId(string? pMapPath)
     {
