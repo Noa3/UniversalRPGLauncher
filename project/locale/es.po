@@ -173,3 +173,18 @@ msgstr "Se encontró una estructura web genérica de MV/MZ"
 
 msgid "DETECT_FILE_FOUND"
 msgstr "Se encontró {file}"
+
+msgid "RTP_DIALOG_TITLE"
+msgstr "Este juego necesita un paquete de ejecucion"
+
+msgid "RTP_DIALOG_BODY"
+msgstr "{game} se hizo con {engine} y necesita el tiempo de ejecucion {rtp}. Son {size} y viene del sitio oficial de RPG Maker."
+
+msgid "RTP_DIALOG_DOWNLOAD"
+msgstr "Descargar y descomprimir"
+
+msgid "RTP_DIALOG_START_WITHOUT"
+msgstr "Iniciar de todos modos"
+
+msgid "RTP_DIALOG_CANCEL"
+msgstr "Cancelar"

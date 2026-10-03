@@ -172,3 +172,18 @@ msgstr "找到通用 MV/MZ Web 结构"
 
 msgid "DETECT_FILE_FOUND"
 msgstr "找到 {file}"
+
+msgid "RTP_DIALOG_TITLE"
+msgstr "这个游戏需要运行库"
+
+msgid "RTP_DIALOG_BODY"
+msgstr "{game} 使用 {engine} 制作，需要 {rtp} 运行库。大小 {size}，从 RPG Maker 官方网站下载。"
+
+msgid "RTP_DIALOG_DOWNLOAD"
+msgstr "下载并解压"
+
+msgid "RTP_DIALOG_START_WITHOUT"
+msgstr "仍然开始"
+
+msgid "RTP_DIALOG_CANCEL"
+msgstr "取消"

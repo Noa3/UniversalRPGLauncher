@@ -172,3 +172,18 @@ msgstr "일반 MV/MZ 웹 구조 발견"
 
 msgid "DETECT_FILE_FOUND"
 msgstr "{file} 발견"
+
+msgid "RTP_DIALOG_TITLE"
+msgstr "이 게임에는 런타임 패키지가 필요합니다"
+
+msgid "RTP_DIALOG_BODY"
+msgstr "{game}은(는) {engine}로 만들어졌으며 {rtp} 런타임이 필요합니다. 크기는 {size}이고 RPG Maker 공식 사이트에서 받습니다."
+
+msgid "RTP_DIALOG_DOWNLOAD"
+msgstr "다운로드하고 압축 풀기"
+
+msgid "RTP_DIALOG_START_WITHOUT"
+msgstr "그대로 시작"
+
+msgid "RTP_DIALOG_CANCEL"
+msgstr "취소"

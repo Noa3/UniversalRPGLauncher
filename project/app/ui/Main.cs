@@ -6,6 +6,7 @@ using UniversalRPG.Plugins;
 using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Input;
 using UniversalRPG.Rm2k.Rendering;
+using UniversalRPG.Rtp;
 
 namespace UniversalRPG.App.Ui;
 
@@ -674,9 +675,22 @@ public partial class Main : Control
 		_presentationControls.Visible = false;
 	}
 
-	private void LaunchSelectedGame()
+	private async void LaunchSelectedGame()
 	{
 		if (_selectedGame == null)
+		{
+			return;
+		}
+
+		// **Und vor dem Start wird gefragt,  wenn  die  Laufzeit
+		// fehlt**,  --
+		// **und nur dann**,  --
+		// **und ein Spiel ohne `RTP=`  im  `Game.ini`  wird nie
+		// gefragt.**
+		var bedarf = RtpPruefer.Pruefe(
+			_selectedGame.Detection.RtpDependency);
+		if (bedarf.Fehlt
+			&& !await RtpDialog.Fragen(this, _selectedGame, bedarf))
 		{
 			return;
 		}

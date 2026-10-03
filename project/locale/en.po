@@ -173,3 +173,18 @@ msgstr "Found generic MV/MZ web structure"
 
 msgid "DETECT_FILE_FOUND"
 msgstr "Found {file}"
+
+msgid "RTP_DIALOG_TITLE"
+msgstr "This game needs a runtime package"
+
+msgid "RTP_DIALOG_BODY"
+msgstr "{game} was made with {engine} and needs the {rtp} runtime. It is {size} and comes from the official RPG Maker site."
+
+msgid "RTP_DIALOG_DOWNLOAD"
+msgstr "Download and unpack"
+
+msgid "RTP_DIALOG_START_WITHOUT"
+msgstr "Start anyway"
+
+msgid "RTP_DIALOG_CANCEL"
+msgstr "Cancel"

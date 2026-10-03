@@ -172,3 +172,18 @@ msgstr "一般的なMV/MZウェブ構成を検出"
 
 msgid "DETECT_FILE_FOUND"
 msgstr "{file}を検出"
+
+msgid "RTP_DIALOG_TITLE"
+msgstr "このゲームにはランタイムパッケージが必要です"
+
+msgid "RTP_DIALOG_BODY"
+msgstr "{game} は {engine} で作られ、{rtp} ランタイムが必要です。サイズは {size} で、RPG Maker 公式サイトから取得します。"
+
+msgid "RTP_DIALOG_DOWNLOAD"
+msgstr "ダウンロードして展開"
+
+msgid "RTP_DIALOG_START_WITHOUT"
+msgstr "このまま開始"
+
+msgid "RTP_DIALOG_CANCEL"
+msgstr "キャンセル"

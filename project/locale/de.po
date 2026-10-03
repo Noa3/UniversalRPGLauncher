@@ -179,3 +179,18 @@ msgstr "Allgemeine MV/MZ-Webstruktur gefunden"
 
 msgid "DETECT_FILE_FOUND"
 msgstr "{file} gefunden"
+
+msgid "RTP_DIALOG_TITLE"
+msgstr "Dieses Spiel braucht ein Laufzeitpaket"
+
+msgid "RTP_DIALOG_BODY"
+msgstr "{game} wurde mit {engine} erstellt und braucht die Laufzeit {rtp}. Sie ist {size} gross und kommt von der offiziellen RPG-Maker-Seite."
+
+msgid "RTP_DIALOG_DOWNLOAD"
+msgstr "Herunterladen und entpacken"
+
+msgid "RTP_DIALOG_START_WITHOUT"
+msgstr "Trotzdem starten"
+
+msgid "RTP_DIALOG_CANCEL"
+msgstr "Abbrechen"
