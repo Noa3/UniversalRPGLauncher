@@ -256,6 +256,37 @@ public partial class TestRm2kBefehlsmessung : TestBase
 
         // **Und  die  Kampf-Befehle  im  selben  Lauf.**
         int V(int n) => zahler.TryGetValue(n, out var w) ? w : 0;
+        // **Und  die  haeufigsten  Befehle  ueberhaupt** -- **denn
+        //  das  ist  die  Frage,  was  ein  Lauf  wirklich  tut**,
+        // **und  nicht  was  das  Format  kennt.**
+        var haeufigste = new List<(int Nr, string Name, int Anzahl)>();
+        foreach (var kv in zahler)
+        {
+            haeufigste.Add((kv.Key, kv.Key.ToString(), kv.Value));
+        }
+
+        haeufigste.Sort((a, b) => b.Anzahl.CompareTo(a.Anzahl));
+        Console.WriteLine("Top 15 Befehle:");
+        for (var i = 0; i < Math.Min(15, haeufigste.Count); i++)
+        {
+            Console.WriteLine("  " + haeufigste[i].Anzahl + "x  "
+                + haeufigste[i].Nr);
+        }
+
+        // **Und  die  Kampfbefehle  im  Besonderen** -- **und  das  ist
+        //  die  Liste,  die  fuer  die  Party  zaehlt.**
+        var kampf = new List<string>();
+        foreach (var kv in zahler)
+        {
+            if (kv.Key >= 10000 && kv.Key < 20000)
+            {
+                kampf.Add(kv.Key + ":" + kv.Value);
+            }
+        }
+
+        kampf.Sort(StringComparer.Ordinal);
+        Console.WriteLine("Kampfbereich: " + string.Join(" ", kampf));
+
         Console.WriteLine($"Kampf: 10710 Gegnerbegegnung {V(10710)}"
             + $"  20710 Sieg {V(20710)}  20712 Niederlage {V(20712)}"
             + $"  20713 Kampfende {V(20713)}  13310 Bedingung {V(13310)}"
