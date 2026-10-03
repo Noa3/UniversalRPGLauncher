@@ -173,9 +173,25 @@ public static class Rm2kBefehlswahl
 
     private static IEnumerable<int> HeldIds(GameSimulationState pZustand)
     {
-        foreach (var held in pZustand.ActorValues.Keys)
+        // **Und  das  sind  die  Helden  mit  gelernten  Faehigkeiten.**
+        //
+        // **Und  vorher  stand  hier  `ActorValues`** -- **und  das  ist
+        //  die  Karte  der  Laufzeitwerte,  nicht  die  der
+        //  Helden.**  **Und  sie  war  leer,  waehrend
+        //  `ActorSkills`  4  Helden  mit  29  Faehigkeiten  traeg**,
+        // -- **und  deshalb  fand  der  Schlag  nichts.**
+        //
+        // **Und  das  ist  das  siebte  Feld  dieser  Gestalt.**
+        //
+        // **Und  `ActorSkills` ist  ein  Feld  und  kein  Wörterbuch**,
+        // -- **deshalb  zählt  man  es  durch.**
+        for (var held = 0; held < pZustand.ActorSkills.Length; held++)
         {
-            yield return held;
+            if (pZustand.ActorSkills[held] != null
+                && pZustand.ActorSkills[held].Count > 0)
+            {
+                yield return held;
+            }
         }
     }
 

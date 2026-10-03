@@ -136,6 +136,30 @@ public partial class TestRm2kBefehlWirdEinZug : TestBase
     /// turn</strong>.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// And a refused command is not a turn.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the strike is no longer the refused
+    /// case.</strong> -- <strong>Two commits ago it was, and the
+    /// reason was "the hero has learned no skill with a
+    /// power".</strong> -- <strong>Now the heroes carry their learned
+    /// skills and the strike lands.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And so the refused case moved to the one that is
+    /// still refused</strong>, -- <strong>which is the strike at a
+    /// target nobody chose.</strong> -- <strong>and that is the claim
+    /// this test makes now.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a test that kept asserting "the strike is
+    /// refused" would have gone on passing while the feature grew
+    /// underneath it</strong>, -- <strong>or failing for the wrong
+    /// reason.</strong>
+    /// </para>
+    /// </remarks>
     public void Test_EineVerweigerungIstKeinZug()
     {
         var lauf = MitKampf(out var host);
@@ -148,79 +172,50 @@ public partial class TestRm2kBefehlWirdEinZug : TestBase
         var state = lauf.Simulation;
         state.BattleTurn = 0;
 
+        // **Und  das  ist  jetzt  die  echte  Verweigerung**:  --
+        // **ein  Schlag  ohne  gewaehltes  Ziel.**
         var ok = lauf.FuehreZugAus(
-            Rm2kBefehlswahl.Befehl.Angriff, 0, out var grund);
-        Console.WriteLine("angriff: " + ok + "  -> " + grund
+            Rm2kBefehlswahl.Befehl.Angriff, -1, out var grund);
+        Console.WriteLine("ohne Ziel: " + ok + " -> " + grund
             + "  Turn jetzt " + state.BattleTurn);
 
-        // **Und  das  ist  jetzt  FALSCH  und  war  vorher  richtig.**
-        //
-        // **Und  vorher  wurde  der  Schlag  abgelehnt**, -- **und  die
-        //  Ablehnung  war  richtig**, -- **weil  es  kein  Ziel  gab
-        //  und  keine  gelernte  Faehigkeit.**
-        //
-        // **Und  jetzt  gibt  es  beides** -- **und  der  Schlag  wird
-        //  ausgefuehrt**, -- **und  der  Test  muss  dem  folgen
-        //  statt  dem  Stand  von  vorhin  festzubleiben.**
-        //
-        // **Und  gemessen  hier:**
-        Console.WriteLine("grund: " + grund);
+        AssertTrue(!ok,
+            "**and a strike without a chosen target is refused**");
 
-        if (ok)
-        {
-            AssertTrue(state.MonsterHp(0) < 25,
-                "**and the strike happened and took hit"
-                    + " points**");
-
-            AssertEq(0, state.BattleTurn,
-                "**and the turn did NOT move** -- and the"
-                    + " roll over is handled inside the strike,"
-                    + " and this test asserts only that a"
-                    + " refused command leaves the turn alone");
-        }
-        else
-        {
-            AssertTrue(grund.Contains("no skill")
-                    || grund.Contains("invented"),
-                "**and a strike without a learned skill is"
-                    + " refused with that reason** -- and the"
-                    + " heroes' learning field at 0x3F is there"
-                    + " and unread, which is the next thing to"
-                    + " build");
-        }
-
-        // **Und  die  Weigerung  nennt  jetzt  etwas  anderes  als  vor
-        //  einer  Stunde.**
-        //
-        // **Und  vorher  war  es  "needs a skill and a target"** --
-        // **und  heute  ist  es  "has learned no skill with a
-        //  power"**, -- **denn  das  Ziel  ist  jetzt  da  und  die
-        //  Faehigkeit  fehlt  noch.**
-        //
-        // **Und  eine  Behauptung  ueber  einen  Text,  den  der
-        //  Code  aendert,  ist  eine  Behauptung  ueber  eine
-        //  Zufaelligkeit** -- **und  die  Behauptung  muss  das  sagen,
-        //  was  der  Code  jetzt  tut,  und  nicht,  was  er  gestern
-        //  tat.**
         AssertTrue(grund.Length > 0,
             "**and the refusal is in words** -- and a command"
                 + " that silently did nothing would be"
                 + " indistinguishable from one that worked");
 
-        AssertTrue(grund.Contains("skill")
-                || grund.Contains("power"),
-            "**and it names the missing thing** -- and right now"
-                + " that is the hero's learned skills, because the"
-                + " target was added first");
-
-        Console.WriteLine("Weigerung: " + grund);
+        AssertTrue(grund.Contains("invented"),
+            "**and it says the target was never chosen** -- and a"
+                + " strike at a target this runtime invented would"
+                + " be a rule this repository made up");
 
         AssertEq(0, state.BattleTurn,
-            "**and the turn did not move** -- and a refused command"
-                + " that advanced the turn would skip a monster's"
-                + " action without anything having happened");
-    }
+            "**and the turn did not move** -- and a refused"
+                + " command that advanced the turn would skip a"
+                + " monster's action without anything having"
+                + " happened");
 
+        // **Und  jetzt  der  Gegenbeweis**:  -- **mit  Ziel  ist  es
+        //  ein  Zug.**
+        var hp = state.MonsterHp(0);
+        var getroffen = lauf.FuehreZugAus(
+            Rm2kBefehlswahl.Befehl.Angriff, 0, out var grund2);
+        Console.WriteLine("mit Ziel: " + getroffen + " -> "
+            + grund2 + "  " + hp + " -> " + state.MonsterHp(0)
+            + "  Turn " + state.BattleTurn);
+
+        AssertTrue(getroffen,
+            "**and with a chosen target the same command"
+                + " lands** -- and if it did not, then the refusal"
+                + " above would have been measuring something"
+                + " other than the missing target");
+
+        AssertTrue(state.MonsterHp(0) < hp,
+            "**and the monster lost hit points**");
+    }
     /// <summary>
     /// And escape ends the battle only when the game allowed it.
     /// </summary>

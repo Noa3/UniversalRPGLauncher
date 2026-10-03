@@ -107,6 +107,29 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         // **und  ohne  die  Bank  bleiben  seine  Gegner
         //  leer.**
         Simulation.DatabaseData = database.Data;
+
+        // **Und  die  Helden  kommen  mit  ihren  gelernten
+        //  Faehigkeiten  in  den  Zustand.**
+        //
+        // **Und  das  ist  das  sechste  Feld  dieser  Gestalt**, --
+        // **geschrieben  von  einem  Test  und  gefuellt  von  nichts,
+        //  was  ein  Spiel  erreichen  koennte.**  **Und  es  hat  den
+        //  Schlag  gekostet**:  -- **denn  `ErsteAngriffsfaehigkeit`
+        //  fragt  `FaehigkeitenVon`,  und  das  fragt  `SkillsOf`,  und
+        //  das  las  eine  Menge,  die  niemand  gefuellt  hat.**
+        //
+        // **Und  es  passiert  hier  und  nicht  erst  beim
+        //  Kampfstart**, -- **denn  ein  Held  lernt  nicht  erst
+        //  waehrend  eines  Kampfes.**
+        var heldenGeladen = UniversalRPG.Rm2k.Simulation
+            .Rm2kHeldLaden.LadeAlle(Simulation, database.Data);
+        if (heldenGeladen > 0)
+        {
+            Simulation.AddDiagnostic(
+                "RM2K " + heldenGeladen
+                + " heroes carry their learned skills");
+        }
+
         try
         {
             ConfigureSimulationMap(currentMap, mapTree.Data, mapPath);
@@ -1392,10 +1415,30 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     continue;
                 }
 
+                // **Und  eine  Kraft  genuegt.**
+                //
+                // **Und  mein  erster  Leser  verlangte  auch
+                //  `affect_hp`**, -- **und  von  27  gelernten
+                //  Faehigkeiten  haben  19  eine  Kraft,  aber  nur  16
+                //  eine  Richtung**:
+                //
+                // <code>
+                // Kraft Skill  8 =  30  scope 4  affect_hp -1
+                // Kraft Skill 28 =   5  scope 4  affect_hp -1
+                // Kraft Skill 29 =   5  scope 1  affect_hp -1
+                // </code>
+                //
+                // **Und  `affect_hp` fehlt bei  diesen  dreien**, --
+                // **und  das  ist  keine  Beschaedigung**, -- **es  ist
+                //  eine  Faehigkeit  ohne  Wirkungsrichtung**, -- **und
+                //  sie  aus  dem  Filter  zu  werfen  heisst  sie  zu
+                //  loeschen.**
+                //
+                // **Und  liblcf  nennt  `scope`  und  nicht  "Ziel"**,
+                // -- **und  `scope 0`  ist  ein  einzelnes  Ziel,  und
+                //  `scope 3`  ist  die  ganze  Truppe.**
                 if (skill.ContainsKey("power")
-                    && skill["power"].AsInt32() > 0
-                    && skill.ContainsKey("affect_hp")
-                    && skill["affect_hp"].AsInt32() != 0)
+                    && skill["power"].AsInt32() > 0)
                 {
                     return skill;
                 }
