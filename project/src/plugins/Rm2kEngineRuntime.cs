@@ -1367,6 +1367,24 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             return;
         }
 
+        // **Und  der  Ausgang  ist  eine  Zahl  und  keine
+        //  Spielentscheidung.**
+        //
+        // **Und  gemessen  an  `ExecuteEnemyEncounter`:  es  setzt
+        //  `BattleSubcommand = -1`  und  sonst  nichts**, --
+        // **und  `ExecuteBattleHandler`  liest  `SubIdxVictory`,
+        //  `SubIdxEscape`  und  `SubIdxDefeat`**, --
+        // **und  das  sind  die  drei  Positionen  in  der
+        //  Begegnungsliste  des  Spieles.**
+        //
+        // **Und  drei  und  nicht  zwei:**  `false`  ist  nicht
+        //  "Niederlage",  --  Flucht  und  Niederlage  sind  zwei
+        //  verschiedene  Ausgaenge  mit  zwei  verschiedenen
+        //  Handlerlisten.
+        Simulation.BattleSubcommand = pSiegreich
+            ? EventInterpreter.SubIdxVictory
+            : EventInterpreter.SubIdxDefeat;
+
         Simulation.IsBattleActive = false;
         Simulation.WaitingFor = GameSimulationState.WaitReason.None;
         Simulation.AddDiagnostic(

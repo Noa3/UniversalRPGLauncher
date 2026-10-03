@@ -4368,9 +4368,39 @@ public sealed class EventInterpreter
 	private const int SubIdxShopNoTransaction = 1;
 	private const int SubIdxInnStay = 2;
 	private const int SubIdxInnNoStay = 3;
-	private const int SubIdxVictory = 4;
-	private const int SubIdxEscape = 5;
-	private const int SubIdxDefeat = 6;
+	/// <summary>
+	/// And the subcommand index of a victory, and it is a number and
+	/// not a command code.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And these are the reference's own subcommand indices, in
+	/// the order its option enum declares them</strong>, -- <strong>and
+	/// they are the numbers <c>CommandOptionGeneric</c> compares
+	/// against</strong>, -- <strong>and they are not the command
+	/// codes</strong>, -- <strong>and a reader that used
+	/// <c>20710</c> here would compare a handler against a
+	/// position.</strong>
+	/// </para>
+	/// <para>
+	/// <strong>And they are public because the runtime writes the
+	/// outcome</strong>, -- <strong>and it writes
+	/// <c>BattleSubcommand</c>, which nothing in this repository read
+	/// before.</strong> -- <strong>And that is why the field existed
+	/// and no test failed: it was written once and never
+	/// read.</strong>
+	/// </para>
+	/// </remarks>
+	public const int SubIdxVictory = 4;
+
+	/// <summary>And the subcommand index of an escape, which is five.</summary>
+	public const int SubIdxEscape = 5;
+
+	/// <summary>
+	/// And the subcommand index of a defeat, which is six and not the
+	/// same as an escape.
+	/// </summary>
+	public const int SubIdxDefeat = 6;
 	private const int SubIdxBranchBattleElse = 7;
 
 	/// <summary>
