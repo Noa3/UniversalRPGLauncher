@@ -54,6 +54,7 @@ public partial class Main : Control
 	private Label _runtimeState = null!;
 	private Label _presentationState = null!;
 	private Rm2kMapPreview _mapPreview = null!;
+	private MzAudioOutput _mzAudio = new();
 	private VBoxContainer _presentationControls = null!;
 	private Button _dismissMessageButton = null!;
 	private HBoxContainer _choiceButtons = null!;
@@ -273,6 +274,8 @@ public partial class Main : Control
 		_detailsPath.AddThemeColorOverride("font_color", ColorMuted.Darkened(0.08f));
 		_detailsPath.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		details.AddChild(_detailsPath);
+		_mzAudio = new MzAudioOutput();
+		AddChild(_mzAudio);
 		_mapPreview = new Rm2kMapPreview();
 		_mapPreview.CustomMinimumSize = new Vector2(0, 180);
 		_mapPreview.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
@@ -573,6 +576,21 @@ public partial class Main : Control
 		_mapPreview.SetMapData(null);
 		_mapPreview.SetFramebuffer(null);
 		_mapPreview.SetRenderedMap(null);
+		// **Und der MZ-Lauf bekommt seine vier Kanaele**, --
+		// **und das ist derselbe Ort, an dem die Karte ihre Pixel
+		// bekommt**:  ein Frame, ein Host, ein Typ, eine Anzeige.
+		if (_launcher.ActiveRuntime is MzEngineRuntime mz)
+		{
+			_mzAudio.SetzeWurzel(
+				mz.GameDirectory,
+				UniversalRPG.Mz.MzVerschluesselung.SchluesselDesSpiels());
+			_mzAudio.SetzeKanaele(mz.Facts.Screen);
+		}
+		else
+		{
+			_mzAudio.StoppeAlle();
+		}
+
 		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
 		{
 			UpdatePresentationControls(rm2k);

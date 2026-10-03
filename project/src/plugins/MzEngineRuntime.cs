@@ -45,6 +45,25 @@ public sealed class MzEngineRuntime : IEngineRuntime
     private readonly string _generation;
     private readonly PluginGameInfo _game;
 
+    /// <summary>
+    /// And where this game's files are, and the audio channel needs it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the only thing the MZ host gives out about
+    /// itself beyond the game's state.</strong> --
+    /// <strong>And it is needed because the four sound channels
+    /// live in files under the project</strong>, --
+    /// <strong><c>audio/bgm</c>, <c>audio/bgs</c>,
+    /// <c>audio/me</c> and <c>audio/se</c></strong>, --
+    /// <strong>and the host reads them nowhere.</strong> --
+    /// <strong>And the reader of those files is above this class, so
+    /// without this a node cannot find a
+    /// track.</strong>
+    /// </para>
+    /// </remarks>
+    public string GameDirectory => _game.GameDirectory;
+
     /// <summary>Builds a runtime for one detected project.</summary>
     /// <param name="pPluginId">Which plugin asked for it.</param>
     /// <param name="pGeneration">"MV" or "MZ", for the messages.</param>
