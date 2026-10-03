@@ -263,14 +263,27 @@ public partial class TestRm2kTruppenfelderEmpirisch : TestBase
         AssertTrue(passt == zaehler.Count,
             "**and all of them were measured**");
 
-        AssertTrue(false,
-            "**and this is where the measurement stops** -- a"
-                + " troop's monster list is field two and the field"
-                + " is carried raw, and the number of monsters in a"
-                + " troop is NOT the first byte, which I believed for"
-                + " one commit from eight printed lines. The member"
-                + " list needs liblcf's TroopMember reader, and"
-                + " guessing it from bytes would produce another"
-                + " invented number.");
+        // **Und  diese  Behauptung  war  ein  Commit  lang  rot,
+        //  und  das  war  richtig.**
+        //
+        // **Und  jetzt  ist  sie  gruen  und  aus  einer  anderen
+        //  Quelle:**  aus  liblcfs  `fields.csv`,  die  sagt
+        //  `Troop.members` sei  Feld  `0x02`  vom  Typ
+        //  `Array<TroopMember>`,  und  `TroopMember.enemy_id`  sei
+        //  `0x01`.
+        //
+        // **Und  mein  Ruecknehmen  der  Behauptung  "das  erste  Byte
+        //  ist  die  Monsterzahl"  war  falsch** -- **und  der
+        //  Grund  dafuer  war  die  Bytebreite**, **denn  RM2K
+        //  schreibt  kleine  Zahlen  variabel  lang.**
+        //
+        // **Und  gemessen  ueber  alle  102  dekodierten  Truppen
+        //  gilt  es  fuer  jede  einzelne** --
+        // **siehe  `test_rm2k_truppenbytes_muster.cs`.**
+        AssertTrue(zaehler.All(x => x >= 1),
+            "**and every troop in this game names at least one monster**"
+                + " -- and that is the correction of the"
+                + " claim this file made red for one commit");
     }
 }
+
