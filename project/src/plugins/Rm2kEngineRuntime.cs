@@ -227,6 +227,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             //  gezeichnet wird.**
             TryCarryOutTransfer();
 
+            // **Und eine Seite, die wartet, wartet weiter** --
+            // **und das ist richtig**, -- **denn das Aufloesen
+            // gehoert an eine Taste und nicht an einen
+            // Frame.**
+            TryCarryOutTransfer();
+
             // Game_Character::UpdateMoveRoute runs once per update for every
             // event with an active route, and it runs whether or not the player
             // is moving. A command that starts a step returns immediately, so
@@ -1254,6 +1260,120 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
         Simulation.AddDiagnostic(
             $"RM2K transfer carried out to map {ziel} at ({x}, {y})");
+    }
+
+    /// <summary>
+    /// And it lets a waiting page go on, which is what a key press is
+    /// in the real game.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the step that was missing.</strong> --
+    /// <strong>The interpreter sets <c>WaitingFor</c> and holds the
+    /// page</strong>, -- <strong>and nothing in this repository ever
+    /// set it back to <c>None</c></strong>, -- **and so a game that
+    /// opened one dialog never showed its second line.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the engine's rule is that the page carries on when
+    /// the thing it waits for is gone</strong>, -- **not that a timer
+    /// ends the wait</strong>, -- **and that is why this is a call
+    /// and not a frame count.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And what ends each of the six</strong>, -- <strong>and
+    /// each of them is named here because each of them is a place
+    /// where the game stood still:</strong>
+    /// </para>
+    /// <list type="bullet">
+    /// <item><strong><c>MessageOpen</c></strong> -- a key press closes
+    /// the window, -- <strong>and the state carries
+    /// <c>MessageContinuesEvents</c> for a line that hands the page
+    /// on.</strong></item>
+    /// <item><strong><c>BattleRunning</c></strong> -- a battle ends
+    /// with a result, -- <strong>and until one is given this does not
+    /// touch it</strong>, -- <strong>because inventing a victory
+    /// would be inventing gameplay.</strong></item>
+    /// <item><strong><c>SaveMenuOpen</c> and <c>MainMenuOpen</c></strong>
+    /// -- the menu closes.</item>
+    /// <item><strong><c>GameOver</c> and <c>TitleRequested</c></strong>
+    /// -- these end the run and are not cleared here.</item>
+    /// </list>
+    /// </remarks>
+    public void DrueckeFort()
+    {
+        switch (Simulation.WaitingFor)
+        {
+            case GameSimulationState.WaitReason.MessageOpen:
+                Presentation.DismissMessage();
+                Simulation.WaitingFor = GameSimulationState.WaitReason.None;
+                Simulation.AddDiagnostic(
+                    "RM2K a key press closed the message window and the"
+                    + " page carries on");
+                return;
+
+            case GameSimulationState.WaitReason.SaveMenuOpen:
+                Simulation.IsSaveMenuActive = false;
+                Simulation.WaitingFor = GameSimulationState.WaitReason.None;
+                Simulation.AddDiagnostic(
+                    "RM2K a key press closed the save menu and the page"
+                    + " carries on");
+                return;
+
+            case GameSimulationState.WaitReason.MainMenuOpen:
+                Simulation.IsMainMenuActive = false;
+                Simulation.WaitingFor = GameSimulationState.WaitReason.None;
+                Simulation.AddDiagnostic(
+                    "RM2K a key press closed the main menu and the page"
+                    + " carries on");
+                return;
+
+            case GameSimulationState.WaitReason.BattleRunning:
+                // **Und  hier  wird  nichts  entschieden.** --
+                // **Und  ein  Kampf  zu  beenden  ohne  Ergebnis
+                // waere  erfundenes  Spiel.**
+                Simulation.AddDiagnostic(
+                    "RM2K a key press arrived during a battle, and a"
+                    + " battle ends with a result and not with a key");
+                return;
+
+            default:
+                return;
+        }
+    }
+
+    /// <summary>
+    /// And it ends a battle with a result the events asked for.
+    /// </summary>
+    /// <param name="pSiegreich">
+    /// Whether the party won, -- <strong>and false is not a loss and
+    /// is an escape</strong>, -- <strong>because those are three
+    /// things in the format and one of them is not a number.</strong>
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the handlers are the game's own commands</strong>,
+    /// -- <c>20710</c>, <c>20711</c> and <c>20712</c>, -- <strong>and
+    /// the interpreter runs whichever one the database
+    /// named.</strong> -- <strong>And this only says which one, and
+    /// the interpreter still does the running.</strong>
+    /// </para>
+    /// </remarks>
+    public void BeendeKampf(bool pSiegreich)
+    {
+        if (Simulation.WaitingFor
+            != GameSimulationState.WaitReason.BattleRunning)
+        {
+            return;
+        }
+
+        Simulation.IsBattleActive = false;
+        Simulation.WaitingFor = GameSimulationState.WaitReason.None;
+        Simulation.AddDiagnostic(
+            "RM2K the battle ended with "
+            + (pSiegreich ? "a victory" : "an escape or a defeat")
+            + ", and the page carries on into the handler the"
+            + " database named");
     }
 
     private static int ParseMapId(string? pMapPath)

@@ -170,16 +170,40 @@ public partial class TestRm2kWartezustandImLauf : TestBase
                 + " seen in the source and not the ones the enum"
                 + " declares");
 
-        // **Und  der  Host  beantwortet  keinen  von  ihnen.**
+        // **Und  drei  von  den  sechs  beantwortet  der  Host
+        //  jetzt**, -- **und  das  ist  der  Stand  vom  selben
+        //  Tag,  an  dem  dieser  Test  das  Gegenteil
+        //  behauptete.**
+        //
+        // **Und  der  Grund  dafuer  ist  in  beiden  Richtungen
+        //  wichtig:**  die  erste  Messung  fand  einen  Fehler,
+        //  und  die  zweite  baut  seine  Behebung.
         var quelle = File.ReadAllText(
             "E:/URPG/project/src/plugins/Rm2kEngineRuntime.cs");
-        foreach (var grund in gruende)
+        var beantwortet = new[]
+        {
+            GameSimulationState.WaitReason.MessageOpen,
+            GameSimulationState.WaitReason.SaveMenuOpen,
+            GameSimulationState.WaitReason.MainMenuOpen,
+        };
+        foreach (var grund in beantwortet)
+        {
+            AssertTrue(quelle.Contains("WaitReason." + grund),
+                "**and the runtime answers " + grund + " now** -- and"
+                    + " this test asserted the opposite a few commits"
+                    + " ago, which was right then and is wrong now");
+        }
+
+        foreach (var grund in new[]
+        {
+            GameSimulationState.WaitReason.GameOver,
+            GameSimulationState.WaitReason.TitleRequested,
+        })
         {
             AssertTrue(!quelle.Contains("WaitReason." + grund),
-                "**and the runtime does not mention "
-                    + grund + "** -- and that is the finding: each of"
-                    + " these is a place where the game stops and"
-                    + " nothing takes it further");
+                "**and the runtime does not touch " + grund + "**"
+                    + " -- and that is correct: both end the run,"
+                    + " and neither is a thing a key press undoes");
         }
     }
 }
