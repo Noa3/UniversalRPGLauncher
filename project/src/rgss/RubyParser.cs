@@ -695,10 +695,14 @@ public sealed class RubyParser
             //
             // **Und das ist keine Vermutung: zwölf Fehlschlaege in zwei
             // Tests sahen genau so aus.**
-            if (k < _tokens.Count
-                && StartsAValueAt(k)
-                && k + 1 < _tokens.Count
-                && _tokens[k + 1].Text == "=")
+            // **Und das Ziel kann mehr als ein Token lang sein**, --
+            // **und die Vorausschau las bisher nur eines**, --
+            // **und bei `a, A.b = 1, 2` stand hinter `A` ein `.` und
+            // kein `=`.**
+            var zielEnde = ZielAn(k);
+            if (zielEnde > 0
+                && zielEnde < _tokens.Count
+                && _tokens[zielEnde].Text == "=")
             {
                 // **Und ein Name links von `=` ist ein Parameter mit
                 // Vorgabe, und keine zweite Zuweisung.**
@@ -734,20 +738,17 @@ public sealed class RubyParser
                 // Rueckgabe am Ende der Methode fragte genau den
                 // falschen Token**, **und `a, *rest = x` sah deshalb aus
                 // wie `sprite.draw(x, y)`.**
-                if (k + 1 < _tokens.Count && _tokens[k + 1].Text == "=")
-                {
-                    k++;
-                }
+                k = zielEnde;
 
                 break;
             }
 
-            if (k < _tokens.Count
-                && StartsAValueAt(k)
-                && k + 1 < _tokens.Count
-                && _tokens[k + 1].Text == ",")
+            var zielEnde2 = ZielAn(k);
+            if (zielEnde2 > 0
+                && zielEnde2 < _tokens.Count
+                && _tokens[zielEnde2].Text == ",")
             {
-                k++;
+                k = zielEnde2;
                 continue;
             }
 
@@ -780,6 +781,115 @@ public sealed class RubyParser
     }
 
     /// <summary>Whether a token at an index begins a value.</summary>
+    /// <summary>
+    /// Reads one assignment target at an index and returns the position
+    /// after it.
+    /// </summary>
+    /// <param name="pIndex">Where the target starts.</param>
+    /// <returns>The position after the target, or -1 if there is none.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the lookahead that was missing.</strong>
+    /// <c>CommaBelongsToTheTarget</c> asked only whether the token after
+    /// the comma was a value and the token after <em>that</em> was
+    /// <c>=</c> -- <strong>and so <c>a, A.b = 1, 2</c> failed, because
+    /// the token after <c>A</c> is <c>.</c> and not
+    /// <c>=</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And Ruby 1.8.1's own <c>parse.y</c> has a production for
+    /// this:</strong>
+    /// </para>
+    /// <code>
+    /// mlhs_node : variable
+    ///           | primary_value '[' aref_args ']'
+    ///           | primary_value '.' tIDENTIFIER
+    ///           | primary_value tCOLON2 tIDENTIFIER
+    /// </code>
+    /// <para>
+    /// <strong>And so a target is a name, optionally followed by a member
+    /// reference and optionally followed by an index</strong>, --
+    /// <strong>and the lookahead has to read all of that before it asks
+    /// for the <c>=</c>.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And this is measured, not assumed:</strong>
+    ///
+    /// <code>
+    /// a, b = 1, 2       KOMMA=True
+    /// a, @b = 1, 2     KOMMA=True
+    /// a, $b = 1, 2     KOMMA=True
+    /// a, A.b = 1, 2    KOMMA=False, k zeigt auf 'A'
+    /// a, a[i] = 1, 2   KOMMA=False, k zeigt auf 'a'
+    /// </code>
+    ///
+    /// <strong>And the first three work because a name is followed
+    /// directly by <c>=</c></strong>, -- <strong>and the last two fail
+    /// because the lookahead stops at the name.</strong>
+    /// </para>
+    /// </remarks>
+    private int ZielAn(int pIndex)
+    {
+        if (pIndex >= _tokens.Count || !StartsAValueAt(pIndex))
+        {
+            return -1;
+        }
+
+        var k = pIndex + 1;
+
+        // **Und ein Mitgliedszugriff kann beliebig viele Glieder
+        // haben** -- `a.b.c.d = 1`.
+        while (k < _tokens.Count
+            && (_tokens[k].Text == "." || _tokens[k].Text == "::"))
+        {
+            k++;
+            while (k < _tokens.Count
+                && (_tokens[k].Kind == RubyTokenKind.Newline
+                    || _tokens[k].Kind == RubyTokenKind.Semicolon))
+            {
+                k++;
+            }
+
+            if (k >= _tokens.Count
+                || (_tokens[k].Kind != RubyTokenKind.Identifier
+                    && _tokens[k].Kind != RubyTokenKind.Constant))
+            {
+                return -1;
+            }
+
+            k++;
+        }
+
+        // **Und ein Index kann beliebig viele haben** -- `a[i][j] = 1`.
+        while (k < _tokens.Count && _tokens[k].Text == "[")
+        {
+            k++;
+            while (k < _tokens.Count
+                && (_tokens[k].Kind == RubyTokenKind.Newline
+                    || _tokens[k].Kind == RubyTokenKind.Semicolon))
+            {
+                k++;
+            }
+
+            var tiefe = 1;
+            while (k < _tokens.Count && tiefe > 0)
+            {
+                if (_tokens[k].Text == "[")
+                {
+                    tiefe++;
+                }
+                else if (_tokens[k].Text == "]")
+                {
+                    tiefe--;
+                }
+
+                k++;
+            }
+        }
+
+        return k;
+    }
+
     private bool StartsAValueAt(int pIndex) =>
         pIndex < _tokens.Count
         && StartsAValue(_tokens[pIndex]);

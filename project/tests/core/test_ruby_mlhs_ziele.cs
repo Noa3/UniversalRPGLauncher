@@ -5,7 +5,8 @@ using UniversalRPG.Tests.Framework;
 namespace UniversalRPG.Tests.Core;
 
 /// <summary>
-/// Which target a multiple assignment accepts, measured.
+/// Which target a multiple assignment accepts, measured over twelve
+/// steps.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,9 +34,20 @@ namespace UniversalRPG.Tests.Core;
 /// a, a.b = 1, 2       -> ',' at offset 1 does not begin an expression
 /// </code>
 ///
-/// <strong>And so the comma is not the fault and the target list
-/// is</strong>, -- <strong>and <c>ParseAssignmentTarget</c> reads one
-/// name at a time</strong>.
+/// <strong>And so the comma is not the fault and the lookahead is.</strong>
+/// <c>CommaBelongsToTheTarget</c> asked whether the token after the
+/// comma began a value and whether the token after <em>that</em> was
+/// <c>=</c> -- <strong>and for <c>a, A.b = 1, 2</c> the token after
+/// <c>A</c> is <c>.</c>, so the lookahead answered no and the comma
+/// was left to the expression reader.</strong>
+/// </para>
+/// <para>
+/// <strong>And the fix reads the whole target first</strong>,
+/// -- <strong>because <c>parse.y</c> has
+/// <c>mlhs_node : variable | primary_value '[' aref_args ']' |
+/// primary_value '.' tIDENTIFIER</c></strong>, --
+/// <strong>so a target is a name, then any number of members, then any
+/// number of indexes.</strong>
 /// </para>
 /// </remarks>
 public partial class TestRubyMlhsZiele : TestBase
@@ -96,24 +108,37 @@ public partial class TestRubyMlhsZiele : TestBase
                 + " works, and `a, *rest = x` was fixed earlier the same"
                 + " way");
 
-        // **Und die Haelfte, die nicht geht, und das ist der Fehler.**
-        AssertTrue(P("a, a.b = 1, 2").Contains("does not begin"),
-            "**and a dotted expression on the left does not parse**"
-                + " -- and `RubyParser`, `ParseAssignmentTarget`, reads"
-                + " one plain name per comma, and Ruby 1.8.1's own"
-                + " `parse.y` has `mlhs_item : mlhs_basic | tSTAR"
-                + " mlhs_node | primary_value '[' aref_args ']'`, and a"
-                + " `primary_value` includes a member reference");
+        // **Und die Haelfte, die vorher nicht ging, und jetzt schon.**
+        AssertEq("1 Anweisungen", P("a, a.b = 1, 2"),
+            "**and a dotted expression on the left parses** -- and it"
+                + " did not before, and the place was"
+                + " `RubyParser`, `CommaBelongsToTheTarget`, whose"
+                + " lookahead read one token and asked for `=` behind"
+                + " it, -- and Ruby 1.8.1's own `parse.y` has"
+                + " `mlhs_node : variable | primary_value '[' aref_args"
+                + " ']' | primary_value '.' tIDENTIFIER`");
 
-        AssertTrue(P("a, a[i] = 1, 2").Contains("does not begin"),
-            "**and an indexed expression on the left does not parse"
-                + " either** -- and that is the same fault, because"
-                + " both are `primary_value`");
+        AssertEq("1 Anweisungen", P("a, a[i] = 1, 2"),
+            "**and an indexed expression on the left parses too**"
+                + " -- and that is the same fix, because both are"
+                + " `primary_value`");
 
-        AssertTrue(P("@actors[i], @actors[j] = @actors[j], @actors[i]")
-            .Contains("does not begin"),
-            "**and the line out of `多人数パーティ` does not parse**"
-                + " -- and that is one of the four VX scripts, and it"
-                + " is at line 576 of that game's own source");
+        AssertEq("1 Anweisungen",
+            P("@actors[i], @actors[j] = @actors[j], @actors[i]"),
+            "**and the line out of `多人数パーティ` parses** -- and that"
+                + " is one of the four VX scripts that failed on a"
+                + " comma, and it stands at line 576 of that game's"
+                + " own source");
+
+        // **Und eine Kette und zwei Indizes gehen auch.**
+        AssertEq("1 Anweisungen", P("a, b.c.d = 1"),
+            "**and a chain of members on the left parses** -- and the"
+                + " lookahead reads all of it before it asks for the"
+                + " `=`");
+
+        AssertEq("1 Anweisungen", P("a, b[i][j] = 1"),
+            "**and two indexes in a row parse** -- and that is the"
+                + " case where a lookahead that counts one `[` would"
+                + " stop in the middle");
     }
 }
