@@ -254,6 +254,13 @@ public partial class TestRm2kBefehlsmessung : TestBase
             + "  Kartenwechsel "
             + (zahler.TryGetValue(11710, out var ct) ? ct : 0));
 
+        // **Und  die  Kampf-Befehle  im  selben  Lauf.**
+        int V(int n) => zahler.TryGetValue(n, out var w) ? w : 0;
+        Console.WriteLine($"Kampf: 10710 Gegnerbegegnung {V(10710)}"
+            + $"  20710 Sieg {V(20710)}  20712 Niederlage {V(20712)}"
+            + $"  20713 Kampfende {V(20713)}  13310 Bedingung {V(13310)}"
+            + $"  11740 Begegnungsschritte {V(11740)}");
+
         AssertEq(0, fehlend.Count,
             "**and every command this game writes is dispatched** --"
                 + " and the eleven I first reported missing are all in"
