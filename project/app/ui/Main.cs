@@ -55,6 +55,7 @@ public partial class Main : Control
 	private Label _presentationState = null!;
 	private Rm2kMapPreview _mapPreview = null!;
 	private MzAudioOutput _mzAudio = new();
+	private MzMapPreview _mzMap = new();
 	private VBoxContainer _presentationControls = null!;
 	private Button _dismissMessageButton = null!;
 	private HBoxContainer _choiceButtons = null!;
@@ -276,6 +277,9 @@ public partial class Main : Control
 		details.AddChild(_detailsPath);
 		_mzAudio = new MzAudioOutput();
 		AddChild(_mzAudio);
+		_mzMap.CustomMinimumSize = new Vector2(0, 220);
+		_mzMap.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		details.AddChild(_mzMap);
 		_mapPreview = new Rm2kMapPreview();
 		_mapPreview.CustomMinimumSize = new Vector2(0, 180);
 		_mapPreview.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
@@ -585,6 +589,8 @@ public partial class Main : Control
 				mz.GameDirectory,
 				UniversalRPG.Mz.MzVerschluesselung.SchluesselDesSpiels());
 			_mzAudio.SetzeKanaele(mz.Facts.Screen);
+			_mzMap.Grund = mz.PaintReason;
+			_mzMap.SetzeKarte(mz.PaintedMap);
 		}
 		else
 		{
