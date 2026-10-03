@@ -19141,4 +19141,92 @@ keinem der drei Spiele auf diesem Rechner vor -- nullmal. Ersetzt durch
 `$gameSelfVariables.get(this, 'Type') === 0`, die haeufigste echte
 Autorzeile (1032x), plus ein neuer Test, dass eine Rechnung eine Rechnung
 bleibt.
+### Und der Ternaer-Doppelpunkt war ein Hexteufel:  er steckte im Symbol
+
+**Und gemessen ist es mit der Token-Ausgabe,  nicht mit dem
+Parserfehler:**
+
+```text
+x = y ? z : w     Operator '?'  ->  Delimiter ':'     <- geht
+x = y ? z:w       Operator '?'  ->  Symbol 'z:'      <- bricht
+while x do label: end            Symbol 'label:'     <- geht
+```
+
+**Und `Symbol 'z:'` ist der ganze Fehler:**  **der Doppelpunkt
+wurde in das Symbol geschluckt,  bevor der Parser ihn sehen
+konnte.**
+
+**Und der Ort war `RubyLexer`, `ReadWord`,  und nicht der
+Parser:**
+
+```csharp
+if (!AtEnd && Current == ':' && Peek(1) != ':'
+    && !(_ternaerOffen && _klammerTiefe == 0))
+```
+
+**Und ohne den letzten Teil wurde jeder Name mit angehaengtem
+Doppelpunkt zu einem `tLABEL`** -- **und das ist richtig fuer
+`while x do label: end`** -- **und falsch,  wenn ein `?` vorher
+gelesen wurde.**
+
+**Und das ist genau Rubys eigene Regel**,  -- **und der Lexer
+hatte den Zustand schon** (`_ternaerOffen`,  `_ternaerGelesen`,
+`_klammerTiefe`) -- **und hat ihn nur an dieser einen Stelle nicht
+benutzt.**
+
+### Und was das gebracht hat
+
+```text
+VX vorher:  3 von 180 fehlgeschlagen
+VX jetzt :  2 von 180 fehlgeschlagen
+```
+
+**Und die beiden,  die bleiben:**
+
+```text
+Scene_Battle   [Parse]  '+=' at offset 8193 does not begin an expression
+   Zeile 225:  @status_window.index = @actor_index += 1
+マップ軽量化     [Parse]  an alias names two things, and '[' is at offset 3872
+   Zeile 103:  alias indexer_equal_KGC_MapLightening []=
+```
+
+**Und `a = b += 1` ist der Fall,  und `a += 1` geht** --
+**und der Ort ist `RubyParser`, `ReadEinWert`,  das `ParseTernary`
+ruft** -- **und Rubys `parse.y` hat dafuer
+`arg : lhs '=' arg_rhs` und `arg_rhs : arg | tSTAR arg_rhs`.**
+
+**Und der Alias-Name ist der andere,  und `parse.y` hat
+`fname : tIDENTIFIER | tCONSTANT | tFID`,  und `tFID` ist
+`operation2 tIDENTIFIER` mit `operation2 : '[' ']' '='`.**
+
+### Und `validate.sh` ist der Weg,  und nicht ein eigenes Kommando
+
+**Und `scripts/validate.sh` traegt einen Kommentar ueber genau
+diesen Fehler:**
+
+```bash
+# `-t:Rebuild` und nicht ein inkrementelles `dotnet build`. Ein
+# inkrementeller Build haelt eine DLL, die nicht mehr zum Quelltext passt
+# am 2026-09-29 gemessen: 2 Fehler in einem Baum, der gruen war
+dotnet build --no-restore -t:Rebuild
+```
+
+**Und ich habe den Fehler am 2026-10-02 erneut gemacht** -- **ein
+geloschter Test stand noch in der DLL  und wurde ausgefuehrt** --
+**und noch einmal,  indem ich die DLL mitten im Lauf eines anderen
+Tests ersetzte.**
+
+**Beides hat eine Hintergrundsuite abgebrochen,  und beides hat
+zwei Laeufe lang eine Zahl gemeldet,  die zu keinem Commit
+gehoerte.**
+
+**Und dieser Lauf:**
+
+```text
+All 2420 tests passed
+UniversalRPG validation passed.
+```
+
+**ueber `scripts/validate.sh`,  ohne dass ich die DLL waehrend des
+Laufs angefasst habe.**
 

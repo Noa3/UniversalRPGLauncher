@@ -2284,7 +2284,8 @@ public sealed class RubyLexer
         // **-- und genau so steht es in `parse.y`, wo `tLABEL` aus
         // `fname` und dem Doppelpunkt entsteht und kein Leerzeichen
         // dazwischen sein kann.**
-        if (!AtEnd && Current == ':' && Peek(1) != ':')
+        if (!AtEnd && Current == ':' && Peek(1) != ':'
+            && !(_ternaerOffen && _klammerTiefe == 0))
         {
             _offset++;
             return new RubyToken
