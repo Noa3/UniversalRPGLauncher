@@ -18952,6 +18952,86 @@ Und Befehl 355 ist "Script",  und die Zahl steht im Kommentar
 ```text
 61 Maps      1983 Seiten
 Skriptbefehle 355:  10111
+
+### 2026-10-03 — MZ: $gameMap, $gameSelfVariables, $gameScreen gemessen
+
+**Und `$gameMap` traegt 1187 Aufrufe, davon 1000 zwei Methoden:**
+
+```
+$gameMap.event()   870   -> return this._events[eventId]
+$gameMap.mapId()   130   -> return this._mapId
+Plugin              187   (chahuiMapTemp, getGroupBulletListQJ, ...)
+```
+
+**Und `Game_Map` steht als `var Game_Map = class {`**, --
+**und deshalb findet eine Suche nach `function Game_Map` nichts.** --
+**Und es hat 110 Methoden, und der Leser beantwortet sechs.** --
+**Und `event()` gibt `undefined` fuer eine unbekannte Id**, --
+**und das Spiel schreibt deshalb `$gameMap.event(18)?.start()` 12x.**
+
+**Und `$gameSelfVariables` traegt 679 Aufrufe und ist KEIN
+Engine-Code** -- **es steht in `js/plugins/Iavra Self
+Variables.js`** -- **und dessen eigener Kommentar sagt
+"basically a copy of Game_SelfSwitches, mixed with
+Game_Variables for correct value handling".** --
+
+```
+.get() 251  .set() 246  .add() 84
+.value() 52  .setValue() 40  .addValue() 6
+```
+
+**Und `value(key) { return this._data[key] || 0; }`** -- **also
+`0` fuer einen fehlenden Schluessel, nie `undefined`** -- **und
+das ist das Gegenteil von `$gameMap.event()`** -- **und das Spiel
+ruft `get(this, 'frames')` 251x ohne Fragezeichen auf.**
+
+**Und `$gameScreen` traegt 397 Aufrufe, davon 139 Plugin:**
+
+```
+.picture() 175   .changePictureName() 103  <- PictureCallCommon.js
+.erasePicture() 18  ._pictureCidArray() 20 <- QJ-MPMZLib
+.startFadeIn() 14  .setShakeRandom() 16    <- DirectivityShake.js
+```
+
+**Und `realPictureId(pictureId)` gibt im Kampf `pictureId + 120`:**
+
+```javascript
+realPictureId(pictureId) {
+    if ($gameParty.inBattle()) {
+        return pictureId + this.maxPictures();
+    } else { return pictureId; }
+}
+maxPictures() { return 120; }
+```
+
+**Und ein Leser, der unter der Skriptnummer speicherte, haette
+`showPicture(1, ...)` und `picture(1)` sich beim Kampfstart
+widersprochen** -- **und das Spiel ruft die beiden 179x
+zusammen.**
+
+### Und $gameSystem ist ein negatives Ergebnis
+
+**Und die 327 Aufrufe zerfallen in:**
+
+```
+Engine-Methoden von Game_System, die benutzt werden: KEINE
+Drill-Plugin-Felder:   226   (_drill_DCB_curStyle 127)
+andere Plugins:        101   (day, add_hour, setBgsLine)
+```
+
+**Und `Game_System` hat 45 Methoden in `rpg_objects.js`, und keine
+einzige wird gerufen** -- **und `day()`, `add_hour()` und
+`set_hour()` kommen aus `MOG_TimeSystem.js`.** -- **Also waere
+ein Leser fuer `$gameSystem` ein Leser fuer 253 Plugin-Dateien,
+und das ist nicht, was dieses Repository tut.** --
+**Festgehalten in `test_mz_gamesystem_ohne_engine.cs`.**
+
+**Und meine Behauptung "die naechste sind Sprachflaggen und
+Fensterbreite" war geraten** -- **und die Messung sagt: dieses
+Spiel benutzt die Engine-Flags von `$gameSystem` nicht.**
+
+    All 2459 tests passed  (Commit 70b0a54 vor diesem Abschnitt)
+
 ```
 
 **Und  was  die  Skripte  tragen,  sind  nicht  Operatoren,
