@@ -18928,6 +18928,66 @@ etwas gezeigt, das ich gebraucht habe.**
 All 2409 tests passed
 ```
 
+## 2026-10-03 — Kriterium 3:  das Spiel ist MZ,  und die Zahl war falsch
+
+**Und  die  Zahl  "4952  Bedingungen"  war  zwei  Dinge  und
+weder  noch  das  Skriptvolumen:**
+
+```text
+Das Spiel ist RPG Maker MZ,  nicht MV.
+
+js/rpg_objects.js schreibt:  command117() { ... }
+Das ist MZ-Syntax.  MV schreibt Game_Interpreter.prototype.command117.
+
+data/Map001.json ist ein OBJEKT mit events[].pages[],
+und conditions ist ein OBJEKT mit Schaltern --  keine Liste.
+
+Und Befehl 117 ist "Common Event",  nicht "Script".
+Und Befehl 355 ist "Script",  und die Zahl steht im Kommentar
+"// Script" direkt ueber dem Block.
+```
+
+**Und  die  echten  Zahlen  aus  den  10  MB  Spieldaten:**
+
+```text
+61 Maps      1983 Seiten
+Skriptbefehle 355:  10111
+```
+
+**Und  was  die  Skripte  tragen,  sind  nicht  Operatoren,
+sondern  vier  Zeilen,  die  das  aktuelle  Ereignis  lesen:**
+
+```text
+ 345  let event = $gameMap.event(this._eventId);
+ 256  let id = this._eventId;
+ 208  let eid = this._eventId;
+ 173  let type = String(this._sourceeventId);
+ 107  var pic_ids = $gameNumberArray.value(41);
+ 105  $gameSystem._drill_DCB_curStyle = 25;
+
+$game 3162   AudioManager 138   SceneManager 21
+```
+
+**Und ein Leser,  der  nur  Vergleichsoperatoren  kann,
+bedient  dieses  Spiel  fast  gar nicht.**
+
+**Und `Utils.isOptionValid`  steht  in  118  Skripten  und
+`Utils.isMobileDevice`  in  50** -- **und  das  sind  die  beiden
+Funktionen,  die  dieser  Leser  kann** -- **und  das  ist  von
+128,  nicht  von  10111.**
+
+### Und  `MapInfos.json`  hat  vier  Versuche  gekostet
+
+**Und  das  Muster  `Map*.json`  fasst  auch  die  Kartenliste,
+und deren Wurzel  ist  ein  Array** -- **und `TryGetProperty`
+darauf wirft**, -- **und `MapInfos.json`  ist  die  einzige
+Datei,  die  so  auffaellt.**
+
+**Und  das  habe  ich  nicht  durch  Lesen  gefunden,  sondern
+durch  eine  Messung,  die  aus  zwei  Teilen  bestand** --
+**einer,  die  sagte  "Wurzel ist Array"**, -- **und  einer,
+die  sagte  "657 Events sind null"**.
+
 ## 2026-10-02 — Kriterien 5 und 6 beginnen: VX liest seine eigenen Skripte
 
 **Und Random Dungeon hat kein `Scripts.rvdata2`**, -- **und es hat
