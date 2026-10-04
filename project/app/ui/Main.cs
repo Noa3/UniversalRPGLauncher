@@ -77,6 +77,10 @@ public partial class Main : Control
 	/// <summary>And the target list's own signature.</summary>
 	private string _zielSignature = "";
 	private VBoxContainer _menuPanel = null!;
+	private VBoxContainer _shopPanel = null!;
+	private Label _shopHead = null!;
+	private HBoxContainer _shopRows = null!;
+	private string _shopSignature = "";
 	private Label? _menuGold;
 	private Label? _menuRechte;
 	private readonly System.Collections.Generic.List<Label> _menuRows = new();
@@ -388,6 +392,19 @@ public partial class Main : Control
 		_menuPanel.AddChild(_menuGold);
 		_menuRechte = new Label();
 		_menuPanel.AddChild(_menuRechte);
+
+		// **Und  die  Ladenflaeche  haengt  an  derselben  Zeile.**
+		//
+		// **Und  sie  gehoert  neben  das  Menuepanel** -- **denn  beides
+		//  ist  ein  Zustand  des  Spiels**, -- **und  ein  Shop,  den
+		//  kein  Fenster  zeigt,  ist  ein  toter  Befehl.**
+		_shopPanel = new VBoxContainer();
+		_shopPanel.Visible = false;
+		_presentationControls.AddChild(_shopPanel);
+		_shopHead = new Label();
+		_shopPanel.AddChild(_shopHead);
+		_shopRows = new HBoxContainer();
+		_shopPanel.AddChild(_shopRows);
 		_inputSpinBox = new SpinBox();
 		_inputSpinBox.MinValue = 0;
 		_inputSpinBox.MaxValue = int.MaxValue;
@@ -870,6 +887,74 @@ public partial class Main : Control
 		}
 	}
 
+	/// <summary>
+	/// And the shop, with the bank's prices on the shelves.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And every shelf is a button that buys one</strong>, --
+	/// <strong>because a shop that shows prices and cannot be used is
+	/// half a command</strong>.
+	/// </para>
+	/// <para>
+	/// <strong>And the price is the item bank's and not the
+	/// command's</strong>, -- <strong>because <c>10720</c> carries no
+	/// price at all and the reference reads it from the
+	/// item</strong>.
+	/// </para>
+	/// </remarks>
+	private void _renderShopRow(
+		UniversalRPG.Rm2k.Simulation.GameSimulationState pState,
+		Rm2kEngineRuntime pRuntime)
+	{
+		_shopPanel.Visible = pState.IsShopOpen;
+		if (!pState.IsShopOpen)
+		{
+			return;
+		}
+
+		_shopHead.Text = UniversalRPG.Rm2k.Simulation.Rm2kLadenZeile
+			.Kopf(pState);
+
+		var zeilen = UniversalRPG.Rm2k.Simulation.Rm2kLadenZeile
+			.Regale(pState, pRuntime.DatabaseData);
+		var signatur = string.Join("|", zeilen);
+		if (signatur == _shopSignature)
+		{
+			return;
+		}
+
+		_shopSignature = signatur;
+		foreach (var child in _shopRows.GetChildren())
+		{
+			child.QueueFree();
+		}
+
+		var itemIds = new int[zeilen.Count];
+		var i = 0;
+		for (var k = 0; k < pState.ShopItemIds.Count
+			&& i < itemIds.Length; k++)
+		{
+			itemIds[i++] = pState.ShopItemIds[k];
+		}
+
+		for (var index = 0; index < zeilen.Count; index++)
+		{
+			var knopf = new Button { Text = zeilen[index] };
+			var itemId = index < itemIds.Length
+				? itemIds[index] : 0;
+			knopf.Pressed += () =>
+			{
+				UniversalRPG.Rm2k.Simulation.Rm2kLadenKauf.Kaufe(
+					pState, pRuntime.DatabaseData, itemId, 1,
+					out var grund);
+				_status.Text = grund;
+				_shopSignature = "";
+			};
+			_shopRows.AddChild(knopf);
+		}
+	}
+
 	private void UpdatePresentationControls(Rm2kEngineRuntime pRuntime)
 	{
 		var presentation = pRuntime.Presentation;
@@ -987,6 +1072,8 @@ public partial class Main : Control
 		}
 
 		_renderTargetRow(simulation);
+
+		_renderShopRow(simulation, pRuntime);
 
 		if (presentation.PendingInputVariableId != null)
 		{
