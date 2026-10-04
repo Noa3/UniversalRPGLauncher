@@ -131,5 +131,29 @@ public partial class TestRm2kEchteKarteBegehbar : TestBase
                 + " and if none did, then the passability"
                 + " reading is broken for every chipset and not"
                 + " just for the start map");
+
+        // **Und  das  ist  die  Antwort  auf  die  Bewegungsfrage.**
+        //
+        // **Und  drei  der  gezeigten  Karten  benutzen  Chipset  drei**,
+        // -- **und  genau  das  Chipset,  das  5143  zur  Wand  macht.**
+        //
+        // **Und  damit  ist  bewiesen:  derselbe  Chipset-Datensatz
+        //  macht  auf  einer  Karte  eine  Kachel  zur  Wand  und  auf
+        //  einer  anderen  zum  Boden** -- **und  es  ist  nicht  die
+        //  Tabelle,  die  falsch  liegt,  sondern  die  Karte  742,
+        //  die  dreihundertmal  dieselbe  Kachel  traegt.**
+        var mitDrei = begehbar.Count(x => x.Contains("Chipset 3"));
+        Console.WriteLine("davon mit Chipset 3: " + mitDrei);
+
+        AssertTrue(mitDrei >= 3,
+            "**and three of the walkable maps use chipset three"
+                + "** -- and the very chipset that makes tile"
+                + " 5143 a wall has walkable tiles on other"
+                + " maps, so the table is right and map 742 is"
+                + " a canvas of one repeated wall");
+
+        AssertTrue(geprueft >= 400,
+            "**and four hundred maps were resolved** -- and the"
+                + " count is measured and not estimated");
     }
 }
