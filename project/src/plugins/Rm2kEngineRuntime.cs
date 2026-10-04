@@ -108,6 +108,17 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         //  leer.**
         Simulation.DatabaseData = database.Data;
 
+        // **Und  die  Heldenbank  wandert  in  den  Zustand.**
+        //
+        // **Und  vorher  las  der  Host  sie  nur  fuer  Sprite-Namen**,
+        // -- **und  `GetOrCreateActorValues`  erfand  sonst  leere
+        //  Werte** -- **und  das  Menue  zeigte  darum  einen  Helden
+        //  ohne  Namen  und  ohne  Maximalwerte.**
+        //
+        // **Und  das  war  eine  stille  Luecke**, -- **denn  die  Werte
+        //  waren  vorhanden  und  nur  nirgends  angefasst.**
+        ReadActorValues(database.Data);
+
         // **Und  die  Helden  kommen  mit  ihren  gelernten
         //  Faehigkeiten  in  den  Zustand.**
         //
@@ -2146,6 +2157,180 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 return raw.AsGodotDictionary();
             }
             return null;
+        }
+    }
+
+    /// <summary>
+    /// And the hero database into the state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the state held empty values</strong>, -- <strong>because
+    /// <c>GetOrCreateActorValues</c> creates a blank entry and nothing ever
+    /// filled it from the bank</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And every number here is a field of an actor entry</strong>,
+    /// -- <strong>and a field that is absent leaves the value alone</strong>,
+    /// -- <strong>because a missing field is not a zero</strong>.
+    /// </para>
+    /// </remarks>
+    private void ReadActorValues(Godot.Collections.Dictionary pDatabase)
+    {
+        if (pDatabase == null
+            || !pDatabase.TryGetValue("actors", out var rawActors)
+            || rawActors.VariantType != Godot.Variant.Type.Array)
+        {
+            return;
+        }
+
+        foreach (var raw in rawActors.AsGodotArray())
+        {
+            if (raw.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+
+            var entry = raw.AsGodotDictionary();
+            if (!TryReadInt(entry, "id", out var id) || id <= 0
+                || id > UniversalRPG.Rm2k.Simulation
+                    .GameSimulationState.MaxActorId)
+            {
+                continue;
+            }
+
+            // **Und  die  Basiswerte  gehen  ueber  den  vorhandenen
+            //  Setter**, -- **denn  der  klemmt  auf  die  Grenzen  des
+            //  Formats  und  eine  Bank,  die  dort  eine  Zahl  ueber
+            //  `9999`  schreibt,  soll  nicht  einen  Helden  mit
+            //  fuenfstelligen  Trefferpunkten  erzeugen.**
+            var werte = Simulation.GetOrCreateActorValues(id);
+            // **Und  die  sechs  Kampfwerte  kommen  aus  einem  Array**
+            // -- **und  nicht  aus  sechs  Feldern**, -- **denn  liblcf
+            //  gibt  `ChunkActor`  bei  0x1F  ein  `Array x 6 - Short`
+            //  namens  `parameters`** -- **und  meine  ersten  sechs
+            //  Feldnamen  existierten  dort  nicht.**
+            //
+            // **Und  die  Reihenfolge  ist  liblcfs  eigene:**
+            // -- **maxhp, maxsp, attack, defense, spirit, agility.**
+            // **Und  die  sechs  Kampfwerte  kommen  aus  `parameters`**,
+// **und  das  ist  ein  `Dictionary`  mit  sechs  Listen,  jede
+//  eine  Stufe  lang**, -- **und  nicht  ein  flaches  Array  von
+//  sechs  Zahlen**.
+//
+// **Und  mein  erster  Versuch  las  es  als  `AsInt32Array`**,
+// -- **und  das  gibt  es  dort  nicht**,
+// -- **und  deshalb  war  der  Held
+//  nach  dem  Start  ein  `Spencer`  mit  einem  Trefferpunkt**.
+//
+// **Und  welche  Stufe  zaehlt,  ist  eine  Frage  des  Spiels**:
+// -- **RM2K  startet  den  Helden  auf  `initial_level`**, -- **und
+//  das  ist  Feld  `0x07`  des  Actors**, -- **und  der  Vektor  ist
+//  pro  Stufe  indiziert**, -- **also  `Stufe - 1`**.
+var stufe = TryReadInt(entry, "initial_level", out var li)
+    && li > 0 ? li : 1;
+if (entry.TryGetValue("parameters", out var rohParameter)
+    && rohParameter.VariantType == Godot.Variant.Type.Dictionary)
+{
+    var parameter = rohParameter.AsGodotDictionary();
+    if (ReadParameterAt(parameter, "maxhp", stufe,
+            v => werte.SetBaseParameter(
+                Rm2kActorValues.ParameterMaxHp, v))
+        && ReadParameterAt(parameter, "maxsp", stufe,
+            v => werte.SetBaseParameter(
+                Rm2kActorValues.ParameterMaxSp, v))
+        && ReadParameterAt(parameter, "attack", stufe,
+            v => werte.SetBaseParameter(
+                Rm2kActorValues.ParameterAttack, v))
+        && ReadParameterAt(parameter, "defense", stufe,
+            v => werte.SetBaseParameter(
+                Rm2kActorValues.ParameterDefense, v))
+        && ReadParameterAt(parameter, "spirit", stufe,
+            v => werte.SetBaseParameter(
+                Rm2kActorValues.ParameterSpirit, v))
+        && ReadParameterAt(parameter, "agility", stufe,
+            v => werte.SetBaseParameter(
+                Rm2kActorValues.ParameterAgility, v)))
+    {
+        // **Und  sechs  von  sechs  gelesen.**
+    }
+    else
+    {
+        Simulation.AddDiagnostic(
+            "RM2K actor " + id + " does not carry all six parameter"
+                + " vectors for level " + stufe + ", so the hero"
+                + " keeps the base values");
+    }
+}
+else
+{
+    Simulation.AddDiagnostic(
+        "RM2K actor " + id + " has no parameters chunk, so the"
+            + " hero keeps the base values");
+}
+
+ReadString(entry, "name", v => werte.Name = v);
+            ReadString(entry, "title", v => werte.Title = v);
+            ReadString(entry, "character_name",
+                v => werte.SpriteName = v);
+            ReadInt(entry, "character_index", v => werte.SpriteIndex = v);
+        }
+    }
+
+    /// <summary>
+    /// And one level's value out of a parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the six vectors are indexed by level</strong>, --
+    /// <strong>and level one is index zero</strong>, -- <strong>because the
+    /// chunk starts at the class's first level</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And a level the game never wrote is not a zero</strong>, --
+    /// <strong>it is an absent value</strong>, -- <strong>and this returns
+    /// false rather than clamping it to one</strong>.
+    /// </para>
+    /// </remarks>
+    private static bool ReadParameterAt(
+        Godot.Collections.Dictionary pParameter, string pName, int pStufe,
+        System.Action<int> pSet)
+    {
+        if (!pParameter.TryGetValue(pName, out var raw)
+            || raw.VariantType != Godot.Variant.Type.Array)
+        {
+            return false;
+        }
+
+        var liste = raw.AsGodotArray();
+        var index = pStufe - 1;
+        if (index < 0 || index >= liste.Count)
+        {
+            return false;
+        }
+
+        pSet(liste[index].AsInt32());
+        return true;
+    }
+
+    /// <summary>And an int field into a setter, when the bank has it.</summary>
+    private static void ReadInt(Godot.Collections.Dictionary pEntry,
+        string pField, System.Action<int> pSet)
+    {
+        if (TryReadInt(pEntry, pField, out var wert))
+        {
+            pSet(wert);
+        }
+    }
+
+    /// <summary>And a string field into a setter, when the bank has it.</summary>
+    private static void ReadString(Godot.Collections.Dictionary pEntry,
+        string pField, System.Action<string> pSet)
+    {
+        if (pEntry.TryGetValue(pField, out var raw)
+            && raw.VariantType == Godot.Variant.Type.String)
+        {
+            pSet(raw.AsString());
         }
     }
 

@@ -72,6 +72,21 @@ public partial class Main : Control
 	/// enter is a battle that runs without them.
 	/// </summary>
 	private HBoxContainer _battleCommandButtons = null!;
+	private VBoxContainer _menuPanel = null!;
+	private Label? _menuGold;
+	private Label? _menuRechte;
+	private readonly System.Collections.Generic.List<Label> _menuRows = new();
+
+	/// <summary>
+	/// And whether the menu panel has been built.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And the panel is built once</strong>, -- <strong>because a
+	/// label per frame is garbage in the frame loop</strong>.
+	/// </para>
+	/// </remarks>
+	private bool menueAufbauen;
 
 	/// <summary>
 	/// And which commands were shown last, so a new button is only
@@ -336,6 +351,27 @@ public partial class Main : Control
 
 		_battleCommandButtons = new HBoxContainer();
 		_presentationControls.AddChild(_battleCommandButtons);
+		// **Und  das  Menuepanel  kommt  in  dieselbe  Steuermenge.**
+		//
+		// **Und  es  traegt  vier  Zeilen**, -- **denn
+		//  `MaxPartyMembers` ist  vier** -- **und  es  wird  einmal
+		//  gebaut  und  nicht  bei  jedem  Bild.**
+		_menuPanel = new VBoxContainer();
+		_menuPanel.Visible = false;
+		_presentationControls.AddChild(_menuPanel);
+		for (var i = 0; i < UniversalRPG.Rm2k.Simulation
+			.GameSimulationState.MaxPartyMembers; i++)
+		{
+			var zeile = new Label();
+			zeile.Visible = false;
+			_menuPanel.AddChild(zeile);
+			_menuRows.Add(zeile);
+		}
+
+		_menuGold = new Label();
+		_menuPanel.AddChild(_menuGold);
+		_menuRechte = new Label();
+		_menuPanel.AddChild(_menuRechte);
 		_inputSpinBox = new SpinBox();
 		_inputSpinBox.MinValue = 0;
 		_inputSpinBox.MaxValue = int.MaxValue;
@@ -688,6 +724,64 @@ public partial class Main : Control
 	}
 
 
+	/// <summary>
+	/// And the menu panel with the party's own numbers.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And every number here is the game's</strong>, --
+	/// <strong>the hero's name from the database, the hit points from
+	/// the state, the gold the game gave, and the four rights that
+	/// <c>11960</c> sets</strong>.
+	/// </para>
+	/// <para>
+	/// <strong>And a menu that shows invented numbers teaches the
+	/// player nothing about the game</strong>.
+	/// </para>
+	/// </remarks>
+	private void _renderMenuPanel(
+		UniversalRPG.Rm2k.Simulation.GameSimulationState pState)
+	{
+		if (_menuPanel == null)
+		{
+			// **Und  ein  fehlender  Knoten  ist  ein  Zustand  und
+			//  keine  Ausnahme.**
+			return;
+		}
+
+		var reiter = 0;
+		foreach (var zeile in UniversalRPG.Rm2k.Simulation.Rm2kMenueZeile
+			.Helden(pState))
+		{
+			if (reiter >= _menuRows.Count)
+			{
+				break;
+			}
+
+			var knoten = _menuRows[reiter];
+			knoten.Visible = true;
+			knoten.Text = zeile;
+			reiter++;
+		}
+
+		for (var i = reiter; i < _menuRows.Count; i++)
+		{
+			_menuRows[i].Visible = false;
+		}
+
+		var zustand = UniversalRPG.Rm2k.Simulation.Rm2kMenueZeile
+			.Zustand(pState);
+		if (_menuGold != null && zustand.Count > 0)
+		{
+			_menuGold.Text = zustand[0];
+		}
+
+		if (_menuRechte != null && zustand.Count > 1)
+		{
+			_menuRechte.Text = zustand[1];
+		}
+	}
+
 	private void UpdatePresentationControls(Rm2kEngineRuntime pRuntime)
 	{
 		var presentation = pRuntime.Presentation;
@@ -722,6 +816,29 @@ public partial class Main : Control
 				}
 			}
 		}
+		// **Und  das  Menue  wird  sichtbar.**
+		//
+		// **Und  die  Menüetaste  hat  das  Menue  geoeffnet**, -- **und
+		//  das  Menue  war  nirgends  in  dieser  Oberflaeche.**
+		//
+		// **Und  es  gehoert  zu  `_presentationControls`**, -- **denn  es
+		//  ist  genauso  ein  Zustand  des  Spiels  wie  ein  Dialog
+		//  und  eine  Auswahl**, -- **und  es  traegt  die  Rechte,  die
+		//  `11960`  gesetzt  hat.**
+		var simulation = pRuntime.Simulation;
+		var menueOffen = simulation.IsMainMenuActive;
+		if (menueOffen)
+		{
+			_renderMenuPanel(simulation);
+		}
+		if (_menuPanel != null)
+		{
+			_menuPanel.Visible = menueOffen;
+		}
+
+		_presentationControls.Visible =
+			_presentationControls.Visible || menueOffen;
+
 		// **Und  die  Kampfbefehle  kommen  daneben.**
 		//
 		// **Und  dieselbe  Signatur-Logik  wie  bei  der  Auswahl:**

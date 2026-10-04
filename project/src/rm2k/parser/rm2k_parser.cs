@@ -105,6 +105,22 @@ public partial class Rm2kParser : RefCounted
 		{ 0x0a, "critical_hit_chance" },
 		{ 0x0f, "face_name" },
 		{ 0x10, "face_index" },
+		// **Und  die  Kampfwerte  sind  KEINE  Einzel-Felder.**
+		//
+		// **Und  liblcfs  `struct ChunkActor` hat  bei  0x1F  ein**
+		// -- **`Array x 6 - Short`** -- **namens  `parameters`** -- **und
+		//  mein  erster  Versuch  las  `max_hp`, `attack`  und  so
+		//  weiter  als  Felder  des  Actors  und  die  gibt  es
+		//  dort  nicht.**
+		//
+		// **Und  `0x1F`  steht  deshalb  hier  nicht**:  -- **es  hat
+		//  schon  einen  eigenen  Decoder**, -- **`Rm2kClassParameter
+		//  Decoder`**, -- **und  ein  zweiter  Eintrag  wuerde  ihn
+		//  ueberschreiben  und  die  Bank  unlesbar  machen.**
+		//
+		// **Und  die  Reihenfolge  der  sechs  Vektoren  ist
+		//  liblcfs  eigene**:  -- **maxhp, maxsp, attack, defense, spirit,
+		//  agility.**
 	};
 
 	// struct ChunkSwitch and struct ChunkVariable contain only the name field.
