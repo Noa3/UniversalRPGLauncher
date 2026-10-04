@@ -72,6 +72,10 @@ public partial class Main : Control
 	/// enter is a battle that runs without them.
 	/// </summary>
 	private HBoxContainer _battleCommandButtons = null!;
+	private HBoxContainer _zielButtons = null!;
+
+	/// <summary>And the target list's own signature.</summary>
+	private string _zielSignature = "";
 	private VBoxContainer _menuPanel = null!;
 	private Label? _menuGold;
 	private Label? _menuRechte;
@@ -351,6 +355,18 @@ public partial class Main : Control
 
 		_battleCommandButtons = new HBoxContainer();
 		_presentationControls.AddChild(_battleCommandButtons);
+
+		// **Und  die  Zielleiste  kommt  darunter.**
+		//
+		// **Und  sie  ist  kein  Zufallsgenerator**, -- **sondern  eine
+		//  Liste  der  lebenden  Gegner  in  der  Reihenfolge  der
+		//  Truppe**, -- **und  jeder  Knopf  benennt  das  Ziel**, --
+		// **denn  `FuehreZugAus`  nahm  vorher  einen  Index  und  wusste
+		//  damit  nicht,  ob  er  einen  Gegner  oder  einen  Helden
+		//  meinte.**
+		_zielButtons = new HBoxContainer();
+		_zielButtons.Visible = false;
+		_presentationControls.AddChild(_zielButtons);
 		// **Und  das  Menuepanel  kommt  in  dieselbe  Steuermenge.**
 		//
 		// **Und  es  traegt  vier  Zeilen**, -- **denn
@@ -782,6 +798,78 @@ public partial class Main : Control
 		}
 	}
 
+	/// <summary>
+	/// And the row that names what a strike may be aimed at.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And every button carries the monster's own name and hit
+	/// points</strong>, -- <strong>because a list of numbers is not a
+	/// target the player can aim</strong>.
+	/// </para>
+	/// <para>
+	/// <strong>And only the living members appear</strong>, --
+	/// <strong>because a fallen monster cannot be struck and offering it
+	/// would be a command the game never issued</strong>.
+	/// </para>
+	/// </remarks>
+	private void _renderTargetRow(
+		UniversalRPG.Rm2k.Simulation.GameSimulationState pState)
+	{
+		var ziele = UniversalRPG.Rm2k.Simulation.Rm2kZielwahl
+			.MoeglicheZiele(pState);
+		_zielButtons.Visible = ziele.Count > 0;
+		if (ziele.Count == 0)
+		{
+			return;
+		}
+
+		var namen = new System.Text.StringBuilder();
+		foreach (var index in ziele)
+		{
+			namen.Append(pState.TroopMembers[index]["name"].AsString());
+			namen.Append(' ').Append(pState.MonsterHp(index));
+			namen.Append('/')
+				.Append(pState.MonsterMaxHp(index)).Append(';');
+		}
+
+		var signatur = namen.ToString();
+		if (signatur != _zielSignature)
+		{
+			foreach (var child in _zielButtons.GetChildren())
+			{
+				child.QueueFree();
+			}
+
+			_zielSignature = signatur;
+			foreach (var index in ziele)
+			{
+				var knopf = new Button
+				{
+					Text = pState.TroopMembers[index]["name"].AsString()
+						+ "  " + pState.MonsterHp(index) + "/"
+						+ pState.MonsterMaxHp(index)
+				};
+				var zielIndex = index;
+				knopf.Pressed += () =>
+				{
+					if (_launcher.ActiveRuntime
+						is Rm2kEngineRuntime lauf)
+					{
+						lauf.AktuellesZiel.WaehleGegner(lauf.Simulation,
+							zielIndex, out var grund);
+						_status.Text = grund.Length > 0
+							? grund
+							: "Ziel: " + pState.TroopMembers[zielIndex]
+								["name"].AsString();
+					}
+				};
+
+				_zielButtons.AddChild(knopf);
+			}
+		}
+	}
+
 	private void UpdatePresentationControls(Rm2kEngineRuntime pRuntime)
 	{
 		var presentation = pRuntime.Presentation;
@@ -877,9 +965,18 @@ public partial class Main : Control
 					if (_launcher.ActiveRuntime
 						is Rm2kEngineRuntime lauf)
 					{
-						if (!lauf.FuehreZugAus(
-							gewaehlt, UniversalRPG.Rm2k.Simulation.Rm2kZugfolge.Naechster(
-								lauf.Simulation), out var grund))
+						// **Und  hier  stand  die  Zugfolge  an  der
+						//  Zielstelle** -- **und  die  Zugfolge  weiss  nicht,
+						//  wer  als  naechstes  dran  ist.**
+						//
+						// **Und  das  Ziel  steht  im  `AktuellesZiel`.**
+						if (!lauf.AktuellesZiel.HatGegner)
+						{
+							_status.Text = "kein Ziel gewaehlt";
+						}
+						else if (!lauf.FuehreZugAus(
+							gewaehlt, lauf.AktuellesZiel.GegnerIndex,
+							out var grund))
 						{
 							_status.Text = grund;
 						}
@@ -888,6 +985,8 @@ public partial class Main : Control
 				_battleCommandButtons.AddChild(knopf);
 			}
 		}
+
+		_renderTargetRow(simulation);
 
 		if (presentation.PendingInputVariableId != null)
 		{
