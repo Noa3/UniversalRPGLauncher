@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Godot;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Tests.Framework;
 
@@ -93,6 +94,58 @@ public partial class TestRm2kParteiGemessen : TestBase
             }
         }
 
+        // **Und  jetzt  die  echte  Quelle.**
+        //
+        // **Und  EasyRPG Players  `Game_Party::SetupNewGame` liest**
+        // -- **`data.party = lcf::Data::system.party`** -- **und  nicht
+        //  eine  Karte  und  nicht  ein  Befehl.**
+        //
+        // **Und  liblcfs  `struct ChunkSystem`  hat  bei  0x16  ein**
+        // -- **`Array - Short`  namens  `party`**, -- **und  0x15  ein
+        //  `Integer`  namens  `party_size`.**
+        var bank = new Rm2kParser().ParseDatabase(
+            "res://tests/fixtures/rm2k-dragon-destiny/RPG_RT.ldb");
+        if (!bank.IsSuccess()
+            || !bank.GetData().ContainsKey("system"))
+        {
+            AssertTrue(false, "**and the bank's system chunk is"
+                + " read**");
+            return;
+        }
+
+        var system = bank.GetData()["system"].AsGodotDictionary();
+        Console.WriteLine("System-Felder: " + system.Count);
+
+        foreach (var k in system.Keys)
+        {
+            var v = system[k];
+            Console.WriteLine("  " + k + " : " + v.VariantType
+                + (v.VariantType == Godot.Variant.Type.Int
+                    ? " = " + v.AsInt32()
+                    : v.VariantType == Godot.Variant.Type.String
+                        ? " = '" + v.AsString().Substring(0,
+                            Math.Min(24, v.AsString().Length)) + "'"
+                        : v.VariantType
+                            == Godot.Variant.Type.Array
+                                ? " n=" + v.AsGodotArray().Count
+                                : ""));
+        }
+        Console.WriteLine("party_size: "
+            + (system.ContainsKey("party_size")
+                ? system["party_size"].AsInt32() : -1));
+        if (system.ContainsKey("party"))
+        {
+            var party = system["party"];
+            Console.WriteLine("party-Typ: " + party.VariantType);
+            if (party.VariantType == Godot.Variant.Type.Array)
+            {
+                var helden = party.AsGodotArray();
+                Console.WriteLine("Party: "
+                    + string.Join(",", helden.Select(x =>
+                        x.AsInt32())));
+            }
+        }
+
         Console.WriteLine("Karten mit 11110: " + mitBefehl
             + "  Karten mit 11120: " + mitHeld1);
 
@@ -117,18 +170,44 @@ public partial class TestRm2kParteiGemessen : TestBase
 
         AssertEq(0, mitHeld1,
             "**and this game never writes 11120 either** -- and"
-                + " so the party of this game comes from"
-                + " somewhere the map tree and the party command"
-                + " do not cover, and a reader that fills it would"
-                + " be inventing it");
+                + " so neither the map tree nor a party command"
+                + " supplies this game's party");
 
-        // **Und  die _party_  bleibt  darum  leer,  bis  eine  Quelle
-        //  gemessen  ist  --  und  ein  Menue,  das  eine  leere
-        //  Party  zeigt,  ist  ehrlich  und  nicht  kaputt.**
-        AssertTrue(true,
-            "**and the empty party is the game's own fact and not"
-                + " a failure** -- and the menu shows an empty"
-                + " party rather than a hero the game never put"
-                + " there");
+        // **Und  die  echte  Quelle  ist  der  System-Chunk  der  Bank.**
+        //
+        // **Und  das  ist  keine  Vermutung**, -- **denn  die  Rohbytes
+        //  des  498-Byte-`System`-Chunks  enthalten  bei  `0x16` genau
+        //  zwei  Byte:  `[1, 0]`** -- **und  das  ist  Little-Endian
+        //  `1`** -- **und  das  ist  Held  eins.**
+        var partyEintraege = system["party"].AsGodotArray();
+        AssertEq(1, partyEintraege.Count,
+            "**and the system's party chunk holds exactly one"
+                + " entry** -- and its raw bytes are [1, 0]");
+
+        AssertEq(1, partyEintraege[0].AsInt32(),
+            "**and that entry is actor one** -- so the party"
+                + " comes from ChunkSystem 0x16 and not from a map,"
+                + " which is what EasyRPG's SetupNewGame reads");
+
+        // **Und  `party_size`  fehlt  in  diesem  Spiel.**
+        //
+        // **Und  mein  Decoder  hat  die  zwei  vorhandenen  Bytes
+        //  verworfen**, -- **weil  er  die  Bytezahl  aus  dem
+        //  fehlenden  Groessenfeld  genommen  hat** -- **und  daraus
+        //  wurde  eine  leere  Party.**
+        AssertTrue(!system.ContainsKey("party_size"),
+            "**and this game writes no party_size field** -- and"
+                + " the decoder had reported an empty party because"
+                + " a missing size field must not discard the"
+                + " bytes that are there");
+
+        // **Und  die  Quelle  ist  messbar  und  nicht  geraten.**
+        AssertTrue(!string.IsNullOrEmpty(
+                new UniversalRPG.Rm2k.Parser.Rm2kParser()
+                    .ParseDatabase("res://tests/fixtures/rm2k-dragon-"
+                        + "destiny/RPG_RT.ldb").IsSuccess()
+                    ? "gelesen" : ""),
+            "**and the bank that carries that party is the game's"
+                + " own file**");
     }
 }

@@ -66,26 +66,39 @@ public partial class TestRm2kMenueZeigtEchteWerte : TestBase
             + "  MaxHp "
             + (state.FindActorValues(1)?.BaseMaxHp ?? -1));
 
-        // **Und  die  Party  dieses  Spiels  ist  leer.**
+        // **Und  jetzt  die  Party  --  und  meine  Behauptung  war
+        //  falsch.**
         //
-        // **Und  das  ist  gemessen  und  nicht  geraten** -- **denn  das
-        //  Spiel  schreibt  weder  `11110`  noch  `11120`  in  seinen
-        //  743  Karten**, -- **und  `PartyMemberIds`  hat  genau  einen
-        //  Schreiber**, -- **`EventInterpreter.cs:7816`,  --  und  der
-        //  gehoert  zu  `11110`.**
+        // **Und  ich  habe  gemessen,  das  Spiel  schreibe  weder
+        //  `11110`  noch  `11120`  in  seinen  743  Karten**, --
+        // **und  daraus  habe  ich  geschlossen,  die  Party  sei
+        //  leer.**
         //
-        // **Und  der  Startblock  des  Kartenbaums  traegt  nur
-        //  `party_map_id`, `party_x`, `party_y`  und  drei  Fahrzeuge**
-        // -- **und  keine  Heldenliste**, -- **denn  das  ist  liblcfs
-        //  `LMT_Start`  und  die  hat  keine  Party.**
+        // **Und  EasyRPG Players  `Game_Party::SetupNewGame` liest**
+        // -- **`data.party = lcf::Data::system.party`** -- **und  damit
+        //  aus  dem  System-Chunk  der  Bank  und  nicht  aus  einer
+        //  Karte.**
         //
-        // **Und  darum  ist  diese  Assertion  eine  Messung  und
-        //  keine  Erwartung.**
-        AssertEq(0, state.PartyMemberIds.Count,
-            "**and this game's own party is empty** -- and it"
-                + " writes neither 11110 nor 11120 in its 743"
-                + " maps, and the state has exactly one writer"
-                + " for the party and that is 11110");
+        // **Und  Dragon  Destinys  Rohbytes  sagen  `0x16  party  len 2
+        //  [1, 0]`** -- **und  das  ist  Little-Endian  `1`** -- **und
+        //  das  ist  Held  eins.**
+        //
+        // **Und  mein  eigener  Decoder  hatte  daraus  null  gemacht**,
+        // -- **weil  `party_size`  im  Spiel  fehlt  und  mein  Code  die
+        //  vorhandenen  Bytes  verworfen  hat**, -- **sobald  das
+        //  Groessenfeld  fehlte.**
+        AssertEq(1, state.PartyMemberIds.Count,
+            "**and the game's own party has one hero** -- and it"
+                + " comes from ChunkSystem field 0x16, and the raw"
+                + " bytes are [1, 0] which is little endian 1, and"
+                + " the decoder had reported an empty party"
+                + " because party_size is absent and a missing"
+                + " size field must not discard present bytes");
+
+        AssertEq(1, state.PartyMemberIds[0],
+            "**and that hero is actor one** -- which the bank"
+                + " calls '" + (state.FindActorValues(1)?.Name ?? "?")
+                + "'");
 
         var zeilen = Rm2kMenueZeile.Helden(state);
         var rechts = Rm2kMenueZeile.Zustand(state);

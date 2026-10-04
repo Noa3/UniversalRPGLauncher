@@ -785,7 +785,8 @@ public partial class Rm2kParser : RefCounted
 			// The size field is authoritative for the count, and liblcf keeps
 			// every value even when the data is longer than the declared size.
 			var declared = 0;
-			if (byId.TryGetValue(sizeId, out var sizeData))
+			var hatGroesse = byId.TryGetValue(sizeId, out var sizeData);
+			if (hatGroesse)
 			{
 				var sizeResult = DecodeLdbIntegerField(sizeData, $"system size 0x{sizeId:X}");
 				if (!sizeResult.Success)
@@ -795,8 +796,28 @@ public partial class Rm2kParser : RefCounted
 				declared = (int)sizeResult.Data["value"];
 			}
 			var values = new Godot.Collections.Array<long>();
-			var count = Math.Min(declared, data.Length / 2);
-			if (declared < 0 || declared > MaxSystemArrayEntries)
+
+			// **Und  das  war  ein  stiller  Fehler  und  kein  Randfall.**
+			//
+			// **Und  `declared`  blieb  null,  wenn  das  Groessenfeld
+			//  fehlt**, -- **und  `Math.Min(0, data.Length / 2)`  liefert
+			//  dann  null  Werte** -- **und  der  Leser  meldete  eine
+			//  leere  Party  fuer  ein  Spiel,  dessen  Party  genau
+			//  einen  Helden  traegt.**
+			//
+			// **Und  Dragon  Destinys  `System`-Chunk  hat  498  Byte
+			//  und  41  Felder  und  `0x16  party`  hat  genau  zwei
+			//  Byte:  `[1, 0]`** -- **und  das  ist  Little-Endian  `1`**,
+			// **und  das  ist  Held  eins.**
+			//
+			// **Und  ein  fehlendes  Groessenfeld  ist  kein  Grund,
+			//  die  vorhandenen  Bytes  zu  verwerfen.**
+			var count = hatGroesse && declared > 0
+				? Math.Min(declared, data.Length / 2)
+				: data.Length / 2;
+			if ((hatGroesse && declared < 0)
+				|| declared > MaxSystemArrayEntries
+				|| count > MaxSystemArrayEntries)
 			{
 				return Failure($"System array 0x{dataId:X} declares {declared} entries", 0);
 			}

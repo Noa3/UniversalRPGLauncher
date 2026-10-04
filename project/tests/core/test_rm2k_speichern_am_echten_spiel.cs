@@ -125,7 +125,14 @@ public partial class TestRm2kSpeichernAmEchtenSpiel : TestBase
         state.Switches[6] = true;
         state.Variables[2] = 99;
         state.ItemCounts[12] = 5;
-        state.PartyMemberIds.Add(1);
+        // **Und  Held  eins  ist  schon  da**, -- **denn  der  Host  liest
+        //  die  Startparty  aus  dem  System-Chunk  der  Bank**, --
+        // **und  die  Rohbytes  tragen  `[1, 0]`**, -- **und  das  ist
+        //  Little-Endian  `1`**.
+        //
+        // **Und  darum  steht  hier  nur  noch  Held  vier.**
+        Console.WriteLine("Party nach dem Start: ["
+            + string.Join(",", state.PartyMemberIds) + "]");
         state.PartyMemberIds.Add(4);
         // **Und  die  gelernten  Faehigkeiten** -- **denn  das  ist  das
         //  Feld,  das  eine  Party  nach  dem  Laden  wirklich  braucht**,
@@ -192,7 +199,10 @@ public partial class TestRm2kSpeichernAmEchtenSpiel : TestBase
             "**and an item count survives**");
 
         AssertEq(2, geladen.PartyMemberIds.Count,
-            "**and the party survives**");
+            "**and the party survives** -- and it starts with"
+                + " one hero from ChunkSystem 0x16 and gains a"
+                + " second through the interpreter, and both"
+                + " come back");
 
         AssertEq(1, geladen.PartyMemberIds[0],
             "**and it survives in order** -- and a party that came"

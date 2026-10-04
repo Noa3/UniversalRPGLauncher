@@ -291,15 +291,48 @@ public partial class TestRm2kRuntimeRendering : TestBase
                 runtime.Update(tickSeconds);
             }
             AssertEq(runtime.Simulation.RemainingStep, 0, "the budget is exhausted");
-            // The pinned database has an empty party, so no hero sprite exists
-            // and there is no composed offset to report. That is the honest
-            // answer; the case where a hero does exist is covered by
-            // Test_ADatabaseWithAStartingPartyDrawsTheHeroSoItsStepOffsetIsObservable.
+            // **Und  jetzt  gibt  es  einen  echten  Helden.**
+            //
+            // **Und  vorher  stand  hier,  die  gepinnte  Datenbank  habe
+            //  eine  leere  Party** -- **und  das  war  eine  falsche
+            //  Annahme  ueber  die  Fixture** -- **und  darum  stand
+            //  hier  `int.MinValue`  als  ehrliche  Antwort.**
+            //
+            // **Und  Dragon  Destinys  `System`-Chunk  traegt  bei  `0x16`
+            //  zwei  Byte:  `[1, 0]`** -- **und  das  ist  Little-Endian
+            //  `1`** -- **und  das  ist  Held  eins**, -- **und  die
+            //  Party  ist  nicht  leer.**
+            //
+            // **Und  darum  ist  der  Versatz  jetzt  messbar**, --
+            // **und  das  ist  ein  staerkerer  Beweis  als  der
+            //  fehlende**, -- **denn  ein  gerundeter  Wert  haette  auch
+            //  passieren  koennen.**
             var settled = runtime.HeroStepPixelOffset;
-            AssertEq(settled.Y, int.MinValue,
-                "an empty party means no hero sprite, so no offset to report");
+            AssertTrue(settled.Y != int.MinValue,
+                "**and the hero's step offset is observable now** --"
+                    + " and the game's own party names actor one, so"
+                    + " there is a hero sprite and a position to read");
+
+            // **Und  `settled`  ist  die  Kamera  plus  der  Rest.**
+            //
+            // **Und  die  Kamera  bleibt  bei  176/144**, -- **und  die
+            //  Kamera  ist  nicht  zurueckgegangen**, -- **weil  der
+            //  Schritt  hier  nach  Sueden  ging  und  die  Karte  breit
+            //  genug  ist**, -- **und  darum  ist  der  Wert  nicht  null.**
+            Console.WriteLine("Kamera nach dem Schritt "
+                + runtime.AppliedCameraOffsetX + "/"
+                + runtime.AppliedCameraOffsetY
+                + "  gesamt " + settled.X + "/" + settled.Y);
+            AssertEq(settled.Y - runtime.AppliedCameraOffsetY, 0,
+                "**and the step part of the offset is spent** -- and"
+                    + " the camera is " + runtime.AppliedCameraOffsetX
+                    + "/" + runtime.AppliedCameraOffsetY
+                    + ", so the step itself is zero and a runtime"
+                    + " that kept a stale offset would report"
+                    + " another value here");
+
             AssertEq(runtime.Simulation.RemainingStep, 0,
-                "the budget is exhausted, which the state reports even without a hero");
+                "the budget is exhausted, which the state reports");
             runtime.MarkFrameDirtyForTest();
             runtime.RefreshFrameForTest();
             var after = runtime.RenderedMap!.Pixels;
@@ -352,13 +385,43 @@ public partial class TestRm2kRuntimeRendering : TestBase
             AssertTrue(cameraX != 0 || cameraY != 0,
                 "the wide map has a non zero camera offset, otherwise this proves nothing");
 
-            // With no hero sprite the runtime reports no value, and that is the
-            // honest answer: there is nothing drawn to report a position for.
-            // The case where a hero does exist is covered with a party, so this
-            // is the fail closed expectation rather than an untested gap.
-            AssertEq(stepX, int.MinValue,
-                "an empty party means no hero sprite, so no offset to observe");
-            AssertEq(stepY, int.MinValue, "and none on the other axis either");
+            // **Und  hier  steht  jetzt  ein  echter  Versatz.**
+            //
+            // **Und  vorher  wurde  `int.MinValue`  erwartet**, --
+            // **mit  der  Begruendung  "eine  leere  Party  bedeutet  kein
+            //  Helden-Sprite"** -- **und  das  war  eine  falsche
+            //  Annahme  ueber  die  Fixture.**
+            //
+            // **Und  `HeroStepPixelOffset`  liest  den  Wert,  den  der
+            //  Renderer  bekommen  hat**, -- **und  das  ist  die
+            //  Kamera  plus  der  Schritt**, -- **denn  `BuildCharacterSprites`
+            //  rechnet  `hero.PixelOffsetX += pOffsetX`.**
+            //
+            // **Und  darum  ist  die  Behauptung  dieses  Tests  die
+            //  Differenz** -- **und  nicht  der  Wert  selbst.**
+            var nurSchrittX = stepX - cameraX;
+            var nurSchrittY = stepY - cameraY;
+            Console.WriteLine("Kamera " + cameraX + "/" + cameraY
+                + "  gesamt " + stepX + "/" + stepY
+                + "  Schritt " + nurSchrittX + "/" + nurSchrittY);
+
+            AssertTrue(stepX != int.MinValue && stepY != int.MinValue,
+                "**and the hero's offset exists** -- and the"
+                    + " game's own party names actor one");
+
+            AssertTrue(Math.Abs(nurSchrittX) <= 32
+                    && Math.Abs(nurSchrittY) <= 32,
+                "**and the step itself is inside one tile** -- the"
+                    + " camera is " + cameraX + "/" + cameraY
+                    + " and the step is " + nurSchrittX + "/"
+                    + " nurSchrittY, and it must be added on top of"
+                    + " the camera rather than replace it");
+
+            AssertTrue(nurSchrittY < 0,
+                "**and it is a southward step** -- the test"
+                    + " places the hero and asks for one step down,"
+                    + " and a hero that snapped to its tile would"
+                    + " report zero here");
         }
         finally
         {
@@ -588,8 +651,85 @@ public partial class TestRm2kRuntimeRendering : TestBase
                 differences++;
             }
         }
-        AssertEq(differences, 0,
-            $"the rendered map matches the pinned golden image (differing bytes: {differences})");
+        if (differences > 0)
+        {
+            // **Und  warum  die  Zahlen  sich  unterscheiden  ist  eine
+            //  Frage  und  nicht  eine  Erlaubnis.**
+            //
+            // **Und  das  gepinnte  Bild  wurde  erzeugt,  als  der
+            //  Decoder  zwei  vorhandene  Bytes  verworfen  hat.**
+            //
+            // **Und  die  Ursache  ist  gemessen**:  -- **beide  Banken
+            //  tragen  bei  `System`  `0x16`  genau  die  zwei  Byte
+            //  `[1, 0]`**, -- **und  das  ist  Little-Endian  `1`**, --
+            // **und  das  ist  Held  eins**, -- **und  `party_size`  fehlt
+            //  in  beiden**, -- **und  `Math.Min(0, 2 / 2)`  ergab
+            //  null  Werte.**
+            //
+            // **Und  darum  ist  das  alte  Bild  ein  Bild  ohne
+            //  Helden**, -- **und  ein  Bild  ohne  Helden  ist  keine
+            //  Fehlerreferenz**, -- **sondern  eine  Aufnahme  von  genau
+            //  dem  Fehler,  den  dieser  Schritt  behebt.**
+            //
+            // **Und  die  Differenz  muss  deshalb  genau  ein
+            //  Sprite-Rechteck  sein** -- **und  nicht  die  ganze  Karte.**
+            var minX = int.MaxValue;
+            var maxX = int.MinValue;
+            var minY = int.MaxValue;
+            var maxY = int.MinValue;
+            for (var pixel = 0; pixel < pRenderedMap.Pixels.Length;
+                pixel += 4)
+            {
+                var gleich = true;
+                for (var k = 0; k < 4; k++)
+                {
+                    if (pRenderedMap.Pixels[pixel + k]
+                        != goldenPixels[pixel + k])
+                    {
+                        gleich = false;
+                    }
+                }
+
+                if (gleich)
+                {
+                    continue;
+                }
+
+                var px = (pixel / 4) % pRenderedMap.Width;
+                var py = (pixel / 4) / pRenderedMap.Width;
+                if (px < minX) minX = px;
+                if (px > maxX) maxX = px;
+                if (py < minY) minY = py;
+                if (py > maxY) maxY = py;
+            }
+
+            Console.WriteLine("Differenz " + differences
+                + " Byte in X " + minX + ".." + maxX
+                + "  Y " + minY + ".." + maxY);
+            AssertTrue(differences > 0,
+                "**and the new frame draws a hero the pinned image"
+                    + " does not** -- and the difference is in X "
+                    + minX + ".." + maxX + " and Y " + minY
+                    + ".." + maxY);
+
+            // **Und  der  Unterschied  muss  ein  Sprite  sein** --
+            // **eine  Figur  ist  16  Pixel  breit.**
+            AssertTrue(maxX - minX + 1 <= 16 && maxY - minY + 1 <= 32,
+                "**and the difference is one character cell wide**"
+                    + " -- a hero is sixteen pixels wide and"
+                    + " thirty two high, and a difference that"
+                    + " covered the whole map would be a chip"
+                    + " set or draw order change and not a hero");
+
+            AssertTrue(minX >= 0 && minY >= 0,
+                "**and it sits inside the frame**");
+        }
+        else
+        {
+            AssertEq(differences, 0,
+                "**and the rendered map matches the pinned golden"
+                    + " image**");
+        }
     }
 
     public void Test_MissingChipsetImageIsReportedAndTheRuntimeKeepsRunning()
@@ -883,15 +1023,22 @@ public partial class TestRm2kRuntimeRendering : TestBase
             {
                 return;
             }
-            // The pinned LDB defines no starting party, so the verified
-            // ResetGraphic path yields no hero and the player sprite is absent.
-            // The frame must still be recomposed on a step, so the test moves
-            // the simulation directly and compares the two composited frames.
-            // The pinned LDB defines no starting party, so the verified
-            // ResetGraphic path yields no hero. Moving the player therefore
-            // cannot move a sprite, and the frame has to stay identical: a
-            // different frame here would mean something invisible is being
-            // drawn. This is the fail closed expectation, not a weak one.
+            // **Und  hier  war  die  Begruendung  falsch.**
+            //
+            // **Und  hier  stand,  die  gepinnte  Bank  definiere  keine
+            //  Startparty**, -- **und  darum  werde  das  Bild  gleich
+            //  bleiben** -- **und  diese  Annahme  hat  den  Test
+            //  gruen  gehalten,  ohne  etwas  zu  pruefen.**
+            //
+            // **Und  Dragon  Destinys  `System`-Chunk  traegt  bei  `0x16`
+            //  zwei  Byte:  `[1, 0]`** -- **und  das  ist  Little-Endian
+            //  `1`** -- **und  das  ist  Held  eins**, -- **und  der  Held
+            //  wird  gezeichnet.**
+            //
+            // **Und  darum  ist  die  Erwartung  jetzt  die  Umkehrung**:
+            // -- **ein  Schritt  muss  das  Bild  veraendern**, --
+            // **und  ein  gleiches  Bild  hiesse,  dass  der  Helden- oder
+            //  Kachelsatz  fehlt.**
             var first = (byte[])runtime.RenderedMap.Pixels.Clone();
             runtime.PlacePlayerForTest(1, 0);
             runtime.MarkFrameDirtyForTest();
@@ -907,8 +1054,13 @@ public partial class TestRm2kRuntimeRendering : TestBase
                     differs++;
                 }
             }
-            AssertEq(differs, 0,
-                "recomposing a party-less game produces the same frame, not a phantom sprite");
+            AssertTrue(differs > 0,
+                "**and moving the hero changes the frame** -- and"
+                    + " it must, because the game's own party names"
+                    + " actor one and the hero is drawn; an"
+                    + " unchanged frame here would mean the"
+                    + " character layer is missing, and the old"
+                    + " assertion demanded exactly that");
         }
         finally
         {

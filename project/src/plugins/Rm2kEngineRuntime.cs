@@ -119,6 +119,21 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         //  waren  vorhanden  und  nur  nirgends  angefasst.**
         ReadActorValues(database.Data);
 
+        // **Und  die  Party  kommt  aus  dem  System-Chunk  der  Bank.**
+        //
+        // **Und  EasyRPG Players  `Game_Party::SetupNewGame` macht  es
+        //  genauso**:  -- **`data.party = lcf::Data::system.party`** --
+        // -- **und  nicht  aus  einer  Karte  und  nicht  aus  einem
+        //  Befehl.**
+        //
+        // **Und  Dragon  Destinys  Party  ist  `[1, 0]`  in  den
+        //  Rohbytes**, -- **und  das  ist  Little-Endian  `1`**, --
+        // **und  das  ist  Held  eins**, -- **und  der  Decoder  meldete
+        //  vorher  eine  leere  Party**, -- **weil  `party_size`  im
+        //  Spiel  fehlt  und  ein  fehlendes  Groessenfeld  die
+        //  vorhandenen  Bytes  nicht  verwerfen  darf.**
+        ReadStartParty(database.Data);
+
         // **Und  die  Helden  kommen  mit  ihren  gelernten
         //  Faehigkeiten  in  den  Zustand.**
         //
@@ -2311,6 +2326,75 @@ ReadString(entry, "name", v => werte.Name = v);
 
         pSet(liste[index].AsInt32());
         return true;
+    }
+
+    /// <summary>
+    /// And the starting party out of the bank's system chunk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the only writer of <c>PartyMemberIds</c> is the
+    /// interpreter's <c>11110</c></strong>, -- <strong>and this game
+    /// writes it in none of its seven hundred and forty-three maps</strong>,
+    /// -- <strong>so the running game had no party at all</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And the reference reads it from
+    /// <c>lcf::Data::system.party</c></strong>, -- <strong>and
+    /// <c>ChunkSystem</c> field <c>0x16</c> is an array of
+    /// <c>int16</c></strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And an entry the bank does not carry is skipped</strong>,
+    /// -- <strong>because a party of actors the database does not
+    /// define is not a party the game wrote</strong>.
+    /// </para>
+    /// </remarks>
+    private void ReadStartParty(Godot.Collections.Dictionary pDatabase)
+    {
+        if (Simulation.PartyMemberIds.Count > 0)
+        {
+            return;
+        }
+
+        if (pDatabase == null
+            || !pDatabase.TryGetValue("system", out var rawSystem)
+            || rawSystem.VariantType != Godot.Variant.Type.Dictionary)
+        {
+            return;
+        }
+
+        if (!rawSystem.AsGodotDictionary().TryGetValue("party",
+                out var rawParty)
+            || rawParty.VariantType != Godot.Variant.Type.Array)
+        {
+            return;
+        }
+
+        foreach (var raw in rawParty.AsGodotArray())
+        {
+            var held = raw.AsInt32();
+            if (held < 1 || held > GameSimulationState.MaxActorId
+                || Simulation.FindActorValues(held) == null)
+            {
+                Simulation.AddDiagnostic(
+                    "RM2K the starting party names actor " + held
+                    + ", which the database does not define, so it"
+                    + " is skipped");
+                continue;
+            }
+
+            // **Und  vier  sind  das  Format** -- **und
+            //  `MaxPartyMembers`  ist  liblcfs  Zahl.**
+            if (Simulation.PartyMemberIds.Count
+                >= UniversalRPG.Rm2k.Simulation.GameSimulationState
+                    .MaxPartyMembers)
+            {
+                break;
+            }
+
+            Simulation.PartyMemberIds.Add(held);
+        }
     }
 
     /// <summary>And an int field into a setter, when the bank has it.</summary>
