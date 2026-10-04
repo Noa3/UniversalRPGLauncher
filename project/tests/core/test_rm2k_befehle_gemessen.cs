@@ -168,6 +168,35 @@ public partial class TestRm2kBefehleGemessen : TestBase
             "**and the camera data numbers are gone** -- and my"
                 + " first attempt read the bytes by hand and"
                 + " found camera records");
+
+        // **Und  damit  ist  die  Antwort  auf  die  zwei  offenen
+        //  Befehle  eine  Messung  und  kein  Aufschub.**
+        //
+        // **Und  liblcfs  Befehlsnummern  fuer  eine  Truppenseite
+        //  sind**:
+        //
+        // <code>
+        /// 10210  Attack
+        /// 10220  Skill
+        /// 10230  Subskill
+        /// </code>
+        //
+        // **Und  dieses  Spiel  schreibt  keinen  davon  ausser  den
+        //  ersten  beiden.**
+        AssertEq(0, zaehler.TryGetValue(10230, out var teil2)
+                ? teil2 : 0,
+            "**and 10230, Subskill, never appears** -- and no"
+                + " subskill selection has to be built for this"
+                + " game, because the game never asks for one");
+
+        // **Und  Gegenstand  und  Spezial  stehen  in  keiner  der
+        //  hundertfuenf  Seiten.**
+        AssertEq(10, zaehler.Count,
+            "**and exactly ten distinct commands exist across the"
+                + " hundred and five troop pages** -- and the"
+                + " ones the host does not execute are absent from"
+                + " the game, so implementing them would be code"
+                + " for nothing rather than a missing feature");
     }
 
     private static int ReadInt16(byte[] pDaten, ref int pOff)
