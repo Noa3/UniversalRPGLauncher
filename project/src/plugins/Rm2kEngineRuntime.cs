@@ -370,6 +370,96 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         });
     }
 
+    /// <summary>
+    /// And where this game's slots live.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is under the game's own directory and not in the
+    /// engine's</strong>, -- <strong>because a launcher that keeps
+    /// saves beside the game is a launcher the player can find
+    /// again</strong>.
+    /// </para>
+    /// </remarks>
+    public string SaveDirectory
+    {
+        get
+        {
+            var root = ResolveGameDirectory();
+            return System.IO.Path.Combine(root ?? ".", "Save");
+        }
+    }
+
+    /// <summary>
+    /// And it writes one slot.
+    /// </summary>
+    /// <param name="pSlot">The slot name.</param>
+    /// <param name="pError">Why not, and empty on success.</param>
+    /// <returns>Whether the slot was written.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the codec has had <c>TryWriteFile</c> all along</strong>,
+    /// -- <strong>and nothing called it</strong>, -- <strong>and the
+    /// runtime only exported a string into memory</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And a save the player cannot reach is a save that does
+    /// not exist</strong>.
+    /// </para>
+    /// </remarks>
+    public bool TrySaveSlot(string pSlot, out string pError)
+    {
+        pError = "";
+        var root = ResolveGameDirectory();
+        if (string.IsNullOrEmpty(root))
+        {
+            pError = "the runtime cannot resolve the game directory,"
+                + " and a slot beside a game needs one";
+            return false;
+        }
+
+        System.IO.Directory.CreateDirectory(SaveDirectory);
+        return Rm2kSimulationSaveCodec.TryWriteFile(SaveDirectory,
+            pSlot, Simulation, out pError);
+    }
+
+    /// <summary>
+    /// And it reads one slot.
+    /// </summary>
+    /// <param name="pSlot">The slot name.</param>
+    /// <param name="pError">Why not, and empty on success.</param>
+    /// <returns>Whether the slot was read.</returns>
+    public bool TryLoadSlot(string pSlot, out string pError)
+    {
+        pError = "";
+        return Rm2kSimulationSaveCodec.TryReadFile(SaveDirectory,
+            pSlot, Simulation, out pError);
+    }
+
+    /// <summary>
+    /// And the slots that exist.
+    /// </summary>
+    /// <returns>The slot names, without their extension.</returns>
+    public System.Collections.Generic.List<string> SaveSlots()
+    {
+        var slots = new System.Collections.Generic.List<string>();
+        if (string.IsNullOrEmpty(ResolveGameDirectory())
+            || !System.IO.Directory.Exists(SaveDirectory))
+        {
+            return slots;
+        }
+
+        foreach (var datei in System.IO.Directory.GetFiles(
+            SaveDirectory, "*.json"))
+        {
+            slots.Add(System.IO.Path.GetFileNameWithoutExtension(
+                datei));
+        }
+
+        slots.Sort(StringComparer.Ordinal);
+        return slots;
+    }
+
     public PluginOperationResult SetDebugToolsEnabled(bool pEnabled)
     {
         _debugToolsEnabled = pEnabled;
