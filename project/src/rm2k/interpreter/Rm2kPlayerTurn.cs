@@ -107,6 +107,64 @@ public sealed class Rm2kPlayerTurn
             return _scheduler.CheckActionEvent();
         }
 
+        // **Und  jetzt  die  Menuetaste** -- **und  sie  gehoert  vor
+        //  die  Bewegung**, -- **weil  die  Referenz  sie  an  erster
+        //  Stelle  behandelt.**
+        //
+        // **Und  die  Reihenfolge  kommt  aus  EasyRPG Players
+        //  `Game_Player::UpdateNextMovementAction`:**
+        //
+        // <code>
+        /// if (Game_Map::GetInterpreter().IsRunning()) { SetMenuCalling(false); return; }
+        /// if (IsPaused() || IsMoveRouteOverwritten() || Game_Message::IsMessageActive()) { return; }
+        /// ...
+        /// if (IsMenuCalling()) {
+        ///     SetMenuCalling(false);
+        ///     ResetAnimation();
+        ///     game_system->SePlay(game_system->GetSystemSE(SFX_Decision));
+        ///     Game_Map::GetInterpreter().RequestMainMenuScene();
+        ///     return;
+        /// }
+        /// </code>
+        //
+        // **Und  `RequestMainMenuScene`  ist  genau  das,  was  der
+        //  Interpreter  hier  fuer  `11910`  bereits  tut**, -- **und
+        //  damit  ist  der  Weg  der  Taste  derselbe  Weg  des
+        //  Befehls  und  nicht  ein  zweiter.**
+        if (pAction == Rm2kInputAction.Menu)
+        {
+            if (_scheduler.ActiveInterpreterCount > 0
+                || _state.WaitingFor
+                    != GameSimulationState.WaitReason.None)
+            {
+                // **Und  eine  laufende  Seite  bricht  den  Menueaufruf
+                //  ab** -- **denn  die  Referenz  setzt  das  Anfordern
+                //  zurueck  und  kehrt  zurueck.**
+                return false;
+            }
+
+            if (_state.IsPaused || _state.IsMenuOpen)
+            {
+                return false;
+            }
+
+            if (!_state.AllowMenu)
+            {
+                _state.AddDiagnostic(
+                    "RM2K the menu key was pressed and the game"
+                    + " forbade the menu, from 11960");
+                return false;
+            }
+
+            _state.IsMainMenuActive = true;
+            _state.WaitingFor =
+                GameSimulationState.WaitReason.MainMenuOpen;
+            _state.AddDiagnostic(
+                "RM2K the menu key opened the main menu, the same"
+                + " request 11910 makes");
+            return true;
+        }
+
         var (deltaX, deltaY) = ToStep(pAction);
         if (deltaX == 0 && deltaY == 0)
         {

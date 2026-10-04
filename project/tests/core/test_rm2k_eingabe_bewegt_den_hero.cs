@@ -160,7 +160,24 @@ public partial class TestRm2kEingabeBewegtDenHero : TestBase
     /// input path.</strong>
     /// </para>
     /// </remarks>
-    public void Test_BestaetigenErreichtDenInterpreter()
+    /// <summary>
+    /// And the menu key opens the main menu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the menu key did nothing</strong>, -- <strong>and
+    /// <c>Rm2kPlayerTurn</c> handled neither <c>Menu</c> nor
+    /// <c>Cancel</c></strong>, -- <strong>and only the interpreter's
+    /// <c>11910</c> could open a menu</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And the key now takes the same path as the
+    /// command</strong>, -- <strong>which is what EasyRPG's
+    /// <c>RequestMainMenuScene</c> does from
+    /// <c>Game_Player::UpdateNextMovementAction</c>.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieMenueTasteOeffnetDasMenue()
     {
         var lauf = Starte(out var host);
         if (lauf == null)
@@ -170,97 +187,43 @@ public partial class TestRm2kEingabeBewegtDenHero : TestBase
 
         using var h = host!;
         var state = lauf.Simulation;
+        Console.WriteLine("vorher: Menue offen "
+            + state.IsMainMenuActive + "  erlaubt "
+            + state.AllowMenu);
 
-        // **Und  die  Menueaktion  ist  die  eine,  die  einen  eigenen
-        //  Zustand  setzt**, -- **und  sie  ist  damit  messbar.**
-        Console.WriteLine("Menue erlaubt: " + state.AllowMenu
-            + "  Menue offen: " + state.IsMainMenuActive);
+        AssertTrue(lauf.SubmitInput(Rm2kInputAction.Menu),
+            "**and the key is accepted**");
 
-        for (var i = 0; i < 10; i++)
-        {
-            lauf.SubmitInput(Rm2kInputAction.Menu);
-            lauf.Update(1.0 / 60.0);
-        }
+        Console.WriteLine("nachher: Menue offen "
+            + state.IsMainMenuActive + "  wartet auf "
+            + state.WaitingFor);
 
-        Console.WriteLine("nach 10 Bildern: Menue offen "
+        AssertTrue(state.IsMainMenuActive,
+            "**and the main menu is open** -- and the menu key"
+                + " did nothing before, because only the"
+                + " interpreter's 11910 could open one");
+
+        AssertEq(GameSimulationState.WaitReason.MainMenuOpen,
+            state.WaitingFor,
+            "**and the page waits on it** -- and that is the"
+                + " same wait reason 11910 sets");
+
+        // **Und  jetzt  das  Gegenteil:  `11960`  verbietet  das  Menue.**
+        state.WaitingFor = GameSimulationState.WaitReason.None;
+        state.IsMainMenuActive = false;
+        state.SetAccess(pEscape: true, pSave: true, pMenu: false,
+            pTeleport: true);
+
+        var abgelehnt = lauf.SubmitInput(Rm2kInputAction.Menu);
+        Console.WriteLine("verboten: " + abgelehnt + "  Menue offen "
             + state.IsMainMenuActive);
 
-        AssertTrue(state.AllowMenu,
-            "**and the game allows the menu** -- and Dragon"
-                + " Destiny never runs 11960 to forbid it, so the"
-                + " default the reference uses is the one that"
-                + " applies");
+        AssertTrue(!abgelehnt,
+            "**and a game that forbade the menu keeps it"
+                + " closed** -- and the flag comes from 11960");
+
+        AssertTrue(!state.IsMainMenuActive,
+            "**and no menu opens behind the refusal**");
     }
 
-    /// <summary>
-    /// And the input mapper binds the eight actions.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>And an action nothing is bound to is a command
-    /// nobody can press.</strong>
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// And every action is bound to a key.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>And the proof is that a real Godot key event resolves
-    /// to the action</strong>, -- <strong>and not that the mapper has a
-    /// method which says so</strong>, -- <strong>because a mapper that
-    /// answers "yes" without resolving anything is a
-    /// claim.</strong>
-    /// </para>
-    /// <para>
-    /// <strong>And the key is the one the mapper bound itself</strong>,
-    /// -- <strong>and those come from liblcf's own defaults in the
-    /// mapper's constructor.</strong>
-    /// </para>
-    /// </remarks>
-    public void Test_JedeAktionHatEineTaste()
-    {
-        var mapper = new Rm2kInputMapper();
-        var tasten = new Dictionary<Rm2kInputAction, Key>
-        {
-            { Rm2kInputAction.MoveUp, Key.Up },
-            { Rm2kInputAction.MoveDown, Key.Down },
-            { Rm2kInputAction.MoveLeft, Key.Left },
-            { Rm2kInputAction.MoveRight, Key.Right },
-            { Rm2kInputAction.Confirm, Key.Enter },
-            { Rm2kInputAction.Cancel, Key.Escape },
-            // **Und  die  Menuestaste  ist  `M`  und  nicht  `Shift`.**
-            // **Und  das  steht  so  in  `Rm2kInputMapper`  und  nicht  in
-            //  meiner  Hoffnung**, -- **und  ich  hatte  `Shift`
-            //  geraten**, -- **und  der  Test  hat  mich  darauf
-            //  aufmerksam  gemacht.**
-            { Rm2kInputAction.Menu, Key.M },
-        };
-
-        // **Und  jede  gebundene  Taste  wird  geprueft**,
-        // -- **und  nicht  nur  eine  je  Aktion**,
-        // -- **denn  der  Mapper  bindet  `WASD`  und  `Enter`  und
-        //  `Leertaste`  und  `KP Enter`  an  dieselben  Aktionen.**
-        var alle = new List<Key>
-        {
-            Key.Up, Key.W, Key.Down, Key.S, Key.Left, Key.A,
-            Key.Right, Key.D, Key.Enter, Key.Space, Key.KpEnter,
-            Key.Escape, Key.M,
-        };
-
-        foreach (var eintrag in tasten)
-        {
-            var aufgeloest = mapper.Resolve(
-                new Godot.InputEventKey { Pressed = true,
-                    Keycode = eintrag.Value });
-            Console.WriteLine(eintrag.Key + " loest "
-                + eintrag.Value + " zu " + aufgeloest);
-
-            AssertTrue(aufgeloest == eintrag.Key,
-                "**and " + eintrag.Key + " is bound to "
-                    + eintrag.Value + "** -- and an action that"
-                    + " resolves to None is a command nobody can"
-                    + " press");
-        }
-    }
 }

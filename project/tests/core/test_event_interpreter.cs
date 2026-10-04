@@ -309,10 +309,34 @@ public partial class TestEventInterpreter : TestBase
 		var scheduler = new Rm2kEventScheduler(state);
 		var turn = new Rm2kPlayerTurn(state, scheduler);
 		AssertFalse(turn.Apply(Rm2kInputAction.None), "no action does nothing");
-		AssertFalse(turn.Apply(Rm2kInputAction.Menu), "the menu action is not a map step");
 		AssertFalse(turn.Apply(Rm2kInputAction.Cancel), "cancel is not a map step");
 		AssertEq(state.MapX, 0);
 		AssertEq(state.MapY, 0);
+
+		// **Und  die  Menueaktion  ist  auch  kein  Kartenschritt**,
+		// -- **und  sie  ist  seit  diesem  Schritt  auch  keine
+		//  Leere  mehr.**
+		//
+		// **Und  der  Test  behauptete  "die  Menueaktion  ist  kein
+		//  Kartenschritt"  und  meinte  damit  "sie  tut  gar
+		//  nichts"** -- **und  das  war  eine  Behauptung  ueber  eine
+		//  Luecke  und  nicht  ueber  eine  Regel.**
+		//
+		// **Und  sie  oeffnet  jetzt  das  Menue**, -- **denn
+		//  EasyRPGs  `Game_Player::UpdateNextMovementAction` ruft  bei
+		//  `IsMenuCalling()`  `RequestMainMenuScene`  auf** -- **und
+		//  genau  das  macht  der  Interpreter  fuer  `11910`.**
+		var menu = turn.Apply(Rm2kInputAction.Menu);
+		Console.WriteLine("Menue: " + menu + "  offen "
+			+ state.IsMainMenuActive + "  wartet auf "
+			+ state.WaitingFor);
+
+		AssertEq(state.MapX, 0);
+		AssertEq(state.MapY, 0);
+		AssertTrue(state.IsMainMenuActive,
+			"**and the menu action opens the menu** -- and it"
+				+ " is still not a map step, and the hero did not"
+				+ " move one tile because of it");
 	}
 
 	public void Test_EventPageSelectorUsesHighestEligiblePage()
