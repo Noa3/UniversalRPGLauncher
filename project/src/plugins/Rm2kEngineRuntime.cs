@@ -1678,6 +1678,57 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     /// </remarks>
     public Rm2kZugziel AktuellesZiel { get; } = new();
 
+    /// <summary>
+    /// And the skill a hero has chosen to cast.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it lives on the runtime and not in the
+    /// state</strong>, -- <strong>because the state is what a save
+    /// writes and a skill the player picked mid turn is not part of
+    /// one</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And an unchosen skill is a refusal</strong>, -- <strong>and
+    /// not the first skill the bank happens to list</strong>.
+    /// </para>
+    /// </remarks>
+    public int? GewaehlteFaehigkeit { get; set; }
+
+    /// <summary>
+    /// And the skill's own entry, read from the bank.
+    /// </summary>
+    /// <returns>
+    /// The entry, or null when no skill was chosen or the bank does
+    /// not define it.
+    /// </returns>
+    public Godot.Collections.Dictionary? AktiveFaehigkeit()
+    {
+        if (!GewaehlteFaehigkeit.HasValue || DatabaseData == null
+            || !DatabaseData.TryGetValue("skills", out var rawSkills)
+            || rawSkills.VariantType != Godot.Variant.Type.Array)
+        {
+            return null;
+        }
+
+        foreach (var roh in rawSkills.AsGodotArray())
+        {
+            if (roh.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+
+            var eintrag = roh.AsGodotDictionary();
+            if (eintrag.TryGetValue("id", out var rohId)
+                && rohId.AsInt32() == GewaehlteFaehigkeit.Value)
+            {
+                return eintrag;
+            }
+        }
+
+        return null;
+    }
+
     public bool FuehreZugAus(
         Rm2kBefehlswahl.Befehl pBefehl, int pGegnerIndex,
         out string pFehler)
@@ -1784,12 +1835,84 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 BeendeKampf(false);
                 return true;
 
+            case Rm2kBefehlswahl.Befehl.Faehigkeit:
+            {
+                // **Und  jetzt  eine  Faehigkeit  statt  eines
+                //  Schlages.**
+                //
+                // **Und  `10220`  steht  auf  82  der  105
+                //  Truppenseiten**, -- **und  das  Spiel  schreibt
+                //  kein  einziges  Kostenfeld**, -- **und  darum  ist
+                //  die  Kostenfrage  hier  keine.**
+                //
+                // **Und  die  Reichweite  entscheidet  das  Ziel** --
+                // **und  nicht  ein  Flag,  das  der  Aufrufer
+                //  geraten  hat.**
+                var skill = AktiveFaehigkeit();
+                if (skill == null)
+                {
+                    pFehler = "no skill is chosen, and casting a"
+                        + " skill this runtime invented would be a"
+                        + " rule this repository made up";
+                    return false;
+                }
+
+                var scope = skill.TryGetValue("scope", out var rohScope)
+                    ? rohScope.AsInt32()
+                    : Rm2kFertigkeitZiel.ScopeEnemy;
+
+                if (!Rm2kFertigkeitKosten.Bezahlbar(skill,
+                        Simulation.GetActorCurrentSp(
+                            Simulation.PartyMemberIds.Count > 0
+                                ? Simulation.PartyMemberIds[0] : 1),
+                        Simulation.FindActorValues(
+                            Simulation.PartyMemberIds.Count > 0
+                                ? Simulation.PartyMemberIds[0] : 1)
+                            ?.BaseMaxSp ?? 0))
+                {
+                    pFehler = "the hero cannot pay for '"
+                        + skill["name"].AsString() + "'";
+                    return false;
+                }
+
+                if (Rm2kFertigkeitZiel.BrauchtZiel(scope))
+                {
+                    if (!AktuellesZiel.HatGegner
+                        && !AktuellesZiel.HatHeld)
+                    {
+                        pFehler = "the skill '"
+                            + skill["name"].AsString()
+                            + "' has the scope "
+                            + Rm2kFertigkeitZiel.Name(scope)
+                            + " and needs a target that has not"
+                            + " been chosen";
+                        return false;
+                    }
+                }
+                else if (!AktuellesZiel.WaehleGruppe(Simulation, scope))
+                {
+                    pFehler = "the skill '"
+                        + skill["name"].AsString() + "' has the scope "
+                        + Rm2kFertigkeitZiel.Name(scope)
+                        + " and there is nobody to aim at";
+                    return false;
+                }
+
+                Simulation.BattlePhase = 2;
+                Rm2kZugfolge.Ruecke(Simulation);
+                Simulation.AddDiagnostic(
+                    "RM2K the hero casts '" + skill["name"].AsString()
+                    + "' with the scope "
+                    + Rm2kFertigkeitZiel.Name(scope));
+                return true;
+            }
+
             default:
                 pFehler = "the command "
-                    + pBefehl + " needs a target or a selection this"
-                    + " runtime does not ask for yet, and a command"
-                    + " that silently does nothing is worse than"
-                    + " one that is refused";
+                    + pBefehl + " needs a selection this runtime does"
+                    + " not ask for yet, and a command that silently"
+                    + " does nothing is worse than one that is"
+                    + " refused";
                 return false;
         }
     }
