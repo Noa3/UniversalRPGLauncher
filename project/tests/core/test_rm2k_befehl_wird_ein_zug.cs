@@ -200,9 +200,35 @@ public partial class TestRm2kBefehlWirdEinZug : TestBase
 
         // **Und  jetzt  der  Gegenbeweis**:  -- **mit  Ziel  ist  es
         //  ein  Zug.**
+        //
+        // **Und  das  Ziel  muss  vorher  gewaehlt  werden** --
+        // **und  genau  das  ist  neu** -- **denn  vorher  genuegte  eine
+        //  nackte  Zahl  an  der  Parameterstelle.**
+        //
+        // **Und  die  Zahl  allein  konnte  nicht  sagen,  ob  sie  ein
+        //  Gegner-Index  oder  eine  Helden-ID  war** -- **und  beide
+        //  Seiten  beginnen  bei  einer  anderen  Zahl.**
+        var gewaehlt = lauf.AktuellesZiel.WaehleGegner(
+            state, 0, out var zielFehler);
+        Console.WriteLine("Ziel gewaehlt: " + gewaehlt + " -> "
+            + zielFehler + "  Gegner "
+            + lauf.AktuellesZiel.GegnerIndex);
+        AssertTrue(gewaehlt,
+            "**and the target is chosen before the command**");
+
+        AssertTrue(lauf.AktuellesZiel.HatGegner,
+            "**and the choice says it is a monster** -- and a"
+                + " bare index could not have said that, because"
+                + " hero ids start at one and troop indices at"
+                + " zero");
+
+        AssertEq(0, lauf.AktuellesZiel.GegnerIndex,
+            "**and it is the troop's first member**");
+
         var hp = state.MonsterHp(0);
         var getroffen = lauf.FuehreZugAus(
-            Rm2kBefehlswahl.Befehl.Angriff, 0, out var grund2);
+            Rm2kBefehlswahl.Befehl.Angriff,
+            lauf.AktuellesZiel.GegnerIndex, out var grund2);
         Console.WriteLine("mit Ziel: " + getroffen + " -> "
             + grund2 + "  " + hp + " -> " + state.MonsterHp(0)
             + "  Turn " + state.BattleTurn);

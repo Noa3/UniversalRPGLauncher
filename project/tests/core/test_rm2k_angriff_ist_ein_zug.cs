@@ -123,8 +123,21 @@ public partial class TestRm2kAngriffIstEinZug : TestBase
         Console.WriteLine("Gegner 0 vor dem Schlag: " + vorher
             + " hp, " + vorher + "/" + state.MonsterMaxHp(0));
 
+        // **Und  hier  stand  eine  nackte  Null  an  der
+        //  Parameterstelle**, -- **und  eine  nackte  Zahl  weiss  nicht,
+        //  ob  sie  ein  Gegner-Index  oder  eine  Helden-ID  ist.**
+        //
+        // **Und  darum  wird  das  Ziel  jetzt  vorher  benannt.**
+        lauf.AktuellesZiel.WaehleGegner(state, 0, out var zielFehler);
+        Console.WriteLine("Ziel: Gegner " + lauf.AktuellesZiel.HatGegner
+            + "  Index " + lauf.AktuellesZiel.GegnerIndex
+            + "  -> " + zielFehler);
+        AssertTrue(lauf.AktuellesZiel.HatGegner,
+            "**and the aim is a monster and says so**");
+
         var ok = lauf.FuehreZugAus(
-            Rm2kBefehlswahl.Befehl.Angriff, 0, out var grund);
+            Rm2kBefehlswahl.Befehl.Angriff,
+            lauf.AktuellesZiel.GegnerIndex, out var grund);
         Console.WriteLine("schlag: " + ok + " -> " + grund
             + "  hp jetzt " + state.MonsterHp(0)
             + "  Turn " + state.BattleTurn

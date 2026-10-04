@@ -1661,6 +1661,23 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     /// a turn.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// And what the next command is aimed at.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a bare <c>int</c> cannot say whether it is a monster
+    /// index or a hero id</strong>, -- <strong>because troop indices
+    /// start at zero and hero ids at one</strong>.
+    /// </para>
+    /// <para>
+    /// <strong>And this lives on the runtime and not in the state</strong>,
+    /// -- <strong>because the state is what a save writes and the aim is
+    /// not part of a save</strong>.
+    /// </para>
+    /// </remarks>
+    public Rm2kZugziel AktuellesZiel { get; } = new();
+
     public bool FuehreZugAus(
         Rm2kBefehlswahl.Befehl pBefehl, int pGegnerIndex,
         out string pFehler)
@@ -1693,8 +1710,27 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     return false;
                 }
 
-                if (!Rm2kZielwahl.Waehle(
-                        Simulation, pGegnerIndex, false, out var zielFehler))
+                // **Und  hier  stand  eine  nackte  Zahl.**
+                //
+                // **Und  ein  Troop-Index  beginnt  bei  null  und  eine
+                //  Helden-ID  bei  eins** -- **und  ein  Schlag  auf  Index
+                //  eins  haette  ohne  Fehlermeldung  die  falsche  Seite
+                //  getroffen.**
+                //
+                // **Und  darum  steht  die  Zielwahl  in  einem  benannten
+                //  Objekt**, -- **und  das  Objekt  weiss,  ob  es  einen
+                //  Gegner  oder  einen  Helden  meint.**
+                var gezielt = pGegnerIndex;
+                if (!AktuellesZiel.HatGegner)
+                {
+                    pFehler = "no target is chosen, and a strike at"
+                        + " a target this runtime invented would be"
+                        + " a rule this repository made up";
+                    return false;
+                }
+
+                if (!Rm2kZielwahl.Waehle(Simulation, gezielt, false,
+                        out var zielFehler))
                 {
                     pFehler = zielFehler;
                     return false;
