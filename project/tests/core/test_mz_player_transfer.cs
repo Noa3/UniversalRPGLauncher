@@ -157,7 +157,22 @@ partial class TestMzPlayerTransfer : TestBase
             + $" turn happened: {done}");
     }
 
-    public void Test_ATransferInABattleOrDuringAMessageIsRefusedAndNothingIsReserved()
+    /// <summary>
+    /// And a transfer in a battle or during a message is <b>held</b>, not
+    /// refused.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the engine's answer is a false return, and a false
+    /// return is a wait.</strong>  Measured in the game's own
+    /// <c>rmmz_objects.js</c>:
+    /// <c>Game_Interpreter.prototype.command201</c> begins
+    /// <c>if ($gameParty.inBattle() || $gameMessage.isBusy()) { return
+    /// false; }</c>, **and <c>executeCommand</c> does
+    /// <c>if (!this[methodName](command.parameters)) { return false; }
+    /// this._index++;</c>** -- **the index only moves on a true one.**
+    /// <strong>A refusal would end the page; the engine holds it.</strong>
+    /// </remarks>
+    public void Test_ATransferInABattleOrDuringAMessageWaitsAndNothingIsReserved()
     {
         // **`if ($gameParty.inBattle() || $gameMessage.isBusy()) return
         // false;` is the first line of the command.** In a battle or with a
@@ -184,10 +199,34 @@ partial class TestMzPlayerTransfer : TestBase
         battleFacts.EnterBattle();
         battle.Run(battleActions, battleFacts);
 
+        //
+        // **Und die Antwort der Engine ist `Waiting`, und nicht
+        // `Refused` -- und das ist an der Quelle gemessen, woher diese
+        // Seite kommt (`CamelliaCoronation-Win/js/rmmz_objects.js`):**
+        //
+        // ```js
+        // Game_Interpreter.prototype.command201 = function(params) {
+        //     if ($gameParty.inBattle() || $gameMessage.isBusy()) {
+        //         return false;
+        //     }
+        // ```
+        //
+        // **Und was `false` bedeutet, steht eine Ebene hoeher:**
+        // `executeCommand` macht `if (!this[methodName](command
+        // .parameters)) { return false; } this._index++;` -- **der Index
+        // rueckt nur bei `true` weiter**, **und dieselbe Seite wartet im
+        // naechsten Bild erneut.**
+        //
+        // **Ein Test, der hier `Refused` verlangt, prueft eine
+        // Erfindung.**  **Und gemessen war der Unterschied an Camellias
+        // Map005 Ereignis 4: mit `Refuse` blieb die Seite bei Index 174
+        // von 176 stehen, **und mit `WaitFor` lief sie durch.**
         AssertEq(
-            battle.Stopped, MzStep.Refused,
-            "and the run is refused rather than finished or waiting, because"
-            + $" the engine's answer is neither; it is {battle.Stopped}");
+            battle.Stopped, MzStep.Waiting,
+            "and the page waits rather than being refused, because the"
+            + " engine's answer is a false return and the index only"
+            + " moves on a true one"
+            + $" -- and it is {battle.Stopped}");
         AssertEq(
             battlePlayer.MapId, 1,
             "and the player has not moved, because nothing was reserved; they"
@@ -218,9 +257,10 @@ partial class TestMzPlayerTransfer : TestBase
         message.Run(messageActions, duringMessage);
 
         AssertEq(
-            message.Stopped, MzStep.Refused,
-            "and a message on the screen refuses it the same way, because the"
-            + $" engine tests both; it is {message.Stopped}");
+            message.Stopped, MzStep.Waiting,
+            "and a message on the screen holds it the same way, because the"
+            + " engine tests both with the same false return"
+            + $" -- and it is {message.Stopped}");
         AssertEq(
             duringMessage.Player.MapId, 1,
             $"and the player is still where they were; they are on"

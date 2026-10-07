@@ -83,6 +83,39 @@ public sealed class MzMapRenderer
     /// that guessed the single-letter name found a file that does not
     /// exist for every map but one.</strong>
     /// </remarks>
+    /// <summary>And every spelling a tileset image carries, in one list.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And MZ and MV do not agree on the suffix.</strong> Measured
+    /// on this machine: <c>CamelliaCoronation</c> (MZ) writes
+    /// <c>img/tilesets/Overworld.png_</c>, and <c>LegalTruck</c> (MV)
+    /// writes <c>img/tilesets/Dungeon_A1.rpgmvp</c> for the very same
+    /// concept. <strong>A reader that appends <c>.png_</c> and stops
+    /// finds an MZ game and no MV game at all</strong>, and an MV run
+    /// then starts and paints nothing, which looks like a broken
+    /// runtime rather than a missing suffix.
+    /// </para>
+    /// <para>
+    /// <strong>And both spellings are tried, in the order the games
+    /// write them</strong>, because which one exists is a fact about the
+    /// disk and not something to guess from the engine name.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> TilesetFileNames(string pName)
+    {
+        if (pName.Length == 0)
+        {
+            return Array.Empty<string>();
+        }
+        if (pName.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || pName.EndsWith(".png_", StringComparison.OrdinalIgnoreCase)
+            || pName.EndsWith(".rpgmvp", StringComparison.OrdinalIgnoreCase))
+        {
+            return new[] { pName };
+        }
+        return new[] { pName + ".rpgmvp", pName + ".png_", pName + ".png" };
+    }
+
     public static string TilesetFileName(string pName)
     {
         return pName.EndsWith(".png", StringComparison.OrdinalIgnoreCase)

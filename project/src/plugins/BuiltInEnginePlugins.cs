@@ -449,8 +449,41 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
     protected readonly string _runtimeFile;
     protected readonly string _runtimeLabel;
 
-    protected WebRpgPlugin(string pId, string pName, string pGeneration, string pRuntimeFile, string pRuntimeLabel, int pPriority)
-        : base(pId, pName, $"Detection-only {pName} boundary until an embedded JavaScript runtime is available.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing)
+    /// <summary>
+    /// And the capabilities this web engine's own plugin metadata claims.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the word "JavaScript" was the wrong reason to refuse a
+    /// runtime.</strong> This project never executes an imported
+    /// <c>.js</c>, a plugin, or <c>Game.exe</c>: the MV/MZ games are
+    /// <em>read as data</em> -- <c>Map*.json</c>, <c>System.json</c>,
+    /// the encrypted <c>img/*.png_</c> -- and their maps, events,
+    /// commands and pictures are reimplemented natively in
+    /// <c>src/mz</c>. <strong>A runtime built out of our own reader needs
+    /// no JavaScript engine, and advertising
+    /// <c>Detection | Parsing</c> only was a statement about a boundary
+    /// that does not exist here.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the MZ runtime had it already and could not use it.</strong>
+    /// <c>MzEngineRuntime</c> initialises, runs, executes event commands
+    /// and paints a real encrypted tileset; a test on
+    /// <c>CamelliaCoronation</c> measured <c>672x864</c> with 310
+    /// distinct colours. <strong>Only the advertised bit was missing.</strong>
+    /// </para>
+    /// </remarks>
+    protected WebRpgPlugin(
+        string pId,
+        string pName,
+        string pGeneration,
+        string pRuntimeFile,
+        string pRuntimeLabel,
+        int pPriority,
+        PluginCapability pCapabilities = PluginCapability.Detection | PluginCapability.Parsing)
+        : base(pId, pName,
+            $"Native {pName} runtime over the game's own JSON and encrypted image data; no imported JavaScript is executed.",
+            pGeneration, pPriority, pCapabilities)
     {
         _runtimeFile = pRuntimeFile;
         _runtimeLabel = pRuntimeLabel;
@@ -529,7 +562,16 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
 
 public sealed class RpgMakerMvPlugin : WebRpgPlugin
 {
-    public RpgMakerMvPlugin() : base(EnginePluginIds.RpgMakerMv, "RPG Maker MV", "mv", "rpg_core.js", "js/rpg_core.js", 30) { }
+    public RpgMakerMvPlugin() : base(
+        EnginePluginIds.RpgMakerMv, "RPG Maker MV", "mv", "rpg_core.js", "js/rpg_core.js", 30,
+        // **Und MV wirbt dasselbe Bit wie MZ, weil  es  dieselbe  Laufzeit
+        //  bekommt** -- **und  das  ist  der  Punkt,  an  dem  die  beiden
+        //  Engines  lange  als  zwei  Runtime  behandelt  wurden.**  MV
+        //  nutzt  `*.rpgmvp`  statt  `*.png_`,  und  beides  entschluesselt
+        //  derselbe  Leser;  ein  Lauf  mit  dem  MV-Bit  und  MZ-Bildern
+        //  waere  ein  Spiel,  das  startet  und  eine  leere  Karte
+        //  zeigt.
+        PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime) { }
 
     /// <summary>
     /// Builds the same runtime MZ gets, with the generation named MV.
@@ -723,7 +765,15 @@ public sealed class RpgMakerMzPlugin : WebRpgPlugin
         => PluginResult<IEngineRuntime>.Succeeded(new MzEngineRuntime(
             Metadata.Id, "MZ", pContext.Game));
 
-    public RpgMakerMzPlugin() : base(EnginePluginIds.RpgMakerMz, "RPG Maker MZ", "mz", "rmmz_core.js", "js/rmmz_core.js", 30) { }
+    public RpgMakerMzPlugin() : base(
+        EnginePluginIds.RpgMakerMz, "RPG Maker MZ", "mz", "rmmz_core.js", "js/rmmz_core.js", 30,
+        // **Und das Bit steht hier, weil `BuiltInEnginePlugin.Match` den
+        // Status eines Candidates daraus setzt** -- **und ohne dieses Bit
+        // meldet die Erkennung `DetectionOnly`, der Start-Button bleibt
+        // deaktiviert, und der Lauf ist unerreichbar, obwohl das Backend
+        // fertig ist.** `SaveLoad` folgt erst mit einem geprueften
+        // Spielstandformat, `Debugging` mit dem Pause-Overlay fuer MZ.
+        PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime) { }
     private const int MaxSystemJsonBytes = 512 * 1024; // 512 KiB cap
 
     public override EngineDetectionProbe Detect(EngineInspectionContext pContext)

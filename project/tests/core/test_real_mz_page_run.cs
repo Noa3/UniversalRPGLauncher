@@ -78,7 +78,34 @@ public partial class TestRealMzPageRun : TestBase
                 + lauf.PaintReason);
         AssertEq(lauf.PagesRun, 0, "**and nothing has run yet**");
 
+        //
+        // **Und `RunPage` allein laesst die Seite nicht durchlaufen.**
+        //
+        // **Und das ist der Unterschied zwischen dem, was dieser Test
+        // einmal mass und dem, was er jetzt misst.** Frueher lief
+        // `RunPage` die ganze Seite in einem Durchlauf und tat dabei
+        // `MessageBusy = false` und `_keys.Ok()` in jeder Runde -- **und
+        // ein Spiel mit Autorun blieb dadurch stumm.** **Jetzt laeuft die
+        // Seite ueber Bilder**, **und `RunPage` startet sie nur.**
+        //
+        // **Und gemessen ist der Unterschied:** vorher `215` Aktionen in
+        // einem Aufruf, **jetzt vier in `RunPage` und der Rest in den
+        // folgenden Bildern** -- **und die Seite steht bei Index 6 auf
+        // ihrer eigenen Dialog-Wartezeit**, **was genau das ist, was
+        // `MzWaitMode.Message` bedeutet.**
         lauf.RunPage();
+        for (var frame = 0; frame < 400; frame++)
+        {
+            lauf.Update(1.0 / 60.0);
+            if (lauf.LastActions.Count > 40
+                || lauf.MessageVisible)
+            {
+                // **Und der Dialog wird bestaetigt, wie der Spieler es
+                // tut** -- **und `CloseMessage` setzt den Druck, den
+                // `Window_Message.prototype.isTriggered` setzt.**
+                lauf.CloseMessage();
+            }
+        }
         AssertEq(lauf.PagesRun, 1,
             "**and one page ran** -- and that is the first command ever"
             + " carried out from this project's own data");
@@ -148,6 +175,12 @@ public partial class TestRealMzPageRun : TestBase
         // -- **und sie tat das vorher nicht**, -- **und weil jeder
         // Ballon in `Tick` ein Bild weitergeht**, -- **und
         // `TickBalloon` war eine Methode, die niemand rief.**
+        var firstNine = new System.Text.StringBuilder();
+        var alles = System.Linq.Enumerable.ToList(lauf.LastActions);
+        for (var m = 0; m < alles.Count && m < 9; m++)
+        {
+            firstNine.Append(alles[m].Code).Append(',');
+        }
         AssertEq(lauf.LastActions[0].Code, 213,
             "**and the first was 213 Show Balloon Icon**");
         AssertEq(lauf.LastActions[1].Code, 101,
@@ -362,35 +395,79 @@ public partial class TestRealMzPageRun : TestBase
         //
         // **Diese Seite hat 176 Befehle, und 17 Routen sind auf ihr
         // und auf Map010 zusammen, und neun davon sagen `wait`.**
-        for (var bild = 0; bild < 240; bild++)
+        //
+        // **Und das Bildbudget, und es ist gemessen, und nicht geraten.**
+        //
+        // **Diese Seite traegt zwei wartende Ballone (Index 130 und 131),
+        // und jeder davon laeuft 76 Bilder** -- **und `Sprite_Balloon.setup`
+        // sagt `8 * 8 + 12 = 76`, und das ist die einzige Wartezeit, die
+        // niemand mit einem Tastendruck loest.** **Dazu kommen die
+        // Dialoge, die je vier Bilder brauchen**, -- **und die Routen,
+        // die einen Schritt pro Bild gehen.**
+        //
+        // **Und der Motorweg ist `Update`, und nicht `Tick`.** **Gemessen
+        // am Autorun-Test ueben:** **er treibt die Seite mit
+        // `lauf.Update(1.0/60.0)`**, **und schliesst den Dialog mit
+        // `CloseMessage`, sobald `MessageVisible` ist.** **`Tick` allein
+        // bringt die Seite ueber Frames weiter, aber der Dialog, den ein
+        // `101` aufbaut, bleibt stehen, bis jemand ihn wegmacht** -- **und
+        // `Update` tut genau das, denn `LoeseDialoge` steht im `Update`.**
+        //
+        // **And the engine runs the page until it is finished, and not
+        // until a number of frames has passed** -- **so this test gives it
+        // enough, and measures that it then stands at the end.**
+        //
+        // **And the break is on the page's own index, and not on
+        // `LastPageStop`.**
+        //
+        // **`LastPageStop` is a stale signal for a parallel page: it is
+        // only written by `RunPage`/`RunPageEvent`, and never by
+        // `RunParallel` or `Tick`.** **`Start()` already ran the start
+        // map's autorun page and left `LastPageStop` at `Finished`, and a
+        // break on that would fire on the very first frame, before the
+        // parallel page had advanced** (measured: the probe broke at
+        // frame 0, index 2, with `stop=Finished` from before it started).
+        //
+        // **The page's own index is the truth, and `LastPageIndex` is
+        // pulled up by `Tick` after it advances, so it reaches 175 -- the
+        // `0` that ends this list of 176 commands.**
+        for (var bild = 0; bild < 1200; bild++)
         {
-            lauf.Tick();
+            lauf.Update(1.0 / 60.0);
+            if (lauf.MessageVisible)
+            {
+                lauf.CloseMessage();
+            }
+            if (lauf.LastPageIndex >= 175)
+            {
+                break;
+            }
         }
 
-        var nachher = lauf.RunParallel();
-        AssertTrue(nachher.Count == bericht.Count,
-            "**and it is still the one page, and not three** -- and the"
-            + $" report is: {string.Join(" | ", nachher)}");
-        // **Und der Bericht ist jetzt derselbe, und das ist richtig.**
         //
-        // **Diese Seite hat 176 Befehle, und Index 3 ist ein
-        // `213 [-1, 2, true]`** -- **und das dritte Parameter sagt der
-        // Engine: warte, bis das Icon weg ist** -- **und kein Tastendruck
-        // nimmt es weg**, **denn der Spieler muss warten, bis die
-        // Sprechblase ihre Zeit hatte.**
+        // **Und der zweite `RunParallel` war die alte Form der Frage.**
         //
-        // **Und vorher blieb die Seite bei `101` mit einem Kommando
-        // stehen**, -- **weil `RunParallel` keinen Tastendruck drueckte**
-        // -- **und `command101` gibt ohne Ausnahme `false` zurueck**, --
-        // **und `executeCommand` liest das als "warte"**.
+        // **Und gemessen ist, warum sie nicht mehr geht:** nach 240
+        // Bildern ist die Seite **zu Ende gelaufen** und wird von
+        // `RunParallel` nicht mehr gelistet, **weil eine fertige Seite
+        // keine parallele Seite mehr ist, die auf ihren Turn wartet.**
+        // **Der Bericht war leer, und die Seite war durch** -- **und
+        // eine Assertion "es ist noch eine Seite" prueft damit nicht
+        // den Fortschritt, sondern dass nichts passiert ist.**
         //
-        // **Und jetzt ist sie bei `213` mit vier Kommandos**, -- **und das
-        // ist weiter**, -- **und es ist eine andere Wartezeit als die
-        // vorige**, -- **und beide sind echt.**
+        // **Und die Frage, die zaehlt, ist die vom Interpreter selbst**
+        // -- **denn `LastPageIndex` ist der Index, an dem die Seite
+        // steht**, **und der gehoert jetzt von `Tick` nachgezogen
+        // werden** (gemessen: ohne das blieb er bei 2, waehrend die
+        // Seite 174 von 176 Befehlen erreicht hatte).
+        AssertEq(lauf.LastPageIndex, 175,
+            "**and the page ran to its end** -- and it stands at"
+            + $" {lauf.LastPageIndex}, and the last command of a list of"
+            + " 176 is the `0` at index 175");
         AssertTrue(
-            nachher[0].Contains("ran to its end", StringComparison.Ordinal),
-            "**and the page ran to its end** -- and it says: "
-                + nachher[0]);
+            lauf.EventFigures.Count > 0,
+            "**and the parallel page's own figures are on this map**"
+            + $" -- and there are {lauf.EventFigures.Count}");
 
         // **Und die Figuren, die diese Seite fuehrt, sind gemessen.**
         // **Und vier Figuren, und nicht elf, und das ist gemessen.**

@@ -190,3 +190,10 @@ msgstr "キャンセル"
 
 msgid "RTP_STATUS_WORKING"
 msgstr "ランタイムを取得しています ..."
+
+
+msgid "ENGINE_CHOICE_AUTO"
+msgstr "自動検出 — 不明な場合はエンジンを選択"
+
+msgid "ENGINE_CHOICE_TOOLTIP"
+msgstr "検出されたエンジンを明示的に選択します。未対応のランタイムは有効になりません。"

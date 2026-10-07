@@ -50,6 +50,7 @@ public partial class Main : Control
 	private Label _folderPath = null!;
 	private Label _detailsTitle = null!;
 	private Label _detailsEngine = null!;
+	private OptionButton _engineChoice = null!;
 	private Label _detailsPath = null!;
 	private Label _detailsEvidence = null!;
 	private Label _runtimeState = null!;
@@ -61,7 +62,7 @@ public partial class Main : Control
 	/// seen is a battle that did not happen.
 	/// </summary>
 	private Rm2kBattleView _battleView = null!;
-	private MzAudioOutput _mzAudio = new();
+	private MzAudioOutput _mzAudio = null!;
 	private MzMapPreview _mzMap = new();
 	private VBoxContainer _presentationControls = null!;
 	private Button _dismissMessageButton = null!;
@@ -105,12 +106,15 @@ public partial class Main : Control
 	private Button _submitInputButton = null!;
 	private string _choiceSignature = "";
 	private Button _launchButton = null!;
-	private Button _stopButton = null!;
+	private Rm2kGameScreen _gameScreen = null!;
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
 	private OptionButton _languageMenu = null!;
 	private readonly RenderProfile _renderProfile = new();
 	private readonly Rm2kInputMapper _inputMapper = new();
+	private readonly System.Collections.Concurrent.ConcurrentQueue<string> _rtpProgress = new();
+	private bool _launchInProgress;
+	private volatile bool _closing;
 
 	public Main()
 	{
@@ -125,13 +129,36 @@ public partial class Main : Control
 		ApplyRenderFrameRate(30);
 		LoadLocale();
 		BuildTheme();
-		BuildInterface();
+		// **Und `BuildInterface` baut das Formular genau einmal** -- **und
+		// nicht auch noch, weil `_Ready` ein zweites Mal laeuft.**
+		//
+		// **Und  das  war  kein  Testartefakt,  sondern  der  Grund,  warum
+		// der  Godot-Log  beim  Start  ``Can't add child ... already has
+		// a parent``  schrieb** -- **ein  Control  kann  nicht  an  zwei
+		//  Eltern  haengen,  und  das  Ergebnis  war  eine  halb  gebaute
+		//  Oberflaeche  mit  doppelten  Controls.**
+		//
+		// **Und  es  ist  idempotent  statt  boolean-getrackt**,  --  **denn
+		//  `_Ready`  ist  auch  der  Ort,  an  dem  ein  zurueckgesetzter
+		//  Knoten  neu  aufgebaut  wird,  und  ein  Flag  waere  nach  einem
+		//  `QueueFree`  der  Elemente  falsch  gewesen.**
+		if (GetChildCount() == 0)
+		{
+			BuildInterface();
+		}
 		_library.LoadSettings();
 		_folderPath.Text = _library.RootPath;
 		GetViewport().SizeChanged += ApplyResponsiveLayout;
 		_inputMapper.SetTouchViewport(GetViewportRect().Size);
 		ApplyResponsiveLayout();
 		RefreshLibrary();
+	}
+
+	public override void _ExitTree()
+	{
+		_closing = true;
+		if (IsInsideTree()) GetViewport().SizeChanged -= ApplyResponsiveLayout;
+		_launcher.Shutdown();
 	}
 
 	private void BuildTheme()
@@ -298,8 +325,15 @@ public partial class Main : Control
 		var detailsMargin = new MarginContainer();
 		SetMargins(detailsMargin, 22);
 		detailsPanel.AddChild(detailsMargin);
+		var detailsHost = new VBoxContainer();
+		detailsMargin.AddChild(detailsHost);
+		var detailsScroll = new ScrollContainer();
+		detailsScroll.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
+		detailsScroll.HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled;
+		detailsHost.AddChild(detailsScroll);
 		var details = new VBoxContainer();
-		detailsMargin.AddChild(details);
+		details.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		detailsScroll.AddChild(details);
 		var detailsCaption = new Label();
 		detailsCaption.Text = Tr("LIBRARY_SELECTION");
 		detailsCaption.AddThemeFontSizeOverride("font_size", 14);
@@ -313,6 +347,10 @@ public partial class Main : Control
 		_detailsEngine = new Label();
 		_detailsEngine.AddThemeColorOverride("font_color", ColorMuted);
 		details.AddChild(_detailsEngine);
+		_engineChoice = new OptionButton();
+		_engineChoice.TooltipText = Tr("ENGINE_CHOICE_TOOLTIP");
+		_engineChoice.ItemSelected += SelectDetectedEngine;
+		details.AddChild(_engineChoice);
 		_detailsPath = new Label();
 		_detailsPath.AddThemeColorOverride("font_color", ColorMuted.Darkened(0.08f));
 		_detailsPath.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -422,13 +460,7 @@ public partial class Main : Control
 		_launchButton.AddThemeStyleboxOverride("normal", MakeStyleBox(ColorAccent, ColorAccent, 0, 9));
 		_launchButton.AddThemeStyleboxOverride("hover", MakeStyleBox(ColorAccent.Lightened(0.08f), Colors.White, 1, 9));
 		_launchButton.Pressed += LaunchSelectedGame;
-		details.AddChild(_launchButton);
-		_stopButton = new Button();
-		_stopButton.Text = "Stop runtime";
-		_stopButton.Disabled = true;
-		_stopButton.Pressed += StopActiveRuntime;
-		details.AddChild(_stopButton);
-
+		detailsHost.AddChild(_launchButton);
 		_status = new Label();
 		_status.AddThemeColorOverride("font_color", ColorMuted);
 		_status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -441,6 +473,71 @@ public partial class Main : Control
 		_folderDialog.UseNativeDialog = true;
 		_folderDialog.DirSelected += SetFolder;
 		AddChild(_folderDialog);
+
+		// **Und  das  Spiel  bekommt  das  ganze  Fenster** -- **und  das
+		//  Menue  der  Pause  haengt  an  ihm  und  nicht  mehr  an  einem
+		//  Knopf  in  der  Detailspalte.**
+		_gameScreen = new Rm2kGameScreen();
+		_gameScreen.ContinueRequested += OnGameContinue;
+		_gameScreen.ChoiceSelected += OnGameChoice;
+		_gameScreen.InputSubmitted += OnGameInputSubmitted;
+		_gameScreen.StopRuntimeRequested += StopActiveRuntime;
+		_gameScreen.CloseProgramRequested += () =>
+		{
+			_closing = true;
+			GetTree().Quit();
+		};
+		_gameScreen.LanguageRequested += RequestLocale;
+		_gameScreen.IntegerScaleRequested += pEnabled => _renderProfile.TrySetIntegerScaling(pEnabled);
+		_gameScreen.SetIntegerScale(_renderProfile.IntegerScaling);
+		_gameScreen.SetLanguageSelection(GetSavedLocale());
+		AddChild(_gameScreen);
+	}
+
+	/// <summary>And the language menu of the pause screen persists the same way.</summary>
+	private void RequestLocale(string pLocaleId)
+	{
+		var config = new ConfigFile();
+		config.Load(GameLibrary.SettingsPath);
+		config.SetValue("interface", "locale", pLocaleId);
+		config.Save(GameLibrary.SettingsPath);
+		TranslationServer.SetLocale(pLocaleId == "auto" ? OS.GetLocaleLanguage() : pLocaleId);
+		GetTree().ReloadCurrentScene();
+	}
+
+	private void UpdateWindowTitle(bool pGameMode)
+	{
+		if (!pGameMode)
+		{
+			GetWindow().Title = "UniversalRPG";
+			return;
+		}
+		var title = _selectedGame?.Title ?? "UniversalRPG";
+		GetWindow().Title = $"UniversalRPG - {title} - F4: Pause";
+	}
+
+	private void OnGameContinue()
+	{
+		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
+		{
+			rm2k.DrueckeFort();
+		}
+	}
+
+	private void OnGameChoice(int pIndex)
+	{
+		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
+		{
+			rm2k.Presentation.SelectChoice(pIndex);
+		}
+	}
+
+	private void OnGameInputSubmitted(int pValue)
+	{
+		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
+		{
+			rm2k.Presentation.SetInputValue(pValue);
+		}
 	}
 
 	private void RefreshLibrary()
@@ -472,6 +569,20 @@ public partial class Main : Control
 	{
 		_selectedGame = _library.Games[(int)pIndex];
 		var detection = _selectedGame.Detection;
+		_engineChoice.Clear();
+		_engineChoice.AddItem(Tr("ENGINE_CHOICE_AUTO"));
+		_engineChoice.SetItemMetadata(0, "");
+		foreach (var candidate in detection.Candidates.Where(candidate =>
+			candidate.Status == EngineDetectionStatus.Supported))
+		{
+			var index = _engineChoice.ItemCount;
+			_engineChoice.AddItem(candidate.DisplayName);
+			_engineChoice.SetItemMetadata(index, candidate.PluginId);
+			if (candidate.PluginId == _selectedGame.ExplicitPluginId) _engineChoice.Select(index);
+		}
+		_engineChoice.Visible = _engineChoice.ItemCount > 1
+			&& (detection.Report.IsAmbiguous || !string.IsNullOrEmpty(_selectedGame.ExplicitPluginId));
+		_engineChoice.Disabled = _launchInProgress;
 		_detailsTitle.Text = _selectedGame.Title;
 		_detailsEngine.Text = Tr("DETAIL_ENGINE_CONFIDENCE")
 			.Replace("{engine}", detection.GetEngineName())
@@ -509,7 +620,7 @@ public partial class Main : Control
 		}
 		_detailsEvidence.Text = string.Join("\n", facts);
 
-		var support = _launcher.GetSupport(detection.Engine);
+		var support = _launcher.GetSupport(_selectedGame);
 		_runtimeState.Text = Tr("DETAIL_RUNTIME_STATE")
 			.Replace("{label}", support.Label)
 			.Replace("{reason}", support.Reason);
@@ -517,12 +628,28 @@ public partial class Main : Control
 			"font_color",
 			support.State == RuntimeLauncher.SupportState.Available ? ColorAccent : ColorMuted
 		);
-		_launchButton.Disabled = support.State != RuntimeLauncher.SupportState.Available;
+		_launchButton.Disabled = _launchInProgress
+			|| support.State != RuntimeLauncher.SupportState.Available;
 		_launchButton.Text = !_launchButton.Disabled ? Tr("ACTION_START_GAME") : Tr("ACTION_NOT_PLAYABLE");
+	}
+
+	private void SelectDetectedEngine(long pIndex)
+	{
+		if (_selectedGame == null || _launchInProgress || pIndex < 0
+			|| pIndex >= _engineChoice.ItemCount) return;
+		var pluginId = _engineChoice.GetItemMetadata((int)pIndex).AsString();
+		if (!_library.TrySelectEngine(_selectedGame, pluginId, out var error))
+		{
+			_status.Text = error;
+			return;
+		}
+		var index = _library.Games.IndexOf(_selectedGame);
+		if (index >= 0) SelectGame(index);
 	}
 
 	private void ClearDetails()
 	{
+		_engineChoice.Visible = false;
 		_detailsTitle.Text = Tr("DETAIL_NO_GAMES");
 		_detailsEngine.Text = "";
 		_detailsPath.Text = _library.RootPath;
@@ -553,8 +680,52 @@ public partial class Main : Control
 
 	public override void _UnhandledInput(InputEvent pEvent)
 	{
-		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running
-			|| _launcher.ActiveRuntime is not Rm2kEngineRuntime rm2k)
+		if (_gameScreen.Visible && pEvent is InputEventKey shortcut && shortcut.Pressed
+			&& !shortcut.Echo && shortcut.Keycode == Key.F4)
+		{
+			_gameScreen.TogglePause();
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (_gameScreen.Visible && _gameScreen.IsPauseOpen)
+		{
+			if (pEvent is InputEventKey resumeKey && resumeKey.Pressed && !resumeKey.Echo)
+			{
+				if (resumeKey.Keycode == Key.Escape)
+				{
+					_gameScreen.ClosePause();
+				}
+				else
+				{
+					// **Und  das  Menue  bewegt  seinen  eigenen  Auswahlrahmen**
+					// -- **denn  es  nimmt  jede  Taste  an,  und  ohne  das
+					// waere  der  Pfeil  eine  wirkungslose Eingabe.**
+					_gameScreen.HandlePauseKey(resumeKey);
+				}
+			}
+			GetViewport().SetInputAsHandled();
+			return;
+		}
+		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running)
+		{
+			return;
+		}
+		// **Und MV und MZ bekommen dieselbe Taste wie RM2K** -- **denn
+		// beide Laufzeien bieten `SubmitInput`, und ein Fenster, das den
+		// Runtime-Typ prueft, haette zwei Eingabepfade, von denen einer
+		// ungetestet bliebe.**  Der ganze Rest des Handlers gehoert zum
+		// RM2K-Dialog und laeuft nur dort.
+		if (_launcher.ActiveRuntime is MzEngineRuntime mzRuntime)
+		{
+			var mzAction = _inputMapper.Resolve(pEvent);
+			if (mzAction != UniversalRPG.Rm2k.Input.Rm2kInputAction.None
+				&& mzRuntime.SubmitInput(mzAction))
+			{
+				GetViewport().SetInputAsHandled();
+			}
+			return;
+		}
+		if (_launcher.ActiveRuntime is not Rm2kEngineRuntime rm2k)
 		{
 			return;
 		}
@@ -667,16 +838,51 @@ public partial class Main : Control
 
 	public override void _Process(double pDelta)
 	{
-		if (_launcher.ActiveRuntimeState != PluginRuntimeState.Running)
+		// Background fetchers only enqueue plain text; all Godot calls stay here.
+		string? latestProgress = null;
+		while (_rtpProgress.TryDequeue(out var progress)) latestProgress = progress;
+		if (latestProgress != null) _status.Text = Tr("RTP_STATUS_WORKING") + " " + latestProgress;
+		var running = _launcher.ActiveRuntimeState == PluginRuntimeState.Running;
+		// **Und  der  Spielmodus  gilt  fuer  jede  Laufzeit,  die  ein  Bild
+		// liefert** -- **und  nicht  nur  fuer  RM2K.**  `MzEngineRuntime`
+		// malt  eine  ganze  Karte  (gemessen: LegalTruck 816x624,
+		// Camellia 672x864),  und  ein  Lauf,  der  nur  ein  220  Pixel
+		// hohes  Vorschaubild  links  unten  bekommen  hat,  ist  kein
+		//  spielbares  Fenster.
+		var gameMode = running
+			&& _launcher.ActiveRuntime is Rm2kEngineRuntime or MzEngineRuntime;
+		if (_gameScreen.Visible != gameMode)
+		{
+			_gameScreen.Visible = gameMode;
+			_pageMargin.Visible = !gameMode;
+			UpdateWindowTitle(gameMode);
+			if (!gameMode)
+			{
+				_gameScreen.Reset();
+			}
+		}
+		// **Und das Vorschaubild bleibt fuer den Fall, dass die Laufzeit
+		// startet, aber kein Bild liefert** -- **das ist bei RM2K der Fall,
+		// wenn das Chipset fehlt, und dort ist ein Grund besser als ein
+		// leerer Spielschirm.**
+		_mzMap.Visible = running && _launcher.ActiveRuntime is MzEngineRuntime && !gameMode;
+		_mapPreview.Visible = running && _launcher.ActiveRuntime is Rm2kEngineRuntime && !gameMode;
+		if (!running)
 		{
 			ApplyRenderFrameRate(30);
-			_stopButton.Disabled = true;
 			_presentationControls.Visible = false;
 			_mapPreview.SetFramebuffer(null);
 			_mapPreview.SetRenderedMap(null);
 			return;
 		}
-		_stopButton.Disabled = false;
+		if (_gameScreen.Visible && _gameScreen.IsPauseOpen)
+		{
+			// **Und  eine  Pause  haelt  auch  die  Laufzeit  an** -- **denn
+			//  ein  Menue,  hinter  dem  die  Welt  weiterlaeuft,  ist  keine
+			//  Pause.**
+			ApplyRenderFrameRate(30);
+			return;
+		}
 		ApplyRenderFrameRate(60);
 		var update = _launcher.Update(pDelta);
 		if (!update.Success)
@@ -702,6 +908,23 @@ public partial class Main : Control
 			_mzAudio.SetzeKanaele(mz.Facts.Screen);
 			_mzMap.Grund = mz.PaintReason;
 			_mzMap.SetzeKarte(mz.PaintedMap);
+			// **Und dieselbe Karte geht in die Vollbildansicht** -- **denn
+			// der Spielmodus ist fuer MV und MZ jetzt derselbe wie fuer
+			// RM2K, und eine Karte, die nur im Vorschaubild liegt, ist
+			// nicht das, was der Spieler sehen soll.**
+			//
+			// **Und die Diagnose wandert mit**, -- **denn "Map 1 has no
+			// drawn tile" ist eine Nachricht, die in der Spielansicht
+			// stehen muss und nicht im Detailpanel neben dem Startknopf.**
+			// **Und der Bildzaehler ist `Frames`, nicht `SimulationTicks`.**
+			//
+			// **Und das ist der Grund, warum ein Schritt sich im Fenster
+			// nicht zeigte, obwohl er stattfand:** `SetGameState` nutzt den
+			// Wert als Teil der Textur-Signatur, und `SimulationTicks`
+			// zaehlt die Simulation, nicht die Bilder -- **ein Schritt aendert
+			// die Karte, aber keinen Tick, also blieb die Signatur gleich
+			// und die Textur wurde nicht neu gebaut.**
+			_gameScreen.SetGameState(mz.PaintedMap, mz.Frames, mz.PaintReason);
 		}
 		else
 		{
@@ -733,6 +956,16 @@ public partial class Main : Control
 			_mapPreview.SetRenderedMap(rm2k.RenderedMap);
 			_mapPreview.RenderDiagnostic = rm2k.RenderDiagnostic;
 			_mapPreview.SetPlayerPosition(rm2k.Simulation.MapX, rm2k.Simulation.MapY);
+			// **Und  dasselbe  Bild  geht  an  die  Vollbildansicht** -- **mit
+			//  der  Kamera  des  Spiels  und  nicht  mit  dem  ganzen
+			//  Kartenbild.**
+			_gameScreen.SetGameState(rm2k.RenderedMap, rm2k.Simulation.FrameCount,
+				rm2k.RenderDiagnostic);
+			_gameScreen.SetPresentation(
+				presentation.MessageVisible, presentation.MessageText,
+				presentation.ActiveChoice?.Options, presentation.ActiveChoice?.SelectedIndex ?? -1,
+				presentation.PendingInputVariableId != null, presentation.InputValue ?? 0);
+			_gameScreen.SetBattle(rm2k.Simulation);
 
 			// **Und  der  Kampf  kommt  in  die  Anzeige** -- **und
 			//  die  Anzeige  wird  nur  neu  gezeichnet,  wenn  sich
@@ -1085,7 +1318,7 @@ public partial class Main : Control
 	{
 		if (_launcher.ActiveRuntime is Rm2kEngineRuntime runtime)
 		{
-			runtime.Presentation.DismissMessage();
+			runtime.DrueckeFort();
 		}
 	}
 
@@ -1101,7 +1334,6 @@ public partial class Main : Control
 	{
 		var result = _launcher.Stop();
 		_status.Text = result.Success ? "Runtime stopped." : result.Error?.Message ?? "Runtime stop failed.";
-		_stopButton.Disabled = true;
 		_presentationControls.Visible = false;
 		// **Und  der  Kampf  gehoert  mit  versteckt** -- **denn  ein
 		//  Kampf,  der  nicht  laeuft,  ist  keiner.**
@@ -1111,57 +1343,57 @@ public partial class Main : Control
 
 	private async void LaunchSelectedGame()
 	{
-		if (_selectedGame == null)
+		if (_selectedGame == null || _launchInProgress || _closing) return;
+		var game = _selectedGame;
+		var support = _launcher.GetSupport(game);
+		if (support.State != RuntimeLauncher.SupportState.Available)
 		{
+			_status.Text = support.Reason;
 			return;
 		}
-
-		// **Und vor dem Start wird gefragt,  wenn  die  Laufzeit
-		// fehlt**,  --
-		// **und nur dann**,  --
-		// **und ein Spiel ohne `RTP=`  im  `Game.ini`  wird nie
-		// gefragt.**
-		var bedarf = RtpPruefer.Pruefe(
-			_selectedGame.Detection.RtpDependency);
-		if (bedarf.Fehlt)
+		_launchInProgress = true;
+		_launchButton.Disabled = true;
+		_engineChoice.Disabled = true;
+		try
 		{
-			var gewaehlt = await RtpDialog.Fragen(
-				this, _selectedGame, bedarf);
-
-			if (gewaehlt == RtpDialog.Antwort.Laden)
+			var bedarf = RtpPruefer.Pruefe(game.Detection.RtpDependency);
+			if (bedarf.Fehlt)
 			{
-				// **Und hier laeuft der Download**, --
-				// **und er laeuft im Hintergrund, damit die
-				// Oberflaeche nicht einfriert.**
-				_status.Text = Tr("RTP_STATUS_WORKING");
-				var ziel = RtpAblage.Benutzer(bedarf.EngineId);
-				var geholt = await System.Threading.Tasks.Task.Run(
-					() => new RtpAblauf(new RtpHoler())
-						.FuehreAus(true, bedarf.EngineId, ziel,
-							teil => _status.Text = Tr(
-								"RTP_STATUS_WORKING") + " " + teil));
-
-				_status.Text = geholt.Meldung;
-				foreach (var schritt in geholt.Schritte)
+				var gewaehlt = await RtpDialog.Fragen(this, game, bedarf);
+				if (_closing || gewaehlt == RtpDialog.Antwort.Abbrechen) return;
+				if (gewaehlt == RtpDialog.Antwort.Laden)
 				{
-					_status.Text += "\n" + schritt;
-				}
-
-				if (!geholt.Erfolgreich)
-				{
-					return;
+					_status.Text = Tr("RTP_STATUS_WORKING");
+					var ziel = ProjectSettings.GlobalizePath(RtpAblage.Benutzer(bedarf.EngineId));
+					var geholt = await System.Threading.Tasks.Task.Run(() =>
+						new RtpAblauf(new RtpHoler()).FuehreAus(true, bedarf.EngineId,
+							ziel, teil => _rtpProgress.Enqueue(teil), () => _closing));
+					if (_closing) return;
+					while (_rtpProgress.TryDequeue(out _)) { }
+					_status.Text = geholt.Meldung + "\n" + string.Join("\n", geholt.Schritte);
+					if (!geholt.Erfolgreich) return;
 				}
 			}
-			else if (gewaehlt == RtpDialog.Antwort.Abbrechen)
-			{
-				return;
-			}
+			if (_closing) return;
+			var result = _launcher.Launch(game);
+			_status.Text = result.Message;
+			foreach (var diagnostic in result.Diagnostics)
+				_status.Text += $"\n[{diagnostic.Severity}/{diagnostic.Code}] {diagnostic.Message}";
 		}
-		var result = _launcher.Launch(_selectedGame);
-		_status.Text = result.Message;
-		foreach (var diagnostic in result.Diagnostics)
+		catch (System.Exception exception)
 		{
-			_status.Text += $"\n[{diagnostic.Severity}/{diagnostic.Code}] {diagnostic.Message}";
+			// async-void UI handlers must surface failures instead of terminating the app.
+			if (!_closing) _status.Text = "RTP/launch failed: " + exception.Message;
+		}
+		finally
+		{
+			_launchInProgress = false;
+			if (!_closing)
+			{
+				_engineChoice.Disabled = false;
+				_launchButton.Disabled = _selectedGame == null
+					|| _launcher.GetSupport(_selectedGame).State != RuntimeLauncher.SupportState.Available;
+			}
 		}
 	}
 

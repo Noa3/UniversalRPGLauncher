@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Collections.Generic;
 
+using System.Linq;
 namespace UniversalRPG.Rm2k.Rendering;
 
 /// <summary>
@@ -304,6 +305,7 @@ public sealed class Rm2kIndexedImage
 
         var width = 0;
         var height = 0;
+        var farbtyp = 3;
         byte[]? paletteData = null;
         var compressed = new List<byte>();
 
@@ -330,16 +332,31 @@ public sealed class Rm2kIndexedImage
                     height = ReadBigEndianInt32(pData, payload + 4);
                     var bitDepth = pData[payload + 8];
                     var colorType = pData[payload + 9];
+                    farbtyp = colorType;
                     if (bitDepth != 8)
                     {
                         pError = $"Chipset PNG must use 8 bit depth but uses {bitDepth}.";
                         return false;
                     }
-                    if (colorType != 3)
+                    // **Und Farbtyp 6 (RGBA) wird neben 3 angenommen.**
+                    //
+                    // **Und die Ablehnung war richtig fuer ihre eigene Engine
+                    // und falsch fuer uns:**  RM2K-Chipsets sind
+                    // palettiert,  und  die  Transparenzregel  des  Players
+                    // ist  ein  Palettenindex.  **MV schreibt  aber  Farbtyp
+                    // 6**  --  gemessen  an
+                    //  `LegalTruck/www/img/tilesets/World_A1.rpgmvp`:
+                    //  768x576, Tiefe 8, Farbtyp 6 --  **wahrend MZs
+                    //  `Outside_A1.png_`  in  denselben  Massen  Farbtyp 3
+                    //  ist.**  **Ein Leser,  der  nur  3  annimmt,  lehnt
+                    //  damit  jedes  MV-Tileset  ab.**
+                    if (colorType is not 3 and not 6)
                     {
-                        pError = $"Chipset PNG must be paletted (colour type 3) but uses {colorType}.";
+                        pError = $"Chipset PNG must be paletted (colour type 3) or"
+                            + $" RGBA (colour type 6) but uses {colorType}.";
                         return false;
                     }
+
                     if (pData[payload + 12] != 0)
                     {
                         pError = "Chipset PNG must not be interlaced.";
@@ -368,16 +385,27 @@ public sealed class Rm2kIndexedImage
             pError = $"Chipset PNG dimensions {width}x{height} are outside the accepted range.";
             return false;
         }
-        if (paletteData == null || paletteData.Length == 0 || paletteData.Length % 3 != 0)
+        // **Und die Palettenpruefung gilt nur fuer Farbtyp 3.**
+        //
+        // **Und sie stand vorher vor der Quantisierung und hat damit jedes
+        // RGBA-Bild abgelehnt** -- **ein Bild, das seine Farben selbst
+        // traegt, hat keine PLTE-Chunk, und "no usable palette" war die
+        // Diagnose fuer einen Code, der die falsche Frage stellte.**
+        var paletteEntries = 0;
+        if (farbtyp == 3)
         {
-            pError = "Chipset PNG has no usable palette.";
-            return false;
-        }
-        var paletteEntries = paletteData.Length / 3;
-        if (paletteEntries > MaxPaletteEntries)
-        {
-            pError = $"Chipset PNG palette has {paletteEntries} entries, more than {MaxPaletteEntries}.";
-            return false;
+            if (paletteData == null || paletteData.Length == 0 || paletteData.Length % 3 != 0)
+            {
+                pError = "Chipset PNG has no usable palette.";
+                return false;
+            }
+            paletteEntries = paletteData.Length / 3;
+            if (paletteEntries > MaxPaletteEntries)
+            {
+                pError = $"Chipset PNG palette has {paletteEntries} entries,"
+                    + $" more than {MaxPaletteEntries}.";
+                return false;
+            }
         }
         if (compressed.Count == 0)
         {
@@ -396,7 +424,12 @@ public sealed class Rm2kIndexedImage
             return false;
         }
 
-        var stride = width;
+        // **Und die Zeilenlaenge folgt der Farbtiefe, nicht der Pixelzahl.**
+        // RGBA braucht vier Bytes pro Pixel, und ein Unfilter, der mit der
+        // Pixelzahl rechnet, verschiebt jede Zeile -- was als "not valid
+        // deflate data" ankommt und nicht als der Fehler, der sie ist.
+        var bytesPerPixel = farbtyp == 6 ? 4 : 1;
+        var stride = checked(width * bytesPerPixel);
         var expected = checked((stride + 1) * height);
         if (raw.Length < expected)
         {
@@ -404,16 +437,37 @@ public sealed class Rm2kIndexedImage
             return false;
         }
 
-        if (!TryUnfilter(raw, width, height, out var indices, out pError))
+        if (!TryUnfilter(raw, width, height, bytesPerPixel, out var indices, out pError))
         {
             return false;
         }
 
-        var palette = new byte[paletteEntries][];
-        for (var entry = 0; entry < paletteEntries; entry++)
+        byte[][] palette;
+        if (farbtyp == 6)
         {
-            palette[entry] = [paletteData[entry * 3], paletteData[entry * 3 + 1], paletteData[entry * 3 + 2]];
+            // **Und RGBA wird quantisiert, nicht separat gezeichnet.**
+            if (!Quantisiere(indices, stride, bytesPerPixel,
+                out var quantisiert, out palette, out pError))
+            {
+                return false;
+            }
+            indices = quantisiert;
         }
+        else
+        {
+            palette = new byte[paletteEntries][];
+            for (var entry = 0; entry < paletteEntries; entry++)
+            {
+                // paletteData is non-null here: the guard above returned for
+                // colour type 3 without one.
+                palette[entry] = [
+                    paletteData[entry * 3],
+                    paletteData[entry * 3 + 1],
+                    paletteData[entry * 3 + 2],
+                ];
+            }
+        }
+
         pImage = new Rm2kIndexedImage(width, height, indices, palette);
         return true;
     }
@@ -491,11 +545,165 @@ public sealed class Rm2kIndexedImage
     /// specification is implemented; an unknown type is refused instead of being
     /// treated as "none".
     /// </summary>
-    private static bool TryUnfilter(byte[] pRaw, int pWidth, int pHeight, out byte[] pIndices, out string pError)
+    /// <summary>
+    /// And RGBA pixels become palette entries, one per distinct colour.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a quantisation and not a second renderer.</strong>
+    /// Every rule above this layer -- the eight-by-eight cell, the lower
+    /// and upper half, the passability table -- reads an indexed image,
+    /// and an indexed image built from distinct colours satisfies it
+    /// unchanged. Alpha is read and ignored on purpose: <strong>MZ tilesets
+    /// are opaque tilesets that happen to carry an alpha channel</strong>,
+    /// and treating a partially transparent pixel as a hole would put
+    /// holes in a map the game draws solid.
+    /// </para>
+    /// <para>
+    // **Und mehr Farben als der Index adressieren kann werden
+    // reduziert, nicht abgelehnt** -- **denn die Karte waere sonst
+    // komplett unbrauchbar, und ein Spiel, das startet und nichts
+    // anzeigt, ist schlimmer als eines, das ein paar Kacheln in
+    // naher Nachbarschaft gleich faerbt.**
+    // **Und die Reduktion ist deterministisch und nach Helligkeit
+    // sortiert**, -- **damit derselbe Fehler bei jedem Lauf dasselbe
+    // Bild liefert und nicht ueber den Frame hinweg flackert.**
+    /// </para>
+    /// </remarks>
+    private static bool Quantisiere(
+        byte[] pRoh, int pStride, int pBytesPerPixel,
+        out byte[] pIndizes, out byte[][] pPalette, out string pError)
+    {
+        pIndizes = [];
+        pPalette = [];
+        pError = "";
+        var pixelCount = pRoh.Length / pBytesPerPixel;
+        var indizes = new byte[pixelCount];
+        var palette = new List<byte[]>();
+        var verzeichnis = new Dictionary<uint, byte>(pixelCount);
+        for (var pixel = 0; pixel < pixelCount; pixel++)
+        {
+            var basis = pixel * pBytesPerPixel;
+            var schluessel = FarbSchluessel(pRoh, basis);
+            if (verzeichnis.ContainsKey(schluessel))
+            {
+                continue;
+            }
+            verzeichnis[schluessel] = (byte)palette.Count;
+            palette.Add([pRoh[basis], pRoh[basis + 1], pRoh[basis + 2]]);
+        }
+        if (palette.Count > Rm2kIndexedImage.MaxPaletteEntries)
+        {
+            return Reduziere(pRoh, pixelCount, pBytesPerPixel, palette,
+                out pIndizes, out pPalette, out pError);
+        }
+        for (var pixel = 0; pixel < pixelCount; pixel++)
+        {
+            var basis = pixel * pBytesPerPixel;
+            indizes[pixel] = verzeichnis[FarbSchluessel(pRoh, basis)];
+        }
+        pPalette = palette.ToArray();
+        pIndizes = indizes;
+        return true;
+    }
+
+    /// <summary>And the three colour bytes packed into one key.</summary>
+    private static uint FarbSchluessel(byte[] pRoh, int pBasis)
+        => (uint)(pRoh[pBasis] | (pRoh[pBasis + 1] << 8) | (pRoh[pBasis + 2] << 16));
+
+    /// <summary>
+    /// And a tileset with more distinct colours than the index addresses is
+    /// reduced to a fixed set, and the rest is snapped to the nearest one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the count is a fact about the game, not a bug.</strong>
+    /// Measured at <c>LegalTruck</c>'s <c>World_A1.rpgmvp</c>: more than
+    /// 256 distinct colours in one 768x576 sheet. <strong>An RGBA tileset
+    /// has no reason to stay inside a limit that exists only because
+    /// RM2K chipsets are indexed.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And reducing is better than refusing.</strong> A refused
+    /// tileset means an MV game that starts and paints nothing at all;
+    /// a reduced one means a game whose crowded tiles differ slightly
+    /// from the original. <strong>The choice is deterministic</strong> --
+    /// sorted by luminance and then by channel, so the same file always
+    /// produces the same image and never flickers between frames.
+    /// </para>
+    /// </remarks>
+    private static bool Reduziere(
+        byte[] pRoh, int pPixelCount, int pBytesPerPixel, List<byte[]> pFarben,
+        out byte[] pIndizes, out byte[][] pPalette, out string pError)
+    {
+        pIndizes = [];
+        pPalette = [];
+        pError = "";
+        var geordnet = pFarben
+            .OrderBy(pFarbe => Luminanz(pFarbe[0], pFarbe[1], pFarbe[2]))
+            .ThenBy(pFarbe => pFarbe[0])
+            .ThenBy(pFarbe => pFarbe[1])
+            .ThenBy(pFarbe => pFarbe[2])
+            .ToList();
+
+        // One colour per luminance step keeps the whole ramp instead of
+        // only the most common entries, which is what makes a reduced
+        // tileset still look like the tileset.
+        var palette = new List<byte[]>(Rm2kIndexedImage.MaxPaletteEntries);
+        var verzeichnis = new Dictionary<uint, byte>(Rm2kIndexedImage.MaxPaletteEntries);
+        var schritt = (geordnet.Count - 1)
+            / (double)(Rm2kIndexedImage.MaxPaletteEntries - 1);
+        for (var index = 0; index < Rm2kIndexedImage.MaxPaletteEntries; index++)
+        {
+            var farbe = geordnet[(int)Math.Round(index * schritt)];
+            var schluessel = (uint)(farbe[0] | (farbe[1] << 8) | (farbe[2] << 16));
+            if (verzeichnis.ContainsKey(schluessel))
+            {
+                continue;
+            }
+            verzeichnis[schluessel] = (byte)palette.Count;
+            palette.Add(farbe);
+        }
+
+        var indizes = new byte[pPixelCount];
+        for (var pixel = 0; pixel < pPixelCount; pixel++)
+        {
+            var basis = pixel * pBytesPerPixel;
+            var schluessel = FarbSchluessel(pRoh, basis);
+            if (!verzeichnis.TryGetValue(schluessel, out var ziel))
+            {
+                var lum = Luminanz(pRoh[basis], pRoh[basis + 1], pRoh[basis + 2]);
+                var best = 0;
+                var bestAbstand = int.MaxValue;
+                for (var index = 0; index < palette.Count; index++)
+                {
+                    var abstand = Math.Abs(Luminanz(
+                        palette[index][0], palette[index][1], palette[index][2]) - lum);
+                    if (abstand < bestAbstand)
+                    {
+                        bestAbstand = abstand;
+                        best = index;
+                    }
+                }
+                ziel = (byte)best;
+            }
+            indizes[pixel] = ziel;
+        }
+        pPalette = palette.ToArray();
+        pIndizes = indizes;
+        return true;
+    }
+
+    private static int Luminanz(int pR, int pG, int pB)
+        => (pR * 299 + pG * 587 + pB * 114) / 1000;
+
+    private static bool TryUnfilter(
+        byte[] pRaw, int pWidth, int pHeight, int pBytesPerPixel,
+        out byte[] pIndices, out string pError)
     {
         pIndices = [];
         pError = "";
-        var stride = pWidth;
+        var stride = checked(pWidth * pBytesPerPixel);
         var result = new byte[checked(stride * pHeight)];
         var previous = new byte[stride];
         var current = new byte[stride];
@@ -515,7 +723,13 @@ public sealed class Rm2kIndexedImage
                 case 1:
                     for (var index = 0; index < stride; index++)
                     {
-                        var left = index >= 1 ? current[index - 1] : (byte)0;
+                        // **Und der linke Nachbar zaehlt in Bytes, nicht in
+                        // Pixel** -- **bei RGBA liegt er vier Positionen
+                        // zurueck,  und ein Abstand von einem Byte  rechnet
+                        // Kanalwerte statt Pixel und zerlegt das Bild
+                        // lautlos in Farbrauschen.**
+                        var left = index >= pBytesPerPixel
+                            ? current[index - pBytesPerPixel] : (byte)0;
                         current[index] = (byte)(current[index] + left);
                     }
                     break;
@@ -528,16 +742,19 @@ public sealed class Rm2kIndexedImage
                 case 3:
                     for (var index = 0; index < stride; index++)
                     {
-                        var left = index >= 1 ? current[index - 1] : (byte)0;
+                        var left = index >= pBytesPerPixel
+                            ? current[index - pBytesPerPixel] : (byte)0;
                         current[index] = (byte)(current[index] + (left + previous[index]) / 2);
                     }
                     break;
                 case 4:
                     for (var index = 0; index < stride; index++)
                     {
-                        var left = index >= 1 ? current[index - 1] : (byte)0;
+                        var left = index >= pBytesPerPixel
+                            ? current[index - pBytesPerPixel] : (byte)0;
                         var up = previous[index];
-                        var upLeft = index >= 1 ? previous[index - 1] : (byte)0;
+                        var upLeft = index >= pBytesPerPixel
+                            ? previous[index - pBytesPerPixel] : (byte)0;
                         current[index] = (byte)(current[index] + Paeth(left, up, upLeft));
                     }
                     break;

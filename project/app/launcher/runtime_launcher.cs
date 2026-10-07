@@ -67,6 +67,12 @@ public partial class RuntimeLauncher : RefCounted
 		return _activeHost?.Stop() ?? PluginOperationResult.Succeeded();
 	}
 
+	public void Shutdown()
+	{
+		_activeHost?.Dispose();
+		_activeHost = null;
+	}
+
 	public SupportInfo GetSupport(GameLibrary.GameEntry pGame)
 	{
 		return GetSupport(pGame, GetCurrentPlatform());

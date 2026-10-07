@@ -131,11 +131,23 @@ public static class Rm2kBmp
             return false;
         }
 
-        // **Und  eine  negative  Hoehe  heisst  "von  unten  nach
-        //  oben"** -- **und  die  Spiele  schreiben  alle  eine
-        //  positive,  und  darum  wird  hier  die  Vorzeichenregel
-        //  von  BMP  beachtet  und  nicht  angenommen.**
-        var vonUnten = rohHoehe < 0;
+        // **Und  eine  positive  Hoehe  heisst  "von  unten  nach
+        //  oben"** --  so  steht  es  im  Bitmap-Vertrag  von
+        //  Windows:  das  erste  Byte  der  Bilddaten  gehoert
+        //  zur  untersten  Zeile.  --  **Und  die  Spiele
+        //  schreiben  genau  diese  Form,  also  wird  die
+        //  Vorzeichenregel  von  BMP  beachtet  und  nicht
+        //  angenommen.**
+        //
+        // **Und  das  war  der  Fehler  hinter  einem  echten
+        //  Spiel,  das  in  Magenta  gemalt  wurde:**  der  Leser
+        //  drehte  die  Regel  um  und  las  jede  Chipset- und
+        //  CharSet-Kachel  von  Lisa  (zehn  Chipsets,  fuenfund-
+        //  zwanzig  CharSets  als  `.bmp`)  auf  dem  Kopf,  --
+        //  **und  die  Adresszeile  der  oberen  Ebene  landete
+        //  damit  auf  der  pinkfarbenen  Marker-Flaeche  des
+        //  Bildes,  die  das  ganze  Feld  ueberdeckte.**
+        var vonUnten = rohHoehe > 0;
         pHoehe = Math.Abs(rohHoehe);
 
         if (pBreite <= 0 || pHoehe <= 0

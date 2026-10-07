@@ -88,33 +88,78 @@ public static class RtpEntpacker
         Directory.CreateDirectory(wurzel);
 
         using var archiv = ZipFile.OpenRead(pArchiv);
+        const long maxEntryBytes = 256L * 1024 * 1024;
+        const long maxTotalBytes = 2L * 1024 * 1024 * 1024;
+        if (archiv.Entries.Count > 10000)
+        {
+            return new Ergebnis { Verweigert = new[] { "Das Archiv enthaelt mehr als 10000 Eintraege." } };
+        }
         foreach (var eintrag in archiv.Entries)
         {
-            if (string.IsNullOrEmpty(eintrag.Name))
+            if (eintrag.Length > maxEntryBytes || eintrag.Length > maxTotalBytes - bytes
+                || ((eintrag.ExternalAttributes >> 16) & 0xF000) == 0xA000)
             {
-                // **Und ein Verzeichnisseintrag hat keinen Namen** --
-                // **und der leere Name ist kein Fehler.**
-                Directory.CreateDirectory(Path.Combine(
-                    wurzel, eintrag.FullName.Replace('/', Path.DirectorySeparatorChar)));
+                verweigert.Add(eintrag.FullName + " (Groessenlimit oder symbolischer Link)");
+                continue;
+            }
+            var name = eintrag.FullName.Replace('\\', '/');
+            var segments = name.TrimEnd('/').Split('/');
+            if (Path.IsPathRooted(name) || name.Contains(':')
+                || Array.Exists(segments, segment => string.IsNullOrEmpty(segment)
+                    || segment is "." or ".." || segment.EndsWith('.') || segment.EndsWith(' ')
+                    || IsWindowsDeviceName(segment)
+                    || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+            {
+                verweigert.Add(eintrag.FullName + " (ungueltiger Archivpfad)");
                 continue;
             }
 
-            var ziel = Path.Combine(wurzel,
-                eintrag.FullName.Replace('/', Path.DirectorySeparatorChar));
-            var voll = Path.GetFullPath(ziel);
-
-            if (!voll.StartsWith(wurzel, StringComparison.OrdinalIgnoreCase))
+            var voll = Path.GetFullPath(Path.Combine(wurzel,
+                name.Replace('/', Path.DirectorySeparatorChar)));
+            var prefix = Path.TrimEndingDirectorySeparator(wurzel)
+                + Path.DirectorySeparatorChar;
+            if (!voll.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 verweigert.Add(eintrag.FullName + " (verlaesst das Ziel)");
                 continue;
             }
 
+            if (HasReparsePoint(voll))
+            {
+                verweigert.Add(eintrag.FullName + " (Link im Zielpfad)");
+                continue;
+            }
+            if (File.Exists(voll))
+            {
+                verweigert.Add(eintrag.FullName + " (vorhandene Datei wird nicht ersetzt)");
+                continue;
+            }
+
+            // Directory entries need the same confinement check as files.
+            if (string.IsNullOrEmpty(eintrag.Name))
+            {
+                Directory.CreateDirectory(voll);
+                continue;
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(voll)!);
 
-            using (var zielstrom = File.Create(voll))
+            using (var zielstrom = new FileStream(voll, FileMode.CreateNew, FileAccess.Write))
             using (var quelle = eintrag.Open())
             {
-                quelle.CopyTo(zielstrom);
+                var buffer = new byte[81920];
+                var written = 0L;
+                int read;
+                while ((read = quelle.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    written += read;
+                    if (written > eintrag.Length || written > maxEntryBytes
+                        || written > maxTotalBytes - bytes)
+                        throw new InvalidDataException("Archivinhalt ueberschreitet das Groessenlimit.");
+                    zielstrom.Write(buffer, 0, read);
+                }
+                if (written != eintrag.Length)
+                    throw new InvalidDataException("Archivinhalt ist abgeschnitten.");
             }
 
             dateien++;
@@ -142,6 +187,26 @@ public static class RtpEntpacker
     /// all four pages answered <c>text/html</c>.</strong>
     /// </para>
     /// </remarks>
+    private static bool IsWindowsDeviceName(string pSegment)
+    {
+        var name = pSegment.Split('.')[0].ToUpperInvariant();
+        return name is "CON" or "PRN" or "AUX" or "NUL" or "CONIN$" or "CONOUT$"
+            || (name.Length == 4 && (name.StartsWith("COM") || name.StartsWith("LPT"))
+                && (name[3] is >= '1' and <= '9' or '¹' or '²' or '³'));
+    }
+
+    private static bool HasReparsePoint(string pPath)
+    {
+        for (var current = pPath; !string.IsNullOrEmpty(current);
+            current = Path.GetDirectoryName(current))
+        {
+            if ((File.Exists(current) || Directory.Exists(current))
+                && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                return true;
+        }
+        return false;
+    }
+
     public static bool IstZip(string pPfad)
     {
         using var strom = File.OpenRead(pPfad);

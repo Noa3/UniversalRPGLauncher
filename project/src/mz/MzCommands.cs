@@ -439,6 +439,29 @@ public static class MzCommands
                 // at its first dialogue that follows another one, and
                 // says the engine refused something the engine never
                 // refuses.**
+                //
+                // **Und `isBusy()` ist die *Fenster*-Flagge, und nicht die
+                // des Spiels.**  `Game_Interpreter.prototype.command101`
+                // in `rmmz_objects.js` ist
+                // `if ($gameMessage.isBusy()) { return false; }`,
+                // **und `isBusy()` fragt `$gameMessage.isBusy()`, dessen
+                // Flag `Window_Message.prototype.updateMessage` in
+                // `if (this.isTriggered()) { ... }` wieder loescht.**
+                //
+                // **Und "busy" heisst in beiden Engines: es steht Text auf
+                // dem Bildschirm.**  Ein Lauf, der `MessageBusy` gesetzt
+                // hat **und keinen Block haelt**, haelt in der Engine
+                // keinen Text auf dem Bildschirm -- **und der naechste
+                // 101 gehoert nicht auf eine Nachricht, die niemand
+                // sieht.**
+                //
+                // **Und gemessen ist der Deadlock, den diese eine Zeile
+                // verursacht hat:** der 101 las vier echte Zeilen
+                // (`"This passage is weird... I can hear chatter?"`),
+                // **und `MessageBusy` blieb true, `LastDialogue` wurde
+                // nie wieder gesetzt** -- **`command101` wartete dann auf
+                // sich selbst, Frame fuer Frame, bis zum Ende der
+                // 20.000 (gemessen).**
                 if (pFacts.MessageBusy)
                 {
                     pActions.Add(new MzAction(pCommand,
@@ -549,8 +572,58 @@ public static class MzCommands
                         befehl.Code, befehl.Parameters);
                 }
 
-                // **`setWaitMode("message")` is outside the switch**, so a
-                // dialogue with no choice holds its page all the same.
+                //
+                // **Und `setWaitMode("message")` steht *ausserhalb* des
+                // `switch`, und `return true` steht danach -- und das
+                // ist an der Quelle gemessen, woher diese Seite kommt
+                // (`CamelliaCoronation-Win/js/rmmz_objects.js`):**
+                //
+                // ```js
+                // Game_Interpreter.prototype.command101 = function(params) {
+                //     if ($gameMessage.isBusy()) {
+                //         return false;
+                //     }
+                //     ...
+                //     while (this.nextEventCode() === 401) {
+                //         this._index++;
+                //         $gameMessage.add(this.currentCommand().parameters[0]);
+                //     }
+                //     switch (this.nextEventCode()) {
+                //         case 102: this._index++; this.setupChoices(...); break;
+                //         case 103: this._index++; this.setupNumInput(...); break;
+                //         case 104: this._index++; this.setupItemChoice(...); break;
+                //     }
+                //     this.setWaitMode("message");
+                //     return true;
+                // };
+                // ```
+                //
+                // **Und `return true` heisst "der Befehl ist gelaufen",
+                // und *nicht* "es gibt nichts zu warten".**
+                // **`setWaitMode` ist eine zweite, davon getrennte
+                // Sache**, **und `executeCommand` fragt sie im
+                // `updateWait` des *naechsten* Bildes ab.**
+                //
+                // **Und gemessen war der Unterschied als Camellias
+                // Map005 Ereignis 4, das bei Index 99 von 176 stehen
+                // blieb:**
+                //
+                // ```
+                // [mz-iw] idx=99  flag=True stopped=Waiting
+                // [mz-iw] idx=101 flag=True stopped=Waiting
+                // [mz-iw] idx=104 flag=True stopped=Waiting
+                // ```
+                //
+                // **Der Index wurde jedes Mal richtig gesetzt (`flag=True`
+                // heisst: der Befehl hat ihn selbst bewegt), und der
+                // Interpreter hielt trotzdem an** -- **weil `Waiting`
+                // zurueckkam, und `Run` bei jedem Schritt, der nicht
+                // `Stepped` ist, `false` gibt.**  **Und drei Bilder
+                // lang stand `[mz-pf] antwort=True` und `ok=True` im
+                // Log**, **und der Index blieb 99.**
+                //
+                // **Die Regel ist die des Motors: der Befehl meldet
+                // Erfolg, und die Wartezeit steht daneben.**
                 pInterpreter.WaitFor(MzWaitMode.Message);
                 return true;
             }
@@ -685,17 +758,55 @@ public static class MzCommands
                 // `waiting = $gamePlayer.isTransferring()`. So the page is held
                 // by a **condition** and not by a frame count, which is a third
                 // shape next to a 230's frames and a 232's movement.
+                //
+                // **Und `return false` heisst "warte", und nicht
+                // "verweigert"** -- **und das ist an der Quelle
+                // gemessen, woher diese Seite kommt
+                // (`CamelliaCoronation-Win/js/rmmz_objects.js`):**
+                //
+                // ```js
+                // Game_Interpreter.prototype.command201 = function(params) {
+                //     if ($gameParty.inBattle() || $gameMessage.isBusy()) {
+                //         return false;
+                //     }
+                // ```
+                //
+                // **Und was `false` bedeutet, steht eine Ebene hoeher:**
+                //
+                // ```js
+                // Game_Interpreter.prototype.executeCommand = function() {
+                //     const command = this.currentCommand();
+                //     if (command) {
+                //         const methodName = "command" + command.code;
+                //         if (typeof this[methodName] === "function") {
+                //             if (!this[methodName](command.parameters)) {
+                //                 return false;
+                //             }
+                //         }
+                //         this._index++;
+                //     }
+                // ```
+                //
+                // **Der Index wird nur bei `true` weitergesetzt. `false`
+                // laesst ihn stehen, und die Seite versucht es im
+                // naechsten Bild erneut** -- **und `command101` macht
+                // genau dasselbe mit `if ($gameMessage.isBusy()) {
+                // return false; }`.**
+                //
+                // **Und gemessen war der Unterschied:** `Refuse` hier
+                // stoppte Camellias Map005 Ereignis 4 **an Index 174 von
+                // 176** -- **und Index 172 ist ein `101`, dessen Text in
+                // 173 steht und dessen `201` in 174 folgt.** Der Dialog
+                // stand noch einen Bild lang offen, **und die Seite
+                // musste warten, nicht aufgeben.**
                 if (pFacts.InBattle || pFacts.MessageBusy)
                 {
                     pActions.Add(new MzAction(
                         pCommand,
-                        "the player is not transferred, because the engine"
-                        + " transfers nobody in a battle or while a message is"
-                        + " on the screen"));
-                    pInterpreter.Refuse(
-                        "a transfer in a battle or during a message is refused"
-                        + $" by the engine, and the run stops at index"
-                        + $" {pInterpreter.Index} where it stands");
+                        "the transfer waits, because the engine returns"
+                        + " false while a battle or a message is up, and a"
+                        + " false means the index stays where it stands"));
+                    pInterpreter.WaitFor(MzWaitMode.Message);
                     return false;
                 }
 
@@ -1045,11 +1156,43 @@ public static class MzCommands
                     $"scroll text at speed {At(pCommand, 0)} with"
                     + $" {scrollZeilen.Count} choice lines"));
 
-                // **Und der Index steht auf der letzten Zeile, und nicht darueber**
-                // -- **denn die while oben hat ihn einmal je gelesener Zeile
-                // gesetzt, und der Interpreter setzt ihn nicht noch einmal.**
+                // **Und `return true`, und nicht `false` -- und das ist an
+                // der Quelle gemessen, woher diese Seite kommt
+                // (`CamelliaCoronation-Win/js/rmmz_objects.js`):**
+                //
+                // ```js
+                // Game_Interpreter.prototype.command105 = function(params) {
+                //     if ($gameMessage.isBusy()) { return false; }
+                //     $gameMessage.setScroll(params[0], params[1]);
+                //     while (this.nextEventCode() === 405) {
+                //         this._index++;
+                //         $gameMessage.add(this.currentCommand().parameters[0]);
+                //     }
+                //     this.setWaitMode("message");
+                //     return true;
+                // };
+                // ```
+                //
+                // **Und was der Unterschied ist, steht eine Ebene
+                // hoeher:** `executeCommand` macht
+                // `if (!this[methodName](command.parameters)) { return
+                // false; } this._index++;` -- **der Index rueckt nur bei
+                // `true` weiter.**
+                //
+                // **Und gemessen war das als Camellias Map003 Ereignis 9
+                // bei Index 200 stehenbleibend**, **waehrend 400 Bilder
+                // liefen** (`Wartezaehlung: ... 120:200 180:200
+                // 240:200 300:200 360:200`) -- **Index 201 ist genau
+                // diese `105 [1, False]`, und ihre fuenf 405-Zeilen waren
+                // gelesen, aber der Index stand auf der letzten und ging
+                // nicht weiter.**
+                //
+                // **Und `WaitFor` bleibt trotzdem, denn `setWaitMode`
+                // steht in der Quelle vor dem `return true`** -- **die
+                // Seite wartet also weiter auf die Taste, aber ihr Index
+                // steht hinter den Zeilen, statt auf ihnen.**
                 pInterpreter.WaitFor(MzWaitMode.Message);
-                return false;
+                return true;
             }
 
             case MzCommandTable.ScreenShake:
@@ -3535,30 +3678,41 @@ case MzCommandTable.ChangeExp:
                 // **Und diese beiden Befehle trugen vorher den Code von
                 // `212 Show Animation`.**
                 //
-                // **Gemessen an `command221`, und das ist der ganze
-                // Befehl:**
+                // **Gemessen an `command221` in der Quelle dieses Spiels
+                // (`CamelliaCoronation-Win/js/rmmz_objects.js`), und das
+                // ist der ganze Befehl:**
                 //
                 // ```js
                 // Game_Interpreter.prototype.command221 = function() {
-                //     if (!$gameMessage.isBusy()) {
-                //         $gameScreen.startFadeOut(this.fadeSpeed());
-                //         this.wait(this.fadeSpeed());
-                //         this._index++;
+                //     if ($gameMessage.isBusy()) {
+                //         return false;
                 //     }
-                //     return false;
+                //     $gameScreen.startFadeOut(this.fadeSpeed());
+                //     this.wait(this.fadeSpeed());
+                //     return true;
                 // };
                 // ```
                 //
                 // **Und `command222` ist derselbe Befehl mit
                 // `startFadeIn`.**
                 //
-                // **Und `return false` ist hier richtig**, -- **und das
-                // ist der einzige Grund, warum es hier richtig ist:**
-                // `this._index++` steht im Rumpf, -- **und dieser
-                // Befehl zaehlt sich selbst hoch**, -- **und gibt dann
-                // `false` zurueck, damit `executeCommand` nicht noch
-                // einmal eins zaehlt.** **Und das ist genau das Muster,
-                // das `101` bis `105` auch haben.**
+                // **Und hier ist kein `_index++`, und das ist der ganze
+                // Unterschied.**  Eine alte Fassung dieses Kommentars
+                // behauptete `this._index++; ... return false;` -- **und
+                // das steht nicht in der Datei.**  **Was `false` bedeutet,
+                // steht in `executeCommand`: `if (!this[methodName]
+                // (command.parameters)) { return false; } this._index++;`
+                // -- der Index rueckt nur bei `true` weiter.**
+                //
+                // **Und gemessen war, was das falsche `Index++` tat:**
+                // Camellias Map003 Ereignis 9 blieb bei **Index 200 von
+                // 211** stehen, ueber 400 Bilder
+                // (`Wartezaehlung: ... 120:200 180:200 240:200 300:200
+                // 360:200`), **und Index 200 ist genau diese `221`.** Mit
+                // `Index++` **und** `return false` rueckte der Index nie
+                // weiter, weil `executeCommand` ihn zurueckschrieb und
+                // die Seite bei jedem Bild denselben Befehl erneut
+                // versuchte.
                 //
                 // **Und die Dauer kommt aus `fadeSpeed()`, und das ist
                 // `return 24`** -- **und nicht aus den Parametern, denn
@@ -3571,8 +3725,28 @@ case MzCommandTable.ChangeExp:
                 // laesst die Seite warten**, -- **und ohne diese
                 // Pruefung wuerde ein Spiel seinen Bildschirm
                 // abdunkeln, waehrend jemand liest.**
+                //
+                // **Und `return false` ist hier richtig, und `WaitFor`
+                // ist es auch** -- **denn `false` heisst "warte", und
+                // der Index bleibt stehen, und genau so haelt die Seite
+                // an.**
+                //
+                // **Und gemessen ist, was ohne das `WaitFor` passiert:**
+                // Camellias Map003 Ereignis 9 **rief `command221`
+                // 124.389 Mal bei Index 200 auf** (`[mz-221b] 221
+                // erreicht bei idx=200`, 124.389 Treffer, **und `[mz-221c]
+                // warte=24` genau einmal, bei Index 0**) -- **weil
+                // `MessageBusy` von einem frueheren `101` true war und
+                // nie wieder false wurde.**
+                //
+                // **Ein `return false`, das keine Wartezeit setzt, ist
+                // kein Warten, sondern eine Endlosschleife ueber denselben
+                // Befehl.**  Die Seite hat hier dieselbe Form wie der
+                // 101 und der 201: **erst die Bedingung, dann die
+                // Wartezeit, dann `false`.**
                 if (pFacts.MessageBusy)
                 {
+                    pInterpreter.WaitFor(MzWaitMode.Message);
                     return false;
                 }
 
@@ -3582,11 +3756,14 @@ case MzCommandTable.ChangeExp:
                 pActions.Add(new MzAction(pCommand, gemeldet));
                 pInterpreter.Wait(geschwindigkeit);
 
-                // **Und `this._index++` heisst hier: der Befehl zaehlt
-                // sich selbst hoch, und der Rueckgabewert sagt nur
-                // "nicht noch einmal".**
-                pInterpreter.Index++;
-                return false;
+                // **Und `return true`, und kein `Index++`**
+                // `executeCommand` zaehlt selbst hoch, wenn kein
+                // `false` zurueckkommt**, **und `this.wait(24)` ist
+                // `_waitCount = 24`, und nicht `setWaitMode`.** Das ist
+                // der Unterschied zwischen einer Wartezeit, die
+                // abzaehlt, und einer Bedingung, die erst ein Tastendruck
+                // loest: **eine Bildzaehlung braucht keinen Spieler.**
+                return true;
             }
 
             case MzCommandTable.ChangeActorImages:
@@ -3767,6 +3944,13 @@ case MzCommandTable.ChangeExp:
                         At(pCommand, 1), MzScreen.MaxBalloonFrames);
                     if (warten)
                     {
+                        // **Und hier wartet die Engine auf den Spieler** --
+                        // **denn `command213` sagt `this._characterId =
+                        // params[0]`** (und das ist `-1`), **und
+                        // `this.character(-1)` ist der Spieler.** **Also
+                        // wartet sie auf den Spieler-Ballon, und nicht auf
+                        // eine beliebige Figur.**
+                        pInterpreter.BalloonCharacterId = ziel;
                         // **Und das Warten ist der Zustand "Ballon",
                         // und nicht eine Zahl von Bildern.**
                         //
@@ -3816,6 +4000,19 @@ case MzCommandTable.ChangeExp:
                     At(pCommand, 1), MzScreen.MaxBalloonFrames);
                 if (warte)
                 {
+                    // **Und die Engine merkt sich die Figur** -- **denn
+                    // `command213` sagt `this._characterId = params[0]`,
+                    // und `updateWaitMode` wartet auf
+                    // `character.isBalloonPlaying()` -- **auf genau diese
+                    // Figur, und nicht auf eine beliebige.**
+                    //
+                    // **Und ein Leser, der auf *jede* Figur mit Ballon
+                    // wartete**, -- **parkte eine Seite, die gerade
+                    // zwei ihrer eigenen Figuren ein Icon gab und dann
+                    // auf einem dritten wartete** -- **denn die eigenen
+                    // Icons laeuften nie aus, weil die Seite auf sie
+                    // wartete, und sie wartete auf sie, die nie ausliefen.**
+                    pInterpreter.BalloonCharacterId = ziel;
                     pInterpreter.WaitFor(MzWaitMode.Balloon);
                 }
 

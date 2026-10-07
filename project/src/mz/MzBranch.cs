@@ -1029,10 +1029,45 @@ public sealed class MzBranchFacts
             ScrollSpeed = ScrollSpeed,
             ScrollLines = ScrollLines,
 
-            // **Und die Wartebedingungen des Bildschirms** -- **denn
-            // `MessageBusy` und `InBattle` entscheiden, ob `201`
-            // ueberhaupt umzieht.**
+            // **Und der Dialog gehoert dazu, denn `MessageBusy` ohne
+            // `LastDialogue` ist ein Fenster, das "Text im Bildschirm"
+            // meldet und keinen hat.**
+            //
+            // **Und gemessen ist genau das, und `Repaint` ist der Grund:**
+            // `WithCharacters` baut ein **neues** `MzBranchFacts`, und
+            // **der alte Dialog ist nicht darin.** `MessageBusy` wurde
+            // mitgenommen, `LastDialogue` nicht -- **und weil `Repaint`
+            // `WithCharacters` bei jedem Kartenwechsel ruft, war nach dem
+            // ersten Repaint `MessageBusy = true` bei
+            // `LastDialogue = null`** (gemessen an Camellias Map003
+            // "Day 1": `busy=True last=null`, `vis=False`, **vier echte
+            // Zeilen `"This passage is weird... I can hear chatter?"`
+            // gelesen und nie sichtbar geworden).
+            //
+            // **Und `MessageBusy` gehoert dazu, denn `command101`
+            // prueft in beiden Engines `$gameMessage.isBusy()`.**
+            //
+            // **Und gemessen ist, dass die *beide* fehlen nicht darf:**
+            // `Repaint` ruft `WithCharacters` bei jedem Kartenwechsel, **und
+            // `Repaint` ist es, was den frisch gelesenen Dialog wieder
+            // wegkickt** -- **gemessen an Camellias Map003 "Day 1" direkt
+            // um `Transfer(3, 4, 11)` herum**:
+            //
+            // ```
+            // [mz-tf2] vorRepaint   busy=True vis=True last=set
+            // [mz-tf2] nachRepaint  busy=False vis=False last=set
+            // ```
+            //
+            // **Und das ist die schlimmere Haelfte des Fehlers:** vorher
+            // blieb die Flagge stehen und der Block ging verloren
+            // (`busy=True last=null`), **jetzt bleibt der Block stehen und
+            // die Flagge geht.** **Beides heisst: kein Dialog.**
             MessageBusy = MessageBusy,
+            LastDialogue = LastDialogue,
+            LastChoice = LastChoice,
+
+            // **Und die Wartebedingungen des Bildschirms** -- **denn
+            // `InBattle` entscheidet, ob `201` ueberhaupt umzieht.**
             InBattle = InBattle,
             BattleCanEscape = BattleCanEscape,
             BattleCanLose = BattleCanLose,

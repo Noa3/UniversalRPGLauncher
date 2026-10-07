@@ -190,3 +190,10 @@ msgstr "取消"
 
 msgid "RTP_STATUS_WORKING"
 msgstr "正在获取运行库 ..."
+
+
+msgid "ENGINE_CHOICE_AUTO"
+msgstr "自动检测 — 不明确时选择引擎"
+
+msgid "ENGINE_CHOICE_TOOLTIP"
+msgstr "明确选择已检测到的引擎。这不会启用不支持的运行时。"

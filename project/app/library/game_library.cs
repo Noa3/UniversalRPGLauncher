@@ -32,6 +32,7 @@ public partial class GameLibrary : RefCounted
 		public string Path;
 		public GameDetector.DetectionResult Detection;
 		public string SelectedPluginId { get; internal set; } = "";
+		public string ExplicitPluginId { get; internal set; } = "";
 		public GameCompatibilityStatus CompatibilityStatus { get; internal set; }
 		public bool LoadedFromPersistence { get; internal set; }
 		public IReadOnlyList<EngineDetectionCandidate> Candidates => Detection.Candidates;
@@ -262,16 +263,39 @@ public partial class GameLibrary : RefCounted
 		if (persisted != null)
 		{
 			entry.LoadedFromPersistence = true;
-			// A persisted explicit selection is reused only when the current bounded
-			// detection still reports that candidate. Stale selections never drive launch.
-			if (!string.IsNullOrEmpty(persisted.SelectedPluginId)
-				&& detection.Candidates.Any(pCandidate =>
-					pCandidate.PluginId.Equals(persisted.SelectedPluginId, StringComparison.Ordinal)))
-			{
-				entry.SelectedPluginId = persisted.SelectedPluginId;
-			}
+			// Automatic historical selections are not user overrides. Revalidate an
+			// explicit choice against the current files, not the persisted candidate list.
+			if (!string.IsNullOrEmpty(persisted.ExplicitPluginId))
+				TrySelectEngine(entry, persisted.ExplicitPluginId, out _, false);
 		}
 		return entry;
+	}
+
+	public bool TrySelectEngine(GameEntry pEntry, string pPluginId, out string pError, bool pPersist = true)
+	{
+		pError = "";
+		if (pEntry == null || pPluginId == null)
+		{
+			pError = "A game and engine choice are required.";
+			return false;
+		}
+		var detection = _detector.Analyze(pEntry.Path, pPluginId);
+		if (!string.IsNullOrEmpty(pPluginId)
+			&& (detection.Report.IsMalformed || detection.Report.IsUnknown
+				|| detection.Report.IsAmbiguous
+				|| detection.Report.SelectedCandidate?.PluginId != pPluginId
+				|| !_runtimeRegistry.TryGet(pPluginId, out var plugin) || plugin == null
+				|| (plugin.Metadata.Capabilities & PluginCapability.Runtime) == 0))
+		{
+			pError = "The chosen engine is not a currently detected playable candidate.";
+			return false;
+		}
+		pEntry.Detection = detection;
+		pEntry.SelectedPluginId = detection.Report.SelectedCandidate?.PluginId ?? "";
+		pEntry.ExplicitPluginId = pPluginId;
+		pEntry.CompatibilityStatus = DetermineCompatibility(detection);
+		if (pPersist) PersistEntry(pEntry);
+		return true;
 	}
 
 	private void UpsertEntry(GameEntry pEntry)
@@ -345,6 +369,7 @@ public partial class GameLibrary : RefCounted
 			Path = pEntry.Path,
 			Title = pEntry.Title,
 			SelectedPluginId = pEntry.SelectedPluginId,
+			ExplicitPluginId = pEntry.ExplicitPluginId,
 			CompatibilityStatus = pEntry.CompatibilityStatus.ToString(),
 			Confidence = pEntry.Detection.Confidence.ToString(),
 			DetectionScore = pEntry.DetectionScore,
@@ -463,6 +488,7 @@ public partial class GameLibrary : RefCounted
 		public string Path { get; set; } = "";
 		public string Title { get; set; } = "";
 		public string SelectedPluginId { get; set; } = "";
+		public string ExplicitPluginId { get; set; } = "";
 		public string CompatibilityStatus { get; set; } = "";
 		public string Confidence { get; set; } = "";
 		public int DetectionScore { get; set; }

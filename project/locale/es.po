@@ -191,3 +191,10 @@ msgstr "Cancelar"
 
 msgid "RTP_STATUS_WORKING"
 msgstr "Obteniendo el tiempo de ejecucion ..."
+
+
+msgid "ENGINE_CHOICE_AUTO"
+msgstr "Detección automática — elegir motor si es ambiguo"
+
+msgid "ENGINE_CHOICE_TOOLTIP"
+msgstr "Elegir explícitamente un motor detectado. No habilita entornos no compatibles."

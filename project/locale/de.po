@@ -197,3 +197,43 @@ msgstr "Abbrechen"
 
 msgid "RTP_STATUS_WORKING"
 msgstr "Laufzeit wird geholt ..."
+
+
+msgid "ENGINE_CHOICE_AUTO"
+msgstr "Automatische Erkennung — bei Mehrdeutigkeit Engine wählen"
+
+msgid "ENGINE_CHOICE_TOOLTIP"
+msgstr "Eine erkannte Engine ausdrücklich auswählen. Nicht unterstützte Laufzeiten werden dadurch nicht freigegeben."
+
+msgid "PAUSE_TITLE"
+msgstr "Pause"
+
+msgid "PAUSE_RESUME"
+msgstr "Fortsetzen"
+
+msgid "PAUSE_OPTIONS"
+msgstr "Optionen"
+
+msgid "PAUSE_CHEATS"
+msgstr "Cheats"
+
+msgid "PAUSE_STOP_RUNTIME"
+msgstr "Laufzeit beenden"
+
+msgid "PAUSE_CLOSE_PROGRAM"
+msgstr "Programm schliessen"
+
+msgid "PAUSE_BACK"
+msgstr "Zurueck"
+
+msgid "OPTIONS_LANGUAGE"
+msgstr "Sprache"
+
+msgid "OPTIONS_INTEGER_SCALE"
+msgstr "Ganzzahlige Skalierung"
+
+msgid "CHEATS_EMPTY"
+msgstr "Fuer dieses Spiel sind noch keine Cheats verfuegbar."
+
+msgid "GAME_CONTINUE_HINT"
+msgstr "(Enter oder Klick: weiter)"

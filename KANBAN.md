@@ -1,5 +1,100 @@
 ## Active
 
+### K-MZ-MV-RUNTIME — DONE (MV and MZ start in the launcher)
+
+Goal: make RPG Maker MV and MZ run, not just be detected. Acceptance: the
+detector reports `Supported`, the launcher's Start button enables, the runtime
+starts a real game, and the game paints a frame a player can look at -- with no
+imported JavaScript executed. Full suite green.
+
+Result: both engines run. The runtime already existed; `WebRpgPlugin` only
+refused to advertise it. Three measured gaps closed:
+- tileset suffix: `.rpgmvp` (MV) vs `.png_` (MZ), all spellings tried;
+- PNG colour type 6 (MV) refused, now accepted and quantised to a palette;
+- MV tilesets exceed 256 colours and are reduced deterministically instead of
+  refused.
+Game view now covers MV/MZ (the whole painted map at its own size), not a
+preview panel. Live: Camellia (MZ) `Supported` + starts + paints a real scene,
+F4 pause menu works there too; LegalTruck (MV) starts and paints 816x624.
+Canonical suite **2693/2693**, validation exit 0, Windows release rebuilt.
+Known limits: MV LegalTruck's own start map is an empty editor map; plugin
+commands are reported and not run; no MV/MZ sound yet in the game view.
+
+### K-INPUT-LIVE — DONE (movement proven, pause menu keyboard, double-built form fixed)
+
+Follow-up card: the movement of the exported build was still unproven.
+Acceptance: prove arrow-key movement against the exported executable, make the
+F4 pause menu usable without the mouse, and fix any real defect found on the
+way. Full suite green, Windows release rebuilt and repackaged.
+
+Result: movement is proven live (`pos=41/24 -> 42/24` on Right, Down refused
+by passability). Two real defects were found and fixed:
+1. `Main._Ready` called `BuildInterface()` unconditionally, so every second
+   tree entry built a second copy of the launcher form
+   (`Can't add child ... already has a parent`); now guarded by
+   `GetChildCount() == 0`.
+2. The F4 pause menu accepted only mouse clicks while the launcher marks every
+   key as handled while it is open, so Up/Down/Tab did nothing; `HandlePauseKey`
+   and `CurrentPausePage` now move the selection and `OpenPause` focuses the
+   first entry (live check shows a focus frame on "Resume").
+`TestBase` publishes the running `Window`/host node so suites can drive real
+`Viewport.PushInput`. Evidence: **2679/2679**, 338/338 suites, validation exit 0,
+ZIP 219 files / 141.9 MiB, sha256 `5133e6b2…7c` , every entry verified.
+Known: the headless runner aborts sporadically (101/177/205 of 338 suites) --
+proven pre-existing on HEAD via a clean worktree. Investigated with per-suite
+diagnostics: orphaned scene nodes stay constant at 53, the managed heap is 8-23
+MiB against a working set of up to 947 MiB, handles 462-672 and threads 44-53, so
+neither a node leak nor a managed-memory leak nor a Windows handle/thread limit
+is the cause; the evidence points to Godot-side native memory and does not yet
+pin a line. The runner collects the managed heap between suites, which is
+correct housekeeping and explicitly not claimed as the fix. After that change two
+consecutive full runs plus the release build passed (2679/2679).
+
+### K-GAMEVIEW-RENDERFIX — DONE
+
+User report: no game usable; after engine choice the run showed a pink picture
+and did not fill the window. Acceptance: fix the pink rendering from the real
+cause, make at least one real game testable in a full-window game view that
+scales with the window, remove the launcher Stop button in favour of an F4
+pause screen (resume, options, cheats, stop runtime, close program), keep all
+regression tests green and rebuild the Windows release.
+
+Root cause of the pink screen: the BMP reader had the orientation rule
+inverted (a positive height is bottom-up), so every Lisa chipset was mirrored
+vertically and the upper layer sampled the pink marker area. Root cause of the
+black view: `RenderedMap` is already the composed 320x240 screen and the new
+screen cropped it a second time; it now copies the frame one-to-one.
+
+Evidence: canonical suite **2677/2677**; `scripts/build_windows.sh` exit 0
+(validation + export + smoke); exported EXE run live — Diary selected, started,
+game filled the window letterboxed with **0 pink pixels** and a real scene
+(player sprite, room, sand/stone palette; raster probe `opaquePixels=30287/76800`),
+F4 pause menu shown and dismissed; screenshots
+`build/verification/diary-game.png` / `diary-pause.png`; ZIP rebuilt,
+219 files, 141.9 MiB, sha256 `b0749608…c254e4`, every entry verified.
+Residual: arrow-key movement not confirmable through the movie recorder
+(synthetic key delivery); Dragon Destiny starts on an editor-empty map and says
+so; 135 warnings and shutdown leak diagnostics remain.
+
+### K-AUDIT-WINDOWS — DONE
+
+User-requested audit of the current launcher/runtime and a runnable Windows build.
+Acceptance: reproduce and fix confirmed safety/lifecycle defects with regression tests;
+run the canonical validator; export a release into root `build/windows` and exercise
+that executable; report live engine support separately from parser/helper coverage.
+Do not execute imported game code or bundle games/RTP assets. Preserve `qa_patches/`.
+
+Evidence: `bash scripts/build_windows.sh` exit 0, **2670/2670** canonical tests;
+C# rebuild 0 errors/135 existing warnings. Exported headless startup/shutdown,
+directly rendered launcher frames and native folder-picker persistence verified.
+11 real games audited: 3 ambiguous LCF games start for 180 frames each after an
+explicit supported RM2000/2003 choice; 8 stay detection-only. No full gameplay claim.
+Windows directory and integrity-checked ZIP produced; report `docs/AUDIT_WINDOWS.md`.
+Known residuals: suite shutdown CanvasItem/ObjectDB leaks, compiler warnings,
+full gameplay and RTP-download E2E unverified. Original games/saves and `qa_patches/`
+preserved; audit work remains local, no commit/push.
+
+
 ### K-RUBY-SINGLETON -- `def $a.b` ist gelesen und nicht ausgefuehrt, und
 ### das ist ein Werttyp-Problem und kein Zeilenproblem
 

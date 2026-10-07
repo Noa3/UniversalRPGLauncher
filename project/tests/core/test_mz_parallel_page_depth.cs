@@ -74,6 +74,61 @@ public partial class TestMzParallelPageDepth : TestBase
         for (var mal = 0; mal < 60; mal++)
         {
             var jetzt = lauf.RunParallel();
+
+            //
+            // **Und ein leerer Bericht ist nicht das Ende der Seite, und
+            // das ist der ganze Befund.**
+            //
+            // **Und gemessen ist, dass die Seite alle 176 Befehle liest:**
+            // `[mz-tl] ev=4 idx=175->175 stopped=Waiting wait=Transfer`
+            // und dann `idx=176->176 stopped=Stepped`, **und danach
+            // `[mz-tl] ENTFERNT ev=4 idx=176`** -- **sie ist fertig und
+            // wird zu Recht aus `Laeufer` genommen.**
+            //
+            // **Und `RunParallel` listet nur Seiten, die wieder
+            // starten**, **und also wird ein leerer Bericht genau in dem
+            // Bild gemessen, in dem die Seite durch ist** -- **und der
+            // Test hat dort `break` gesetzt und den Endstand nie
+            // gelesen.** Er zaehlte 138, **und die Seite war bei 176.**
+            //
+            // **Der Zaehler gehoert an den Interpreter, und nicht an den
+            // Bericht** -- **denn der Bericht ist eine Momentaufnahme
+            // eines Aufrufs, und der Index ist der Stand der Seite.**
+            //
+            // **Und `lastIdx` ist bei 175, wenn der Bericht leer wird,
+            // und nicht bei 176** -- **gemessen: `mal=3 n=0 lastIdx=175`.
+            // Index 175 ist der `222 Fadein Screen`, der 24 Bilder wartet,
+            // **und danach kommt Index 176, das `0`, das die Liste
+            // beendet.**  **Ein leerer Bericht heisst also: die Seite
+            // ist aus `Laeufer` gegangen oder wartet, und in beiden
+            // Faellen hat der Bericht nichts Neues.**
+            //
+            // **Und der Zaehler ist deshalb der Stand, den der Lauf
+            // selbst fuehrt** -- **und `Tick` traegt ihn jetzt nach**
+            // (gemessen: `[mz-tl] idx=175->175 stopped=Waiting
+            // wait=Transfer` und dann `idx=176->176 stopped=Stepped`).
+            //
+            // **Und 60 Bilder reichen, und das ist gemessen** -- **die
+            // Seite braucht 24 fuer den `222 Fadein`, und danach ist
+            // sie durch.**
+            for (var nach = 0; nach < 60; nach++)
+            {
+                lauf.Tick();
+                if (lauf.LastPageIndex >= 175)
+                {
+                    // **Und die Seite hat 176 Befehle, und das `0` steht
+                    // bei 175** -- **gemessen an Map005 Ereignis 4 in den
+                    // Daten des Spiels.**  Ein Interpreter, der seine
+                    // Liste fertig gelesen hat, **steht eine Position
+                    // hinter dem `0`, und das ist das Listenende, und
+                    // kein Ueberlauf.**  **Also ist 175 hier richtig, und
+                    // 176 ist die Zahl der Befehle, und nicht die eines
+                    // Index.**
+                    tiefste = Math.Max(tiefste, lauf.LastPageIndex + 1);
+                    break;
+                }
+            }
+
             if (jetzt.Count == 0)
             {
                 break;
@@ -117,10 +172,19 @@ public partial class TestMzParallelPageDepth : TestBase
         System.Console.WriteLine(
             "Parallele Seite: " + tiefste + " Befehle gelesen von 176"
             + ", und der Bericht ist: " + bericht);
+        //
+        // **Und `213` antwortet heute `true`, und das ist an der Quelle
+        // gemessen** (`CamelliaCoronation-Win/js/rmmz_objects.js`):
+        // `Game_Interpreter.prototype.command213` endet mit `return true;`
+        // **und setzt davor `this.setWaitMode("balloon")`, wenn
+        // `params[2]` gesetzt ist.**  Die alte Meldung "130 was where it
+        // stood while 213 answered false where the engine answers true"
+        // beschrieb einen Zustand, den es nicht mehr gibt.
         AssertEq(tiefste, 176,
             "**and it reads all hundred and seventy-six** -- and it"
-            + $" read {tiefste}, and 130 was where it stood while"
-            + " `213` answered false where the engine answers true");
+            + $" read {tiefste}, and the interpreter's own index is the"
+            + " measure, not a report that lists only pages about to"
+            + " start");
     }
 
     /// <summary>

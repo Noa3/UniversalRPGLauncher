@@ -1,4 +1,887 @@
 ## Current card
+
+### CHECKPOINT 2026-10-07 — MZ parallel-page fix (committed, pushed)
+
+**And the standing goal is "make MV/MZ fully working", and this is an
+honest checkpoint of where that stands, not a claim that it is done.**
+
+**What is verified green this slice (measured, build clean):**
+
+| suite | result |
+|---|---|
+| `TestRealMzPageRun` | **11/11** (was 10/11) |
+| `TestMzParallelPageDepth` | **1/1** |
+| `TestMzWaitCountsDown` | **3/3** |
+| `TestRealMvRuntimeRun` | **3/3** |
+| `TestRealMzRuntimeRun` | **10/10** |
+
+**The two fixes in this slice, both measured before and after:**
+
+1. **The test broke on a stale signal.** `TestRealMzPageRun` broke its
+   frame loop on `LastPageStop == Finished`, but `Start()` had already run
+   the start map's autorun page and left `LastPageStop = Finished`, so the
+   test exited at frame 0 before the parallel page advanced (probe:
+   `init idx=0 stop=Finished`, then `f=0 idx=2`). `LastPageStop` is written
+   only by `RunPage`/`RunPageEvent`, never by `RunParallel`/`Tick`. The
+   honest signal is `LastPageIndex`, and the break now uses
+   `LastPageIndex >= 175` (the `0` that ends the 176-command list).
+   Comments in that test are English.
+
+2. **`Update()` re-ran every page of the map from index 0, every frame,
+   even while `Tick()` was advancing the running page.** That is not what
+   `Game_Map.prototype.update` does (it continues the interpreter, it never
+   restarts it), and it is what made frame-loop tests hang. The start-run
+   loop (`foreach ... PageOf(CurrentMapId)`) is now guarded by
+   `if (Laeufer.Count == 0)`, so it only starts a page when none is running.
+   `TestMzParallelPageDepth` and the frame loops complete with it.
+
+**What is still open, and is stated as open and not hidden:**
+
+- `TestMvParallelPageDepth` **spins at ~895 % CPU** (Fatal Fantasy Map231,
+  `Tick()` x 80 x 120). It drives `Tick()` + `RunParallel()`, which never
+  call `Update()`, so the `Update()` guard above is not the cause; it is in
+  the accumulated MZ slice of this working tree. **This is a regression in
+  the working state and is not fixed.** The canonical suite does not fully
+  pass while it spins.
+- `TestMzEchtesSpielStartet` choice test (`Test_EineWahlErscheintUnd...`)
+  still reports "got 0 choices" (7/8) -- pre-existing, the choice path is
+  not yet wired.
+
+**Standing rules for this session (from the user, 2026-10-07):** code and
+comments in English only; checkpoint to git regularly; write tests for the
+changes; internet research is allowed when a fact is unknown. `qa_patches/`
+stays unversioned and is preserved, not committed.
+
+### K-GAMEVIEW-RENDERFIX — DONE (playable game view + BMP fix)
+
+Final: canonical suite **2677/2677 passed**; `scripts/build_windows.sh` exit 0
+(validation + export + headless smoke); Windows release rebuilt 2026-10-05 and
+live-checked with the exported EXE: Diary selected, Start pressed, game filled
+the window letterboxed with **0 pink pixels**, a real scene with the player
+sprite and the room visible (raster probe `opaquePixels=30287/76800`, sand and
+stone palette, empty diagnostic); F4 opened the live pause menu (resume,
+options, cheats, stop runtime, close program) and closed it again.
+Screenshots: `build/verification/diary-game.png`, `diary-pause.png`.
+Integrity-checked ZIP: `build/UniversalRPG-Windows-x64.zip`, 219 files,
+141.9 MiB, sha256 `b0749608…c254e4`, every entry hash-verified.
+Known limits: arrow-key movement could not be confirmed through the movie
+recorder (synthetic key delivery); the user should try the real window.
+Dragon Destiny starts on an editor-empty one-tile map and names it; Pom renders
+a mostly sparse scene. 135 compiler warnings and suite shutdown leak
+diagnostics remain. Audit work stays local, no commit/push.
+
+User report: games "seem unusable", after engine choice the game ran but showed
+a pink picture and did not fill the window; asked to make at least one game
+testable, remove the launcher Stop button, add an F4 pause screen (resume,
+options, cheats, stop runtime, close program) and rebuild.
+
+**Pink root cause (found, fixed):** `Rm2kBmp.TryParse` read every 8-bit BMP
+upside down (`vonUnten = rohHoehe < 0`; the Windows contract is the opposite:
+positive height is bottom-up). Lisa's ten chipsets and 25 character sheets are
+`.bmp`, so every lower-layer slot read the mirrored cell: lower slot 54 landed
+on a magenta marker tile and upper slot 0 (99% of the layer, meant to be
+transparent) landed on a pink cell that covered the whole field. Reproduced in
+Python against the real chipset and the map's own tiles: data rows
+`[0x13BE lower, 0x2710 upper]`; correct reading shows slot 0 = index-0
+transparent. Fix + `test_rm2k_bmp_orientation.cs` (2 tests, red before green).
+The BMP path had zero test coverage before this. Full suite after the fix:
+**2672/2672 passed**.
+
+**Movement proven in the exported build (2026-10-05, 14:06 build):** with
+temporary instrumentation in `Main._UnhandledInput` the live window printed
+`key=Right action=MoveRight paused=False menu=False waiting=None pos=41/24`
+then `submitted=True pos=42/24`, and `key=Down ... submitted=False` because the
+tile below is impassable. So the arrow keys reach the window, the mapper
+resolves them, and the runtime applies the step; a blocked direction is
+correctly refused. Both probe lines were removed afterwards and the shipped
+`UniversalRPG.dll` contains no probe string. Live F4 pause menu confirmed with
+a visible focus frame on "Resume" in the keyboard-navigable build.
+
+**Flaky abort investigated (2026-10-05, after 4 failed runs):** the per-suite
+diagnostics now name the suite (`RUNNING <name>`) and report orphan-node changes
+(`ORPHANS after suite <name>: N (+N)`). Measured results: **orphans stay constant
+at 53** -- the 50 attributed to `TestLauncherUiSafety` are managed-side objects,
+not orphaned scene nodes, because a tree walk found no parentless node; and the
+**GC heap is only 8-23 MiB while the working set reaches 947 MiB**, so the memory
+sits on Godot's side, not in managed code. Working set min 155 MiB, handles
+462-672, threads 44-53: nothing exhausts a Windows limit. Conclusion: the abort is
+a native-side memory event that this evidence does not yet pin to a specific
+line; `CSharpRunner` therefore collects the managed heap between suites (correct
+housekeeping, explicitly *not* claimed as the fix, with that reasoning in the
+comment) and after that change two consecutive full runs and the release build
+all passed: **2679/2679**, 338/338 suites, validation exit 0.
+
+**Flaky headless runner abort (pre-existing, NOT a regression):** several
+`scripts/validate.sh` runs died mid-run with exit 1 and no message, after
+177 or 205 of 338 suites. A `git worktree` of HEAD (without any of the game
+view work) aborts the same way at the same suite, so the cause predates this
+work. Every offending suite passes alone; working set stays at 6 MB, so it is
+not memory. `CSharpRunner` now prints `RUNNING <suite>` before each suite and
+logs `OBJECTS after suite <name>: N nodes, orphan=N` every 25 suites (measured
+1737-42707 nodes, orphans 50-53), so a future abort names its suite instead of
+looking like a run that refuses to finish. The last full run was
+**2679/2679 passed, 338/338 suites, validation passed, exit 0**.
+
+**MV and MZ now run in the launcher (2026-10-05, 22:21 build):** the blocker was
+never a missing runtime. `MzEngineRuntime` was already a complete native
+backend (Initialize -> Running, event runner, painted map) -- `WebRpgPlugin`
+simply advertised `Detection | Parsing` with the reason "until an embedded
+JavaScript runtime is available", and this project never executes an imported
+`.js`: MV/MZ games are read as data. Adding `PluginCapability.Runtime` to
+`RpgMakerMzPlugin` and `RpgMakerMvPlugin` is what makes the detector report
+`Supported` and the Start button leave its disabled state.
+
+Three real gaps were found and closed on the way, each measured on the real
+games rather than assumed:
+1. `MzMapRenderer.TilesetFileNames` now tries `.rpgmvp` (MV) and `.png_` (MZ);
+   the old single-spelling reader found every MZ tileset and no MV tileset.
+2. `Rm2kIndexedImage.TryParse` refused colour type 6. Measured at LegalTruck's
+   `World_A1.rpgmvp`: 768x576, depth 8, colour type 6, while MZ's
+   `Outside_A1.png_` is colour type 3. It now accepts both and quantises RGBA
+   into a palette, so every tile rule above that layer keeps working. The
+   palette check moved behind the colour type, because "no usable palette" was
+   a diagnosis for code asking the wrong question.
+3. An MV tileset has more than 256 distinct colours, more than an 8-bit index
+   addresses. It is reduced deterministically (sorted by luminance, then
+   channel) rather than refused: a refused tileset means an MV game that starts
+   and paints nothing.
+
+The game view was also widened: `Main._Process` treated only `Rm2kEngineRuntime`
+as game mode, so MV/MZ got a 220 px preview instead of the window. It now fills
+and scales like RM2K, and `Rm2kGameScreen` takes the frame at its own size
+(measured: LegalTruck 816x624, Camellia 672x864) instead of cropping everything
+to a 320x240 RM2K screen.
+
+Live check with the exported executable: Camillia's Coronation Report (MZ)
+shows `Compatibility: Supported` and an active Start button, starts, and paints
+a real scene with the player sprite, terrain and water -- no black screen, no
+diagnostic. F4 opened the pause menu there too (162,185 changed pixels).
+LegalTruck (MV) starts and paints 816x624; its own start map "Hai" is an empty
+editor map (0 of 1326 tile values non-zero, measured), which is why it looks
+empty, and its one drawn map "Test map" is the one with content.
+Canonical suite after all of it: **2693/2693**, validation passed.
+
+**MV/MZ movement implemented (2026-10-05, after the render fix):** the web
+runtimes had no input path at all -- `MzEngineRuntime` had no `SubmitInput`, so a
+game could start and paint but not be walked. Two new pieces, both read out of
+the engines' own source (`rmmz_objects.js` / `rpg_objects.js`, where the code is
+byte-identical between MV and MZ):
+
+- `MzKachelDurchgang` -- `checkPassage(x, y, bit)`: skip any tile whose flag has
+  0x10 set ("*", no effect on passage), and return on the FIRST tile that can
+  answer; `o` means the bit is clear, `x` means it is set, and a cell with no
+  answering tile is refused. Three details that are easy to get wrong, each
+  written into the code: the flags live in ONE array (`tilesetFlags()` returns
+  `$dataTilesets[id].flags`, 8192 entries in every tileset measured -- reading
+  `passage1..7` finds nothing, those keys are not in the files); 0x10 is tested
+  before anything else, so `0x01 | 0x10` is a star and says nothing; and the
+  direction bits are `(1 << (d / 2 - 1)) & 0x0f` over the engine's own direction
+  numbers 2/4/6/8.
+- `MzSpielerZug` + `MzEngineRuntime.SubmitInput` -- one key turns the player and
+  steps if the target cell allows it, with `Game_Map.isValid` checked before
+  passability. The player turns on a blocked key too, because
+  `Game_Player.moveStraight` guards only the follower update with `canPass` and
+  then calls the base implementation, which turns the character either way.
+
+Three of my own tests were wrong before the code was: I read the engine's star
+skip as an "allow", expected a later tile to overrule a closed one, and compared
+only start and end position -- four steps in four directions end where they
+began. Measured on Camellia: `MZ hero 4/11 | rechts:1/0 unten:0/1 links:-1/0
+oben:0/-1 | moved=4`.
+
+`Main._UnhandledInput` now routes MV/MZ to the same `SubmitInput` the RM2K path
+uses, so the window has one input path rather than two with one untested.
+
+**MZ movement is visible now, and it took four separate fixes (2026-10-06):**
+the step worked in the logic from the first version (`hero=4/11 -> 5/11`, measured
+in the live window) and stayed invisible for three builds. Four causes, in the
+order they had to be found:
+1. `SubmitInput` moved the player but never asked for a repaint. `Update` only
+   repaints figures when `MzWalkClock.Tick()` fires, and that clock runs on the
+   player's figure whose route a key press does not create -- the hero counted as
+   `IsStopping` and was never drawn past his old tile.
+2. `MzPlayer.SyncFigure` pulls the *player* to the figure
+   (`if (Figur.X != X) StandAt(MapId, Figur.X, Figur.Y)`), because it was written
+   for routes, where the figure leads. A key moves the player, so the figure has
+   to follow: `Facts.Player.Figur?.SetLocation(...)`.
+3. `Main._Process` passed `mz.SimulationTicks` as the image counter, and
+   `SetGameState` uses it in the texture signature. A step changes the map but no
+   tick, so the signature stayed equal and no new texture was built.
+4. `SetGameState` never called `QueueRedraw()`, and `_Draw` -- where the texture is
+   actually built -- only runs when something asks for it. This was the last one
+   standing after the first three were fixed, which is why it was worth measuring
+   the window instead of the headless buffer: every headless assertion passed the
+   whole time.
+
+Live with the exported build after the fix (01:22 build): the window changes
+**1124 pixels in a compact box (x 411-485, y 488-533)** on one Right press --
+the size of one character sprite -- and the vision check puts the pink player
+figure in the terrain at that spot. Proof frames
+`build/verification/mz-proof-before.png` / `mz-proof-after.png`. Headless
+assertions could not have caught #4, which is now written down as the reason the
+window is checked rather than only the buffer.
+
+Note for future live runs: the exported window starts on whichever monitor Godot
+picks and this machine has one at a negative desktop coordinate, so
+`set_window_frame` has to run before any click and a click at a remembered
+coordinate can minimise or resize the window instead of hitting the button.
+
+**Arrow keys are NOT broken — proof (2026-10-05):** a new regression
+test drives the *real* Godot input chain -- `Viewport.PushInput(InputEventKey)`
+through `Main._UnhandledInput` into `Rm2kEngineRuntime.SubmitInput` -- against
+the real game `E:/RPGMakerGames/Lisa`. Measured hero displacement per key:
+`Right=+1/0, Down=0/+1, Left=-1/0, Up=0/-1, D=+1/0, S=0/+1`, start 42/25.
+So movement works; the earlier "arrows do nothing" was synthetic key delivery
+through the movie recorder, not a runtime defect. Two test traps are now
+documented in the test: `Simulation.Steps` counts the tiles of the move in
+progress and is not a running total (use `MapX/MapY`), and the Dragon Destiny
+fixture starts on an editor-empty map whose lower table carries zero
+passability, so a hero there must not move in a correct implementation.
+
+**Pause menu keyboard navigation (2026-10-05):** the pause menu only accepted
+mouse clicks, while `Main._UnhandledInput` marks *every* key as handled while the
+menu is open -- so an arrow key there did nothing at all. `Rm2kGameScreen` now
+exposes `HandlePauseKey` / `CurrentPausePage`, `OpenPause` focuses the first
+entry (so Enter has a visible target), and Up/Down plus Tab move the selection
+with wrap-around. Covered by
+`Test_PauseMenuOpensFocusedAndMovesWithTheArrowKeys`.
+
+**Second real defect found and fixed (2026-10-05):** `Main._Ready` called
+`BuildInterface()` unconditionally, so every second entry into the tree built a
+*second* copy of the launcher form and Godot logged
+`Can't add child '@Control@74' ... already has a parent`. Guarded with
+`if (GetChildCount() == 0)` -- idempotent rather than a boolean flag, because
+`_Ready` is also where a recycled node is rebuilt. `TestBase` now publishes the
+running `Window` and host `Node` so suites can drive real input;
+`TestLauncherUiSafety` is 14/14.
+
+**Second render finding (fixed):** the raster probe (`RealGameAuditRunner`
+`rasterProbe`, added this round) showed `RenderedMap` is ALREADY the composed
+320x240 screen — the runtime scrolls the cached layers, draws the player
+sprite and lays the upper layer over it in `RecomposeFrame`. The game screen
+first cropped that frame a second time and went black for any camera offset
+larger than one screen. The screen now copies the frame one-to-one and draws
+the player from the frame itself; `ComputeGameView` is a plain letterbox
+(canvas + integer option). Probe evidence after the BMP fix:
+`Diary` (Lisa) `map=320x240 opaquePixels=30287/76800` with sand/stone/green
+palette colours and no diagnostic; `Dragon Destiny` starts on an editor-empty
+one-tile map (runtime names it); `Pom` 308 opaque pixels. F4 pause menu was
+exercised live on the previous build and showed resume/options/cheats/stop
+runtime/close program; pink pixels are gone from the exported frames.
+
+**Game view (built):** `app/ui/Rm2kGameScreen.cs` — the launcher UI hides while
+an RM2K runtime runs; the map fills the window letterboxed with
+`ComputeGameView` (pure, tested: camera offsets from `Rm2kMapCamera`, 700/240
+scale, integer-scale option, small-map case). Only the visible 320x240 slice is
+copied and uploaded per frame (a full 111x108 map would be 12 MB per frame).
+Message box, choice buttons and input row render in the game view; F4 toggles
+the pause menu (resume / options / cheats / stop runtime / close program),
+Escape resumes, the pause stops runtime updates, the window title carries
+`- F4: Pause` while playing, and a missing map image names the
+`RenderDiagnostic` instead of showing black. The launcher Stop button is
+removed; stopping lives in the pause menu. New locale keys in `en.po`/`de.po`.
+UI suite `test_launcher_ui_safety.cs` extended to 13 tests (stop placement,
+letterbox, integer scale, small map, pause toggle, message/choice rendering).
+
+### K-AUDIT-WINDOWS — DONE (user-requested project review)
+
+Baseline: commit `bda191f`, tracked tree clean; untracked `qa_patches/` preserved.
+Fresh `scripts/validate.sh`: exit 0, all 2651 tests passed, 135 compiler warnings.
+Confirmed defects: RTP ZIP directory traversal/prefix containment, UI writes from
+Task.Run, unresolved `user://` passed to System.IO. Export templates absent; official
+4.7.2 Mono template download started. Existing engine flags keep XP/VX/VX Ace/MV/MZ
+at Detection|Parsing; runtime helper existence does not make them launcher-playable.
+Implemented ZIP confinement/no-overwrite/link/size guards and focused regressions;
+launcher report selection, message continuation, shutdown, background progress,
+absolute RTP cache path, launch reentry guard and save I/O handling repaired.
+Official export template SHA-256 matches GitHub release metadata; templates installed.
+Final: `bash scripts/build_windows.sh` exit 0; canonical suite **2670/2670**,
+C# rebuild 0 errors/135 existing warnings, Windows release and headless smoke verified.
+Audit: 11 real games; 3 ambiguous LCF games start and complete 180 frames each
+under either explicit supported RM2000/RM2003 choice; 8 remain detection-only.
+Explicit choice is not proof of the game's actual generation or full playability.
+Exported renderer frames confirm scrollable details and visible Start/Stop.
+Native folder picker was exercised; `E:/RPGMakerGames` persisted and read back.
+Background native window snapshots did not capture OpenGL content; use direct
+movie-writer PNGs as pixel evidence, not gray PrintWindow output as a UI failure.
+Three generated records from the first non-isolated UI RED run were removed from
+user library settings; existing unrelated records retained. Current tests use
+isolated settings. Original game data/saves and `qa_patches/` remain untouched.
+Deliverables: `build/windows/`, integrity-checked `build/UniversalRPG-Windows-x64.zip`
+(219 files, 141.9 MiB compressed), `docs/AUDIT_WINDOWS.md`; raw logs/reports in
+`build/verification/`. Fresh ZIP extraction into a separate scratch directory also
+started the EXE headlessly and exited 0 without ERROR diagnostics; see
+`build/verification/packaged-headless.log`. Audit changes remain local, no commit/push performed.
+Remaining: 135 compiler warnings; full-suite shutdown 3 CanvasItem RID and
+6 ObjectDB leaks (baseline 3/7); full gameplay and RTP-download E2E unverified.
+Next: manual gameplay checks; subsequent runtime work stays behind Kanban acceptance
+criteria and must not interpret the bounded start checks as completed compatibility.
+
+### The parallel page at index 99 (four measurements, no fix yet)
+
+**And the measurement, because it is worth more than the four attempts.**
+
+```
+[mz-iw] idx=99  flag=True stopped=Waiting
+[mz-iw] idx=101 flag=True stopped=Waiting
+[mz-iw] idx=104 flag=True stopped=Waiting
+[mz-pf] idx=99 warte=Message antwort=True ok=True
+[mz-run] idx=99 -> 99 stopped=Waiting n=1
+```
+
+**And what those five lines say together:**
+
+- `flag=True` -- the 101 **did** move the index itself, as it should.
+- `antwort=True` -- `WaitBeantwortet` says the wait is over.
+- `ok=True` -- the key is set.
+- `idx=99 -> 99` -- and `Run` leaves the index exactly where it was.
+
+**And the engine's own code, in
+`CamelliaCoronation-Win/js/rmmz_objects.js`:**
+
+```js
+Game_Interpreter.prototype.command101 = function(params) {
+    if ($gameMessage.isBusy()) {
+        return false;
+    }
+    ...
+    while (this.nextEventCode() === 401) {
+        this._index++;
+        $gameMessage.add(this.currentCommand().parameters[0]);
+    }
+    switch (this.nextEventCode()) { case 102: ... case 103: ... case 104: ... }
+    this.setWaitMode("message");
+    return true;
+};
+```
+
+**So the command reports success and the wait stands beside it.**
+**And this reader sets `Stopped = Waiting` from `WaitFor`, which `Run`
+reads back as `false` -- and `false` stops the page before the index
+moves.**
+
+**And that is the open question, stated as a question:** `WaitFor` is
+two things at once here -- "the page is waiting" and "this command did
+not run".  **The engine keeps them apart** (`_waitMode` next to
+`_index`, `return true` next to `setWaitMode`).  **This reader folds
+them into one flag, and every 101 that waits loses its step.**
+
+**And the four attempts, all measured, none better than 10/11:**
+
+| attempt | result |
+|---|---|
+| `return true` on the 101 | no change -- the code already said it |
+| clearing `IndexWeitergesetzt` only on a real run | no change |
+| `Wait(int)` clearing `WaitMode` | fixed index 200, not this |
+| tile check on `RunPage` | fixed the action button, not this |
+
+**And the baseline, unchanged and verified after the probes came out:**
+
+| suite | |
+|---|---|
+| `TestRealMvRuntimeRun` | **3/3** |
+| `TestMzPlayerTransfer` | **5/5** |
+| `TestMzParallelPageDepth` | **1/1** |
+| `TestMzWaitCountsDown` | **3/3** |
+| `TestMzDialogueAndChoice` | **9/9** |
+| `TestRealMzPageRun` | 10/11 |
+| `TestMzEchtesSpielStartet` | 7/8 |
+
+**And the next step is one line of code, and not a search:**
+`MzInterpreter.Run` must step the index when a command returned **true**
+even if it also set a wait.  **Today it returns `false` on
+`Stopped != Stepped` before it ever looks at what the command returned,
+and `Stopped` is `Waiting` for every 101.**
+
+## Batch of two background runs, and four more defects
+
+**And the two runs named the same two suites, and the batch was worth
+more than either run alone.**
+
+**1. `command201` waits, and a test insisted it refuses.**  The test
+`Test_ATransferInABattleOrDuringAMessageIsRefusedAndNothingIsReserved`
+asserted `MzStep.Refused` and its own name said "refused".  The source
+says `return false`, **and `executeCommand` only advances the index on
+`true`** -- **so the engine holds the page.**  The test is now
+`...WaitsAndNothingIsReserved` and asserts `MzStep.Waiting`, with the
+source quoted.  `TestMzPlayerTransfer` **5/5**.
+
+**2. Autorun has two numbers, and they are per project.**  Measured in
+the two games:
+
+| game | triggers in its maps |
+|---|---|
+| CamelliaCoronation-Win (MZ) | 0, 1, **2**, 3 |
+| sister/www (MV) | 0, 1, **2**, 3, **4** (445 pages with 4) |
+
+`Game_Event.prototype.start` is word-for-word identical in
+`rmmz_objects.js` and `rpg_objects.js`, **and neither says which number
+is autorun** -- **and `setupStartingMapEvent` asks `isStarting()`, not
+the trigger.**  **A table that knew only `2` ran none of LegalTruck's
+and none of sister's 445 autorun pages.**
+
+**3. `Actions` was a per-frame buffer and the tests read it as the run's
+history.**  `Test_DerLaufFuehrtDieEigenenBefehleDesProjektsAus` wants
+`> 1000` after 600 frames and measured **14** -- **because a hook I added
+cleared it.**  `Actions` grows and is read; `LastActions` is the page's
+list.  `TestRealMvRuntimeRun` **3/3**.
+
+**4. The action button needs the player's tile.**  Measured in
+`rmmz_objects.js`:
+
+```js
+Game_Player.prototype.triggerButtonAction = function() {
+    if (Input.isTriggered("ok")) {
+        if (this.getOnOffVehicle()) { return true; }
+        this.checkEventTriggerHere([0]);
+        if ($gameMap.setupStartingEvent()) { return true; }
+        this.checkEventTriggerThere([0, 1, 2]);
+        if ($gameMap.setupStartingEvent()) { return true; }
+    }
+    return false;
+};
+```
+
+**`Here` is the player's tile.** Without that check the button started
+the first matching event on the whole map -- **measured: the player
+stood correctly on `(2, 12)` and 19.999 frames ran event 5** instead of
+14. **`RunPage` now checks the tile, and only for `ActionButton` and
+`Touched`** -- **autorun and parallel go through
+`setupStartingMapEvent`, which never mentions a tile, and binding those
+to one would stop every autorun page in both engines.**
+
+**And the baseline, measured:**
+
+| suite | |
+|---|---|
+| `TestRealMvRuntimeRun` | **3/3** |
+| `TestMzPlayerTransfer` | **5/5** |
+| `TestMzParallelPageDepth` | **1/1** |
+| `TestMzWaitCountsDown` | **3/3** |
+| `TestMzDialogueAndChoice` | **9/9** |
+| `TestRealMzPageRun` | 10/11 |
+| `TestMzEchtesSpielStartet` | 7/8 |
+
+**And the two open ones, both measured, both the same shape.**  The
+parallel page of Map005 event 4 and the choice page of Map004 event 14
+both stand at `wait=Message`, `frames=0`, and `[mz-ld3]
+ok-gesetzt=True` fires **once per 240 frames** -- **so the release runs,
+the key is set, and `PassFrame` does not see it.**  **The next step is
+one question: what reads `_keys.Pressed` between `LoeseDialoge` and
+`PassFrame` and empties it.**  `Tick` has no `_keys.FrameEnde()` of its
+own, so the clearing happens in `Update`, and **a caller that drives
+`Tick` directly never runs it** -- **which is exactly the difference
+between the two passing suites and these two failing ones.**
+
+## Two more defects, and a diff that was lying
+
+**And `command221` is the reason a page stood at index 200.**  The
+source, in the game itself:
+
+```js
+Game_Interpreter.prototype.command221 = function() {
+    if ($gameMessage.isBusy()) {
+        return false;
+    }
+    $gameScreen.startFadeOut(this.fadeSpeed());
+    this.wait(this.fadeSpeed());
+    return true;
+};
+```
+
+**And two things followed from that.**  The handler did
+`pInterpreter.Index++; return false;` -- **there is no `_index++` in the
+engine**, and `executeCommand` moves the index itself on `true`.  And
+`if (pFacts.MessageBusy) { return false; }` set **no wait mode**, so the
+page retried the same command forever:
+
+```
+[mz-221b] 221 erreicht bei idx=200        <- 124.389 times
+[mz-221c] warte=24 ...                     <- once, at index 0
+```
+
+**And a `return false` that names no wait is not a wait, it is a spin.**
+The fix is the shape every one of these commands has: **test, then
+`WaitFor`, then `return false`.**
+
+**And `MzInterpreter.Wait(int)` now clears `WaitMode`, because
+`this.wait(n)` sets only `_waitCount`.**  Measured without it: a page
+whose 101 set `MzWaitMode.Message` and whose 221 waited 24 frames stood
+at index 200 for 400 frames with `frames=0` and `wait=Message` -- **the
+count was gone and the condition was not, and a condition without a key
+press never opens.**
+
+**And the diff was lying.**  `git diff --numstat` said
+`MzInterpreter.cs | 987 insertions, 948 deletions` for a **24-line
+change.**  Cause: reading and writing the file normalised its mixed
+CRLF/LF endings (HEAD had 948 CRLF and 137 LF lines).  **No lines were
+lost -- the file grew from 1085 to 1124 -- but every diff of these three
+files was unreadable until the line endings were put back byte for byte.**
+`MzCommands.cs` and `MzEngineRuntime.cs` were the same shape (HEAD was
+pure LF, mine was pure CRLF).
+
+**And this is worth remembering as a rule:** after writing a file in a
+repository whose files have mixed endings, check `git diff --numstat`
+against the line count.  **A diff of a whole file for a small change is
+a line-ending artefact, not a big edit.**
+
+**And the baseline now, measured:**
+
+| suite | |
+|---|---|
+| `TestMzWaitCountsDown` | **3/3** |
+| `TestRealMzPageRun` | **11/11** |
+| `TestMzDialogueAndChoice` | **9/9** |
+| `TestMzParallelPageDepth` | 0/1 -- reads 138 of 176 |
+
+**And the open one, measured:** the parallel page of Map005 event 4
+reads 138 of 176 commands and then leaves `Laeufer` entirely -- the
+probe at index 130-145 never fires, **so the page is removed from the
+collection rather than left waiting.**  `Spur: 0->2(E3=0 E15=0 S=0)
+1->132(E3=51 E15=76 S=0) 2->138(E3=0 E15=0 S=0)` -- **the balloons
+counted down, and the page stopped with `waitMode=None`.**  **The next
+step is the `else` branch of `Tick`'s `Laeufer` handling, not another
+command.**
+
+## The engine source is IN the games (this is the unlock)
+
+**And `E:/RPGMakerGames/CamelliaCoronation-Win/js/rmmz_objects.js` is the
+real `rmmz_objects.js`, 305.528 bytes.**  **Every question in this
+session could have been answered by reading it, and three of them
+were answered wrongly first.**  Use it as the source of truth, not
+documentation.
+
+**And three defects, each read off the source and each confirmed by a
+measurement before and after:**
+
+1. **`command201` returns `false`, and `false` means "wait", not
+   "refuse".**  The source is
+
+   ```js
+   Game_Interpreter.prototype.command201 = function(params) {
+       if ($gameParty.inBattle() || $gameMessage.isBusy()) {
+           return false;
+       }
+   ```
+
+   **and what `false` means is one level up:**
+
+   ```js
+   Game_Interpreter.prototype.executeCommand = function() {
+       const command = this.currentCommand();
+       if (command) {
+           const methodName = "command" + command.code;
+           if (typeof this[methodName] === "function") {
+               if (!this[methodName](command.parameters)) {
+                   return false;
+               }
+           }
+           this._index++;
+       }
+   ```
+
+   **The index only moves on `true`.**  `Refuse` stopped Camellia's
+   Map005 event 4 at index 174 of 176; **the wait carried it to the
+   end.**  `MzCommands.cs` now waits, and the parallel suite is green.
+
+2. **`command105` returns `true`, and that matters.**  The source ends
+
+   ```js
+   this.setWaitMode("message");
+   return true;
+   ```
+
+   **A `return false` there leaves the index on the last 405 line**
+   (measured: Map003 event 9 stuck at index 200 for 400 frames).
+   **Fixed to `return true`, and the wait stays** -- `setWaitMode` is
+   before the return, as the engine has it.
+
+3. **`command101` is the same shape** -- `if ($gameMessage.isBusy())
+   { return false; }` -- **so the wait and the block are one thing, and
+   `MzWaitMode.Message` is the only place they can disagree.**
+
+**And the message wait is solved, and it is one condition:** the release
+belongs to the *wait*, not to `Facts.MessageBusy` --
+
+```csharp
+if (Laeufer.Values.Any(i => i != null
+    && i.WaitMode == MzWaitMode.Message))
+```
+
+**332 of 573 frames had `MessageBusy = false` while a page stood on that
+wait.**  It is now one method, `LoeseDialoge`, called from **both**
+`Tick` and `Update` -- because `Tick` is public and
+`Test_DieDreiParallelenSeiten` drives it directly.
+
+**And `LastActions` and `LastPageIndex` are now written by `Tick`.**
+Both were only ever written by `RunPage` and `RunPageEvent`, **so a page
+that runs over frames carried 200 commands and reported 4** (measured:
+459 actions and index 210 after the fix).
+
+**And the baseline now, measured:**
+
+| suite | |
+|---|---|
+| `TestRealMzPageRun` | **11/11** |
+| `TestMzDialogueAndChoice` | **9/9** |
+| `TestMzWaitCountsDown` | 2/3 -- page stops at index 200/210 |
+| `TestMzParallelPageDepth` | 0/1 |
+| `TestMzEchtesSpielStartet` | 7/8 -- choice still open |
+
+**And what is open, measured, and not guessed:** the page stops at
+index 200, which is a `221` (24 frames), and the interpreter reports
+`idx=200 stopped=Waiting wait=Message`.  **180 releases fire and each
+one is followed by a fresh wait** -- so the page is moving and
+something sets a message wait it should not.  **The next step is to
+find who sets `MzWaitMode.Message` at index 200, and the source to read
+is `command221`.**
+
+## The Message wait, solved (measured)
+
+**And the fix is one condition, and the measurement that found it:**
+
+```
+[mz-b] A pass=False kann=True busy=False last=null     x332
+[mz-b] A pass=False kann=True busy=True  last=set        x241
+[mz-wa] message ok=False busy=False last=null okPressed=38
+```
+
+**And what it says: the release that answers the message wait was
+gated on `Facts.MessageBusy`, and 332 of the 573 frames had
+`MessageBusy = false` while an interpreter stood on
+`MzWaitMode.Message`.**  **And `ok=True` fired exactly once per run
+(`okPressed=1`), never again.**
+
+**And the fix is that the release belongs to the *wait*, not to the
+screen flag:**
+
+```csharp
+if (Laeufer.Values.Any(i => i != null
+    && i.WaitMode == MzWaitMode.Message))
+```
+
+**And the result, measured on Camellias Map003 event 9 (211 commands):
+the page now reaches index 210, the last command.**  Before this it
+stood at 208; in one earlier attempt it fell back to 6.
+
+**And a second defect the same measurement exposed: `Tick` collected its
+work into `Actions`, and `LastActions` was only ever set by `RunPage`
+and `RunPageEvent`.**  So the page carried 200 commands and **not one of
+them appeared in the list the tests read** -- **measured 4 actions at
+index 210, 459 after the fix.**
+
+**And the balloons are not a defect:** `MzWaitMode.Balloon` at indices
+22 and 37 measured `laeuft=False`, and both resolved.  `213 [-1, 2,
+true]` is the *player* figure, and `BalloonFramesLeft` counts down as the
+engine's `8 * speed + waitTime` says.
+
+**And the baseline now, measured:**
+
+| suite | |
+|---|---|
+| `TestMzDialogueAndChoice` | **9/9** |
+| `TestRealMzPageRun` | 9/11 -- actions count now right, order asserted against the synchronous `RunPage` list |
+| `TestMzEchtesSpielStartet` | 7/8 -- dialogue with the game's own text |
+
+**And what is left in `TestRealMzPageRun` is a test that reads the
+first `RunPage`, and the page now runs over frames.**  The assertions
+"the first was 213", "the second was 101" and "the 205 is among the
+first nine" are about the *synchronous* prefix.  **The order of the run
+is unchanged and correct -- `101, 205, 101, 213, 101` over 459 actions
+-- so this test has to be rewritten against the frame path, not the
+runtime repaired.**
+
+## BLOCKED-ish: the Message wait (three measured attempts)
+
+**And the exact measurement, because it is worth more than my three
+guesses:**
+
+```
+[mz-q] busy=False last=null vis=False pressed=[ok] ok=12
+```
+
+**And what that means:** a page waits on `MzWaitMode.Message`, the key
+list says "ok", **and there is no dialogue at all** -- `last=null`,
+`busy=False`.  The 101 ran (`LastActions` carries it, with the game's
+own text), **and `MessageBusy` is false anyway.**
+
+**And why the 101 runs and sets nothing: `command101` sets
+`WaitFor(MzWaitMode.Message)` on its way out** -- **measured at
+`MzCommands.cs:577`: `setWaitMode("message")` is outside the `switch` in
+the engine, so a dialogue with no choice holds its page all the same.**
+**Five other places set the same wait** (`MzCommands.cs` lines 472, 1074,
+2531, 2544, 3218).
+
+**And three attempts, all measured, none better than the baseline:**
+
+| attempt | result |
+|---|---|
+| baseline (`Pressed.Contains("ok")`) | `TestRealMzPageRun` 9/11, page reaches index 208/210 |
+| `!MessageBusy && LastDialogue == null` | **6/11** -- index falls back to 6, the page runs past its own dialogue |
+| `_facts = Facts` after `WithCharacters` | 9/11 but a *different* pair of failures, so it is not this cause |
+
+**And the two tests that prove the 101 handler itself is right:**
+`TestMzDialogueAndChoice` is **9/9**, and it is the suite that covers
+"a second dialogue is refused while one is up".
+
+**And the baseline to return to, measured:** `TestRealMzPageRun` 9/11,
+`TestMzDialogueAndChoice` 9/9, `TestMzEchtesSpielStartet` 7/8,
+`TestMzParallelPageDepth` 0/1.  **The open failure is the choice, and
+its cause is the same wait.**
+
+**And the next step, which is not another guess:** the 101 sets the wait
+**on the way out of the command**, **and the release happens in `Update`
+before `Tick`** -- **so the order inside one frame is: 101 sets the wait
+and the block, `Update` releases the block because `_dialogAge` is old,
+`Tick` then asks `WaitBeantwortet` about a dialogue that is already
+gone.**  **The release has to be driven by the same condition that set
+the wait, not by a frame counter.**
+
+## Session checkpoint (mv/mz, this session)
+
+**And the current state is not green, and the exact number is 28 of
+2711.**  **A regression in `Test_ASecondDialogueIsRefusedWhileOneIsUpAnd
+TheIndexWaits` (5 failures) is mine** -- I loosened the 101 guard from
+`if (MessageBusy)` to `if (MessageBusy && LastDialogue != null)` and that
+test is right and I am wrong: the engine puts nobody's words on the
+screen while another message is up.  **The guard is back to
+`if (MessageBusy)`.**
+
+**And what is verified working, with the game's own text:**
+
+- MZ starts, paints and moves -- measured `4/11 -> 5/11`.
+- **The dialogue reaches the window: `"This passage is weird... I can
+  hear chatter?"`**, and it is Camellia's own Map003 event 9 text.
+- The action-button page starts: `event 5 page 0 ... trigger 0`.
+
+**And what is still open, measured and not guessed:**
+
+**One cause behind 9 of the failures, and it is measured:**
+
+```
+[mz-w] busy=False laeufer=1 idx=101 wait=Message
+[mz-w] busy=False laeufer=1 idx=103 wait=Message
+[mz-w] busy=False laeufer=1 idx=104 wait=Route
+[mz-w] busy=False laeufer=1 idx=121 wait=Message
+```
+
+**And the release path never fires: `[mz-rel]` was printed 0 times.**
+`WaitBeantwortet` reads `MzWaitMode.Message => _keys.Pressed
+.Contains("ok")`, **and the page sits on `wait=Message` while
+`MessageBusy` is `false`** -- **so the interpreter waits for a dialogue
+that the runtime never opened.**  The 101 sets
+`WaitFor(MzWaitMode.Message)` at `MzCommands.cs:472`, **and that is the
+only place that wait mode is set.**
+
+**And so the next step is exactly this, and not another guess:** find
+why `WaitFor(Message)` is set while `MessageBusy` is `false`.  **Two
+readings, both still open:**
+
+- the 101 waits because a *previous* 101 left `MessageBusy` true, and
+  something cleared the flag without the interpreter noticing -- in
+  which case the flag and the wait have to be released together; **or**
+- the wait mode is never cleared when the condition stops holding, and
+  `KannFortgesetztWerden` then needs `WaitBeantwortet` to be asked
+  against a flag that describes the *window*, not the interpreter.
+
+**And what the 19.797 measurements were:** the action button restarted
+event 5 every frame.  That is guarded now with `Laeufer.Count == 0`,
+which matches `Game_Player.updateNonmoving`'s
+`$gameMap.isEventRunning()`.  **That guard was not re-measured after the
+wait cause above was found, so treat the choice path as unmeasured.**
+
+**And the parallel-page test fails with the same shape**
+(`event 4: waiting 0 frames at code 101`), **so it is the same cause and
+not a third one.**
+
+**And the honest account of this session's method, because it matters
+for the next one:** I made about a dozen changes to one behaviour before
+measuring once, and only the measurement at `vorRepaint` /
+`nachRepaint` found the real cause (`Repaint` -> `WithCharacters` drops
+`LastDialogue`).  **Measure first.**
+
+## MZ dialogue + action button (this session)
+
+**And the four real defects, and each was measured before it was fixed.**
+
+1. **`Tick()` was written and never called.** `MzEngineRuntime.Tick()`
+   holds the loop that advances a waiting page, and `Game_Map.prototype
+   .update` is `if (this._interpreter.isRunning()) { this._interpreter
+   .update(); }` -- **measured in `rmmz_objects.js`.** Without the call a
+   page stops at the first command it waits on: **measured at Camellia
+   Map003 "Day 1", event 9 with 211 commands executed exactly one and
+   stayed at code 221**, and the command that shows the dialogue never
+   ran.
+
+2. **Two synchronous loops deleted the dialogue they had just read.**
+   `RunPage` and `RunPageEvent` each ran the whole page in one pass and
+   set `Facts.MessageBusy = false` at the top of every iteration, then
+   pressed "ok". **Both removed** -- a page now advances over frames
+   through `Tick()` in `Update`, and the dialogue stands until it is
+   confirmed.
+
+3. **`WithCharacters` carried `MessageBusy` but not `LastDialogue`.**
+   `Repaint` calls it on every map change and it builds a **new**
+   `MzBranchFacts`, so the flag survived and the text did not:
+   **measured `busy=True last=null`, `vis=False`, four real lines read
+   and never shown.** Both fields are carried now, and the measurement is
+   in the comment: `vorRepaint busy=True vis=True` /
+   `nachRepaint busy=False vis=False`.
+
+4. **`RunPage(StartMode.ActionButton)` was written and never called.**
+   `Passt` distinguished trigger 0 and trigger 1 correctly; nothing
+   invoked them. **Measured at Camellia Map004 event 14: `trigger 0`, the
+   dialogue `"~14 hours or so later"` and the choice `Yes` / `No`** --
+   and **14 pages in this one game.** Now wired in `Update` behind a real
+   key press, and not while a dialogue or a choice is open.
+
+**And two test defects, not runtime defects:**
+
+- `Frames != SimulationTicks` was asserted. **Measured: both stand at 54**
+  -- two separate counters may hold the same value, and the assertion
+  tested a coincidence. It now asserts what it means: `Frames` counts
+  images, and a key press is not an image (**measured 54 -> 54**).
+- The choice test looked for a `102` on Map003. **Measured: this game's
+  six choices are on Map004, Map006, Map009, Map016 and Map017 -- Map003
+  carries none.** A test that looks for one there tests the test's map
+  choice, not the engine.
+
+**And the state of it, honestly:**
+
+| | |
+|---|---|
+| MZ starts, paints, moves | verified |
+| **MZ dialogue with the game's own text** | **verified** -- `"This passage is weird... I can hear chatter?"` |
+| Action-button page starts | verified (`event 5 page 0, trigger 0`) |
+| **MZ choice answered** | **open** -- the page sits at code 101 |
+| `TestMzEchtesSpielStartet` | 7/8 |
+
+**And the choice is still open, and the reason is not yet measured.**
+The action-button page starts and stops at its own dialogue, and the loop
+that should carry it past that dialogue is the same one that now works
+for the autorun dialogue -- so the next step is to measure what
+`event 5`'s page 0 holds, and not to guess again.
+
+## Failure log (K-AUDIT-WINDOWS)
+
+- Exported-frame review exposed overflowing details/inactive preview space.
+  Two layout tests failed before the fix; details now scroll and Start/Stop stay
+  outside the scrolling content. Final UI suite 8/8 and full suite 2670/2670.
+- Native background screenshots were gray despite working input. Switched evidence
+  to the executable's own rendered PNG frames and native folder-dialog readback;
+  no speculative renderer change made.
+
+- ZIP safety RED: traversal directory and sibling-prefix escaping reproduced;
+  after confinement changes focused tests passed.
+- UI RED: four actual failures (Continue leaves event waiting, runtime survives
+  scene exit, enum-only support disables a valid selection, save I/O throws).
+  All five focused UI regressions now pass.
+- Canonical run exceeded the 180-second tool deadline but continued progressing;
+  waited for the exact original PID instead of starting a second validator.
+  Result: one new test failed because its cleanup deleted `test.zip` while its
+  helper created `input.zip`. Fixed the test to delete the returned archive path.
+  No production assertions or compatibility requirements weakened.
+
 ## The battle-only monster family is done — 13110, 13120, 13130, 13150, 13210
 
 **Measured against liblcf's own `eventcommand.h` (`src/generated/lcf/rpg/`,

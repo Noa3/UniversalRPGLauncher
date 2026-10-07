@@ -418,7 +418,6 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             return false;
         }
 
-        System.IO.Directory.CreateDirectory(SaveDirectory);
         return Rm2kSimulationSaveCodec.TryWriteFile(SaveDirectory,
             pSlot, Simulation, out pError);
     }

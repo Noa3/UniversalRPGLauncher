@@ -23,6 +23,8 @@ public partial class CSharpRunner : Node
 	private readonly List<string> _failures = new();
 	private int _total;
 	private int _passed;
+	private int _index;
+	private int _orphanBefore;
 
 	/// <summary>
 	/// Which suite names an argument asked for, and null for all of them.
@@ -54,6 +56,8 @@ public partial class CSharpRunner : Node
 
 	public override void _Ready()
 	{
+		TestBase.Tree = GetTree().Root;
+		TestBase.Host = this;
 		TranslationServer.SetLocale("en");
 		RunSuites();
 		RunSmokeTests();
@@ -101,6 +105,12 @@ public partial class CSharpRunner : Node
 				_failures.Add($"{suiteType.Name}: could not create test suite instance");
 				continue;
 			}
+			// **Und die Suite wird *vor* dem Lauf benannt** -- **denn wenn der
+			// native Prozess mitten in einer Suite stirbt, ist die letzte
+			// gedruckte Zeile der einzige Hinweis darauf, welche es war.**
+			// **Ohne diese Zeile sieht ein Abbruch ohne Meldung wie ein Lauf aus,
+			// der sich einfach weigert, fertig zu werden.**
+			GD.Print($"RUNNING {suiteType.Name}");
 			TestBase.SuiteResult result;
 			try
 			{
@@ -115,6 +125,50 @@ public partial class CSharpRunner : Node
 			{
 				suite.Dispose();
 			}
+			// **Und  die  Objektrechnung  des  Prozesses  wird  nach  jeder
+			// Suite  mitprotokolliert** -- **denn  eine  Suite,  die  ihre
+			// Knoten  nicht  freigibt,  sammelt  sie  ueber  300  Laeufe  an,
+			//  und  das  sieht  dann  aus wie  ein  Absturz  ohne  Ursache.
+			// **Und  nur  die  Suite,  die  die  Zahl  erhoeht,  ist  die
+			//  schuldige** -- **ein  Summenwert  allein  sagt  nur,  dass
+			//  etwas  leckt,  und  nicht  was.**
+			// **Und  der  verwaltete  Heap  wird  zwischen  den Suiten
+			// zurueckgegeben.**
+			//
+			// **Und  das  ist  Haushalten  und  nicht  die  erklaerte
+			// Ursache:**  die  Messung  zeigte  einen  GC-Heap  von  8 bis 23
+			// MiB  bei  einem  Working  Set  bis  947 MiB,  und  der
+			// Speicher  liegt  damit  auf  Godots  Seite  und  nicht  in
+			// verwaltetem  Code.  Wer  das  umdreht  und  die  GC  als  Fix  fuer
+			//  den  Abbruch  verkauft,  hat  zwei  Messungen  verwechselt.
+			//
+			// **Und  richtig  ist  es  trotzdem:**  zwischen  zwei  Suiten  gibt
+			// es  keinen  laufenden  Zustand,  den  eine  Erschuetterung
+			// beschaedigen koennte,  und  die  Parsebaffer  der  echten
+			// Spiele  sind  genau  die  Sorte  Objekt,  die  man  nicht  bis
+			//  zum  Laufende  liegen  lassen  will.
+			if (_index % 20 == 0)
+			{
+				GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+				GC.WaitForPendingFinalizers();
+				GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
+			}
+			var orphanAfter = (int)Performance.GetMonitor(
+				Performance.Monitor.ObjectOrphanNodeCount);
+			if (orphanAfter != _orphanBefore)
+			{
+				// **Und  nur  eine  Veraenderung  der  Verwaisten  wird
+				// gemeldet,  nicht  die  Knotenzahl** -- **denn
+				// `ObjectCount` ist  Godots  Objektpool  und  schwankt  ueber
+				// 3000  Eintraege  hin  und  her,  ohne  dass  irgendetwas
+				//  undicht  wird;  ein  Lauf  mit  konstanten 53  Verwaisten
+				//  hat  keinen  Knotenleck,  und  eine  Meldung  darueber
+				//  waere  ein  Messfehler,  der  wie  ein  Befund  aussieht.**
+				GD.Print($"ORPHANS after suite {suiteType.Name}: {orphanAfter} "
+					+ $"(+{orphanAfter - _orphanBefore})");
+			}
+			_orphanBefore = orphanAfter;
+			_index += 1;
 			_total += result.Tests;
 			_passed += result.Passed;
 			var label = suiteType.Name;

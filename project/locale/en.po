@@ -191,3 +191,43 @@ msgstr "Cancel"
 
 msgid "RTP_STATUS_WORKING"
 msgstr "Getting the runtime ..."
+
+
+msgid "ENGINE_CHOICE_AUTO"
+msgstr "Automatic detection — choose engine if ambiguous"
+
+msgid "ENGINE_CHOICE_TOOLTIP"
+msgstr "Choose a detected engine explicitly. This does not enable unsupported runtimes."
+
+msgid "PAUSE_TITLE"
+msgstr "Paused"
+
+msgid "PAUSE_RESUME"
+msgstr "Resume"
+
+msgid "PAUSE_OPTIONS"
+msgstr "Options"
+
+msgid "PAUSE_CHEATS"
+msgstr "Cheats"
+
+msgid "PAUSE_STOP_RUNTIME"
+msgstr "Stop runtime"
+
+msgid "PAUSE_CLOSE_PROGRAM"
+msgstr "Close program"
+
+msgid "PAUSE_BACK"
+msgstr "Back"
+
+msgid "OPTIONS_LANGUAGE"
+msgstr "Language"
+
+msgid "OPTIONS_INTEGER_SCALE"
+msgstr "Integer scale"
+
+msgid "CHEATS_EMPTY"
+msgstr "No cheats are available for this game yet."
+
+msgid "GAME_CONTINUE_HINT"
+msgstr "(Enter or click: continue)"

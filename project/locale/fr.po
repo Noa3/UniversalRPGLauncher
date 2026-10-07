@@ -191,3 +191,10 @@ msgstr "Annuler"
 
 msgid "RTP_STATUS_WORKING"
 msgstr "Telechargement du paquet ..."
+
+
+msgid "ENGINE_CHOICE_AUTO"
+msgstr "Détection automatique — choisir en cas d’ambiguïté"
+
+msgid "ENGINE_CHOICE_TOOLTIP"
+msgstr "Choisir explicitement un moteur détecté. Cela n’active pas les moteurs non pris en charge."

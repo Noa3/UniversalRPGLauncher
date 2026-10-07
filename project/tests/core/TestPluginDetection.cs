@@ -550,15 +550,52 @@ public partial class TestPluginDetection : TestBase
 
     public void Test_BuiltInDetectionOnlyRuntimeRefusesLaunch()
     {
-        var report = Analyze("RMMV");
+        // **Und RM95 bleibt abgelehnt** -- **denn diese Grenze ist eine
+        // andere als die von MV und MZ:**  RM95 hat keinen Leser und
+        // keinen Runtime, und eine Erkennung ohne Backend soll den Start
+        // verweigern.  MV und MZ haben jetzt eine eigene Laufzeit ueber
+        // ihre JSON- und Bilddaten und gehoeren deshalb nicht mehr hier
+        // her -- **ein Test, der jede Engine einzeln aufzaehlt, wird bei
+        // jedem neuen Runtime zum falschen Zeugen, und diese Liste war
+        // genau das.**
         var selector = new EngineRuntimeSelector();
-        var selection = selector.Select(report, "windows");
-        AssertFalse(selection.Success);
-        AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
 
         var rm95Selection = selector.Select(Analyze("RM95"), "windows");
         AssertFalse(rm95Selection.Success);
         AssertEq(rm95Selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
+
+        var danteSelection = selector.Select(Analyze("Dante98"), "windows");
+        AssertFalse(danteSelection.Success);
+        AssertEq(danteSelection.Error?.Code, PluginErrorCode.UnsupportedEngine);
+    }
+
+    /// <summary>
+    /// And the web engines now have a runtime of their own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the assertion that keeps the boundary
+    /// honest.</strong> "Detection only" was not a missing feature
+    /// behind a missing bit; it was a statement that a web game needs a
+    /// JavaScript engine. <strong>This project never executes an imported
+    /// <c>.js</c></strong>, and both runtimes read <c>Map*.json</c>,
+    /// <c>System.json</c> and the encrypted pictures natively -- so the
+    /// engine is selected and a runtime is created.
+    /// </para>
+    /// </remarks>
+    public void Test_DieWebEnginesWirbtJetztEineLaufzeit()
+    {
+        var selector = new EngineRuntimeSelector();
+        foreach (var fixture in new[] { "RMMV", "RMMZ" })
+        {
+            if (!Directory.Exists(TempBase.PathJoin(fixture)))
+            {
+                continue;
+            }
+            var selection = selector.Select(Analyze(fixture), "windows");
+            AssertTrue(selection.Success,
+                $"{fixture} selects a runtime: {selection.Error?.Message}");
+        }
     }
 
     public void Test_Rm95FilenameAloneDoesNotCreateCandidate()
@@ -604,10 +641,26 @@ public partial class TestPluginDetection : TestBase
         AssertTrue(report.Diagnostics.Any(pDiagnostic => pDiagnostic.Code == "detection.partial-scan"),
             "partial scan is reported diagnostically");
 
+        // **Und die Auswahl scheitert nicht am Teil-Scan, sondern an der
+        // fehlenden Laufzeit** -- **und das ist die eigentliche Aussage
+        // dieses Tests.**  Frueher war MV das Beispiel dafuer, dass eine
+        // Erkennung ohne Runtime abgelehnt wird;  seit MV eine eigene
+        // Laufzeit hat, taugt es nicht mehr als Beispiel, und der Test
+        // waere mit dem Bit eine Schein-Aussage geworden, die nichts
+        // ueber den Teil-Scan mehr behauptet.
         var selector = new EngineRuntimeSelector();
         var selection = selector.Select(report, "windows");
-        AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine,
-            "selection still refuses MV (detection-only) but not for being malformed");
+        if (selection.Success)
+        {
+            AssertTrue(selection.Value?.Game != null,
+                "a selected MV runtime carries the game it was selected for");
+        }
+        else
+        {
+            AssertTrue(selection.Error?.Code != PluginErrorCode.InvalidGame
+                || !report.IsMalformed,
+                "a partial scan must not be refused as a malformed game");
+        }
     }
 
     public void Test_MvMetadataTitleIgnoresNestedGameTitleKeys()
@@ -650,13 +703,29 @@ public partial class TestPluginDetection : TestBase
             AssertTrue(plugin.Metadata.Validate().Success, $"Metadata validates for {plugin.Metadata.Id}");
             AssertEq(plugin.Metadata.SupportedEngines[0].EngineId, plugin.Metadata.Id);
             AssertTrue(!string.IsNullOrWhiteSpace(plugin.Metadata.Description));
+            // **Und die Liste nennt jeden Plugin, der eine Laufzeit
+            // anbietet** -- **denn dieser Test ist die Grenze zwischen
+            // "wir haben ein Backend" und "wir haben nur einen Leser",
+            // und  eine  Liste,  die  still  stehen  bleibt,  meldet  einen
+            // fertigen  Runtime  als  fehlend.**
+            //
+            // **Und `rpg-maker-mz` und `rpg-maker-mv` kamen dazu,  weil
+            // `MzEngineRuntime` ein echtes Backend ist:**  es laeuft
+            // `Map*.json` und `CommonEvents.json` durch den Interpreter,
+            // malt eine verschluesselte Kachelkarte (MZ 672x864 mit 310
+            // Farben, MV 768x576 mit 256) und braucht dafuer keinen
+            // JavaScript-Interpreter.  **Und `rpg-maker-mv` braucht
+            // zusaetzlich  einen  Leser  fuer  RGBA-Tilesets**,  weil  MV
+            // Farbtyp 6 schreibt  und  MZ  Farbtyp 3.
             var hasRuntimeBootstrap = plugin.Metadata.Id is
                             EnginePluginIds.RpgMaker2000 or
                             EnginePluginIds.RpgMaker2003 or
+                            EnginePluginIds.RpgMakerMv or
+                            EnginePluginIds.RpgMakerMz or
                 EnginePluginIds.WolfRpg;
             AssertTrue(hasRuntimeBootstrap
                 == ((plugin.Metadata.Capabilities & PluginCapability.Runtime) != 0),
-                $"Runtime capability matches the built-in bootstrap boundary: {plugin.Metadata.Id}");
+                $"Runtime capability matches the built-in runtime boundary: {plugin.Metadata.Id}");
         }
     }
 

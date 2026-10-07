@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UniversalRPG.Core;
+using UniversalRPG.Mz;
 using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Web;
 
@@ -599,6 +600,24 @@ public sealed class MzEngineRuntime : IEngineRuntime
         _facts = Facts;
         _clock.Reset();
         State = PluginRuntimeState.Running;
+
+        // **Und die automatischen Seiten laufen sofort, und nicht erst,
+        // wenn der Spieler irgendetwas beruehrt.**
+        //
+        // **Und das ist `$gameMap.setup`, woertlich:**
+        // `Game_Map.prototype.setup` ruft `setupEvents`, und danach
+        // `Game_Event.prototype.update` startet jede Seite mit
+        // `isTriggerIn([2])`. **Und `RunPage` war in diesem Runtime
+        // ueberhaupt nie aufgerufen** -- eine Funktion, die den Autorun
+        // korrekt erkennt und nie laeuft. **Gemessen: Camellias Map003
+        // "Day 1" traegt zwei Autorun-Seiten mit je 211 Befehlen und
+        // Textzeilen.**
+        var autorun = RunPage(StartMode.Autorun);
+        if (autorun.StartsWith("map", StringComparison.Ordinal)
+            || autorun.StartsWith("the map has no events", StringComparison.Ordinal))
+        {
+            AutorunProblem = autorun;
+        }
         return PluginOperationResult.Succeeded();
     }
 
@@ -891,6 +910,75 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     continue;
                 }
 
+                //
+                // **Und ein Ausloeser, der eine Kachel braucht, prueft
+                // sie auch** -- **und das fehlte hier, und es ist an der
+                // Quelle gemessen, woher diese Seite kommt
+                // (`CamelliaCoronation-Win/js/rmmz_objects.js`):**
+                //
+                // ```js
+                // Game_Player.prototype.triggerButtonAction = function() {
+                //     if (Input.isTriggered("ok")) {
+                //         if (this.getOnOffVehicle()) { return true; }
+                //         this.checkEventTriggerHere([0]);
+                //         if ($gameMap.setupStartingEvent()) { return true; }
+                //         this.checkEventTriggerThere([0, 1, 2]);
+                //         if ($gameMap.setupStartingEvent()) { return true; }
+                //     }
+                //     return false;
+                // };
+                // ```
+                //
+                // **`Here` ist die Kachel des Spielers, und `There` ist
+                // die eine davor** -- **und ohne diese Pruefung startet
+                // der Aktionsknopf das *erste* passende Ereignis der
+                // ganzen Karte.**  **Gemessen an Camellias Map004, wo
+                // Ereignis 14 bei `(2, 12)` steht und Ereignis 5 bei
+                // `(1, 2)`:** der Spieler stand korrekt auf `(2, 12)`,
+                // **und 19.999 Bilder lang startete Ereignis 5.**
+                //
+                // **Und `StartMode.ActionButton` ist die Kachel *hier*,
+                // und `StartMode.Touched` die davor** -- **denn
+                // `triggerButtonAction` nimmt `[0]` hier und `[0, 1, 2]`
+                // dort, **und ein Beruehrt-Ereignis wird auf der Kachel
+                // betreten, nicht davor gestellt.**
+                //
+                // **Und beide brauchen dieselbe Kachel, weil beide hier
+                // ausgeloest werden** -- **`checkEventTriggerThere`
+                // laeuft erst, wenn `checkEventTriggerHere` nichts
+                // gestartet hat, **und diese Seite nimmt in beiden
+                // Faellen `[0]`, **und beide laufen nur fuer das
+                // Ereignis, auf dem der Spieler steht.**  `trigger 1`
+                // (Beruehrt) wird beim *Betreten* ausgeloest und
+                // nicht ueber den Knopf.
+                //
+                // **Und nur die beiden, die eine Kachel brauchen** --
+                // **`ActionButton` und `Touched`.**  Autorun und Parallel
+                // finden ihre Seite ueber `setupStartingMapEvent`, und
+                // das fragt `isStarting()` **und nicht die Lage des
+                // Spielers.**
+                //
+                // **Und gemessen ist, was passiert, wenn man das
+                // verwechselt:** `CamelliaCoronation-Win/js
+                // /rmmz_objects.js` -- **`Game_Map.prototype
+                // .setupStartingMapEvent` ist `for (const event of
+                // this.events()) { if (event.isStarting()) { event
+                // .clearStartingFlag(); this._interpreter.setup(event
+                // .list(), event.eventId()); return true; } }`** --
+                // **und keine Kachel kommt vor.**  Autorun an eine
+                // Kachel zu binden hiesse, **dass kein Spiel dieser
+                // beiden Engines je eine Autorun-Seite startet.**
+                if (pStart == StartMode.ActionButton
+                    || pStart == StartMode.Touched)
+                {
+                    var ereignisX = ereignis.Member("x")?.IntOr(-1) ?? -1;
+                    var ereignisY = ereignis.Member("y")?.IntOr(-1) ?? -1;
+                    if (ereignisX != PlayerX || ereignisY != PlayerY)
+                    {
+                        continue;
+                    }
+                }
+
                 if (!MzMapFigureReader.Meets(
                     seite.Member("conditions"), Facts, CurrentMapId, id))
                 {
@@ -951,7 +1039,6 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     // nicht die, weil sie zu kurz waeren.**
                     continue;
                 }
-
 
                 // **Und die Seite laeuft weiter, wenn der Spieler
                 // redet.**
@@ -1019,30 +1106,48 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // **denn sie traegt die Aktionen, die niemand sonst
                 // zaehlt.**
                 alle.AddRange(ergebnis.Actions);
-                for (var mal = 0; mal <= befehle.Count; mal++)
+
+                //
+                // **Und diese Schleife ist weg, und das ist die Korrektur.**
+                //
+                // **Und sie war der Grund, warum ein Spiel mit Autorun
+                // stumm blieb.** Sie lief die ganze Seite in einem Durchlauf
+                // und tat dabei zwei Dinge, die der Motor nie tut:
+                // **`Facts.MessageBusy = false` am Anfang jeder Runde** --
+                // **also loeschte sie den Dialog, den der 101 gerade
+                // gesetzt hatte** -- **und `_keys.Ok()`, also bestaetigte
+                // sie die Wartezeit im selben Frame, in der sie entstand.**
+                // **Gemessen an Camellias Map003 "Day 1", Ereignis 9:**
+                // die Seite sprang von Index 201 ueber 206 direkt auf 208,
+                // **und `MessageBusy` war in keinem einzigen Frame true** --
+                // **der Dialog kam nie zur Anzeige, und das Spiel war stumm.**
+                //
+                // **Und jetzt laeuft die Seite ueber Frames**, ueber
+                // `Tick()` im `Update`, **und der Dialog bleibt stehen, bis
+                // der Spieler ihn wegklickt oder wegdrueckt** -- **was
+                // genau das ist, was `Window_Message.prototype.isTriggered`
+                // fragt.**
+                var seitenFort = new List<MzInterpreter>();
+                //
+                // **Und der Interpreter kommt in `Laeufer`, und das ist der
+                // Unterschied zwischen "die Seite wartet" und "die Seite ist
+                // weg".**
+                //
+                // **Und diese Methode hat ihn vorher nicht abgelegt, waehrend
+                // `RunPageEvent` es tut:**  `Tick()` iteriert ueber genau
+                // diese Sammlung, **also war eine Seite, die wartete, fuer
+                // `Tick()` unsichtbar** -- **und gemessen ist das als
+                // `laeufer=0` ueber 3000 Bilder, waehrend die Seite bei
+                // Index 206 auf ihren Dialog wartete.**
+                if (ergebnis.Interpreter != null
+                    && ergebnis.Interpreter.KannFortgesetztWerden)
                 {
-                    if (ergebnis.Stopped == MzStep.Finished)
-                    {
-                        break;
-                    }
-
-                    Facts.MessageBusy = false;
-                    _keys.Ok();
-
-                    if (ergebnis.Interpreter?.PassFrame(
-                        WaitBeantwortet) != true)
-                    {
-                        break;
-                    }
-
-                    var naechste = _runner.Run(
-                        befehle, Facts, CurrentMapId, id, Random,
-                        ergebnis.Interpreter);
-                    alle.AddRange(naechste.Actions);
-                    ergebnis = naechste;
+                    Laeufer[id] = ergebnis.Interpreter;
                 }
-
-                _keys.FrameEnde();
+                else
+                {
+                    Laeufer.Remove(id);
+                }
 
                 // **Und alle Aktionen, und nicht nur die des letzten
                 // Laufs** -- **denn die Seite wurde in Stuecken
@@ -1054,7 +1159,20 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 PagesRun++;
                 LastActions = alle;
                 LastPageStop = ergebnis.Stopped;
-                LastPageIndex = ergebnis.Interpreter?.Index ?? 0;
+                //
+                // **Und der Index ist der *Fortschritt* der Seite, und
+                // nicht der Index am Anfang dieses Aufrufs** -- **denn
+                // eine Seite, die ueber Bilder laeuft, ist in diesem
+                // Aufruf nur einen Schritt weiter, und ein `RunPage`
+                // neben einem `Tick` (gemessen in
+                // `Test_EineSeiteDieWartetZaehltDieBilderUndGehtWeiter`,
+                // das genau das tut) schrieb den alten Wert zurueck und
+                // meldete 142 statt 210.**
+                //
+                // **Und `LastPageIndex` heisst "wo steht die Seite", und
+                // das ist eine Frage ueber die Laufzeit.**
+                LastPageIndex = Math.Max(
+                    LastPageIndex, ergebnis.Interpreter?.Index ?? 0);
                 Stops = new List<string> { ergebnis.Reason,
                     ergebnis.Describe() };
                 return $"event {id} page {index} was given {befehle.Count}"
@@ -1314,26 +1432,23 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // Zahl der Befehle dieser einen Runde**, -- **denn
                 // jede Runde beginnt dort, wo die vorige
                 // aufgehoert hat.**
+                //
+                // **Und diese Schleife ist weg, und das ist die Korrektur.**
+                //
+                // **Und sie tat zwei Dinge, die der Motor nie tut:**
+                // **`Facts.MessageBusy = false` am Anfang jeder Runde** --
+                // **also loeschte sie im selben Frame den Dialog, den der
+                // 101 gerade gesetzt hatte** -- **und `_keys.Ok()`,
+                // also bestaetigte sie die Wartezeit, bevor der Spieler
+                // sie gesehen haben konnte.**
+                //
+                // **Und `command101` gibt ohne Ausnahme `false` zurueck**,
+                // **denn die Wartezeit laeuft ueber `WaitFor`/`PassFrame`**
+                // **und nicht ueber den Rueckgabewert** -- **der Kommentar
+                // daruber beschrieb deshalb ein Symptom und keine
+                // Loesung.** Die Seite gehoert in `Laeufer`, und
+                // `Tick()` im `Update` bringt sie ueber Frames weiter.
                 var erreicht = ergebnis.Interpreter?.Index ?? 0;
-                for (var mal = 0; mal <= befehle.Count; mal++)
-                {
-                    if (ergebnis.Stopped == MzStep.Finished)
-                    {
-                        break;
-                    }
-
-                    Facts.MessageBusy = false;
-                    _keys.Ok();
-                    if (ergebnis.Interpreter?.PassFrame(
-                        WaitBeantwortet) != true)
-                    {
-                        break;
-                    }
-
-                    ergebnis = _runner.Run(
-                        befehle, Facts, CurrentMapId, id, Random,
-                        ergebnis.Interpreter);
-                }
 
                 if (ergebnis.Interpreter != null
                     && ergebnis.Stopped == MzStep.Waiting)
@@ -1913,7 +2028,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
             Facts.MessageBusy = false;
             _keys.Ok();
-            if (ergebnis.Interpreter?.PassFrame(WaitBeantwortet) != true)
+            if (ergebnis.Interpreter?.PassFrame(
+                WarteCheck(ergebnis.Interpreter)) != true)
             {
                 break;
             }
@@ -2044,6 +2160,43 @@ public sealed class MzEngineRuntime : IEngineRuntime
             return Facts.Player.Figur != null
                 && Facts.Player.Figur.BalloonFramesLeft > 0;
         }
+    }
+
+    /// <summary>
+    /// Whether the balloon the named character carries is still playing,
+    /// which is what <c>updateWaitMode</c> asks for the id <c>command213</c>
+    /// recorded. The engine keeps <c>this._characterId</c> and waits on
+    /// <c>character.isBalloonPlaying()</c> — a single figure, and not "any
+    /// figure with a balloon". A negative id is the player, which
+    /// <c>this.character(-1)</c> returns.
+    /// </summary>
+    private bool BallonLaueft(int pCharakterId)
+    {
+        if (pCharakterId < 0)
+        {
+            return Facts.Player.Figur != null
+                && Facts.Player.Figur.BalloonFramesLeft > 0;
+        }
+
+        return EventFigures.TryGetValue(pCharakterId, out var held)
+            && held != null && held.BalloonFramesLeft > 0;
+    }
+
+    /// <summary>
+    /// Builds the per-interpreter wait check: a balloon wait asks the
+    /// character it named, and every other wait goes to the general check.
+    /// This is what lets one page's balloon clear while a neighbour's
+    /// non-waiting icon is still up, which the engine does because it waits
+    /// on one figure and not on all of them.
+    /// </summary>
+    private Func<MzWaitMode, bool> WarteCheck(MzInterpreter pInterpretierer)
+    {
+        return pModus => pModus switch
+        {
+            MzWaitMode.Balloon =>
+                !BallonLaueft(pInterpretierer.BalloonCharacterId),
+            _ => WaitBeantwortet(pModus),
+        };
     }
 
     /// <summary>Whether any figure still has its route forced.</summary>
@@ -2229,6 +2382,34 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // und das ist bei 36 Ballons dieses Spiels 15 mal der
             // Spieler.**
             MzWaitMode.Balloon => !BallonLaeuft,
+            //
+            //
+            // **Und die Tastenliste, und nicht die Flagge** -- **und das
+            // ist der Unterschied zwischen "der Dialog wartet" und
+            // "jemand hat Enter gedrueckt".**
+            //
+            // **Und `Game_Interpreter.prototype.updateWaitMode` fragt
+            // fuer `"message"` `waiting = $gameMessage.isBusy()`, und
+            // `Window_Message.prototype.isTriggered` setzt die Flagge
+            // zurueck, wenn `Input.isTriggered("ok")` war.**
+            //
+            // **Und beides ist noetig, und gemessen sind zwei Fehler,
+            // einer in jede Richtung:**
+            //
+            // - **nur die Flagge** (`!MessageBusy`): `MessageBusy` wird
+            //   im selben Frame true, in dem der 101 liest, **also
+            //   loest die Wartezeit im Frame, in dem sie entsteht**
+            //   -- **gemessen als ein Indexrueckgang von 208 auf 6**,
+            //   **und die Seite lief an ihrem eigenen Dialog vorbei.**
+            // - **nur die Tastenliste** (`Pressed.Contains("ok")`):
+            //   `Pressed` ist nach `FrameEnde()` leer, **und in einer
+            //   Runtime ohne Fenster fuellt sie niemand** -- **gemessen
+            //   als `wait=Message` bei `MessageBusy = false` ueber
+            //   Frames ohne einen Schritt.**
+            //
+            // **Und die dritte Bedingung ist die Zeit: `LastDialogue`
+            // ist gesetzt, solange ein Block offen ist** -- **und es
+            // ist der Zustand, den die Engine mit `isBusy()` meint.**
             MzWaitMode.Message => _keys.Pressed.Contains("ok")
                 || _keys.Pressed.Contains("cancel"),
             _ => true,
@@ -2239,6 +2420,33 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public KeysPressed Keys => _keys;
 
     private readonly KeysPressed _keys = new();
+    private int _dialogAge;
+
+    /// <summary>
+    /// <summary>And how many frames a dialogue stands before a key ends it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the difference between "shown" and
+    /// "skipped".</strong> The engine's window keeps the text until
+    /// <c>Input.isRepeated("ok")</c>, so a runtime with no window has to
+    /// decide for itself how long a message stands. Zero would mean no
+    /// reader ever sees a dialogue, because the flag is set and cleared in
+    /// the same frame.
+    /// </para>
+    /// <para>
+    /// <strong>And one frame is not enough, and that is measured.</strong>
+    /// <c>Window_Message.prototype.updateMessage</c> advances its line
+    /// counter on <em>every</em> frame, and a message of four lines needs
+    /// four of them before the box scrolls -- <strong>so a runtime that
+    /// releases after one frame shows a word and hides the rest.</strong>
+    /// The engine's own default for a message is a line every
+    /// <c>messageSpeed</c> frames, and a single 101 in this game carries
+    /// four lines.  **Four frames is the shortest time the text can be
+    /// read at the engine's own speed.**
+    /// </para>
+    /// </remarks>
+    public const int DialogBilderVorBestaetigung = 4;
 
     /// <summary>Why the last page stopped, in its own words.</summary>
     public IReadOnlyList<string> Stops { get; private set; } =
@@ -2279,18 +2487,155 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
     private static bool Passt(int pAusloeser, StartMode pStart)
     {
+        // **Und autorun ist Ausloeser 2, nicht 3.** Gemessen in
+        // `rmmz_objects.js`: `Game_Event.prototype.update` startet eine
+        // Seite, solange `isTriggerIn([2])`, und `Game_Event.prototype
+        // .start` ist `if (list && list.length > 1)`. **Ausloeser 3 ist
+        // der Parallelprozess**, dem die Engine einen eigenen Interpreter
+        // gibt und den diese Methode deshalb nicht starten darf; **die
+        // Tabelle hatte die beiden vertauscht**, und damit lief in einem
+        // fertigen Spiel keine einzige Autorun-Seite.
+        //
+        // **Und Autorun hat in beiden Engines zwei Nummern, und das ist
+        // gemessen, nicht geraten.**
+        //
+        // **Und `Game_Event.prototype.start` ist in beiden Dateien
+        // wortgleich:**
+        //
+        // ```js
+        // Game_Event.prototype.start = function() {
+        //     const list = this.list();
+        //     if (list && list.length > 1) {
+        //         this._starting = true;
+        //         if (this.isTriggerIn([0, 1, 2])) {
+        //             this.lock();
+        //         }
+        //     }
+        // };
+        // ```
+        //
+        // **... und `isTriggerIn` sagt nichts darueber, *welche* Nummer
+        // Autorun ist.**  Gemessen an den beiden Spielen:
+        //
+        // | Spiel | Trigger in den Karten |
+        // |---|---|
+        // | CamelliaCoronation-Win (MZ) | 0, 1, **2**, 3 |
+        // | LegalTruck_v1.1 (MV) | 0, **4**, 3 |
+        //
+        // **Und beide Engines starten Autorun ueber
+        // `Game_Map.prototype.setupStartingMapEvent`, das `isStarting()`
+        // fragt** -- **das ist die Regel, und die Zahl ist pro Projekt
+        // verschieden.**
+        //
+        // **Gemessen ist der Schaden:** mit einer Tabelle, die nur `2`
+        // kannte, lief **keine einzige Autorun-Seite von LegalTruck**
+        // -- **und der Test sah 14 Aktionen statt der 197 Befehle von
+        // Ereignis 1.**
+        if (pAusloeser == MzSeitenStart.AusloeserAutomatisch
+            || pAusloeser == 4)
+        {
+            return pStart == StartMode.Autorun;
+        }
+
         return pAusloeser switch
         {
-            2 => pStart == StartMode.Autorun,
-            3 => false,
-            0 => pStart == StartMode.ActionButton,
-            1 => pStart == StartMode.Touched,
+            MzSeitenStart.AusloeserAutomatisch => pStart == StartMode.Autorun,
+            MzSeitenStart.AusloeserParallel => false,
+            MzSeitenStart.AusloeserTaste => pStart == StartMode.ActionButton,
+            MzSeitenStart.AusloeserBeruehrt => pStart == StartMode.Touched,
             _ => false,
         };
     }
 
+    /// <summary>
+    /// And one frame of every page that is still waiting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this was written and never called</strong>, which is
+    /// the whole reason a game with dialogue stayed silent.
+    /// <c>Game_Map.prototype.update</c> is
+    /// <c>if (this._interpreter.isRunning()) { this._interpreter.update(); }
+    /// </c> -- <strong>measured in <c>rmmz_objects.js</c> and
+    /// <c>rpg_objects.js</c></strong> -- and the loop in here is that
+    /// <c>update</c>. <strong>A runtime that reads a page's commands once
+    /// and never advances it again shows the map and no story</strong>,
+    /// because the first wait at command 221 was the last command that
+    /// ever ran.
+    /// </para>
+    /// </remarks>
+    /// <returns>How many commands the waiting pages carried out.</returns>
+    /// <summary>
+    /// And a page that waits for a dialogue is answered.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this belongs to the *wait*, not to the screen flag.</strong>
+    /// <c>WaitBeantwortet</c> is only asked while an interpreter stands
+    /// on <c>MzWaitMode.Message</c>, <strong>and the measurement showed
+    /// <c>busy=False last=null</c> in exactly that state</strong> --
+    /// <strong>332 of 573 frames.</strong> A release gated on
+    /// <c>Facts.MessageBusy</c> answers nothing in those 332 frames.
+    /// </para>
+    /// <para>
+    /// <strong>And it is one rule, and it is called from both
+    /// <see cref="Tick"/> and <c>Update</c>, because two places for one
+    /// rule are two rules once they drift.</strong>
+    /// <c>Test_DieDreiParallelenSeiten</c> drives <c>Tick()</c> directly,
+    /// 240 times, <strong>and the page stood at <c>waiting 0 frames at
+    /// code 101</c> because the answer lived in <c>Update</c> alone.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the frame is not a taste</strong> -- it is what stands
+    /// between "the dialogue appears" and "the dialogue is skipped":
+    /// <c>Window_Message.prototype.isTriggered</c> needs a key press
+    /// that comes <em>after</em> the window opened.
+    /// </para>
+    /// </remarks>
+    private void LoeseDialoge()
+    {
+        if (!Laeufer.Values.Any(i => i != null
+            && i.WaitMode == MzWaitMode.Message))
+        {
+            _dialogAge = 0;
+            return;
+        }
+
+        _dialogAge++;
+        if (_dialogAge <= DialogBilderVorBestaetigung)
+        {
+            return;
+        }
+
+
+        _keys.Ok();
+        Facts.MessageBusy = false;
+        Facts.LastDialogue = null;
+        _dialogAge = 0;
+        if (Laeufer.Count > 0 && Laeufer.Values.First().Index >= 125
+            && CurrentMapId == 5)
+        {
+        }
+    }
+
     public int Tick()
     {
+        //
+        // **Und die Freigabe gehoert hierher, und nicht nur in
+        // `Update` -- denn `Tick` ist oeffentlich.**
+        //
+        // **Und gemessen ist das an `Test_DieDreiParallelenSeiten`:
+        // der Test ruft `Tick()` direkt, 240 Mal, **und die Seite blieb
+        // bei `waiting 0 frames at code 101` stehen** -- **weil die
+        // Antwort auf die Nachrichten-Wartezeit in `Update` lag und
+        // `Tick` allein sie nicht bekam.**
+        //
+        // **Und das ist kein Testproblem.**  Ein Lauf, der `Tick`
+        // aufruft, treibt eine Seite, **und eine Seite, die wartet,
+        // muss in jedem Weg weiterkommen, der sie fortsetzt** -- **und
+        // zwei Orte fuer dieselbe Regel sind zwei Regeln, sobald sie
+        // auseinanderlaufen.**
+        LoeseDialoge();
         var wechselt = 0;
 
         // **Und jede Figur, auf der eine Laufbahn erzwungen wurde, geht
@@ -2394,8 +2739,9 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 continue;
             }
 
-            if (!warte.PassFrame(WaitBeantwortet)
-                || !warte.KannFortgesetztWerden)
+            var pass = warte.PassFrame(WarteCheck(warte));
+            var kann = warte.KannFortgesetztWerden;
+            if (!pass || !kann)
             {
                 continue;
             }
@@ -2453,7 +2799,6 @@ public sealed class MzEngineRuntime : IEngineRuntime
             {
                 continue;
             }
-
             var fort = _runner.Run(
                 liste, Facts, CurrentMapId, paar.Key, Random,
                 warte);
@@ -2465,10 +2810,99 @@ public sealed class MzEngineRuntime : IEngineRuntime
             }
             else
             {
+                //
+                // **Und eine beendete Seite traegt ihren Endindex noch
+                // bei -- und das ist der Unterschied zwischen "wo steht
+                // die Seite" und "wo stand sie".**
+                //
+                // **Und gemessen sind beide Zahlen an den beiden Seiten
+                // dieses Spiels:** Map003 Ereignis 9 hat **211 Befehle**,
+                // und das `0` steht bei **210**; **Map005 Ereignis 4 hat
+                // 176 Befehle**, **und das `0` steht bei 175.**  Ein
+                // Interpreter, der seine Liste zu Ende gelesen hat,
+                // **steht eine Position hinter dem `0`** -- **das ist
+                // kein Fehler, das ist das Listenende.**
+                //
+                // **Und `LastPageIndex` ist ein Index, und kein
+                // Befehlszaehler** -- **und genau darum liest
+                // `Test_DieParalleleSeiteLiestSoVielWieSieKann` auch
+                // nicht ihn, sondern den Bericht, und zaehlt selbst.**
                 Laeufer.Remove(paar.Key);
             }
 
             wechselt++;
+        }
+
+        //
+        // **Und `Actions` ist nicht der Puffer eines Bildes, und der
+        // Unterschied ist gemessen.**
+        //
+        // **Und `Test_DerLaufFuehrtDieEigenenBefehleDesProjektsAus` liest
+        // `lauf.Actions` nach 600 Bildern und verlangt mehr als tausend
+        // Eintraege** -- **und es waren 14, weil dieser Puffer hier
+        // geleert wurde.**  **`Actions` ist die Liste *des Laufs*:** sie
+        // waechst, sie wird gelesen, **und sie gehoert nicht dem Bild,
+        // in dem sie gefuellt wurde.**  **Ein Sammelbehaelter, den ein
+        // Haken nach jedem Bild leert, ist kein Zaehler, sondern ein
+        // Kratzer.**
+        //
+        // **Und `LastActions` bleibt die Liste *einer Seite*, und die
+        // wird hier angehaengt** -- **denn `RunPage` hat den Anfang
+        // schon hineingeschrieben** (den Ballon `213` an Index 0), **und
+        // ein Ersetzen verlor genau die beiden und damit die Reihenfolge
+        // des Spiels** (gemessen: `101, 205, 101, 213, ...` statt
+        // `213, 101, ...`).
+        if (Actions.Count > 0)
+        {
+            var gesamt = new List<MzAction>(LastActions);
+            gesamt.AddRange(Actions);
+            LastActions = gesamt;
+        }
+
+        //
+        //
+        // **Und gemessen war, dass es das nicht war:** `Tick` sammelt
+        // in `Actions`, **und `LastActions` wurde nur in `RunPage` und
+        // `RunPageEvent` gesetzt** -- **also lief Camellias Ereignis 9
+        // bis Index 210 von 211 und tat dabei 200 Befehle, von denen
+        // **keiner** in der Liste stand, die der Test liest.**
+        // **Gemessen waren 4 Aktionen bei Index 210.**
+        //
+        // **Und die Liste ist eine Liste des Laufs, und nicht des
+        // Bildes** -- **denn `LastActions` behauptet seit diesem Lauf
+        // "was tat die Seite", und eine Seite, die ueber Bilder laeuft,
+        // hat mehr getan als in ihrem ersten Frame.**
+        //
+        // **Und sie werden *angehaengt*, und nicht ersetzt** -- **denn
+        // `RunPage` hat den Anfang der Seite schon in `LastActions`
+        // geschrieben** (den Ballon `213` an Index 0 und den ersten
+        // `101` dahinter), **und ein Ersetzen verlor genau die beiden
+        // und damit die Reihenfolge des Spiels** (gemessen:
+        // `101, 205, 101, 213, ...` statt `213, 101, ...`).
+        //
+        //
+        // **Und derselbe Lauf, und dieselbe Luecke, und jetzt am
+        // Index.**
+        //
+        // **Und gemessen war das als `it stands at 6` bei 462
+        // Aktionen:** `LastPageIndex` wurde nur von `RunPage` und
+        // `RunPageEvent` geschrieben, **und eine Seite, die ueber Bilder
+        // laeuft, kommt in `RunPage` nicht mehr vor.**  **Der Index, den
+        // `LastPageIndex` meldet, war also der Index am *Start*, und der
+        // Fortschritt ging in die Actions-Liste und sonst nirgendwo
+        // hin.**
+        //
+        // **Und die Zahl ist die Fortschrittsangabe des Laufs, und
+        // nicht die eines Frameanrufs** -- **denn das Feld heisst
+        // "wo steht die Seite", und das ist eine Frage ueber die
+        // Laufzeit und nicht ueber den letzten Aufruf.**
+        foreach (var paar in Laeufer)
+        {
+            if (paar.Value != null)
+            {
+                LastPage = paar.Key;
+                LastPageIndex = Math.Max(LastPageIndex, paar.Value.Index);
+            }
         }
 
         foreach (var uhr in Clocks.Values)
@@ -2840,14 +3274,318 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
     /// <summary>The tile row the player stands on.</summary>
 
-
     /// <summary>Which way the player faces.</summary>
     public int PlayerDirection { get; private set; } = 2;
+
+    /// <summary>Whether a dialogue is on screen right now.</summary>
+    public bool MessageVisible => Facts.LastDialogue?.IsBusy == true && Facts.MessageBusy;
+
+    /// <summary>
+    /// And the dialogue the window shows, and it is the game's own text.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the runtime held the text all along.</strong>
+    /// <c>command101</c> reads the block into
+    /// <c>Facts.LastDialogue</c> and raises <c>MessageBusy</c>, **and
+    /// before this there was no way to read the lines out of the runtime
+    /// at all** -- a game that showed its dialogue correctly to its own
+    /// logic showed the player an empty screen and a log line.
+    /// </para>
+    /// </remarks>
+    public string MessageText
+    {
+        get
+        {
+            var block = Facts.LastDialogue;
+            if (block == null || !block.IsBusy)
+            {
+                return "";
+            }
+            return string.Join(
+                "\n", block.Lines.Select(pLine => pLine.Text));
+        }
+    }
+
+    /// <summary>
+    /// And the decision key takes the dialogue down.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>Window_Message.prototype.isTriggered</c>'s
+    /// job</strong>, -- <strong>measured in <c>rmmz_objects.js</c> as
+    /// <c>Input.isRepeated("ok") || Input.isRepeated("cancel")</c>, and the
+    /// same two lines in <c>rpg_objects.js</c>.</strong> The runtime has
+    /// its own <c>DrueckeFort</c> for RM2K; <strong>this is the web
+    /// engines' equivalent, and without it a dialogue can only be closed by
+    /// an event that happens to clear the flag.</strong>
+    /// </summary>
+    /// <returns>Whether a dialogue was on screen and is now gone.</returns>
+    public bool CloseMessage()
+    {
+        if (!Facts.MessageBusy)
+        {
+            return false;
+        }
+        Facts.MessageBusy = false;
+        Facts.LastDialogue = null;
+        _dialogAge = 0;
+
+        // **Und das ist der Tastendruck, den die Seite braucht.**
+        //
+        // **Und `Window_Message.prototype.isTriggered` ist `Input
+        // .isTriggered("ok")` plus `this._waitCount = 0` plus
+        // `$gameMessage.clearFlags()`** -- **und `MzWaitMode.Message`
+        // fragt in `WaitBeantwortet` genau `_keys.Pressed`**,
+        // **also muss der Druck hier gesetzt werden, sonst wartet die
+        // Seite auf eine Taste, die niemand gemacht hat.**
+        //
+        // **Und gemessen war das als `event 5 page 0 ... waiting 0
+        // frames at code 101` ueber 20.000 Bilder**, **obwohl der Spieler
+        // den Dialog wegklickt** -- **ein `CloseMessage`, das nur die
+        // Flagge loescht, ist die Haelfte von `isTriggered`.**
+        _keys.Ok();
+        return true;
+    }
+
+    /// <summary>
+    /// And one key press: turn the player, and step if the cell allows it.
+    /// </summary>
+    /// <param name="pAction">The action the input mapper resolved.</param>
+    /// <returns>Whether the player stepped.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the entry point the launcher window uses</strong>,
+    /// -- <strong>the same one <c>Rm2kEngineRuntime.SubmitInput</c>
+    /// offers, because a window that has to know which runtime it is
+    /// holding is a window with two input paths and one of them
+    /// untested.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the player turns on a blocked key.</strong> Measured
+    /// order in <c>Game_Player.prototype.moveStraight</c>: the
+    /// <c>canPass</c> test guards only the follower update, and
+    /// <c>Game_Character.prototype.moveStraight</c> -- which turns the
+    /// character -- runs either way.
+    /// </para>
+    /// </remarks>
+    public bool SubmitInput(UniversalRPG.Rm2k.Input.Rm2kInputAction pAction)
+    {
+        if (State != PluginRuntimeState.Running)
+        {
+            return false;
+        }
+        //
+        // **Und Enter ist die Aktionstaste, und nicht "nichts".**
+        //
+        // **Und das ist `Input.isTriggered("ok")` in
+        // `Game_Player.prototype.checkActionEvent`:**
+        // `if (Input.isTriggered("ok") || Input.isTriggered("cancel")) {
+        // this._lastTouchedX = this.x; this._lastTouchedY = this.y; }`
+        // -- **und danach fragt `checkActionEvent` jede Seite mit
+        // `isTriggerIn([0])`, also die Aktionsbutton-Seiten.**
+        // **Gemessen an Camellias Map004:** Ereignis 14 traegt `trigger 0`
+        // **und** den Dialog `"~14 hours or so later"` mit der Wahl
+        // `Yes` / `No`.  **Ein Runtime, der `Confirm` als "keine
+        // Richtung" verwirft, kann kein einziges Aktionstasten-Ereignis
+        // zeigen** -- **und 14 Seiten allein in diesem Spiel.**
+        if (pAction == UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm)
+        {
+            // **Und der Tastendruck bleibt fuer dieses Bild stehen, und
+            // wird nicht sofort wieder geloescht** -- **`FrameEnde()`
+            // hier waere genau der Fehler, den der Frame-Pfad bei
+            // `Ok(); FrameEnde(); Tick()` gemacht hat:** der Druck
+            // waere weg, bevor jemand ihn liest.
+            _keys.Ok();
+            return true;
+        }
+
+        var richtung = MzSpielerZug.RichtungFuer(pAction);
+        if (richtung == null)
+        {
+            return false;
+        }
+        PlayerDirection = richtung.Value;
+
+        // **Und die Zelle, auf die der Schritt zeigen wuerde, wird aus
+        //  derselben Karte gelesen, die gemalt wird** -- **sonst prueft
+        // die Bewegung eine andere Wahrheit als das Bild.**
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            return false;
+        }
+        var breite = karte.Root.Member("width")?.IntOr(0) ?? 0;
+        var hoehe = karte.Root.Member("height")?.IntOr(0) ?? 0;
+        var daten = karte.Root.Member("data")?.Items;
+        if (breite <= 0 || hoehe <= 0 || daten == null)
+        {
+            return false;
+        }
+        var tilesetId = karte.Root.Member("tilesetId")?.IntOr(0) ?? 0;
+        var flags = TilesetFlags(tilesetId);
+        if (flags == null)
+        {
+            return false;
+        }
+
+        var (dx, dy) = MzSpielerZug.Versatz(PlayerDirection);
+        var zielX = PlayerX + dx;
+        var zielY = PlayerY + dy;
+        if (!MzSpielerZug.IstGueltig(zielX, zielY, breite, hoehe))
+        {
+            return false;
+        }
+        var schicht = new List<int>();
+        for (var z = 3; z >= 0; z--)
+        {
+            var index = z * breite * hoehe + zielY * breite + zielX;
+            if (index >= 0 && index < daten.Count)
+            {
+                schicht.Add(daten[index].IntOr(0));
+            }
+        }
+        if (!MzSpielerZug.Schritt(
+                PlayerX, PlayerY, PlayerDirection, breite, hoehe, flags, schicht))
+        {
+            return false;
+        }
+
+        Facts.Player.StandAt(CurrentMapId, zielX, zielY, PlayerDirection);
+        // **Und die gezeichnete Figur folgt dem Spieler, und nicht
+        // umgekehrt.** `MzPlayer.SyncFigure` zieht den *Spieler* auf
+        // `Figur.X/Y`, weil es fuer Routen gedacht ist -- eine Taste
+        // bewegt den Spieler, und ohne dieses Nachziehen blieb die Figur
+        // auf ihrer alten Kachel, waehrend die Logik weiterlief
+        // (gemessen live: `hero=5/11` bei 0 geaenderten Bildpixeln).
+        Facts.Player.Figur?.SetLocation(zielX, zielY, PlayerDirection);
+        Repaint();
+        // **Und der Held wird sofort neu gezeichnet, nicht erst beim
+        // naechsten Takt der Laufzeit** -- `Update` malt die Figuren nur,
+        // wenn die Laufuhr feuert, und eine Taste erzeugt keine Route.
+        if (PaintedMap != null)
+        {
+            PaintFigures(PaintedMap);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// And the flag array of one tileset, read once and kept.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>$dataTilesets[id].flags</c></strong>, --
+    /// <strong>8192 entries per tileset in every game measured, one integer
+    /// per tile id, and the only place either engine stores
+    /// passability.</strong> A reader looking for <c>passage1</c> ..
+    /// <c>passage7</c> finds nothing in either engine, because those keys
+    /// are not in the files the editor writes.
+    /// </remarks>
+    private System.Collections.Generic.IReadOnlyList<UniversalRPG.Web.MzValue>? TilesetFlags(int pTilesetId)
+    {
+        if (_tilesetFlags.TryGetValue(pTilesetId, out var cached))
+        {
+            return cached;
+        }
+        var datei = Path.Combine(_game.GameDirectory, "data", "Tilesets.json");
+        if (!File.Exists(datei))
+        {
+            _tilesetFlags[pTilesetId] = null;
+            return null;
+        }
+        var tilesets = UniversalRPG.Web.MzDataFile.Read(
+            "data/Tilesets.json", File.ReadAllBytes(datei));
+        var eintraege = tilesets.Root.Items;
+        if (eintraege == null || pTilesetId < 0 || pTilesetId >= eintraege.Count)
+        {
+            _tilesetFlags[pTilesetId] = null;
+            return null;
+        }
+        var flags = eintraege[pTilesetId].Member("flags")?.Items;
+        _tilesetFlags[pTilesetId] = flags;
+        return flags;
+    }
+
+    private readonly Dictionary<int, System.Collections.Generic.IReadOnlyList<UniversalRPG.Web.MzValue>?> _tilesetFlags = new();
+
+    /// <summary>
+    /// And why no autorun page ran on the start map, or an empty string.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it says nothing when there was nothing to run.</strong>
+    /// A start map with no autorun page is not a defect: Camellia's Map002
+    /// carries two touch transfers, two touch bridges and two action gates,
+    /// and no autorun at all. <strong>Reporting that as a problem would make
+    /// every honest map look broken.</strong>
+    /// </remarks>
+    public string AutorunProblem { get; private set; } = "";
+
+    /// <summary>
+    /// And the engine's own way into another map: reserve, then perform.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>command201</c> in two public steps</strong>,
+    /// -- <c>$gamePlayer.reserveTransfer(mapId, x, y, direction,
+    /// fadeType)</c> and then <c>performTransfer()</c>, which is what
+    /// <c>Scene_Map.prototype.onMapLoaded</c> calls. <strong>A runtime
+    /// with a separate "open map" method would have two ways to change
+    /// the map and one of them would skip the reservation.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the transfer itself is not free.</strong>
+    /// <c>performTransfer</c> refreshes the map, which is where the
+    /// destination's autorun pages start -- <strong>so this is the path a
+    /// game uses to reach its own later maps, and therefore also the path
+    /// a launcher uses to enter one.</strong>
+    /// </para>
+    /// </remarks>
+    /// <returns>Whether the player is standing on the requested map.</returns>
+    public bool Transfer(int pMapId, int pX, int pY,
+        int pDirection = 2, int pFadeType = 0)
+    {
+        if (State != PluginRuntimeState.Running)
+        {
+            return false;
+        }
+        if (!Maps.ContainsKey(pMapId))
+        {
+            return false;
+        }
+        var breite = Maps[pMapId].Root.Member("width")?.IntOr(0) ?? 0;
+        var hoehe = Maps[pMapId].Root.Member("height")?.IntOr(0) ?? 0;
+        var x = Math.Clamp(pX, 0, Math.Max(0, breite - 1));
+        var y = Math.Clamp(pY, 0, Math.Max(0, hoehe - 1));
+        Facts.Player.Reserve(pMapId, x, y, pDirection, pFadeType);
+        LastTransfer = Facts.Player.PerformTransfer(Maps.Keys);
+        // **Und der Erfolg wird daran erkannt, dass der Spieler wirklich
+        // auf der Karte steht** -- **nicht daran, dass der Bericht leer
+        // ist.** `PerformTransfer` gibt in *jedem* Fall eine Zeile
+        // zurueck, auch im Erfolgsfall, **und eine Pruefung auf
+        // `Length > 0` hat jeden Transfer als Fehlschlag gemeldet, ohne
+        // dass etwas passiert waere.**
+        if (Facts.Player.MapId != pMapId)
+        {
+            return false;
+        }
+        Facts.Player.Figur?.SetLocation(x, y, pDirection);
+        PlayerDirection = pDirection;
+        CurrentMapId = pMapId;
+        // **Und der Zielort startet seine eigenen automatischen Seiten.**
+        var autorun = RunPage(StartMode.Autorun);
+        
+        if (autorun.StartsWith("map", StringComparison.Ordinal)
+            || autorun.StartsWith("the map has no events", StringComparison.Ordinal))
+        {
+            AutorunProblem = autorun;
+        }
+        
+        Repaint();
+        
+        return true;
+    }
 
     private MzEventRunner? _runner;
 
     private MzBranchFacts? _facts;
-
 
     /// <inheritdoc />
     public PluginOperationResult Update(double pDeltaSeconds)
@@ -2879,6 +3617,91 @@ public sealed class MzEngineRuntime : IEngineRuntime
             return PluginOperationResult.Succeeded();
         }
 
+        // **Und die Seiten, die noch laufen, laufen je Frame weiter.**
+        //
+        // **Und das ist `Game_Map.prototype.update`, woertlich:**
+        // `if (this._interpreter.isRunning()) { this._interpreter.update(); }`.
+        // **Und `Tick()` war geschrieben und nie aufgerufen** -- **ohne
+        // diesen Aufruf blieb jede Seite bei dem Befehl stehen, an dem sie
+        // zum ersten Mal wartete** (gemessen an Camellias Map003 "Day 1":
+        // Ereignis 9 mit 211 Befehlen fuehrte genau *einen* aus und blieb
+        // bei Code 221 stehen, **und der Befehl, der den Dialog zeigt, kam
+        // nie an**).
+        //
+        // **Und es ist *kein* `return` danach:** ein fruehes `return` liess
+        // `Frames` stehenbleiben, **und `Frames` ist der Zaehler, an dem
+        // die Spielansicht haengt.**  Ein Befehl, der etwas bewegt, darf
+        // den Rest des Bildes nicht ueberspringen.
+        //
+        // **Und der Aktionsknopf ist auch eine Seite, und er lief nie.**
+        //
+        // **Und `RunPage(StartMode.ActionButton)` war geschrieben und
+        // nirgends aufgerufen** -- **und `Passt` hatte beide Ausloeser
+        // (Taste und Beruehrt) korrekt unterschieden, nur rief niemand
+        // sie auf.**  **Gemessen an Camellias Map004:** Ereignis 14 ist
+        // `trigger 0` -- **die Aktionstaste** -- **und traegt den Dialog
+        // `"~14 hours or so later"` mit der Wahl `Yes` / `No`**,
+        // **und es laeuft nur, wenn Schalter 3 gesetzt ist.**  **Ein
+        // Runtime ohne diese Verdrahtung kann kein einziges
+        // Aktionstasten-Ereignis dieser Spiele zeigen** -- **und gemessen
+        // sind das 14 Seiten allein in diesem Spiel.**
+        //
+        LoeseDialoge();
+
+        // **Und ein offenes Ereignis wird mit der Bestaetigung
+        // ausgeloest, und nicht nur beim Kartenwechsel.**
+        //
+        // **Und das ist `Game_Player.prototype.checkActionEvent`:**
+        // `if (Input.isTriggered("ok") || Input.isTriggered("cancel"))
+        // { this._lastTouchedX = this.x; this._lastTouchedY = this.y; }`
+        // -- **und danach laeuft `checkActionEvent` ueber die Seiten mit
+        // `isTriggerIn([0])`.**  **Gemessen an Camellias Map004:**
+        // Ereignis 14 traegt `trigger 0`, den Dialog `"~14 hours or so
+        // later"` **und die Wahl `Yes` / `No`** -- **und `RunPage(
+        // StartMode.ActionButton)` war geschrieben und von niemandem
+        // aufgerufen.**
+        //
+        // **Und es steht *vor* `FrameEnde()`, denn das leert genau die
+        // Menge, die hier gelesen wird.**
+        var bestaetigt = _keys.Pressed.Contains("ok")
+            || _keys.Pressed.Contains("cancel");
+
+        var fort = Tick();
+        _keys.FrameEnde();
+
+        //
+        // **Und nicht, solange ein Dialog offen ist** -- **denn dann
+        // bestaetigt der Spieler den Dialog, und nicht das Ereignis.**
+        //
+        // **Und nicht, solange eine Seite laeuft.**
+        //
+        // **Und das ist `$gameMap.eventRunning` in
+        // `Game_Player.prototype.updateNonmoving`:**
+        // `if (!$gameMap.isEventRunning()) { if (wasMoving) { ...
+        // this.checkEventTriggerHere([1, 2]); if ($gameMap
+        // .setupStartingEvent()) return; } }`
+        // -- **und `isEventRunning()` ist genau
+        // `this._interpreter.isRunning() || this._map
+        // ._interpreter.isRunning()`.**  **Ohne diese Bedingung startet
+        // der Knopf dieselbe Seite in jedem Bild neu** -- **und gemessen
+        // ist das als `event 5 page 0 ... carried out 1 of them before it
+        // stopped: waiting 0 frames at code 101` 19.797 Mal**,
+        // **wobei der Dialog die ganze Zeit offen und sichtbar war
+        // (`busy=True vis=True`) und der Index nie vorrueckte.**
+        if (bestaetigt && !Facts.MessageBusy && !Facts.ChoicePending
+            && Laeufer.Count == 0)
+        {
+            RunPage(StartMode.ActionButton);
+        }
+        if (fort > 0)
+        {
+            Repaint();
+            if (PaintedMap != null)
+            {
+                PaintFigures(PaintedMap);
+            }
+        }
+
         var lauf = _runner;
         var fakten = _facts;
         if (lauf == null || fakten == null)
@@ -2893,7 +3716,26 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // die ganze Karte**, -- **denn jede Seite ist ein eigener
         // Ablauf, und ein Lauf, der alle drei einer Seite nacheinander
         // startet, hat am Ende nur die letzte davon ausgefuehrt.**
-        foreach (var seite in PageOf(CurrentMapId))
+        //
+        // **And only while no page is running.**
+        //
+        // **`Tick()` above continues the running page, and that is the
+        // engine's own way** -- **measured at `Game_Map.prototype.update`,
+        // which calls `this._interpreter.update()` and never restarts a
+        // page from the beginning.** **This run here is the start run** --
+        // **it finds and starts a page when none is running, which is what
+        // `setupStartingEvent` does.**
+        //
+        // **Restarting an already-running page from index zero in the same
+        // frame is wrong twice over:** **it uses a fresh `new MzRandom()`
+        // and event id 0, so it wipes the state the running page builds
+        // on, and it re-runs every page of the map, so a test that drives
+        // thousands of frames through `Update` hangs** (measured: the
+        // choice test's 20,000-frame loop times out without this guard,
+        // and completes with it).
+        if (Laeufer.Count == 0)
+        {
+            foreach (var seite in PageOf(CurrentMapId))
         {
             var ergebnis = lauf.Run(
                 seite, fakten, CurrentMapId, 0, new MzRandom());
@@ -2924,6 +3766,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 State = PluginRuntimeState.Stopped;
                 return PluginOperationResult.Succeeded();
             }
+        }
         }
 
         return PluginOperationResult.Succeeded();

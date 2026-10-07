@@ -183,6 +183,59 @@ public partial class TestGameLibraryIntegration : TestBase
         AssertTrue(launch.Message.Contains("not registered", StringComparison.OrdinalIgnoreCase));
     }
 
+    public void Test_ExplicitCandidateResolvesAmbiguityAndPersists()
+    {
+        using var library = NewLibrary();
+        var entry = library.Import(ProjectSettings.GlobalizePath(_ambiguousPath))!;
+        AssertTrue(entry.Detection.Report.IsAmbiguous);
+        AssertTrue(Choose(library, entry, EnginePluginIds.RpgMaker2000));
+        AssertFalse(entry.Detection.Report.IsAmbiguous);
+        AssertEq(entry.SelectedPluginId, EnginePluginIds.RpgMaker2000);
+        AssertEq(entry.CompatibilityStatus, GameLibrary.GameCompatibilityStatus.Supported);
+        using var reopened = NewLibrary();
+        var restored = reopened.Import(entry.Path, false)!;
+        AssertEq(restored.Detection.Report.SelectedCandidate?.PluginId, EnginePluginIds.RpgMaker2000);
+        AssertFalse(restored.Detection.Report.IsAmbiguous);
+    }
+
+    public void Test_ExplicitCandidateCannotPromoteDetectionOnlyEngine()
+    {
+        using var library = NewLibrary();
+        var entry = library.Import(ProjectSettings.GlobalizePath(_detectionOnlyPath))!;
+        AssertFalse(Choose(library, entry, EnginePluginIds.RpgMakerUnite));
+        AssertEq(entry.CompatibilityStatus, GameLibrary.GameCompatibilityStatus.DetectionOnly);
+    }
+
+    public void Test_StaleExplicitCandidateIsNotUsedAfterGameChanges()
+    {
+        using var library = NewLibrary();
+        var path = ProjectSettings.GlobalizePath(_ambiguousPath);
+        var entry = library.Import(path)!;
+        AssertTrue(Choose(library, entry, EnginePluginIds.RpgMaker2000));
+        WriteText(_ambiguousPath.PathJoin("RPG_RT.ini"), "[RPG_RT]\nEngineID=RM2003\n");
+        using var reopened = NewLibrary();
+        var restored = reopened.Import(path, false)!;
+        AssertEq(restored.Detection.Report.SelectedCandidate?.PluginId, EnginePluginIds.RpgMaker2003);
+        AssertEq(restored.SelectedPluginId, EnginePluginIds.RpgMaker2003);
+    }
+
+    public void Test_UnknownExplicitCandidateCannotBypassDetection()
+    {
+        using var library = NewLibrary();
+        var entry = library.Import(ProjectSettings.GlobalizePath(_ambiguousPath))!;
+        AssertFalse(Choose(library, entry, EnginePluginIds.RpgMakerMz));
+        AssertTrue(entry.Detection.Report.IsAmbiguous);
+    }
+
+    private bool Choose(GameLibrary pLibrary, GameLibrary.GameEntry pEntry, string pPluginId)
+    {
+        var method = typeof(GameLibrary).GetMethod("TrySelectEngine");
+        AssertTrue(method != null, "The library must support a validated explicit engine choice.");
+        if (method == null) return false;
+        var arguments = new object[] { pEntry, pPluginId, "", true };
+        return (bool)method.Invoke(pLibrary, arguments)!;
+    }
+
     private GameLibrary NewLibrary()
     {
         return new GameLibrary(pSettingsPath: SettingsPath);

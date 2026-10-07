@@ -153,6 +153,22 @@ public abstract partial class TestBase : RefCounted
 	/// **and a helper a second file has to borrow is a helper whose home
 	/// was wrong.**
 	/// </remarks>
+	/// <summary>
+	/// The running scene tree, set once by the runner.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And a suite that needs a real input event needs a real
+	/// viewport.</strong> <c>Viewport.PushInput</c> is what decides whether a
+	/// focused Control ate the key before <c>_UnhandledInput</c> runs, and
+	/// <c>RefCounted</c> has no <c>GetTree()</c> of its own.
+	/// </para>
+	/// </remarks>
+	public static Window? Tree { get; internal set; }
+
+	/// <summary>And the node the runner mounted its suites under.</summary>
+	public static Node? Host { get; internal set; }
+
 	protected static T FehlerAus<T>(System.Action pWas)
 		where T : System.Exception
 	{

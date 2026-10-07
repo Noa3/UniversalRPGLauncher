@@ -132,9 +132,32 @@ public partial class GameDetector : RefCounted
         }
     }
 
-    public DetectionResult Analyze(string pGameDirectory)
+    public DetectionResult Analyze(string pGameDirectory) => Analyze(pGameDirectory, null);
+
+    public DetectionResult Analyze(string pGameDirectory, string? pExplicitPluginId)
     {
         var report = _pluginDetector.Analyze(pGameDirectory);
+        if (!report.IsMalformed && !report.IsUnknown && !string.IsNullOrEmpty(pExplicitPluginId))
+        {
+            var chosen = report.Candidates.FirstOrDefault(candidate =>
+                candidate.PluginId.Equals(pExplicitPluginId, StringComparison.Ordinal)
+                && candidate.Status == EngineDetectionStatus.Supported);
+            if (chosen != null)
+            {
+                report = new EngineDetectionReport
+                {
+                    SourcePath = report.SourcePath,
+                    IsArchive = report.IsArchive,
+                    SelectedCandidate = chosen,
+                    Candidates = report.Candidates,
+                    Inspection = report.Inspection,
+                    InspectionDiagnostics = report.InspectionDiagnostics,
+                    Diagnostics = report.Diagnostics.Append(PluginDiagnostic.Info(
+                        "detection.explicit-selection", "User selected a currently detected engine candidate.",
+                        chosen.PluginId)).ToArray(),
+                };
+            }
+        }
         var snapshot = report.Inspection;
         var top = report.Candidates.FirstOrDefault();
         var selected = report.SelectedCandidate;

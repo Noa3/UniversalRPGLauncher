@@ -567,6 +567,23 @@ public sealed class MzInterpreter
             Index++;
         }
 
+        //
+        // **Und das Flag gehoert *nur* zu einem Befehl, der wirklich
+        // gelaufen ist.**  Ein Befehl, der `false` zurueckgibt und damit
+        // wartet, **hat seinen Index nicht bewegt** -- **und der Index
+        // steht dann noch dort, wo er war, und der Befehl laeuft im
+        // naechsten Bild erneut.**
+        //
+        // **Und gemessen war das als Camellias Map005 Ereignis 4 bei
+        // Index 99:** der `101` dort hat vier Zeilen, **setzte den Index
+        // auf 104, und gab `false` zurueck** (`setWaitMode("message");
+        // return true;` steht so in der Quelle -- **und der 101 gibt
+        // `false` zurueck, wenn `$gameMessage.isBusy()`**).  **Das Flag
+        // wurde in diesem Fall geloescht, ohne dass der Index je
+        // weiterkam**, **und die Seite blieb bei 99 fuer 240 Bilder
+        // stehen**, **obwohl `[mz-pf] antwort=True` meldete, der Dialog
+        // offen war und "ok" gedrueckt wurde.**
+
         IndexWeitergesetzt = false;
         if (Stopped != MzStep.Stepped)
         {
@@ -869,9 +886,33 @@ public sealed class MzInterpreter
     /// the frame after — so a reader that moved the index on would run the rest
     /// of a list before the wait was over.
     /// </summary>
+    /// <summary>
+    /// Counts a wait off in frames, and it is <c>this.wait(n)</c>.
+    /// </summary>
+    /// <param name="pFrames">The frames to wait.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this clears the wait mode, and that is the whole
+    /// reason it does.</strong> <c>Game_Interpreter.prototype.wait</c>
+    /// is <c>this._waitCount = duration;</c> <strong>and nothing
+    /// else</strong> -- <strong>and <c>update()</c> asks the count
+    /// first</strong>, and returns as soon as it is positive.
+    /// </para>
+    /// <para>
+    /// <strong>And measured is what happens without the clear:</strong>
+    /// a page whose 101 set <c>MzWaitMode.Message</c> and whose 221
+    /// then called <c>this.wait(24)</c> stood at <strong>index 200 of
+    /// 211</strong> for 400 frames (<c>120:200 180:200 240:200
+    /// 300:200 360:200</c>), <strong>with <c>frames=0</c> and
+    /// <c>wait=Message</c></strong> -- **the frame count was gone
+    /// and the condition was not, and a condition without a key
+    /// press never opens.**
+    /// </para>
+    /// </remarks>
     public void Wait(int pFrames)
     {
         WaitFrames = pFrames;
+        WaitMode = MzWaitMode.None;
         Stopped = MzStep.Waiting;
         Reason = pFrames > 0
             ? $"waiting {pFrames} frames at index {Index}"
@@ -925,6 +966,15 @@ public sealed class MzInterpreter
     /// <summary>Why the run is being held up, when the answer is a condition
     /// and not a count.</summary>
     public MzWaitMode WaitMode { get; private set; } = MzWaitMode.None;
+
+    /// <summary>
+    /// The character a balloon wait is on, and the one <c>command213</c>
+    /// named. The engine keeps it as <c>this._characterId</c> and waits on
+    /// <c>character.isBalloonPlaying()</c> — a single figure, never "any
+    /// figure with a balloon". A reader that waited on any figure parked a
+    /// page that had also lit non-waiting balloons on its neighbours.
+    /// </summary>
+    public int BalloonCharacterId { get; set; } = -1;
 
     /// <summary>What was reported and not run, in the order it happened.</summary>
     /// <remarks>
@@ -983,7 +1033,8 @@ public sealed class MzInterpreter
         WaitFrames = 0;
         Stopped = MzStep.Stepped;
         return true;
-    }
+    }
+
     /// <summary>
     /// The three forms of the block that are not JavaScript but one number
     /// this interpreter keeps itself.
