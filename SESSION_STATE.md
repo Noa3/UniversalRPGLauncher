@@ -1,5 +1,31 @@
 ## Current card
 
+### CHECKPOINT 2026-10-07 — MV movement acceptance test (committed `6cc3bfe`, pushed)
+
+**MV now has the same input→movement coverage as MZ and RM2K.** The MZ
+and RM2K engines each have a "an arrow key moves the hero, and a wall
+stops it" acceptance test; MV had start/paint/character-sheet tests but no
+movement test. This closes that gap.
+
+- **Start map (Map001 "Hai") is all star tiles.** All 1326 cells carry the
+  engine's `0x10` star flag, and the engine's own `checkPassage` refuses a
+  step from a cell whose tiles are all star. The test asserts the hero
+  stays put in all four directions — **and turns to face each blocked key**,
+  which is what `Game_CharacterBase.moveStraight` does (`setDirection` runs
+  either way, the `canPass` test guards only the step).
+- **The drawn map (Map005) is walkable in every direction.** The test places
+  the hero on an open cell (`Facts.Player.StandAt(5, 5, 5, 2)` after
+  `GoTo(5)`), steps right, and asserts both that the position changes
+  (`5/5 → 6/5`) and that the frame repaints (`21 → 266` distinct colours, the
+  hero sprite landing on the map). That is the assertion that separates
+  "the input path reaches the player" from "a key is pressed and dropped."
+- **Canonical suite: all 2713 tests pass, exit 0** (was 2712).
+- **Honest limit, not a gap:** LegalTruck has no `101`/`102` (dialogue or
+  choice) on any of its 8 maps, so an MV dialogue/choice acceptance test
+  would need a different game. The choice path is already proven on MZ
+  (Camellia, `Test_EineWahlErscheintUndLaesstSichBeantworten`), and MV shares
+  the runtime.
+
 ### CHECKPOINT 2026-10-07 — MV character sheets (committed `761cbca`, pushed)
 
 **The character-sheet twin of the tileset fix.** The same single-spelling
