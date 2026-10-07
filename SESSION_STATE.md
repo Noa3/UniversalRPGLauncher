@@ -1,5 +1,50 @@
 ## Current card
 
+### CHECKPOINT 2026-10-07 — MV/MZ real-game choice + MV tileset (committed `53f11e9`, pushed)
+
+**Both real-game acceptance tests that were red are now green, and the
+canonical suite passes fully. This closes the two items the previous
+checkpoint listed as open.**
+
+| suite | before | after |
+|---|---|---|
+| `TestMzEchtesSpielStartet` | 7/8 (choice never appeared) | **8/8** |
+| `TestMvEchtesSpielStartet` | 3/4 (no frame, "sheets missing") | **4/4** |
+| canonical full suite | 6/2712 failed | **All 2711 passed, exit 0** |
+
+**A correction to the earlier conclusion.** Both failing test files were
+*first added in `ceecc5e`* and do **not** exist at the "green baseline"
+`bda191f`. So "baseline is fully green, therefore this is a regression" was
+a false comfort for these two: the tests simply were not present at that
+baseline. They are new acceptance tests the feature never satisfied, and
+this slice makes them genuinely pass rather than relabeling them.
+
+**The two fixes (each measured against the engine source and real data):**
+
+1. **`command101` now opens the interactive choice.** A real game's choice
+   is a `101` + `401` + `102` block (measured on LegalTruck/Camellia, Map004
+   event 14). `command101` eats the `102` and only recorded it in
+   `LastChoice` (data), so `OpenChoice` stayed null and `ChoicePending`
+   stayed false across 20,000 frames. The engine's `command101` calls
+   `setupChoices` itself, so `command101` now also calls
+   `pFacts.StartChoice(...)`. `LastChoice` is still set for the dialogue
+   tests that read it.
+2. **`ReadTilesets` reads MV's `.rpgmvp` sheets.** It appended only `.png_`
+   (the singular `TilesetFileName` helper), so an MV game whose sheets are
+   all `.rpgmvp` (measured on LegalTruck) read every sheet as missing and
+   painted nothing. It now walks `TilesetFileNames` (`.rpgmvp`, `.png_`,
+   `.png` in the order the games write them) and takes the first that is on
+   disk and reads.
+3. **The runtime's `AnswerChoice` bridges the engine's zero-based pick to
+   the facts' one-based branch** (`Window_ChoiceList.callOkHandler` fires
+   `onChoice(index)` with the zero-based row; the facts API counts from one).
+   The facts API and `test_mz_choice.cs` are untouched.
+
+**Standing rules (from the user, 2026-10-07):** code and comments in English
+only; checkpoint to git regularly; write tests for the changes; internet
+research allowed when a fact is unknown. `qa_patches/` stays unversioned and
+is preserved, not committed.
+
 ### CHECKPOINT 2026-10-07 — MZ parallel-page fix (committed, pushed)
 
 **And the standing goal is "make MV/MZ fully working", and this is an
