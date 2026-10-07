@@ -191,6 +191,55 @@ public partial class TestMvEchtesSpielStartet : TestBase
             $"tile {tile} addresses something the sheet holds");
     }
 
+    /// <summary>
+    /// And the MV player's own sheet is loaded, which is a fact about the disk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the character-sheet twin of the tileset fix.</strong>
+    /// LegalTruck's sheets are <c>*.rpgmvp</c> — the player is
+    /// <c>!Sprite1</c>, the vehicle is <c>Vehicle</c>, and neither has a
+    /// <c>.png_</c> spelling. A reader that filtered for <c>.png_</c> alone
+    /// found no sheet at all, and the hero was painted with nothing: a game
+    /// that starts and shows a room but no player.
+    /// </para>
+    /// </remarks>
+    public void Test_DerMvSpielerTragteinGeladenesFigurenblatt()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Projekt,
+            EngineId = EnginePluginIds.RpgMakerMv,
+            Generation = "mv",
+            DetectorScore = 850,
+        });
+        AssertTrue(started.Success, $"the MV game starts: {started.Error?.Message}");
+        if (!started.Success)
+        {
+            return;
+        }
+        var runtime = (MzEngineRuntime)host.Runtime!;
+
+        // Actors.json names the player's sheet; it must be in the runtime's
+        // character table. Measured: LegalTruck's player is `!Sprite1`,
+        // on disk as `!Sprite1.rpgmvp`.
+        var sheet = runtime.PlayerSheetName;
+        AssertTrue(sheet.Length > 0,
+            "the MV project names a sheet for its player");
+        AssertTrue(
+            runtime.Characters.TryGetValue(sheet, out var blatt) && blatt != null,
+            $"the player's sheet \"{sheet}\" is loaded -- a reader that "
+                + "filtered for .png_ alone found no sheet in an MV game "
+                + "whose sheets are .rpgmvp, and the hero was painted "
+                + "with nothing");
+    }
+
     public void Test_DerMvPluginWirbtLaufzeitUndNichtNurErkennung()
     {
         var plugin = BuiltInEnginePluginCatalog.CreateRuntimeRegistry()

@@ -3943,22 +3943,40 @@ public sealed class MzEngineRuntime : IEngineRuntime
         var schluessel = EncryptionKey();
         Characters = new Dictionary<string, MzCharacterSheet?>(
             StringComparer.Ordinal);
-        foreach (var datei in SafeFiles("characters", ".png_"))
-        {
-            var name = Path.GetFileNameWithoutExtension(
-                Path.GetFileNameWithoutExtension(datei));
-            var bild = MzImageReader.Read(
-                File.ReadAllBytes(datei), schluessel, out var _);
-            if (bild == null)
-            {
-                continue;
-            }
 
-            // **Und ein Figurenblatt ist nicht immer RGBA.** **Gemessen
-            // an den vier Blaettern eines fertigen Spiels**:
-            // **`MC_Sprite_sheet`, `!Flame` und `Vehicle` sind Farbtyp
-            // 3, eine Palette, und `SlimeCharacters` ist Farbtyp 6 mit
-            // vier Kanaelen.** **Und ein Leser, der nur den einen Fall
+        // **And the sheet's spelling is a fact about the disk.** MZ writes
+        // `img/characters/SlimeCharacters.png_`, MV writes
+        // `img/characters/Vehicle.rpgmvp` for the very same concept. This
+        // directory lists what is actually on disk, so both spellings are
+        // taken in one pass and the name is the file name without its
+        // two-part suffix. A reader that filtered for `.png_` alone found
+        // an MZ game and no MV game at all — measured on LegalTruck,
+        // whose sheets are all `.rpgmvp`, so the player's sheet was
+        // missing and the hero was painted with nothing.
+        var ordner = Path.Combine(_game.GameDirectory, "img", "characters");
+        if (Directory.Exists(ordner))
+        {
+            foreach (var datei in Directory.EnumerateFiles(ordner)
+                .Where(pPfad =>
+                    pPfad.EndsWith(".png_", StringComparison.Ordinal)
+                    || pPfad.EndsWith(".rpgmvp", StringComparison.Ordinal)
+                    || pPfad.EndsWith(".png", StringComparison.Ordinal))
+                .OrderBy(pPfad => pPfad, StringComparer.Ordinal))
+            {
+                var name = Path.GetFileNameWithoutExtension(
+                    Path.GetFileNameWithoutExtension(datei));
+                var bild = MzImageReader.Read(
+                    File.ReadAllBytes(datei), schluessel, out var _);
+                if (bild == null)
+                {
+                    continue;
+                }
+
+                // **Und ein Figurenblatt ist nicht immer RGBA.** **Gemessen
+                // an den vier Blaettern eines fertigen Spiels**:
+                // **`MC_Sprite_sheet`, `!Flame` und `Vehicle` sind Farbtyp
+                // 3, eine Palette, und `SlimeCharacters` ist Farbtyp 6 mit
+                // vier Kanaelen.** **Und ein Leser, der nur den einen Fall
             // kannte, zeichnete drei von vier Figurenarten aus dem
             // Nichts** -- **und zaehlte trotzdem vier gelesene
             // Blaetter, denn er zaehlte die Dateien und nicht die
@@ -3967,12 +3985,13 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // **Und die Durchsicht hat in beiden Faellen eine
             // andere Quelle** -- **bei einer Palette der Index null,
             // und bei echten Farben der Alphakanal.**
-            var farbe = MzCharacterSheet.Read(
-                bild, out var blatt, out var _);
-            if (blatt != null)
-            {
-                Characters[name] = blatt;
+                var farbe = MzCharacterSheet.Read(
+                    bild, out var blatt, out var _);
+                if (blatt != null)
+                {
+                    Characters[name] = blatt;
             }
+        }
         }
 
         // **Und die Animations kommen aus `Animations.json`.**
@@ -4102,25 +4121,6 @@ public sealed class MzEngineRuntime : IEngineRuntime
         {
             return "";
         }
-    }
-
-    private IEnumerable<string> SafeFiles(string pOrdner, string pEndung)
-    {
-        var ordner = Path.Combine(_game.GameDirectory, "img", pOrdner);
-        if (!Directory.Exists(ordner))
-        {
-            return Array.Empty<string>();
-        }
-
-        var liste = new List<string>();
-        foreach (var datei in Directory.EnumerateFiles(ordner)
-            .Where(pPfad => pPfad.EndsWith(pEndung, StringComparison.Ordinal))
-            .OrderBy(pPfad => pPfad, StringComparer.Ordinal))
-        {
-            liste.Add(datei);
-        }
-
-        return liste;
     }
 
     /// <summary>
