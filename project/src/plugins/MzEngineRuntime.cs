@@ -231,15 +231,32 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <summary>
     /// Answers the open choice, from a key press.
     /// </summary>
-    /// <param name="pBranch">Which answer, counting from one.</param>
+    /// <param name="pBranch">The option the player picked, the way the engine
+    /// numbers it: the first option is zero.</param>
     /// <returns>Whether the answer was one of the options.</returns>
+    /// <remarks>
+    /// **The engine is zero-based here, and the facts API is one-based.**
+    /// `Window_ChoiceList.callOkHandler` fires
+    /// `$gameMessage.onChoice(this.index())`, and `index()` is the zero-based
+    /// row of the option that was selected; `command402` then compares the
+    /// stored branch against the zero-based `402` line (`402 [0, "Yes"]` is
+    /// the first option). The facts object counts its branches from one
+    /// (`ChoiceBranch` maps `pBranch - 1` to the zero-based line), so this
+    /// method takes the engine's zero-based pick and hands the facts the
+    /// one-based branch. A reader that passed the zero-based pick straight
+    /// through would answer "the first option" with the facts' "no answer",
+    /// and the choice would never settle.
+    /// </remarks>
     public bool AnswerChoice(int pBranch)
     {
-        if (!Facts.AnswerChoice(pBranch))
+        if (pBranch < 0)
         {
             return false;
         }
-
+        if (!Facts.AnswerChoice(pBranch + 1))
+        {
+            return false;
+        }
         _branch = pBranch;
         return true;
     }
@@ -519,17 +536,34 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 Rm2kIndexedImage? decodiert = null;
                 if (name.Length > 0)
                 {
-                    var datei = Path.Combine(
-                        _game.GameDirectory, "img", "tilesets",
-                        MzMapRenderer.TilesetFileName(name));
-                    if (File.Exists(datei))
+                    // **And the spelling is a fact about the disk.** MZ
+                    // writes `World.png_`, MV writes `World.rpgmvp` for the
+                    // very same sheet, and which one exists is not something
+                    // to guess from the engine name. `TilesetFileNames`
+                    // gives both spellings in the order the games write
+                    // them, and the first one that is on disk and reads is
+                    // the sheet. A reader that appended only `.png_` (the
+                    // singular helper) found an MZ game and no MV game at
+                    // all — measured on LegalTruck, whose sheets are all
+                    // `.rpgmvp`, which made every sheet read as missing.
+                    foreach (var dateiname in MzMapRenderer.TilesetFileNames(name))
                     {
+                        var datei = Path.Combine(
+                            _game.GameDirectory, "img", "tilesets", dateiname);
+                        if (!File.Exists(datei))
+                        {
+                            continue;
+                        }
                         var bild = MzImageReader.Read(
                             File.ReadAllBytes(datei), schluessel, out var _);
                         if (bild != null)
                         {
                             Rm2kIndexedImage.TryParse(
                                 bild, out decodiert, out var _);
+                        }
+                        if (decodiert != null)
+                        {
+                            break;
                         }
                     }
                 }

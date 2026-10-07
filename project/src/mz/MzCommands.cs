@@ -547,8 +547,18 @@ public static class MzCommands
                 if (block.Follower == MzCommandTable.ShowChoiceList
                     && genommen < pInterpreter.Commands.Count)
                 {
-                    pFacts.LastChoice = MzChoice.Read(
+                    var wahl = MzChoice.Read(
                         pInterpreter.Commands[genommen].Parameters);
+                    pFacts.LastChoice = wahl;
+                    // **The engine calls `setupChoices`, not just records
+                    // the choice.** `command101` eats the `102` and opens
+                    // the interactive choice (`ChoicePending`) — a reader
+                    // that only filed it in `LastChoice` would never have
+                    // shown the choice to the player (measured: `ChoicePending`
+                    // stayed false across 20,000 frames because only
+                    // `LastChoice` was set).
+                    pFacts.StartChoice(
+                        wahl, wahl.CancelType != MzChoice.NoCancel);
                 }
                 else if (block.Follower is 103 or 104
                     && genommen < pInterpreter.Commands.Count)
