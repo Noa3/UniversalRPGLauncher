@@ -1157,7 +1157,11 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 // fortgesetzt wurde, ist immer noch eine Seite.**
                 LastPage = id;
                 PagesRun++;
-                LastActions = alle;
+                // **And the list is the page's own, so a new page starts it**
+                // -- **it is replaced, not extended, and the frame
+                // continuation is appended to it in `Tick`.**
+                _lastActions.Clear();
+                _lastActions.AddRange(alle);
                 LastPageStop = ergebnis.Stopped;
                 //
                 // **Und der Index ist der *Fortschritt* der Seite, und
@@ -1213,8 +1217,14 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// presses the button the page does not go on.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<MzAction> LastActions { get; private set; } =
-        Array.Empty<MzAction>();
+    /// <summary>
+    /// Backs <c>LastActions</c>: a page's ordered action list, the page's
+    /// opening actions plus the ones it carries out over later frames, each
+    /// exactly once.
+    /// </summary>
+    private readonly List<MzAction> _lastActions = new();
+
+    public IReadOnlyList<MzAction> LastActions => _lastActions;
 
     /// <summary>
     /// The keys this game has, measured, and the wait a dialog waits.
@@ -2073,7 +2083,11 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         PagesRun++;
         LastPage = pId;
-        LastActions = ergebnis.Actions;
+        // **And the list is the page's own, so a new page starts it**
+        // -- **it is replaced, not extended, and the frame
+        // continuation is appended to it in `Tick`.**
+        _lastActions.Clear();
+        _lastActions.AddRange(ergebnis.Actions);
         LastPageStop = ergebnis.Stopped;
         LastPageIndex = ergebnis.Interpreter?.Index ?? 0;
 
@@ -2803,6 +2817,11 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 liste, Facts, CurrentMapId, paar.Key, Random,
                 warte);
             Actions.AddRange(fort.Actions);
+            // **And the page's own list grows with it, and linearly** --
+            // **a frame's continuation is appended once, and not the
+            // whole cumulative run list re-merged into a copy every
+            // frame, which is the O(n squared) that hung a long run.**
+            _lastActions.AddRange(fort.Actions);
             if (fort.Interpreter != null
                 && fort.Interpreter.KannFortgesetztWerden)
             {
@@ -2833,31 +2852,6 @@ public sealed class MzEngineRuntime : IEngineRuntime
             wechselt++;
         }
 
-        //
-        // **Und `Actions` ist nicht der Puffer eines Bildes, und der
-        // Unterschied ist gemessen.**
-        //
-        // **Und `Test_DerLaufFuehrtDieEigenenBefehleDesProjektsAus` liest
-        // `lauf.Actions` nach 600 Bildern und verlangt mehr als tausend
-        // Eintraege** -- **und es waren 14, weil dieser Puffer hier
-        // geleert wurde.**  **`Actions` ist die Liste *des Laufs*:** sie
-        // waechst, sie wird gelesen, **und sie gehoert nicht dem Bild,
-        // in dem sie gefuellt wurde.**  **Ein Sammelbehaelter, den ein
-        // Haken nach jedem Bild leert, ist kein Zaehler, sondern ein
-        // Kratzer.**
-        //
-        // **Und `LastActions` bleibt die Liste *einer Seite*, und die
-        // wird hier angehaengt** -- **denn `RunPage` hat den Anfang
-        // schon hineingeschrieben** (den Ballon `213` an Index 0), **und
-        // ein Ersetzen verlor genau die beiden und damit die Reihenfolge
-        // des Spiels** (gemessen: `101, 205, 101, 213, ...` statt
-        // `213, 101, ...`).
-        if (Actions.Count > 0)
-        {
-            var gesamt = new List<MzAction>(LastActions);
-            gesamt.AddRange(Actions);
-            LastActions = gesamt;
-        }
 
         //
         //
