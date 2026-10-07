@@ -1,5 +1,25 @@
 ## Current card
 
+### CHECKPOINT 2026-10-07 — MV character sheets (committed `761cbca`, pushed)
+
+**The character-sheet twin of the tileset fix.** The same single-spelling
+bug that blinded the MV tileset reader also blinded the character reader:
+`ReadCharacters` filtered `img/characters` for `.png_` alone. An MV game
+whose sheets are all `.rpgmvp` (measured on LegalTruck: `!Sprite1.rpgmvp`,
+`Vehicle.rpgmvp` — no `.png_` file exists there at all) therefore loaded no
+sheet, and the hero was painted with nothing in a game that otherwise
+started and showed its room.
+
+- `ReadCharacters` now lists the directory for the three spellings the
+  engines write (`.png_`, `.rpgmvp`, `.png`) and takes the stem without the
+  two-part suffix. The now-unused `SafeFiles` helper is removed.
+- New acceptance test
+  `Test_DerMvSpielerTragteinGeladenesFigurenblatt`: asserts the MV project's
+  named player sheet is in the runtime's character table. Red before the
+  fix, green after.
+- **Canonical suite: all 2712 tests pass, exit 0** (was 2711 — the new test
+  is counted now).
+
 ### CHECKPOINT 2026-10-07 — MV/MZ real-game choice + MV tileset (committed `53f11e9`, pushed)
 
 **Both real-game acceptance tests that were red are now green, and the
