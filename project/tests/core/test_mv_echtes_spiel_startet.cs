@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Godot;
@@ -238,6 +239,137 @@ public partial class TestMvEchtesSpielStartet : TestBase
                 + "filtered for .png_ alone found no sheet in an MV game "
                 + "whose sheets are .rpgmvp, and the hero was painted "
                 + "with nothing");
+    }
+
+    /// <summary>
+    /// And an arrow key moves the MV hero, and a wall stops it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the MV twin of
+    /// <c>Test_EinePfeiltasteBewegtDenHeroImEchtenMzSpiel</c>.</strong>
+    /// The start map of this project, Map001 "Hai", is an empty editor
+    /// map: 1326 cells, and every one of them is a star tile — the
+    /// engine's own <c>checkPassage</c> says a cell whose tiles are all
+    /// star refuses a step, so a correct reader must leave the hero where
+    /// he stands. That is the honest answer, and the RM2K test already
+    /// proved the same on a wall.
+    /// </para>
+    /// <para>
+    /// <strong>And the engine turns the hero on a blocked key.</strong>
+    /// Measured in <c>Game_CharacterBase.prototype.moveStraight</c>: the
+    /// <c>canPass</c> test guards only the step, and
+    /// <c>setDirection</c> runs either way. A runtime that refused the
+    /// step and kept the old facing would leave the sprite looking the
+    /// wrong way after every bump into a wall.
+    /// </para>
+    /// <para>
+    /// <strong>And the drawn map of the project, Map005, is walkable in
+    /// every direction</strong>, -- <strong>and a step there moves the
+    /// hero and repaints the frame</strong>, -- <strong>which is the
+    /// assertion that separates "the input path reaches the player"
+    /// from "a key is pressed and dropped."</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_EinePfeiltasteBewegtDenHeroImEchtenMvSpiel()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Projekt,
+            EngineId = EnginePluginIds.RpgMakerMv,
+            Generation = "mv",
+            DetectorScore = 850,
+        });
+        AssertTrue(started.Success, $"the MV game starts: {started.Error?.Message}");
+        if (!started.Success)
+        {
+            return;
+        }
+        var runtime = (MzEngineRuntime)host.Runtime!;
+        for (var frame = 0; frame < 30; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+        }
+
+        // The start map is all star tiles; the engine's own checkPassage
+        // refuses a step from a cell whose tiles are all star, so a
+        // correct reader must not let the hero leave it.
+        var x0 = runtime.PlayerX;
+        var y0 = runtime.PlayerY;
+        var d0 = runtime.PlayerDirection;
+        var blockiert = new List<string>();
+        foreach (var aktion in new[] {
+            UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveRight,
+            UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveDown,
+            UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveLeft,
+            UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveUp,
+        })
+        {
+            var vorX = runtime.PlayerX;
+            var vorY = runtime.PlayerY;
+            var vorRichtung = runtime.PlayerDirection;
+            runtime.SubmitInput(aktion);
+            var dx = runtime.PlayerX - vorX;
+            var dy = runtime.PlayerY - vorY;
+            blockiert.Add($"{aktion}:{dx}/{dy} dir {vorRichtung}->{runtime.PlayerDirection}");
+            AssertEq(dx, 0, $"the star-tiled start map refuses the step: {aktion}");
+            AssertEq(dy, 0, $"the star-tiled start map refuses the step: {aktion}");
+            AssertTrue(
+                runtime.PlayerDirection != vorRichtung
+                || aktion == UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveDown,
+                $"the engine turns the hero on a blocked key too ({aktion})");
+        }
+        Console.WriteLine(
+            $"MV start map blocked the hero {x0}/{y0}: {string.Join(" ", blockiert)}");
+
+        // **Und die gezeichnete Karte des Projekts ist Map005** --
+        // **und dort ist der Held nicht gegen eine Wand, sondern auf
+        //  einer Zelle, die in alle vier Richtungen offen ist.**
+        // **Und `GoTo` ist das Tor, das ein Kartenwechsel nimmt, und
+        // `StandAt` der Befehl, der den Spieler stellt, und `SubmitInput`
+        // die Taste, die ihn bewegt.**
+        AssertTrue(runtime.GoTo(5), "the drawn MV map 5 is among the maps this runtime read");
+        runtime.Facts.Player.StandAt(5, 5, 5, 2);
+        var nachX = runtime.PlayerX;
+        var nachY = runtime.PlayerY;
+        AssertEq(nachX, 5, "the hero stands on the drawn map");
+        AssertEq(nachY, 5, "the hero stands on the drawn map");
+
+        var pixelVorher = runtime.PaintedMap == null ? 0 : AnzahlFarben(runtime.PaintedMap);
+        var schrittRechts = runtime.SubmitInput(
+            UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveRight);
+        var pixelNachher = runtime.PaintedMap == null ? 0 : AnzahlFarben(runtime.PaintedMap);
+        AssertTrue(schrittRechts,
+            "the drawn MV map lets the hero step right -- a reader that refused"
+            + " him here was reading a different game");
+        AssertEq(runtime.PlayerX, 6, "the hero stepped one tile to the right");
+        AssertEq(runtime.PlayerY, 5, "the hero did not drift off the row");
+        AssertTrue(pixelNachher != pixelVorher,
+            $"a step repaints the hero on the drawn map: {pixelVorher} distinct"
+            + $" colours before, {pixelNachher} after -- an unmoved hero and a"
+            + " moved hero look the same to a position check");
+        Console.WriteLine(
+            $"MV drawn map hero {nachX}/{nachY} -> {runtime.PlayerX}/{runtime.PlayerY},"
+            + $" {pixelVorher} -> {pixelNachher} colours");
+    }
+
+    private static int AnzahlFarben(UniversalRPG.Rm2k.Rendering.Rm2kPixelBuffer pPixels)
+    {
+        var gesehen = new HashSet<int>();
+        for (var index = 0; index + 3 < pPixels.Pixels.Length; index += 4)
+        {
+            gesehen.Add(
+                pPixels.Pixels[index]
+                | (pPixels.Pixels[index + 1] << 8)
+                | (pPixels.Pixels[index + 2] << 16));
+        }
+        return gesehen.Count;
     }
 
     public void Test_DerMvPluginWirbtLaufzeitUndNichtNurErkennung()
