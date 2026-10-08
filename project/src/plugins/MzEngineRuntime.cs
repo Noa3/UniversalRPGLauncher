@@ -2448,7 +2448,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         // **Und die Kachel unter den Fuessen, und zwar mit der
         // Ausloeserliste `[1, 2]`** -- **gemessen an `updateNonmoving`.**
-        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, 1, 2))
+        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, false, 1, 2))
         {
             bericht.Add(zeile);
         }
@@ -2463,7 +2463,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // `startMapEvent(x, y, [1, 2], true)` ruft.**
         var vorne = (PlayerX + SchrittX(PlayerDirection),
             PlayerY + SchrittY(PlayerDirection));
-        foreach (var zeile in SucheStartende(vorne, true, 1, 2))
+        foreach (var zeile in SucheStartende(vorne, true, false, 1, 2))
         {
             bericht.Add(zeile);
         }
@@ -2643,12 +2643,18 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// tile.</strong>
     /// </para>
     /// </remarks>
-    public IReadOnlyList<string> DruckeKnopf()
+    /// <param name="pNurStarten">
+    /// Whether to start the page the button reaches and stop, instead of
+    /// running it to its end. The tick passes <c>true</c>: a page the player
+    /// triggered belongs to the frames that follow, and a probe wants the
+    /// whole page.
+    /// </param>
+    public IReadOnlyList<string> DruckeKnopf(bool pNurStarten = false)
     {
         var bericht = new List<string>();
         // **Und `[0]` unter den Fuessen** -- **gemessen an
         // `triggerButtonAction`, das `checkEventTriggerHere([0])` ruft.**
-        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, 0))
+        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, pNurStarten, 0))
         {
             bericht.Add(zeile);
         }
@@ -2659,7 +2665,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // Stelle: `this.checkEventTriggerThere([0, 1, 2])`.**
             var vorne = (PlayerX + SchrittX(PlayerDirection),
                 PlayerY + SchrittY(PlayerDirection));
-            foreach (var zeile in SucheStartende(vorne, true, 0, 1, 2))
+            foreach (var zeile in SucheStartende(vorne, true, pNurStarten, 0, 1, 2))
             {
                 bericht.Add(zeile);
             }
@@ -2720,6 +2726,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
     private IReadOnlyList<string> SucheStartende(
         (int X, int Y) pTile,
         bool pNormal,
+        bool pNurStarten,
         params int[] pAusloeser)
     {
         var bericht = new List<string>();
@@ -2780,7 +2787,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     continue;
                 }
 
-                bericht.Add(RunPageEvent(id, seite, false));
+                bericht.Add(RunPageEvent(id, seite, false, pNurStarten));
                 break;
             }
         }
@@ -2838,7 +2845,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // **Gemessen an Map001:** **die Beruehrungsseiten dort tragen
         // Prioritaet 0, und der Spieler tritt auf sie**, **und ohne
         // diesen Aufruf redete keine davon.**
-        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, 1, 2))
+        foreach (var zeile in SucheStartende((PlayerX, PlayerY), false, false, 1, 2))
         {
             bericht.Add(zeile);
         }
@@ -2914,7 +2921,41 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <param name="pPage">The page itself.</param>
     /// <param name="pAutorun">Whether this is an autorun page.</param>
     /// <returns>One line about what the page did.</returns>
-    private string RunPageEvent(int pId, MzValue pPage, bool pAutorun)
+    /// <param name="pAutorun">Whether the page is an autorun page.</param>
+    /// <param name="pNurStarten">
+    /// Whether to start the page and stop, instead of running it to its end.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this method has two callers with two different needs, and
+    /// running them the same way was a defect.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>A probe wants the whole page</strong> -- it asks what a page
+    /// does, so it runs it to its end and answers every wait it meets. Every
+    /// acceptance test in this repository is such a caller, and
+    /// <c>Betrete</c> and <c>DruckeKnopf</c> are used as probes by them.
+    /// </para>
+    /// <para>
+    /// <strong>A running game wants one step.</strong> Measured: the action
+    /// button started event 6 of Camellia's Map002 through the probing path,
+    /// and the page <em>ran to its end after one command</em> with
+    /// <c>Facts.LastDialogue.IsBusy</c> true while <c>Facts.MessageBusy</c>
+    /// was false -- because that path clears the flag and presses ok at the
+    /// start of every round, which is exactly what made the autorun path
+    /// silent before it was corrected. The engine does not do that:
+    /// <c>Game_Map.update</c> drives <c>this._interpreter.update()</c> once
+    /// per frame and <c>Window_Message.isTriggered</c> waits for
+    /// <c>Input.isRepeated("ok")</c>.
+    /// </para>
+    /// <para>
+    /// <strong>So the tick passes <c>true</c></strong>: the page takes one
+    /// step, waits at its message, and lands in <see cref="Laeufer"/> for
+    /// <c>Tick()</c> to carry on once the player has answered.
+    /// </para>
+    /// </remarks>
+    private string RunPageEvent(
+        int pId, MzValue pPage, bool pAutorun, bool pNurStarten = false)
     {
         var befehle = new List<MzCommandEntry>();
         foreach (var eintrag in pPage.Member("list")?.Items
@@ -2951,7 +2992,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // das began jede Seite mit einer leeren Liste**, **und der
         // Dialog, der vor dem Selbstschalter kommt, war weg.**
         alle.AddRange(ergebnis.Actions);
-        for (var mal = 0; mal <= befehle.Count; mal++)
+        for (var mal = 0; !pNurStarten && mal <= befehle.Count; mal++)
         {
             if (ergebnis.Stopped == MzStep.Finished)
             {
@@ -4753,7 +4794,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // Prioritaetsregel** -- **und darum konnte der Spieler keinen
             // NPC ansprechen, den er korrekt nicht betreten kann.**
             _actionButtonReport.Clear();
-            foreach (var zeile in DruckeKnopf())
+            foreach (var zeile in DruckeKnopf(true))
             {
                 _actionButtonReport.Add(zeile);
             }

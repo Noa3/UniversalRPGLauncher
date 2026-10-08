@@ -1,5 +1,58 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — a started page waits at its dialogue
+
+**And the last open item from the previous checkpoint is closed.**
+
+**The signature was** `event 6: ran to its end, 1 commands` with
+`visible=False busy=False blockBusy=True` -- the press reached the page in
+front of the player, the page produced its text, and the text was never shown.
+
+**The cause was a loop, and it was the same one that had made the autorun path
+silent.** `RunPageEvent` ran a page to its end in one pass, and at the start of
+every round it did two things the engine never does:
+
+```csharp
+Facts.MessageBusy = false;   // deletes the dialogue the 101 just set
+_keys.Ok();                  // answers the wait in the frame that created it
+```
+
+The autorun path had this removed and now runs over frames; `RunPageEvent` still
+had it, and `DruckeKnopf()` goes through `RunPageEvent`.
+
+**And the honest part: the first fix was too broad and broke four tests.**
+`RunPageEvent` has two callers with two different needs, and the tests named
+which ones they are:
+
+| caller | wants | measured |
+|---|---|---|
+| `FuehreAn()`, `Betrete()` -- **only tests call them** | the whole page: run it to its end and answer every wait | `TestRealMzPageRun` 11/11 |
+| the tick, through `DruckeKnopf(true)` | one step: wait at the message and stay in `Laeufer` | `TestMzMessageOnScreen` 4/4 |
+
+A blanket `break` on `MessageBusy` broke `TestRealMzPageRun` **4 tests** --
+`Test_DerKnopfFragtNachZweiVerschiedenenPrioritaeten`,
+`Test_DieselbeKachelSagtBeimZweitenMalEtwasAnderes`,
+`Test_EinLauftextLiestSeineZeilenUndDerBodenWackelt` -- because those are
+probes and they want the whole page. So the switch is a parameter,
+`RunPageEvent(..., bool pNurStarten)`, and the loop is skipped when it is set:
+
+```csharp
+for (var mal = 0; !pNurStarten && mal <= befehle.Count; mal++)
+```
+
+**Measured after the fix:**
+
+```
+MZ collision: report=[event 6: waiting 0 frames at code 101, 1 commands so far]
+               visible=True busy=True blockBusy=True
+```
+
+The page now **waits at its dialogue**, is **visible**, and the player is held --
+and `Tick()` carries it on once the player answers, which is what
+`Game_Map.update` does with `this._interpreter.update()`.
+
+**Canonical suite: all 2729 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the game talks, and the player cannot walk through people
 
 **And this closes the largest MV/MZ gap, and finds the reason NPCs were

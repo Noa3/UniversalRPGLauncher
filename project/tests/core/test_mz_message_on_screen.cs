@@ -274,6 +274,22 @@ public partial class TestMzMessageOnScreen : TestBase
         AssertTrue(runtime.MessageText.Trim().Length > 0,
             "and that page says something, so the press reached the game's own"
                 + " dialogue and not just a counter");
+
+        // **And the page waits there instead of running past it.** Measured
+        // before this: `event 6: ran to its end, 1 commands` with `busy=False`
+        // at `blockBusy=True` -- the text was produced and never shown,
+        // because the runner that started the page dismissed every message it
+        // met and pressed ok in the same frame the wait was created. The
+        // engine waits: `Window_Message.isTriggered` asks
+        // `Input.isRepeated("ok")`, and `Game_Map.update` drives the
+        // interpreter once per frame.
+        var bericht = string.Join(" | ", runtime.ActionButtonReport);
+        AssertTrue(bericht.Contains("waiting"),
+            $"the page waits at its dialogue instead of running past it: {bericht}");
+        AssertTrue(runtime.MessageVisible,
+            "so the player is shown the dialogue the press started");
+        AssertTrue(runtime.MessageHoldsPlayer,
+            "and is held while it is up");
     }
 
     /// <summary>
