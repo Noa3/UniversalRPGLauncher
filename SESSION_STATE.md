@@ -1,5 +1,67 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the screen tone reaches the frame
+
+**And this is `223 Screen Tint`**, which the runtime modelled and never drew:
+`MzScreen` kept the tone, its target and the frames it had left, and
+`ToneIsMoving` was what a wait asked about -- and no pixel ever saw it.
+
+**And the arithmetic is the engine's own shader**, measured in the project's
+`rmmz_core.js` at `ColorFilter.prototype._fragmentSrc`:
+
+```glsl
+vec3 hsl = rgbToHsl(sample.rgb);
+hsl.y = hsl.y * (1.0 - colorTone.a / 255.0);
+vec3 rgb = hslToRgb(hsl);
+r = clamp((r / a + colorTone.r / 255.0) * a, 0.0, 1.0);
+g = clamp((g / a + colorTone.g / 255.0) * a, 0.0, 1.0);
+b = clamp((b / a + colorTone.b / 255.0) * a, 0.0, 1.0);
+```
+
+so a tone is **two things at once**: an *additive* shift of each channel by
+`tone[0..2]`, and a *desaturation* toward the colour's own **HSL lightness** by
+`tone[3]`.
+
+**And the desaturation needs no HSL round trip.** In HSL, `l = m + c/2` and the
+colour is `m + chroma`; scaling the saturation by `k` scales the chroma by `k`
+and leaves `l` where it was, so `rgb' = l + (rgb - l) * k` is the same
+arithmetic. **That is what is implemented, and it is what makes the middle
+channel provably stand still.**
+
+**Measured on the real game's map, 580608 pixels:**
+
+```
+-64,+32 checked on 580608 pixels                     every pixel shifts by the tone and nothing else
+fully desaturated 580608 pixels, 560553 were coloured
+half saturation kept the lightness on 580608 pixels  l + (rgb - l) * k, proven
+none -> drawn=False                                  a tone of nothing costs nothing
+```
+
+**And a tone of `[0,0,0,0]` is not applied at all** -- a frame that walks every
+pixel to multiply by one and add zero is work without a result, and every map
+is shown with no tone most of the time.
+
+**And still not drawn: the fade and the flash.** Both are modelled
+(`FadeOutDuration`, `FadeInDuration`, `FadeSpeed = 24`, `StarteBlitz`, `Flash`)
+and neither reaches the frame. Measured for the next step, in the project's own
+`rmmz_scenes.js`:
+
+```js
+Scene_Base.prototype.updateFade = function() {
+    if (this._fadeDuration > 0) {
+        const d = this._fadeDuration;
+        if (this._fadeSign > 0) { this._fadeOpacity -= this._fadeOpacity / d; }
+        else { this._fadeOpacity += (255 - this._fadeOpacity) / d; }
+        this._fadeDuration--;
+    }
+};
+```
+
+-- **asymptotic, not linear**, and it needs its own state because the model
+keeps the countdown and not the opacity.
+
+**Canonical suite: all 2736 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the game's pictures are drawn
 
 **And this was the largest thing a running game showed and this runtime did

@@ -1685,6 +1685,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         PaintFigures(pixel);
         PicturesDrawn = PaintPictures(pixel);
+        ToneDrawn = PaintScreenTone(pixel);
         PaintedMap = pixel;
         return true;
     }
@@ -4387,6 +4388,99 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
     /// <summary>And how many pictures the last frame had to draw.</summary>
     public int PicturesDrawn { get; private set; }
+
+    /// <summary>And whether the last frame carried the game's tone.</summary>
+    public bool ToneDrawn { get; private set; }
+
+    /// <summary>
+    /// And the colour tone the game put over the screen, <c>223 Screen
+    /// Tint</c>.
+    /// </summary>
+    /// <param name="pPixels">The frame to tint.</param>
+    /// <returns>Whether a tone was applied at all.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own shader, measured in the project's
+    /// <c>rmmz_core.js</c> at <c>ColorFilter.prototype._fragmentSrc</c>:</strong>
+    /// </para>
+    /// <code>
+    /// vec3 hsl = rgbToHsl(sample.rgb);
+    /// hsl.y = hsl.y * (1.0 - colorTone.a / 255.0);
+    /// vec3 rgb = hslToRgb(hsl);
+    /// r = clamp((r / a + colorTone.r / 255.0) * a, 0.0, 1.0);
+    /// g = clamp((g / a + colorTone.g / 255.0) * a, 0.0, 1.0);
+    /// b = clamp((b / a + colorTone.b / 255.0) * a, 0.0, 1.0);
+    /// </code>
+    /// <para>
+    /// <strong>so a tone is two things at once:</strong> an <em>additive</em>
+    /// shift of each channel by <c>tone[0..2]</c>, and a <em>desaturation</em>
+    /// toward the colour's own HSL lightness by <c>tone[3]</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the desaturation is a plain mix, not an HSL round
+    /// trip.</strong> In HSL, <c>l = m + c/2</c> and the colour is
+    /// <c>m + chroma</c>, so scaling the saturation by <c>k</c> scales the
+    /// chroma by <c>k</c> and leaves the lightness where it was:
+    /// <c>rgb' = l + (rgb - l) * k</c>. That is the same arithmetic without
+    /// the conversion, and it is what this does.
+    /// </para>
+    /// <para>
+    /// <strong>And the <c>(r / a + r2) * a</c> in the shader is premultiplied
+    /// alpha</strong>, which for the opaque frame this runtime paints is
+    /// <c>r + r2</c>.
+    /// </para>
+    /// </remarks>
+    public bool PaintScreenTone(Rm2kPixelBuffer pPixels)
+    {
+        if (pPixels == null)
+        {
+            return false;
+        }
+
+        var ton = Facts.Screen.Tone;
+        if (ton == null || ton.Length < 4)
+        {
+            return false;
+        }
+        if (ton[0] == 0 && ton[1] == 0 && ton[2] == 0 && ton[3] == 0)
+        {
+            return false;
+        }
+
+        var rot = ton[0];
+        var gruen = ton[1];
+        var blau = ton[2];
+        var satt = 1.0 - Math.Clamp(ton[3], 0, 255) / 255.0;
+
+        for (var i = 0; i + 3 < pPixels.Pixels.Length; i += 4)
+        {
+            if (pPixels.Pixels[i + 3] == 0)
+            {
+                continue;
+            }
+            var r = (double)pPixels.Pixels[i];
+            var g = (double)pPixels.Pixels[i + 1];
+            var b = (double)pPixels.Pixels[i + 2];
+
+            // **And the lightness is the HSL one**, `(min + max) / 2`.
+            var min = Math.Min(r, Math.Min(g, b));
+            var max = Math.Max(r, Math.Max(g, b));
+            var helligkeit = (min + max) / 2.0;
+
+            pPixels.Pixels[i] = Klemme(
+                helligkeit + (r - helligkeit) * satt + rot);
+            pPixels.Pixels[i + 1] = Klemme(
+                helligkeit + (g - helligkeit) * satt + gruen);
+            pPixels.Pixels[i + 2] = Klemme(
+                helligkeit + (b - helligkeit) * satt + blau);
+        }
+
+        return true;
+    }
+
+    /// <summary>And one channel, back into a byte.</summary>
+    private static byte Klemme(double pWert) =>
+        (byte)Math.Clamp((int)Math.Round(pWert), 0, 255);
 
     /// <summary>And one picture, onto the frame.</summary>
     private static bool BlitPicture(
