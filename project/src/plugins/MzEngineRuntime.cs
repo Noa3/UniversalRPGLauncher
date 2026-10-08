@@ -875,6 +875,25 @@ public sealed class MzEngineRuntime : IEngineRuntime
         CurrentMapId = start;
         _startMapId = start;
         _runner = new MzEventRunner(_commonEvents);
+
+        // **Und die Laufzeit hoert, wenn eine Seite ein Bild anfordert.**
+        //
+        // **Und das muss hier stehen**, **denn `Repaint` ersetzt `Facts`
+        // durch `WithCharacters(...)`, und das traegt nur weiter, was schon
+        // da war.** **Ein Ruf, der danach gesetzt wird, faellt mit dem
+        // ersten Kartenwechsel weg** -- **und `212` ist in jedem
+        // Kampfsystem dieses Spiels.**
+        Facts.AnimationGestartet = (figur, animation) =>
+        {
+            if (!StarteAnimation(figur, animation))
+            {
+                Facts.Notices.Add(
+                    $"the page asked to show animation {animation} on figure "
+                    + $"{figur}, and the project has no animation with that "
+                    + "number, so nothing runs");
+            }
+        };
+
         _facts = Facts;
         _clock.Reset();
         State = PluginRuntimeState.Running;
@@ -3220,6 +3239,14 @@ public sealed class MzEngineRuntime : IEngineRuntime
         {
             MzWaitMode.Balloon =>
                 !BallonLaueft(pInterpretierer.BalloonCharacterId),
+
+            // **Und `212` mit Warten wartet auf sein Bild.**
+            // **Und das ist `character.isAnimationPlaying()`** -- **die
+            // Figur, die die Seite genannt hat, und nicht "irgendeine"**,
+            // sonst parkt eine Seite, die auch ohne Warten Bilder auf ihre
+            // Nachbarn gelegt hat.
+            MzWaitMode.Animation =>
+                !AnimationLaeuft(pInterpretierer.AnimationCharacterId),
             _ => WaitBeantwortet(pModus),
         };
     }

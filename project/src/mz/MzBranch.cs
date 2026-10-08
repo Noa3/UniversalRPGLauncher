@@ -740,6 +740,28 @@ public sealed class MzBranchFacts
     public List<int> AnimationAsked { get; } = new();
 
     /// <summary>
+    /// And the runtime is told when a page asks for an animation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is a callback and not a list, and the difference is
+    /// the whole point.</strong> <see cref="AnimationAsked"/> was written by
+    /// the command and read by nobody, <strong>because the command writes
+    /// into a copy of these facts</strong>: <c>MzCommands</c> runs with the
+    /// child facts <c>WithCharacters</c> builds, and a list added to there is
+    /// thrown away when the page ends. Measured:
+    /// <c>grep -rn "AnimationAsked"</c> finds the declaration, the copy, and
+    /// one write -- and no reader at all.
+    /// </para>
+    /// <para>
+    /// <strong>A delegate is carried across the copy and keeps pointing at
+    /// the runtime</strong>, so the runtime hears about the animation
+    /// whatever facts object the command happens to hold.
+    /// </para>
+    /// </remarks>
+    public Action<int, int>? AnimationGestartet { get; set; }
+
+    /// <summary>
     /// How long each animation of this project plays, in frames.
     /// </summary>
     /// <remarks>
@@ -1105,6 +1127,15 @@ public sealed class MzBranchFacts
         {
             kopie.AnimationAsked.Add(wen);
         }
+
+        // **Und der Ruf an die Laufzeit kommt mit.**
+        //
+        // **Und daran lag `AnimationAsked`:** der Befehl schreibt in ein
+        // Kind dieser Tatsachen, und eine Liste, die dort waechst, ist weg,
+        // sobald die Seite endet. **Ein Delegat zeigt weiter auf die
+        // Laufzeit**, gleichgueltig welches Tatsachenobjekt der Befehl
+        // gerade haelt.
+        kopie.AnimationGestartet = AnimationGestartet;
 
         // **Und die Animationslaengen kommen mit**, -- **denn ein
         // Kindlauf, der sie nicht kennt, wartet auf kein Bild**,

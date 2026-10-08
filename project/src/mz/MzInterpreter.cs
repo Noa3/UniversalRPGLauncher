@@ -976,6 +976,18 @@ public sealed class MzInterpreter
     /// </summary>
     public int BalloonCharacterId { get; set; } = -1;
 
+    /// <summary>
+    /// And the figure <c>212 Show Animation</c> waits on.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>this._characterId</c> of <c>command212</c>
+    /// </strong>, and the wait is <c>character.isAnimationPlaying()</c> --
+    /// **the figure the page named, and not "any figure with an
+    /// animation"**, which is the same distinction
+    /// <see cref="BalloonCharacterId"/> carries.
+    /// </remarks>
+    public int AnimationCharacterId { get; set; } = -1;
+
     /// <summary>What was reported and not run, in the order it happened.</summary>
     /// <remarks>
     /// <strong>And this is here because a 355 is reported and not

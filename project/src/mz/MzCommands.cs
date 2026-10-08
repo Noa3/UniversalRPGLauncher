@@ -3481,12 +3481,26 @@ case MzCommandTable.ChangeExp:
                 if (wessen < 0)
                 {
                     pFacts.Player.ShowAnimation(animation, laenge);
+
+                    // **Und die Laufzeit erfaehrt davon**, **denn die
+                    // Figur allein traegt die Animation nicht**: sie wird
+                    // bei jedem `Repaint` neu gebaut. **Der Lauf liegt in
+                    // der Laufzeit**, und `-1` ist der Spieler -- dieselbe
+                    // Zahl, die `205` fuer ihn benutzt.
+                    pFacts.AnimationGestartet?.Invoke(-1, animation);
                     pActions.Add(new MzAction(pCommand,
                         $"the player is asked for animation {animation}"
                         + $" over {laenge} frames"
                         + (warten ? ", and the page waits for it" : "")));
                     if (warten)
                     {
+                        // **Und die Engine merkt sich die Figur**, **denn
+                        // `command212` setzt `this._characterId` und wartet
+                        // auf `character.isAnimationPlaying()`** -- **und
+                        // eine Seite, die auf "irgendeine Figur" wartet,
+                        // wartet auf die falsche.** Dieselbe Unterscheidung
+                        // traegt `BalloonCharacterId`.
+                        pInterpreter.AnimationCharacterId = -1;
                         pInterpreter.WaitFor(MzWaitMode.Animation);
                     }
 
@@ -3510,12 +3524,14 @@ case MzCommandTable.ChangeExp:
                 {
                     zeichen.ShowAnimation(animation, laenge);
                     pFacts.AnimationAsked.Add(zeichen.EventId);
+                    pFacts.AnimationGestartet?.Invoke(zeichen.EventId, animation);
                     pActions.Add(new MzAction(pCommand,
                         $"character {wessen} is asked for animation "
                         + $"{animation} over {laenge} frames"
                         + (warten ? ", and the page waits for it" : "")));
                     if (warten)
                     {
+                        pInterpreter.AnimationCharacterId = zeichen.EventId;
                         pInterpreter.WaitFor(MzWaitMode.Animation);
 
                         // **Und `212` gibt `true` zurueck**, --

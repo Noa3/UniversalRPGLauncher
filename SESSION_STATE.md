@@ -1,5 +1,47 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — `212` reaches the runtime, and a list never could
+
+**And `AnimationAsked` was not merely unread -- it could not have been read.**
+
+Measured: `grep -rn "AnimationAsked"` finds the declaration, the copy inside
+`WithCharacters`, and **one write** in `MzCommands` -- and no reader at all.
+The reason is the design: **the command runs with the child facts that
+`WithCharacters` builds**, so a list that grows there is thrown away when the
+page ends. A reader added later would have found an empty list and blamed
+itself.
+
+**So the channel is a delegate**, which is carried across the copy and keeps
+pointing at the runtime:
+
+```csharp
+public Action<int, int>? AnimationGestartet { get; set; }   // MzBranchFacts
+kopie.AnimationGestartet = AnimationGestartet;              // WithCharacters
+Facts.AnimationGestartet = (figur, animation) => { ... };   // MzEngineRuntime.Start
+```
+
+**And it has to be set in `Start`**, measured: `Repaint()` replaces `Facts` by
+`WithCharacters(...)` and that carries only what was already there, so a
+callback attached later would fall away at the first map change.
+
+**And the wait is answered too.** `MzInterpreter` now carries
+`AnimationCharacterId` next to `BalloonCharacterId`, the command names the
+figure it waits on, and the runtime answers `MzWaitMode.Animation` with
+`!AnimationLaeuft(id)` -- **the same "the figure the page named, and not any
+figure" distinction the balloon wait needed.**
+
+**Measured:**
+
+```
+MZ animation 212: the callback is set
+MZ animation 212: after a repaint the callback is set
+MZ animation 212: animation 1 runs=True
+MZ animation 212: it ended after 31 frames, and its own duration is 31
+MZ animation 212: asking for 99999 added 1 notice(s)
+```
+
+**Canonical suite: all 2753 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the animation table was empty, and MZ animations are not MV's
 
 **And the whole table was skipped, and the guard that skipped it said why it
