@@ -120,6 +120,12 @@ public partial class Main : Control
 	{
 		_library = new GameLibrary(pRuntimeRegistry: _pluginRegistry);
 		_launcher = new RuntimeLauncher(_pluginRegistry);
+
+		// **And the window asks for the title screen, because it is the
+		// caller that shows a player a screen.** The engine's own order is
+		// Scene_Title and then Scene_Map, and a game whose front page is
+		// never shown is a game that starts in the middle.
+		_launcher.PresentTitleScreen = true;
 	}
 
 	public override void _Ready()

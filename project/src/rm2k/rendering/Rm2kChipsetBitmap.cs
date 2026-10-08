@@ -350,10 +350,19 @@ public sealed class Rm2kIndexedImage
                     //  `Outside_A1.png_`  in  denselben  Massen  Farbtyp 3
                     //  ist.**  **Ein Leser,  der  nur  3  annimmt,  lehnt
                     //  damit  jedes  MV-Tileset  ab.**
-                    if (colorType is not 3 and not 6)
+                    // **And colour type 2 is RGB without an alpha
+                    // channel, and it is what a title screen is made of.**
+                    // Measured on this project: `img/titles1/SkieTitle.png_`
+                    // decrypts to 1280x720, depth 8, **colour type 2** --
+                    // and a reader that accepted only 3 and 6 refused it,
+                    // so the game's own front page could not be painted.
+                    // Its alpha is 255 everywhere, which is exactly what a
+                    // background means.
+                    if (colorType is not 2 and not 3 and not 6)
                     {
-                        pError = $"Chipset PNG must be paletted (colour type 3) or"
-                            + $" RGBA (colour type 6) but uses {colorType}.";
+                        pError = $"Chipset PNG must be paletted (colour type 3),"
+                            + $" RGB (colour type 2) or RGBA (colour type 6) but"
+                            + $" uses {colorType}.";
                         return false;
                     }
 
@@ -425,10 +434,15 @@ public sealed class Rm2kIndexedImage
         }
 
         // **Und die Zeilenlaenge folgt der Farbtiefe, nicht der Pixelzahl.**
-        // RGBA braucht vier Bytes pro Pixel, und ein Unfilter, der mit der
-        // Pixelzahl rechnet, verschiebt jede Zeile -- was als "not valid
-        // deflate data" ankommt und nicht als der Fehler, der sie ist.
-        var bytesPerPixel = farbtyp == 6 ? 4 : 1;
+        // RGBA braucht vier Bytes pro Pixel, RGB drei, und ein Unfilter, der
+        // mit der Pixelzahl rechnet, verschiebt jede Zeile -- was als "not
+        // valid deflate data" ankommt und nicht als der Fehler, der sie ist.
+        var bytesPerPixel = farbtyp switch
+        {
+            6 => 4,
+            2 => 3,
+            _ => 1,
+        };
         var stride = checked(width * bytesPerPixel);
         var expected = checked((stride + 1) * height);
         if (raw.Length < expected)
@@ -443,9 +457,12 @@ public sealed class Rm2kIndexedImage
         }
 
         byte[][] palette;
-        if (farbtyp == 6)
+        if (farbtyp is 6 or 2)
         {
-            // **Und RGBA wird quantisiert, nicht separat gezeichnet.**
+            // **Und RGBA und RGB werden quantisiert, nicht separat
+            // gezeichnet.** **Und `FarbSchluessel` liest die drei
+            // Farbbytes, die beide Sorten an derselben Stelle tragen** --
+            // **ein RGB-Bild hat nur keinen vierten.**
             if (!Quantisiere(indices, stride, bytesPerPixel,
                 out var quantisiert, out palette, out pError))
             {

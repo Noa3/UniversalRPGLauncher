@@ -237,6 +237,104 @@ public partial class TestMzEchtesSpielStartet : TestBase
             + " keys on that one");
     }
 
+    /// <summary>
+    /// And the project's own title screen appears before its first map.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>Scene_Title</c>, which the runtime did not
+    /// have at all.</strong> Measured: this project names
+    /// <c>title1Name: "menu_page"</c>, and the file is
+    /// <c>img/titles1/menu_page.png_</c>. The engine's order is
+    /// <c>Scene_Boot</c>, then <c>Scene_Title</c>, then
+    /// <c>commandNewGame</c> and <c>Scene_Map</c> -- <strong>and a runtime
+    /// that starts on the map has skipped the game's front page.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the caller asks for it.</strong> A window that shows a
+    /// player a screen sets <c>PresentTitleScreen</c>; a caller that
+    /// measures a map does not, and every other test in this file is such a
+    /// caller.
+    /// </para>
+    /// </remarks>
+    public void Test_DerTitelbildschirmErscheintUndStartetDasSpiel()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Projekt,
+            EngineId = EnginePluginIds.RpgMakerMz,
+            Generation = "mz",
+            DetectorScore = 850,
+            PresentTitleScreen = true,
+        });
+        AssertTrue(started.Success, $"the MZ game starts: {started.Error?.Message}");
+        if (!started.Success)
+        {
+            return;
+        }
+        var runtime = (MzEngineRuntime)host.Runtime!;
+
+        AssertTrue(runtime.TitleImageName.Length > 0,
+            "the project names a title image");
+        AssertTrue(runtime.TitleVisible,
+            $"the title screen is on the frame: {runtime.TitleProblem}");
+        var titel = runtime.PaintedMap;
+        AssertTrue(titel != null && titel.Width == MzEngineRuntime.ScreenWidth
+            && titel.Height == MzEngineRuntime.ScreenHeight,
+            "the title frame is the engine's own screen");
+        if (titel == null)
+        {
+            return;
+        }
+
+        var titelFarben = AnzahlFarben(titel);
+        AssertTrue(titelFarben > 100,
+            $"the title frame carries the picture, not an empty buffer"
+            + $" ({titelFarben} distinct colours)");
+        AssertTrue(runtime.TitleCommands.Contains("New Game"),
+            "the title offers the engine's own New Game command");
+
+        // **Und nichts dahinter tickt.** A title screen with a map running
+        // behind it would advance the game while a player reads the front
+        // page.
+        var xVorher = runtime.PlayerX;
+        for (var frame = 0; frame < 30; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+        }
+        AssertTrue(runtime.TitleVisible,
+            "thirty frames of title leave the title on the frame");
+        AssertEq(runtime.PlayerX, xVorher,
+            "no map runs behind the title screen");
+
+        // **Und der Bestaetigungsschluessel ist `commandNewGame`.**
+        AssertTrue(runtime.SubmitInput(
+                UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm),
+            "the confirmation key starts a new game");
+        AssertTrue(!runtime.TitleVisible,
+            "the title leaves the frame when a new game begins");
+
+        var karte = runtime.PaintedMap;
+        AssertTrue(karte != null, "the start map takes the frame");
+        if (karte == null)
+        {
+            return;
+        }
+        var kartenFarben = AnzahlFarben(karte);
+        Console.WriteLine($"MZ title \"{runtime.TitleImageName}\" "
+            + $"{titel.Width}x{titel.Height} colours={titelFarben}; "
+            + $"start map colours={kartenFarben}");
+        AssertTrue(kartenFarben != titelFarben,
+            "the start map is a different picture from the title: a title "
+            + "screen that left the same frame behind was never replaced");
+    }
+
     /// <summary>And how many distinct colours a frame carries.</summary>
     private static int AnzahlFarben(UniversalRPG.Rm2k.Rendering.Rm2kPixelBuffer pPixels)
     {

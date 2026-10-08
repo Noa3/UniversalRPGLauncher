@@ -355,6 +355,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         _tilesetNames = ReadTilesetNames();
         _commonEvents = ReadCommonEvents();
         ReadCharacters();
+        ReadTitleFromSystem();
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded();
     }
@@ -657,11 +658,24 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         CurrentMapId = start;
-        Repaint();
+        _startMapId = start;
         _runner = new MzEventRunner(_commonEvents);
         _facts = Facts;
         _clock.Reset();
         State = PluginRuntimeState.Running;
+
+        // **And a caller that presents a window asks for the title first**,
+        // because the title is the engine's own first scene: Scene_Title,
+        // then commandNewGame, then Scene_Map. A caller that measures the
+        // map does not ask for it and gets the map, which is what every
+        // acceptance test in this repository does.
+        if (_game.PresentTitleScreen && TitleImageName.Length > 0
+            && PaintTitle())
+        {
+            return PluginOperationResult.Succeeded();
+        }
+
+        Repaint();
 
         // **Und die automatischen Seiten laufen sofort, und nicht erst,
         // wenn der Spieler irgendetwas beruehrt.**
@@ -681,6 +695,255 @@ public sealed class MzEngineRuntime : IEngineRuntime
             AutorunProblem = autorun;
         }
         return PluginOperationResult.Succeeded();
+    }
+
+    /// <summary>The title image the project names, and empty when it names none.</summary>
+    public string TitleImageName { get; private set; } = "";
+
+    /// <summary>The overlay the project draws over the title.</summary>
+    public string TitleOverlayName { get; private set; } = "";
+
+    /// <summary>The project's own game title.</summary>
+    public string GameTitle { get; private set; } = "";
+
+    /// <summary>Whether the title screen is on the frame right now.</summary>
+    public bool TitleVisible { get; private set; }
+
+    /// <summary>Why the title screen is not there, and empty when it is.</summary>
+    public string TitleProblem { get; private set; } = "";
+
+    /// <summary>
+    /// The commands the title screen offers.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>Window_TitleCommand.makeCommandList</c>:</strong>
+    /// <c>addCommand(TextManager.newGame, "newGame")</c>, then Continue
+    /// <em>enabled only when a save file exists</em>, then Options. Measured
+    /// at <c>isContinueEnabled</c>: <c>DataManager.isAnySavefileExists()</c>.
+    /// <strong>This runtime has no MZ save support yet, so no save file can
+    /// exist and Continue is not offered</strong> -- and saying that here is
+    /// better than a command that can never be chosen.
+    /// </remarks>
+    public IReadOnlyList<string> TitleCommands { get; private set; } =
+        Array.Empty<string>();
+
+    /// <summary>The screen the engine draws a title on.</summary>
+    public const int ScreenWidth = 816;
+
+    /// <summary>The screen the engine draws a title on.</summary>
+    public const int ScreenHeight = 624;
+
+    /// <summary>The map a new game starts on.</summary>
+    private int _startMapId = -1;
+
+    /// <summary>
+    /// Reads the title names the project writes.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And these come from <c>System.json</c> and from nowhere
+    /// else.</strong> Measured: Camellia names <c>menu_page</c>, LegalTruck
+    /// names <c>Castle</c>, Skies names <c>SkieTitle</c>, and each of those
+    /// is a file under <c>img/titles1</c> with the engine's own spelling
+    /// (<c>.png_</c> for MZ, <c>.rpgmvp</c> for MV).
+    /// </remarks>
+    private void ReadTitleFromSystem()
+    {
+        var pfad = DataPfad("System.json");
+        if (pfad.Length == 0)
+        {
+            return;
+        }
+
+        MzDataFile system;
+        try
+        {
+            system = MzDataFile.Read(
+                "data/System.json", File.ReadAllBytes(pfad));
+        }
+        catch (MzDataException)
+        {
+            return;
+        }
+
+        TitleImageName = system.Root.Member("title1Name")?.StringOr("") ?? "";
+        TitleOverlayName = system.Root.Member("title2Name")?.StringOr("") ?? "";
+        GameTitle = system.Root.Member("gameTitle")?.StringOr("") ?? "";
+        TitleCommands = new List<string> { "New Game", "Options" };
+    }
+
+    /// <summary>
+    /// And `Scene_Title`: the background, scaled to cover and centred.
+    /// </summary>
+    /// <returns>Whether the frame carries the title.</returns>
+    /// <remarks>
+    /// <strong>And the two rules are measured, not chosen.</strong>
+    /// <c>Scene_Title.createBackground</c> loads
+    /// <c>ImageManager.loadTitle1($dataSystem.title1Name)</c> and
+    /// <c>loadTitle2(title2Name)</c>, <c>adjustBackground</c> calls
+    /// <c>scaleSprite</c> -- <c>Math.max(ratioX, ratioY, 1.0)</c>, so the
+    /// image covers the screen and is never shrunk -- and then
+    /// <c>centerSprite</c>, which centres it with an anchor of one half.
+    /// </remarks>
+    public bool PaintTitle()
+    {
+        PaintedMap = null;
+        TitleProblem = "";
+        if (TitleImageName.Length == 0)
+        {
+            TitleProblem = "The project's System.json names no title1Name, "
+                + "and a title screen with nothing on it is not a title "
+                + "screen.";
+            return false;
+        }
+
+        var pixel = new Rm2kPixelBuffer(ScreenWidth, ScreenHeight);
+        var schluessel = EncryptionKey();
+        var gezeichnet = false;
+        foreach (var name in new[] { TitleImageName, TitleOverlayName })
+        {
+            if (name.Length == 0)
+            {
+                continue;
+            }
+            var bild = LadeBild("titles1", name, schluessel);
+            if (bild == null)
+            {
+                continue;
+            }
+            ZeichneTitelbild(bild, pixel);
+            gezeichnet = true;
+        }
+
+        if (!gezeichnet)
+        {
+            TitleProblem = $"The project names the title \"{TitleImageName}\", "
+                + "and this runtime read no such file under img/titles1.";
+            return false;
+        }
+
+        PaintedMap = pixel;
+        TitleVisible = true;
+        return true;
+    }
+
+    /// <summary>
+    /// And `commandNewGame`: the title leaves the frame and the start map
+    /// takes it.
+    /// </summary>
+    /// <returns>Whether a new game began.</returns>
+    /// <remarks>
+    /// <strong>And this is the engine's own order.</strong> Measured at
+    /// <c>Scene_Title.prototype.commandNewGame</c>:
+    /// <c>DataManager.setupNewGame(); this._commandWindow.close();
+    /// this.fadeOutAll(); SceneManager.goto(Scene_Map);</c> -- <strong>the
+    /// title comes first and the map second, and a reader that skipped the
+    /// first never showed a player the game's own front page.</strong>
+    /// </remarks>
+    public bool BeginNewGame()
+    {
+        if (!TitleVisible)
+        {
+            return false;
+        }
+
+        TitleVisible = false;
+        if (!Maps.ContainsKey(_startMapId))
+        {
+            return false;
+        }
+
+        CurrentMapId = _startMapId;
+        Repaint();
+
+        // **Und die automatischen Seiten laufen, sobald die Karte steht.**
+        var autorun = RunPage(StartMode.Autorun);
+        if (autorun.StartsWith("map", StringComparison.Ordinal)
+            || autorun.StartsWith("the map has no events", StringComparison.Ordinal))
+        {
+            AutorunProblem = autorun;
+        }
+        return true;
+    }
+
+    /// <summary>One image out of an <c>img</c> folder, in either spelling.</summary>
+    private Rm2kIndexedImage? LadeBild(
+        string pOrdner, string pName, string pSchluessel)
+    {
+        foreach (var dateiname in MzMapRenderer.TilesetFileNames(pName))
+        {
+            var datei = Path.Combine(
+                _game.GameDirectory, "img", pOrdner, dateiname);
+            if (!File.Exists(datei))
+            {
+                continue;
+            }
+            var bild = MzImageReader.Read(
+                File.ReadAllBytes(datei), pSchluessel, out var _);
+            if (bild == null)
+            {
+                continue;
+            }
+            if (Rm2kIndexedImage.TryParse(bild, out var ind, out var _)
+                && ind != null)
+            {
+                return ind;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// And one image onto the screen, scaled to cover and centred.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And every pixel is painted, and no index is skipped.</strong>
+    /// The transparent index is a rule of RM2K's paletted chipsets, and a
+    /// title screen of either web engine is not paletted: measured,
+    /// <c>SkieTitle.png_</c> is colour type 2 and the reader quantises it,
+    /// <strong>so index zero is a real colour and skipping it punched a
+    /// hole in the picture.</strong>
+    /// </remarks>
+    private static void ZeichneTitelbild(
+        Rm2kIndexedImage pBild, Rm2kPixelBuffer pZiel)
+    {
+        if (pBild.Width <= 0 || pBild.Height <= 0)
+        {
+            return;
+        }
+
+        var skala = Math.Max(
+            Math.Max(
+                pZiel.Width / (double)pBild.Width,
+                pZiel.Height / (double)pBild.Height),
+            1.0);
+        var breite = (int)Math.Round(pBild.Width * skala);
+        var hoehe = (int)Math.Round(pBild.Height * skala);
+        var links = (pZiel.Width - breite) / 2;
+        var oben = (pZiel.Height - hoehe) / 2;
+
+        for (var y = 0; y < pZiel.Height; y++)
+        {
+            var quelleY = (int)((y - oben) / skala);
+            if (quelleY < 0 || quelleY >= pBild.Height)
+            {
+                continue;
+            }
+            for (var x = 0; x < pZiel.Width; x++)
+            {
+                var quelleX = (int)((x - links) / skala);
+                if (quelleX < 0 || quelleX >= pBild.Width)
+                {
+                    continue;
+                }
+                var index = pBild.Indices[quelleY * pBild.Width + quelleX];
+                if (index >= pBild.Palette.Length)
+                {
+                    continue;
+                }
+                var farbe = pBild.Palette[index];
+                pZiel.TrySetPixel(x, y, farbe[0], farbe[1], farbe[2], 255);
+            }
+        }
     }
 
     /// <summary>
@@ -3496,6 +3759,15 @@ public sealed class MzEngineRuntime : IEngineRuntime
             return false;
         }
         //
+        // **And the title screen takes exactly one key**, and it is the
+        // confirmation: `Window_TitleCommand` answers to ok and cancel, and
+        // the command it runs on ok is New Game.
+        if (TitleVisible)
+        {
+            return pAction == UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm
+                && BeginNewGame();
+        }
+
         // **Und Enter ist die Aktionstaste, und nicht "nichts".**
         //
         // **Und das ist `Input.isTriggered("ok")` in
@@ -3726,6 +3998,17 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 $"A frame of {pDeltaSeconds} seconds is not a length of "
                 + "time, and the runtime refuses it rather than counting "
                 + "it.");
+        }
+
+        // **And the title screen is a scene of its own, and no map runs
+        // behind it.** Measured at Scene_Title: it has no map, no
+        // interpreter and no player. **And the frame counter still moves**,
+        // because the window rebuilds its texture when it changes, and a
+        // title that never advanced it would never reach the screen.
+        if (TitleVisible)
+        {
+            Frames++;
+            return PluginOperationResult.Succeeded();
         }
 
         _clock.ProcessFrame(pDeltaSeconds);

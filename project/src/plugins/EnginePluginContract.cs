@@ -464,6 +464,23 @@ public sealed class PluginGameInfo
 	public int DetectorScore { get; init; }
 	public IReadOnlyList<string> Evidence { get; init; } = Array.Empty<string>();
 
+	/// <summary>
+	/// Whether the runtime should present the project's title screen before
+	/// its first map.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And this is false by default, and the window asks for
+	/// it.</strong> Measured on every game at hand: Camellia names
+	/// <c>menu_page</c>, LegalTruck names <c>Castle</c>, Skies names
+	/// <c>SkieTitle</c> -- <strong>so a runtime that always showed the
+	/// title would change what every existing caller and every existing
+	/// acceptance test sees.</strong> A caller that presents a window for a
+	/// player sets it; a caller that measures the map does not, and the
+	/// engine's own order is still available to both through
+	/// <c>MzEngineRuntime.BeginNewGame</c>.
+	/// </remarks>
+	public bool PresentTitleScreen { get; init; }
+
 	public PluginOperationResult Validate()
 	{
 		if (string.IsNullOrWhiteSpace(GameDirectory))

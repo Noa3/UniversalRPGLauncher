@@ -47,6 +47,21 @@ public sealed class MzMapRenderer
     /// <summary>How many tiles one sheet is wide and high.</summary>
     public const int TilesPerSheetSide = 8;
 
+    /// <summary>The first tile number of the A5 sheet.</summary>
+    /// <remarks>
+    /// Measured at <c>Tilemap.isTileA5</c>: <c>tileId &gt;= 1536 &amp;&amp;
+    /// tileId &lt; 1664</c>. **And A5 is sheet four, and the number does not
+    /// say so** -- <c>Math.floor(1536 / 256)</c> is six, which would name a
+    /// sheet this tileset does not have.
+    /// </remarks>
+    public const int TileA5First = 1536;
+
+    /// <summary>The last tile number of the A5 sheet.</summary>
+    public const int TileA5Last = 1663;
+
+    /// <summary>Which sheet A5 is.</summary>
+    public const int A5Sheet = 4;
+
     /// <summary>How many sheets a tileset is spread over.</summary>
     /// <remarks>
     /// <strong>And this is measured, and it is nine.</strong> Every
@@ -236,20 +251,27 @@ public sealed class MzMapRenderer
         int pHeight,
         Rm2kPixelBuffer pPixels)
     {
-        // **Und die Kachelnummer nennt erst das Blatt und dann die
-        // Stelle darin.** **Gemessen:** `5` ist Spalte 5 Blatt 0,
-        // `81` ist Spalte 1 Blatt 10 -- **und 10 ist groesser als die
-        // neun Blaetter, die ein Tileset hat.** **Also teilt man
-        // zuerst durch die Zahl der Blaetter eines Blattes**,
-        // **und das ist acht mal acht Kacheln.**
+        // **And the tile number is decoded the way the engine decodes it.**
+        // Measured at `Tilemap.prototype._addNormalTile`:
         //
-        // **Und eine Nummer, die auf ein leeres Blatt zeigt, malt
-        // nichts** -- **und gemessen sind in jedem Tileset mehrere
-        // Blaetter leer**, **und ein Leser, der sie uebersprang,
-        // zeigte Luecken im Fussboden.**
-        var kachelnProBlatt = TilesPerSheetSide * TilesPerSheetSide;
-        var blatt = pTileId / kachelnProBlatt;
-        var rest = pTileId % kachelnProBlatt;
+        //     setNumber = isTileA5(tileId) ? 4 : 5 + Math.floor(tileId / 256);
+        //     sx = ((Math.floor(tileId / 128) % 2) * 8 + (tileId % 8)) * w;
+        //     sy = (Math.floor((tileId % 256) / 8) % 16) * h;
+        //
+        // **and `isTileA5` is `tileId >= 1536 && tileId < 1664`.** So a
+        // B-E sheet holds sixteen by sixteen tiles and not eight by eight,
+        // the A5 sheet is sheet four, and the sheet number comes from the
+        // division by 256 and not by the sheet's tile count.
+        //
+        // **And the old arithmetic here was `tileId / 64`, which is a
+        // different number entirely.** Measured on this machine: of
+        // Camellia's 56 distinct tile ids, 24 fell outside the nine sheets
+        // and painted nothing; of the start map of Skies, all 221 tiles are
+        // id 1536 -- an A5 tile -- which `1536 / 64` sends to sheet 24, so
+        // the whole room was black.
+        var blatt = pTileId >= TileA5First && pTileId <= TileA5Last
+            ? A5Sheet
+            : 5 + (pTileId / 256);
         if (blatt < 0 || blatt >= pBlätter.Count)
         {
             return;
@@ -261,10 +283,8 @@ public sealed class MzMapRenderer
             return;
         }
 
-        var spalte = rest % TilesPerSheetSide;
-        var zeile = rest / TilesPerSheetSide;
-        var x0 = spalte * TilePixels;
-        var y0 = zeile * TilePixels;
+        var x0 = (((pTileId / 128) % 2) * 8 + (pTileId % 8)) * TilePixels;
+        var y0 = (((pTileId % 256) / 8) % 16) * TilePixels;
 
         for (var dy = 0; dy < pHeight; dy++)
         {

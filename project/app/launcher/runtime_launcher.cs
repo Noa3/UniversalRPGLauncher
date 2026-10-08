@@ -43,6 +43,19 @@ public partial class RuntimeLauncher : RefCounted
 	public IEngineRuntime? ActiveRuntime => _activeHost?.Runtime;
 	public PluginRuntimeState ActiveRuntimeState => _activeHost?.State ?? PluginRuntimeState.NotStarted;
 
+	/// <summary>
+	/// Whether the next launch should present the project's title screen.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And the window sets this, because the window is the caller
+	/// that shows a player a screen.</strong> Measured: every game at hand
+	/// names a title -- Camellia <c>menu_page</c>, LegalTruck
+	/// <c>Castle</c>, Skies <c>SkieTitle</c> -- so a launcher that never
+	/// asked would never show any of them, and a player who starts a game
+	/// would land on a map with no front page.
+	/// </remarks>
+	public bool PresentTitleScreen { get; set; }
+
 	public RuntimeLauncher()
 		: this(BuiltInEnginePluginCatalog.CreateRuntimeRegistry())
 	{
@@ -186,7 +199,26 @@ public partial class RuntimeLauncher : RefCounted
 
 		_activeHost?.Dispose();
 		_activeHost = new EnginePluginHost(_registry);
-		var started = _activeHost.Start(selection.Value.Game);
+
+		// **And the title is asked for here, where a window is about to be
+		// shown.** The selection's own game info is what every other caller
+		// uses, and it is not mutated: a copy carries the flag, so a caller
+		// that measures a map keeps the map.
+		var spiel = selection.Value.Game;
+		if (PresentTitleScreen && !spiel.PresentTitleScreen)
+		{
+			spiel = new PluginGameInfo
+			{
+				GameDirectory = spiel.GameDirectory,
+				EngineId = spiel.EngineId,
+				Generation = spiel.Generation,
+				EngineVersion = spiel.EngineVersion,
+				DetectorScore = spiel.DetectorScore,
+				Evidence = spiel.Evidence,
+				PresentTitleScreen = true,
+			};
+		}
+		var started = _activeHost.Start(spiel);
 		if (!started.Success)
 		{
 			return Failure(started.Error ?? PluginError.Create(
