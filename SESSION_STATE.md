@@ -1,5 +1,57 @@
 ## Current card
 
+### CHECKPOINT 2026-10-07 — the layer model and the autotiles (`a2455fb`, `6845e74`, pushed)
+
+**The map painter read the tile numbers wrong and could not draw most of
+them.** Both were measured, both are fixed.
+
+**The layer model.** Measured in the engine's own source:
+
+- `Game_Map.tileId` returns `data[(z * height + y) * width + x]`, so the
+  planes are stored one after another — a reader that stepped six numbers
+  per cell read the right tile for the first cell and a different one for
+  every cell after it.
+- `Game_Map.layeredTiles` pushes `tileId(x, y, 3 - i)` for `i = 0..3`: four
+  tile layers, bottom to top. Planes four and five are the shadow and the
+  region and are **not** tiles, so the old `(0,1) (2,3) (4,5)` pairing
+  painted shadow values as B-sheet tiles.
+- A tile is 48 pixels; the 16-over-32 halves were RM2K's model.
+  `BlitHalf` → `BlitTile`; `LowerHalfPixels`/`UpperHalfPixels` removed.
+- `TileCell` is now the one place a tile number is decoded, and
+  `Test_EineKachelIdNenntEinBlattUndEineZelle` asserts the engine's
+  arithmetic, including tile 130 where the old eight-wide reading parts
+  from it.
+
+**The autotiles.** Measured on Camellia's start map: of 297 tile numbers,
+266 are autotiles (41 A1, 191 A2, 34 A3) and 31 are A5 or B–E, so only
+10.4% of the map could be drawn at all. `BlitAutotile` writes out
+`Tilemap.prototype._addAutotile` — kind is
+`floor((tileId - TILE_ID_A1) / 48)`, shape is the remainder, and the shape
+names four 24-pixel quadrants — and the three tables (FLOOR 48, WALL 16,
+WATERFALL 4) are **copied out of the project's own `rmmz_core.js`**, not
+invented.
+
+| frame | before | after |
+|---|---|---|
+| Skies start map (all A5) | 710 px lit | **509184 / 509184 = 100%** |
+| Camellia start map (mostly autotiles) | 10.7% | **580608 / 580608 = 100%**, 272 colours |
+
+**Deliberately not implemented, and said so in the doc comment:** the water
+surface animates (`[0,1,2,1][animationFrame % 4]`) and this reader draws
+the first frame; the counter-tile rule
+(`isTileA2(tileId) && flags[tileId] & 0x80`) needs the tileset's flag
+array, which the painter does not carry.
+
+**Canonical suite: all 2715 tests pass, exit 0.**
+
+**Still open, unchanged from the previous checkpoint:**
+
+- 4-bit paletted PNGs are refused (bit depth must be 8) — window skins.
+- MZ save support does not exist, so the title's Continue is not offered.
+- The shadow plane is not drawn (the engine darkens those cells).
+- MZ/MV pictures (`showPicture`) are stored but never painted, so a game
+  whose splash is a picture rather than a title screen would show nothing.
+
 ### CHECKPOINT 2026-10-07 — the hang, the lazy load, and the title screen (`216a59d`, `d148bc4`, pushed)
 
 **A real MZ project (Skies Inflateable Adventure, 58 maps, 5294 images,
