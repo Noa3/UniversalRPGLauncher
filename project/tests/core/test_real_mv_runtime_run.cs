@@ -329,12 +329,70 @@ public partial class TestRealMvRuntimeRun : TestBase
             "**and the run finishes** -- and it stopped at "
             + lauf.Stopped + " after " + lauf.Actions.Count
             + " actions and " + lauf.SimulationTicks + " frames");
-        AssertTrue(lauf.Actions.Count >= 1000,
-            "**and it ran the game's own commands all the way through** "
-            + "-- " + lauf.Actions.Count + ", and that is more than"
-            + " a thousand, and a reader that answered false where"
-            + " the engine says false-means-wait stopped it at"
-            + " twenty-seven");
+        var zaehlung = new System.Collections.Generic.Dictionary<int, int>();
+        foreach (var a in lauf.Actions)
+        {
+            zaehlung[a.Code] = zaehlung.TryGetValue(a.Code, out var n) ? n + 1 : 1;
+        }
+
+        var verteilung = new System.Text.StringBuilder();
+        foreach (var kv in System.Linq.Enumerable.OrderBy(zaehlung, x => x.Key))
+        {
+            verteilung.Append(kv.Key).Append('x').Append(kv.Value).Append(' ');
+        }
+
+        Console.WriteLine($"MV state: stopped={lauf.Stopped} "
+            + $"reason='{lauf.StopReason}' pages={lauf.PagesRun} "
+            + $"last={lauf.LastPage} frames={lauf.SimulationTicks}");
+        Console.WriteLine("MV first actions: "
+            + string.Join(" | ", System.Linq.Enumerable.Take(
+                System.Linq.Enumerable.Select(lauf.Actions, a => a.Code + ": " + a.What), 4)));
+        Console.WriteLine($"MV actions: {lauf.Actions.Count} over "
+            + $"{lauf.SimulationTicks} frames: {verteilung}");
+
+        // **Und die Seite, die hier laeuft, ist die eigene Autorun-Seite
+        // dieser Startkarte, und das ist gemessen.**
+        //
+        // **Denn Map002 dieses Spiels traegt genau eine Seite mit
+        // `trigger 3`** -- Ereignis 1 auf `(0,9)`, 49 Befehle, mit 4x`355`
+        // und 9x`356` als Plugin-Befehlen -- **und `pages=1 last=1`.
+        // Vorher lief hier eine andere Seite**, **weil die Nummern im
+        // Leser um eins verschoben waren und `trigger 2` als Autorun
+        // galten** -- **und die Zahl dieses Tests, 8414 Aktionen, war die
+        // Zahl jener Seite.**
+        AssertEq(lauf.PagesRun, 1,
+            "**and exactly one page ran** -- the start map's own"
+            + " autorun page, and it is event 1");
+
+        // **Und sie laeuft bis zu einer Bedingung, die dieses Spiel
+        // selbst schreibt, und die der Lauf nicht raet.**
+        //
+        // **Gemessen: der erste Befehl ist
+        // `111 branch ScriptNotRun: needs ConfigManager.isImouto &&
+        // !ConfigManager.isJapanesePlatform, which this game's plugins
+        // also write from game state, so it is not a fact about the
+        // machine`.**
+        //
+        // **Und `ConfigManager` ist ein Plugin dieses Spiels**, und die
+        // beiden Werte darin schreibt das Spiel selbst -- **also sind sie
+        // kein Fakt ueber den Rechner, und `AGENTS.md` verbietet, das
+        // JavaScript eines importierten Spiels auszufuehren.** **Der Lauf
+        // sagt darum, woran er steht, statt zu raten** -- **und das ist
+        // der Unterschied zwischen "das Spiel laeuft nicht" und "das
+        // Spiel verlangt, dass sein eigenes JavaScript laeuft".**
+        AssertTrue(lauf.Actions.Count > 0,
+            "**and the page ran commands of its own** -- "
+            + lauf.Actions.Count + " of them, over "
+            + lauf.SimulationTicks + " frames: " + verteilung);
+        AssertTrue(lauf.Actions[0].Code == 111
+                && lauf.Actions[0].What.Contains("ScriptNotRun"),
+            "**and it stops where the game's own script condition is** "
+            + "-- and that is measured, not guessed: the condition is "
+            + "ConfigManager.isImouto && "
+            + "!ConfigManager.isJapanesePlatform, and ConfigManager is a "
+            + "plugin of this game, so the value is game state and not a "
+            + "fact about the machine. It said: "
+            + lauf.Actions[0].What);
         AssertTrue(lauf.StopReason.Length == 0,
             "**and there is nothing left to report** -- and it is '"
             + lauf.StopReason + "', and a refusal is one thing and"

@@ -35,16 +35,39 @@ public partial class TestMzSeitenStartRegel : TestBase
 
     private static bool Vorhanden() => File.Exists(MzSpiel + "/data/Map002.json");
 
-    public void Test_DieNummernSindAutomatischZweiUndNichtDrei()
+    // **Und dieser Test hiess `Test_DieNummernSindAutomatischZweiUndNichtDrei`,
+    // und er behauptete genau das Falsche.**
+    //
+    // **Und er stand auf einer Zeile, die es im Motor nicht gibt:**
+    // `isTriggerIn([2])` als Autorun-Pruefung. Gemessen an
+    // `Game_Event.prototype.update` und `checkEventTriggerAuto`:
+    //
+    //     Game_Event.prototype.checkEventTriggerAuto = function() {
+    //         if (this._trigger === 3) { this.start(); }
+    //     };
+    //
+    // **Also ist Autorun 3 und nicht 2, und Parallel 4 und nicht 3** --
+    // und das `[0, 1, 2]` an `Game_Event.prototype.start` ist die
+    // Knopf-und-Beruehrungsgruppe, **zu der die Ereignis-Beruehrung (2)
+    // gehoert.**
+    public void Test_DieNummernSindDreiUndVierUndNichtZweiUndDrei()
     {
-        // The engine's own words, from Game_Event.prototype.update:
-        // isTriggerIn([2]) is the autorun test.
-        AssertEq(MzSeitenStart.AusloeserAutomatisch, 2,
-            "autorun is trigger 2");
+        AssertEq(MzSeitenStart.AusloeserAutomatisch, 3,
+            "**autorun is trigger 3**, which is what checkEventTriggerAuto asks");
         AssertEq(MzSeitenStart.AusloeserTaste, 0, "the action button is trigger 0");
-        AssertEq(MzSeitenStart.AusloeserBeruehrt, 1, "touch is trigger 1");
-        AssertEq(MzSeitenStart.AusloeserParallel, 3,
-            "parallel process is trigger 3, and it is not started here");
+        AssertEq(MzSeitenStart.AusloeserBeruehrt, 1, "player touch is trigger 1");
+        AssertEq(MzSeitenStart.AusloeserBeruehrtVorne, 2,
+            "**event touch is trigger 2**, and it belongs to the group the "
+            + "engine starts with isTriggerIn([1,2])");
+        AssertEq(MzSeitenStart.AusloeserParallel, 4,
+            "**parallel process is trigger 4**, and it gets its own interpreter");
+
+        AssertTrue(MzSeitenStart.StartetDurchBeruehrung(1),
+            "walking onto the tile starts a player-touch page");
+        AssertTrue(MzSeitenStart.StartetDurchBeruehrung(2),
+            "and it starts an event-touch page too");
+        AssertFalse(MzSeitenStart.StartetDurchBeruehrung(3),
+            "and it does not start an autorun page");
     }
 
     public void Test_EineSeiteMitEinemBefehlStartetNicht()
@@ -107,12 +130,21 @@ public partial class TestMzSeitenStartRegel : TestBase
     /// </remarks>
     public void Test_DieEchteKarteTraegtEinenAutomatischenText()
     {
-        if (!Vorhanden() || !File.Exists(MzSpiel + "/data/Map003.json"))
+        if (!Vorhanden() || !File.Exists(MzSpiel + "/data/Map002.json"))
         {
             return;
         }
-        var karte = MzDataFile.Read("data/Map003.json",
-            File.ReadAllBytes(MzSpiel + "/data/Map003.json"));
+        // **Und hier stand `Map003`, und das war die falsche Karte.**
+        //
+        // **Gemessen ist sie es nicht:** `System.json` nennt
+        // `startMapId: 2`, **und Map002 traegt die Autorun-Seite dieses
+        // Spiels** -- Ereignis 5, Seite 0, `trigger 3`, 22 Befehle --
+        // **waehrend Map003 keine einzige hat** (seine Ausloeser sind
+        // `{0: 9, 1: 1, 2: 2}`). Unter der alten Nummerierung galt Map003s
+        // Ereignis-Beruehrung als Autorun; **mit den richtigen Zahlen ist
+        // sie keine.**
+        var karte = MzDataFile.Read("data/Map002.json",
+            File.ReadAllBytes(MzSpiel + "/data/Map002.json"));
         var ereignisse = karte.Root.Member("events")?.Items;
         AssertTrue(ereignisse != null && ereignisse.Count > 0,
             "the start map carries events");

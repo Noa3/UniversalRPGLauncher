@@ -3343,63 +3343,31 @@ public sealed class MzEngineRuntime : IEngineRuntime
             return bericht;
         }
 
-        if (!Maps.TryGetValue(CurrentMapId, out var karte))
-        {
-            bericht.Add(
-                $"map {CurrentMapId} is not among the maps this runtime read,"
-                    + " so nothing on it can be stepped on");
-            return bericht;
-        }
-
-        foreach (var ereignis in karte.Root.Member("events")?.Items
-            ?? new List<MzValue>())
-        {
-            if (ereignis.Member("x")?.IntOr(-1) != pX
-                || ereignis.Member("y")?.IntOr(-1) != pY)
-            {
-                continue;
-            }
-
-            var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
-            var seiten = ereignis.Member("pages")?.Items
-                ?? new List<MzValue>();
-
-            // **Und von hinten, und nur eine Seite.**
-            //
-            // **Gemessen an `Game_Character.prototype.findProperPageIndex`:
-            // `for (let i = pages.length - 1; i >= 0; i--)`** -- **und
-            // `page()` gibt `pages[findProperPageIndex()]` zurueck.**
-            // **Ein Ereignis hat genau eine Seite, und ein Leser, der
-            // alle passenden laufen laesst, redet dreimal auf derselben
-            // Kachel.**
-            for (var index = seiten.Count - 1; index >= 0; index--)
-            {
-                var seite = seiten[index];
-                if ((seite.Member("trigger")?.IntOr(0) ?? 0) != 0)
-                {
-                    continue;
-                }
-
-                // **Und die Bedingung der Seite gilt, und das ist
-                // gemessen an `Game_Character.isTriggerIn` und
-                // `Game_Interpreter.setupStartingMapEvent`.**
-                //
-                // **Und ein Schalter, ein Gegenstand, eine Variable und
-                // ein eigener Schalter koennen eine Seite sperren** --
-                // **und `switch1Id: 1` ohne `switch1Valid` sperrt
-                // nichts**, **denn das ist der Wert des Editors, und
-                // nicht eine Forderung.** **Gemessen: 10 der 253 Seiten
-                // dieses Spiels tragen eine solche Forderung.**
-                if (!MzMapFigureReader.Meets(
-                    seite.Member("conditions"), Facts, CurrentMapId, id))
-                {
-                    continue;
-                }
-
-                bericht.Add(RunPageEvent(id, seite, false));
-                break;
-            }
-        }
+        // **Und hier stand ein zweiter Scan, und er war nicht die Regel des
+        // Motors: er startete Seiten mit `trigger 0` beim *Ankommen*.**
+        //
+        // **Gemessen an `Game_Player.prototype.updateNonmoving`:**
+        //
+        //     if (wasMoving) {
+        //         this.checkEventTriggerHere([1, 2]);
+        //         if ($gameMap.setupStartingEvent()) { return; }
+        //     }
+        //     if (sceneActive && this.triggerAction()) { return; }
+        //
+        // **`[1, 2]` ist alles, was ein Schritt startet**, und
+        // `Game_Player.prototype.checkEventTriggerHere` ruft
+        // `startMapEvent(this.x, this.y, triggers, false)` -- **das `false`
+        // ist das `normal`-Flag, und eine Seite mit Prioritaet 0 ist damit
+        // die einzige, die so erreichbar ist.**
+        //
+        // **Eine Seite mit `trigger 0` ist die Aktionstaste**, und die
+        // laeuft ueber `triggerAction` -- **und nur, wenn der Spieler steht
+        // und nicht geht.**
+        //
+        // **Und der Schaden war messbar:** Map003s Ereignis 5 steht auf
+        // `(1,2)`, traegt `trigger 0` **und Prioritaet 1** -- **also eine
+        // Kachel, auf der ein Spieler nie stehen kann** --, und der zweite
+        // Scan startete es trotzdem.
 
         return bericht;
     }
@@ -4004,18 +3972,13 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // kannte, lief **keine einzige Autorun-Seite von LegalTruck**
         // -- **und der Test sah 14 Aktionen statt der 197 Befehle von
         // Ereignis 1.**
-        if (pAusloeser == MzSeitenStart.AusloeserAutomatisch
-            || pAusloeser == 4)
-        {
-            return pStart == StartMode.Autorun;
-        }
-
         return pAusloeser switch
         {
             MzSeitenStart.AusloeserAutomatisch => pStart == StartMode.Autorun,
-            MzSeitenStart.AusloeserParallel => false,
+            MzSeitenStart.AusloeserParallel => pStart == StartMode.Parallel,
             MzSeitenStart.AusloeserTaste => pStart == StartMode.ActionButton,
             MzSeitenStart.AusloeserBeruehrt => pStart == StartMode.Touched,
+            MzSeitenStart.AusloeserBeruehrtVorne => pStart == StartMode.Touched,
             _ => false,
         };
     }

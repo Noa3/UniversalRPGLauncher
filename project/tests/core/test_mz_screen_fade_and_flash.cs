@@ -76,7 +76,18 @@ public partial class TestMzScreenFadeAndFlash : TestBase
             throw new InvalidOperationException(
                 $"the MZ game did not start: {started.Error?.Message}");
         }
-        return (MzEngineRuntime)host.Runtime!;
+        var runtime = (MzEngineRuntime)host.Runtime!;
+
+        // **Und die Eroeffnung dieser Karte wird durchgelassen.**
+        //
+        // **Und das ist keine Bequemlichkeit:** die Startkarte ist Map002,
+        // und sie traegt seit der korrigierten Ausloeser-Nummerierung eine
+        // **Autorun**-Seite -- Ereignis 5, 22 Befehle, vier Dialoge. Der
+        // Motor spielt sie, und sie haelt die Karte, solange sie spricht.
+        // **Ein Test, der danach den Bildschirm oder eine Figur bewegt,
+        // braucht eine stille Karte.**
+        MzTestOpening.Durchlassen(runtime);
+        return runtime;
     }
 
     /// <summary>
