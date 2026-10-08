@@ -25,6 +25,31 @@ Do not invent a parallel private roadmap and do not spend a session only rewriti
 - Godot 4.7.2 stable is the pinned engine line for this repository unless a deliberate upgrade card changes it.
 - Imported games are untrusted input. Never execute game EXEs, DLLs, Ruby, JavaScript, shell commands, or native plugins during detection/parsing tests.
 
+### Plugin JavaScript: allowed while a game runs, in a sandbox (user decision, 2026-10-07)
+
+The rule above is about **detection and parsing**, and it stays. What changed
+is the running game:
+
+- **A game's plugin JavaScript may be executed while that game runs**, for the
+  maker engine the game belongs to. The user asked for this explicitly and
+  accepted the risk: a game's menus, windows and messages are what its plugins
+  make them, and reading only the plugin *parameters* cannot reproduce that.
+- **It runs in a sandbox with no host APIs.** A pure managed interpreter
+  (Jint, no native dependency) is given the engine's own `js/rmmz_*.js`, the
+  project's data files as globals, and the plugins — and **nothing else**: no
+  file access, no network, no process, no `require`. Bounded by a timeout, a
+  memory limit and a statement budget.
+- **Detection and parsing still execute nothing.** A probe, a detector or a
+  parser never starts the sandbox.
+- **A plugin that fails to load is reported by name and reason**, and the run
+  continues; the native runtime keeps working for everything the sandbox does
+  not answer.
+
+Measured (2026-10-07, a real MZ project with 81 plugins, 72 active): the whole
+engine loads, and **70 of 72 plugins execute in about two seconds**, the 17
+obfuscated VisuStella files included.
+
+
 ## RTP: what the agent may do, and what the tool must do
 
 **The agent may download and unpack RTP archives from rpgmaker.net at
