@@ -97,8 +97,50 @@ the work lives, and it is a work branch and not a merge candidate.
   priority 1) with the player's `startMapEvent(x, y, [1, 2], false)`, which
   takes the normal flag as a parameter and matches priority 0.
 
-**Fourth pass, on the branch. The engine's arrival rule is measured to the
-letter, and one test was migrated and verified in isolation.**
+**DONE, merged to main as `70297b3`, and main is green: all 2756 tests pass.**
+
+**The trigger numbering is corrected and five suites that read it wrong are
+migrated.** Measured in the projects' own `rmmz_objects.js` and
+`rpg_objects.js` -- **MZ and MV are identical here**: 0 action, 1 player
+touch, 2 event touch, 3 autorun, 4 parallel.
+
+```js
+checkEventTriggerAuto() { if (this._trigger === 3) { this.start(); } }
+checkEventTriggerHere(triggers)  { startMapEvent(this.x, this.y, triggers, false); }
+checkEventTriggerThere(triggers) { startMapEvent(x2, y2, triggers, true); }
+```
+
+**Also removed: `Betrete`'s second scan**, which started trigger-0 pages on
+arrival. `updateNonmoving` asks `checkEventTriggerHere([1, 2])` while moving
+and `triggerAction()` while standing still.
+
+**What the suites now do:**
+
+- `MzTestOpening.Durchlassen` lets a map's opening play, and **it must be
+  called after the transfer**: behind the title screen it let
+  `0 message(s)` through.
+- Map003 `(2,3)` is **event 7, trigger 1, priority 0, 17 commands, no
+  picture** -- a step reaches it, and its first line is
+  `Queen? Scout? Any hunter? Hello?`.
+- **A trigger-0 page is the button.** Four tests that used `Betrete` as one
+  verb meaning "arrive and press" now press: Map004 `(9,5)` (trigger 0,
+  priority 1 -- stand at `(9,4)` facing down), Map001 `(14,12)` (trigger 0,
+  priority 0 -- stand on it), Map007 `(1,12)` (trigger 0, priority 1 --
+  stand at `(1,11)`), Map006 `(2,12)` (trigger 0, priority 1, switch 6 --
+  stand at `(2,11)`).
+- **Suites that count must count relative**: measured `the start map ran 1
+  page(s) before map 3`, and the start map's opening moved 13 figures.
+
+**And one measured boundary, not a bug:** the MV game LegalTruck's start map
+carries exactly one `trigger 3` page (event 1 at `(0,9)`, 49 commands), and
+its first `111` needs `ConfigManager.isImouto &&
+!ConfigManager.isJapanesePlatform`. **`ConfigManager` is that game's own
+plugin, so the value is game state and not a fact about the machine**, and
+the run says `ScriptNotRun` and names it instead of guessing. The test's old
+expectation of a thousand actions was the count from the page the wrong
+numbering started.
+
+**And the earlier attempts, for the record.**
 
 ```js
 Game_Player.prototype.updateNonmoving = function(wasMoving, sceneActive) {
