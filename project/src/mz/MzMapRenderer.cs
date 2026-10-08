@@ -74,6 +74,41 @@ public sealed class MzMapRenderer
     /// <summary>Which sheet A5 is.</summary>
     public const int A5Sheet = 4;
 
+    /// <summary>The first tile number of the A1 sheet.</summary>
+    /// <remarks>
+    /// Measured at <c>Tilemap.TILE_ID_A1</c>, and A2, A3 and A4 follow the
+    /// same way: 2816, 4352 and 5888. <c>Tilemap.isAutotile</c> is
+    /// <c>tileId &gt;= TILE_ID_A1</c>.
+    /// </remarks>
+    public const int TileA1First = 2048;
+
+    /// <summary>The first tile number of the A2 sheet.</summary>
+    public const int TileA2First = 2816;
+
+    /// <summary>The first tile number of the A3 sheet.</summary>
+    public const int TileA3First = 4352;
+
+    /// <summary>The first tile number of the A4 sheet.</summary>
+    public const int TileA4First = 5888;
+
+    /// <summary>One past the last tile number the engine has.</summary>
+    public const int TileIdMax = 8192;
+
+    /// <summary>
+    /// How many shapes one autotile kind has.
+    /// </summary>
+    /// <remarks>
+    /// Measured at <c>Tilemap.getAutotileShape</c>:
+    /// <c>(tileId - TILE_ID_A1) % 48</c>, and the kind is the division by the
+    /// same forty-eight.
+    /// </remarks>
+    public const int AutotileShapes = 48;
+
+    /// <summary>Whether a tile number is an autotile.</summary>
+    /// <param name="pTileId">The number the map stores.</param>
+    /// <returns>True for A1 to A4, which are drawn as four quadrants.</returns>
+    public static bool IsAutotile(int pTileId) => pTileId >= TileA1First;
+
     /// <summary>How many sheets a tileset is spread over.</summary>
     /// <remarks>
     /// <strong>And this is measured, and it is nine.</strong> Every
@@ -245,7 +280,22 @@ public sealed class MzMapRenderer
                 for (var ebene = 3; ebene >= 0; ebene--)
                 {
                     var kachel = felder[ebene * flaeche + y * breite + x].IntOr(0);
-                    if (kachel > 0)
+                    if (kachel <= 0)
+                    {
+                        continue;
+                    }
+
+                    // **And an autotile is not one rectangle.** The engine
+                    // sends 2048 and up to `_addAutotile` and everything else
+                    // to `_addNormalTile`, and the two read the sheet
+                    // differently.
+                    if (IsAutotile(kachel))
+                    {
+                        BlitAutotile(
+                            pBlätter, kachel, x * TilePixels, y * TilePixels,
+                            pPixels);
+                    }
+                    else
                     {
                         BlitTile(
                             pBlätter, kachel, x * TilePixels, y * TilePixels,
@@ -287,6 +337,269 @@ public sealed class MzMapRenderer
         var spalte = ((pTileId / 128) % 2) * 8 + (pTileId % 8);
         var zeile = ((pTileId % 256) / 8) % SheetSideTiles;
         return (blatt, spalte, zeile);
+    }
+
+    /// <summary>And the engine's own floor shapes, all forty-eight.</summary>
+    /// <remarks>
+    /// <strong>Copied from <c>Tilemap.FLOOR_AUTOTILE_TABLE</c> in the project's
+    /// own <c>rmmz_core.js</c></strong>, four quadrant pairs per shape, each pair
+    /// being a column and a row of the twenty-four pixel quadrant grid.
+    /// <strong>And a reader that invented the shapes drew water and grass that
+    /// do not meet the way the editor drew them.</strong>
+    /// </remarks>
+    private static readonly int[][] FloorAutotileTable =
+    {
+        new[] { 2, 4, 1, 4, 2, 3, 1, 3 },
+        new[] { 2, 0, 1, 4, 2, 3, 1, 3 },
+        new[] { 2, 4, 3, 0, 2, 3, 1, 3 },
+        new[] { 2, 0, 3, 0, 2, 3, 1, 3 },
+        new[] { 2, 4, 1, 4, 2, 3, 3, 1 },
+        new[] { 2, 0, 1, 4, 2, 3, 3, 1 },
+        new[] { 2, 4, 3, 0, 2, 3, 3, 1 },
+        new[] { 2, 0, 3, 0, 2, 3, 3, 1 },
+        new[] { 2, 4, 1, 4, 2, 1, 1, 3 },
+        new[] { 2, 0, 1, 4, 2, 1, 1, 3 },
+        new[] { 2, 4, 3, 0, 2, 1, 1, 3 },
+        new[] { 2, 0, 3, 0, 2, 1, 1, 3 },
+        new[] { 2, 4, 1, 4, 2, 1, 3, 1 },
+        new[] { 2, 0, 1, 4, 2, 1, 3, 1 },
+        new[] { 2, 4, 3, 0, 2, 1, 3, 1 },
+        new[] { 2, 0, 3, 0, 2, 1, 3, 1 },
+        new[] { 0, 4, 1, 4, 0, 3, 1, 3 },
+        new[] { 0, 4, 3, 0, 0, 3, 1, 3 },
+        new[] { 0, 4, 1, 4, 0, 3, 3, 1 },
+        new[] { 0, 4, 3, 0, 0, 3, 3, 1 },
+        new[] { 2, 2, 1, 2, 2, 3, 1, 3 },
+        new[] { 2, 2, 1, 2, 2, 3, 3, 1 },
+        new[] { 2, 2, 1, 2, 2, 1, 1, 3 },
+        new[] { 2, 2, 1, 2, 2, 1, 3, 1 },
+        new[] { 2, 4, 3, 4, 2, 3, 3, 3 },
+        new[] { 2, 4, 3, 4, 2, 1, 3, 3 },
+        new[] { 2, 0, 3, 4, 2, 3, 3, 3 },
+        new[] { 2, 0, 3, 4, 2, 1, 3, 3 },
+        new[] { 2, 4, 1, 4, 2, 5, 1, 5 },
+        new[] { 2, 0, 1, 4, 2, 5, 1, 5 },
+        new[] { 2, 4, 3, 0, 2, 5, 1, 5 },
+        new[] { 2, 0, 3, 0, 2, 5, 1, 5 },
+        new[] { 0, 4, 3, 4, 0, 3, 3, 3 },
+        new[] { 2, 2, 1, 2, 2, 5, 1, 5 },
+        new[] { 0, 2, 1, 2, 0, 3, 1, 3 },
+        new[] { 0, 2, 1, 2, 0, 3, 3, 1 },
+        new[] { 2, 2, 3, 2, 2, 3, 3, 3 },
+        new[] { 2, 2, 3, 2, 2, 1, 3, 3 },
+        new[] { 2, 4, 3, 4, 2, 5, 3, 5 },
+        new[] { 2, 0, 3, 4, 2, 5, 3, 5 },
+        new[] { 0, 4, 1, 4, 0, 5, 1, 5 },
+        new[] { 0, 4, 3, 0, 0, 5, 1, 5 },
+        new[] { 0, 2, 3, 2, 0, 3, 3, 3 },
+        new[] { 0, 2, 1, 2, 0, 5, 1, 5 },
+        new[] { 0, 4, 3, 4, 0, 5, 3, 5 },
+        new[] { 2, 2, 3, 2, 2, 5, 3, 5 },
+        new[] { 0, 2, 3, 2, 0, 5, 3, 5 },
+        new[] { 0, 0, 1, 0, 0, 1, 1, 1 },
+    };
+
+    /// <summary>And the engine's wall shapes, all sixteen.</summary>
+    /// <remarks><c>Tilemap.WALL_AUTOTILE_TABLE</c>, used by A3 and by the odd rows
+    /// of A4.</remarks>
+    private static readonly int[][] WallAutotileTable =
+    {
+        new[] { 2, 2, 1, 2, 2, 1, 1, 1 },
+        new[] { 0, 2, 1, 2, 0, 1, 1, 1 },
+        new[] { 2, 0, 1, 0, 2, 1, 1, 1 },
+        new[] { 0, 0, 1, 0, 0, 1, 1, 1 },
+        new[] { 2, 2, 3, 2, 2, 1, 3, 1 },
+        new[] { 0, 2, 3, 2, 0, 1, 3, 1 },
+        new[] { 2, 0, 3, 0, 2, 1, 3, 1 },
+        new[] { 0, 0, 3, 0, 0, 1, 3, 1 },
+        new[] { 2, 2, 1, 2, 2, 3, 1, 3 },
+        new[] { 0, 2, 1, 2, 0, 3, 1, 3 },
+        new[] { 2, 0, 1, 0, 2, 3, 1, 3 },
+        new[] { 0, 0, 1, 0, 0, 3, 1, 3 },
+        new[] { 2, 2, 3, 2, 2, 3, 3, 3 },
+        new[] { 0, 2, 3, 2, 0, 3, 3, 3 },
+        new[] { 2, 0, 3, 0, 2, 3, 3, 3 },
+        new[] { 0, 0, 3, 0, 0, 3, 3, 3 },
+    };
+
+    /// <summary>And the engine's waterfall shapes, all four.</summary>
+    /// <remarks><c>Tilemap.WATERFALL_AUTOTILE_TABLE</c>, used by the odd kinds of
+    /// A1.</remarks>
+    private static readonly int[][] WaterfallAutotileTable =
+    {
+        new[] { 2, 0, 1, 0, 2, 1, 1, 1 },
+        new[] { 0, 0, 1, 0, 0, 1, 1, 1 },
+        new[] { 2, 0, 3, 0, 2, 1, 3, 1 },
+        new[] { 0, 0, 3, 0, 0, 1, 3, 1 },
+    };
+
+    /// <summary>
+    /// And one autotile, drawn the engine's way: four quadrants out of a
+    /// shape table.
+    /// </summary>
+    /// <param name="pBlätter">The tileset's sheets, A1 to A4 first.</param>
+    /// <param name="pTileId">The number the map stores.</param>
+    /// <param name="pX">Where the tile's left edge is.</param>
+    /// <param name="pY">Where the tile's top edge is.</param>
+    /// <param name="pPixels">The buffer to paint into.</param>
+    /// <returns>Whether anything was painted.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>Tilemap.prototype._addAutotile</c>, written
+    /// out.</strong> An autotile is not one rectangle: it is four
+    /// twenty-four pixel quadrants, and which quadrant comes from where is
+    /// the shape table's answer. <c>getAutotileKind</c> is
+    /// <c>Math.floor((tileId - TILE_ID_A1) / 48)</c> and
+    /// <c>getAutotileShape</c> is <c>(tileId - TILE_ID_A1) % 48</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And two parts of the engine's own code are not here, and say
+    /// so:</strong> the water surface animates
+    /// (<c>[0, 1, 2, 1][this.animationFrame % 4]</c>) and this reader draws
+    /// the first frame, and the counter tile rule
+    /// (<c>isTileA2(tileId) &amp;&amp; flags[tileId] &amp; 0x80</c>) needs the
+    /// tileset's flag array, which the painter does not carry yet.
+    /// </para>
+    /// </remarks>
+    public static bool BlitAutotile(
+        IReadOnlyList<Rm2kIndexedImage?> pBlätter,
+        int pTileId,
+        int pX,
+        int pY,
+        Rm2kPixelBuffer pPixels)
+    {
+        if (!IsAutotile(pTileId) || pTileId >= TileIdMax)
+        {
+            return false;
+        }
+
+        var kind = (pTileId - TileA1First) / AutotileShapes;
+        var shape = (pTileId - TileA1First) % AutotileShapes;
+        if (shape < 0 || shape >= AutotileShapes)
+        {
+            return false;
+        }
+
+        var tx = kind % 8;
+        var ty = kind / 8;
+        var blatt = 0;
+        var bx = 0;
+        var by = 0;
+        var tabelle = FloorAutotileTable;
+
+        if (pTileId < TileA2First)
+        {
+            // A1: water, and the first four kinds have fixed corners.
+            blatt = 0;
+            if (kind == 0)
+            {
+                bx = 0;
+                by = 0;
+            }
+            else if (kind == 1)
+            {
+                bx = 0;
+                by = 3;
+            }
+            else if (kind == 2)
+            {
+                bx = 6;
+                by = 0;
+            }
+            else if (kind == 3)
+            {
+                bx = 6;
+                by = 3;
+            }
+            else
+            {
+                bx = (tx / 4) * 8;
+                by = ty * 6 + ((tx / 2) % 2) * 3;
+                if (kind % 2 != 0)
+                {
+                    bx += 6;
+                    tabelle = WaterfallAutotileTable;
+                }
+            }
+        }
+        else if (pTileId < TileA3First)
+        {
+            blatt = 1;
+            bx = tx * 2;
+            by = (ty - 2) * 3;
+        }
+        else if (pTileId < TileA4First)
+        {
+            blatt = 2;
+            bx = tx * 2;
+            by = (ty - 6) * 2;
+            tabelle = WallAutotileTable;
+        }
+        else
+        {
+            blatt = 3;
+            bx = tx * 2;
+            by = (int)Math.Floor((ty - 10) * 2.5 + (ty % 2 == 1 ? 0.5 : 0));
+            if (ty % 2 == 1)
+            {
+                tabelle = WallAutotileTable;
+            }
+        }
+
+        if (blatt >= pBlätter.Count || pBlätter[blatt] == null)
+        {
+            return false;
+        }
+
+        var bild = pBlätter[blatt]!;
+        var quadranten = tabelle[shape];
+        var halb = TilePixels / 2;
+        for (var i = 0; i < 4; i++)
+        {
+            var qsx = quadranten[i * 2];
+            var qsy = quadranten[i * 2 + 1];
+            BlitRect(
+                bild, (bx * 2 + qsx) * halb, (by * 2 + qsy) * halb,
+                pX + (i % 2) * halb, pY + (i / 2) * halb, halb, pPixels);
+        }
+
+        return true;
+    }
+
+    /// <summary>And one square region of a sheet onto the buffer.</summary>
+    private static void BlitRect(
+        Rm2kIndexedImage pBild,
+        int pQuelleX,
+        int pQuelleY,
+        int pZielX,
+        int pZielY,
+        int pKante,
+        Rm2kPixelBuffer pPixels)
+    {
+        for (var dy = 0; dy < pKante; dy++)
+        {
+            var quelleY = pQuelleY + dy;
+            if (quelleY < 0 || quelleY >= pBild.Height)
+            {
+                continue;
+            }
+
+            for (var dx = 0; dx < pKante; dx++)
+            {
+                var quelleX = pQuelleX + dx;
+                if (quelleX < 0 || quelleX >= pBild.Width)
+                {
+                    continue;
+                }
+
+                var index = pBild.IndexAt(quelleX, quelleY);
+                var farbe = pBild.Palette[
+                    Math.Min(index, pBild.Palette.Length - 1)];
+                pPixels.TrySetPixel(
+                    pZielX + dx, pZielY + dy,
+                    farbe[0], farbe[1], farbe[2], 255);
+            }
+        }
     }
 
     private static void BlitTile(

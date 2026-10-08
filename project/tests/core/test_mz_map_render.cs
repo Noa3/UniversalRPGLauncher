@@ -249,10 +249,28 @@ public partial class TestMzMapRender : TestBase
         for (var feld = 0; feld < MzMapRenderer.NumbersPerTile; feld++)
         {
             AssertTrue(benutzt[feld] > 0,
-                $"**and field {feld} is in use** -- and it was on "
-                    + $"{benutzt[feld]} tiles, and a painter that treated "
-                    + "it as empty left that part of the map unpainted");
+                $"**and field {feld} carries a number** -- and it was on "
+                    + $"{benutzt[feld]} cells");
         }
+
+        // **And the six are six planes, and only the first four are tiles.**
+        // Measured: plane four holds the shadow (the values 1 and 5 on this
+        // map) and plane five holds the region (zero here). **A painter that
+        // paired them as a lower and an upper half painted shadow values as
+        // B-sheet tiles**, which is what this reader did before the layer
+        // model was corrected.
+        AssertEq(MzMapRenderer.NumbersPerTile, 6, "six planes per cell");
+        var schatten = 0;
+        for (var index = 4 * breite * hoehe; index < 5 * breite * hoehe; index++)
+        {
+            if (felder[index].IntOr(0) != 0)
+            {
+                schatten += 1;
+            }
+        }
+        Console.WriteLine($"MZ layers: plane 4 carries {schatten} shadow marks");
+        AssertTrue(schatten > 0,
+            "plane four is the shadow and not a tile layer");
     }
 
     /// <summary>
@@ -307,5 +325,113 @@ public partial class TestMzMapRender : TestBase
         AssertEq(blatt, 4, "tile 1536 is the A5 sheet");
         AssertEq(spalte, 0, "and column zero");
         AssertEq(zeile, 0, "and row zero");
+    }
+
+    /// <summary>
+    /// And the map's autotiles are drawn, four quadrants each.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the half of a map that was missing.</strong>
+    /// Measured on this project's start map: 297 tile numbers, of which 266
+    /// are autotiles (41 of A1, 191 of A2 and 34 of A3) and 31 are A5 or B
+    /// to E. <strong>A reader that draws only the thirty-one covers 10.4% of
+    /// the map</strong>, and the room is a floor with holes in it.
+    /// </para>
+    /// <para>
+    /// <strong>And an autotile is not one rectangle.</strong> Measured at
+    /// <c>Tilemap.prototype._addAutotile</c>: the kind is
+    /// <c>Math.floor((tileId - TILE_ID_A1) / 48)</c>, the shape is the
+    /// remainder, and the shape's four entries of <c>FLOOR_AUTOTILE_TABLE</c>
+    /// say which twenty-four pixel quadrant of the sheet goes into which
+    /// corner. <strong>A reader that drew a whole rectangle there put the
+    /// right picture in the wrong place, four times per tile.</strong>
+    /// </para>
+    /// </remarks>
+    public void Test_DieAutokachelnDerKarteWerdenGemalt()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        AssertTrue(MzMapRenderer.IsAutotile(2048),
+            "2048 is an autotile, the first of A1");
+        AssertTrue(MzMapRenderer.IsAutotile(6426),
+            "6426 is an autotile of A4");
+        AssertTrue(!MzMapRenderer.IsAutotile(1536),
+            "1536 is A5 and is drawn as one whole tile");
+        AssertTrue(!MzMapRenderer.IsAutotile(130),
+            "130 is a B sheet tile");
+
+        var system = MzDataFile.Read("data/System.json",
+            File.ReadAllBytes(Projekt + "/data/System.json"));
+        var schluessel = system.Root.Member("encryptionKey")?.StringOr("") ?? "";
+        var karte = MzDataFile.Read("data/Map002.json",
+            File.ReadAllBytes(Projekt + "/data/Map002.json"));
+        var tabelle = MzDataFile.Read("data/Tilesets.json",
+            File.ReadAllBytes(Projekt + "/data/Tilesets.json"));
+        var id = karte.Root.Member("tilesetId")?.IntOr(-1) ?? -1;
+        var namen = tabelle.Root.Items[id].Member("tilesetNames")?.Items;
+
+        var blaetter = new System.Collections.Generic.List
+            <UniversalRPG.Rm2k.Rendering.Rm2kIndexedImage?>();
+        for (var index = 0; index < MzMapRenderer.SheetsPerTileset; index++)
+        {
+            var name = index < namen!.Count ? namen[index].StringOr("") : "";
+            Rm2kIndexedImage? blatt = null;
+            if (name.Length > 0)
+            {
+                foreach (var dateiname in MzMapRenderer.TilesetFileNames(name))
+                {
+                    var datei = Projekt + "/img/tilesets/" + dateiname;
+                    if (!File.Exists(datei))
+                    {
+                        continue;
+                    }
+                    var bild = MzImageReader.Read(
+                        File.ReadAllBytes(datei), schluessel, out _);
+                    if (bild != null)
+                    {
+                        Rm2kIndexedImage.TryParse(bild, out blatt, out _);
+                    }
+                    if (blatt != null)
+                    {
+                        break;
+                    }
+                }
+            }
+            blaetter.Add(blatt);
+        }
+
+        var breite = karte.Root.Member("width")?.IntOr(0) ?? 0;
+        var hoehe = karte.Root.Member("height")?.IntOr(0) ?? 0;
+        var pixel = new Rm2kPixelBuffer(
+            breite * MzMapRenderer.TilePixels,
+            hoehe * MzMapRenderer.TilePixels);
+        var renderer = new MzMapRenderer();
+        AssertTrue(renderer.Paint(karte.Root, blaetter, pixel, out var warum),
+            "the map paints: " + warum);
+
+        var lit = 0;
+        for (var index = 3; index < pixel.Pixels.Length; index += 4)
+        {
+            if (pixel.Pixels[index] != 0)
+            {
+                lit += 1;
+            }
+        }
+        var gesamt = pixel.Width * pixel.Height;
+        var anteil = 100.0 * lit / gesamt;
+        Console.WriteLine($"MZ autotiles: {lit} of {gesamt} pixels "
+            + $"({anteil:F1}%), {MzMapRenderer.DistinctColours(pixel)} colours");
+
+        // This map's tiles are opaque, so a painter that draws every layer
+        // covers it. Measured before autotiles: 10.7%.
+        AssertTrue(anteil > 95.0,
+            $"the autotiles are drawn: {anteil:F1}% of the map is painted, and"
+            + " a reader that draws only the A5 and B to E tiles covers 10.4%");
+        AssertTrue(MzMapRenderer.DistinctColours(pixel) > 100,
+            "and the map carries its colours, not one flat fill");
     }
 }
