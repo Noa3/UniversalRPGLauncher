@@ -1,5 +1,53 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the weather falls
+
+**And every number is measured in the project's own `rmmz_core.js`, in
+`Weather`:**
+
+```js
+this._rainBitmap  = new Bitmap(1, 60);   this._rainBitmap.fillAll("white");
+this._stormBitmap = new Bitmap(2, 100);  this._stormBitmap.fillAll("white");
+this._snowBitmap  = new Bitmap(9, 9);
+this._snowBitmap.drawCircle(4, 4, 4, "white");
+this._dimmerSprite.setColor(80, 80, 80);
+this._dimmerSprite.opacity = Math.floor(this.power * 6);
+const maxSprites = Math.floor(this.power * 10);
+sprite.rotation = Math.PI / 16;
+sprite.ax -= 6 * Math.sin(sprite.rotation);
+sprite.ay += 6 * Math.cos(sprite.rotation);
+sprite.opacity -= 6;
+if (sprite.opacity < 40) { this._rebornSprite(sprite); }
+```
+
+**Measured after the fix:**
+
+```
+MZ weather: rain at power 5 -> drawn=50
+MZ weather: a pixel of 225 under a wash of 30 is 207, and the arithmetic says 207
+MZ weather: snow at power 3 -> drawn=30
+MZ weather: after none, drawn=0; 580608 pixels are back to the clear map
+MZ weather: after five of sixty frames the power is 5
+MZ weather: at the end the power is 9, frames left 0
+```
+
+**And the fourth "written, tested, called by nobody":** `MzWeather.EinBild`
+walks the power one step per frame toward its target, and nothing called it --
+so a game that asked for rain at power 9 over 60 frames got it at the power it
+already had, for ever. It is wired into the same guarded block as the screen's
+own ticks.
+
+**And one thing this cannot copy, recorded rather than hidden.** The engine's
+`Spriteset_Map.prototype.updateWeather` sets
+`this._weather.origin.x = $gameMap.displayX() * $gameMap.tileWidth()` -- **the
+camera's scroll**. This runtime paints the whole map into one frame and the
+window crops it, so there is no camera here to ask. The weather covers the
+screen-sized region at the frame's own origin instead. Measured: this project's
+maps are 960x720 against a 1280x720 screen, so on them the difference does not
+show; on a map larger than the screen it would.
+
+**Canonical suite: all 2743 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the fade and the flash reach the frame
 
 **And two things were wrong at once, and the second one was a model bug a

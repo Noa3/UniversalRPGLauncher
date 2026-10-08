@@ -1688,6 +1688,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         ToneDrawn = PaintScreenTone(pixel);
         BrightnessDrawn = PaintScreenBrightness(pixel);
         FlashDrawn = PaintScreenFlash(pixel);
+        PaintWeather(pixel);
         PaintedMap = pixel;
         return true;
     }
@@ -3639,6 +3640,15 @@ public sealed class MzEngineRuntime : IEngineRuntime
             Facts.Screen.TickBlitz();
             Facts.Screen.TickWackeln();
             Facts.Screen.TickAudio();
+
+            // **And the weather's power walks toward its target**, which is
+            // `Game_Screen.prototype.updateWeather`: `if (this._weatherDuration
+            // > 0) { this._weatherPower += ...; this._weatherDuration--; }`.
+            // **Measured before this: `EinBild()` was written, tested and
+            // called by nobody** -- so a game that asked for rain at power 9
+            // over 60 frames got it at the power it already had, for ever.
+            Facts.Screen.Wetter.EinBild();
+            TickWetter();
         }
 
         LoeseDialoge();
@@ -4653,6 +4663,270 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
     /// <summary>And whether the last frame carried a flash.</summary>
     public bool FlashDrawn { get; private set; }
+
+    /// <summary>And one drop of weather, as the engine keeps it.</summary>
+    /// <remarks>
+    /// <strong>And these three are <c>Sprite.ax</c>, <c>Sprite.ay</c> and
+    /// <c>Sprite.opacity</c></strong>, measured in the project's own
+    /// <c>rmmz_core.js</c>: the sprite is placed at
+    /// <c>ax - origin.x, ay - origin.y</c>, and the <c>a</c> stands for the
+    /// absolute position the weather moves in while the map scrolls under
+    /// it.
+    /// </remarks>
+    private sealed class WetterTropfen
+    {
+        public double Ax;
+        public double Ay;
+        public int Deckkraft;
+    }
+
+    private readonly List<WetterTropfen> _wetter = new();
+    private int _wetterKraft;
+    private string _wetterTyp = MzWeather.None;
+
+    /// <summary>And how many drops the last frame had to draw.</summary>
+    public int WeatherDrawn { get; private set; }
+
+    /// <summary>
+    /// And the weather, which the engine draws as a crowd of small sprites.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And every number here is measured in the project's own
+    /// <c>rmmz_core.js</c>, in <c>Weather</c>:</strong>
+    /// </para>
+    /// <code>
+    /// Weather.prototype._createBitmaps = function() {
+    ///     this._rainBitmap = new Bitmap(1, 60);   this._rainBitmap.fillAll("white");
+    ///     this._stormBitmap = new Bitmap(2, 100); this._stormBitmap.fillAll("white");
+    ///     this._snowBitmap = new Bitmap(9, 9);
+    ///     this._snowBitmap.drawCircle(4, 4, 4, "white");
+    /// };
+    /// Weather.prototype._updateDimmer = function() {
+    ///     this._dimmerSprite.opacity = Math.floor(this.power * 6);
+    /// };
+    /// Weather.prototype._updateAllSprites = function() {
+    ///     const maxSprites = Math.floor(this.power * 10);
+    ///     ...
+    /// };
+    /// Weather.prototype._updateRainSprite = function(sprite) {
+    ///     sprite.rotation = Math.PI / 16;
+    ///     sprite.ax -= 6 * Math.sin(sprite.rotation);
+    ///     sprite.ay += 6 * Math.cos(sprite.rotation);
+    ///     sprite.opacity -= 6;
+    /// };
+    /// Weather.prototype._rebornSprite = function(sprite) {
+    ///     sprite.ax = Math.randomInt(Graphics.width + 100) - 100 + this.origin.x;
+    ///     sprite.ay = Math.randomInt(Graphics.height + 200) - 200 + this.origin.y;
+    ///     sprite.opacity = 160 + Math.randomInt(60);
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>so the weather is <c>power * 10</c> sprites</strong>, each a
+    /// white bar (rain, 1x60), a wider bar (storm, 2x100) or a filled circle
+    /// (snow, 9x9 with its centre on 4,4), <strong>falling along its own
+    /// rotated axis and fading as it goes</strong>, reborn once its opacity
+    /// drops below 40. <strong>And there is a grey wash under all of
+    /// it</strong>, colour 80,80,80, at <c>power * 6</c> opacity.
+    /// </para>
+    /// <para>
+    /// <strong>And the origin is the one thing this cannot copy.</strong>
+    /// Measured at <c>Spriteset_Map.prototype.updateWeather</c>:
+    /// <c>this._weather.origin.x = $gameMap.displayX() * $gameMap.tileWidth()</c>
+    /// -- <strong>the camera's scroll</strong>. This runtime paints the whole
+    /// map into one frame and the window crops it, so there is no camera here
+    /// to ask; the weather covers the screen-sized region at the frame's own
+    /// origin instead. On a map smaller than the screen -- measured, this
+    /// project's maps are 960x720 against a 1280x720 screen -- that is the
+    /// whole map and the difference does not show.
+    /// </para>
+    /// </remarks>
+    public void TickWetter()
+    {
+        var typ = Facts.Screen.Wetter.Typ;
+        var kraft = Math.Clamp(Facts.Screen.Wetter.Kraft, 0, 9);
+
+        // **And a change of type or power throws the crowd away**, which is
+        // what the engine's own `setup` does: `this._sprites = []`.
+        if (typ != _wetterTyp || kraft != _wetterKraft)
+        {
+            _wetterTyp = typ;
+            _wetterKraft = kraft;
+            _wetter.Clear();
+        }
+
+        if (typ == MzWeather.None || kraft <= 0)
+        {
+            _wetter.Clear();
+            return;
+        }
+
+        var gewuenscht = kraft * 10;
+        while (_wetter.Count < gewuenscht)
+        {
+            var neu = new WetterTropfen();
+            ErweckeWetter(neu);
+            _wetter.Add(neu);
+        }
+        while (_wetter.Count > gewuenscht)
+        {
+            _wetter.RemoveAt(_wetter.Count - 1);
+        }
+
+        foreach (var tropfen in _wetter)
+        {
+            var (schrittX, schrittY, abfall) = WetterSchritt(typ);
+            tropfen.Ax += schrittX;
+            tropfen.Ay += schrittY;
+            tropfen.Deckkraft -= abfall;
+            if (tropfen.Deckkraft < 40)
+            {
+                ErweckeWetter(tropfen);
+            }
+        }
+    }
+
+    /// <summary>And one drop, reborn somewhere above the frame.</summary>
+    private void ErweckeWetter(WetterTropfen pTropfen)
+    {
+        pTropfen.Ax = Random.Next(ScreenWidth + 100) - 100;
+        pTropfen.Ay = Random.Next(ScreenHeight + 200) - 200;
+        pTropfen.Deckkraft = 160 + Random.Next(60);
+    }
+
+    /// <summary>And how far one drop moves in a frame, and how much it fades.</summary>
+    private static (double X, double Y, int Abfall) WetterSchritt(string pTyp)
+    {
+        return pTyp switch
+        {
+            MzWeather.Storm => (
+                -8 * Math.Sin(Math.PI / 8), 8 * Math.Cos(Math.PI / 8), 8),
+            MzWeather.Snow => (
+                -3 * Math.Sin(Math.PI / 16), 3 * Math.Cos(Math.PI / 16), 3),
+            _ => (-6 * Math.Sin(Math.PI / 16), 6 * Math.Cos(Math.PI / 16), 6),
+        };
+    }
+
+    /// <summary>
+    /// And the weather onto the frame: a grey wash, then the drops.
+    /// </summary>
+    /// <param name="pPixels">The frame to draw onto.</param>
+    /// <returns>How many drops were drawn.</returns>
+    public int PaintWeather(Rm2kPixelBuffer pPixels)
+    {
+        WeatherDrawn = 0;
+        if (pPixels == null || _wetterTyp == MzWeather.None || _wetter.Count == 0)
+        {
+            return 0;
+        }
+
+        // **And the wash comes first**, measured at `_createDimmer`: the
+        // dimmer sprite is added to the container before any drop.
+        var schleier = Math.Clamp(_wetterKraft * 6, 0, 255);
+        if (schleier > 0)
+        {
+            for (var i = 0; i + 3 < pPixels.Pixels.Length; i += 4)
+            {
+                if (pPixels.Pixels[i + 3] == 0)
+                {
+                    continue;
+                }
+                var rest = 255 - schleier;
+                pPixels.Pixels[i] =
+                    (byte)((80 * schleier + pPixels.Pixels[i] * rest) / 255);
+                pPixels.Pixels[i + 1] =
+                    (byte)((80 * schleier + pPixels.Pixels[i + 1] * rest) / 255);
+                pPixels.Pixels[i + 2] =
+                    (byte)((80 * schleier + pPixels.Pixels[i + 2] * rest) / 255);
+            }
+        }
+
+        // **And then the drops**, each along its own rotated axis: a bar of
+        // height h rotated by t runs from (x, y) to (x - h*sin t, y + h*cos t).
+        var laenge = _wetterTyp == MzWeather.Storm ? 100 : 60;
+        var breite = _wetterTyp == MzWeather.Storm ? 2 : 1;
+        var winkel = _wetterTyp == MzWeather.Storm ? Math.PI / 8 : Math.PI / 16;
+        var istSchnee = _wetterTyp == MzWeather.Snow;
+
+        foreach (var tropfen in _wetter)
+        {
+            var x = (int)Math.Round(tropfen.Ax);
+            var y = (int)Math.Round(tropfen.Ay);
+            var deckkraft = Math.Clamp(tropfen.Deckkraft, 0, 255);
+            if (deckkraft <= 0)
+            {
+                continue;
+            }
+
+            if (istSchnee)
+            {
+                ZeichneKreis(pPixels, x + 4, y + 4, 4, deckkraft);
+            }
+            else
+            {
+                var dx = -laenge * Math.Sin(winkel);
+                var dy = laenge * Math.Cos(winkel);
+                ZeichneStrich(pPixels, x, y, x + dx, y + dy, breite, deckkraft);
+            }
+            WeatherDrawn++;
+        }
+
+        return WeatherDrawn;
+    }
+
+    /// <summary>And a filled circle, which is the engine's snow bitmap.</summary>
+    private static void ZeichneKreis(
+        Rm2kPixelBuffer pPixels, int pMitteX, int pMitteY, int pRadius,
+        int pDeckkraft)
+    {
+        for (var dy = -pRadius; dy <= pRadius; dy++)
+        {
+            for (var dx = -pRadius; dx <= pRadius; dx++)
+            {
+                if (dx * dx + dy * dy > pRadius * pRadius)
+                {
+                    continue;
+                }
+                MischeWeiss(pPixels, pMitteX + dx, pMitteY + dy, pDeckkraft);
+            }
+        }
+    }
+
+    /// <summary>And one bar, from one end to the other.</summary>
+    private static void ZeichneStrich(
+        Rm2kPixelBuffer pPixels, double pX1, double pY1, double pX2, double pY2,
+        int pBreite, int pDeckkraft)
+    {
+        var schritte = (int)Math.Max(
+            1, Math.Max(Math.Abs(pX2 - pX1), Math.Abs(pY2 - pY1)));
+        for (var i = 0; i <= schritte; i++)
+        {
+            var t = (double)i / schritte;
+            var x = (int)Math.Round(pX1 + (pX2 - pX1) * t);
+            var y = (int)Math.Round(pY1 + (pY2 - pY1) * t);
+            for (var b = 0; b < pBreite; b++)
+            {
+                MischeWeiss(pPixels, x + b, y, pDeckkraft);
+            }
+        }
+    }
+
+    /// <summary>And one white pixel of weather, over what is there.</summary>
+    private static void MischeWeiss(
+        Rm2kPixelBuffer pPixels, int pX, int pY, int pDeckkraft)
+    {
+        if (pX < 0 || pY < 0 || pX >= pPixels.Width || pY >= pPixels.Height)
+        {
+            return;
+        }
+        var i = (pY * pPixels.Width + pX) * 4;
+        var rest = 255 - pDeckkraft;
+        pPixels.Pixels[i] = (byte)((255 * pDeckkraft + pPixels.Pixels[i] * rest) / 255);
+        pPixels.Pixels[i + 1] =
+            (byte)((255 * pDeckkraft + pPixels.Pixels[i + 1] * rest) / 255);
+        pPixels.Pixels[i + 2] =
+            (byte)((255 * pDeckkraft + pPixels.Pixels[i + 2] * rest) / 255);
+    }
 
     /// <summary>And one picture, onto the frame.</summary>
     private static bool BlitPicture(
