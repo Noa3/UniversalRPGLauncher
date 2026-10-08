@@ -768,7 +768,124 @@ public sealed class MzEngineRuntime : IEngineRuntime
         TitleImageName = system.Root.Member("title1Name")?.StringOr("") ?? "";
         TitleOverlayName = system.Root.Member("title2Name")?.StringOr("") ?? "";
         GameTitle = system.Root.Member("gameTitle")?.StringOr("") ?? "";
-        TitleCommands = new List<string> { "New Game", "Options" };
+
+        var befehle = new List<string> { "New Game", "Options" };
+
+        // **And the project's own plugins put commands on that window, and
+        // this reader takes them from the plugins' parameters.**
+        // <see cref="PluginMenuCommands"/> reads them; nothing here executes
+        // a plugin.
+        var pluginsPfad = Path.Combine(_game.GameDirectory, "js", "plugins.js");
+        if (File.Exists(pluginsPfad))
+        {
+            foreach (var befehl in PluginMenuCommands(File.ReadAllText(pluginsPfad)))
+            {
+                if (!befehle.Contains(befehl))
+                {
+                    befehle.Add(befehl);
+                }
+            }
+        }
+
+        TitleCommands = befehle;
+    }
+
+    /// <summary>
+    /// And the title commands a project's own plugins add, out of their own
+    /// parameters.
+    /// </summary>
+    /// <param name="pPluginsJs">The text of the project's js/plugins.js.</param>
+    /// <returns>The command names, in the order the plugins are listed.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is data and not code.</strong> A plugin's parameters
+    /// are a JSON blob the editor wrote, and the menu entries a plugin adds
+    /// are named in it. Measured on this project: three VisuStella plugins
+    /// carry a <c>MainMenu</c> parameter whose <c>ShowTitleCommand:eval</c>
+    /// is <c>"true"</c> and whose <c>Name:str</c> is the command text --
+    /// <em>CG Gallery</em>, <em>Credits</em> and <em>Patch Notes</em>.
+    /// <strong>A title screen that offers only New Game, Continue and
+    /// Options is a different front page from the one the game's author
+    /// built</strong>, and a player who knows the original would notice at
+    /// once.
+    /// </para>
+    /// <para>
+    /// <strong>And no plugin's JavaScript is run to find this.</strong> The
+    /// parameter blob is parsed as JSON and read; the plugin's own code is
+    /// obfuscated, and it is never loaded, never evaluated and never
+    /// executed -- which is the boundary this whole runtime keeps.
+    /// </para>
+    /// <para>
+    /// <strong>And the position is the one thing not read.</strong> Which
+    /// index a plugin inserts its command at lives in its obfuscated code,
+    /// so these come after the engine's own commands, which is where the
+    /// VisuStella page plugins put theirs.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> PluginMenuCommands(string pPluginsJs)
+    {
+        var befehle = new List<string>();
+        if (string.IsNullOrEmpty(pPluginsJs))
+        {
+            return befehle;
+        }
+
+        var anfang = pPluginsJs.IndexOf('[');
+        var ende = pPluginsJs.LastIndexOf(']');
+        if (anfang < 0 || ende <= anfang)
+        {
+            return befehle;
+        }
+
+        MzDataFile liste;
+        try
+        {
+            liste = MzDataFile.ReadText(
+                "js/plugins.js",
+                pPluginsJs.Substring(anfang, ende - anfang + 1));
+        }
+        catch (MzDataException)
+        {
+            return befehle;
+        }
+
+        foreach (var eintrag in liste.Root.Items)
+        {
+            var parameter = eintrag.Member("parameters");
+            if (parameter == null)
+            {
+                continue;
+            }
+
+            foreach (var schluessel in parameter.Keys)
+            {
+                var wert = parameter.Member(schluessel)?.StringOr("") ?? "";
+                if (!wert.Contains("ShowTitleCommand", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                MzDataFile struktur;
+                try
+                {
+                    struktur = MzDataFile.ReadText("plugin parameter", wert);
+                }
+                catch (MzDataException)
+                {
+                    continue;
+                }
+
+                var zeigen = struktur.Root
+                    .Member("ShowTitleCommand:eval")?.StringOr("") ?? "";
+                var name = struktur.Root.Member("Name:str")?.StringOr("") ?? "";
+                if (zeigen == "true" && name.Length > 0)
+                {
+                    befehle.Add(name);
+                }
+            }
+        }
+
+        return befehle;
     }
 
     /// <summary>
