@@ -40,7 +40,12 @@ namespace UniversalRPG.Plugins;
 /// the same answer <c>357 Plugin Command</c> already gives.
 /// </para>
 /// </remarks>
-public sealed class MzEngineRuntime : IEngineRuntime
+/// <remarks>
+/// <strong>And the class is partial, so that a piece as self-contained as
+/// saving lives in its own file</strong> -- <c>MzEngineRuntime.Save.cs</c>
+/// -- <strong>and not in the middle of seven thousand lines of interpreter.</strong>
+/// </remarks>
+public sealed partial class MzEngineRuntime : IEngineRuntime
 {
     private readonly VirtualClock _clock = new();
     private readonly string _generation;
