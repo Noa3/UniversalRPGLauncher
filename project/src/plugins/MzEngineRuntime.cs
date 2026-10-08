@@ -745,6 +745,33 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public IReadOnlyList<string> TitleCommands { get; private set; } =
         Array.Empty<string>();
 
+    /// <summary>
+    /// And the plugin sandbox for this game, when one was prepared for it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the one place a game's own code is executed</strong>,
+    /// at the user's request and with the risk accepted. The launcher prepares
+    /// it away from the frame loop, because starting it takes a few seconds on
+    /// a project with a large plugin suite, and hands it over here. When it is
+    /// null -- or when it cannot answer -- the runtime falls back on the
+    /// plugins' parameters and says so.
+    /// </remarks>
+    public MzPluginHost? PluginHost { get; set; }
+
+    /// <summary>
+    /// And where <see cref="TitleCommands"/> came from.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is reported rather than assumed.</strong> A menu read
+    /// out of the executed plugins is what the game would really show; a menu
+    /// read out of their parameters is the names the author typed, without
+    /// whatever the plugin's code does with them. Measured: with a large
+    /// VisuStella suite the executed answer is not available yet, so the
+    /// parameter list is what is shown -- and this says so instead of
+    /// pretending otherwise.
+    /// </remarks>
+    public string TitleCommandSource { get; private set; } = "";
+
     /// <summary>The screen the engine draws a title on.</summary>
     public const int ScreenWidth = 816;
 
@@ -787,25 +814,75 @@ public sealed class MzEngineRuntime : IEngineRuntime
         TitleOverlayName = system.Root.Member("title2Name")?.StringOr("") ?? "";
         GameTitle = system.Root.Member("gameTitle")?.StringOr("") ?? "";
 
-        var befehle = new List<string> { "New Game", "Options" };
+        ReadTitleCommands();
+    }
 
-        // **And the project's own plugins put commands on that window, and
-        // this reader takes them from the plugins' parameters.**
-        // <see cref="PluginMenuCommands"/> reads them; nothing here executes
-        // a plugin.
-        var pluginsPfad = Path.Combine(_game.GameDirectory, "js", "plugins.js");
-        if (File.Exists(pluginsPfad))
+    /// <summary>
+    /// And the title's commands: what the engine and the plugins leave there.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the sandbox is asked first</strong>, because only the
+    /// plugins' own code gives the finished list -- what the engine put
+    /// there, what the plugins put there, in what order, and which of them
+    /// are switched off. When it cannot answer, the plugins' parameters still
+    /// name their commands, and <see cref="TitleCommandSource"/> says which of
+    /// the two this is.
+    /// </remarks>
+    private void ReadTitleCommands()
+    {
+        var befehle = new List<string> { "New Game", "Options" };
+        TitleCommandSource = "the engine's own commands, and nothing else";
+
+        var ausDemSandkasten = PluginHost?.TitleCommands();
+        if (ausDemSandkasten is { Count: > 0 })
         {
-            foreach (var befehl in PluginMenuCommands(File.ReadAllText(pluginsPfad)))
+            befehle = ausDemSandkasten
+                .Where(p => p.Enabled)
+                .Select(p => p.Name)
+                .ToList();
+            TitleCommandSource = "the executed plugins";
+        }
+        else
+        {
+            var pluginsPfad = Path.Combine(_game.GameDirectory, "js", "plugins.js");
+            if (File.Exists(pluginsPfad))
             {
-                if (!befehle.Contains(befehl))
+                var dazu = new List<string>();
+                foreach (var befehl in PluginMenuCommands(File.ReadAllText(pluginsPfad)))
                 {
-                    befehle.Add(befehl);
+                    if (!befehle.Contains(befehl) && !dazu.Contains(befehl))
+                    {
+                        dazu.Add(befehl);
+                    }
+                }
+                if (dazu.Count > 0)
+                {
+                    befehle.AddRange(dazu);
+                    TitleCommandSource = "the plugins' parameters";
                 }
             }
         }
 
         TitleCommands = befehle;
+    }
+
+    /// <summary>
+    /// And a plugin sandbox, handed over after the game was already read.
+    /// </summary>
+    /// <param name="pHost">The sandbox, prepared away from the frame loop.</param>
+    /// <remarks>
+    /// <strong>And this is how the sandbox reaches a running game.</strong>
+    /// Starting it takes a few seconds on a project with a large plugin suite,
+    /// so it is prepared elsewhere and handed over here; the title's commands
+    /// are then read again, this time from the plugins' own code.
+    /// </remarks>
+    public void UsePluginHost(MzPluginHost pHost)
+    {
+        PluginHost = pHost;
+        if (TitleCommands.Count > 0)
+        {
+            ReadTitleCommands();
+        }
     }
 
     /// <summary>

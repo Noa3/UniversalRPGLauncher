@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using UniversalRPG.Plugins;
 using UniversalRPG.Web;
 using UniversalRPG.Tests.Framework;
 
@@ -96,5 +97,119 @@ public partial class TestMzPluginHost : TestBase
             "a project with no plugins has none to load");
         AssertEq(MzPluginHost.ActivePluginNames("Z:/no/such/game").Count, 0,
             "and a project without the file has none either");
+    }
+
+    /// <summary>
+    /// And the runtime asks the sandbox, and says where the answer came from.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the whole point of the sandbox.</strong> A menu
+    /// read out of a plugin's parameters is the names the author typed; a
+    /// menu read out of the plugin's own code is what the game would really
+    /// show. Measured on Camellia, whose single plugin adds no title command:
+    /// the engine's own two are the list either way, so only the reported
+    /// source distinguishes them -- and it does.
+    /// </remarks>
+    public void Test_DieRuntimeFragtDieSandboxUndSagtWoher()
+    {
+        if (!Vorhanden(Camellia))
+        {
+            return;
+        }
+
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Camellia,
+            EngineId = EnginePluginIds.RpgMakerMz,
+            Generation = "mz",
+            DetectorScore = 850,
+            PresentTitleScreen = true,
+        });
+        AssertTrue(started.Success,
+            $"the MZ game starts: {started.Error?.Message}");
+        if (!started.Success)
+        {
+            return;
+        }
+
+        var runtime = (MzEngineRuntime)host.Runtime!;
+        Console.WriteLine($"MZ title before the sandbox: "
+            + $"source=\"{runtime.TitleCommandSource}\" "
+            + $"commands=[{string.Join(", ", runtime.TitleCommands)}]");
+        AssertEq(runtime.TitleCommandSource,
+            "the engine's own commands, and nothing else",
+            "without a sandbox the title is the engine's own two commands");
+
+        runtime.UsePluginHost(MzPluginHost.Start(Camellia));
+        Console.WriteLine($"MZ title after the sandbox: "
+            + $"source=\"{runtime.TitleCommandSource}\" "
+            + $"commands=[{string.Join(", ", runtime.TitleCommands)}]");
+        AssertEq(runtime.TitleCommandSource, "the executed plugins",
+            "and with one, the list is the plugins' own answer");
+        AssertTrue(runtime.TitleCommands.Contains("New Game"),
+            "which still offers a new game");
+        AssertTrue(runtime.TitleCommands.Contains("Options"),
+            "and still offers the options");
+
+        // **And a title that offers Continue would be lying**, because this
+        // runtime has no save file. The engine asks the storage manager, and
+        // the sandbox answers that there are none.
+        AssertTrue(!runtime.TitleCommands.Contains("Continue"),
+            "and it does not offer to continue a game that was never saved");
+    }
+
+    /// <summary>
+    /// And a plugin suite the sandbox cannot answer for falls back, and says so.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is measured rather than assumed.</strong> On the big
+    /// project the VisuStella core engine replaces
+    /// <c>Window_TitleCommand.makeCommandList</c>, and its replacement throws
+    /// inside the sandbox -- so the runtime keeps the parameter list and
+    /// reports that it did. A runtime that quietly showed the parameter list
+    /// while claiming it came from the plugins would be the dishonest version
+    /// of this.
+    /// </remarks>
+    public void Test_EineSuiteDieDieSandboxUeberfordertFaelltZurueck()
+    {
+        const string Skies =
+            "D:/NextCloud/Games/PornGames/SkiesInflateableAdventure";
+        if (!Vorhanden(Skies))
+        {
+            return;
+        }
+
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Skies,
+            EngineId = EnginePluginIds.RpgMakerMz,
+            Generation = "mz",
+            DetectorScore = 850,
+            PresentTitleScreen = true,
+        });
+        AssertTrue(started.Success,
+            $"the MZ game starts: {started.Error?.Message}");
+        if (!started.Success)
+        {
+            return;
+        }
+
+        var runtime = (MzEngineRuntime)host.Runtime!;
+        var sandkasten = MzPluginHost.Start(Skies);
+        Console.WriteLine($"SKIES sandbox: loaded={sandkasten.LoadedPlugins.Count} "
+            + $"failed={sandkasten.FailedPlugins.Count} "
+            + $"title answer={(sandkasten.TitleCommands() == null ? "none" : "some")}");
+        runtime.UsePluginHost(sandkasten);
+
+        Console.WriteLine($"SKIES title: source=\"{runtime.TitleCommandSource}\" "
+            + $"commands=[{string.Join(", ", runtime.TitleCommands)}]");
+        AssertEq(runtime.TitleCommandSource, "the plugins' parameters",
+            "the parameters are what a title the sandbox cannot answer falls back on");
+        AssertTrue(runtime.TitleCommands.Contains("CG Gallery"),
+            "and they still name the gallery the plugin adds");
     }
 }
