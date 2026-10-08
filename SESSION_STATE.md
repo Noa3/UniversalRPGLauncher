@@ -1,5 +1,64 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the screen is the project's own size (`793c1d6`, pushed)
+
+**And this was a real defect, found while measuring where the title's command
+window goes.** Measured at `$dataSystem.advanced`:
+
+| project | screenWidth x screenHeight | uiArea |
+|---|---|---|
+| Camellia | 816 x 624 | 816 x 624 |
+| **Skies** | **1280 x 720** | 1216 x 624 |
+
+The runtime painted both at 816x624 — so Skies' title image was scaled down
+onto a screen it was not made for, and its command window landed off the right
+edge: `Scene_Title.commandWindowRect` is
+`wx = (Graphics.boxWidth - ww) / 2 + offsetX`, and Skies writes **offsetX 382**,
+which only fits a 1280-wide screen.
+
+`ScreenWidth`/`ScreenHeight` are now per project, read from `System.json`,
+with 816x624 as the default a project that writes no size of its own still
+gets (MV writes none, because it is always that size). Measured after the fix:
+Camellia 816x624, Skies **1280x720**, and `Skies title frame: 1280x720
+visible=True`.
+
+### OPEN — the title's command list is not drawn (found 2026-10-08)
+
+**And the player cannot see the menu.** `TitleCommands`, `TitleIndex`,
+`TitleSelection` and `TitleVisible` are computed and tested, but **no UI reads
+them**: `grep TitleCommands project/app/` finds nothing outside the runtime.
+The window shows `mz.PaintedMap` and forwards input, so a player sees the title
+image, can move a cursor that is not drawn, and gets no visible menu.
+
+**And the engine's own numbers for drawing it are measured** (from Skies'
+`rmmz_windows.js` / `rmmz_scenes.js`, so they are the engine's and not a
+guess):
+
+```
+Window_Base.prototype.lineHeight   = function() { return 36; };
+Window_Base.prototype.itemHeight   = function() { return this.lineHeight(); };
+Window_Base.prototype.fittingHeight = function(n) { return n * this.itemHeight() + $gameSystem.windowPadding() * 2; };
+Game_System.prototype.windowPadding = function() { return 12; };
+Scene_Title.prototype.commandWindowRect = function() {
+    const offsetX = $dataSystem.titleCommandWindow.offsetX;
+    const offsetY = $dataSystem.titleCommandWindow.offsetY;
+    const ww = this.mainCommandWidth();
+    const wh = this.calcWindowHeight(3, true);
+    const wx = (Graphics.boxWidth - ww) / 2 + offsetX;
+    const wy = Graphics.boxHeight - wh - 96 + offsetY;
+    return new Rectangle(wx, wy, ww, wh);
+};
+```
+
+so `wh = 3 * 36 + 12 * 2 = 132` and, on Skies, `wy = 720 - 132 - 96 + 45 = 537`.
+`$dataSystem.titleCommandWindow` exists in MZ only — **LegalTruck (MV) has no
+such field**, so an MV title window needs MV's own placement.
+
+**And `MzMapPreview` already draws text** with
+`DrawString(ThemeDB.FallbackFont, ...)`, so the pattern for drawing a command
+window exists in this repository; what is missing is the node and its wiring
+into `Rm2kGameScreen`.
+
 ### CHECKPOINT 2026-10-08 — the runtime asks the sandbox (`63f6b89`, pushed)
 
 **And the runtime now asks a finished question and uses the answer.**
