@@ -256,27 +256,56 @@ public partial class TestMzMapRender : TestBase
     }
 
     /// <summary>
-    /// A tile id addresses a cell of eight by eight.
+    /// A tile number names a sheet and a cell of it, the engine's way.
     /// </summary>
     /// <remarks>
-    /// <strong>And it is eight, and not sixteen.</strong> Measured on
-    /// this map: <c>5</c> is column 5 row 0, <c>81</c> is column 1 row
-    /// 10, <c>5519</c> is column 7 row 689 — <strong>that is
-    /// <c>id % 8</c> and <c>id / 8</c></strong>, <strong>and sixteen
-    /// would put tile 81 in row 5, which is a different picture
-    /// entirely.</strong>
+    /// <para>
+    /// <strong>And the arithmetic is the engine's own, and not a reading of
+    /// it.</strong> Measured at <c>Tilemap.prototype._addNormalTile</c>:
+    /// <c>setNumber = isTileA5(tileId) ? 4 : 5 + Math.floor(tileId / 256)</c>,
+    /// <c>sx = ((Math.floor(tileId / 128) % 2) * 8 + (tileId % 8)) * w</c>,
+    /// <c>sy = (Math.floor((tileId % 256) / 8) % 16) * h</c>, and
+    /// <c>isTileA5</c> is <c>tileId &gt;= 1536 &amp;&amp; tileId &lt; 1664</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the older reading here was <c>id % 8</c> and
+    /// <c>id / 8</c>, which is a sheet eight tiles wide.</strong> It agrees
+    /// with the engine for every number below 128 -- which is why it looked
+    /// right -- <strong>and disagrees from 128 on, and it sends an A5 tile
+    /// to sheet twenty-four, which no tileset has.</strong> Measured: of
+    /// Camellia's 56 tile ids, 24 fell outside the nine sheets and painted
+    /// nothing.
+    /// </para>
     /// </remarks>
-    public void Test_EineKachelIdAdressiertEineZelleVonAchtMalAcht()
+    public void Test_EineKachelIdNenntEinBlattUndEineZelle()
     {
-        AssertEq(MzMapRenderer.TilesPerSheetSide, 8,
-            "**and a sheet is eight by eight**");
+        AssertEq(MzMapRenderer.SheetSideTiles, 16,
+            "a B-E sheet is sixteen tiles wide and high, which is 768 / 48");
 
-        AssertEq(5 % 8, 5, "**and tile 5 is column 5**");
-        AssertEq(5 / 8, 0, "**and row 0**");
-        AssertEq(81 % 8, 1, "**and tile 81 is column 1**");
-        AssertEq(81 / 8, 10, "**and row 10** -- and sixteen would say row "
-            + "5, which is a different picture entirely");
-        AssertEq(5519 % 8, 7, "**and tile 5519 is column 7**");
-        AssertEq(5519 / 8, 689, "**and row 689**");
+        // Below 128 the two readings agree, which is why the old one looked
+        // right: tile 5 is column five of row zero.
+        var (blatt, spalte, zeile) = MzMapRenderer.TileCell(5);
+        AssertEq(blatt, 5, "tile 5 is the B sheet");
+        AssertEq(spalte, 5, "and column five");
+        AssertEq(zeile, 0, "and row zero");
+
+        (blatt, spalte, zeile) = MzMapRenderer.TileCell(81);
+        AssertEq(blatt, 5, "tile 81 is the B sheet");
+        AssertEq(spalte, 1, "and column one");
+        AssertEq(zeile, 10, "and row ten");
+
+        // And here the two readings part. The engine says column ten of row
+        // zero; id / 8 said column two of row sixteen, which is off the sheet.
+        (blatt, spalte, zeile) = MzMapRenderer.TileCell(130);
+        AssertEq(blatt, 5, "tile 130 is the B sheet");
+        AssertEq(spalte, 10, "and column ten");
+        AssertEq(zeile, 0, "and row zero -- id / 8 said row sixteen");
+
+        // An A5 tile. 1536 / 256 is six, and the number does not name the
+        // sheet at all: A5 is sheet four.
+        (blatt, spalte, zeile) = MzMapRenderer.TileCell(1536);
+        AssertEq(blatt, 4, "tile 1536 is the A5 sheet");
+        AssertEq(spalte, 0, "and column zero");
+        AssertEq(zeile, 0, "and row zero");
     }
 }

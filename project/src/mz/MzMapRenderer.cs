@@ -37,15 +37,27 @@ public sealed class MzMapRenderer
 {
     /// <summary>How many numbers one tile carries in the map file.</summary>
     /// <remarks>
-    /// <strong>And this is measured, and not the engine's number.</strong>
-    /// The engine's <c>Game_Map</c> stores three layers of two halves
-    /// each; <strong>the file stores the same six numbers flat, and the
-    /// six is 14 × 18 × 6 = 1512 on the map in front of us.</strong>
+    /// <summary>How many numbers a cell carries.</summary>
+    /// <remarks>
+    /// <strong>And they are six planes and not three layers of two
+    /// halves.</strong> Measured: the file stores them plane by plane --
+    /// <c>data[(z * height + y) * width + x]</c> -- and planes zero to three
+    /// are the four tile layers, plane four is the shadow and plane five is
+    /// the region. <strong>A reader that paired them as lower and upper
+    /// halves read the shadow plane as a tile.</strong>
     /// </remarks>
     public const int NumbersPerTile = 6;
 
-    /// <summary>How many tiles one sheet is wide and high.</summary>
-    public const int TilesPerSheetSide = 8;
+    /// <summary>
+    /// How many tiles a B-E sheet holds per side.
+    /// </summary>
+    /// <remarks>
+    /// Measured: a sheet is 768 pixels wide and a tile is 48, so sixteen.
+    /// <strong>And the engine's own arithmetic says so</strong> --
+    /// <c>sy = (Math.floor((tileId % 256) / 8) % 16) * h</c>, where the
+    /// modulo sixteen is the row wrap of a sixteen row sheet.
+    /// </remarks>
+    public const int SheetSideTiles = 16;
 
     /// <summary>The first tile number of the A5 sheet.</summary>
     /// <remarks>
@@ -79,12 +91,6 @@ public sealed class MzMapRenderer
 
     /// <summary>The engine's tile size in pixels.</summary>
     public const int TilePixels = 48;
-
-    /// <summary>How tall a tile's lower half is, in pixels.</summary>
-    public const int LowerHalfPixels = 32;
-
-    /// <summary>How tall a tile's upper half is, in pixels.</summary>
-    public const int UpperHalfPixels = 16;
 
     /// <summary>Where the tileset for a map's tileset id lives.</summary>
     /// <param name="pTilesetId">The map's <c>tilesetId</c>.</param>
@@ -212,29 +218,38 @@ public sealed class MzMapRenderer
             return false;
         }
 
+        // **And the map's numbers are stored plane by plane, and not cell by
+        // cell.** Measured at `Game_Map.prototype.tileId`:
+        //
+        //     return $dataMap.data[(z * height + y) * width + x] || 0;
+        //
+        // **so layer three's whole plane comes first, and a reader that
+        // stepped six numbers per cell read the right tile for the first cell
+        // and a different one for every cell after it.**
+        //
+        // **And there are four tile layers, drawn bottom to top.** Measured
+        // at `Game_Map.prototype.layeredTiles`:
+        //
+        //     for (let i = 0; i < 4; i++) tiles.push(this.tileId(x, y, 3 - i));
+        //
+        // **and a tile is forty-eight pixels and not a sixteen pixel half
+        // over a thirty-two pixel half** -- the halves are RM2K's model, not
+        // this engine's. Planes four and five are the shadow and the region
+        // and are not tiles at all.
+        var flaeche = breite * hoehe;
         pPixels.Clear();
         for (var y = 0; y < hoehe; y++)
         {
             for (var x = 0; x < breite; x++)
             {
-                var basis = (y * breite + x) * NumbersPerTile;
-                for (var ebene = 0; ebene < 3; ebene++)
+                for (var ebene = 3; ebene >= 0; ebene--)
                 {
-                    var unten = felder[basis + ebene * 2].IntOr(0);
-                    var oben = felder[basis + ebene * 2 + 1].IntOr(0);
-                    if (unten > 0)
+                    var kachel = felder[ebene * flaeche + y * breite + x].IntOr(0);
+                    if (kachel > 0)
                     {
-                        BlitHalf(
-                            pBlätter, unten, x * TilePixels,
-                            y * TilePixels + UpperHalfPixels,
-                            LowerHalfPixels, pPixels);
-                    }
-
-                    if (oben > 0)
-                    {
-                        BlitHalf(
-                            pBlätter, oben, x * TilePixels, y * TilePixels,
-                            UpperHalfPixels, pPixels);
+                        BlitTile(
+                            pBlätter, kachel, x * TilePixels, y * TilePixels,
+                            pPixels);
                     }
                 }
             }
@@ -243,12 +258,42 @@ public sealed class MzMapRenderer
         return true;
     }
 
-    private static void BlitHalf(
+    /// <summary>
+    /// And where a tile number sits: which sheet, and which cell of it.
+    /// </summary>
+    /// <param name="pTileId">The number the map stores.</param>
+    /// <returns>
+    /// The sheet, the column and the row, in tiles. A number no sheet holds
+    /// gives a sheet outside the nine, which the caller refuses.
+    /// </returns>
+    /// <remarks>
+    /// <strong>And this is the engine's own arithmetic, measured at
+    /// <c>Tilemap.prototype._addNormalTile</c>:</strong>
+    /// <code>
+    /// setNumber = isTileA5(tileId) ? 4 : 5 + Math.floor(tileId / 256);
+    /// sx = ((Math.floor(tileId / 128) % 2) * 8 + (tileId % 8)) * w;
+    /// sy = (Math.floor((tileId % 256) / 8) % 16) * h;
+    /// </code>
+    /// <strong>and <c>isTileA5</c> is <c>tileId &gt;= 1536 &amp;&amp; tileId
+    /// &lt; 1664</c>.</strong> A tile of the B to E sheets is forty-eight
+    /// pixels and covers one cell whole; the autotiles (2048 and up) are a
+    /// different arithmetic and are not decoded here yet.
+    /// </remarks>
+    public static (int Sheet, int Column, int Row) TileCell(int pTileId)
+    {
+        var blatt = pTileId >= TileA5First && pTileId <= TileA5Last
+            ? A5Sheet
+            : 5 + (pTileId / 256);
+        var spalte = ((pTileId / 128) % 2) * 8 + (pTileId % 8);
+        var zeile = ((pTileId % 256) / 8) % SheetSideTiles;
+        return (blatt, spalte, zeile);
+    }
+
+    private static void BlitTile(
         IReadOnlyList<Rm2kIndexedImage?> pBlätter,
         int pTileId,
         int pX,
         int pY,
-        int pHeight,
         Rm2kPixelBuffer pPixels)
     {
         // **And the tile number is decoded the way the engine decodes it.**
@@ -269,9 +314,7 @@ public sealed class MzMapRenderer
         // and painted nothing; of the start map of Skies, all 221 tiles are
         // id 1536 -- an A5 tile -- which `1536 / 64` sends to sheet 24, so
         // the whole room was black.
-        var blatt = pTileId >= TileA5First && pTileId <= TileA5Last
-            ? A5Sheet
-            : 5 + (pTileId / 256);
+        var (blatt, spalte, zeile) = TileCell(pTileId);
         if (blatt < 0 || blatt >= pBlätter.Count)
         {
             return;
@@ -283,10 +326,10 @@ public sealed class MzMapRenderer
             return;
         }
 
-        var x0 = (((pTileId / 128) % 2) * 8 + (pTileId % 8)) * TilePixels;
-        var y0 = (((pTileId % 256) / 8) % 16) * TilePixels;
+        var x0 = spalte * TilePixels;
+        var y0 = zeile * TilePixels;
 
-        for (var dy = 0; dy < pHeight; dy++)
+        for (var dy = 0; dy < TilePixels; dy++)
         {
             var quelle = y0 + dy;
             if (quelle >= tileset.Height)
