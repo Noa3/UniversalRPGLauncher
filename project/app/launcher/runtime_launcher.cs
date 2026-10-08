@@ -148,6 +148,25 @@ public partial class RuntimeLauncher : RefCounted
 
 	public LaunchResult Launch(GameLibrary.GameEntry pGame)
 	{
+		return Launch(pGame, GetCurrentPlatform());
+	}
+
+	/// <summary>
+	/// Launches a game on a platform the caller names.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And the caller names the platform, because the caller is the
+	/// one that may ask Godot.</strong> The window loads a project off the
+	/// main thread: a project with 1.6 GiB of images takes seconds to read,
+	/// and a window that stops answering is what a player calls a hang.
+	/// <c>OS.GetName()</c> is a Godot call and does not belong on a worker,
+	/// <strong>so the window reads it first and passes it in.</strong>
+	/// <c>EnginePluginHost</c> and both runtimes are plain .NET classes with
+	/// no Godot types in them, which is what makes the load itself safe
+	/// there.
+	/// </remarks>
+	public LaunchResult Launch(GameLibrary.GameEntry pGame, string pPlatform)
+	{
 		if (pGame == null)
 		{
 			return Failure(PluginError.Create(
@@ -155,7 +174,7 @@ public partial class RuntimeLauncher : RefCounted
 				"No game was selected.",
 				pPhase: "select"));
 		}
-		var selection = _selector.Select(pGame.Detection.Report, GetCurrentPlatform());
+		var selection = _selector.Select(pGame.Detection.Report, pPlatform);
 		if (!selection.Success || selection.Value == null)
 		{
 			var error = selection.Error ?? PluginError.Create(

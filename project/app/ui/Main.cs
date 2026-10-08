@@ -1375,7 +1375,21 @@ public partial class Main : Control
 				}
 			}
 			if (_closing) return;
-			var result = _launcher.Launch(game);
+
+			// **And the load runs off the main thread.** A project with
+			// 1.6 GiB of images takes seconds to read, and a window that
+			// stops answering is what a player calls a hang. The platform
+			// is read here, on the main thread, because `OS.GetName()` is
+			// a Godot call and does not belong on a worker;
+			// `RuntimeLauncher`, `EnginePluginHost` and both runtimes are
+			// plain .NET classes with no Godot types in them, which is
+			// what makes the load itself safe there -- the same shape the
+			// RTP download above already uses.
+			_status.Text = Tr("STATUS_LOADING_GAME");
+			var plattform = OS.GetName().ToLowerInvariant();
+			var result = await System.Threading.Tasks.Task.Run(
+				() => _launcher.Launch(game, plattform));
+			if (_closing) return;
 			_status.Text = result.Message;
 			foreach (var diagnostic in result.Diagnostics)
 				_status.Text += $"\n[{diagnostic.Severity}/{diagnostic.Code}] {diagnostic.Message}";

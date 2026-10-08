@@ -198,6 +198,9 @@ msgstr "Abbrechen"
 msgid "RTP_STATUS_WORKING"
 msgstr "Laufzeit wird geholt ..."
 
+msgid "STATUS_LOADING_GAME"
+msgstr "Spiel wird geladen ..."
+
 
 msgid "ENGINE_CHOICE_AUTO"
 msgstr "Automatische Erkennung — bei Mehrdeutigkeit Engine wählen"

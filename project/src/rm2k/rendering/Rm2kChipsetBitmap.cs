@@ -665,6 +665,19 @@ public sealed class Rm2kIndexedImage
             palette.Add(farbe);
         }
 
+        // **And the palette's luminance is computed once, and not once per
+        // pixel per entry.** Measured on this project's sheets: the inner
+        // loop ran up to 256 times for every pixel whose colour was not in
+        // the palette, and every run recomputed the luminance of every
+        // palette entry -- 135 seconds for 108 MP of sheets, which a player
+        // sees as a game that hangs on the loading screen.
+        var palettenLum = new int[palette.Count];
+        for (var index = 0; index < palette.Count; index++)
+        {
+            palettenLum[index] = Luminanz(
+                palette[index][0], palette[index][1], palette[index][2]);
+        }
+
         var indizes = new byte[pPixelCount];
         for (var pixel = 0; pixel < pPixelCount; pixel++)
         {
@@ -675,10 +688,9 @@ public sealed class Rm2kIndexedImage
                 var lum = Luminanz(pRoh[basis], pRoh[basis + 1], pRoh[basis + 2]);
                 var best = 0;
                 var bestAbstand = int.MaxValue;
-                for (var index = 0; index < palette.Count; index++)
+                for (var index = 0; index < palettenLum.Length; index++)
                 {
-                    var abstand = Math.Abs(Luminanz(
-                        palette[index][0], palette[index][1], palette[index][2]) - lum);
+                    var abstand = Math.Abs(palettenLum[index] - lum);
                     if (abstand < bestAbstand)
                     {
                         bestAbstand = abstand;
@@ -686,6 +698,13 @@ public sealed class Rm2kIndexedImage
                     }
                 }
                 ziel = (byte)best;
+
+                // **And the answer is kept.** A colour that snapped to an
+                // entry once snaps to the same entry for every later pixel,
+                // so the scan runs once per distinct colour instead of once
+                // per pixel -- which is the difference between 135 seconds
+                // and a load a player waits out.
+                verzeichnis[schluessel] = ziel;
             }
             indizes[pixel] = ziel;
         }

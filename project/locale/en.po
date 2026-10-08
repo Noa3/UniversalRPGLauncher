@@ -192,6 +192,9 @@ msgstr "Cancel"
 msgid "RTP_STATUS_WORKING"
 msgstr "Getting the runtime ..."
 
+msgid "STATUS_LOADING_GAME"
+msgstr "Loading the game ..."
+
 
 msgid "ENGINE_CHOICE_AUTO"
 msgstr "Automatic detection — choose engine if ambiguous"

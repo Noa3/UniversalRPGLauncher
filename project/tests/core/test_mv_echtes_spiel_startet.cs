@@ -234,7 +234,8 @@ public partial class TestMvEchtesSpielStartet : TestBase
         AssertTrue(sheet.Length > 0,
             "the MV project names a sheet for its player");
         AssertTrue(
-            runtime.Characters.TryGetValue(sheet, out var blatt) && blatt != null,
+            runtime.CharacterFiles.ContainsKey(sheet)
+                && runtime.SheetNamed(sheet) != null,
             $"the player's sheet \"{sheet}\" is loaded -- a reader that "
                 + "filtered for .png_ alone found no sheet in an MV game "
                 + "whose sheets are .rpgmvp, and the hero was painted "

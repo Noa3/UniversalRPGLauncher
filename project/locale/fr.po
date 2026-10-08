@@ -192,6 +192,9 @@ msgstr "Annuler"
 msgid "RTP_STATUS_WORKING"
 msgstr "Telechargement du paquet ..."
 
+msgid "STATUS_LOADING_GAME"
+msgstr "Chargement du jeu ..."
+
 
 msgid "ENGINE_CHOICE_AUTO"
 msgstr "Détection automatique — choisir en cas d’ambiguïté"

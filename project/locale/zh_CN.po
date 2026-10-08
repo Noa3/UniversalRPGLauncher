@@ -191,6 +191,9 @@ msgstr "取消"
 msgid "RTP_STATUS_WORKING"
 msgstr "正在获取运行库 ..."
 
+msgid "STATUS_LOADING_GAME"
+msgstr "正在加载游戏 ..."
+
 
 msgid "ENGINE_CHOICE_AUTO"
 msgstr "自动检测 — 不明确时选择引擎"

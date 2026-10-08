@@ -537,7 +537,7 @@ public partial class TestRealMzRuntimeRun : TestBase
             return;
         }
 
-        AssertTrue(lauf.Characters.Count > 0,
+        AssertTrue(lauf.CharacterFiles.Count > 0,
             "**and it read the project's character sheets** -- and they "
                 + "are named MC_Sprite_sheet, SlimeCharacters, !Flame and "
                 + "Vehicle, and Actors.json names them by that word");

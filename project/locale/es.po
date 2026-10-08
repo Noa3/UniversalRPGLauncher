@@ -192,6 +192,9 @@ msgstr "Cancelar"
 msgid "RTP_STATUS_WORKING"
 msgstr "Obteniendo el tiempo de ejecucion ..."
 
+msgid "STATUS_LOADING_GAME"
+msgstr "Cargando el juego ..."
+
 
 msgid "ENGINE_CHOICE_AUTO"
 msgstr "Detección automática — elegir motor si es ambiguo"

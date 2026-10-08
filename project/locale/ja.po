@@ -191,6 +191,9 @@ msgstr "キャンセル"
 msgid "RTP_STATUS_WORKING"
 msgstr "ランタイムを取得しています ..."
 
+msgid "STATUS_LOADING_GAME"
+msgstr "ゲームを読み込んでいます ..."
+
 
 msgid "ENGINE_CHOICE_AUTO"
 msgstr "自動検出 — 不明な場合はエンジンを選択"

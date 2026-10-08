@@ -352,7 +352,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         MapCount = gelesen;
         SkippedMaps = verweigert;
-        _tilesets = ReadTilesets();
+        _tilesetNames = ReadTilesetNames();
         _commonEvents = ReadCommonEvents();
         ReadCharacters();
         State = PluginRuntimeState.Initialized;
@@ -474,9 +474,9 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <c>.png_</c> rather than <c>.png</c>.</strong>
     /// </para>
     /// </remarks>
-    private Dictionary<int, List<Rm2kIndexedImage?>> ReadTilesets()
+    private Dictionary<int, List<string>> ReadTilesetNames()
     {
-        var ergebnis = new Dictionary<int, List<Rm2kIndexedImage?>>();
+        var ergebnis = new Dictionary<int, List<string>>();
         var pfad = Path.Combine(_game.GameDirectory, "data", "Tilesets.json");
         if (!File.Exists(pfad))
         {
@@ -485,27 +485,21 @@ public sealed class MzEngineRuntime : IEngineRuntime
             return ergebnis;
         }
 
-        MzDataFile system;
         MzDataFile tabelle;
         try
         {
-            system = MzDataFile.Read(
-                "data/System.json", File.ReadAllBytes(
-                    Path.Combine(_game.GameDirectory, "data", "System.json")));
             tabelle = MzDataFile.Read("data/Tilesets.json", File.ReadAllBytes(pfad));
         }
         catch (MzDataException ausnahme)
         {
-            // **Und der Grund wird gesagt, und nicht geschluckt** --
-            // **denn dieser `catch` stand hier zuerst stumm**, **und
-            // die Karte malte nichts**, **und der einzige Grund war ein
-            // leeres Wörterbuch**, **das aussah wie ein Projekt ohne
-            // Tilesets.**
+            // **Und der Grund wird gesagt, und nicht geschluckt** -- **denn
+            // dieser `catch` stand hier zuerst stumm**, **und die Karte
+            // malte nichts**, **und der einzige Grund war ein leeres
+            // Woerterbuch**, **das aussah wie ein Projekt ohne Tilesets.**
             TilesetProblem = ausnahme.Message;
             return ergebnis;
         }
 
-        var schluessel = system.Root.Member("encryptionKey")?.StringOr("") ?? "";
         foreach (var eintrag in tabelle.Root.Items)
         {
             // **Und `IntOr` liest den Wert des Elements selbst, und
@@ -521,31 +515,66 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // sind leer** -- **[World_A1, World_A2, (leer), (leer),
             // (leer), World_B, World_C, (leer), (leer)]** -- **und keine
             // der Dateien heisst `Overworld.png_`.**
-            var blaetter = new List<Rm2kIndexedImage?>();
             var namen = eintrag.Member("tilesetNames")?.Items;
             if (id < 0 || namen == null)
             {
                 continue;
             }
 
+            // **And this keeps the names and decodes no sheet.** Measured
+            // on a real MZ project: 31 tilesets name 168 sheets, 64.6 MiB
+            // on disk, 56.7 MP of pixels -- and the start map needs the
+            // sheets of exactly one tileset. Decoding them all before the
+            // first frame cost 115 seconds, which a player sees as a game
+            // that hangs on its loading screen. `SheetsOf` decodes one
+            // tileset's sheets when a map asks for them, and keeps them.
+            var blaetter = new List<string>(MzMapRenderer.SheetsPerTileset);
             for (var index = 0; index < MzMapRenderer.SheetsPerTileset; index++)
             {
-                var name = index < namen.Count
-                    ? namen[index].StringOr("")
-                    : "";
+                blaetter.Add(index < namen.Count ? namen[index].StringOr("") : "");
+            }
+
+            ergebnis[id] = blaetter;
+        }
+
+        return ergebnis;
+    }
+
+    /// <summary>
+    /// And the sheets of one tileset, decoded the first time a map asks.
+    /// </summary>
+    /// <param name="pTilesetId">Which tileset.</param>
+    /// <returns>
+    /// Nine entries, one per sheet slot, and a null where the slot is empty
+    /// or the file could not be read.
+    /// </returns>
+    /// <remarks>
+    /// <strong>And the spelling is a fact about the disk.</strong> MZ writes
+    /// <c>World.png_</c>, MV writes <c>World.rpgmvp</c> for the very same
+    /// sheet, and which one exists is not something to guess from the engine
+    /// name. <c>TilesetFileNames</c> gives both spellings in the order the
+    /// games write them, and the first one that is on disk and reads is the
+    /// sheet. A reader that appended only <c>.png_</c> (the singular helper)
+    /// found an MZ game and no MV game at all -- measured on LegalTruck,
+    /// whose sheets are all <c>.rpgmvp</c>, which made every sheet read as
+    /// missing.
+    /// </remarks>
+    private List<Rm2kIndexedImage?> SheetsOf(int pTilesetId)
+    {
+        if (_tilesetSheets.TryGetValue(pTilesetId, out var vorhanden))
+        {
+            return vorhanden;
+        }
+
+        var ergebnis = new List<Rm2kIndexedImage?>();
+        if (_tilesetNames.TryGetValue(pTilesetId, out var namen))
+        {
+            var schluessel = EncryptionKey();
+            foreach (var name in namen)
+            {
                 Rm2kIndexedImage? decodiert = null;
                 if (name.Length > 0)
                 {
-                    // **And the spelling is a fact about the disk.** MZ
-                    // writes `World.png_`, MV writes `World.rpgmvp` for the
-                    // very same sheet, and which one exists is not something
-                    // to guess from the engine name. `TilesetFileNames`
-                    // gives both spellings in the order the games write
-                    // them, and the first one that is on disk and reads is
-                    // the sheet. A reader that appended only `.png_` (the
-                    // singular helper) found an MZ game and no MV game at
-                    // all — measured on LegalTruck, whose sheets are all
-                    // `.rpgmvp`, which made every sheet read as missing.
                     foreach (var dateiname in MzMapRenderer.TilesetFileNames(name))
                     {
                         var datei = Path.Combine(
@@ -568,12 +597,11 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     }
                 }
 
-                blaetter.Add(decodiert);
+                ergebnis.Add(decodiert);
             }
-
-            ergebnis[id] = blaetter;
         }
 
+        _tilesetSheets[pTilesetId] = ergebnis;
         return ergebnis;
     }
 
@@ -678,7 +706,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         var tilesetId = karte.Root.Member("tilesetId")?.IntOr(-1) ?? -1;
-        if (tilesetId < 0 || !_tilesets.TryGetValue(tilesetId, out var blaetter))
+        if (tilesetId < 0 || !_tilesetNames.ContainsKey(tilesetId))
         {
             PaintReason = $"Map {CurrentMapId} names tileset {tilesetId}, "
                 + "and this runtime read no sheets for it. Measured on a "
@@ -687,6 +715,11 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 + "named after the tileset itself.";
             return false;
         }
+
+        // **And only now are this map's sheets decoded** -- the whole
+        // reason a game with 168 named sheets starts on the ones it
+        // paints, and not on all of them.
+        var blaetter = SheetsOf(tilesetId);
 
         var breite = karte.Root.Member("width")?.IntOr(0) ?? 0;
         var hoehe = karte.Root.Member("height")?.IntOr(0) ?? 0;
@@ -3136,8 +3169,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
         var gezeichnet = 0;
         foreach (var figur in Figures)
         {
-            if (!Characters.TryGetValue(
-                    figur.CharacterName, out var blatt) || blatt == null)
+            var blatt = SheetNamed(figur.CharacterName);
+            if (blatt == null)
             {
                 continue;
             }
@@ -3266,11 +3299,71 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     public Dictionary<int, int> AnimationFrames { get; } = new();
 
-    public Dictionary<string, MzCharacterSheet?> Characters { get; private set; } =
+    /// <summary>
+    /// Where each character sheet of the project is, by name.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the lazy half of a reader that used to decode
+    /// every sheet before the first frame.</strong> Measured on a real MZ
+    /// project: 158 sheets, 12 MiB on disk, 51.6 MP of pixels -- 20
+    /// seconds of decoding, for a start map whose figures need one or two
+    /// of them. <see cref="SheetNamed"/> decodes one when a figure asks
+    /// for it, and keeps it.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> CharacterFiles { get; private set; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>The decoded sheets, filled the first time one is asked for.</summary>
+    private readonly Dictionary<string, MzCharacterSheet?> _characterSheets =
         new(StringComparer.Ordinal);
 
-    /// <summary>The sheet the player is drawn from, if it was read.</summary>
-    public MzCharacterSheet? PlayerSheet { get; private set; }
+    /// <summary>
+    /// The sheet a name means, decoded the first time it is asked for.
+    /// </summary>
+    /// <param name="pName">The name the project writes.</param>
+    /// <returns>The sheet, or null when the project has no such sheet.</returns>
+    /// <remarks>
+    /// <strong>And a sheet is not always RGBA.</strong> Measured on the
+    /// four sheets of a finished project: <c>MC_Sprite_sheet</c>,
+    /// <c>!Flame</c> and <c>Vehicle</c> are colour type 3, a palette, and
+    /// <c>SlimeCharacters</c> is colour type 6 with four channels. A
+    /// reader that knew only the one case drew three of four figure kinds
+    /// out of nothing, and counted four sheets read anyway, because it
+    /// counted the files and not the pictures. The transparency rule has a
+    /// different source in each case: index zero for a palette, and the
+    /// alpha channel for real colours.
+    /// </remarks>
+    public MzCharacterSheet? SheetNamed(string pName)
+    {
+        if (string.IsNullOrEmpty(pName))
+        {
+            return null;
+        }
+        if (_characterSheets.TryGetValue(pName, out var bekannt))
+        {
+            return bekannt;
+        }
+
+        MzCharacterSheet? blatt = null;
+        if (CharacterFiles.TryGetValue(pName, out var pfad))
+        {
+            var bild = MzImageReader.Read(
+                File.ReadAllBytes(pfad), EncryptionKey(), out var _);
+            if (bild != null)
+            {
+                MzCharacterSheet.Read(bild, out blatt, out var _);
+            }
+        }
+
+        // **And a name the project does not have is remembered as such**,
+        // so a figure whose sheet is missing is not searched for again
+        // every single frame.
+        _characterSheets[pName] = blatt;
+        return blatt;
+    }
+
+    /// <summary>The sheet the player is drawn from, decoded on first use.</summary>
+    public MzCharacterSheet? PlayerSheet => SheetNamed(PlayerSheetName);
 
     /// <summary>Which character in that sheet the player is.</summary>
     public int PlayerIndex { get; private set; }
@@ -3822,17 +3915,24 @@ public sealed class MzEngineRuntime : IEngineRuntime
         State = PluginRuntimeState.Disposed;
     }
 
-    /// <summary>How many sheets this runtime read over all tilesets.</summary>
+    /// <summary>
+    /// How many sheets the project names over all tilesets.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this counts the names and not the decoded sheets</strong>,
+    /// because a sheet is decoded the first time a map paints it and "how
+    /// many the project has" is a question about the project.
+    /// </remarks>
     public int TilesetSheetCount
     {
         get
         {
             var anzahl = 0;
-            foreach (var blaetter in _tilesets.Values)
+            foreach (var blaetter in _tilesetNames.Values)
             {
-                foreach (var blatt in blaetter)
+                foreach (var name in blaetter)
                 {
-                    if (blatt != null)
+                    if (name.Length > 0)
                     {
                         anzahl++;
                     }
@@ -3940,9 +4040,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
     }
     private void ReadCharacters()
     {
-        var schluessel = EncryptionKey();
-        Characters = new Dictionary<string, MzCharacterSheet?>(
-            StringComparer.Ordinal);
+        var dateien = new Dictionary<string, string>(StringComparer.Ordinal);
 
         // **And the sheet's spelling is a fact about the disk.** MZ writes
         // `img/characters/SlimeCharacters.png_`, MV writes
@@ -3965,34 +4063,16 @@ public sealed class MzEngineRuntime : IEngineRuntime
             {
                 var name = Path.GetFileNameWithoutExtension(
                     Path.GetFileNameWithoutExtension(datei));
-                var bild = MzImageReader.Read(
-                    File.ReadAllBytes(datei), schluessel, out var _);
-                if (bild == null)
-                {
-                    continue;
-                }
-
-                // **Und ein Figurenblatt ist nicht immer RGBA.** **Gemessen
-                // an den vier Blaettern eines fertigen Spiels**:
-                // **`MC_Sprite_sheet`, `!Flame` und `Vehicle` sind Farbtyp
-                // 3, eine Palette, und `SlimeCharacters` ist Farbtyp 6 mit
-                // vier Kanaelen.** **Und ein Leser, der nur den einen Fall
-            // kannte, zeichnete drei von vier Figurenarten aus dem
-            // Nichts** -- **und zaehlte trotzdem vier gelesene
-            // Blaetter, denn er zaehlte die Dateien und nicht die
-            // Bilder.**
-            //
-            // **Und die Durchsicht hat in beiden Faellen eine
-            // andere Quelle** -- **bei einer Palette der Index null,
-            // und bei echten Farben der Alphakanal.**
-                var farbe = MzCharacterSheet.Read(
-                    bild, out var blatt, out var _);
-                if (blatt != null)
-                {
-                    Characters[name] = blatt;
+                // **And the file is remembered, and not decoded.** The
+                // decoding happens in `SheetNamed`, the first time a
+                // figure or the player asks for that sheet -- which is
+                // what turns 20 seconds of decoding into the one or two
+                // sheets a start map actually draws.
+                dateien[name] = datei;
             }
         }
-        }
+
+        CharacterFiles = dateien;
 
         // **Und die Animations kommen aus `Animations.json`.**
 
@@ -4059,14 +4139,6 @@ public sealed class MzEngineRuntime : IEngineRuntime
             Moving = false,
         };
         PlayerClock = _playerClock;
-        if (bildName.Length > 0)
-        {
-            if (Characters.TryGetValue(bildName, out var blatt)
-                && blatt != null)
-            {
-                PlayerSheet = blatt;
-            }
-        }
 
         // **Und wo er steht, sagt `System.json`.**
         var systemPfad = Path.Combine(
@@ -4146,7 +4218,13 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     private Dictionary<int, List<MzCommandEntry>> _commonEvents = new();
 
-    private Dictionary<int, List<Rm2kIndexedImage?>> _tilesets = new();
+    /// <summary>What each tileset names, and no decoded sheet.</summary>
+    private Dictionary<int, List<string>> _tilesetNames = new();
+
+    /// <summary>
+    /// The decoded sheets, by tileset, filled the first time a map asks.
+    /// </summary>
+    private readonly Dictionary<int, List<Rm2kIndexedImage?>> _tilesetSheets = new();
 
     private static bool IsMap(string pRelativePath)
     {
