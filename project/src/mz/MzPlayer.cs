@@ -70,7 +70,14 @@ public sealed class MzPlayer
     /// <c>performTransfer</c> is what calls <c>setDirection</c> — a reader that
     /// turned the player on the reservation would turn them a frame early.
     /// </summary>
-    public int Direction { get; private set; }
+    /// <remarks>
+    /// <strong>And the starting value is two and not zero.</strong> Measured
+    /// in the engine's own <c>Game_CharacterBase.initMembers</c>:
+    /// <c>this._direction = 2;</c> — <strong>and a player that has never
+    /// moved still faces down, and a save written before the first step says
+    /// so.</strong>
+    /// </remarks>
+    public int Direction { get; private set; } = MzCharacter.Down;
 
     /// <summary>
     /// The balloon icon over the player, and how long it has left.
