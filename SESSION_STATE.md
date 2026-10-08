@@ -1,5 +1,83 @@
 ## Current card
 
+### CHECKPOINT 2026-10-07 — the hang, the lazy load, and the title screen (`216a59d`, `d148bc4`, pushed)
+
+**A real MZ project (Skies Inflateable Adventure, 58 maps, 5294 images,
+1.6 GiB) hung the launcher: the window stopped answering and a player could
+not press anything. Measured with a temporary probe, phase by phase:**
+
+| phase | before | after |
+|---|---|---|
+| `SafeGameInspector.Inspect` | 312 ms | 364 ms |
+| I/O for every image | 49 ms | — |
+| decryption | 13 ms | — |
+| **PNG parsing (108 MP)** | **134,981 ms** | **16,384 ms** |
+| **`host.Start` total** | **154,373 ms** | **2,697 ms** |
+
+**Three root causes, each measured, each fixed:**
+
+1. **`Rm2kChipsetBitmap.Reduziere` recomputed the luminance of every palette
+   entry inside the per-pixel nearest-colour scan** (up to 256 times per
+   pixel) and never kept the answer, so every pixel of an unlisted colour
+   repeated the whole scan. The palette's luminance is computed once now and
+   a resolved colour is remembered: 134,981 → 16,384 ms.
+2. **The runtime decoded every sheet before the first frame** — 168 named
+   tileset sheets (64.6 MiB) and 158 character sheets (12 MiB) — while the
+   start map needs one tileset and the player's own sheet.
+   `ReadTilesetNames` keeps the names and `SheetsOf` decodes one tileset when
+   a map asks; `ReadCharacters` keeps name → file and `SheetNamed` decodes one
+   sheet when a figure asks. `Characters` becomes `CharacterFiles` +
+   `SheetNamed`.
+3. **The window loaded on the main thread.** `RuntimeLauncher.Launch` now has
+   a `(game, platform)` overload so the worker never calls `OS.GetName()`, and
+   `Main.LaunchSelectedGame` awaits `Task.Run` with a status line — the shape
+   the RTP download already used. `EnginePluginHost` and both runtimes are
+   plain .NET classes with no Godot types.
+
+**And the title screen did not exist.** Measured: the engine's order is
+`Scene_Boot` → `Scene_Title` → `commandNewGame` → `Scene_Map`, and the
+runtime started on the map, so no player ever saw a game's front page.
+`PaintTitle` reads `img/titles1/<title1Name>`, scales it the way
+`Scene_Base.scaleSprite` does (`Math.max(ratioX, ratioY, 1.0)`) and centres it
+like `centerSprite`; `BeginNewGame` is `commandNewGame`. The caller asks for it
+through `PluginGameInfo.PresentTitleScreen` (default false, so every existing
+acceptance test still measures the map), and the window sets it.
+
+**Verified on the user's own game:** `SKIES start with title: 1540 ms`,
+`title image="SkieTitle" visible=True commands=[New Game, Options]`,
+`title frame 816x624 lit=509184 colours=250`, then `Confirm` →
+`map=25 player=4/1`.
+
+**Two more measured gaps found while doing it:**
+
+- **Colour type 2 (RGB, no alpha) was refused.** This project's title is
+  1280x720 depth 8 colour type 2, so the front page could not be decoded at
+  all. RGB now takes the same quantising path as RGBA.
+- **The tile number was decoded as `tileId / 64`.** The engine's own
+  `Tilemap._addNormalTile` says A5 (1536..1663) is sheet four and every other
+  tile is sheet `5 + floor(tileId / 256)`, sixteen by sixteen tiles per sheet.
+  Measured: of Camellia's 56 tile ids, 24 fell outside the nine sheets and
+  painted nothing; of this project's start map, all 221 tiles are id 1536,
+  which `tileId / 64` sends to sheet 24. The start map now paints 88,262 lit
+  pixels instead of 710.
+
+**Still open, and not claimed as done:**
+
+- **The layer model is wrong.** Measured: planes 0–3 are the four tile layers,
+  plane 4 is the shadow (values 1 and 5 on Camellia) and plane 5 is the
+  region. `MzMapRenderer.Paint` pairs `(0,1)`, `(2,3)`, `(4,5)` as
+  lower/upper halves, so it paints shadow values as B-sheet tiles and halves
+  real tiles. The engine's `layeredTiles` pushes `tileId(x, y, 3 - i)` for
+  `i = 0..3` — four whole 48-pixel tiles, bottom to top.
+- **Autotiles (A1–A4, tile ids ≥ 2048) paint nothing**, because they need the
+  engine's `FLOOR_AUTOTILE_TABLE` (48 shapes), `WALL_AUTOTILE_TABLE` (16) and
+  `WATERFALL_AUTOTILE_TABLE` (4), and the four quadrant rects per shape.
+  Camellia's maps carry 118 autotile instances each.
+- **4-bit paletted PNGs are still refused** (bit depth must be 8), which is
+  what `img/system` window skins are — not painted by the runtime yet.
+- **MZ save support does not exist**, so the title's Continue command is not
+  offered (the engine adds it disabled when no save file exists).
+
 ### CHECKPOINT 2026-10-07 — MV movement acceptance test (committed `6cc3bfe`, pushed)
 
 **MV now has the same input→movement coverage as MZ and RM2K.** The MZ
