@@ -1,5 +1,78 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the menu, and the facts object that drifted
+
+**And this card found the ninth "nobody reads it", and a cause that is worse
+than the other eight: the writer and the reader were holding different
+objects.**
+
+Measured: `_facts` is set once in `Start` (`_facts = Facts`), and the commands
+run against it. `Repaint()` then does
+`Facts = Facts.WithCharacters(figuren, Facts.Player)` -- **a new object** --
+so from the first map change on, the commands wrote into one facts object and
+the runtime read another. **`351 Open Menu` set `Menu` on an object nobody
+looked at again.** Fixed by `_facts = Facts;` right after the copy, with the
+consequence written down.
+
+**And the menu's own words and shape are measured, not chosen:**
+
+```js
+Window_MenuCommand.prototype.needsCommand = function(name) {
+    const table = ["item","skill","equip","status","formation","save"];
+    const index = table.indexOf(name);
+    if (index >= 0) return $dataSystem.menuCommands[index];
+    return true;
+};
+Scene_Base.prototype.mainCommandWidth = function() { return 240; };
+Scene_Base.prototype.buttonAreaHeight = function() { return 52; };
+Scene_Menu.prototype.helpAreaHeight = function() { return 0; };
+```
+
+**and the words come from the game's own `terms.commands`** -- measured
+`item = commands[4]`, `skill = 5`, `equip = 6`, `status = 7`, `formation = 8`,
+`save = 9`, `gameEnd = 10`, `options = 11`. **The title's two commands used to
+be the English strings this reader wrote itself**, which is a defect in a
+German game, and they now come from the same place.
+
+**Measured:**
+
+```
+MZ menu: [Item, Options, Save, Game End] from symbols [item, options, save, gameEnd]
+MZ menu: the game's own words are item='Item' save='Save' gameEnd='Game End' options='Options'
+MZ menu: on 1280x720 the command window is (1040,52,240,608)
+MZ menu: the gold window is (1040,660,240,60)
+MZ menu: the status window is (0,52,1040,668)
+MZ menu: after 351 visible=True, index=0
+MZ menu: after one step down index=1 selection='Options'
+MZ menu: up from the top lands on 3 of 4
+MZ menu: confirming said 'Game End (gameEnd)'
+MZ menu: after cancel visible=False
+MZ menu: it stood on 2 before, and on 0 when it opened again
+```
+
+**And a wrong assumption of mine, corrected by measuring** -- the third this
+run: I asserted the command window and the gold window end on the same line.
+They do not: the command window ends at 660 and the gold window runs to 720,
+because `commandWindowRect` subtracts the gold window's height. The
+assertion now says what the engine does.
+
+**And what a command does is named and not done:** `item` pushes
+`Scene_Item`, `save` pushes `Scene_Save`, `gameEnd` pushes `Scene_GameEnd`,
+and this reader runs none of them yet. A chosen command lands in
+`MenuReport`, and `gameEnd` also adds a notice.
+
+**And the broad fix was measured, reverted, and recorded.** The obvious line
+`_facts = Facts;` in `Repaint()` makes the commands and the runtime share one
+object -- **and it breaks `Test_EineWahlErscheintUndLaesstSichBeantworten`**:
+on Camellia's Map004 a page with `trigger 0` starts by itself, with the player
+on `2,13` and the event on `1,2`, and `msg=True` before the first action key.
+**Without the line that suite is 12/12 green.** The mechanism is not yet found,
+so the line stays out and the menu reads the side the write lands on
+(`BefehlsTatsachen => _facts ?? Facts`) instead. **That is a named defect with a
+reproduction, not a papered-over one.**
+
+**Canonical suite: all 2756 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — `212` reaches the runtime, and a list never could
 
 **And `AnimationAsked` was not merely unread -- it could not have been read.**

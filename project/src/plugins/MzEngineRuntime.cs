@@ -1006,6 +1006,348 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     public string TitleCommandSource { get; private set; } = "";
 
+    private readonly List<string> _termsCommands = new();
+    private readonly List<bool> _menuFlags = new();
+
+    /// <summary>
+    /// And one of the game's own words, out of <c>terms.commands</c>.
+    /// </summary>
+    /// <param name="pIndex">The engine's own index for it.</param>
+    /// <param name="pVorgabe">What to say when the game has no word there.</param>
+    /// <returns>The word, or the fallback.</returns>
+    public string Begriff(int pIndex, string pVorgabe)
+    {
+        if (pIndex >= 0 && pIndex < _termsCommands.Count
+            && _termsCommands[pIndex].Length > 0)
+        {
+            return _termsCommands[pIndex];
+        }
+        return pVorgabe;
+    }
+
+    /// <summary>
+    /// And the menu's commands, in the engine's own order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>Window_MenuCommand.prototype.makeCommandList</c>
+    /// </strong>, measured in the project's own <c>rmmz_windows.js</c>:
+    /// </para>
+    /// <code>
+    /// Window_MenuCommand.prototype.makeCommandList = function() {
+    ///     this.addMainCommands();     // item, skill, equip, status
+    ///     this.addFormationCommand(); // formation
+    ///     this.addOriginalCommands(); // the plugins
+    ///     this.addOptionsCommand();   // options
+    ///     this.addSaveCommand();      // save
+    ///     this.addGameEndCommand();   // gameEnd
+    /// };
+    /// Window_MenuCommand.prototype.needsCommand = function(name) {
+    ///     const table = ["item", "skill", "equip", "status", "formation", "save"];
+    ///     const index = table.indexOf(name);
+    ///     if (index >= 0) return $dataSystem.menuCommands[index];
+    ///     return true;
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>so four of the eight are gated by the game's own switches and
+    /// four are not</strong> -- <c>options</c> and <c>gameEnd</c> ask
+    /// <c>needsCommand</c> for a name that is not in the table and get
+    /// <c>true</c> back, <c>formation</c> is the sixth table entry, and
+    /// <c>item</c> to <c>status</c> are the first four. Measured on
+    /// Camellia: <c>menuCommands = [true, false, false, false, false,
+    /// true]</c>, so its menu is <c>Item</c>, <c>Options</c>, <c>Save</c>,
+    /// <c>Game End</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And the plugins' own commands come between formation and
+    /// options</strong>, which is where <c>addOriginalCommands</c> sits --
+    /// and this reader takes them from the plugins' parameters, the same
+    /// fallback <see cref="TitleCommands"/> uses.
+    /// </para>
+    /// </remarks>
+    private void ReadMenuCommands()
+    {
+        var namen = new List<string>();
+        var symbole = new List<string>();
+
+        void Dazu(string pSymbol, int pIndex, string pVorgabe)
+        {
+            namen.Add(Begriff(pIndex, pVorgabe));
+            symbole.Add(pSymbol);
+        }
+
+        // **Und die Tabelle des Motors, in seiner Reihenfolge.**
+        var tabelle = new[]
+        {
+            ("item", 4, "Item"),
+            ("skill", 5, "Skill"),
+            ("equip", 6, "Equip"),
+            ("status", 7, "Status"),
+            ("formation", 8, "Formation"),
+        };
+        for (var i = 0; i < tabelle.Length; i++)
+        {
+            var (symbol, index, vorgabe) = tabelle[i];
+            var an = i < _menuFlags.Count ? _menuFlags[i] : true;
+            if (an)
+            {
+                Dazu(symbol, index, vorgabe);
+            }
+        }
+
+        // **Und die Befehle der Plugins stehen hier**, **denn
+        // `addOriginalCommands` liegt zwischen `addFormationCommand` und
+        // `addOptionsCommand`.**
+        var pluginsPfad = Path.Combine(
+            _game.GameDirectory, "js", "plugins.js");
+        if (File.Exists(pluginsPfad))
+        {
+            foreach (var befehl in PluginMenuCommands(File.ReadAllText(pluginsPfad)))
+            {
+                if (!namen.Contains(befehl))
+                {
+                    namen.Add(befehl);
+                    symbole.Add("plugin:" + befehl);
+                }
+            }
+        }
+
+        // **Und `options` und `gameEnd` fragen `needsCommand` nach einem
+        // Namen, der nicht in der Tabelle steht, und bekommen `true`.**
+        Dazu("options", 11, "Options");
+        var speichern = _menuFlags.Count > 5 && _menuFlags[5];
+        if (speichern)
+        {
+            Dazu("save", 9, "Save");
+        }
+        Dazu("gameEnd", 10, "Game End");
+
+        MenuCommands = namen;
+        MenuCommandSymbols = symbole;
+    }
+
+    /// <summary>And the menu's commands, in the engine's own order.</summary>
+    public IReadOnlyList<string> MenuCommands { get; private set; } =
+        Array.Empty<string>();
+
+    /// <summary>And what each of them is, for a reader that acts on one.</summary>
+    public IReadOnlyList<string> MenuCommandSymbols { get; private set; } =
+        Array.Empty<string>();
+
+    /// <summary>And which one the cursor is on.</summary>
+    public int MenuIndex { get; private set; }
+
+    /// <summary>And the word under the cursor.</summary>
+    public string MenuSelection =>
+        MenuIndex >= 0 && MenuIndex < MenuCommands.Count
+            ? MenuCommands[MenuIndex] : "";
+
+    /// <summary>
+    /// And the three windows of the menu, on the project's own screen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And these are <c>Scene_Menu</c>'s own four sums</strong>,
+    /// measured in the project's <c>rmmz_scenes.js</c> and
+    /// <c>rmmz_core.js</c>:
+    /// </para>
+    /// <code>
+    /// Scene_Base.prototype.mainCommandWidth = function() { return 240; };
+    /// Scene_Base.prototype.buttonAreaHeight = function() { return 52; };
+    /// Scene_Base.prototype.isBottomButtonMode = function() { return false; };
+    /// Scene_Menu.prototype.helpAreaHeight = function() { return 0; };
+    /// Scene_MenuBase.prototype.mainAreaTop = function() {
+    ///     if (!this.isBottomHelpMode()) { return this.helpAreaBottom(); }
+    ///     else if (this.isBottomButtonMode()) { return 0; }
+    ///     else { return this.buttonAreaBottom(); }
+    /// };
+    /// Scene_MenuBase.prototype.mainAreaHeight = function() {
+    ///     return Graphics.boxHeight - this.buttonAreaHeight() - this.helpAreaHeight();
+    /// };
+    /// Scene_Menu.prototype.commandWindowRect = function() {
+    ///     const ww = this.mainCommandWidth();
+    ///     const wh = this.mainAreaHeight() - this.goldWindowRect().height;
+    ///     const wx = this.isRightInputMode() ? Graphics.boxWidth - ww : 0;
+    ///     const wy = this.mainAreaTop();
+    ///     return new Rectangle(wx, wy, ww, wh);
+    /// };
+    /// Scene_Menu.prototype.goldWindowRect = function() {
+    ///     const ww = this.mainCommandWidth();
+    ///     const wh = this.calcWindowHeight(1, true);
+    ///     const wx = this.isRightInputMode() ? Graphics.boxWidth - ww : 0;
+    ///     const wy = this.mainAreaBottom() - wh;
+    ///     return new Rectangle(wx, wy, ww, wh);
+    /// };
+    /// Scene_Menu.prototype.statusWindowRect = function() {
+    ///     const ww = Graphics.boxWidth - this.mainCommandWidth();
+    ///     const wh = this.mainAreaHeight();
+    ///     const wx = this.isRightInputMode() ? 0 : Graphics.boxWidth - ww;
+    ///     const wy = this.mainAreaTop();
+    ///     return new Rectangle(wx, wy, ww, wh);
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>with <c>isBottomHelpMode()</c> true, <c>isBottomButtonMode()</c>
+    /// false and <c>isRightInputMode()</c> true</strong>, so
+    /// <c>mainAreaTop()</c> is <c>buttonAreaBottom() = 0 + 52</c> and
+    /// <c>mainAreaHeight()</c> is <c>boxHeight - 52</c>. <strong>Measured on
+    /// the 1280x720 project:</strong> the command window is
+    /// <c>(1040, 52, 240, 608)</c>, the gold window <c>(1040, 660, 240, 60)</c>
+    /// and the status window <c>(0, 52, 1040, 668)</c>.
+    /// </para>
+    /// </remarks>
+    public void ReadMenuWindows()
+    {
+        var kante = MainCommandWidth;
+        var oben = MenuButtonAreaHeight;
+        var hoehe = ScreenHeight - MenuButtonAreaHeight;
+        // **Und `calcWindowHeight(1, true)` ist `Window_Selectable.fittingHeight(1)`**
+        // und das ist `numLines * lineHeight + padding * 2`.
+        var goldHoehe = WindowLineHeight + WindowPadding * 2;
+
+        MenuWindow = new Window(
+            ScreenWidth - kante, oben, kante, hoehe - goldHoehe);
+        MenuGoldWindow = new Window(
+            ScreenWidth - kante, oben + hoehe - goldHoehe, kante, goldHoehe);
+        MenuStatusWindow = new Window(
+            0, oben, ScreenWidth - kante, hoehe);
+    }
+
+    /// <summary>And <c>Scene_Base.prototype.buttonAreaHeight</c>, measured at 52.</summary>
+    public const int MenuButtonAreaHeight = 52;
+
+    /// <summary>And the menu's command window, on the project's own screen.</summary>
+    public Window MenuWindow { get; private set; }
+
+    /// <summary>And the menu's gold window.</summary>
+    public Window MenuGoldWindow { get; private set; }
+
+    /// <summary>And the menu's status window.</summary>
+    public Window MenuStatusWindow { get; private set; }
+
+    private bool _menueWarOffen;
+
+    /// <summary>
+    /// And the facts a command writes to, which are not always the ones the
+    /// runtime reads.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is measured, and it is a defect that is named rather
+    /// than papered over.</strong> `_facts` is set once in `Start`, while
+    /// `Repaint()` replaces `Facts` with a fresh copy -- <strong>so a write
+    /// through `pFacts` lands on one object and a read through `Facts` looks
+    /// at another.</strong> The right fix is to stop them drifting, and the
+    /// obvious one (`_facts = Facts;`) is measured to break something else
+    /// that is not yet understood -- see `Repaint`. <strong>So this property
+    /// reads the side the write lands on</strong>, which is what makes
+    /// </remarks>
+    private MzBranchFacts BefehlsTatsachen => _facts ?? Facts;
+
+    /// <summary>And whether a menu is open on the screen.</summary>
+    /// <remarks>
+    /// <strong>And it is read from <see cref="BefehlsTatsachen"/></strong>,
+    /// because <c>351 Open Menu</c> writes through <c>pFacts</c> and that is
+    /// the object <c>_facts</c> points at.
+    /// </remarks>
+    public bool MenuVisible =>
+        BefehlsTatsachen.Menu == MzMenuState.Open;
+
+    /// <summary>And whether the menu stops the player from walking.</summary>
+    /// <remarks>
+    /// <strong>And it does, and this is the engine's own reason:</strong>
+    /// <c>SceneManager.push(Scene_Menu)</c> puts a whole scene over the map,
+    /// **so the map's own <c>update</c> does not run while a manu is up** --
+    /// **and a player who can still walk behind a menu is walking through a
+    /// scene that is supposed to be covering him.**
+    /// </remarks>
+    public bool MenuHoldsPlayer => MenuVisible;
+
+    /// <summary>
+    /// And the menu's cursor goes back to the top when it opens.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>Window_MenuCommand.initCommandPosition</c>
+    /// </strong>, measured: <c>this._lastCommandSymbol = null</c> -- **so a
+    /// menu that opens remembers nothing from the last time**, and the
+    /// cursor stands on the first command. <c>Scene_Menu.prototype.create
+    /// </c> builds the window with <c>selectLast()</c>, **and a null
+    /// remembered symbol lands on index zero.**
+    /// </remarks>
+    public void OpenMenu()
+    {
+        BefehlsTatsachen.Menu = MzMenuState.Open;
+        MenuIndex = 0;
+    }
+
+    /// <summary>And the player closes it.</summary>
+    /// <remarks>
+    /// <strong>And nothing in an event list closes a menu</strong>, which is
+    /// what <see cref="MzMenuState"/> says: the engine has no pop for a menu
+    /// an event pushed.
+    /// </remarks>
+    public void CloseMenu()
+    {
+        BefehlsTatsachen.Menu = MzMenuState.Closed;
+        MenuIndex = 0;
+    }
+
+    /// <summary>And the cursor moves, and wraps the way the engine wraps.</summary>
+    /// <param name="pSchritt">One down, or minus one up.</param>
+    /// <returns>Whether anything moved.</returns>
+    public bool MoveMenuCursor(int pSchritt)
+    {
+        var anzahl = MenuCommands.Count;
+        if (anzahl <= 0)
+        {
+            return false;
+        }
+        // **And the engine wraps**, because `Window_Selectable.
+        // processCursorMove` clamps the index into the list rather than
+        // stopping at the edges.
+        MenuIndex = ((MenuIndex + pSchritt) % anzahl + anzahl) % anzahl;
+        return true;
+    }
+
+    /// <summary>
+    /// And the command under the cursor is carried out.
+    /// </summary>
+    /// <returns>Whether anything was carried out.</returns>
+    /// <remarks>
+    /// <strong>And what each of them does is a scene of its own, and this
+    /// reader runs none of them yet.</strong> Measured at
+    /// <c>Scene_Menu.prototype.createCommandWindow</c>: <c>item</c> pushes
+    /// <c>Scene_Item</c>, <c>save</c> pushes <c>Scene_Save</c>, <c>gameEnd</c>
+    /// pushes <c>Scene_GameEnd</c>, and <c>cancel</c> pops. **So a command is
+    /// reported and not carried out**, and <see cref="MenuReport"/> says which
+    /// one a player chose -- **which is the honest answer for a reader with no
+    /// item, save or game-end scene.**
+    /// </remarks>
+    public bool ChooseMenuCommand()
+    {
+        if (MenuIndex < 0 || MenuIndex >= MenuCommands.Count)
+        {
+            return false;
+        }
+        var symbol = MenuIndex < MenuCommandSymbols.Count
+            ? MenuCommandSymbols[MenuIndex] : MenuCommands[MenuIndex];
+        MenuReport = $"{MenuCommands[MenuIndex]} ({symbol})";
+
+        // **Und `cancel` schliesst**, **denn `setHandler("cancel",
+        // popScene)` ist der eine Handler, den diese Laufzeit schon
+        // ausfuehren kann.**
+        if (symbol == "gameEnd")
+        {
+            Facts.Notices.Add(
+                "the menu asked for " + MenuReport
+                + ", and this runtime has no game-end scene yet");
+        }
+        return true;
+    }
+
+    /// <summary>And the last command a player chose from the menu.</summary>
+    public string MenuReport { get; private set; } = "";
+
     /// <summary>And the screen a project with no size of its own gets.</summary>
     /// <remarks>
     /// <strong>And the size is the project's, not this reader's.</strong>
@@ -1058,6 +1400,49 @@ public sealed class MzEngineRuntime : IEngineRuntime
             return;
         }
 
+        // **Und die Begriffe des Spiels kommen aus seinem eigenen
+        // `System.json`.**
+        //
+        // **Und gemessen standen sie vorher hart auf Englisch da:** die
+        // Titelbefehle waren `"New Game"` und `"Options"`, **waehrend
+        // `terms.commands` in der Datei `[... , "New Game", "Continue", null,
+        // "To Title", "Cancel", ...]` steht und ein deutsches Spiel dort
+        // deutsche Woerter hat.** **Ein Leser, der die Woerter selbst
+        // schreibt, zeigt einem deutschen Spiel ein englisches Menue.**
+        //
+        // **Und die Zahlen sind die des Motors**, gemessen an
+        // `TextManager`: `item = commands[4]`, `skill = 5`, `equip = 6`,
+        // `status = 7`, `formation = 8`, `save = 9`, `gameEnd = 10`,
+        // `options = 11`, `newGame = 18`, `continue = 19`, `toTitle = 21`,
+        // `cancel = 22`.
+        if (system.Root.Member("terms")?.Member("commands")
+            is { Kind: MzKind.Array } begriffe)
+        {
+            _termsCommands.Clear();
+            foreach (var wort in begriffe.Items)
+            {
+                _termsCommands.Add(wort.StringOr(""));
+            }
+        }
+
+        // **Und `menuCommands` ist eine Liste von sechs Schaltern**, in der
+        // Reihenfolge der Tabelle des Motors:
+        // `["item", "skill", "equip", "status", "formation", "save"]`.
+        // **Gemessen an Camellia: `[true, false, false, false, false,
+        // true]`** -- **also stehen `Item` und `Save` im Menue und die
+        // anderen vier nicht.**
+        if (system.Root.Member("menuCommands") is { Kind: MzKind.Array } schalter)
+        {
+            _menuFlags.Clear();
+            foreach (var wert in schalter.Items)
+            {
+                _menuFlags.Add(wert.Kind == MzKind.Bool
+                    ? wert.Boolean : wert.IntOr(0) != 0);
+            }
+        }
+
+        ReadMenuCommands();
+
         TitleImageName = system.Root.Member("title1Name")?.StringOr("") ?? "";
         TitleOverlayName = system.Root.Member("title2Name")?.StringOr("") ?? "";
         GameTitle = system.Root.Member("gameTitle")?.StringOr("") ?? "";
@@ -1077,6 +1462,10 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         ReadTitleWindow(system.Root.Member("titleCommandWindow"));
         ReadTitleCommands();
+
+        // **Und die drei Fenster des Menues**, **und hier, weil sie die
+        // Bildschirmgroesse brauchen und die erst oben gesetzt wird.**
+        ReadMenuWindows();
     }
 
     /// <summary>And one window on the screen, in the engine's own pixels.</summary>
@@ -1161,7 +1550,18 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     private void ReadTitleCommands()
     {
-        var befehle = new List<string> { "New Game", "Options" };
+        // **Und die Woerter des Titels sind die des Spiels**, **und nicht
+        // zwei, die dieser Leser selbst schreibt.** Gemessen an
+        // `TextManager`: `newGame = commands[18]`, `continue = 19`,
+        // `options = 11`. **Wo das Spiel kein Wort hat, bleibt der
+        // englische Vorgabename stehen, damit ein Leser den Befehl
+        // erkennt** -- **er ist dann als Vorgabe gekennzeichnet und nicht
+        // als das, was das Spiel sagt.**
+        var befehle = new List<string>
+        {
+            Begriff(18, "New Game"),
+            Begriff(11, "Options"),
+        };
         TitleCommandSource = "the engine's own commands, and nothing else";
 
         var ausDemSandkasten = PluginHost?.TitleCommands();
@@ -1696,6 +2096,27 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         Facts = Facts.WithCharacters(figuren, Facts.Player);
+
+        // **Und hier stand `_facts = Facts;`, und es ist wieder weg.**
+        //
+        // **Und der Grund ist gemessen:** `_facts` wird einmal in `Start`
+        // gesetzt, **und `WithCharacters` baut hier ein *neues* Objekt** --
+        // **also liefen die Befehle ab dem ersten Kartenwechsel gegen das
+        // alte und die Laufzeit las das neue.** **`351 Open Menu` schrieb
+        // `Menu` damit an eine Stelle, die niemand mehr ansah.**
+        //
+        // **Und die naheliegende Zeile `_facts = Facts;` behebt das -- und
+        // bricht etwas anderes.** Gemessen mit ihr:
+        // `Test_EineWahlErscheintUndLaesstSichBeantworten` faellt um, **und
+        // zwar weil auf Map004 von Camellia eine Seite startet, die
+        // `trigger 0` traegt und nicht starten darf** -- der Spieler steht
+        // auf `2,13`, das Ereignis auf `1,2`, und `msg=True` steht schon
+        // vor der ersten Aktionstaste. **Ohne die Zeile ist dieselbe Suite
+        // 12/12 gruen.** **Der Mechanismus dahinter ist noch nicht
+        // gefunden**, und diese Zeile bleibt darum aus, bis er es ist.
+        //
+        // **Und `Menu` wird stattdessen dort gelesen, wo der Befehl es
+        // hinschreibt** -- siehe `BefehlsTatsachen`.
 
         // **Und der Spieler bekommt seine Figur, und sie bekommt ihr
         // Bild** -- **denn `Game_Player.prototype.refresh` ruft
@@ -3724,6 +4145,22 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // **Und die Animationen laufen und verblassen im selben Takt.**
             TickAnimationen();
             TickAnimationsBlend();
+
+            // **Und ein Menue, das aufgeht, faengt oben an.**
+            //
+            // **Und das ist `Window_MenuCommand.initCommandPosition`:**
+            // `this._lastCommandSymbol = null`, **also erinnert sich ein
+            // Menue an nichts von seinem letzten Mal** -- und der Befehl
+            // `351` setzt nur den Zustand, **denn mehr tut die Engine auch
+            // nicht.** **Ein Zeiger, der beim Oeffnen auf dem letzten Befehl
+            // stehen bleibt, ist der Unterschied zwischen dem Motor und
+            // diesem Leser.**
+            var menueOffen = MenuVisible;
+            if (menueOffen && !_menueWarOffen)
+            {
+                OpenMenu();
+            }
+            _menueWarOffen = menueOffen;
         }
 
         LoeseDialoge();
@@ -5771,6 +6208,38 @@ public sealed class MzEngineRuntime : IEngineRuntime
                     return MoveTitleCursor(1);
                 case UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveUp:
                     return MoveTitleCursor(-1);
+                default:
+                    return false;
+            }
+        }
+
+        // **And an open menu takes the keys.**
+        //
+        // **Und das ist der neunte Fall dieser Art, und der erste, der aus
+        // zwei Objekten entstand:** `351 Open Menu` setzte `pFacts.Menu =
+        // MzMenuState.Open` -- **gemessen an `grep -rn "pFacts.Menu"` und
+        // `grep -rn "MzMenuState"` gibt es genau einen Schreiber und keinen
+        // Leser** -- und selbst dieser Schreiber landete auf einem
+        // Tatsachenobjekt, das die Laufzeit nach dem ersten Kartenwechsel
+        // nicht mehr las. **Ein Menue, das nie aufging.**
+        //
+        // **Und die Tasten sind die von `Scene_Menu`:** auf und ab bewegen
+        // den Zeiger, `ok` fuehrt den Befehl aus, `cancel` schliesst das
+        // Menue -- **denn `commandWindow.setHandler("cancel",
+        // this.popScene.bind(this))` sagt genau das.**
+        if (MenuVisible)
+        {
+            switch (pAction)
+            {
+                case UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm:
+                    return ChooseMenuCommand();
+                case UniversalRPG.Rm2k.Input.Rm2kInputAction.Cancel:
+                    CloseMenu();
+                    return true;
+                case UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveDown:
+                    return MoveMenuCursor(1);
+                case UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveUp:
+                    return MoveMenuCursor(-1);
                 default:
                     return false;
             }

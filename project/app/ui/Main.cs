@@ -939,7 +939,18 @@ public partial class Main : Control
 			// steht (`Scene_Title.commandWindowRect`) und wie hoch eine Zeile
 			// ist (`Window_Base.lineHeight`), und die Ansicht skaliert es mit
 			// dem Bild.
-			if (mz.TitleVisible && mz.TitleCommands.Count > 0)
+			if (mz.MenuVisible && mz.MenuCommands.Count > 0)
+			{
+				// **Und das Menue hat ein eigenes Fenster, an der Stelle, die
+				// `Scene_Menu` ihm gibt** -- gemessen `(1040, 52, 240, 608)`
+				// auf dem 1280x720-Projekt.
+				_gameScreen.SetCommandWindow(
+					mz.MenuWindow.X, mz.MenuWindow.Y,
+					mz.MenuWindow.Width, mz.MenuWindow.Height,
+					MzEngineRuntime.WindowLineHeight,
+					mz.MenuCommands, mz.MenuIndex);
+			}
+			else if (mz.TitleVisible && mz.TitleCommands.Count > 0)
 			{
 				_gameScreen.SetCommandWindow(
 					mz.TitleWindow.X, mz.TitleWindow.Y,
