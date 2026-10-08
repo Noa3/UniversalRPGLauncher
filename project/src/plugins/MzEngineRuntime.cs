@@ -1731,6 +1731,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         FlashDrawn = PaintScreenFlash(pixel);
         PaintWeather(pixel);
         PaintBalloons(pixel);
+        PaintAnimationBlend(pixel);
         PaintedMap = pixel;
         return true;
     }
@@ -3692,6 +3693,10 @@ public sealed class MzEngineRuntime : IEngineRuntime
             Facts.Screen.Wetter.EinBild();
             TickWetter();
             Facts.TickBalloons(1);
+
+            // **Und die Animationen laufen und verblassen im selben Takt.**
+            TickAnimationen();
+            TickAnimationsBlend();
         }
 
         LoeseDialoge();
@@ -4727,8 +4732,298 @@ public sealed class MzEngineRuntime : IEngineRuntime
     private int _wetterKraft;
     private string _wetterTyp = MzWeather.None;
 
+    /// <summary>
+    /// And the tint a running animation puts over its target.
+    /// </summary>
+    /// <param name="pPixels">The frame to tint.</param>
+    /// <returns>How many figures were tinted.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own <c>ColorFilter</c>, the same one
+    /// the screen's tone goes through</strong>, measured in the project's
+    /// <c>rmmz_core.js</c> at <c>ColorFilter.prototype._fragmentSrc</c>:
+    /// </para>
+    /// <code>
+    /// float r3 = blendColor.r / 255.0;
+    /// float i3 = blendColor.a / 255.0;
+    /// float i1 = 1.0 - i3;
+    /// r = clamp(r * i1 + r3 * i3 * a, 0.0, 1.0);
+    /// </code>
+    /// <para>
+    /// <strong>so a blend colour is a mix toward its own colour, weighted by
+    /// its alpha</strong> -- <strong>and the alpha is the one that decays by
+    /// <c>(d - 1) / d</c> every frame, which is why an animation's flash
+    /// fades out instead of stopping.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it lands on the figure's own cell</strong>, because
+    /// <c>Sprite_Animation</c> calls <c>target.setBlendColor(...)</c> on the
+    /// target's sprite and on nothing else.
+    /// </para>
+    /// </remarks>
+    public int PaintAnimationBlend(Rm2kPixelBuffer pPixels)
+    {
+        AnimationsDrawn = 0;
+        if (pPixels == null || _laufend.Count == 0)
+        {
+            return 0;
+        }
+
+        var zelle = MzMapRenderer.TilePixels;
+        foreach (var (id, laufend) in _laufend)
+        {
+            if (laufend.FlashColor[3] <= 0)
+            {
+                continue;
+            }
+
+            var figur = FigurNachId(id);
+            if (figur == null)
+            {
+                continue;
+            }
+
+            var links = (int)Math.Round(figur.RealX * zelle);
+            var oben = (int)Math.Round(figur.RealY * zelle);
+            var i3 = Math.Clamp(laufend.FlashColor[3], 0, 255);
+            var i1 = 255 - i3;
+
+            for (var dy = 0; dy < zelle; dy++)
+            {
+                var zielY = oben + dy;
+                if (zielY < 0 || zielY >= pPixels.Height)
+                {
+                    continue;
+                }
+                for (var dx = 0; dx < zelle; dx++)
+                {
+                    var zielX = links + dx;
+                    if (zielX < 0 || zielX >= pPixels.Width)
+                    {
+                        continue;
+                    }
+                    var i = (zielY * pPixels.Width + zielX) * 4;
+                    pPixels.Pixels[i] = (byte)Math.Clamp(
+                        (pPixels.Pixels[i] * i1
+                            + laufend.FlashColor[0] * i3) / 255, 0, 255);
+                    pPixels.Pixels[i + 1] = (byte)Math.Clamp(
+                        (pPixels.Pixels[i + 1] * i1
+                            + laufend.FlashColor[1] * i3) / 255, 0, 255);
+                    pPixels.Pixels[i + 2] = (byte)Math.Clamp(
+                        (pPixels.Pixels[i + 2] * i1
+                            + laufend.FlashColor[2] * i3) / 255, 0, 255);
+                }
+            }
+            AnimationsDrawn++;
+        }
+
+        return AnimationsDrawn;
+    }
+
+    /// <summary>And the figure a running animation belongs to.</summary>
+    /// <param name="pId">An event's number, or -1 for the player.</param>
+    /// <returns>The figure, or null.</returns>
+    public MzCharacter? FigurNachId(int pId)
+    {
+        if (pId < 0)
+        {
+            return Facts.Player.Figur;
+        }
+        return EventFigures.TryGetValue(pId, out var figur) ? figur : null;
+    }
+
     /// <summary>And how many balloon icons the last frame had to draw.</summary>
     public int BalloonsDrawn { get; private set; }
+
+    private readonly Dictionary<int, MzAnimation> _animations = new();
+
+    /// <summary>And the game's own animations, by their number.</summary>
+    public IReadOnlyDictionary<int, MzAnimation> Animations => _animations;
+
+    /// <summary>And one animation while it runs, per figure.</summary>
+    /// <remarks>
+    /// <strong>And this is <c>Sprite_Animation</c>'s own three
+    /// fields</strong> -- <c>_frameIndex</c>, <c>_flashColor</c> and
+    /// <c>_flashDuration</c> -- <strong>which is why the run is here and not
+    /// on the figure</strong>: a figure is rebuilt by every repaint, and an
+    /// animation that lived on it would go with it.
+    /// </remarks>
+    private sealed class LaufendeAnimation
+    {
+        public int AnimationId;
+        public int FrameIndex;
+        public int[] FlashColor = new int[4];
+        public int FlashDuration;
+        public bool Laeuft = true;
+    }
+
+    private readonly Dictionary<int, LaufendeAnimation> _laufend = new();
+
+    /// <summary>And how many animations the last frame had to draw.</summary>
+    public int AnimationsDrawn { get; private set; }
+
+    /// <summary>
+    /// And an animation starts on a figure, from <c>212 Show Animation</c>.
+    /// </summary>
+    /// <param name="pFigurId">Which figure: an event's number, or -1 for the player.</param>
+    /// <param name="pAnimationId">Which animation, from the game's own list.</param>
+    /// <returns>Whether the game has such an animation.</returns>
+    public bool StarteAnimation(int pFigurId, int pAnimationId)
+    {
+        if (!_animations.ContainsKey(pAnimationId))
+        {
+            return false;
+        }
+        _laufend[pFigurId] = new LaufendeAnimation
+        {
+            AnimationId = pAnimationId,
+            FrameIndex = 0,
+            FlashColor = new int[4],
+            FlashDuration = 0,
+        };
+        return true;
+    }
+
+    /// <summary>And whether a figure has an animation running.</summary>
+    /// <param name="pFigurId">Which figure.</param>
+    /// <returns>Whether it is still playing.</returns>
+    public bool AnimationLaeuft(int pFigurId) =>
+        _laufend.TryGetValue(pFigurId, out var laufend) && laufend.Laeuft;
+
+    /// <summary>And which frame of its animation a figure is on.</summary>
+    /// <param name="pFigurId">Which figure.</param>
+    /// <returns>The frame, or -1 when none runs.</returns>
+    public int AnimationsBild(int pFigurId) =>
+        _laufend.TryGetValue(pFigurId, out var laufend) && laufend.Laeuft
+            ? laufend.FrameIndex : -1;
+
+    /// <summary>
+    /// And the animations advance once per frame.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the engine's own <c>updateMain</c></strong>,
+    /// measured in the project's <c>rmmz_sprites.js</c>:
+    /// </para>
+    /// <code>
+    /// Sprite_Animation.prototype.updateMain = function() {
+    ///     this.processSoundTimings();     // playSe when frame === _frameIndex
+    ///     this.processFlashTimings();     // _flashColor = color; _flashDuration = duration
+    ///     this._frameIndex++;
+    ///     this.checkEnd();
+    /// };
+    /// Sprite_Animation.prototype.updateFlash = function() {
+    ///     if (this._flashDuration &gt; 0) {
+    ///         const d = this._flashDuration--;
+    ///         this._flashColor[3] *= (d - 1) / d;
+    ///     }
+    /// };
+    /// Sprite_Animation.prototype.checkEnd = function() {
+    ///     if (this._frameIndex &gt; this._maxTimingFrames &amp;&amp;
+    ///         this._flashDuration === 0 &amp;&amp;
+    ///         !(this._handle &amp;&amp; this._handle.exists)) {
+    ///         this._playing = false;
+    ///     }
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>And the sounds are counted and not played.</strong> The
+    /// runtime has no sound-effect player at all -- measured,
+    /// <c>grep -nE "SpieleSe|PlaySe|SeName" project/src/mz/MzScreen.cs</c>
+    /// found nothing -- <strong>so a frame that names one is recorded in
+    /// <see cref="SoundsAsked"/> and nothing is heard.</strong> That is a
+    /// missing piece and not a silent one.
+    /// </para>
+    /// </remarks>
+    public void TickAnimationen()
+    {
+        if (_laufend.Count == 0)
+        {
+            return;
+        }
+
+        SoundsAsked.Clear();
+        foreach (var (id, laufend) in _laufend)
+        {
+            if (!laufend.Laeuft
+                || !_animations.TryGetValue(laufend.AnimationId, out var animation))
+            {
+                continue;
+            }
+
+            foreach (var klang in animation.SoundTimings)
+            {
+                if (klang.Frame == laufend.FrameIndex && klang.Name.Length > 0)
+                {
+                    SoundsAsked.Add(klang.Name);
+                }
+            }
+
+            foreach (var blitz in animation.FlashTimings)
+            {
+                if (blitz.Frame == laufend.FrameIndex)
+                {
+                    laufend.FlashColor = new[]
+                    {
+                        blitz.Color[0], blitz.Color[1],
+                        blitz.Color[2], blitz.Color[3],
+                    };
+                    laufend.FlashDuration = blitz.Duration;
+                }
+            }
+
+            laufend.FrameIndex++;
+
+            // **And `checkEnd` has three terms and this reader has two** --
+            // the third asks an Effekseer handle that does not exist here.
+            if (laufend.FrameIndex > animation.MaxTimingFrames
+                && laufend.FlashDuration == 0)
+            {
+                laufend.Laeuft = false;
+                _laufend.Remove(id);
+            }
+        }
+    }
+
+    /// <summary>And the sounds an animation asked for this frame.</summary>
+    /// <remarks>
+    /// <strong>And nothing plays them</strong>, because this runtime has no
+    /// sound-effect player. A reader that expected to hear something would be
+    /// waiting for a piece that is not there.
+    /// </remarks>
+    public List<string> SoundsAsked { get; } = new();
+
+    /// <summary>And the alpha of a running animation's tint, and its colour.</summary>
+    /// <param name="pFigurId">Which figure.</param>
+    /// <returns>The colour and alpha, or null when none is running.</returns>
+    public int[]? AnimationsBlend(int pFigurId)
+    {
+        if (!_laufend.TryGetValue(pFigurId, out var laufend) || !laufend.Laeuft
+            || laufend.FlashColor[3] <= 0)
+        {
+            return null;
+        }
+        return laufend.FlashColor;
+    }
+
+    /// <summary>And the tint decays after the frame has run.</summary>
+    /// <remarks>
+    /// <strong>And the engine decays it in <c>updateFlash</c>, one step
+    /// behind <c>updateMain</c></strong>, with the same
+    /// <c>(d - 1) / d</c> the screen's own flash uses.
+    /// </remarks>
+    public void TickAnimationsBlend()
+    {
+        foreach (var laufend in _laufend.Values)
+        {
+            if (laufend.FlashDuration <= 0)
+            {
+                continue;
+            }
+            var d = laufend.FlashDuration--;
+            laufend.FlashColor[3] = laufend.FlashColor[3] * (d - 1) / d;
+        }
+    }
 
     /// <summary>And how many drops the last frame had to draw.</summary>
     public int WeatherDrawn { get; private set; }
@@ -6050,12 +6345,41 @@ public sealed class MzEngineRuntime : IEngineRuntime
         for (var id = 1; id < tabelle.Root.Items.Count; id++)
         {
             var eintrag = tabelle.Root.Items[id];
-            if (eintrag.Kind != MzKind.Array)
+            // **Und hier stand `if (eintrag.Kind != MzKind.Array)
+            // continue;` -- und das uebersprang jede Animation dieses
+            // Spiels.**
+            //
+            // **Gemessen:** die Eintraege von MZ's `Animations.json` sind
+            // **Objects** -- `{displayType, effectName, flashTimings, id,
+            // name, offsetX, offsetY, rotation, scale, soundTimings, speed,
+            // timings}` -- **und `MzKind.Array` ist die Form von MV.**
+            // **Ein Leser, der nur Arrays nahm, liess die Tabelle leer**,
+            // **und `212 Show Animation` hatte damit fuer keine einzige
+            // Animation eine Laenge.**
+            if (eintrag.Kind == MzKind.Array)
             {
+                // **Und die Array-Form ist MV's**, wo eine Animation ein
+                // Blatt mit `frames.length` Zellen ist.
+                AnimationFrames[id] = MzScreen.AnimationsDauer(eintrag.Items.Count);
                 continue;
             }
 
-            AnimationFrames[id] = MzScreen.AnimationsDauer(eintrag.Items.Count);
+            // **Und die Dauer kommt aus den Zeitangaben der Animation und
+            // nicht aus der Zahl ihrer JSON-Eigenschaften.**
+            //
+            // **Gemessen:** `eintrag.Items.Count` ist fuer eine
+            // MZ-Animation die Zahl der Felder -- elf -- und
+            // `MzScreen.AnimationsDauer` rechnete daraus `11 * 4 + 1 = 45`
+            // Bilder. **Das ist eine Tatsache ueber die Datei und keine
+            // ueber die Animation.** **Und dieses Projekt hat 158
+            // Effekseer-Animationen und keine einzige MV-Animation.**
+            var animation = MzAnimation.Read(eintrag);
+            if (animation == null)
+            {
+                continue;
+            }
+            _animations[id] = animation;
+            AnimationFrames[id] = animation.DurationFrames();
         }
 
         // **Und die Tabelle gehoert in die Spieltatsachen**, -- **denn

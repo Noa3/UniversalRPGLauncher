@@ -1,5 +1,74 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the animation table was empty, and MZ animations are not MV's
+
+**And the whole table was skipped, and the guard that skipped it said why it
+had been written.**
+
+```csharp
+if (eintrag.Kind != MzKind.Array)
+{
+    continue;
+}
+```
+
+**Measured:** the entries of MZ's `Animations.json` are **Objects** --
+`{displayType, effectName, flashTimings, id, name, offsetX, offsetY, rotation,
+scale, soundTimings, speed, timings}` -- **and `MzKind.Array` is MV's shape.**
+So for an MZ game **every animation was skipped**, `AnimationFrames` stayed
+empty, and `212 Show Animation` had no length for any animation at all.
+Measured after the fix: `120 animations, 120 durations` on Camellia and `160
+animations` on the real project.
+
+**And the duration was a fact about the file and not about the animation.**
+The old line was `AnimationFrames[id] = MzScreen.AnimationsDauer(eintrag.Items.Count)`
+-- the count of the entry's **JSON fields**. `AnimationsDauer` is MV's rule
+(`frames.length * 4 + 1`), where an animation is a sheet of cells -- **and this
+project has 158 Effekseer animations and not one MV animation.**
+
+**And an MZ animation is an Effekseer effect**, measured: 158 of 160 name an
+`effectName` and none names an `animation1Name`. Running one is a particle
+renderer of its own and this slice does **not** do it.
+
+**And what is left is real**, measured in `rmmz_sprites.js` at
+`Sprite_Animation`: `_maxTimingFrames` over `soundTimings` and `flashTimings`;
+`updateMain` playing the sounds and setting the tints at their named frames;
+`updateFlash` decaying the tint's alpha by `(d - 1) / d`; `checkEnd` passing
+once the frame count has gone past the timings and the tint has decayed. The
+tint lands through the **same `ColorFilter`** the screen's tone uses --
+`r = clamp(r * i1 + r3 * i3 * a, 0, 1)`.
+
+**Measured after the fix:**
+
+```
+MZ animation: 120 animations, 120 durations
+MZ animation: 120 name an Effekseer effect, 120 have flashes, 120 have sounds
+MZ animation: after one frame the blend is [255,255,255,246], frame 1
+MZ animation: drawn=1; 1443 pixels changed
+MZ animation: running=False after the run
+MZ animation: the real project has 160 animations
+MZ animation: animation 3 Hit Fire (effect=HitFire, 2 flashes, 2 sounds, 33 frames)
+MZ animation: its duration is 33 frames, and the field count would have said 45
+```
+
+**And my own expectation was wrong once more**: I asserted 31 frames, and the
+answer is 33 -- the second flash stands on frame 2 and lasts 30, so the end is
+`2 + 30 + 1`. I had counted only the first flash.
+
+**And two pieces are named and not done:**
+
+- **The Effekseer particles.** 158 of 160 animations are particle effects.
+- **The sounds are counted and not played.** The runtime has no sound-effect
+  player -- `grep -nE "SpieleSe|PlaySe|SeName" project/src/mz/MzScreen.cs`
+  found nothing -- so a frame that names one lands in `SoundsAsked` and nothing
+  is heard.
+- **And the command is not wired**: `212 Show Animation` still calls
+  `ShowAnimation` on the figure and does not start the runtime's own run, which
+  needs a new callback on `MzBranchFacts`. `StarteAnimation(id, animationId)` is
+  there and tested.
+
+**Canonical suite: all 2750 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the balloon, and a paletted PNG's own alpha
 
 **And this card found two defects, and the second one was not about balloons
