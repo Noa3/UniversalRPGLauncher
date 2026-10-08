@@ -1,5 +1,56 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the runtime asks the sandbox (`63f6b89`, pushed)
+
+**And the runtime now asks a finished question and uses the answer.**
+`MzEngineRuntime.UsePluginHost` hands the sandbox over after the game was
+read, and `ReadTitleCommands` reads the title's commands again — from the
+plugins' own code when the sandbox can answer, from their parameters when it
+cannot. **`TitleCommandSource` says which of the two it was**, because a menu
+read out of parameters is not the same thing as a menu the plugins made.
+
+**Measured:**
+
+| project | sandbox | source reported | commands |
+|---|---|---|---|
+| Camellia (1 plain plugin) | 6 engine files, 1 plugin, 0 failed | `the executed plugins` | New Game, Options |
+| Skies (81 plugins, 72 active) | 71 loaded, 1 failed, **title answer none** | `the plugins' parameters` | New Game, Options, CG Gallery, Credits, Patch Notes |
+
+The engine's own `makeCommandList` answers `New Game | Continue | Options`,
+with Continue disabled — this runtime has no save file, and the sandbox is
+told so rather than allowed to offer one.
+
+### OPEN — the VisuStella title signature (blocked, evidence recorded)
+
+**Signature:** `VisuMZ_0_CoreEngine` replaces
+`Window_TitleCommand.makeCommandList`; inside the sandbox the replacement
+throws **`Cannot convert undefined or null to object`**. Everything after it
+inherits the broken state.
+
+**Ruled out, by measurement — do not re-try these:**
+
+1. **Not the four `Object.*` calls.** `keys`, `entries`, `values`, `assign`
+   and `getOwnPropertyNames` were wrapped to log a null argument; the run
+   reported `CALLS WITH NULL: (none)`.
+2. **Not the game globals.** `$gameSystem`, `$gameParty`, `$gameScreen`,
+   `$gameMap`, `$gamePlayer`, `$gameMessage`, `$gameTemp` changed nothing.
+3. **Not the registry name.** The obfuscator's string table contains
+   **`TitleCommandList`**; seeding `Window_TitleCommand.TitleCommandList = []`
+   before the plugins load left it at 0 entries and the error unchanged.
+4. **Not a missing engine file.** All six `rmmz_*.js` load, and the engine's
+   *own* `makeCommandList` answers correctly.
+5. **A Proxy over `Window_TitleCommand` logged no undefined read** during the
+   failing call — so either the read is not through that global, or Jint's
+   Proxy trap does not fire for it.
+
+**Unblock condition:** name the exact failing call. Options not yet tried:
+decode `_0x4e9f0e(0x541)` by replicating the obfuscator's table rotation
+offline (the table is at offset 355873 of `VisuMZ_0_CoreEngine.js`), or
+compare against the same plugin running in a real browser.
+
+**And it is not a runtime blocker:** the parameter list is a faithful subset,
+and the runtime reports which source it used.
+
 ### CHECKPOINT 2026-10-07 — the plugin sandbox (`86d747c`, pushed)
 
 **And this is the one place a game's own code is executed.** The user asked
