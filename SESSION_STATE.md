@@ -1,5 +1,45 @@
 ## Current card
 
+### CHECKPOINT 2026-10-07 — the title commands the project's plugins add (`ced4c9d`, pushed)
+
+**The question was whether a plugin changes the menu, and the answer is
+yes — three of them, and the title screen was wrong without them.**
+
+Measured in the project's own `js/plugins.js` (81 plugins, 72 active):
+
+| plugin | parameter | value |
+|---|---|---|
+| `VisuMZ_4_CGGallery` | `MainMenu` | `Name:str` = "CG Gallery", `ShowTitleCommand:eval` = "true" |
+| `VisuMZ_4_CreditsPage` | `MainMenu` | "Credits", true |
+| `VisuMZ_4_PatchNotes` | `MainMenu` | "Patch Notes", true |
+
+All three also carry `ShowMainMenu:eval: "true"`, so they belong on the
+**in-game main menu** as well — and `VisuMZ_1_MainMenuCore` (48 hits on
+`Window_MenuCommand`) reshapes that whole window. **That menu is not
+implemented yet**, so this checkpoint covers the title window only.
+
+`PluginMenuCommands` reads the commands out of the plugin **parameters** —
+JSON the editor wrote, so it is data and not code. **The plugins' own
+JavaScript is obfuscated, is never loaded, evaluated or executed**, which is
+the boundary this runtime keeps. Which index a plugin inserts its command at
+lives in that obfuscated code and is the one thing not read; the commands
+therefore come after the engine's own, which is where the VisuStella page
+plugins put theirs.
+
+**Measured on the real game:**
+`New Game | Options | CG Gallery | Credits | Patch Notes`.
+
+**Two other findings from the same read, both checked and both fine:**
+
+- `VisuMZ_0_CoreEngine` has `NewGameCommonEvent` = 43 — but its own help says
+  "during **play test** session", and the parameter for a real session,
+  `NewGameCommonEventAll`, is **0**. So `BeginNewGame` correctly runs no
+  common event.
+- `removeBurgerMenu.js` is `Scene_Map.prototype.createButtons = function(){}`
+  — it removes the mobile burger buttons, and adds no command.
+
+**Canonical suite: all 2716 tests pass, exit 0.**
+
 ### CHECKPOINT 2026-10-07 — the layer model and the autotiles (`a2455fb`, `6845e74`, pushed)
 
 **The map painter read the tile numbers wrong and could not draw most of
