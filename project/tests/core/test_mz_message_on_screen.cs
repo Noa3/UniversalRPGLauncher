@@ -240,6 +240,22 @@ public partial class TestMzMessageOnScreen : TestBase
         AssertTrue(runtime.Transfer(2, 4, 13),
             $"the transfer to Map002 succeeds: {runtime.AutorunProblem}");
         runtime.Update(1.0 / 60.0);
+
+        // **Und die Eroeffnung dieser Karte wird durchgelassen, und zwar
+        // HIER.**
+        //
+        // **Denn sie laeuft, wenn die Karte steht, und nicht wenn das Spiel
+        // startet** -- gemessen: vor dem Transfer lief kein Bild der Karte,
+        // **denn der Titelbildschirm stand davor**, und `let 0 message(s)
+        // through` war die Antwort. **Ein Helfer vor dem Transfer laesst
+        // nichts durch.**
+        //
+        // **Und Map002 traegt die Autorun-Seite des Spiels** -- Ereignis 5,
+        // 22 Befehle, vier Dialoge, beginnend mit `Camellia, Scout team
+        // found a beetle swarm to`. **Sie haelt die Karte, solange sie
+        // spricht, und ein Test, der dann die Aktionstaste drueckt, drueckt
+        // sie in den Dialog der Eroeffnung hinein.**
+        MzTestOpening.Durchlassen(runtime);
         Console.WriteLine($"MZ collision: player at {runtime.PlayerX}/{runtime.PlayerY}");
         AssertEq(runtime.PlayerX, 4, "the player stands beside the event");
         AssertEq(runtime.PlayerY, 13, "on the tile above it");

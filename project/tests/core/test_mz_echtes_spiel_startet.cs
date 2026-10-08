@@ -133,10 +133,16 @@ public partial class TestMzEchtesSpielStartet : TestBase
             return;
         }
         var runtime = (MzEngineRuntime)host.Runtime!;
-        for (var frame = 0; frame < 30; frame++)
-        {
-            runtime.Update(1.0 / 60.0);
-        }
+
+        // **Und die Eroeffnung dieser Karte wird durchgelassen.**
+        //
+        // **Denn die Startkarte dieses Spiels traegt eine Autorun-Seite**
+        // -- Ereignis 5 auf `(1,2)`, 22 Befehle, vier Dialoge, dann
+        // `222 Fadeout` und `123` auf den Self-Switch A. **Bis zu dieser
+        // Karte lief sie nie**, weil der Leser den Ausloeser 3 fuer
+        // "parallel" hielt. **Ein Test, der danach loslaeuft, laeuft gegen
+        // sie an.**
+        MzTestOpening.Durchlassen(runtime);
 
         var startX = runtime.PlayerX;
         var startY = runtime.PlayerY;

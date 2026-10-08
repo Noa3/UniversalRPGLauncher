@@ -54,7 +54,21 @@ public partial class TestMzWaitCountsDown : TestBase
             "**and map 3 paints** -- and it says: " + lauf.PaintReason);
 
         var spur = new List<string>();
-        lauf.RunPage();
+
+        // **Und die Seite dieser Karte wird BETRETEN, und nicht
+        // automatisch gestartet.**
+        //
+        // **Denn Map003 hat keine Autorun-Seite** -- gemessen: seine
+        // Ausloeser sind `{0: 9, 1: 1, 2: 2}`, **und keine einzige 3.** Die
+        // beiden grossen Erzaehlseiten (Ereignis 9 und 10, je 211 Befehle)
+        // tragen **`trigger 2`**, und den startet der Motor ueber
+        // `isTriggerIn([1, 2])`, wenn der Spieler auf ihrer Kachel
+        // **ankommt**.
+        //
+        // **Und hier stand `lauf.RunPage();`**, das den Ausloeser 2 als
+        // Autorun las, **weil die Nummern im Leser um eins verschoben
+        // waren.**
+        lauf.Betrete(6, 7);
         spur.Add($"Start: Index {lauf.LastPageIndex}, {lauf.LastPageStop}");
 
         // **Und jetzt Bilder, und sonst nichts.**

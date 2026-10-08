@@ -4004,18 +4004,13 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // kannte, lief **keine einzige Autorun-Seite von LegalTruck**
         // -- **und der Test sah 14 Aktionen statt der 197 Befehle von
         // Ereignis 1.**
-        if (pAusloeser == MzSeitenStart.AusloeserAutomatisch
-            || pAusloeser == 4)
-        {
-            return pStart == StartMode.Autorun;
-        }
-
         return pAusloeser switch
         {
             MzSeitenStart.AusloeserAutomatisch => pStart == StartMode.Autorun,
-            MzSeitenStart.AusloeserParallel => false,
+            MzSeitenStart.AusloeserParallel => pStart == StartMode.Parallel,
             MzSeitenStart.AusloeserTaste => pStart == StartMode.ActionButton,
             MzSeitenStart.AusloeserBeruehrt => pStart == StartMode.Touched,
+            MzSeitenStart.AusloeserBeruehrtVorne => pStart == StartMode.Touched,
             _ => false,
         };
     }

@@ -21,76 +21,16 @@ namespace UniversalRPG.Mz;
 /// <c>Game_Player.prototype.isCollidedWithEvent</c> then
 /// <c>Game_Event.prototype.update</c> starts it when the player walks
 /// onto its tile.</description></item>
-/// <item><description><strong>2 — Autorun.</strong> Started when the map
-/// is set up, without the player doing anything.</description></item>
-/// <item><description><strong>3 — Parallel Process.</strong> Not started
-/// by this; <c>Scene_Map.setupReservedCommonEvents</c> and the engine give
-/// it its own interpreter.</description></item>
+/// <item><description><strong>2 — Event Touch.</strong> The event walks
+/// into the player.</description></item>
+/// <item><description><strong>3 — Autorun.</strong>
+/// <c>Game_Event.prototype.checkEventTriggerAuto</c> is
+/// <c>if (this._trigger === 3) { this.start(); }</c>, and it runs every
+/// frame.</description></item>
+/// <item><description><strong>4 — Parallel Process.</strong> Not started
+/// by this; the engine gives it its own interpreter
+/// (<c>updateParallel</c>).</description></item>
 /// </list>
-/// <para>
-/// <strong>⚠ And the four numbers above are wrong, and the constants below
-/// still carry them. This is the next card.</strong>
-/// </para>
-/// <para>
-/// <strong>And the remark above proved it with a line that is not in the
-/// engine.</strong> It cites
-/// <c>isTriggerIn([2]) &amp;&amp; !this._erased &amp;&amp; !this.isStarting()</c>
-/// as the autorun check. <strong>Measured in the project's own
-/// <c>rmmz_objects.js</c>:</strong>
-/// </para>
-/// <code>
-/// Game_Event.prototype.update = function() {
-///     Game_Character.prototype.update.call(this);
-///     this.checkEventTriggerAuto();
-///     this.updateParallel();
-/// };
-/// Game_Event.prototype.checkEventTriggerAuto = function() {
-///     if (this._trigger === 3) { this.start(); }
-/// };
-/// Game_Event.prototype.start = function() {
-///     const list = this.list();
-///     if (list &amp;&amp; list.length &gt; 1) {
-///         this._starting = true;
-///         if (this.isTriggerIn([0, 1, 2])) { this.lock(); }
-///     }
-/// };
-/// Game_Player.prototype.startMapEvent = function(x, y, triggers, normal) {
-///     for (const event of $gameMap.eventsXy(x, y)) {
-///         if (event.isTriggerIn(triggers) &amp;&amp; event.isNormalPriority() === normal) {
-///             event.start();
-///         }
-///     }
-/// };
-/// </code>
-/// <para>
-/// <strong>so <c>_trigger === 3</c> is autorun and <c>[0, 1, 2]</c> is the
-/// button-and-touch group</strong> — the group the player's own walk hands in
-/// — <strong>and the numbers the constants below carry are shifted:</strong>
-/// 0 action, <strong>1 and 2 are both touches</strong>, <strong>3 is
-/// autorun</strong>, <strong>4 is parallel</strong>.
-/// </para>
-/// <para>
-/// <strong>And the cost is counted from the games' own card files:</strong>
-/// Camellia carries 3 autorun pages, LegalTruck 5, Skies 13 — <strong>and not
-/// one of them ever started</strong> — while Skies has 115 event-touch pages
-/// and LegalTruck 15 parallel pages, <strong>and those ran as autorun.</strong>
-/// Measured on Camellia: its start map <strong>is Map002 and carries an
-/// autorun page</strong> (event 5, 22 commands, four messages, then
-/// <c>222 Fadeout</c> and <c>123 Self Switch A</c>) — <strong>the game's own
-/// opening, which never played.</strong>
-/// </para>
-/// <para>
-/// <strong>And the fix is not here yet, and this is why:</strong> with the
-/// four numbers corrected, <strong>45 of 2756 tests fail across nine
-/// suites</strong>, because those suites were written against the shifted
-/// numbering — six of them start Camellia's map and assume a quiet start map
-/// that the opening no longer leaves, and three assert the content of Map003's
-/// two trigger-2 pages as if they were autorun. <strong>Correcting the numbers
-/// and migrating those suites is one change, and half of it is not worth
-/// shipping.</strong> The measurement above is the whole of the evidence it
-/// needs.
-/// </para>
-/// <para>
 /// <strong>And a page needs more than one command.</strong>
 /// <c>Game_Event.prototype.start</c> is
 /// <c>if (list &amp;&amp; list.length &gt; 1)</c>, so a page with a single
@@ -114,11 +54,14 @@ public static class MzSeitenStart
     /// <summary>Player Touch: walking onto the event's own tile.</summary>
     public const int AusloeserBeruehrt = 1;
 
-    /// <summary>Autorun: the page starts by itself when the map is set up.</summary>
-    public const int AusloeserAutomatisch = 2;
+    /// <summary>Event Touch: the event walking into the player.</summary>
+    public const int AusloeserBeruehrtVorne = 2;
+
+    /// <summary>Autorun: the page starts by itself, every frame.</summary>
+    public const int AusloeserAutomatisch = 3;
 
     /// <summary>Parallel Process: it gets its own interpreter.</summary>
-    public const int AusloeserParallel = 3;
+    public const int AusloeserParallel = 4;
 
     /// <summary>
     /// And the engine's boundary, which is exclusive.
@@ -156,8 +99,16 @@ public static class MzSeitenStart
         => pAusloeser == AusloeserTaste;
 
     /// <summary>And whether walking onto the tile starts this page.</summary>
+    /// <remarks>
+    /// <strong>And both touch triggers count.</strong> Measured at
+    /// <c>Game_Player.prototype.checkEventTriggerTouch</c>, which hands
+    /// <c>[1, 2]</c> to <c>startMapEvent</c> -- <strong>so a page the event
+    /// triggers (2) is found by the same walk as one the player triggers
+    /// (1).</strong>
+    /// </remarks>
     public static bool StartetDurchBeruehrung(int pAusloeser)
-        => pAusloeser == AusloeserBeruehrt;
+        => pAusloeser == AusloeserBeruehrt
+            || pAusloeser == AusloeserBeruehrtVorne;
 
     /// <summary>
     /// And the event standing on a tile, which is how a touch is found.

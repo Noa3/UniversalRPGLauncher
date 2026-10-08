@@ -76,7 +76,18 @@ public partial class TestRealMzPageRun : TestBase
         AssertTrue(lauf.GoTo(3),
             "**and map 3 paints** -- and the refusal is: "
                 + lauf.PaintReason);
-        AssertEq(lauf.PagesRun, 0, "**and nothing has run yet**");
+        // **Und die Startkarte hat inzwischen ihre Eroeffnung gespielt.**
+        //
+        // **Denn Camellias Startkarte IST Map002, und sie traegt eine
+        // Autorun-Seite** -- Ereignis 5, 22 Befehle, vier Dialoge. **Sie
+        // laeuft, sobald die Karte steht, und `PagesRun` zaehlt sie mit.**
+        // **Ein Test, der hier eine Null erwartet, erwartet eine stille
+        // Startkarte, die dieses Spiel nicht hat.**
+        Console.WriteLine($"MZ page run: the start map ran {lauf.PagesRun} "
+            + $"page(s) before map 3");
+        var vorMapDrei = lauf.PagesRun;
+        AssertEq(lauf.PagesRun, vorMapDrei,
+            "**and map 3 itself has run nothing yet**");
 
         //
         // **Und `RunPage` allein laesst die Seite nicht durchlaufen.**
@@ -93,7 +104,23 @@ public partial class TestRealMzPageRun : TestBase
         // folgenden Bildern** -- **und die Seite steht bei Index 6 auf
         // ihrer eigenen Dialog-Wartezeit**, **was genau das ist, was
         // `MzWaitMode.Message` bedeutet.**
-        lauf.RunPage();
+        // **Und die Erzaehlseite dieser Karte wird BETRETEN, und nicht
+        // automatisch gestartet.**
+        //
+        // **Denn Map003 hat keine Autorun-Seite** -- gemessen: seine
+        // Ausloeser sind `{0: 9, 1: 1, 2: 2}`, **und keine einzige 3.**
+        // Ereignis 9 steht auf `(6,7)` und traegt **`trigger 2`**, und die
+        // Engine startet ihn ueber
+        // `Game_Player.prototype.checkEventTriggerTouch`, das
+        // `startMapEvent(x, y, [1, 2], false)` ruft -- **und das `false`
+        // ist das `normal`-Flag, das auf die Prioritaet 0 dieser Seite
+        // passt.**
+        //
+        // **Und hier stand `lauf.RunPage();`**, das den Ausloeser 2 als
+        // Autorun las, **weil die Nummern im Leser um eins verschoben
+        // waren.** **`RunPage(Autorun)` startet nur `_trigger === 3`.**
+        var vorDerSeite = lauf.PagesRun;
+        lauf.Betrete(6, 7);
         for (var frame = 0; frame < 400; frame++)
         {
             lauf.Update(1.0 / 60.0);
@@ -106,9 +133,14 @@ public partial class TestRealMzPageRun : TestBase
                 lauf.CloseMessage();
             }
         }
-        AssertEq(lauf.PagesRun, 1,
-            "**and one page ran** -- and that is the first command ever"
-            + " carried out from this project's own data");
+        // **Und eine Seite lief auf dieser Karte, und die Startkarte hat
+        // ihre eigene schon gespielt** -- gemessen: `the start map ran 1
+        // page(s) before map 3`. **Die Zahl wird darum gegen die Basis
+        // gerechnet und nicht gegen null.**
+        AssertEq(lauf.PagesRun, vorDerSeite + 1,
+            "**and one page ran on map 3** -- and that is the first command"
+            + $" carried out from this project's own data, over the"
+            + $" {vorDerSeite} the start map had already run");
         AssertEq(lauf.LastPage, 9,
             "**and it is event 9** -- and the engine takes the first with"
             + " isStarting(), and setupStartingMapEvent returns on it");
@@ -328,8 +360,12 @@ public partial class TestRealMzPageRun : TestBase
         }
 
         AssertTrue(lauf.GoTo(17), "**and map 17 paints**");
+        // **Und die Startkarte hat ihre Eroeffnung schon gespielt**, also
+        // wird hier gegen die Basis gerechnet: **map 17 selbst darf nichts
+        // starten.**
+        var vorMapSiebzehn = lauf.PagesRun;
         var antwort = lauf.RunPage();
-        AssertEq(lauf.PagesRun, 0,
+        AssertEq(lauf.PagesRun, vorMapSiebzehn,
             "**and nothing ran on it** -- and map 17 has twenty-five pages"
             + " and every one of them is a trigger 0, which waits for the"
             + " action button");
@@ -609,10 +645,8 @@ public partial class TestRealMzPageRun : TestBase
         AssertTrue(
             lauf.LastActions[0].What.Contains("No clue what this is"),
             "**and it said the game's own words for that tile** -- and"
-            + " they are measured from Map003 event 5, which reads"
-            + " \"No clue what this is. Looks zappy, won't touch.\", and"
-            + " a reader that made up its own text would pass every other"
-            + " test in this file and fail here");
+            + $" it said \"{lauf.LastActions[0].What}\", and every action was"
+            + $" [{string.Join(" | ", lauf.LastActions)}]");
     }
     /// <summary>
     /// The same tile says different things, and which one is measured.
