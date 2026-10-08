@@ -1618,6 +1618,39 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // **Und ohne diese Namen sagt jeder `205` "diese Figur habe ich
         // nicht"**, **und 96 Routen tun gar nichts.**
         var figuren = new Dictionary<int, MzCharacter>();
+
+        // **And a balloon has to survive the rebuild.**
+        //
+        // **Und gemessen war das der Grund, warum ein Ballon nie zu sehen
+        // war:** diese Methode baut **jede** Figur neu -- `new
+        // MzCharacter(...)` je Ereignis und `BuildFigure()` fuer den Spieler
+        // -- **und `213 Show Balloon Icon` setzt den Ballon auf dem alten
+        // Objekt.** Ein Repaint loeschte ihn also wieder, **und die
+        // Anzeige repaintet jedes Bild.**
+        //
+        // **Und das ist groesser als der Ballon:** dieselbe Zeile verliert
+        // auch alles andere, was nur auf der Figur lebt und nicht in der
+        // Kartendatei steht. **Gemerkt wird hier der Ballon, weil er der
+        // Grund ist, aus dem es auffiel** -- **und die naechste Karte, die
+        // hier etwas verliert, wird an derselben Stelle sichtbar.**
+        var alteBallons = new Dictionary<int, (int Icon, int Frames)>();
+        foreach (var (id, alt) in EventFigures)
+        {
+            if (alt != null && alt.BalloonIcon != MzCharacter.NoBalloon
+                && alt.BalloonFramesLeft > 0)
+            {
+                alteBallons[id] = (alt.BalloonIcon, alt.BalloonFramesLeft);
+            }
+        }
+        var spielerBallon = (Icon: MzCharacter.NoBalloon, Frames: 0);
+        if (Facts.Player.Figur != null
+            && Facts.Player.Figur.BalloonIcon != MzCharacter.NoBalloon
+            && Facts.Player.Figur.BalloonFramesLeft > 0)
+        {
+            spielerBallon = (Facts.Player.Figur.BalloonIcon,
+                Facts.Player.Figur.BalloonFramesLeft);
+        }
+
         EventFigures = new Dictionary<int, MzCharacter?>();
         _eventPriority.Clear();
         foreach (var figur in Figures)
@@ -1637,6 +1670,10 @@ public sealed class MzEngineRuntime : IEngineRuntime
             figuren[figur.EventId] = held;
             EventFigures[figur.EventId] = held;
             _eventPriority[figur.EventId] = figur.PriorityType;
+            if (alteBallons.TryGetValue(figur.EventId, out var ballon))
+            {
+                held.ShowBalloon(ballon.Icon, ballon.Frames);
+            }
         }
 
         Facts = Facts.WithCharacters(figuren, Facts.Player);
@@ -1650,6 +1687,10 @@ public sealed class MzEngineRuntime : IEngineRuntime
         if (spielerFigur != null)
         {
             spielerFigur.SetImage(PlayerSheetName, PlayerIndex);
+            if (spielerBallon.Icon != MzCharacter.NoBalloon)
+            {
+                spielerFigur.ShowBalloon(spielerBallon.Icon, spielerBallon.Frames);
+            }
         }
 
         Clocks = new Dictionary<int, MzWalkClock?>();
@@ -1689,6 +1730,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         BrightnessDrawn = PaintScreenBrightness(pixel);
         FlashDrawn = PaintScreenFlash(pixel);
         PaintWeather(pixel);
+        PaintBalloons(pixel);
         PaintedMap = pixel;
         return true;
     }
@@ -3649,6 +3691,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
             // over 60 frames got it at the power it already had, for ever.
             Facts.Screen.Wetter.EinBild();
             TickWetter();
+            Facts.TickBalloons(1);
         }
 
         LoeseDialoge();
@@ -4684,8 +4727,243 @@ public sealed class MzEngineRuntime : IEngineRuntime
     private int _wetterKraft;
     private string _wetterTyp = MzWeather.None;
 
+    /// <summary>And how many balloon icons the last frame had to draw.</summary>
+    public int BalloonsDrawn { get; private set; }
+
     /// <summary>And how many drops the last frame had to draw.</summary>
     public int WeatherDrawn { get; private set; }
+
+    /// <summary>
+    /// And the icon a figure shows, <c>213 Show Balloon Icon</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And every number here is measured in the project's own
+    /// <c>rmmz_sprites.js</c>, in <c>Sprite_Balloon</c>:</strong>
+    /// </para>
+    /// <code>
+    /// Sprite_Balloon.prototype.initMembers = function() {
+    ///     this._target = null;
+    ///     this._balloonId = 0;
+    ///     this._duration = 0;
+    ///     this.anchor.x = 0.5;
+    ///     this.anchor.y = 1;
+    ///     this.z = 7;
+    /// };
+    /// Sprite_Balloon.prototype.setup = function(targetSprite, balloonId) {
+    ///     this._target = targetSprite;
+    ///     this._balloonId = balloonId;
+    ///     this._duration = 8 * this.speed() + this.waitTime();   // 8*8 + 12
+    /// };
+    /// Sprite_Balloon.prototype.update = function() {
+    ///     if (this._duration > 0) {
+    ///         this._duration--;
+    ///         if (this._duration > 0) { this.updatePosition(); this.updateFrame(); }
+    ///     }
+    /// };
+    /// Sprite_Balloon.prototype.updatePosition = function() {
+    ///     this.x = this._target.x;
+    ///     this.y = this._target.y - this._target.height;
+    /// };
+    /// Sprite_Balloon.prototype.updateFrame = function() {
+    ///     const w = 48, h = 48;
+    ///     const sx = this.frameIndex() * w;
+    ///     const sy = (this._balloonId - 1) * h;
+    ///     this.setFrame(sx, sy, w, h);
+    /// };
+    /// Sprite_Balloon.prototype.frameIndex = function() {
+    ///     const index = (this._duration - this.waitTime()) / this.speed();
+    ///     return 7 - Math.max(Math.floor(index), 0);
+    /// };
+    /// Sprite_Balloon.prototype.speed    = function() { return 8; };
+    /// Sprite_Balloon.prototype.waitTime = function() { return 12; };
+    /// </code>
+    /// <para>
+    /// <strong>so the icon is a 48x48 cell of <c>img/system/Balloon.png</c></strong>
+    /// -- <strong>the column is the animation, and the row is the icon the
+    /// game chose</strong> -- <strong>and it hangs with its bottom centre on
+    /// the figure's head</strong>, because the sprite's anchor is
+    /// <c>(0.5, 1)</c> and it is placed at
+    /// <c>(x, y - height)</c>. <strong>And the animation runs backwards</strong>:
+    /// <c>7 - index</c>, so the balloon grows out of nothing and then holds
+    /// its last frame for <c>waitTime</c> frames before it goes.
+    /// </para>
+    /// <para>
+    /// <strong>And the runtime modelled all of it and drew none of it.</strong>
+    /// Measured: <c>MzCharacter.ShowBalloon</c> sets the icon and the frames,
+    /// <c>MaxBalloonFrames</c> is the engine's own 76, and
+    /// <c>grep -rn "TickBalloons" project/app/</c> and
+    /// <c>grep -rnE "BalloonIcon|HasBalloon" project/app/</c> both found
+    /// nothing -- so an icon that a page asked for, and then waited on, was
+    /// never seen.
+    /// </para>
+    /// </remarks>
+    public int PaintBalloons(Rm2kPixelBuffer pPixels)
+    {
+        BalloonsDrawn = 0;
+        if (pPixels == null)
+        {
+            return 0;
+        }
+
+        var blatt = SystemSheet("Balloon");
+        if (blatt == null)
+        {
+            return 0;
+        }
+
+        var gesehen = new HashSet<int>();
+        foreach (var (id, figur) in EventFigures)
+        {
+            if (figur == null || figur.BalloonIcon == MzCharacter.NoBalloon
+                || figur.BalloonFramesLeft <= 0 || !gesehen.Add(id))
+            {
+                continue;
+            }
+            if (ZeichneBallon(blatt, figur, pPixels))
+            {
+                BalloonsDrawn++;
+            }
+        }
+
+        var spieler = Facts.Player.Figur;
+        if (spieler != null && spieler.BalloonIcon != MzCharacter.NoBalloon
+            && spieler.BalloonFramesLeft > 0)
+        {
+            if (ZeichneBallon(blatt, spieler, pPixels))
+            {
+                BalloonsDrawn++;
+            }
+        }
+
+        return BalloonsDrawn;
+    }
+
+    /// <summary>And which column of the icon sheet a figure is showing.</summary>
+    /// <param name="pFigur">The figure.</param>
+    /// <returns>The column, 0 to 7, or -1 when there is no icon.</returns>
+    /// <remarks>
+    /// <strong>And this is the engine's own <c>frameIndex</c>.</strong>
+    /// <c>Sprite_Balloon.prototype.update</c> decrements <c>_duration</c>
+    /// <em>first</em> and calls <c>updateFrame</c> after it, so the column is
+    /// read from the countdown as it stands -- <strong>and a reader that
+    /// subtracted one more was a frame ahead of the engine, measured as
+    /// <c>[0,0,0,0,0,0,0,1]</c> against the engine's
+    /// <c>[0,0,0,0,0,0,0,0]</c>.</strong>
+    /// </remarks>
+    public int BalloonColumn(MzCharacter pFigur)
+    {
+        if (pFigur == null || pFigur.BalloonIcon == MzCharacter.NoBalloon
+            || pFigur.BalloonFramesLeft <= 0)
+        {
+            return -1;
+        }
+        var index = (pFigur.BalloonFramesLeft - 12) / 8;
+        return Math.Clamp(7 - Math.Max(index, 0), 0, 7);
+    }
+
+    /// <summary>And one icon, over one figure's head.</summary>
+    private bool ZeichneBallon(
+        MzCharacterSheet pBlatt, MzCharacter pFigur, Rm2kPixelBuffer pPixels)
+    {
+        var spalte = BalloonColumn(pFigur);
+        if (spalte < 0)
+        {
+            return false;
+        }
+        var zeile = Math.Max(pFigur.BalloonIcon - 1, 0);
+
+        var zelle = MzScreen.BalloonCellPixels;
+        var quelleX = spalte * zelle;
+        var quelleY = zeile * zelle;
+        if (quelleX + zelle > pBlatt.Width || quelleY + zelle > pBlatt.Height)
+        {
+            return false;
+        }
+
+        // **And the anchor is (0.5, 1)**, so the cell's bottom centre sits on
+        // the figure's head: its left edge is half a cell left of the
+        // figure's centre, and its bottom is one figure-height above the
+        // figure's feet.
+        var mitteX = (int)Math.Round(
+            pFigur.RealX * MzMapRenderer.TilePixels
+            + MzMapRenderer.TilePixels / 2.0);
+        var untenY = (int)Math.Round(
+            pFigur.RealY * MzMapRenderer.TilePixels
+            + MzMapRenderer.TilePixels)
+            - MzMapRenderer.TilePixels;
+        var links = mitteX - zelle / 2;
+        var oben = untenY - zelle;
+
+        var gezeichnet = false;
+        for (var dy = 0; dy < zelle; dy++)
+        {
+            var zielY = oben + dy;
+            if (zielY < 0 || zielY >= pPixels.Height)
+            {
+                continue;
+            }
+            for (var dx = 0; dx < zelle; dx++)
+            {
+                var zielX = links + dx;
+                if (zielX < 0 || zielX >= pPixels.Width)
+                {
+                    continue;
+                }
+                if (!pBlatt.TryGetPixel(quelleX + dx, quelleY + dy, out var farbe)
+                    || farbe[3] == 0)
+                {
+                    continue;
+                }
+                MischeBild(pPixels, zielX, zielY, farbe, 255);
+                gezeichnet = true;
+            }
+        }
+
+        return gezeichnet;
+    }
+
+    private readonly Dictionary<string, MzCharacterSheet?> _systemSheets =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// And a sheet from <c>img/system</c>, which is where the icon lives.
+    /// </summary>
+    /// <param name="pName">The file's name, without its extension.</param>
+    /// <returns>The sheet, or null when the game has no such file.</returns>
+    public MzCharacterSheet? SystemSheet(string pName)
+    {
+        if (string.IsNullOrEmpty(pName))
+        {
+            return null;
+        }
+        if (_systemSheets.TryGetValue(pName, out var bekannt))
+        {
+            return bekannt;
+        }
+
+        MzCharacterSheet? blatt = null;
+        var schluessel = EncryptionKey();
+        foreach (var dateiname in MzMapRenderer.TilesetFileNames(pName))
+        {
+            var pfad = Path.Combine(
+                _game.GameDirectory, "img", "system", dateiname);
+            if (!File.Exists(pfad))
+            {
+                continue;
+            }
+            var bild = MzImageReader.Read(
+                File.ReadAllBytes(pfad), schluessel, out var _);
+            if (bild != null && MzCharacterSheet.Read(bild, out blatt, out var _))
+            {
+                break;
+            }
+            blatt = null;
+        }
+
+        _systemSheets[pName] = blatt;
+        return blatt;
+    }
 
     /// <summary>
     /// And the weather, which the engine draws as a crowd of small sprites.
@@ -5926,7 +6204,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
     }
 
-    private string EncryptionKey()
+    public string EncryptionKey()
     {
         var pfad = Path.Combine(
             _game.GameDirectory, "data", "System.json");

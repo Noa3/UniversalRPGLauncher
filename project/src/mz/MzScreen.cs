@@ -614,6 +614,15 @@ public sealed class MzScreen
     /// </remarks>
 public const int MaxBalloonFrames = 76;
 
+    /// <summary>And one balloon icon's cell, measured at 48x48.</summary>
+    /// <remarks>
+    /// <strong>And this is the engine's own pair of numbers</strong>, in
+    /// <c>Sprite_Balloon.prototype.updateFrame</c>:
+    /// <c>const w = 48; const h = 48;</c> -- <strong>the column is the
+    /// animation and the row is the icon.</strong>
+    /// </remarks>
+    public const int BalloonCellPixels = 48;
+
     /// <summary>
     /// How many game frames one picture of an animation stays up.
     /// </summary>

@@ -133,13 +133,29 @@ public sealed class MzCharacterSheet
             {
                 var index = pBild.IndexAt(x, y);
                 var ziel = (x + y * pBild.Width) * 4;
-                if (index <= 0 || index >= pBild.Palette.Length)
+                if (index < 0 || index >= pBild.Palette.Length)
                 {
-                    // **Und Index null ist durchsichtig** -- **und ein
-                    // Index ausserhalb der Tabelle ist ebenso gut
-                    // nichts**, **und es wird hier zu durchsichtig und
-                    // nicht zu schwarz**, **denn ein schwarzes Rechteck
-                    // um jede Figur ist schlimmer als kein Rechteck.**
+                    // **Und ein Index ausserhalb der Tabelle ist nichts**,
+                    // **und es wird hier zu durchsichtig und nicht zu
+                    // schwarz**, **denn ein schwarzes Rechteck um jede Figur
+                    // ist schlimmer als kein Rechteck.**
+                    continue;
+                }
+
+                // **Und die Durchsichtigkeit kommt aus `AlphaAt`, und nicht
+                // aus "Index null".**
+                //
+                // **Gemessen an `img/system/Balloon.png_`:** die Datei ist
+                // Farbtyp 3 mit 256 Paletteneintraegen und einem `tRNS` von
+                // 65 Bytes -- **also ist nicht der Index null durchsichtig,
+                // sondern die ersten 65 Eintraege tragen ihr eigenes Alpha.**
+                // **Ein Leser, der nur den Index null kannte, machte aus dem
+                // Ballon ein deckendes schwarzes Quadrat mit einem weissen
+                // Fleck darin**, **und das war der Grund, warum der Ballon
+                // auf dem Bildschirm wie ein Kasten aussah.**
+                var alpha = pBild.AlphaAt(index);
+                if (alpha == 0)
+                {
                     continue;
                 }
 
@@ -147,7 +163,7 @@ public sealed class MzCharacterSheet
                 pixel[ziel] = farbe[0];
                 pixel[ziel + 1] = farbe[1];
                 pixel[ziel + 2] = farbe[2];
-                pixel[ziel + 3] = 255;
+                pixel[ziel + 3] = alpha;
             }
         }
 

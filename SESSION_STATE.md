@@ -1,5 +1,59 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the balloon, and a paletted PNG's own alpha
+
+**And this card found two defects, and the second one was not about balloons
+at all.**
+
+**1. `Repaint()` rebuilt every figure, and a balloon lives on the figure.**
+Measured: `Repaint()` does `new MzCharacter(...)` for every event and
+`Facts.Player.BuildFigure()` for the player -- **and `213 Show Balloon Icon`
+sets the balloon on the old object**, which the next repaint threw away. Since
+the display repaints every frame, an icon a page asked for -- and then waited
+on -- was never seen. Both are now carried across the rebuild, and the code
+says plainly that this is bigger than the balloon: **anything that lives on the
+figure and not in the map file is lost at that same line.**
+
+**2. And a paletted PNG names its transparency in a `tRNS` chunk, and the
+paletted reader only knew "index zero".** Measured at
+`img/system/Balloon.png_`:
+
+```
+IHDR (13) [0,0,1,128, 0,0,2,208, 8,3,0,0]   ->  384x720, colour type 3
+PLTE (768)                                    ->  256 entries
+tRNS (65)                                     ->  65 alphas
+```
+
+So entries 0 to 64 carry their own alpha and 65 to 255 are opaque -- **and the
+reader's rule was "index zero is transparent", which is RM2K's rule for RM2K's
+own formats and not a PNG's.** Measured before the fix: `0 of 2304 pixels are
+fully transparent` and the corners read `0,0,0,255` -- **an opaque black square
+with a white blob in it.** `Rm2kIndexedImage` now parses `tRNS` and exposes
+`AlphaAt(index)`; after the fix, `1437 of 2304 pixels are fully transparent`.
+
+**And that fix is not about balloons.** It applies to every paletted PNG with a
+`tRNS` chunk, which is how this engine stores its `img/system` art.
+
+**And a third thing was a wrong assumption of mine, corrected by measuring:**
+I wrote a test asserting the balloon "grows from nothing", and measured all
+eight columns at 2304 of 2304 pixels -- fully painted. After the `tRNS` fix the
+columns read `[867, 1414, 1414, 1414, 1448, 1414, 1414, 1414]`, so it does grow,
+but the assertion I wrote first was checking something I had not measured.
+
+**Measured after both fixes:**
+
+```
+MZ balloon: the sheet is 384x720, which is 8 columns x 15 icons
+MZ balloon: the first columns are [0,0,0,0,0,0,0,0,1,1,1,1] and the engine says [0,0,0,0,0,0,0,0,1,1,1,1]
+MZ balloon: the eight columns hold [867, 1414, 1414, 1414, 1448, 1414, 1414, 1414] of 2304
+MZ balloon: 1437 of 2304 pixels are fully transparent
+MZ balloon: drawn=1; 1414 pixels changed, from (193,484) to (238,526)
+MZ balloon: the icon's bottom is at 526, the figure's feet at 576
+MZ balloon: after its time the icon is -1 and 0 frames are left
+```
+
+**Canonical suite: all 2747 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the weather falls
 
 **And every number is measured in the project's own `rmmz_core.js`, in

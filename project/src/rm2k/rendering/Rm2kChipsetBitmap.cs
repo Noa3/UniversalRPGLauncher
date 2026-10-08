@@ -228,6 +228,50 @@ public sealed class Rm2kIndexedImage
     /// <summary>RGB triples indexed by palette index.</summary>
     public byte[][] Palette { get; }
 
+    /// <summary>
+    /// And the alpha of the first palette entries, from a PNG's
+    /// <c>tRNS</c> chunk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And an empty table means the file named none</strong>, and
+    /// then <see cref="TransparentIndex"/> is the rule -- <strong>which is
+    /// RM2K's own rule for its own formats.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And a paletted PNG with a <c>tRNS</c> chunk says something
+    /// else entirely:</strong> the first <c>n</c> palette entries carry an
+    /// alpha each, and every entry after them is opaque. Measured at
+    /// <c>img/system/Balloon.png_</c>: <c>PLTE</c> 768 bytes (256 entries)
+    /// and <c>tRNS</c> 65 bytes -- so entries 0 to 64 have their own alpha
+    /// and 65 to 255 are opaque, <strong>and a reader that assumed index
+    /// zero drew the icon as an opaque black square with a white blob in
+    /// it.</strong>
+    /// </para>
+    /// </remarks>
+    public byte[] Transparency { get; private init; } = Array.Empty<byte>();
+
+    /// <summary>And whether the file carried a <c>tRNS</c> chunk.</summary>
+    public bool HasTransparencyTable => Transparency.Length > 0;
+
+    /// <summary>And the alpha of one palette index.</summary>
+    /// <param name="pIndex">The palette index.</param>
+    /// <returns>The alpha, 0 to 255.</returns>
+    /// <remarks>
+    /// <strong>And this is the one place the two rules meet</strong>:
+    /// a file that named its alphas keeps them, and a file that named none
+    /// falls back to <see cref="TransparentIndex"/>.
+    /// </remarks>
+    public byte AlphaAt(int pIndex)
+    {
+        if (HasTransparencyTable)
+        {
+            return pIndex >= 0 && pIndex < Transparency.Length
+                ? Transparency[pIndex] : (byte)255;
+        }
+        return pIndex == TransparentIndex ? (byte)0 : (byte)255;
+    }
+
     /// <summary>True when the image matches the chipset size the Player expects.</summary>
     public bool HasExpectedSize => Width == ExpectedWidth && Height == ExpectedHeight;
 
@@ -307,6 +351,14 @@ public sealed class Rm2kIndexedImage
         var height = 0;
         var farbtyp = 3;
         byte[]? paletteData = null;
+
+        // **Und eine Paletten-PNG nennt ihre durchsichtigen Farben in einem
+        // `tRNS`-Chunk und nicht durch den Index null.**
+        //
+        // **Gemessen an `img/system/Balloon.png_`:** Farbtyp 3, `PLTE` 768
+        // Bytes (256 Eintraege), `tRNS` 65 Bytes -- **also tragen die ersten
+        // 65 Palettenfarben je ein Alpha, und alle weiteren sind deckend.**
+        byte[]? trnsData = null;
         var compressed = new List<byte>();
 
         var offset = 8;
@@ -375,6 +427,10 @@ public sealed class Rm2kIndexedImage
                 case "PLTE":
                     paletteData = new byte[length];
                     Array.Copy(pData, payload, paletteData, 0, length);
+                    break;
+                case "tRNS":
+                    trnsData = new byte[length];
+                    Array.Copy(pData, payload, trnsData, 0, length);
                     break;
                 case "IDAT":
                     for (var index = 0; index < length; index++)
@@ -485,7 +541,10 @@ public sealed class Rm2kIndexedImage
             }
         }
 
-        pImage = new Rm2kIndexedImage(width, height, indices, palette);
+        pImage = new Rm2kIndexedImage(width, height, indices, palette)
+        {
+            Transparency = trnsData ?? Array.Empty<byte>(),
+        };
         return true;
     }
 
