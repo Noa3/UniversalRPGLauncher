@@ -97,6 +97,46 @@ the work lives, and it is a work branch and not a merge candidate.
   priority 1) with the player's `startMapEvent(x, y, [1, 2], false)`, which
   takes the normal flag as a parameter and matches priority 0.
 
+**Fourth pass, on the branch. The engine's arrival rule is measured to the
+letter, and one test was migrated and verified in isolation.**
+
+```js
+Game_Player.prototype.updateNonmoving = function(wasMoving, sceneActive) {
+    if (!$gameMap.isEventRunning()) {
+        if (wasMoving) {
+            this.checkEventTriggerHere([1, 2]);          // 1 and 2, that is all
+            if ($gameMap.setupStartingEvent()) { return; }
+        }
+        if (sceneActive && this.triggerAction()) { return; }  // the button, standing
+    }
+};
+Game_Player.prototype.checkEventTriggerHere = function(triggers) {
+    this.startMapEvent(this.x, this.y, triggers, false);   // normal = FALSE
+};
+Game_Player.prototype.checkEventTriggerThere = function(triggers) {
+    this.startMapEvent(x2, y2, triggers, true);            // normal = TRUE
+};
+```
+
+**So a step starts `[1, 2]` with priority 0 and nothing else**, and a trigger-0
+page is the button, standing still. `Betrete`'s first scan is exactly that and
+is right. **Its second scan is not** -- and removing it broke three tests
+(`Test_DerKnopfFragtNachZweiVerschiedenenPrioritaeten`,
+`Test_DieDreiEigenenVerzweigungenDiesesSpiels`,
+`Test_DieselbeKachelSagtBeimZweitenMalEtwasAnderes`), because all three use
+`Betrete` as **one verb meaning "arrive and press"**, and the engine has two:
+
+- `Test_DieselbeKachelSagtBeimZweitenMalEtwasAnderes` steps onto Map004
+  `(9,5)` -- **event 15, every page `trigger 0` with priority 1** -- so the
+  engine reaches it by standing beside it and pressing, never by stepping.
+
+**So the removal and those three migrations are one change**, and it is the next
+step: `Betrete(x, y)` for the tile, then `SubmitInput(Confirm)` for the button.
+The step test itself is migrated and verified: Map003 `(2,3)` is **event 7,
+`trigger 1`, priority 0, 17 commands, no picture**, and its first line is
+`Queen? Scout? Any hunter? Hello?` -- which is exactly what that test claims to
+prove.
+
 **And the earlier attempt, for the record -- it is NOT done.** Measured in the attempt: **45 failures, then 41, then 11, then 7**
 -- and the last five suites are the ones that need real thought rather than an
 edit:
