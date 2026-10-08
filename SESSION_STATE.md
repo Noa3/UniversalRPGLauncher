@@ -68,6 +68,28 @@ asserts exactly the misreading, and cites a line the engine does not have.
 change.** The measurements the card needs are all in this checkpoint and in the
 remark in `MzSeitenStart`.
 
+**And the migration was attempted, and it is NOT done -- this is exactly where
+it stands.** Measured in the attempt: **45 failures, then 41, then 11, then 7**
+-- and the last five suites are the ones that need real thought rather than an
+edit:
+
+| Suite | What it needs |
+|---|---|
+| `TestRealMzPageRun: Test_DieAutorunSeiteEinerKarteLaeuftUndTraegtDieErzaehlung` | Map003 has **no** autorun page. Its two narrative pages (events 9 and 10, 211 commands each) are **trigger 2**, so the engine starts them when the player **steps onto `(6,7)`**. The test calls `RunPage(Autorun)` and has to walk instead. |
+| `TestRealMzPageRun: Test_DasBetretenEinerKachelStartetDieSeiteAuchOhneBild` | expects Map003 **event 5**, which is `trigger 0` -- needs its own reading |
+| `TestRealMzRuntimeRun: Test_DieLaufbahnLaeuftErstNachDerWartezeitDesMotors` | a premise about which figures move |
+| `TestRealMvRuntimeRun: Test_DerLaufFuehrtDieEigenenBefehleDesProjektsAus` | LegalTruck reports 599 where it used to be more than a thousand |
+| `TestMzWaitCountsDown`, `TestMzMessageOnScreen` | their own `Start()` shapes, so an opening helper does not drop in |
+
+**And one real fix came out of the attempt and is KEPT, because it does not
+depend on the numbering at all:** weather, balloons and animations used to sit
+behind `if (Laeufer.Count == 0)` -- the guard that stops the screen from being
+ticked twice, because `MzEventRunner` ticks it too. **Those three have no
+second ticker**, so they **froze for as long as any page ran** -- measured: the
+opening runs 22 commands, and in that time no rain fell and no balloon moved.
+They now tick in every frame, and the guard covers only the screen's own
+effects. **Verified on its own: all 2756 tests pass.**
+
 **Canonical suite: all 2756 tests pass.**
 
 ### CHECKPOINT 2026-10-08 — the menu, and the facts object that drifted

@@ -4131,20 +4131,23 @@ public sealed class MzEngineRuntime : IEngineRuntime
             Facts.Screen.TickBlitz();
             Facts.Screen.TickWackeln();
             Facts.Screen.TickAudio();
+        }
 
-            // **And the weather's power walks toward its target**, which is
-            // `Game_Screen.prototype.updateWeather`: `if (this._weatherDuration
-            // > 0) { this._weatherPower += ...; this._weatherDuration--; }`.
-            // **Measured before this: `EinBild()` was written, tested and
-            // called by nobody** -- so a game that asked for rain at power 9
-            // over 60 frames got it at the power it already had, for ever.
-            Facts.Screen.Wetter.EinBild();
-            TickWetter();
-            Facts.TickBalloons(1);
-
-            // **Und die Animationen laufen und verblassen im selben Takt.**
-            TickAnimationen();
-            TickAnimationsBlend();
+        // **Und Wetter, Ballons und Animationen laufen in *jedem* Bild.**
+        //
+        // **Und das ist gemessen und nicht symmetrisch:** der Bildschirm hat
+        // einen zweiten Geber -- `MzEventRunner` ruft `MzScreen.PassFrame`,
+        // **also laeuft er, solange eine Seite laeuft** -- und darum steht er
+        // hinter der Bedingung. **Wetter, Ballons und Animationen haben
+        // keinen zweiten Geber.** **Und als sie hinter dieselbe Bedingung
+        // gerieten, froren sie ein, sobald eine Seite lief** -- **gemessen:
+        // die Eroeffnung von Camellia laeuft 22 Befehle lang, und in dieser
+        // Zeit fiel kein Regen, kein Ballon tickte und keine Animation.**
+        Facts.Screen.Wetter.EinBild();
+        TickWetter();
+        Facts.TickBalloons(1);
+        TickAnimationen();
+        TickAnimationsBlend();
 
             // **Und ein Menue, das aufgeht, faengt oben an.**
             //
@@ -4161,7 +4164,6 @@ public sealed class MzEngineRuntime : IEngineRuntime
                 OpenMenu();
             }
             _menueWarOffen = menueOffen;
-        }
 
         LoeseDialoge();
         var wechselt = 0;
