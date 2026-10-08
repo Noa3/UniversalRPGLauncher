@@ -712,6 +712,16 @@ public partial class TestRealMzRuntimeRun : TestBase
         // das ist nicht ein Fehler des Projekts, sondern die Regel des
         // Motors**: **eine eigene Laufbahn laeuft nur bei `moveType: 3`,
         // und `moveType: 0` laeuft nie.**
+        // **Und die Eroeffnung der Startkarte wird zuerst durchgelassen.**
+        //
+        // **Denn Camellias Startkarte IST Map002, und sie traegt eine
+        // Autorun-Seite** -- Ereignis 5, 22 Befehle, vier Dialoge. **Sie
+        // laeuft, sobald das Spiel steht, und sie zaehlt in `PagesRun`
+        // mit und bewegt, was ihr Dialog bewegt.** **Gemessen: `it moved
+        // 13, and the pages running are page(s) run 1, last 5`** -- und
+        // das war die Eroeffnung und nicht diese Karte.
+        MzTestOpening.Durchlassen(lauf);
+
         AssertTrue(lauf.GoTo(15), "**and map 15 paints** -- and the "
             + "measured moveType 3 pages are on maps 7, 8, 12 and 15");
 
@@ -754,6 +764,7 @@ public partial class TestRealMzRuntimeRun : TestBase
         }
 
         // **Und vor der Schwelle bewegt sich nichts.**
+        var vorDemZaehlen = lauf.Frames;
         var vorher = 0;
         for (var frame = 0; frame < 40; frame++)
         {
@@ -764,7 +775,8 @@ public partial class TestRealMzRuntimeRun : TestBase
             "**and nothing has moved after forty frames** -- and the "
                 + "engine's own threshold is sixty, and a runtime that "
                 + "skipped it sent every moving figure off on its first "
-                + "frame");
+                + $"frame; it moved {vorher}, and the pages running are "
+                + $"page(s) run {lauf.PagesRun}, last {lauf.LastPage}");
 
         // **Und danach passiert etwas, und zwar das Richtige.**
         //
@@ -782,7 +794,7 @@ public partial class TestRealMzRuntimeRun : TestBase
         }
 
         AssertEq(danach, 0,
-            "**and still nothing has moved after another forty frames** "
+            $"**and still nothing has moved after another forty {danach}** "
                 + "-- and that is right: the engine calls updateRoutineMove "
                 + "for a moveType of 3, and it finds one end entry and "
                 + "does nothing, because these eighteen pages carry no "
@@ -791,11 +803,13 @@ public partial class TestRealMzRuntimeRun : TestBase
 
         // **Und die Schwelle selbst ist der ganze Unterschied, und sie
         // ist messbar, ohne irgendeine Figur.**
-        AssertEq(lauf.Frames, 80,
-            "**and the runtime counted eighty frames** -- and a reader "
-                + "that skipped the wait would have moved on frame one, "
-                + "and one that read the frequency as frames would have "
-                + "waited a hundred and fifty");
+        AssertEq(lauf.Frames, vorDemZaehlen + 80,
+            "**and the runtime counted eighty frames here** -- and a "
+                + "reader that skipped the wait would have moved on frame "
+                + "one, and one that read the frequency as frames would "
+                + "have waited a hundred and fifty. It stood at "
+                + $"{vorDemZaehlen} before these eighty and at "
+                + $"{lauf.Frames} after them");
     }
 
     /// <summary>
