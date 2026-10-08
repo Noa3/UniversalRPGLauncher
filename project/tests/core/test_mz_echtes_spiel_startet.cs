@@ -238,6 +238,89 @@ public partial class TestMzEchtesSpielStartet : TestBase
     }
 
     /// <summary>
+    /// And the title's cursor chooses, and a command without a scene starts
+    /// nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this was the half-finished part:</strong> the commands
+    /// were on the frame and the cursor was not, so a confirmation started a
+    /// new game whichever line was showing. <strong>A player who pressed
+    /// down to reach the credits and pressed ok would have landed in the
+    /// game.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And the arithmetic is the engine's.</strong> Measured at
+    /// <c>Window_Selectable.processCursorMove</c>:
+    /// <c>if (Input.isRepeated("down")) { this.cursorDown(Input.isTriggered("down")); }</c>
+    /// -- the wrap flag is <c>isTriggered</c>, and on a one column list
+    /// <c>cursorDown</c> wraps only when that flag is set.
+    /// </para>
+    /// </remarks>
+    public void Test_DerTitelcursorWaehltUndEinFremderBefehlStartetNichts()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Projekt,
+            EngineId = EnginePluginIds.RpgMakerMz,
+            Generation = "mz",
+            DetectorScore = 850,
+            PresentTitleScreen = true,
+        });
+        AssertTrue(started.Success, $"the MZ game starts: {started.Error?.Message}");
+        if (!started.Success)
+        {
+            return;
+        }
+        var runtime = (MzEngineRuntime)host.Runtime!;
+        AssertTrue(runtime.TitleVisible, "the title screen is on the frame");
+
+        // This project has no plugin that adds a title command, so the
+        // engine's own two are the whole list.
+        AssertEq(runtime.TitleCommands.Count, 2,
+            "this project's title offers New Game and Options");
+        AssertEq(runtime.TitleIndex, 0, "the cursor starts on the first command");
+        AssertEq(runtime.TitleSelection, "New Game", "and that is New Game");
+
+        AssertTrue(runtime.SubmitInput(
+                UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveDown),
+            "the down key moves the cursor");
+        AssertEq(runtime.TitleIndex, 1, "and the cursor is on the second command");
+        AssertEq(runtime.TitleSelection, "Options", "and that is Options");
+
+        // **Und ein Befehl ohne Szene sagt das, und startet kein Spiel.**
+        var gewaehlt = runtime.SubmitInput(
+            UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm);
+        Console.WriteLine($"MZ title refused: {runtime.TitleProblem}");
+        AssertTrue(!gewaehlt,
+            "a command whose scene this runtime does not run is refused");
+        AssertTrue(runtime.TitleVisible,
+            "and the title stays on the frame instead of starting a game");
+        AssertTrue(runtime.TitleProblem.Contains("Options", StringComparison.Ordinal),
+            $"and it says which command it refused: {runtime.TitleProblem}");
+
+        // **Und der Cursor laeuft um** -- ein frischer Druck ist das, was
+        // `isTriggered` in der Engine meint.
+        AssertTrue(runtime.SubmitInput(
+                UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveDown),
+            "the cursor moves past the last command");
+        AssertEq(runtime.TitleIndex, 0, "and it wrapped to the first one");
+
+        AssertTrue(runtime.SubmitInput(
+                UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm),
+            "New Game is chosen");
+        AssertTrue(!runtime.TitleVisible,
+            "and the title leaves the frame");
+        AssertEq(runtime.CurrentMapId, 2, "and the start map is on the frame");
+    }
+
+    /// <summary>
     /// And the commands a project's own plugins put on the title window are
     /// read out of the plugins' parameters.
     /// </summary>

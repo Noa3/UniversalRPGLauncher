@@ -709,6 +709,24 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <summary>Whether the title screen is on the frame right now.</summary>
     public bool TitleVisible { get; private set; }
 
+    /// <summary>
+    /// Which of <see cref="TitleCommands"/> the cursor is on.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the cursor starts on the first command, which is what
+    /// <c>Window_Command</c> does when nothing was chosen before.</strong>
+    /// The engine remembers the last choice in
+    /// <c>Window_TitleCommand._lastCommandSymbol</c>; this reader does not,
+    /// so a second visit to the title starts at the top again.
+    /// </remarks>
+    public int TitleIndex { get; private set; }
+
+    /// <summary>And which command that is, or an empty string.</summary>
+    public string TitleSelection =>
+        TitleIndex >= 0 && TitleIndex < TitleCommands.Count
+            ? TitleCommands[TitleIndex]
+            : "";
+
     /// <summary>Why the title screen is not there, and empty when it is.</summary>
     public string TitleProblem { get; private set; } = "";
 
@@ -940,7 +958,73 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
         PaintedMap = pixel;
         TitleVisible = true;
+        TitleIndex = 0;
         return true;
+    }
+
+    /// <summary>
+    /// And the cursor moves, the way <c>Window_Selectable</c> moves it.
+    /// </summary>
+    /// <param name="pSchritt">One row down, or minus one for up.</param>
+    /// <returns>Whether the cursor moved.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>processCursorMove</c> on a one column
+    /// list.</strong> Measured:
+    /// <c>if (Input.isRepeated("down")) { this.cursorDown(Input.isTriggered("down")); }</c>
+    /// -- <strong>the wrap flag is <c>isTriggered</c>, so a fresh press
+    /// wraps around the list and a held repeat stops at the end.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And every key this runtime sees is a fresh press</strong>,
+    /// because <c>KeysPressed</c> is cleared at the end of each frame -- so
+    /// the cursor wraps here. A caller that wants the held behaviour has to
+    /// send a held key, which is a change to the key model and not to this
+    /// arithmetic.
+    /// </para>
+    /// </remarks>
+    public bool MoveTitleCursor(int pSchritt)
+    {
+        if (!TitleVisible || TitleCommands.Count == 0)
+        {
+            return false;
+        }
+
+        var anzahl = TitleCommands.Count;
+        TitleIndex = ((TitleIndex + pSchritt) % anzahl + anzahl) % anzahl;
+        return true;
+    }
+
+    /// <summary>
+    /// And the command the cursor is on, chosen.
+    /// </summary>
+    /// <returns>Whether the choice did anything.</returns>
+    /// <remarks>
+    /// <strong>And a command whose scene this runtime does not have says so
+    /// and stays on the title.</strong> Measured on this project: three of
+    /// its five title commands -- CG Gallery, Credits and Patch Notes --
+    /// belong to VisuStella plugins whose scenes are their own JavaScript.
+    /// <strong>A reader that started a new game on any confirmation would
+    /// send a player who asked for the credits into the game instead</strong>,
+    /// which is worse than a command that admits it is not there.
+    /// </remarks>
+    public bool ChooseTitleCommand()
+    {
+        if (!TitleVisible)
+        {
+            return false;
+        }
+
+        if (TitleSelection == "New Game")
+        {
+            return BeginNewGame();
+        }
+
+        TitleProblem = $"The title offers \"{TitleSelection}\", and that "
+            + "command belongs to a plugin whose scene this runtime does not "
+            + "run. It stays on the title screen rather than starting a game "
+            + "behind the player's back.";
+        return false;
     }
 
     /// <summary>
@@ -3881,8 +3965,17 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // the command it runs on ok is New Game.
         if (TitleVisible)
         {
-            return pAction == UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm
-                && BeginNewGame();
+            switch (pAction)
+            {
+                case UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm:
+                    return ChooseTitleCommand();
+                case UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveDown:
+                    return MoveTitleCursor(1);
+                case UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveUp:
+                    return MoveTitleCursor(-1);
+                default:
+                    return false;
+            }
         }
 
         // **Und Enter ist die Aktionstaste, und nicht "nichts".**
