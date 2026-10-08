@@ -1,5 +1,75 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the trigger numbering was wrong, and it was wrong in a way its own remark disproved
+
+**And this is the biggest single find of the run, and it came out of the drift
+investigation.**
+
+`MzSeitenStart` said **2 = Autorun** and **3 = Parallel** and cited
+`isTriggerIn([2]) && !this._erased && !this.isStarting()` as the autorun check.
+**Measured in the project's own `rmmz_objects.js`, that line does not
+exist:**
+
+```js
+Game_Event.prototype.update = function() {
+    Game_Character.prototype.update.call(this);
+    this.checkEventTriggerAuto();
+    this.updateParallel();
+};
+Game_Event.prototype.checkEventTriggerAuto = function() {
+    if (this._trigger === 3) { this.start(); }
+};
+Game_Event.prototype.start = function() {
+    const list = this.list();
+    if (list && list.length > 1) {
+        this._starting = true;
+        if (this.isTriggerIn([0, 1, 2])) { this.lock(); }
+    }
+};
+```
+
+**So the numbers are 0 action, 1 player touch, 2 event touch, 3 autorun, 4
+parallel** -- and the `[0, 1, 2]` is the button-and-touch group that
+`Game_Player.prototype.startMapEvent` hands in, not autorun.
+
+**And the cost, counted from the games' own card files:**
+
+| Game | 0 | 1 | 2 | 3 autorun | 4 parallel |
+|---|---|---|---|---|---|
+| Camellia (MZ) | 196 | 52 | 2 | **3** | 0 |
+| LegalTruck (MV) | 9 | 0 | 0 | **5** | **15** |
+| Skies (MZ) | 1197 | 243 | 115 | **13** | **264** |
+
+**Not one real autorun page of any of the three games ever started**, while
+115 event-touch pages of Skies and 15 parallel pages of LegalTruck ran as
+autorun.
+
+**And the fix is measured and NOT shipped, and this is the honest state:**
+with the four numbers corrected, **45 of 2756 tests fail across nine suites**.
+Six of them start Camellia's map and assume a quiet start map that the opening
+no longer leaves; three assert the content of Map003's two trigger-2 pages as
+if they were autorun. **Correcting the numbers and migrating those suites is
+one change, and half of it is not worth shipping.** So the change was reverted
+cleanly (`git checkout` of the four files) and the whole measurement now stands
+as a warning remark at the top of `MzSeitenStart`, where the next reader will
+see it before trusting the numbers.
+
+**And the drift mystery is answered by it.** Camellia's start map **is Map002**
+and carries an autorun page: event 5, 22 commands, four messages, then
+`222 Fadeout` and `123` on self-switch A. **That is the game's opening**, and it
+never played. `_facts = Facts` made its page conditions evaluate properly, so it
+started -- which is why that line looked like it broke a test.
+
+**And this is the sixth test that had locked a wrong rule in, and the first one
+that said so in its own name:** `Test_DieNummernSindAutomatischZweiUndNichtDrei`
+asserts exactly the misreading, and cites a line the engine does not have.
+
+**Next card: correct the four numbers and migrate the nine suites in one
+change.** The measurements the card needs are all in this checkpoint and in the
+remark in `MzSeitenStart`.
+
+**Canonical suite: all 2756 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the menu, and the facts object that drifted
 
 **And this card found the ninth "nobody reads it", and a cause that is worse
