@@ -97,7 +97,39 @@ the work lives, and it is a work branch and not a merge candidate.
   priority 1) with the player's `startMapEvent(x, y, [1, 2], false)`, which
   takes the normal flag as a parameter and matches priority 0.
 
-**DONE, merged to main as `70297b3`, and main is green: all 2756 tests pass.**
+**Saving works end to end, and main is green: all 2768 tests pass.**
+
+Three pieces, all measured in the projects' own `rmmz_managers.js` and
+`rmmz_core.js`:
+
+- `project/src/mz/MzSaveContents.cs` -- the contents in the engine's shape:
+  `system, screen, timer, switches, variables, selfSwitches, actors, party,
+  map, player`, with `JsonEx`'s `@` constructor name written FIRST in every
+  entry. **MZ has no circular-reference handling at all** -- its own note
+  says MV's "has been removed because it was too complicated and expensive".
+- `project/src/mz/MzSaveStore.cs` -- the file: `pako.deflate(json,
+  {level: 1})` is **zlib**, and the measured bytes of a real write are
+  `78 01`; the name is `file1.rmmzsave`; there are 20 slots; and a failed
+  write must not eat the save that was there (tested by forcing the failure
+  with a directory where the temporary file goes).
+- `project/src/plugins/MzEngineRuntime.Save.cs` -- `Speichern(slot)`,
+  `Laden(slot)`, `Spielstaende()`, `SpielstandVorhanden(slot)`,
+  `SaveDirectory`. **A load happens in place**: it fills the containers the
+  facts already own, because the engine's way of assigning ten whole objects
+  to its globals would break the reference the command reader holds.
+
+**Both directions name what they cannot do**: a save says it cannot write
+`screen, timer, actors, party` yet; a load says the save does not carry them.
+**A save that silently dropped the party would lose a player's gold.**
+
+**And the next step is the wiring that makes it reachable:** the sandbox's
+`DataManager`/`StorageManager`, the title's `Continue` command enabled when a
+slot exists, and the launcher setting `SaveDirectory` to a managed folder per
+game (the default is the engine's own `<game>/save`, which for an imported
+game may be read-only).
+
+**And earlier: the trigger numbering, merged to main as `70297b3`, and main
+was green: all 2756 tests passed.**
 
 **The trigger numbering is corrected and five suites that read it wrong are
 migrated.** Measured in the projects' own `rmmz_objects.js` and
