@@ -165,6 +165,221 @@ public sealed class MzEngineRuntime : IEngineRuntime
     public IReadOnlyList<string> ChoiceOptions => Facts.ChoiceOptions;
 
     /// <summary>
+    /// And which option the player has moved the cursor to.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>Window_ChoiceList</c>'s cursor, which the
+    /// runtime did not have.</strong> Measured before this: a choice was
+    /// modelled, tested and answerable by number -- and the arrow keys moved
+    /// the <em>player</em>, because <c>SubmitInput</c> read every direction as
+    /// a step. A player could not point at an answer at all.
+    /// </remarks>
+    public int ChoiceIndex { get; private set; }
+
+    /// <summary>And the options the cursor was last counted against.</summary>
+    private string _choiceSignature = "";
+
+    /// <summary>
+    /// And whether each figure's page stands in the way: <c>priorityType</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>isNormalPriority()</c> for the map that is
+    /// loaded</strong>, which decides whether the player may step onto an
+    /// event's tile at all.
+    /// </remarks>
+    private readonly Dictionary<int, int> _eventPriority = new();
+
+    /// <summary>
+    /// And what the last press of the action button started.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>triggerButtonAction</c>'s own answer</strong>,
+    /// kept so that a caller can see which page a press reached -- and so that
+    /// an empty press can be told apart from a press that was never made.
+    /// </remarks>
+    private readonly List<string> _actionButtonReport = new();
+
+    /// <summary>And what the last press of the action button started.</summary>
+    public IReadOnlyList<string> ActionButtonReport => _actionButtonReport;
+
+    /// <summary>
+    /// And whether the player is being held by a message or a choice.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>$gameMessage.isBusy()</c> in the one rule that
+    /// matters here</strong>, measured in the project's own
+    /// <c>rmmz_objects.js</c>:
+    /// <code>
+    /// Game_Player.prototype.canMove = function() {
+    ///     if ($gameMap.isEventRunning() || $gameMessage.isBusy()) {
+    ///         return false;
+    ///     }
+    ///     ...
+    /// };
+    /// </code>
+    /// <strong>so a runtime that keeps walking while a message is open lets
+    /// the player walk away from a conversation that is still happening.</strong>
+    /// </remarks>
+    public bool MessageHoldsPlayer => MessageVisible || ChoicePending;
+
+    /// <summary>
+    /// And the choice cursor follows the options it is counting against.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is reset when the question changes, not when the
+    /// runtime feels like it.</strong> A cursor left where the last answer was
+    /// would point at the wrong option of the next question -- and a question
+    /// with fewer options than the last one would leave it past the end.
+    /// </remarks>
+    private void SyncChoiceCursor()
+    {
+        var signatur = string.Join("\u001f", ChoiceOptions);
+        if (signatur != _choiceSignature)
+        {
+            _choiceSignature = signatur;
+            ChoiceIndex = 0;
+        }
+        if (ChoiceIndex >= ChoiceOptions.Count)
+        {
+            ChoiceIndex = Math.Max(0, ChoiceOptions.Count - 1);
+        }
+    }
+
+    /// <summary>
+    /// And whether a figure that stands in the way occupies a tile.
+    /// </summary>
+    /// <param name="pX">The tile the player would step onto.</param>
+    /// <param name="pY">And its row.</param>
+    /// <returns>Whether a normal-priority event is there.</returns>
+    /// <remarks>
+    /// <strong>And this is <c>isCollidedWithEvents</c>, measured in the
+    /// project's own <c>rmmz_objects.js</c>:</strong>
+    /// <code>
+    /// Game_CharacterBase.prototype.canPass = function(x, y, d) {
+    ///     ...
+    ///     if (this.isCollidedWithCharacters(x2, y2)) { return false; }
+    ///     return true;
+    /// };
+    /// Game_CharacterBase.prototype.isCollidedWithEvents = function(x, y) {
+    ///     const events = $gameMap.eventsXyNt(x, y);
+    ///     return events.some(event => event.isNormalPriority());
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>And the live position is what counts, not the one the map was
+    /// loaded with</strong> -- an event that walks around moves its tile with
+    /// it. <see cref="EventFigures"/> holds the characters the runtime moves;
+    /// the priority comes from the page the figure was read with.
+    /// </para>
+    /// </remarks>
+    private bool NormalPriorityEventAt(int pX, int pY)
+    {
+        // **And a figure is where the runtime last moved it**, not where the
+        // map was loaded with it.
+        foreach (var (id, gehalten) in EventFigures)
+        {
+            if (gehalten == null || gehalten.Erased
+                || gehalten.Through || gehalten.Transparent)
+            {
+                continue;
+            }
+            if (gehalten.X != pX || gehalten.Y != pY)
+            {
+                continue;
+            }
+            if (_eventPriority.TryGetValue(id, out var priorität) && priorität == 1)
+            {
+                return true;
+            }
+        }
+
+        // **And an event with no picture stands in the way too.** Measured in
+        // this project: Map002's events 6 and 7 are `priorityType 1` with an
+        // empty `characterName`, and `$gameMap.events()` is
+        // `this._events.filter(event => !!event)` -- which keeps them. The
+        // figure reader skips an event with no name on purpose, so they are
+        // not among <see cref="EventFigures"/> and the loop above cannot see
+        // them.
+        if (!Maps.TryGetValue(CurrentMapId, out var karte))
+        {
+            return false;
+        }
+
+        foreach (var ereignis in karte.Root.Member("events")?.Items
+            ?? new List<MzValue>())
+        {
+            if (ereignis.Member("x")?.IntOr(-1) != pX
+                || ereignis.Member("y")?.IntOr(-1) != pY)
+            {
+                continue;
+            }
+            var id = ereignis.Member("id")?.IntOr(-1) ?? -1;
+            if (EventFigures.ContainsKey(id))
+            {
+                // And a figure was already asked, at its live position.
+                continue;
+            }
+
+            var seiten = ereignis.Member("pages")?.Items
+                ?? new List<MzValue>();
+            for (var index = seiten.Count - 1; index >= 0; index--)
+            {
+                var seite = seiten[index];
+                if ((seite.Member("priorityType")?.IntOr(1) ?? 1) != 1)
+                {
+                    continue;
+                }
+                if (!MzMapFigureReader.Meets(
+                    seite.Member("conditions"), Facts, CurrentMapId, id))
+                {
+                    continue;
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// And the arrow keys and the decision key belong to the choice.
+    /// </summary>
+    /// <param name="pAction">The key that was pressed.</param>
+    /// <returns>Whether the choice took it.</returns>
+    /// <remarks>
+    /// <strong>And this is <c>Window_Selectable.processCursorMove</c> and
+    /// <c>Window_ChoiceList.processOk</c>:</strong> up and down move the
+    /// cursor, and the decision key takes the option it is on. Measured, the
+    /// engine's own <c>AnswerChoice</c> takes a branch counting from one, which
+    /// is why the cursor -- counting from zero -- is passed as
+    /// <c>ChoiceIndex + 1</c>.
+    /// </remarks>
+    private bool MoveChoiceCursor(
+        UniversalRPG.Rm2k.Input.Rm2kInputAction pAction)
+    {
+        SyncChoiceCursor();
+        var anzahl = ChoiceOptions.Count;
+        if (anzahl == 0)
+        {
+            return false;
+        }
+
+        switch (pAction)
+        {
+            case UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveDown:
+                ChoiceIndex = (ChoiceIndex + 1) % anzahl;
+                return true;
+            case UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveUp:
+                ChoiceIndex = (ChoiceIndex - 1 + anzahl) % anzahl;
+                return true;
+            case UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm:
+                return AnswerChoice(ChoiceIndex);
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
     /// What stopped the run, or an empty string while it runs.
     /// </summary>
     /// <remarks>
@@ -1404,6 +1619,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // nicht"**, **und 96 Routen tun gar nichts.**
         var figuren = new Dictionary<int, MzCharacter>();
         EventFigures = new Dictionary<int, MzCharacter?>();
+        _eventPriority.Clear();
         foreach (var figur in Figures)
         {
             // **Und die Figur traegt ihr Bild und ihren Index.**
@@ -1420,6 +1636,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
             held.EventId = figur.EventId;
             figuren[figur.EventId] = held;
             EventFigures[figur.EventId] = held;
+            _eventPriority[figur.EventId] = figur.PriorityType;
         }
 
         Facts = Facts.WithCharacters(figuren, Facts.Player);
@@ -4152,6 +4369,35 @@ public sealed class MzEngineRuntime : IEngineRuntime
             }
         }
 
+        // **And a message stops the player, and a choice takes the keys.**
+        //
+        // **And this is `Game_Player.prototype.canMove`, measured in the
+        // project's own `rmmz_objects.js`:**
+        //     if ($gameMap.isEventRunning() || $gameMessage.isBusy()) {
+        //         return false;
+        //     }
+        // **so the direction keys reach the player only when nothing is
+        // being said.** Measured before this: the runtime let the player walk
+        // away from an open dialogue, and an open choice could not be pointed
+        // at with the arrow keys at all.
+        if (ChoicePending)
+        {
+            return MoveChoiceCursor(pAction);
+        }
+        if (MessageVisible)
+        {
+            // **And the decision key takes the dialogue down**, which is
+            // `Window_Message.prototype.isTriggered`. Cancel does the same,
+            // because the engine's own test is
+            // `Input.isRepeated("ok") || Input.isRepeated("cancel")`.
+            if (pAction is UniversalRPG.Rm2k.Input.Rm2kInputAction.Confirm
+                or UniversalRPG.Rm2k.Input.Rm2kInputAction.Cancel)
+            {
+                return CloseMessage();
+            }
+            return false;
+        }
+
         // **Und Enter ist die Aktionstaste, und nicht "nichts".**
         //
         // **Und das ist `Input.isTriggered("ok")` in
@@ -4208,6 +4454,21 @@ public sealed class MzEngineRuntime : IEngineRuntime
         var zielX = PlayerX + dx;
         var zielY = PlayerY + dy;
         if (!MzSpielerZug.IstGueltig(zielX, zielY, breite, hoehe))
+        {
+            return false;
+        }
+
+        // **And a figure with priorityType 1 stands in the way.**
+        //
+        // **Und das ist der Grund, warum ein NPC nie ansprechbar war:**
+        // gemessen lief der Spieler in Camellias Map004 geradeaus ueber
+        // Ereignis 14 -- und weil `checkEventTriggerHere` nur
+        // nicht-normale Ereignisse startet (`normal = false`), waehrend
+        // `checkEventTriggerThere` normale verlangt (`normal = true`),
+        // konnte weder sein Dialog noch seine Ja/Nein-Wahl je aufgehen.
+        // **Der Held dreht sich weiterhin** -- `PlayerDirection` steht
+        // schon oben -- **und geht nur nicht.**
+        if (NormalPriorityEventAt(zielX, zielY))
         {
             return false;
         }
@@ -4479,7 +4740,23 @@ public sealed class MzEngineRuntime : IEngineRuntime
         if (bestaetigt && !Facts.MessageBusy && !Facts.ChoicePending
             && Laeufer.Count == 0)
         {
-            RunPage(StartMode.ActionButton);
+            // **And this is `triggerButtonAction`, and it asks two tiles.**
+            //
+            // **Und `DruckeKnopf()` ist genau das, und es war geschrieben,
+            // getestet und von niemandem gerufen.** Gemessen an der Engine:
+            // `triggerButtonAction` ruft erst `checkEventTriggerHere([0])`
+            // -- die Kachel unter dem Spieler, und nur eine Seite, die
+            // NICHT normal ist -- **und danach `checkEventTriggerThere(
+            // [0, 1, 2])`, die Kachel davor, und nur eine Seite, die
+            // normal ist.** `RunPage(StartMode.ActionButton)` fragte
+            // dagegen **nur die Kachel unter dem Spieler und ohne jede
+            // Prioritaetsregel** -- **und darum konnte der Spieler keinen
+            // NPC ansprechen, den er korrekt nicht betreten kann.**
+            _actionButtonReport.Clear();
+            foreach (var zeile in DruckeKnopf())
+            {
+                _actionButtonReport.Add(zeile);
+            }
         }
         if (fort > 0)
         {

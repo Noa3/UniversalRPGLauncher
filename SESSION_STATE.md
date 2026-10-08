@@ -1,5 +1,85 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the game talks, and the player cannot walk through people
+
+**And this closes the largest MV/MZ gap, and finds the reason NPCs were
+unreachable.**
+
+**1. The runtime's text reached the screen for the first time.** Measured
+before: `MessageText`, `MessageVisible`, `ChoiceOptions`, `ChoicePending` and
+`CloseMessage()` existed and were tested, and
+`grep -rnE "mz\.(MessageText|ChoiceOptions)" project/app/` found **nothing** --
+the presentation block belonged to RM2K. `Main.cs` now calls
+`_gameScreen.SetPresentation` with the MZ state, so a real dialogue appears:
+
+```
+MZ message on screen: "This passage is weird... I can hear chatter?"
+```
+
+**2. And the player is held while it is up.** Measured in the project's own
+`rmmz_objects.js`:
+
+```js
+Game_Player.prototype.canMove = function() {
+    if ($gameMap.isEventRunning() || $gameMessage.isBusy()) { return false; }
+    ...
+};
+```
+
+Before this the direction keys walked the player away from an open
+conversation. Now `MessageHoldsPlayer` is the gate, and a direction key is not
+the message's to take.
+
+**3. And a choice has a cursor.** `ChoiceIndex` plus `MoveChoiceCursor`: up and
+down move it, the decision key answers the branch it is on, and a new question
+resets it. Before this a choice was answerable *by number* and the arrow keys
+moved the *player*.
+
+**4. And the reason no NPC could be talked to, found by measurement.**
+`Game_CharacterBase.canPass` checks the characters, not only the map:
+
+```js
+if (this.isCollidedWithCharacters(x2, y2)) { return false; }
+// isCollidedWithEvents: $gameMap.eventsXyNt(x, y).some(e => e.isNormalPriority())
+```
+
+The runtime checked tile flags and nothing else, so the player walked **through**
+every event. And that is exactly what broke the action button: the engine's
+`triggerButtonAction` asks `checkEventTriggerHere([0])` -- the standing tile,
+**non-normal pages only** -- and then `checkEventTriggerThere([0, 1, 2])` -- the
+tile in front, **normal pages only**. A player standing on the event asked the
+wrong question and got nothing.
+
+Two fixes, both measured:
+
+- `NormalPriorityEventAt` refuses the step, and it covers **events with no
+  picture** too (Map002's events 6 and 7 are `priorityType 1`, unconditional and
+  have an empty `characterName` -- and `$gameMap.events()` keeps them).
+- The tick now calls **`DruckeKnopf()`**, which was written, tested and called
+  by nobody. `RunPage(StartMode.ActionButton)` had asked only the standing tile
+  and had no priority rule at all.
+
+Measured end to end:
+
+```
+MZ collision: player at 4/13
+MZ collision: after pressing down the player is 4/13 facing 2
+MZ collision: talking to it gives "Going back into the village now would only
+MZ collision: report=[event 6: ran to its end, 1 commands] visible=False busy=False blockBusy=True
+```
+
+**And the last line is an open inconsistency, not a success.** The press reached
+the page in front of the player, and the page **ran to its end after one
+command** instead of holding for the message to be dismissed:
+`Facts.LastDialogue.IsBusy` is true while `Facts.MessageBusy` is false. The
+autorun path (Map003) holds correctly -- `Test_EinDialogHaeltDenSpieler` proves
+it -- so this is specific to a page started by the action button.
+
+**Open, with its evidence:** why a page started by the action button runs past
+its `101` instead of entering `MzWaitMode.Message`.
+
+**Canonical suite: all 2729 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the title's command list is drawn (this turn, pushed)
 
 **And the gap is closed: the runtime's list now reaches the window.**

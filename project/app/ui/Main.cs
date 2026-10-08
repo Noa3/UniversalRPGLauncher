@@ -951,6 +951,20 @@ public partial class Main : Control
 			{
 				_gameScreen.SetCommandWindow(0, 0, 0, 0, 0, null, 0);
 			}
+
+			// **Und der Dialog und die Wahl des Spiels kommen in die Anzeige.**
+			//
+			// **Und das war die groesste Luecke:** die Runtime hatte
+			// `MessageText`, `ChoiceOptions` und `CloseMessage()` -- alle
+			// getestet -- **und keine Ansicht las eine davon.** Der
+			// Anzeige-Block darunter gehoert zu RM2K, also lief ein MZ-Spiel
+			// stumm: man konnte herumlaufen und es wurde nie etwas gesagt.
+			// `SetPresentation` nimmt nur Zustand, also geht derselbe Weg.
+			_gameScreen.SetPresentation(
+				mz.MessageVisible, mz.MessageText,
+				mz.ChoicePending ? mz.ChoiceOptions : null,
+				mz.ChoicePending ? mz.ChoiceIndex : -1,
+				false, 0);
 		}
 		else
 		{

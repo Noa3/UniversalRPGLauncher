@@ -647,13 +647,45 @@ public partial class TestMzEchtesSpielStartet : TestBase
         //
         // **Und `Here` heisst die Kachel des Spielers, und `There` die
         // Kachel davor** -- **und Ereignis 14 steht bei `(2, 12)`, gemessen
-        // an den Daten des Spiels.**  **Der Aktionsknopf loest also nur
-        // Ereignisse aus, auf denen der Spieler steht oder vor denen er
-        // steht**, **und ein Test, der ihn von (4, 11) drueckt, prueft
-        // eine Karte, auf der nichts ausgeloest werden kann.**
-        AssertTrue(runtime.Transfer(4, 2, 12),
-            $"the transfer to the event's own tile succeeds: {runtime.AutorunProblem}");
+        // an den Daten des Spiels.**
+        //
+        // **Und hier stand vorher `Transfer(4, 2, 12)`, also AUF die Kachel
+        // des Ereignisses -- und das war falsch, und zwar doppelt:**
+        // gemessen ist `priorityType 1` auf dieser Seite, und
+        // `checkEventTriggerHere([0])` startet nur eine Seite, die NICHT
+        // normal ist, **waehrend `checkEventTriggerThere([0, 1, 2])` eine
+        // normale verlangt** -- **und ausserdem kann der Spieler auf einer
+        // normalen Seite gar nicht stehen, weil
+        // `Game_CharacterBase.canPass` sie als Hindernis liest.**
+        // **Der Test lief nur, weil `RunPage(StartMode.ActionButton)`
+        // keine Prioritaetsregel hatte -- also pruefte er eine Regel, die
+        // die Engine nicht hat.**
+        //
+        // **Und darum steht der Spieler jetzt daneben und sieht hin:**
+        // `Transfer` setzt ihn auf (2, 13), und der Richtungsschritt nach
+        // oben wird verweigert und dreht ihn nur -- **genau so, wie es
+        // einem Spieler ergeht, der einen NPC anspricht.**
+        //
+        // **Und der Schalter kommt VOR dem Aufstellen, und das ist der
+        // ganze Punkt:** eine Seite, deren Bedingung nicht erfuellt ist,
+        // ist keine Seite -- sie traegt keine Prioritaet und blockiert
+        // nichts, **und darum lief der Spieler hier vorher bis auf die
+        // Kachel des Ereignisses durch.**
+        //
+        // **Und `command121` ist der Befehl, der ihn setzt.**
+        runtime.SchalteEin(3);
+
+        AssertTrue(runtime.Transfer(4, 2, 13),
+            $"the transfer beside the event succeeds: {runtime.AutorunProblem}");
         AssertEq(runtime.CurrentMapId, 4, "and the player stands on it");
+        runtime.Update(1.0 / 60.0);
+        runtime.SubmitInput(UniversalRPG.Rm2k.Input.Rm2kInputAction.MoveUp);
+        runtime.Update(1.0 / 60.0);
+        Console.WriteLine($"MZ choice: player at {runtime.PlayerX}/{runtime.PlayerY} "
+            + $"facing {runtime.PlayerDirection}");
+        AssertEq(runtime.PlayerX, 2, "the player stands beside the event");
+        AssertEq(runtime.PlayerY, 13, "on the tile below it");
+        AssertEq(runtime.PlayerDirection, 8, "and faces it");
 
         //
         // **Und die Seite von Map004 Ereignis 14 verlangt Schalter 3,
@@ -664,8 +696,6 @@ public partial class TestMzEchtesSpielStartet : TestBase
         // **Und gemessen ist, dass `RunPage` das noetige Recht hat,
         // `CommandPage` zu starten, und ohne Schalter keine Seite
         // laeuft** -- **das ist nicht am Test, sondern am Spiel.**
-        runtime.SchalteEin(3);
-
         var gefunden = false;
         IReadOnlyList<string> optionen = [];
         for (var frame = 0; frame < 20000 && !gefunden; frame++)

@@ -509,6 +509,21 @@ public partial class Rm2kGameScreen : Control
         return _mapTexture;
     }
 
+    /// <summary>
+    /// And what the screen is showing, for a caller that must check it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this exists so a dialogue can be asserted without a
+    /// screen.</strong> Measured before this, an MZ game's text was modelled,
+    /// tested and never shown: nothing under <c>project/app</c> read
+    /// <c>MessageText</c> or <c>ChoiceOptions</c>, and the presentation block
+    /// belonged to RM2K. What a test can check is that the game's own text and
+    /// its own options arrived here at all.
+    /// </remarks>
+    public (bool MessageVisible, string Message, IReadOnlyList<string> Choices, int Selected)
+        Presentation() =>
+        (_messageVisible, _messageText, _choiceOptions, _choiceSelected);
+
     /// <summary>And the presentation state the screen shows.</summary>
     public void SetPresentation(
         bool pMessageVisible, string pMessage,

@@ -137,6 +137,22 @@ public sealed class MzMapFigure
     /// </remarks>
     public int Trigger { get; init; }
 
+    /// <summary>
+    /// And whether the page stands in the way, which is <c>priorityType: 1</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is <c>isNormalPriority()</c>, measured in the
+    /// engine's own <c>rmmz_objects.js</c> as <c>this._priorityType ===
+    /// 1</c>.</strong> It decides two things at once: whether the player may
+    /// step onto the event's tile at all, and whether the action button
+    /// reaches it -- <c>startMapEvent(x, y, triggers, normal)</c> only starts
+    /// an event whose <c>isNormalPriority()</c> equals the <c>normal</c> the
+    /// caller asked for. Measured on Camellia's Map004 event 14: <c>trigger 0</c>
+    /// with <c>priorityType 1</c>, so it is talked to from beside it and
+    /// <em>cannot</em> be walked onto.
+    /// </remarks>
+    public int PriorityType { get; init; } = 1;
+
     /// <summary>Which page this is, counted from zero.</summary>
     /// <remarks>
     /// <strong>And the engine shows the last matching page, not the
@@ -274,6 +290,7 @@ public static class MzMapFigureReader
                     MoveFrequency = seite.Member("moveFrequency")?.IntOr(6) ?? 6,
                     Route = ReadRoute(seite.Member("moveRoute")),
                     Trigger = seite.Member("trigger")?.IntOr(0) ?? 0,
+                    PriorityType = seite.Member("priorityType")?.IntOr(1) ?? 1,
                     PageIndex = index,
                 });
 
