@@ -68,8 +68,36 @@ asserts exactly the misreading, and cites a line the engine does not have.
 change.** The measurements the card needs are all in this checkpoint and in the
 remark in `MzSeitenStart`.
 
-**And the migration was attempted, and it is NOT done -- this is exactly where
-it stands.** Measured in the attempt: **45 failures, then 41, then 11, then 7**
+**Third pass, on a branch: `feat/mz-trigger-numbering` (`3de60a4`, pushed).**
+The numbering is applied there and six of nine suites are migrated -- **41
+failures down to 7**, in three tests. `main` stays green; the branch is where
+the work lives, and it is a work branch and not a merge candidate.
+
+**What that pass established, so the next one does not repeat it:**
+
+- `MzTestOpening.Durchlassen` is the helper for the opening, and **it has to be
+  called after the transfer, not after `Start()`** -- measured `let 0
+  message(s) through` when it ran behind the title screen.
+- Map003's narrative page is reached by **stepping onto `(6,7)`**. Its trigger
+  is 2 and the engine starts it through
+  `Game_Player.checkEventTriggerTouch` -> `startMapEvent(x, y, [1, 2], false)`,
+  **where the `false` is the normal flag that matches its priority 0.**
+- Suites that count pages must count **relative to the start map's opening**:
+  measured `the start map ran 1 page(s) before map 3`.
+
+**And two defects were found on the way and are on the branch, unfixed:**
+
+- **`Betrete`'s second scan starts trigger-0 pages on arrival**
+  (`if (trigger != 0) continue` is an accept), while the engine's
+  `updateNonmoving` asks only `[1, 2]`. **And the remark above that scan claims
+  the opposite of what the code does.**
+- **The remark at `checkEventTriggerTouch` says Map003's two trigger-2 pages
+  "can never start this way ... reachable through their trigger-0 siblings and
+  nothing else".** That is wrong: it confuses the event's own check (which needs
+  priority 1) with the player's `startMapEvent(x, y, [1, 2], false)`, which
+  takes the normal flag as a parameter and matches priority 0.
+
+**And the earlier attempt, for the record -- it is NOT done.** Measured in the attempt: **45 failures, then 41, then 11, then 7**
 -- and the last five suites are the ones that need real thought rather than an
 edit:
 
