@@ -772,11 +772,25 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     public string TitleCommandSource { get; private set; } = "";
 
-    /// <summary>The screen the engine draws a title on.</summary>
-    public const int ScreenWidth = 816;
+    /// <summary>And the screen a project with no size of its own gets.</summary>
+    /// <remarks>
+    /// <strong>And the size is the project's, not this reader's.</strong>
+    /// Measured: Camellia is 816x624 and Skies is <strong>1280x720</strong>,
+    /// and a runtime that painted both at 816x624 scaled the second one's
+    /// title image down and put its command window off the right edge.
+    /// </remarks>
+    public const int DefaultScreenWidth = 816;
 
-    /// <summary>The screen the engine draws a title on.</summary>
-    public const int ScreenHeight = 624;
+    /// <summary>And the height of a project with no size of its own.</summary>
+    public const int DefaultScreenHeight = 624;
+
+    /// <summary>
+    /// And the screen this project draws on, out of its own System.json.
+    /// </summary>
+    public int ScreenWidth { get; private set; } = DefaultScreenWidth;
+
+    /// <summary>And its height.</summary>
+    public int ScreenHeight { get; private set; } = DefaultScreenHeight;
 
     /// <summary>The map a new game starts on.</summary>
     private int _startMapId = -1;
@@ -813,6 +827,19 @@ public sealed class MzEngineRuntime : IEngineRuntime
         TitleImageName = system.Root.Member("title1Name")?.StringOr("") ?? "";
         TitleOverlayName = system.Root.Member("title2Name")?.StringOr("") ?? "";
         GameTitle = system.Root.Member("gameTitle")?.StringOr("") ?? "";
+
+        // **And the screen is the project's own, not this reader's.**
+        // Measured at `$dataSystem.advanced`: Camellia writes 816x624 and
+        // Skies writes 1280x720, and the second one's title image and command
+        // window only land where its author put them at its own size.
+        var advanced = system.Root.Member("advanced");
+        var breite = advanced?.Member("screenWidth")?.IntOr(0) ?? 0;
+        var hoehe = advanced?.Member("screenHeight")?.IntOr(0) ?? 0;
+        if (breite > 0 && hoehe > 0)
+        {
+            ScreenWidth = breite;
+            ScreenHeight = hoehe;
+        }
 
         ReadTitleCommands();
     }

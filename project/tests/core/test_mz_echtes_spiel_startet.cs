@@ -448,8 +448,8 @@ public partial class TestMzEchtesSpielStartet : TestBase
         AssertTrue(runtime.TitleVisible,
             $"the title screen is on the frame: {runtime.TitleProblem}");
         var titel = runtime.PaintedMap;
-        AssertTrue(titel != null && titel.Width == MzEngineRuntime.ScreenWidth
-            && titel.Height == MzEngineRuntime.ScreenHeight,
+        AssertTrue(titel != null && titel.Width == runtime.ScreenWidth
+            && titel.Height == runtime.ScreenHeight,
             "the title frame is the engine's own screen");
         if (titel == null)
         {
@@ -869,5 +869,81 @@ public partial class TestMzEchtesSpielStartet : TestBase
             "the second MZ game paints a frame as well");
         Console.WriteLine($"Fatal Fantasy: {map?.Width}x{map?.Height}, "
             + $"colours={runtime.PaintedColours}, reason={runtime.PaintReason}");
+    }
+
+    /// <summary>
+    /// And the screen is the project's own size, not the reader's.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this was a real defect.</strong> The runtime painted every
+    /// project at 816x624, and measured at <c>$dataSystem.advanced</c> the big
+    /// project writes <strong>1280x720</strong> -- so its title image was
+    /// scaled down and its command window, at the author's own
+    /// <c>offsetX 382</c>, landed off the right edge of a screen it did not
+    /// fit. A project that writes no size of its own still gets 816x624, which
+    /// is what MV writes nowhere because it is always that size.
+    /// </remarks>
+    public void Test_DieBildschirmgroesseIstDieDesProjekts()
+    {
+        if (!Vorhanden())
+        {
+            return;
+        }
+
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Projekt,
+            EngineId = EnginePluginIds.RpgMakerMz,
+            Generation = "mz",
+            DetectorScore = 850,
+        });
+        AssertTrue(started.Success, $"the MZ game starts: {started.Error?.Message}");
+        if (!started.Success)
+        {
+            return;
+        }
+        var runtime = (MzEngineRuntime)host.Runtime!;
+        Console.WriteLine($"Camellia screen: {runtime.ScreenWidth}x{runtime.ScreenHeight}");
+        AssertEq(runtime.ScreenWidth, 816, "Camellia is 816 wide");
+        AssertEq(runtime.ScreenHeight, 624, "and 624 high");
+
+        const string Skies =
+            "D:/NextCloud/Games/PornGames/SkiesInflateableAdventure";
+        if (!File.Exists(Skies + "/data/System.json"))
+        {
+            return;
+        }
+
+        using var grosserHost = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var grossGestartet = grosserHost.Start(new PluginGameInfo
+        {
+            GameDirectory = Skies,
+            EngineId = EnginePluginIds.RpgMakerMz,
+            Generation = "mz",
+            DetectorScore = 850,
+            PresentTitleScreen = true,
+        });
+        AssertTrue(grossGestartet.Success,
+            $"the big MZ game starts: {grossGestartet.Error?.Message}");
+        if (!grossGestartet.Success)
+        {
+            return;
+        }
+        var gross = (MzEngineRuntime)grosserHost.Runtime!;
+        Console.WriteLine($"Skies screen: {gross.ScreenWidth}x{gross.ScreenHeight}");
+        AssertEq(gross.ScreenWidth, 1280, "and the big project is 1280 wide");
+        AssertEq(gross.ScreenHeight, 720, "and 720 high");
+        // **And the title it paints is that size**, which is what the defect
+        // was about: measured before this fix, the big project's 1280x720
+        // title was scaled down onto 816x624.
+        var grossTitel = gross.PaintedMap;
+        Console.WriteLine($"Skies title frame: "
+            + $"{grossTitel?.Width}x{grossTitel?.Height} visible={gross.TitleVisible}");
+        AssertTrue(grossTitel != null && grossTitel.Width == 1280
+                && grossTitel.Height == 720,
+            "and the title it paints is 1280x720, not the reader's default");
     }
 }
