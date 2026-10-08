@@ -1684,6 +1684,7 @@ public sealed class MzEngineRuntime : IEngineRuntime
         }
 
         PaintFigures(pixel);
+        PicturesDrawn = PaintPictures(pixel);
         PaintedMap = pixel;
         return true;
     }
@@ -4260,6 +4261,231 @@ public sealed class MzEngineRuntime : IEngineRuntime
 
     /// <summary>The sheet the player is drawn from, decoded on first use.</summary>
     public MzCharacterSheet? PlayerSheet => SheetNamed(PlayerSheetName);
+
+    /// <summary>And the picture sheets, decoded on first use.</summary>
+    private readonly Dictionary<string, MzCharacterSheet?> _pictureSheets = new();
+
+    /// <summary>
+    /// And the image a picture shows, out of the project's own
+    /// <c>img/pictures</c>.
+    /// </summary>
+    /// <param name="pName">The name <c>showPicture</c> was given.</param>
+    /// <returns>The image, or null when the project has no such file.</returns>
+    /// <remarks>
+    /// <strong>And this is the same path a character sheet takes</strong> --
+    /// read the file, decrypt it with the project's key, decode the PNG --
+    /// because <c>ImageManager.loadPicture</c> is
+    /// <c>this.loadBitmap("img/pictures/", filename)</c> and nothing else.
+    /// <strong>And a name the project does not have is remembered as
+    /// such</strong>, so a picture whose file is missing is not searched for
+    /// again every frame.
+    /// </remarks>
+    public MzCharacterSheet? PictureSheet(string pName)
+    {
+        if (string.IsNullOrEmpty(pName))
+        {
+            return null;
+        }
+        if (_pictureSheets.TryGetValue(pName, out var bekannt))
+        {
+            return bekannt;
+        }
+
+        MzCharacterSheet? blatt = null;
+        var schluessel = EncryptionKey();
+        foreach (var dateiname in MzMapRenderer.TilesetFileNames(pName))
+        {
+            var pfad = Path.Combine(
+                _game.GameDirectory, "img", "pictures", dateiname);
+            if (!File.Exists(pfad))
+            {
+                continue;
+            }
+            var bild = MzImageReader.Read(
+                File.ReadAllBytes(pfad), schluessel, out var _);
+            if (bild != null && MzCharacterSheet.Read(bild, out blatt, out var _))
+            {
+                break;
+            }
+            blatt = null;
+        }
+
+        _pictureSheets[pName] = blatt;
+        return blatt;
+    }
+
+    /// <summary>
+    /// And the pictures the game shows, drawn over the map and its figures.
+    /// </summary>
+    /// <param name="pPixels">The frame to draw onto.</param>
+    /// <returns>How many pictures were drawn.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>Sprite_Picture</c>, measured in the project's
+    /// own <c>rmmz_sprites.js</c>:</strong>
+    /// </para>
+    /// <code>
+    /// Sprite_Picture.prototype.updatePosition = function() {
+    ///     const picture = this.picture();
+    ///     this.x = Math.round(picture.x());
+    ///     this.y = Math.round(picture.y());
+    /// };
+    /// Sprite_Picture.prototype.updateOrigin = function() {
+    ///     const picture = this.picture();
+    ///     if (picture.origin() === 0) { this.anchor.x = 0; this.anchor.y = 0; }
+    ///     else { this.anchor.x = 0.5; this.anchor.y = 0.5; }
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>so origin 0 puts the picture's upper left corner on (x, y),
+    /// and origin 1 -- the editor's default -- puts its <em>centre</em>
+    /// there.</strong> Measured in this project's data:
+    /// <c>[2, "credits", 0, 0]</c> is origin 0, and Skies' intro is built from
+    /// 168 of them.
+    /// </para>
+    /// <para>
+    /// <strong>And the pictures are drawn in the order the screen holds
+    /// them</strong>, which for pictures shown one after another is the order
+    /// the game showed them in. The engine keeps a sprite per picture and a
+    /// picture shown again keeps the sprite it already had, so a re-shown
+    /// picture stays where it was in that order -- and this does the same,
+    /// because the screen's own order is the order the slots were first taken.
+    /// </para>
+    /// <para>
+    /// <strong>And not drawn: the blend modes.</strong> The engine has four
+    /// (<c>0</c> normal, <c>1</c> add, <c>2</c> multiply, <c>3</c> screen) and
+    /// this draws normal, which is what the great majority of pictures use.
+    /// </para>
+    /// </remarks>
+    public int PaintPictures(Rm2kPixelBuffer pPixels)
+    {
+        if (pPixels == null)
+        {
+            return 0;
+        }
+
+        var gezeichnet = 0;
+        foreach (var (_, bild) in Facts.Screen.Pictures)
+        {
+            if (bild == null || bild.Name.Length == 0 || bild.Opacity <= 0)
+            {
+                continue;
+            }
+            var blatt = PictureSheet(bild.Name);
+            if (blatt == null)
+            {
+                continue;
+            }
+            if (BlitPicture(blatt, bild, pPixels))
+            {
+                gezeichnet++;
+            }
+        }
+
+        return gezeichnet;
+    }
+
+    /// <summary>And how many pictures the last frame had to draw.</summary>
+    public int PicturesDrawn { get; private set; }
+
+    /// <summary>And one picture, onto the frame.</summary>
+    private static bool BlitPicture(
+        MzCharacterSheet pBlatt, MzScreen.Picture pBild,
+        Rm2kPixelBuffer pPixels)
+    {
+        var skalaX = Math.Max(1, pBild.ScaleX);
+        var skalaY = Math.Max(1, pBild.ScaleY);
+        var breite = Math.Max(1, (int)((long)pBlatt.Width * skalaX / 100));
+        var hoehe = Math.Max(1, (int)((long)pBlatt.Height * skalaY / 100));
+
+        // **And the anchor decides which corner stands on (x, y).**
+        var links = pBild.X;
+        var oben = pBild.Y;
+        if (pBild.Origin == 1)
+        {
+            links -= breite / 2;
+            oben -= hoehe / 2;
+        }
+        else if (pBild.Origin >= 2)
+        {
+            links -= breite;
+            oben -= hoehe;
+        }
+
+        var deckkraft = Math.Clamp(pBild.Opacity, 0, 255);
+        var gezeichnet = false;
+        for (var dy = 0; dy < hoehe; dy++)
+        {
+            var zielY = oben + dy;
+            if (zielY < 0 || zielY >= pPixels.Height)
+            {
+                continue;
+            }
+            var quelleY = (int)((long)dy * 100 / skalaY);
+            if (quelleY >= pBlatt.Height)
+            {
+                continue;
+            }
+            for (var dx = 0; dx < breite; dx++)
+            {
+                var zielX = links + dx;
+                if (zielX < 0 || zielX >= pPixels.Width)
+                {
+                    continue;
+                }
+                var quelleX = (int)((long)dx * 100 / skalaX);
+                if (quelleX >= pBlatt.Width)
+                {
+                    continue;
+                }
+                if (!pBlatt.TryGetPixel(quelleX, quelleY, out var farbe)
+                    || farbe[3] == 0)
+                {
+                    continue;
+                }
+                MischeBild(pPixels, zielX, zielY, farbe, deckkraft);
+                gezeichnet = true;
+            }
+        }
+
+        return gezeichnet;
+    }
+
+    /// <summary>And one pixel of a picture, laid over what is already there.</summary>
+    /// <remarks>
+    /// <strong>And the image's own alpha and the picture's opacity are two
+    /// different things:</strong> <c>farbe[3]</c> is what the file says, and
+    /// <see cref="MzScreen.Picture.Opacity"/> is what <c>showPicture</c> was
+    /// given. The engine's <c>Sprite.opacity</c> multiplies them, and so does
+    /// this.
+    /// </remarks>
+    private static void MischeBild(
+        Rm2kPixelBuffer pPixels, int pX, int pY, byte[] pFarbe, int pDeckkraft)
+    {
+        if (pDeckkraft >= 255)
+        {
+            pPixels.TrySetPixel(pX, pY, pFarbe[0], pFarbe[1], pFarbe[2], pFarbe[3]);
+            return;
+        }
+
+        var i = (pY * pPixels.Width + pX) * 4;
+        var zielA = pPixels.Pixels[i + 3];
+        var quelleA = pFarbe[3] * pDeckkraft / 255;
+        var neuA = quelleA + zielA * (255 - quelleA) / 255;
+        if (neuA <= 0)
+        {
+            pPixels.TrySetPixel(pX, pY, 0, 0, 0, 0);
+            return;
+        }
+
+        var rest = zielA * (255 - quelleA) / 255;
+        pPixels.TrySetPixel(
+            pX, pY,
+            (byte)((pFarbe[0] * quelleA + pPixels.Pixels[i] * rest) / neuA),
+            (byte)((pFarbe[1] * quelleA + pPixels.Pixels[i + 1] * rest) / neuA),
+            (byte)((pFarbe[2] * quelleA + pPixels.Pixels[i + 2] * rest) / neuA),
+            (byte)neuA);
+    }
 
     /// <summary>Which character in that sheet the player is.</summary>
     public int PlayerIndex { get; private set; }

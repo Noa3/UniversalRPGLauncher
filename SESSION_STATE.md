@@ -1,5 +1,52 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the game's pictures are drawn
+
+**And this was the largest thing a running game showed and this runtime did
+not.** Measured in the three test projects: **Skies asks for 168 pictures** --
+its whole intro is built from them -- **LegalTruck for 116 and Camellia for
+4**. The runtime modelled every one of them, with origin, scale and opacity,
+and drew none of them.
+
+**And the placement is the engine's own**, measured in the project's own
+`rmmz_sprites.js`:
+
+```js
+Sprite_Picture.prototype.updatePosition = function() {
+    const picture = this.picture();
+    this.x = Math.round(picture.x());
+    this.y = Math.round(picture.y());
+};
+Sprite_Picture.prototype.updateOrigin = function() {
+    const picture = this.picture();
+    if (picture.origin() === 0) { this.anchor.x = 0; this.anchor.y = 0; }
+    else { this.anchor.x = 0.5; this.anchor.y = 0.5; }
+};
+```
+
+so origin 0 puts the picture's upper-left corner on (x, y), and origin 1 --
+**the editor's default** -- puts its **centre** there.
+
+**Measured, on a real picture of the project** (`Illustration`, 1632x1248,
+read out of `img/pictures` with the project's own key):
+
+```
+MZ picture origin 0 at 64,64: columns up to 60 changed 0 pixels, up to 200 changed 18496
+MZ picture origin 1 at 64,64: columns up to 60 changed 12000 pixels
+MZ picture: drawn=1   missing file: 0   opacity 0: 0   opacity 128: 1
+```
+
+**And the first measurement of this was wrong, and the code was right.** The
+first test counted *opaque* pixels and reported `40000 -> 40000` -- because a
+map covers the whole frame and every pixel of it is opaque, so alpha cannot
+tell a picture from the map under it. The measure is **changed** pixels.
+
+**And not drawn: the blend modes.** The engine has four (0 normal, 1 add,
+2 multiply, 3 screen); this draws normal, which is what the great majority of
+pictures use. Recorded rather than implied.
+
+**Canonical suite: all 2732 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — a started page waits at its dialogue
 
 **And the last open item from the previous checkpoint is closed.**
