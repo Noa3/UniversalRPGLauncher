@@ -90,6 +90,25 @@ opening runs 22 commands, and in that time no rain fell and no balloon moved.
 They now tick in every frame, and the guard covers only the screen's own
 effects. **Verified on its own: all 2756 tests pass.**
 
+**Second attempt, same conclusion, and one new measurement.** The numbers were
+applied again and worked suite by suite; the count fell 45 -> 41 -> 11 -> 7 ->
+4. **And `TestRealMzPageRun`'s two remaining failures share one measurement
+worth having:** `GoTo(3)` reports **`1 page(s) ran, the last being 5`** --
+**Map003's event 5, which is `trigger 0` and must not start by itself.** The
+scans in `Betrete` and `DruckeKnopf` pass the engine's own groups (`[1, 2]` and
+`[0]`/`[0, 1, 2]`), so **whatever starts event 5 on arrival is a separate
+defect, and it is not the numbering.** Finding it is the first step of the next
+attempt.
+
+**And this is a stop, not a third guess:** two materially different attempts,
+the same signature, both reverted -- which is what this repository's
+anti-loop rule asks for. **What the next attempt needs, in order:** (1) find
+what starts Map003's event 5 on arrival; (2) the four numbers; (3)
+`Test_DieAutorunSeiteEinerKarteLaeuftUndTraegtDieErzaehlung` walks onto `(6,7)`
+instead of calling `RunPage(Autorun)` -- that edit is written, measured and was
+green in isolation; (4) account for the start map's opening in the suites that
+count pages.
+
 **Canonical suite: all 2756 tests pass.**
 
 ### CHECKPOINT 2026-10-08 — the menu, and the facts object that drifted
