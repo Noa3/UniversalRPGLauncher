@@ -1,5 +1,74 @@
 ## Current card
 
+### CHECKPOINT 2026-10-07 — the plugin sandbox (`86d747c`, pushed)
+
+**And this is the one place a game's own code is executed.** The user asked
+for it on 2026-10-07 and accepted the risk, and **AGENTS.md now records the
+decision and its limits**: a game's plugin JavaScript may run while that game
+runs; detection and parsing still execute nothing.
+
+**Why it is needed.** Reading a plugin's *parameters* gives the name of a menu
+entry. It does not give what the plugin *does* — and a game's menus, windows
+and messages are what its plugins make them.
+
+**How it is safe.** `MzPluginHost` uses **Jint**, a pure managed JavaScript
+engine with no native dependency. The script is given **no host API at all**:
+no file, no network, no process, no `require`. It gets the engine's own
+`js/rmmz_*.js`, the project's data files as globals, and the plugins — and is
+bounded by a 30 s timeout, a 768 MiB memory limit and a 50 M statement budget.
+The stand-ins (`Sandkasten`) exist because a run named them: `rmmz_core.js`
+failed with *PIXI is not defined*, so the rendering library hands out a
+function for whatever it is asked for, and the browser answers and forgets.
+
+**Measured, on the real project (81 plugins, 72 active):**
+
+| | |
+|---|---|
+| engine files | 6 of 6, all execute |
+| plugins loaded | **71 of 72 in 3310 ms**, the 17 obfuscated VisuStella files included |
+| plugins failed | 1 — `VisuMZ_4_Debugger`: *Cannot read property 'slice' of undefined* |
+| defined afterwards | `Window_TitleCommand`, `Scene_Title`, **`Scene_Menu`**, `Game_Map`, **`Window_MenuCommand`**, `$dataSystem` |
+
+**And the two files in bold are the point:** the sandbox has `Scene_Menu` and
+`Window_MenuCommand`, which the native runtime does not implement at all.
+
+**Still open, and not claimed as done:**
+
+- **Reading a plugin-modified list back out of the sandbox is not built yet.**
+  Driving `Window_TitleCommand` far enough to read its final command list
+  needs more of the window environment (it throws on `$gameSystem`/`Term` lookups
+  once the plugins have patched `makeCommandList`). The engine and the plugins
+  execute; asking them a finished question is the next step.
+- The one failing plugin is a **debugger** and is expected to want a dev
+  environment.
+
+### CHECKPOINT 2026-10-07 — the title cursor (`525d30b`, pushed)
+
+**And the boundary, stated once more because it was asked:** the runtime
+**reads** a game's `js/plugins.js` as data — it is the JSON the editor
+writes — and **never loads, parses, evaluates or executes** a plugin's
+JavaScript. What is read out of it is only *what the author named a menu
+entry* and *whether he wanted it on the title window*. Nothing about a
+plugin's behaviour is reproduced, and that is why a command whose scene is
+plugin code is refused instead of faked.
+
+**The title cursor.** The commands were on the frame and the cursor was not,
+so a confirmation started a new game whichever line was showing.
+
+- `MoveTitleCursor` is `Window_Selectable.processCursorMove` on a one-column
+  list. Measured: the wrap flag is `Input.isTriggered`, so a **fresh press
+  wraps and a held repeat does not**. Every key this runtime sees is a fresh
+  press (`KeysPressed` is cleared each frame) and the doc comment says so.
+- `ChooseTitleCommand` runs the engine's handler for the selected command:
+  **New Game** starts the game; anything else names itself and stays on the
+  title.
+- `TitleIndex` / `TitleSelection` are public, and the cursor starts at zero
+  whenever the title is painted. The engine's
+  `Window_TitleCommand._lastCommandSymbol` (remember the last choice) is
+  **not** kept — a second visit starts at the top again.
+
+**Canonical suite: all 2717 tests pass, exit 0.**
+
 ### CHECKPOINT 2026-10-07 — the title commands the project's plugins add (`ced4c9d`, pushed)
 
 **The question was whether a plugin changes the menu, and the answer is
