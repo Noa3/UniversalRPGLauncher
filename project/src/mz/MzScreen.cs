@@ -856,13 +856,23 @@ public const int MaxBalloonFrames = 76;
     /// </summary>
     public string StarteBlitz(int[] pFarbe, int pDauer)
     {
+        // **And a flash is not a tone, measured in the project's own
+        // `rmmz_objects.js`:**
+        //
+        //     Game_Screen.prototype.startFlash = function(color, duration) {
+        //         this._flashColor = color.clone();
+        //         this._flashDuration = duration;
+        //     };
+        //
+        // **so the colour is the one the game named, with its alpha, from the
+        // first frame on** -- there is no target and no travelling toward one.
+        // The tone does travel (`startTint` keeps `_tone` and sets
+        // `_toneTarget`), and this reader copied the tone's shape onto the
+        // flash, which left a flash with a duration invisible until its first
+        // tick and made it a colour that never was.
+        Flash = Vier(pFarbe);
         TargetFlash = Vier(pFarbe);
         FlashDuration = pDauer > 0 ? pDauer : 0;
-        if (FlashDuration == 0)
-        {
-            Flash = new int[] { TargetFlash[0], TargetFlash[1],
-                                TargetFlash[2], TargetFlash[3] };
-        }
 
         return "flash " + Flash[0] + "," + Flash[1] + "," + Flash[2]
             + "," + Flash[3]
@@ -978,12 +988,25 @@ public const int MaxBalloonFrames = 76;
             return;
         }
 
+        // **And only the alpha moves, measured in the project's own
+        // `rmmz_objects.js`:**
+        //
+        //     Game_Screen.prototype.updateFlash = function() {
+        //         if (this._flashDuration > 0) {
+        //             const d = this._flashDuration;
+        //             this._flashColor[3] *= (d - 1) / d;
+        //             this._flashDuration--;
+        //         }
+        //     };
+        //
+        // **The tone walks all four numbers toward a target
+        // (`updateTone` does `i < 4`); the flash keeps its colour and loses
+        // its alpha.** A reader that shared one arithmetic for both -- which
+        // this one did, and a test here proved it -- makes a white flash fade
+        // through grey and a red one through every colour on the way to
+        // black.
         var d = FlashDuration;
-        for (var i = 0; i < 4; i++)
-        {
-            Flash[i] = (Flash[i] * (d - 1) + TargetFlash[i]) / d;
-        }
-
+        Flash[3] = Flash[3] * (d - 1) / d;
         FlashDuration--;
     }
 

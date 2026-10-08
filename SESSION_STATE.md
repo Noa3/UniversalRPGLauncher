@@ -1,5 +1,67 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the fade and the flash reach the frame
+
+**And two things were wrong at once, and the second one was a model bug a
+test had locked in.**
+
+**1. The screen only advanced while a page ran.** Measured:
+`MzEventRunner` calls `MzScreen.PassFrame` -- so a page running advanced the
+screen's effects -- and **nothing advanced them when no page ran**. A fade a
+page starts and then ends never arrived, and a flash lit for ever.
+`MzEngineRuntime.Tick()` now ticks the screen **only when `Laeufer.Count == 0`**,
+so the two paths make one tick per frame and not two: measured
+`brightness 255 -> 244 after one frame` is `255 * 23/24`, exactly the engine's
+own step.
+
+**2. And the flash was computed as a tone.** Measured in the project's own
+`rmmz_objects.js`:
+
+```js
+Game_Screen.prototype.startFlash = function(color, duration) {
+    this._flashColor = color.clone();          // the colour AT ONCE
+    this._flashDuration = duration;
+};
+Game_Screen.prototype.updateFlash = function() {
+    if (this._flashDuration > 0) {
+        const d = this._flashDuration;
+        this._flashColor[3] *= (d - 1) / d;    // ONLY the alpha decays
+        this._flashDuration--;
+    }
+};
+```
+
+`MzScreen.StarteBlitz` copied the **tone's** shape (`startTint` really does
+defer) and `TickBlitz` copied `TickTon`'s loop over all four numbers. So a
+flash with a duration was invisible until its first tick, and then faded
+through every colour instead of fading out.
+
+**And a test proved the wrong rule.** `TestMvStatesAnimationArmor`'s
+`Test_DerBlitzGehtGenausoWieDieEinfaerbung` -- *the flash goes exactly like the
+tint*, which is what it asserted -- drove `TickBlitz` and checked the tone's
+arithmetic on `Flash[0]`. It passed, so the model kept its bug. It is now
+`Test_EinBlitzBehaeltSeineFarbeUndVerliertNurDasAlpha` and measures the engine's
+rule: the colour stands from the first frame and only `Flash[3]` moves. It now
+measures the engine's rule: the colour stands from the first frame and only
+`Flash[3]` moves.
+
+**Measured after both fixes:**
+
+```
+MZ fade: brightness 255 -> 244 after one frame, duration left 23
+MZ fade: after the fade the brightness is 0
+MZ fade: 579332 pixels are darker than the map
+MZ fade: after the fade in the brightness is 255
+MZ flash: alpha=255 drawn=True
+MZ flash: 580090 pixels are lighter than the map
+MZ flash: alpha 255 -> 244 after one frame
+MZ flash: red grew on 580090 pixels, blue on 0
+MZ tone: after four of twelve frames the red is 40 of 120
+MZ tone: at the end the red is 120, moving=False
+```
+
+**Canonical suite: all 2739 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the screen tone reaches the frame
 
 **And this is `223 Screen Tint`**, which the runtime modelled and never drew:

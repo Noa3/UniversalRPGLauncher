@@ -223,7 +223,7 @@ public partial class TestMvStatesAnimationArmor : TestBase
     /// <summary>
     /// <c>224</c> is <c>223</c> with a colour, and it steps the same way.
     /// </summary>
-    public void Test_DerBlitzGehtGenausoWieDieEinfaerbung()
+    public void Test_EinBlitzBehaeltSeineFarbeUndVerliertNurDasAlpha()
     {
         var fakten = new MzBranchFacts();
         var interp = new MzInterpreter(new List<MzCommandEntry>
@@ -240,23 +240,58 @@ public partial class TestMvStatesAnimationArmor : TestBase
         AssertEq(fakten.Screen.TargetFlash[3], 119,
             "**and the fourth number is the strength and not an alpha** -- "
             + fakten.Screen.TargetFlash[3]);
-        AssertEq(fakten.Screen.Flash[0], 0,
-            "**and the screen is not lit yet**");
+        // **Und der Bildschirm leuchtet ab dem ersten Bild, und das war
+        // hier anders behauptet.** Gemessen an `startFlash`: es setzt
+        // `this._flashColor = color.clone()` -- **die Farbe steht sofort,
+        // mit ihrem Alpha** -- und `updateFlash` laesst danach nur noch das
+        // Alpha zerfallen. Ein Leser, der hier `0` erwartete, hatte die
+        // Traegheit des Tones auf den Blitz uebertragen.
+        AssertEq(fakten.Screen.Flash[0], 255,
+            "**and the screen is lit from the first frame on** -- "
+            + fakten.Screen.Flash[0]);
+        AssertEq(fakten.Screen.Flash[3], 119,
+            "**with the alpha the game named** -- " + fakten.Screen.Flash[3]);
         AssertEq(fakten.Screen.FlashDuration, 60,
             "**and it has the sixty frames the game asked for**");
         AssertTrue(fakten.Screen.FlashIsMoving,
             "**and a wait would ask about it**");
 
         // Und vier Bilder, wie die Engine sie macht.
+        // **Und hier stand die Arithmetik des Tones, und das war falsch.**
+        //
+        // **Gemessen in der Quelle des Motors, `rmmz_objects.js`:**
+        //
+        //     Game_Screen.prototype.startFlash = function(color, duration) {
+        //         this._flashColor = color.clone();
+        //         this._flashDuration = duration;
+        //     };
+        //     Game_Screen.prototype.updateFlash = function() {
+        //         if (this._flashDuration > 0) {
+        //             const d = this._flashDuration;
+        //             this._flashColor[3] *= (d - 1) / d;
+        //             this._flashDuration--;
+        //         }
+        //     };
+        //
+        // **Also: die Farbe steht ab dem ersten Bild fest, und nur ihr Alpha
+        // zerfaellt** -- waehrend der Ton alle vier Zahlen auf ein Ziel
+        // wandern laesst. Ein Leser, der beides gleich rechnete, machte aus
+        // einem weissen Blitz einen, der durch Grau verblasst, und aus einem
+        // roten einen, der durch jede Farbe nach Schwarz laeuft.
         var bild = new MzScreen();
         bild.StarteBlitz(new int[] { 255, 255, 255, 119 }, 4);
+        AssertEq(bild.Flash[0], 255,
+            "**and the colour is there from the first frame on**");
+        AssertEq(bild.Flash[3], 119,
+            "**with the alpha the game named**");
+
         var erwartet = new List<int>();
-        var wert = 0;
         var dauer = 4;
+        var alpha = 119;
         while (dauer > 0)
         {
-            wert = (wert * (dauer - 1) + 255) / dauer;
-            erwartet.Add(wert);
+            alpha = alpha * (dauer - 1) / dauer;
+            erwartet.Add(alpha);
             dauer--;
         }
 
@@ -264,14 +299,16 @@ public partial class TestMvStatesAnimationArmor : TestBase
         while (bild.FlashDuration > 0 && gelesen.Count < 50)
         {
             bild.TickBlitz();
-            gelesen.Add(bild.Flash[0]);
+            gelesen.Add(bild.Flash[3]);
         }
 
         for (var i = 0; i < erwartet.Count; i++)
         {
             AssertEq(gelesen[i], erwartet[i],
-                "**and frame " + i + " is the engine's own value**");
+                "**and frame " + i + " is the engine's own alpha**");
         }
+        AssertEq(bild.Flash[0], 255,
+            "**and the colour never moved, which is the difference from a tone**");
     }
 
     /// <summary>

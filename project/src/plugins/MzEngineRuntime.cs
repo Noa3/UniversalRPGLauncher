@@ -1686,6 +1686,8 @@ public sealed class MzEngineRuntime : IEngineRuntime
         PaintFigures(pixel);
         PicturesDrawn = PaintPictures(pixel);
         ToneDrawn = PaintScreenTone(pixel);
+        BrightnessDrawn = PaintScreenBrightness(pixel);
+        FlashDrawn = PaintScreenFlash(pixel);
         PaintedMap = pixel;
         return true;
     }
@@ -3614,6 +3616,31 @@ public sealed class MzEngineRuntime : IEngineRuntime
         // muss in jedem Weg weiterkommen, der sie fortsetzt** -- **und
         // zwei Orte fuer dieselbe Regel sind zwei Regeln, sobald sie
         // auseinanderlaufen.**
+        // **And the screen's own effects move once per frame.**
+        //
+        // **Und das ist `Game_Screen.prototype.update`** -- `updateFadeIn`,
+        // `updateFadeOut`, `updateTone`, `updateFlash`, `updateShake` und die
+        // Lautstaerken.
+        //
+        // **Und gemessen ist die Luecke genau hier:** `MzEventRunner` ruft
+        // `MzScreen.PassFrame` -- **also laeuft der Bildschirm, solange eine
+        // Seite laeuft** -- **und ohne diesen Aufruf stand er still, sobald
+        // keine Seite mehr lief.** Ein Fade, den eine Seite startet und dann
+        // beendet, kam nie an, und ein Blitz leuchtete fuer immer.
+        //
+        // **Und darum nur, wenn keine Seite laeuft** -- **sonst tickte der
+        // Bildschirm zweimal pro Frame** und ein Fade von 24 Bildern waere in
+        // 12 vorbei. Der Motor hat genau ein `Game_Screen.update` pro Bild,
+        // und diese Bedingung macht aus zwei Pfaden einen.
+        if (Laeufer.Count == 0)
+        {
+            Facts.Screen.TickTon();
+            Facts.Screen.TickBildschirm();
+            Facts.Screen.TickBlitz();
+            Facts.Screen.TickWackeln();
+            Facts.Screen.TickAudio();
+        }
+
         LoeseDialoge();
         var wechselt = 0;
 
@@ -4481,6 +4508,151 @@ public sealed class MzEngineRuntime : IEngineRuntime
     /// <summary>And one channel, back into a byte.</summary>
     private static byte Klemme(double pWert) =>
         (byte)Math.Clamp((int)Math.Round(pWert), 0, 255);
+
+    /// <summary>
+    /// And how bright the screen is, which is what <c>221</c> and <c>222</c>
+    /// change.
+    /// </summary>
+    /// <param name="pPixels">The frame to darken.</param>
+    /// <returns>Whether anything was applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the screen fade is a brightness and not an overlay</strong>,
+    /// measured in the project's own <c>rmmz_objects.js</c>:
+    /// </para>
+    /// <code>
+    /// Game_Screen.prototype.updateFadeOut = function() {
+    ///     if (this._fadeOutDuration > 0) {
+    ///         const d = this._fadeOutDuration;
+    ///         this._brightness = (this._brightness * (d - 1)) / d;
+    ///         this._fadeOutDuration--;
+    ///     }
+    /// };
+    /// Game_Screen.prototype.updateFadeIn = function() {
+    ///     if (this._fadeInDuration > 0) {
+    ///         const d = this._fadeInDuration;
+    ///         this._brightness = (this._brightness * (d - 1) + 255) / d;
+    ///         this._fadeInDuration--;
+    ///     }
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>so 255 is a normal screen and 0 is black, and the approach is
+    /// geometric and not linear</strong> -- <c>brightness * (d-1) / d</c>
+    /// reaches zero without ever arriving in a straight line. <strong>And
+    /// <c>MzScreen.Brightness</c> is the model that already carries
+    /// it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is applied by a filter on the whole spriteset</strong>,
+    /// measured at <c>rmmz_sprites.js</c>:
+    /// <c>filter.setBrightness($gameScreen.brightness())</c> -- so it covers
+    /// the map, the figures and the pictures, and it comes <em>after</em> the
+    /// tone, which is the order the engine's own shader uses:
+    /// <c>r = clamp((r / a + colorTone.r / 255.0) * a, ...)</c> and then
+    /// <c>r = r * brightness / 255.0</c>.
+    /// </para>
+    /// </remarks>
+    public bool PaintScreenBrightness(Rm2kPixelBuffer pPixels)
+    {
+        if (pPixels == null)
+        {
+            return false;
+        }
+
+        var helligkeit = Math.Clamp(Facts.Screen.Brightness, 0, 255);
+        if (helligkeit >= 255)
+        {
+            return false;
+        }
+
+        for (var i = 0; i + 3 < pPixels.Pixels.Length; i += 4)
+        {
+            if (pPixels.Pixels[i + 3] == 0)
+            {
+                continue;
+            }
+            pPixels.Pixels[i] = (byte)(pPixels.Pixels[i] * helligkeit / 255);
+            pPixels.Pixels[i + 1] = (byte)(pPixels.Pixels[i + 1] * helligkeit / 255);
+            pPixels.Pixels[i + 2] = (byte)(pPixels.Pixels[i + 2] * helligkeit / 255);
+        }
+
+        return true;
+    }
+
+    /// <summary>And whether the last frame was darkened by a fade.</summary>
+    public bool BrightnessDrawn { get; private set; }
+
+    /// <summary>
+    /// And the flash, which is a coloured light over the whole screen.
+    /// </summary>
+    /// <param name="pPixels">The frame to flash.</param>
+    /// <returns>Whether anything was applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the flash is a colour with an alpha that decays</strong>,
+    /// measured in the project's own <c>rmmz_objects.js</c>:
+    /// </para>
+    /// <code>
+    /// Game_Screen.prototype.startFlash = function(color, duration) {
+    ///     this._flashColor = color.clone();
+    ///     this._flashDuration = duration;
+    /// };
+    /// Game_Screen.prototype.updateFlash = function() {
+    ///     if (this._flashDuration > 0) {
+    ///         const d = this._flashDuration;
+    ///         this._flashColor[3] *= (d - 1) / d;
+    ///         this._flashDuration--;
+    ///     }
+    /// };
+    /// </code>
+    /// <para>
+    /// <strong>so the alpha the game names is the alpha of the first frame,
+    /// and every frame after it takes <c>(d-1)/d</c> of what is left.</strong>
+    /// <strong>And <c>MzScreen.Flash</c> is the model that carries it.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is drawn on top of everything</strong>, measured at
+    /// <c>Spriteset_Base.prototype.updateScreenFlash</c>: the flash sprite is
+    /// added to the spriteset after the pictures, and its
+    /// <c>alpha</c> is <c>flashColor()[3] / 255</c>.
+    /// </para>
+    /// </remarks>
+    public bool PaintScreenFlash(Rm2kPixelBuffer pPixels)
+    {
+        if (pPixels == null)
+        {
+            return false;
+        }
+
+        var blitz = Facts.Screen.Flash;
+        if (blitz == null || blitz.Length < 4 || blitz[3] <= 0)
+        {
+            return false;
+        }
+
+        var alpha = Math.Clamp(blitz[3], 0, 255);
+        var rot = (byte)Math.Clamp(blitz[0], 0, 255);
+        var gruen = (byte)Math.Clamp(blitz[1], 0, 255);
+        var blau = (byte)Math.Clamp(blitz[2], 0, 255);
+        var rest = 255 - alpha;
+
+        for (var i = 0; i + 3 < pPixels.Pixels.Length; i += 4)
+        {
+            if (pPixels.Pixels[i + 3] == 0)
+            {
+                continue;
+            }
+            pPixels.Pixels[i] = (byte)((rot * alpha + pPixels.Pixels[i] * rest) / 255);
+            pPixels.Pixels[i + 1] = (byte)((gruen * alpha + pPixels.Pixels[i + 1] * rest) / 255);
+            pPixels.Pixels[i + 2] = (byte)((blau * alpha + pPixels.Pixels[i + 2] * rest) / 255);
+        }
+
+        return true;
+    }
+
+    /// <summary>And whether the last frame carried a flash.</summary>
+    public bool FlashDrawn { get; private set; }
 
     /// <summary>And one picture, onto the frame.</summary>
     private static bool BlitPicture(
