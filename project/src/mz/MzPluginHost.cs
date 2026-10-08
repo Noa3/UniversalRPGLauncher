@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Jint;
 
 namespace UniversalRPG.Web;
@@ -106,6 +107,107 @@ public sealed class MzPluginHost
             return null;
         }
     }
+
+    /// <summary>And one command the executed engine offers on its title.</summary>
+    /// <param name="Name">What the player reads.</param>
+    /// <param name="Symbol">And what the engine calls it.</param>
+    /// <param name="Enabled">Whether it can be chosen.</param>
+    public sealed record Command(string Name, string Symbol, bool Enabled);
+
+    /// <summary>
+    /// And what the executed engine says its title offers.
+    /// </summary>
+    /// <returns>
+    /// The commands the <em>plugins</em> left on the title, or null when the
+    /// question could not be asked.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is why the sandbox is worth its weight.</strong> A
+    /// plugin's parameters give the <em>name</em> of a command it adds; only
+    /// the plugin's own code gives the finished list -- what the engine put
+    /// there, what the plugin put there, in what order, and which of them are
+    /// switched off.
+    /// </para>
+    /// <para>
+    /// <strong>And the window is a stand-in with the engine's own
+    /// prototype.</strong> A real <c>Window_TitleCommand</c> needs a canvas
+    /// and a scene behind it, which this runtime draws itself; what the
+    /// question needs is the prototype chain, so that a plugin's replacement
+    /// of <c>makeCommandList</c> is the one that runs. Measured: the first
+    /// attempt called the engine's method on a plain object and failed with
+    /// <em>Property 'makeCoreEngineCommandList' of object is not a
+    /// function</em> -- which was the proof that a plugin had replaced it.
+    /// </para>
+    /// <para>
+    /// <strong>And it is told the truth about saves.</strong> The engine asks
+    /// <c>DataManager.isAnySavefileExists()</c> to decide whether "Continue"
+    /// can be chosen, and reading a save file is exactly what this sandbox is
+    /// not allowed to do. This runtime has no save files yet, so it answers
+    /// that there are none -- rather than let the title offer something that
+    /// is not there.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<Command>? TitleCommands()
+    {
+        if (Problem.Length > 0 || !IsDefined("Window_TitleCommand"))
+        {
+            return null;
+        }
+
+        var antwort = Evaluate(Titelbefehle);
+        if (antwort == null || !antwort.StartsWith('['))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var dokument = JsonDocument.Parse(antwort);
+            var befehle = new List<Command>();
+            foreach (var eintrag in dokument.RootElement.EnumerateArray())
+            {
+                befehle.Add(new Command(
+                    eintrag.GetProperty("name").GetString() ?? "",
+                    eintrag.GetProperty("symbol").GetString() ?? "",
+                    eintrag.GetProperty("enabled").GetBoolean()));
+            }
+            return befehle;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>And the question itself, asked inside the sandbox.</summary>
+    private const string Titelbefehle = """
+(function () {
+    if (typeof Window_TitleCommand === 'undefined') { return ''; }
+    if (typeof StorageManager !== 'undefined') {
+        StorageManager.isAnySavefileExists = function () { return false; };
+        StorageManager.exists = function () { return false; };
+    }
+    var fenster = Object.create(Window_TitleCommand.prototype);
+    fenster._list = [];
+    fenster.addCommand = function (name, symbol, enabled) {
+        this._list.push({ name: String(name), symbol: String(symbol),
+            enabled: enabled !== false });
+    };
+    fenster.isContinueEnabled = function () {
+        try {
+            return Window_TitleCommand.prototype.isContinueEnabled.call(this);
+        } catch (e) { return false; }
+    };
+    fenster.maxItems = function () { return this._list.length; };
+    try {
+        Window_TitleCommand.prototype.makeCommandList.call(fenster);
+    } catch (e) {
+        return 'ERROR ' + e.message;
+    }
+    return JSON.stringify(fenster._list);
+})()
+""";
 
     /// <summary>
     /// And the names of the plugins the project switched on.
