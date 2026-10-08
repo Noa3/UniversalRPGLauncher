@@ -51,6 +51,20 @@ public partial class Rm2kGameScreen : Control
     private bool _inputPending;
     private int _inputValue;
 
+    // **And a command window, drawn over the game's own frame.**
+    // `Window_Command` and everything above it needs a canvas and a font,
+    // which is the sandbox's missing half; what this draws is the list the
+    // engine and its plugins left on the window, placed where the engine
+    // places it and scaled with the frame.
+    private bool _commandVisible;
+    private int _commandX;
+    private int _commandY;
+    private int _commandWidth;
+    private int _commandHeight;
+    private int _commandRowHeight = 36;
+    private int _commandIndex;
+    private readonly List<string> _commandRows = new();
+
     private PanelContainer _messagePanel = null!;
     private Label _messageLabel = null!;
     private PanelContainer _choicePanel = null!;
@@ -413,6 +427,65 @@ public partial class Rm2kGameScreen : Control
         QueueRedraw();
     }
 
+    /// <summary>
+    /// And a command window to draw over the frame, or null to draw none.
+    /// </summary>
+    /// <param name="pX">Where the engine puts it, in the engine's pixels.</param>
+    /// <param name="pY">And where it puts it from the top.</param>
+    /// <param name="pWidth">And how wide the engine makes it.</param>
+    /// <param name="pHeight">And how tall.</param>
+    /// <param name="pRowHeight">And the line height the engine uses.</param>
+    /// <param name="pRows">The commands, in the order the engine lists them.</param>
+    /// <param name="pIndex">And which of them the cursor is on.</param>
+    /// <remarks>
+    /// <strong>And this draws a list the engine and its plugins decided
+    /// on</strong>, at the place and size the engine's own
+    /// <c>commandWindowRect</c> gives -- scaled with the frame, so it lands on
+    /// the window where the engine would have put it. It is not a
+    /// reimplementation of <c>Window_Command</c>: the skin, the font and the
+    /// cursor's own animation are the engine's, and what this has instead is
+    /// the list, the placement and the cursor's position.
+    /// </remarks>
+    public void SetCommandWindow(
+        int pX, int pY, int pWidth, int pHeight, int pRowHeight,
+        IReadOnlyList<string>? pRows, int pIndex)
+    {
+        _commandRows.Clear();
+        if (pRows != null && pRows.Count > 0 && pWidth > 0 && pHeight > 0)
+        {
+            _commandRows.AddRange(pRows);
+            _commandX = pX;
+            _commandY = pY;
+            _commandWidth = pWidth;
+            _commandHeight = pHeight;
+            _commandRowHeight = pRowHeight > 0 ? pRowHeight : 36;
+            _commandIndex = Math.Clamp(pIndex, 0, _commandRows.Count - 1);
+            _commandVisible = true;
+        }
+        else
+        {
+            _commandVisible = false;
+        }
+
+        QueueRedraw();
+    }
+
+    /// <summary>
+    /// And what the command window is showing, for a caller that must check it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this exists so the list can be asserted without a
+    /// screen.</strong> The drawing itself is Godot's; what a test can check is
+    /// that the engine's list, its placement and its cursor reached the view at
+    /// all -- which is exactly what was missing: measured before this, nothing
+    /// under <c>project/app</c> read <c>TitleCommands</c>, so a player saw the
+    /// title image and no menu.
+    /// </remarks>
+    public (int X, int Y, int Width, int Height, int Index, IReadOnlyList<string> Rows)
+        CommandWindow() =>
+        (_commandX, _commandY, _commandWidth, _commandHeight, _commandIndex,
+            _commandRows);
+
     /// <summary>And the texture reuses the small view buffer.</summary>
     private ImageTexture? GetMapTexture()
     {
@@ -634,6 +707,51 @@ public partial class Rm2kGameScreen : Control
         {
             DrawString(ThemeDB.FallbackFont, new Vector2(24, 40), RenderDiagnostic,
                 HorizontalAlignment.Left, Size.X - 48, 16, new Color("e8a24a"));
+        }
+
+        // **And the engine's command window, where the engine puts it.**
+        // Measured: `Scene_Title.commandWindowRect` reserves three lines, and
+        // a project whose plugins add more commands than that has a window
+        // `Window_Command` scrolls -- so the rows drawn are the ones that
+        // fit, moved down to keep the cursor in sight, which is what
+        // `Window_Selectable.ensureCursorVisible` does.
+        if (!_commandVisible || _commandRows.Count == 0 || dest.Size.X <= 0
+            || _viewWidth <= 0)
+        {
+            return;
+        }
+
+        var massstab = dest.Size.X / _viewWidth;
+        var links = dest.Position.X + _commandX * massstab;
+        var oben = dest.Position.Y + _commandY * massstab;
+        var breite = _commandWidth * massstab;
+        var hoehe = _commandHeight * massstab;
+        var zeile = _commandRowHeight * massstab;
+        if (zeile <= 0)
+        {
+            return;
+        }
+
+        DrawRect(new Rect2(links, oben, breite, hoehe),
+            new Color(0.06f, 0.06f, 0.10f, 0.88f), true);
+        DrawRect(new Rect2(links, oben, breite, hoehe),
+            new Color(0.85f, 0.85f, 0.92f, 0.95f), false, 2f);
+
+        var sichtbar = Math.Max(1, (int)(hoehe / zeile));
+        var erster = _commandIndex >= sichtbar ? _commandIndex - sichtbar + 1 : 0;
+        var schrift = (int)Math.Max(11f, zeile * 0.6f);
+        for (var i = 0; i < sichtbar && erster + i < _commandRows.Count; i++)
+        {
+            var mitte = oben + (i + 0.5f) * zeile;
+            if (erster + i == _commandIndex)
+            {
+                DrawRect(
+                    new Rect2(links + 3, mitte - zeile / 2 + 1, breite - 6, zeile - 2),
+                    new Color(0.35f, 0.55f, 1.0f, 0.45f), true);
+            }
+            DrawString(ThemeDB.FallbackFont,
+                new Vector2(links, mitte + schrift * 0.36f), _commandRows[erster + i],
+                HorizontalAlignment.Center, breite, schrift, Colors.White);
         }
     }
 }

@@ -909,6 +909,16 @@ public partial class TestMzEchtesSpielStartet : TestBase
         AssertEq(runtime.ScreenWidth, 816, "Camellia is 816 wide");
         AssertEq(runtime.ScreenHeight, 624, "and 624 high");
 
+        // **And its command window is where the engine puts it.**
+        var camelliaFenster = runtime.TitleWindow;
+        Console.WriteLine($"Camellia title window: {camelliaFenster.X},{camelliaFenster.Y} "
+            + $"{camelliaFenster.Width}x{camelliaFenster.Height}");
+        AssertEq(camelliaFenster.X, 288, "Camellia's window is centred: (816-240)/2");
+        AssertEq(camelliaFenster.Y, 396, "and sits 96 above the bottom: 624-132-96");
+        AssertEq(camelliaFenster.Width, 240, "and is mainCommandWidth wide");
+        AssertEq(camelliaFenster.Height, 132,
+            "and three lines tall: 3*36 + 12*2");
+
         const string Skies =
             "D:/NextCloud/Games/PornGames/SkiesInflateableAdventure";
         if (!File.Exists(Skies + "/data/System.json"))
@@ -936,6 +946,19 @@ public partial class TestMzEchtesSpielStartet : TestBase
         Console.WriteLine($"Skies screen: {gross.ScreenWidth}x{gross.ScreenHeight}");
         AssertEq(gross.ScreenWidth, 1280, "and the big project is 1280 wide");
         AssertEq(gross.ScreenHeight, 720, "and 720 high");
+
+        // **And this is the window that did not fit before the screen fix**:
+        // Skies moved it with offsetX 382, and 902 + 240 = 1142 only fits a
+        // 1280-wide screen.
+        var fenster = gross.TitleWindow;
+        Console.WriteLine($"Skies title window: {fenster.X},{fenster.Y} "
+            + $"{fenster.Width}x{fenster.Height}");
+        AssertEq(fenster.X, 902, "Skies moved it right: (1280-240)/2 + 382");
+        AssertEq(fenster.Y, 537, "and down: 720-132-96+45");
+        AssertTrue(fenster.X + fenster.Width <= gross.ScreenWidth,
+            "and it stands on the screen instead of past its right edge");
+        AssertTrue(fenster.Y + fenster.Height <= gross.ScreenHeight,
+            "and inside it at the bottom too");
         // **And the title it paints is that size**, which is what the defect
         // was about: measured before this fix, the big project's 1280x720
         // title was scaled down onto 816x624.

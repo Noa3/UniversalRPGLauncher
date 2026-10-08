@@ -1,5 +1,57 @@
 ## Current card
 
+### CHECKPOINT 2026-10-08 — the title's command list is drawn (this turn, pushed)
+
+**And the gap is closed: the runtime's list now reaches the window.**
+
+Measured before this: `TitleCommands`, `TitleIndex` and `TitleVisible` were
+computed and covered by tests, and `grep TitleCommands project/app/` found
+**nothing** — a player saw the title image, moved a cursor that was not drawn,
+and got no menu. The runtime was right and the window was silent.
+
+**And the placement is the engine's own, measured in the project's files:**
+
+```
+Scene_Base.mainCommandWidth      = function() { return 240; };
+Window_Base.lineHeight           = function() { return 36; };
+Window_Base.fittingHeight(n)     = n * itemHeight() + $gameSystem.windowPadding() * 2;
+Game_System.windowPadding        = function() { return 12; };
+Scene_Title.commandWindowRect:
+    ww = mainCommandWidth();                      // 240
+    wh = calcWindowHeight(3, true);               // 3*36 + 12*2 = 132
+    wx = (Graphics.boxWidth - ww) / 2 + offsetX;
+    wy = Graphics.boxHeight - wh - 96 + offsetY;
+```
+
+so `MzEngineRuntime.TitleWindow` is `(x, y, 240, 132)` and measured:
+
+| project | title window | fits? |
+|---|---|---|
+| Camellia | `288,396` | yes |
+| Skies | `902,537` | yes — 902 + 240 = 1142 on a 1280 screen |
+
+**And the drawing is `Rm2kGameScreen.SetCommandWindow`**, which reuses
+`ComputeGameView`'s scale so the window lands where the engine would put it.
+It draws the rows that fit and moves them to keep the cursor in sight, which
+is what `Window_Selectable.ensureCursorVisible` does — a project whose plugins
+add more commands than the three reserved lines has a window the engine
+scrolls.
+
+**Measured, the numbers travelling end to end:**
+
+```
+MZ command window: 902,537 240x132 index=2 rows=[New Game, Options, CG Gallery, Credits, Patch Notes]
+MZ title handed to the view: 288,396 240x132 index=0 rows=[New Game, Options]
+```
+
+**And it is not a reimplementation of `Window_Command`.** The skin, the font
+and the cursor's animation are the engine's; what this has instead is the
+list, the placement and the cursor's position. The honest limit: the real
+window draws the skin from `img/system/Window.png` and the project's own font,
+and this draws neither.
+
+**Canonical suite: all 2725 tests pass.**
+
 ### CHECKPOINT 2026-10-08 — the screen is the project's own size (`793c1d6`, pushed)
 
 **And this was a real defect, found while measuring where the title's command

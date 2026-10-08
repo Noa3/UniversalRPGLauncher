@@ -841,7 +841,77 @@ public sealed class MzEngineRuntime : IEngineRuntime
             ScreenHeight = hoehe;
         }
 
+        ReadTitleWindow(system.Root.Member("titleCommandWindow"));
         ReadTitleCommands();
+    }
+
+    /// <summary>And one window on the screen, in the engine's own pixels.</summary>
+    /// <param name="X">Where it starts from the left.</param>
+    /// <param name="Y">And from the top.</param>
+    /// <param name="Width">And how wide it is.</param>
+    /// <param name="Height">And how tall.</param>
+    public readonly record struct Window(int X, int Y, int Width, int Height);
+
+    /// <summary>And the line height <c>Window_Base.lineHeight</c> returns.</summary>
+    public const int WindowLineHeight = 36;
+
+    /// <summary>And the padding <c>Game_System.windowPadding</c> returns.</summary>
+    public const int WindowPadding = 12;
+
+    /// <summary>And the width <c>Scene_Base.mainCommandWidth</c> returns.</summary>
+    public const int MainCommandWidth = 240;
+
+    /// <summary>And the gap the title's command window keeps from the bottom.</summary>
+    public const int TitleWindowBottomMargin = 96;
+
+    /// <summary>
+    /// And where the title's command window stands, the engine's own way.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is <c>Scene_Title.commandWindowRect</c>, measured in
+    /// the project's own file:</strong>
+    /// </para>
+    /// <code>
+    /// const offsetX = $dataSystem.titleCommandWindow.offsetX;
+    /// const offsetY = $dataSystem.titleCommandWindow.offsetY;
+    /// const ww = this.mainCommandWidth();          // Scene_Base: 240
+    /// const wh = this.calcWindowHeight(3, true);   // 3 * 36 + 12 * 2 = 132
+    /// const wx = (Graphics.boxWidth - ww) / 2 + offsetX;
+    /// const wy = Graphics.boxHeight - wh - 96 + offsetY;
+    /// </code>
+    /// <para>
+    /// <strong>And the height is <c>Window_Base.fittingHeight(3)</c>, which
+    /// is <c>numLines * itemHeight() + $gameSystem.windowPadding() * 2</c>,
+    /// with <c>itemHeight()</c> = <c>lineHeight()</c> = 36 and the padding
+    /// 12.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And it is three lines even when the project shows fewer</strong>
+    /// -- the engine asks for three, and a plugin that adds a fourth command
+    /// still has to fit. Measured on Skies, whose author moved the window with
+    /// <c>offsetX 382</c>: 902 to 1142 on a 1280-wide screen, which only fits
+    /// once the screen is read from the project and not assumed to be 816.
+    /// </para>
+    /// <para>
+    /// <strong>And MZ writes <c>titleCommandWindow</c> and MV does not.</strong>
+    /// Measured: LegalTruck's System.json has no such field, so an MV title
+    /// needs MV's own placement rather than this one with zeroes in it.
+    /// </para>
+    /// </remarks>
+    public Window TitleWindow { get; private set; }
+
+    private void ReadTitleWindow(MzValue? pFenster)
+    {
+        var versatzX = pFenster?.Member("offsetX")?.IntOr(0) ?? 0;
+        var versatzY = pFenster?.Member("offsetY")?.IntOr(0) ?? 0;
+        var hoehe = 3 * WindowLineHeight + WindowPadding * 2;
+
+        TitleWindow = new Window(
+            (ScreenWidth - MainCommandWidth) / 2 + versatzX,
+            ScreenHeight - hoehe - TitleWindowBottomMargin + versatzY,
+            MainCommandWidth,
+            hoehe);
     }
 
     /// <summary>

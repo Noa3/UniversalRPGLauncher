@@ -931,6 +931,26 @@ public partial class Main : Control
 			// die Karte, aber keinen Tick, also blieb die Signatur gleich
 			// und die Textur wurde nicht neu gebaut.**
 			_gameScreen.SetGameState(mz.PaintedMap, mz.Frames, mz.PaintReason);
+
+			// **Und die Befehlsliste des Titels wird gezeichnet.**
+			// Sie war berechnet und getestet, aber keine Ansicht las sie --
+			// ein Spieler sah das Titelbild, bewegte einen unsichtbaren
+			// Cursor und bekam kein Menue. Die Engine sagt, wo das Fenster
+			// steht (`Scene_Title.commandWindowRect`) und wie hoch eine Zeile
+			// ist (`Window_Base.lineHeight`), und die Ansicht skaliert es mit
+			// dem Bild.
+			if (mz.TitleVisible && mz.TitleCommands.Count > 0)
+			{
+				_gameScreen.SetCommandWindow(
+					mz.TitleWindow.X, mz.TitleWindow.Y,
+					mz.TitleWindow.Width, mz.TitleWindow.Height,
+					MzEngineRuntime.WindowLineHeight,
+					mz.TitleCommands, mz.TitleIndex);
+			}
+			else
+			{
+				_gameScreen.SetCommandWindow(0, 0, 0, 0, 0, null, 0);
+			}
 		}
 		else
 		{
