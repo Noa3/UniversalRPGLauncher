@@ -183,7 +183,10 @@ public class Rm2kMap
 		// liblcf EventPage::move_frequency, LMU chunk 0x20. The value is the
 		// move frequency, which is the divisor in GetMaxStopCountForStep and
 		// not the per update step amount.
-		public int MoveFrequency;
+		public int MoveFrequency = 3;
+
+		// LMU0x1F defaults to random1; only custom6 consumes the page route.
+		public int MoveType = 1;
 
 		public Dictionary<string, object> ToDict()
 		{
@@ -196,6 +199,7 @@ public class Rm2kMap
 				{ "move_route_count", MoveRouteCommands.Count },
 				{ "move_route_repeat", MoveRouteRepeat },
 				{ "move_frequency", MoveFrequency },
+				{ "move_type", MoveType },
 			};
 		}
 	}
@@ -227,6 +231,8 @@ public class Rm2kMap
 		// Page pattern (LMU0x18) overrides it only for fixed-graphic/spin types.
 		public int AnimationFrame = 1;
 		public int AnimationCount;
+		public int StopCount;
+		public int MaxStopCount;
 
 		public Event(int pId = 0, int pX = 0, int pY = 0)
 		{

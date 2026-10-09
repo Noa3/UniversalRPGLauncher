@@ -1354,13 +1354,14 @@ public partial class Rm2kParser : RefCounted
 							eventPattern = (int)patternResult.Data["value"];
 						}
 						// liblcf LMU_Reader::ChunkEventPage: trigger 0x21, layer 0x22,
-						// move_frequency 0x20, condition 0x02, move_route 0x29,
+						// move_type 0x1F, move_frequency 0x20, condition 0x02, move_route 0x29,
 						// event_commands 0x34. No other ids are verified.
         var triggerResult = IntegerFromFields(pageFields, 0x21, 0);
         // liblcf LMU_Reader::ChunkEventPage::layer = 0x22, and rpg::EventPage::Layers
         // is below = 0, same = 1, above = 2. There is no "priority" field.
 					var layerResult = IntegerFromFields(pageFields, 0x22, 0);
-					var freqResult = IntegerFromFields(pageFields, 0x20, 0);
+					var moveTypeResult = IntegerFromFields(pageFields, 0x1F, 1);
+					var freqResult = IntegerFromFields(pageFields, 0x20, 3);
 					var characterIndexResult = IntegerFromFields(pageFields, 0x16, 0);
 					var characterDirectionResult = IntegerFromFields(pageFields, 0x17, 2);
 					// Pinned liblcf6854310c: pattern0x18, animation_type0x24.
@@ -1370,7 +1371,7 @@ public partial class Rm2kParser : RefCounted
 					var moveSpeedResult = IntegerFromFields(pageFields, 0x25, 3);
 					var characterName = ReadRm2kStringField(pageFields, 0x15);
 
-					if (!triggerResult.Success || !layerResult.Success || !freqResult.Success
+					if (!triggerResult.Success || !layerResult.Success || !freqResult.Success || !moveTypeResult.Success
 						|| !characterIndexResult.Success || !characterDirectionResult.Success
 						|| !characterPatternResult.Success || !animationTypeResult.Success || !moveSpeedResult.Success)
 					{
@@ -1456,6 +1457,7 @@ public partial class Rm2kParser : RefCounted
         { "trigger", (int)triggerResult.Data["value"] },
         { "layer", (int)layerResult.Data["value"] },
 						{ "move_frequency", (int)freqResult.Data["value"] },
+						{ "move_type", (int)moveTypeResult.Data["value"] },
 						// liblcf LMU_Reader::ChunkEventPage: character_name = 0x15,
 						// character_index = 0x16, character_direction = 0x17. The Player
 						// reads exactly these three for the event sprite, with the

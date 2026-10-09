@@ -1,5 +1,128 @@
 ## Current card
 
+### Production page route activation — completed
+
+FINAL: K-PROD-RM2K-PAGE-ROUTE-ACTIVATION DONE. Tracked canonical
+proc_02e1eb5bfe2c exited0 with2866/2866 and final validation pass marker.
+Programmatic reconciliation:2846 Core suite tests +20 Smoke Check invocations
+=2866 (SmokeTranslation includes7 locale-loop checks). Native43/43, adjacent
+suites green and both bounded reviews resolved. No new normalized warnings;
+build142warnings/0errors. Shutdown3 CanvasItem RIDs/6 ObjectDB instances remain.
+The earlier checker that summed only suite summaries excluded Smoke checks;
+this was evidence parsing, not a hidden test or runner defect.
+
+Next: K-PROD-RM2K-MOVEMENT-COVERAGE READY/P0, using real mode/opcode counts and
+production dispatch before extending the highest-impact bounded path. Current
+custom production scope is cardinal0..3, face/turn12..18, speed/frequency28..31;
+others stop/report rather than pretend to execute. Full forced pacing, modes
+1..5, collision, remaining route commands and all full engine/GUI gates remain
+open. No release export; qa_patches/ preserved. Earlier pending checkpoints
+below are superseded by this final verified state.
+
+FINAL REVIEW FOLLOW-UP: native43/43 after the targeted skippable refusal test.
+Wrong step-to-turn delay mutation was caught41/43 by both frequency and
+skippable/facing regressions, restored and rebuilt43/43. No production change
+was required for the audit's stale skippable claim. Both bounded reviews are
+resolved against inspected current code and pinned source.
+Final canonical is proc_02e1eb5bfe2c, exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-page-route-final-validation.log`.
+Earlier proc_a579de94ab15 was explicitly cancelled before rebuilding the new
+coverage, so it must not be used for final acceptance. No DONE/commit until
+the final tracked completion and exact suite totals are verified.
+
+LATEST: K-PROD-RM2K-PAGE-ROUTE-ACTIVATION VERIFY. Original/per-page routes and
+cursor bindings are independent of legacy forced slots, with reference mode,
+frequency gates, same-tick first movement, arrival separation, repeat and
+bounded immediate face/speed chains. Same codes retain cursor but rebind data;
+different codes reset; no page suspends commands without deleting cursor/step.
+Forced priority, completion history and original resumption are regression
+covered. Shared step source coordinates AND source/target bit order corrected
+after directional RED33/35; no-page forced gate RED39/40 then fixed. Completion
+observable regression routes5/7 fixed without changing the old assertions.
+
+Restored focused suite42/42; adjacent poseparser1/1, parser36/36, routes7/7,
+renderer19/19, activation8/8, input11/11, interpreter85/85. Disabled activation
+mutation30/42 was caught then restored/rebuilt. Build142warnings/0errors, no
+new normalized signatures. Source verification: scratch byte-identical to
+upstream Player0de2a9ab game_event.cpp/game_character.cpp/h and liblcf6854310c
+eventpage.h (HTTP reads only). Metadata/parser still execute no foreign code.
+
+Final canonical running as proc_a579de94ab15; log
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-page-route-validation.log`.
+Review deleg_28bee8ab pending. Resolve exact final pass count/exit and findings
+before DONE/commit/push. qa_patches/ untouched; no release artifact.
+Review delivered: no code blocker. Its older IN PROGRESS/missing-mutation
+snapshot is superseded by current VERIFY and30/42 mutation evidence. Its
+skippable finding is not a current defect: code sets step delay and changes
+neither direction nor facing before a refused passability check. Added a
+specific skippable blocked-left/allowed-up test to prove delay and restored
+facing. Stopped proc_a579de94ab15 before rebuilding; it is not final evidence.
+Production supports custom6 with cardinal0..3, face/turn12..18 and speed/frequency
+28..31 only. Unsupported commands stop/report once; modes1..5/unknown report
+unsupported. Wait/jump/forward/diagonal/random/switch/graphic/audio/animation
+route expansion, legacy forced pacing and full collision/page/parallel lifecycle
+remain separate. Runtime tests use spec-built LMU pages and real pinned assets,
+not native-game visual parity. Earlier checkpoints below are historical.
+
+Selected K-PROD-RM2K-PAGE-ROUTE-ACTIVATION on main f0cdebd, clean except
+preserved qa_patches/. Last canonical2847/2847. Parser/host omit page movement
+mode; only StartEventMoveRouteForTest creates live routes. Writing a file-based
+failing custom-route test before wiring. Primary liblcf EventPage default is
+move_type1 (random), NOT stationary0; move_frequency default3. Reference audit
+deleg_046adcf4 pending. No new export or parity claim.
+
+Failure log: first native custom-route regression24/25 RED (exit6): missing
+move_type projection, no production step, no moving animation/pixels. Fixture
+route vector parses correctly. Initial checkpoint patch matched two historical
+Current-card headers and was atomic/no-op; retried with the unique full header.
+Metadata tracer completed: explicit custom6 and absent default1 now survive
+parser/typed page/host/ToDict. Corrected absent frequency0 to pinned default3.
+Metadata RED24/26 and poseparser0/1 was observed before the change. Build passes;
+poseparser1/1, parser36/36, existing routes7/7 and renderer19/19 pass. Host
+metadata regression now passes; native runtime suite25/26 remains intentionally
+RED only for Test_FileAuthoredCustomRouteWalksWithoutTheRouteTestEntryPoint
+(exit5: no production step/moving pixels). Do not call this runtime wiring or
+run/claim a green canonical yet. No commit/push; preserve the pending test.
+
+Next after audit deleg_046adcf4: implement production custom-route activation,
+reference stop-count/frequency gates and route cursor/forced lifecycle. Primary
+source already shows same-code page changes retain original cursor (parameters
+ignored), MoveType_custom6, initial turn delay(freq8=0), new steps spend movement
+in the same tick, and only a tick that starts stopped may read the next command.
+Current forced test-seam runner differs: one command per tick, repeat finishes
+on wrap, unsupported nonmovement commands silently advance, source exit uses
+target tile twice, and MoveForward passes a facing byte as a direction index.
+Activation must not inherit those hazards silently. No page-route execution is
+implemented yet; the audit is an async handoff, not a human blocker.
+
+Audit delivered/resolved against primary source; fetched pinned Player0de2a9ab
+game_event.cpp/game_character.cpp/h and liblcf6854310c eventpage.h byte-match
+the scratch references. Reject the audit's suggested no-page state wipe: the
+actual reference preserves its route cursor and unspent movement; only command
+starts are suspended. Initial production binding/native test26/26 passes.
+Lifecycle coverage33/34 exposes existing TryBeginEventStep passability bug:
+source exit tests destination coordinates (RED exit3, inherited step240).
+Adding directional-edge regression before fixing shared movement helper.
+Binding patch first failed atomically on ambiguous foreach; reread/retried with
+unique existing TryGetValue branch. No speculative patch or test suppression.
+
+Failure log: edge fixture initially did not compile (CS0266 at masks assignment,
+int tuple values versus byte collection). Corrected the bounded fixture casts;
+no production change before behavioral RED. This is not a runtime hypothesis.
+
+Coverage run aborted before assertions (exit132): Godot FATAL script.is_null
+in tie_user_managed_to_unmanaged, LcfBinaryReader constructor during fixture
+Setup, after a successful rebuild. This is script registration/import state,
+not a failing route assertion. Run the canonical editor-import prerequisite
+before rerunning; do not delete caches or claim this run passed.
+
+Editor import resolved the native registration abort. No-page forced command
+regression39/40 RED was observed and fixed; native suite40/40 now passes.
+Adjacent route suite5/7 exposed a new regression: removing finished forced
+slots lost EventRouteFinishedForTest history. Retained bounded per-map completed
+IDs until a new explicit route request or map/stop/dispose reset; do not weaken
+the existing completion assertions. Other focused suites pass.
+
 ### Event animation ticks — completed
 
 FINAL: K-PROD-RM2K-EVENT-ANIMATION DONE. Follow-up canonical completed with

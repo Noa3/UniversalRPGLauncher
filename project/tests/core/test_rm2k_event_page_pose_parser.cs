@@ -15,6 +15,8 @@ public partial class TestRm2kEventPagePoseParser : TestBase
         // liblcf6854310c: 0x17 direction, 0x18 pattern, 0x19 translucent,
         // 0x24 animation type. The translucent value must not become a pose.
         var explicitPage = TestRm2kParser.Struct(
+            TestRm2kParser.Chunk(0x1F, TestRm2kParser.Ber(6)),
+            TestRm2kParser.Chunk(0x20, TestRm2kParser.Ber(8)),
             TestRm2kParser.Chunk(0x17, TestRm2kParser.Ber(3)),
             TestRm2kParser.Chunk(0x18, TestRm2kParser.Ber(2)),
             TestRm2kParser.Chunk(0x19, TestRm2kParser.Ber(1)),
@@ -32,6 +34,9 @@ public partial class TestRm2kEventPagePoseParser : TestBase
             var pages = events[0].AsGodotDictionary()["pages"].AsGodotArray();
             AssertEq(pages.Count, 2);
             var authored = pages[0].AsGodotDictionary();
+            AssertTrue(authored.ContainsKey("move_type"), "Page movement mode must survive parsing");
+            if (authored.ContainsKey("move_type")) AssertEq(authored["move_type"].AsInt32(), 6);
+            AssertEq(authored["move_frequency"].AsInt32(), 8);
             AssertEq(authored["character_direction"].AsInt32(), 3);
             AssertTrue(authored.ContainsKey("character_pattern"), "Page pattern must survive parsing");
             AssertTrue(authored.ContainsKey("animation_type"), "Page animation type must survive parsing");
@@ -41,6 +46,10 @@ public partial class TestRm2kEventPagePoseParser : TestBase
                 "0x18 pattern is not the 0x19 translucent flag");
             if (authored.ContainsKey("animation_type")) AssertEq(authored["animation_type"].AsInt32(), 4);
             var defaults = pages[1].AsGodotDictionary();
+            AssertTrue(defaults.ContainsKey("move_type"), "Missing mode still publishes the format default");
+            if (defaults.ContainsKey("move_type")) AssertEq(defaults["move_type"].AsInt32(), 1,
+                "Pinned liblcf defaults to random, not stationary");
+            AssertEq(defaults["move_frequency"].AsInt32(), 3, "Absent frequency defaults to3, not0");
             AssertEq(defaults["character_direction"].AsInt32(), 2, "Absent direction uses liblcf down, not up");
             if (defaults.ContainsKey("character_pattern")) AssertEq(defaults["character_pattern"].AsInt32(), 1);
             if (defaults.ContainsKey("animation_type")) AssertEq(defaults["animation_type"].AsInt32(), 0);

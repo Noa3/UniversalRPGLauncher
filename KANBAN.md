@@ -47,7 +47,63 @@ controls or shared Games/settings; stale/cancelled results cannot replace the
 prior library; close/reload cancels safely; traversal budgets and no-link/no-code
 safety remain; focused UI/library tests and canonical validation pass. Preserve
 saved explicit engine choices. Sprite successor is postponed for this user bug.
-### K-PROD-RM2K-PAGE-ROUTE-ACTIVATION — READY (P0)
+### K-PROD-RM2K-MOVEMENT-COVERAGE — READY (P0)
+
+Successor to production custom page routes. Measure page movement modes and
+route command IDs in pinned/owned RM2000/2003 data using the repository parser,
+without executing imported game code. Compare against the actual production
+mode gate and executed command branches, not a hand-kept constants table.
+Acceptance: publish per-mode and code(count) evidence, distinguish unsupported
+commands from empty/failed parses, select the highest-impact bounded supported
+extension from primary source, observe native RED before implementing it, add
+real-file/asset and lifecycle coverage, and run canonical validation. Keep full
+forced/interpreter/collision lifecycle explicit. Dependency:
+K-PROD-RM2K-PAGE-ROUTE-ACTIVATION.
+
+### K-PROD-RM2K-PAGE-ROUTE-ACTIVATION — DONE (P0, bounded custom routes)
+
+Final canonical proc_02e1eb5bfe2c exited0: **2866/2866** plus final validation
+pass marker. Totals reconciled programmatically:2846 Core tests +20 Smoke checks
+(the latter increment the runner total without individual suite summaries).
+Native runtime/pixel43/43; both reviews resolved. Production-disable mutation
+caught30/42, wrong step-delay mutation caught41/43; restored/rebuilt43/43.
+Build remains142warnings, no new normalized signature; shutdown still3 CanvasItem
+RIDs and6 ObjectDB instances. Earlier pending/VERIFY entries below are history.
+No engine-completion, native visual-parity or release-export claim.
+
+Production custom6 page routes now use a separate original cursor/route binding
+and authoritative ticks. Same-code page changes rebind parameters but retain
+cursor; different codes reset it. Unchanged pages do not restart; no eligible
+page suspends command starts but lets an unspent step arrive. Original routes
+resume after forced slots finish, without consuming the original cursor.
+Initial turn versus subsequent step frequency, first-tick movement, arrival
+tick separation, repeat wrap and bounded immediate nonmovement chains covered.
+Supported commands are cardinal0..3, explicit face/turn12..18 and speed/frequency
+28..31. Other commands stop the page route with a named diagnostic, once; modes
+1..5 and unknown modes are also explicitly unsupported, not custom aliases.
+Wait/jump/forward/diagonal/switch/graphic/audio/animation route expansion and full
+legacy forced-route pacing remain separate. Shared cardinal step source/target
+edge checking corrected after behavioral RED. The old forced completion debug
+observable remains available through bounded map-local history.
+
+Runtime/pixel42/42, poseparser1/1, parser36/36, routes7/7, renderer19/19,
+activation8/8, input11/11 and interpreter85/85 pass. Disabled-custom mutation
+caught30/42 and restored/rebuilt42/42. Build142warnings, no new normalized
+signature. Pinned source byte-match verified against upstream. Canonical
+Precommit review deleg_28bee8ab is resolved against the current source. Its
+status/mutation findings used older snapshots; current VERIFY and detected
+mutation evidence are above. Its skippable concern already matches the current
+code's SetIndex/MaxStopCountForStep, with no facing mutation on failed checks.
+Added a targeted regression instead of an unnecessary production edit. First
+canonical proc_a579de94ab15 explicitly stopped before rebuilding that coverage.
+Skippable refusal coverage43/43 passes; wrong step-to-turn delay mutation failed
+41/43, then restored/rebuilt43/43. Both reviews are resolved. Final canonical
+proc_02e1eb5bfe2c pending. No DONE/commit,
+complete-engine or release claim. Earlier intermediate entries below superseded.
+
+Historical metadata-only checkpoint: LMU0x1F/default1, custom6 and frequency
+default3 were retained before production wiring. The former25/26 failing walk
+test was fixed; the implemented and tested runtime state is described above.
 
 The event animator is live, but page routes currently enter _eventRoutes only
 through StartEventMoveRouteForTest. Trace the pinned page movement-mode and

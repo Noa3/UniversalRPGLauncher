@@ -279,6 +279,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 _eventScheduler.ExecuteFrame();
                 TryCarryOutTransfer();
                 RefreshEventPagePoses();
+                RefreshEventPageRoutes();
                 UpdateEventMoveRoutes(1);
                 UpdateEventAnimations(1);
             }
@@ -580,6 +581,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 // character is already on its way and has to arrive.
                 if (!_eventRoutes.TryGetValue(mapEvent.Id, out var route))
                 {
+                    UpdateEventPageRoute(mapEvent);
                     continue;
                 }
                 // An event mid step is still walking: the budget runs out before
@@ -591,6 +593,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 // none falls through to the command read, which finds nothing.
                 if (_eventStepStates.TryGetValue(mapEvent.Id, out var step))
                 {
+                    mapEvent.StopCount = 0;
                     if (step.RemainingStep > 0) _eventMovedThisTick.Add(mapEvent.Id);
                     var advanced = Rm2kStepBudget.Advance(step.RemainingStep, route.MoveSpeed);
                     if (!advanced.Completed)
@@ -605,10 +608,15 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     _eventRoutesMoved = true;
                 }
 
+                if (!_appliedEventPages.TryGetValue(mapEvent, out var forcedPage) || forcedPage == null) continue;
                 var command = route.Current;
                 if (command == null)
                 {
                     route.Cancel();
+                    _eventRoutes.Remove(mapEvent.Id);
+                    if (route.Finished) _finishedEventRouteIds.Add(mapEvent.Id);
+                    if (_appliedEventPages.TryGetValue(mapEvent, out var resumedPage) && resumedPage != null)
+                        mapEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForStep(Math.Clamp(resumedPage.MoveFrequency, 1, 8));
                     continue;
                 }
 
@@ -675,10 +683,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         // leaving through and the target against the bit it is entered
         // through. Checking only the target lets a character step out of a tile
         // it is not allowed to leave.
-        var leaveBit = Rm2kMoveRoute.OppositePassabilityBit(direction);
-        var enterBit = Rm2kMoveRoute.PassabilityBitFromLiblcfDirection(direction);
+        var leaveBit = Rm2kMoveRoute.PassabilityBitFromLiblcfDirection(direction);
+        var enterBit = Rm2kMoveRoute.OppositePassabilityBit(direction);
         if (!Simulation.IsPassableInDirection(targetX, targetY, enterBit)
-            || !Simulation.IsPassableInDirection(targetX, targetY, leaveBit))
+            || !Simulation.IsPassableInDirection(pEvent.X, pEvent.Y, leaveBit))
         {
             return false;
         }
@@ -689,6 +697,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
             Rm2kStepBudget.ScreenTileSize, direction);
         _eventMovedThisTick.Add(pEvent.Id);
+        pEvent.StopCount = 0;
         _eventRoutesMoved = true;
         return true;
     }
@@ -2157,6 +2166,9 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private void ClearEventMovementState()
     {
         _eventRoutes.Clear();
+        _finishedEventRouteIds.Clear();
+        _eventPageRoutes.Clear();
+        _boundEventRoutePages.Clear();
         _eventStepStates.Clear();
         _eventMovedThisTick.Clear();
         _eventRoutesMoved = false;
@@ -2227,6 +2239,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                         if (TryReadInt(pageData, "move_frequency", out var moveFrequency))
                         {
                             page.MoveFrequency = moveFrequency;
+                        }
+                        if (TryReadInt(pageData, "move_type", out var moveType))
+                        {
+                            page.MoveType = moveType;
                         }
                         if (pageData.TryGetValue("move_route_error", out var rawRouteError)
                             && rawRouteError.VariantType == Godot.Variant.Type.String
@@ -2333,6 +2349,117 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
     private readonly Dictionary<Rm2kMap.Event, Rm2kMap.EventPage?> _appliedEventPages = new();
     private readonly HashSet<int> _eventMovedThisTick = new();
+    private readonly Dictionary<int, Rm2kMoveRouteState> _eventPageRoutes = new();
+    private readonly HashSet<int> _finishedEventRouteIds = new();
+    private readonly Dictionary<Rm2kMap.Event, Rm2kMap.EventPage?> _boundEventRoutePages = new();
+
+    private static bool HaveSameRouteCodes(Rm2kMap.EventPage pOld, Rm2kMap.EventPage pNew) =>
+        pOld.MoveRouteCommands.Count == pNew.MoveRouteCommands.Count
+        && pOld.MoveRouteCommands.Select(command => command.CommandId)
+            .SequenceEqual(pNew.MoveRouteCommands.Select(command => command.CommandId));
+
+    private void RefreshEventPageRoutes()
+    {
+        foreach (var mapEvent in _mapEvents)
+        {
+            _appliedEventPages.TryGetValue(mapEvent, out var page);
+            _boundEventRoutePages.TryGetValue(mapEvent, out var previous);
+            if (_boundEventRoutePages.ContainsKey(mapEvent) && ReferenceEquals(previous, page)) continue;
+            _boundEventRoutePages[mapEvent] = page;
+            // No eligible page suspends commands, but preserves an unspent step
+            // and the original cursor. Reappearance is a fresh page transition.
+            if (page == null) continue;
+            var cursor = previous != null && HaveSameRouteCodes(previous, page)
+                && _eventPageRoutes.TryGetValue(mapEvent.Id, out var oldRoute) ? oldRoute.CurrentIndex : 0;
+            var route = new Rm2kMoveRouteState(page.MoveRouteCommands, page.MoveRouteRepeat, page.MoveRouteSkippable)
+            {
+                MoveSpeed = Math.Clamp(PagePoseValue(page, "move_speed", 3), 1, 6),
+                MoveFrequency = Math.Clamp(page.MoveFrequency, 1, 8)
+            };
+            route.Force(cursor);
+            _eventPageRoutes[mapEvent.Id] = route;
+            mapEvent.MaxStopCount = page.MoveType == 6
+                ? Rm2kStepBudget.MaxStopCountForTurn(route.MoveFrequency)
+                : Rm2kStepBudget.MaxStopCountForStep(route.MoveFrequency);
+            if (_eventRoutes.TryGetValue(mapEvent.Id, out var forced))
+            {
+                forced.MoveSpeed = route.MoveSpeed;
+                forced.MoveFrequency = route.MoveFrequency;
+            }
+            if (page.MoveType != 0 && page.MoveType != 6)
+                Simulation.AddDiagnostic($"RM2K event {mapEvent.Id} autonomous movement type {page.MoveType} is not implemented.");
+        }
+    }
+
+    private void AdvanceEventPageStep(Rm2kMap.Event pEvent, Rm2kMoveRouteState pRoute)
+    {
+        var step = _eventStepStates[pEvent.Id];
+        _eventMovedThisTick.Add(pEvent.Id);
+        var advanced = Rm2kStepBudget.Advance(step.RemainingStep, pRoute.MoveSpeed);
+        if (advanced.Completed) _eventStepStates.Remove(pEvent.Id);
+        else _eventStepStates[pEvent.Id] = (step.X, step.Y, advanced.Remaining, step.Direction);
+        pEvent.StopCount = 0;
+        _eventRoutesMoved = true;
+    }
+
+    private void UpdateEventPageRoute(Rm2kMap.Event pEvent)
+    {
+        if (!_eventPageRoutes.TryGetValue(pEvent.Id, out var route)) return;
+        // A tick that begins moving only spends movement; it cannot also start
+        // the next command on arrival. A newly started step spends this tick too.
+        if (_eventStepStates.ContainsKey(pEvent.Id))
+        {
+            AdvanceEventPageStep(pEvent, route);
+            return;
+        }
+        var canMove = Presentation.MessageContinuesEvents || !_eventScheduler.HasBlockingInterpreter;
+        _appliedEventPages.TryGetValue(pEvent, out var page);
+        if (page != null && page.MoveType == 6 && canMove && route.Active && pEvent.StopCount >= pEvent.MaxStopCount)
+        {
+            var start = route.CurrentIndex;
+            for (var work = 0; work < route.Commands.Count; work++)
+            {
+                if (route.CurrentIndex >= route.Commands.Count)
+                {
+                    if (!route.Repeat) { route.Cancel(); break; }
+                    route.SetIndex(0);
+                    if (start == 0) break;
+                }
+                var command = route.Current!;
+                var id = command.CommandId;
+                if (id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveLeft)
+                {
+                    if (!TryBeginEventStep(pEvent, route, command))
+                    {
+                        if (!route.Skippable) { route.NoteMoveFailure(); break; }
+                    }
+                    route.SetIndex(route.CurrentIndex + 1);
+                    pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForStep(route.MoveFrequency);
+                    if (_eventStepStates.ContainsKey(pEvent.Id)) { AdvanceEventPageStep(pEvent, route); return; }
+                }
+                else if (id >= Rm2kMoveRoute.FaceUp && id <= Rm2kMoveRoute.Turn180Degree)
+                {
+                    ApplyEventRouteFacingCommand(pEvent, route, id);
+                    route.SetIndex(route.CurrentIndex + 1);
+                    pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForTurn(route.MoveFrequency);
+                    pEvent.StopCount = 0;
+                }
+                else if (id >= Rm2kMoveRoute.IncreaseMovementSpeed && id <= Rm2kMoveRoute.DecreaseMovementFrequence)
+                {
+                    ApplyEventRouteFacingCommand(pEvent, route, id);
+                    route.SetIndex(route.CurrentIndex + 1);
+                }
+                else
+                {
+                    Simulation.AddDiagnostic($"RM2K event {pEvent.Id} page route stopped at unsupported command {id}, index {route.CurrentIndex}.");
+                    route.Cancel();
+                    break;
+                }
+                if (pEvent.StopCount < pEvent.MaxStopCount || route.CurrentIndex == start) break;
+            }
+        }
+        if (pEvent.StopCount == 0 || canMove) pEvent.StopCount = Math.Min(pEvent.StopCount + 1, 65535);
+    }
 
     private static int PagePoseValue(Rm2kMap.EventPage pPage, string pField, int pDefault) =>
         pPage.Graphic.TryGetValue(pField, out var raw) && raw is int value ? value : pDefault;
@@ -2387,6 +2514,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             if (!_appliedEventPages.TryGetValue(mapEvent, out var page) || page == null) continue;
             var animationType = PagePoseValue(page, "animation_type", 0);
             var speed = PagePoseValue(page, "move_speed", 3);
+            if (_eventPageRoutes.TryGetValue(mapEvent.Id, out var original)) speed = original.MoveSpeed;
             if (_eventRoutes.TryGetValue(mapEvent.Id, out var route)
                 && (route.Active || _eventStepStates.ContainsKey(mapEvent.Id))) speed = route.MoveSpeed;
             speed = Math.Clamp(speed, 1, 6);
@@ -2991,6 +3119,7 @@ ReadString(entry, "name", v => werte.Name = v);
                 Direction = Rm2kMoveRoute.LiblcfFromFacingDirection(mapEvent.Direction),
             };
             route.Force(0);
+            _finishedEventRouteIds.Remove(pEventId);
             _eventRoutes[pEventId] = route;
             return page.MoveRouteCommands.Count;
         }
@@ -3019,7 +3148,8 @@ ReadString(entry, "name", v => werte.Name = v);
     /// <summary>Whether an event's route has run to completion.</summary>
     public bool EventRouteFinishedForTest(int pEventId)
     {
-        return _eventRoutes.TryGetValue(pEventId, out var route) && route.Finished;
+        return (_eventRoutes.TryGetValue(pEventId, out var route) && route.Finished)
+            || _finishedEventRouteIds.Contains(pEventId);
     }
 
     /// <summary>The direction an event faces, in the RPG Maker byte order.</summary>

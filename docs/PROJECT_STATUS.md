@@ -5,9 +5,24 @@
 
 ## Latest runtime correctness work
 
-The last completed canonical development suite passed **2847/2847**, with the
-final validator pass marker recovered from its exact log after a foreground
-transport timeout. Event animation now advances on simulation ticks with
+The last completed canonical development run exited0 with **2866/2866** and the
+final validator pass marker:2846 Core tests +20 Smoke checks. Custom page routes
+now start from production ticks, with an original cursor independent from forced
+routes, reference movement/frequency timing and repeat wrapping. Same-code page
+changes retain cursor but rebind parameters; different codes reset; no eligible
+page suspends command starts without deleting an in-flight step. Native
+runtime/pixel43/43 and adjacent suites pass; both reviews resolved and activation/
+step-delay mutations detected. Shared cardinal source/target edge checking is
+corrected. Supported production route commands are cardinal0..3, face/turn12..18
+and speed/frequency28..31; others stop/report, not silently succeed. Remaining
+movement modes1..5 and unknown modes report unsupported. Full forced pacing,
+collision, route expansion and parallel/page lifecycle remain open. Build142
+warnings and shutdown3 CanvasItem RIDs/6 ObjectDB instances remain; no release
+export or complete-engine/GUI claim. The next P0 card measures remaining modes
+and route opcodes before selecting the next bounded implementation.
+
+The preceding event-animation canonical passed **2847/2847**. Event animation
+now advances on simulation ticks with
 reference normal/continuous/fixed/spin predicates, live counters and parsed
 LMU0x25 speed. Frame/facing changes invalidate rendering; counter-only ticks do
 not recompose it. Movement and animation interleave per tick, including the
@@ -16,8 +31,8 @@ and step budgets so reused event IDs cannot inherit old movement or speed.
 Native runtime/pixel24/24 and adjacent suites pass, with timing and screen-tick
 mutations detected. Both bounded reviews are resolved. Build142warnings and
 shutdown3 CanvasItem RIDs/6 ObjectDB instances remain. Movement coverage uses
-the explicit existing test seam: production page-route activation is absent
-and has the next READY/P0 card. Full route/parallel lifecycle, hero idle
+the explicit existing test seam in that earlier slice; production custom routes
+are implemented above. Full route/parallel lifecycle, hero idle
 batching, pause/jump reset, transparency and complete engine/GUI gates remain
 open; this is not native-engine visual parity or a new release export.
 
