@@ -214,13 +214,18 @@ public class Rm2kMap
 		// LMT chunk 0x16, liblcf Event::character_index.
 		public int CharacterIndex;
 
-		// LMT chunk 0x17, liblcf Event::character_direction, stored as this
-		// project stores directions: 2 down, 4 left, 6 right, 8 up.
+		// Live movement direction: 2 down, 4 left, 6 right, 8 up.
+		// Authored direction is a page field, not an Event field.
 		public byte Direction = 2;
 
-		// LMT chunk 0x19, liblcf Event::character_pattern. This is the
-		// initial anim_frame, so a page can start on a given walk pose.
-		public int AnimationFrame;
+		// Visible facing is distinct from movement direction for fixed animations.
+		// Null preserves existing direction-only callers until a page initializes it.
+		public byte? FacingDirection;
+		public bool FacingLocked;
+
+		// Pinned SaveMapEventBase initializes normal animation at the middle frame.
+		// Page pattern (LMU0x18) overrides it only for fixed-graphic/spin types.
+		public int AnimationFrame = 1;
 
 		public Event(int pId = 0, int pX = 0, int pY = 0)
 		{

@@ -47,7 +47,54 @@ controls or shared Games/settings; stale/cancelled results cannot replace the
 prior library; close/reload cancels safely; traversal budgets and no-link/no-code
 safety remain; focused UI/library tests and canonical validation pass. Preserve
 saved explicit engine choices. Sprite successor is postponed for this user bug.
-### K-PROD-RM2K-PAGE-POSE — READY
+### K-PROD-RM2K-EVENT-ANIMATION — READY
+
+Successor to page pose. Initial/frame-transition policy is implemented, but
+normal/continuous/spin event animation is not advanced with reference timing.
+Acceptance: inspect pinned Game_Character::UpdateAnim/UpdateFacing and animation
+type predicates; retain per-event timing on simulation ticks, honor fixed and
+spin behavior (including spin's automatic-facing exception), and prove changing
+real-charset pixels without coupling simulation to render frequency. Preserve
+position/route/step progress and explicit route-turn overrides. Cover idle and
+moving animation types, unchanged pages, reload/teardown and mutation-sensitive
+timing/pixel regressions; run canonical validation. Route command expansion and
+parallel-interpreter refresh are separate. Dependency: K-PROD-RM2K-PAGE-POSE.
+
+### K-PROD-RM2K-PAGE-POSE — DONE (initial and page-transition pose rules)
+
+Final canonical proc_3e71ad11a782 exited0 with **2835/2835** and the final
+validation pass marker. Audit deleg_770a5ed5 and review deleg_72c62b9b are
+resolved with no blocker for the card's original acceptance criteria. Final
+runtime/pixel12/12, poseparser1/1 and adjacent suites pass. Parser, initialfixed,
+normalframe and explicitturn regressions were observed RED before corrections;
+fixed-lock mutation was detected. Old golden is preserved and replacement is
+exact-RGBA asserted. This is development evidence, not original-engine parity.
+The earlier VERIFY/pending checkpoints below are historical. Full event tick
+animation (including spin's subsequent movement-facing rules), route pacing,
+unsupported random/hero-relative route commands and parallel lifecycle remain
+open; the next READY animation slice is above. No release export.
+
+Implemented page direction/pattern/animation parsing and native pose transition
+rules. Pinned liblcf6854310c verifies LMU0x17/0x18/0x24 and defaults2/1/0;
+0x19 is translucent, not pattern. Visible facing is independent of movement
+direction; fixed2/3/4 and fixedgraphic4/spin5 exceptions preserve moving steps.
+Stopped initial or direction/pattern changes apply authored direction; normal
+initialframe is reference SaveMapEventBase frame1, not the previous frame0.
+Unchanged pages do not reapply pose. Forced route instances/position survive.
+Runtime/pixel suite11/11, poseparser1/1, parser36/36, rendering19/19, route7/7,
+activation8/8 and input11/11 pass. REDs observed before parser/pose/default fixes;
+fixed-lock mutation caught type2/3/4 then restored. Old developmentgolden is
+preserved; refreshedgolden has no changedpixels outside verified sprite rects,
+and the assertion is now exactRGBA, not relaxed hero-rectangle tolerance.
+Canonical proc_da0d5d5eaf1a and review deleg_72c62b9b pending; initial audit
+deleg_770a5ed5 awaits delivery. No DONE/commit, nativeparity or enginecompletion
+claim. Full continuous/spin stepping and page route/parallel lifecycle separate.
+
+Audit follow-up: explicit route turns use visible facing and override page
+facing locks (pinned game_character.cpp311-350), unlike ordinary movement.
+New regression observed11/12RED then12/12green; adjacent suites stay green.
+Initial audit resolved. Pre-fix canonical run was explicitly cancelled; current
+final validatorproc_3e71ad11a782 and steered reviewdeleg_72c62b9b are pending.
 
 Successor to active graphic selection. Pinned EasyRPG Game_Event::RefreshPage
 182-209 resets page-specific facing/direction only while stopping when the

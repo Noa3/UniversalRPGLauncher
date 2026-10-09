@@ -13,7 +13,8 @@ The source repository includes a GPL-3.0 `COPYING` file and `AUTHORS.md` with pr
 | `rm2003/RPG_RT.lmt` | 1734 | `35ff18ceda8ce13a613ad7f9088a3a7bfa88a86505833c7e953fd07b996cc1e0` |
 | `rm2003/Map0001.lmu` | 8488 | `7a18ef96def5666eb0b8e76ae271d01cb2d23706f51e8bbc9a5f1848e2ba5825` |
 | `rm2000/ChipSet/World.png` | 35812 | `7d3f28e1d825b254c6b5d8afca36e31575e54d9ab58a98678d89ab3573ba6855` |
-| `rm2000/rendered/Map0001.png` | 6270 | `02ffa1bfbd1e5abe2d11f6b3f722abd13253e9e66f478b1e9dc3902a7d3d2935` |
+| `rm2000/rendered/Map0001.png` | 19592 | `060e46f5c16472b40e0fc12315e36113beca527bb106baee1dcae7bb1d0f602f` |
+| `rm2000/rendered/Map0001.legacy.png` | 18859 | `99d94f22bf16c15f7f13865871ca70a19d5eea3f7eeb3712c9155fd27edc5e1a` |
 | `rm2000/CharSet/Chara1.png` | 18785 | `24442b6157d3f609fe3d6e588f23a42f012d3180c2c1729b2af0ddc188ce0cfc` |
 
 Raw source paths are pinned to the same commit:
@@ -41,6 +42,8 @@ The upstream project may change its contents or licensing in later commits. Upda
 
 ## The rendered golden image
 
-`rm2000/rendered/Map0001.png` is **not** from upstream. It is the output of this project's own renderer for the pinned `rm2000/Map0001.lmu` with the pinned `rm2000/ChipSet/World.png`, at frame 0, at 320 by 240 pixels. It is a regression baseline: `TestRm2kRuntimeRendering` renders the map again and compares every byte, so a change in the chipset resolution, the autotile tables, the transparency rule or the draw order fails the test instead of quietly producing a different picture.
+`rm2000/rendered/Map0001.png` is **not** from upstream. It is this project's initial 320x240 composition for the pinned map, chipset and charset, with the starting party and reference-derived page direction/pattern rules. It is a development regression baseline, not native RPG_RT/EasyRPG visual-parity evidence. The test compares every RGBA byte with zero tolerance.
+
+The previous capture is preserved as `Map0001.legacy.png`. Refreshing the baseline was justified by pinned Player `0de2a9ab466a133ac6e192a84bd761a1d81f5f14` RefreshPage and liblcf `6854310c3432e553fd4ae672ce861899c80c3bd0`: normal SaveMapEventBase animation starts at frame1, page pattern is LMU0x18 (not translucent0x19), and fixed/spin pages apply their authored pattern. Independent native runtime tests compare opaque real-charset pixels with the reference cell geometry, including file-based initial fixed and normal pages. The refreshed capture differs at5777 pixels; a separate raw-LMU coordinate/pixel inspection found zero differences outside the22 event rectangles and the starting-hero rectangle. Both images were visually inspected. The old README hash/size did not match the old file; the legacy row above records its measured bytes/hash rather than repeating that stale metadata.
 
 The pinned map is a single test room: 20 by 15 tiles, a lower layer of block D and E tiles, an upper layer of block F tiles that are fully transparent in that chipset, and no animated autotile. It renders to 13 distinct colours and its floor and wall tiles fill every pixel, so a transparency check is not meaningful on it and the transparency rule is verified per tile instead.

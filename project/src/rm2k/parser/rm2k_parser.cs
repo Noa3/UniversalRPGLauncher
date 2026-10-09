@@ -1335,9 +1335,8 @@ public partial class Rm2kParser : RefCounted
 					foreach (var pageObj in (Godot.Collections.Array<Godot.Collections.Dictionary>)pages.Data["objects"])
 					{
 						var pageFields = ChunksById((Godot.Collections.Array<Godot.Collections.Dictionary>)pageObj["fields"]);
-						// LMT character fields, verified in liblcf LMU_Reader:
-						// character_name 0x15, character_index 0x16,
-						// character_direction 0x17, character_pattern 0x19.
+						// Legacy event-level projections remain for dictionary compatibility.
+						// Real LMU pose is decoded from pageFields below; 0x19 is translucent.
 						eventCharacterName = ReadRm2kStringField(eventFields, 0x15);
 						var indexResult = IntegerFromFields(eventFields, 0x16, 0);
 						if (indexResult.Success)
@@ -1363,11 +1362,16 @@ public partial class Rm2kParser : RefCounted
 					var layerResult = IntegerFromFields(pageFields, 0x22, 0);
 					var freqResult = IntegerFromFields(pageFields, 0x20, 0);
 					var characterIndexResult = IntegerFromFields(pageFields, 0x16, 0);
-					var characterDirectionResult = IntegerFromFields(pageFields, 0x17, 0);
+					var characterDirectionResult = IntegerFromFields(pageFields, 0x17, 2);
+					// Pinned liblcf6854310c: pattern0x18, animation_type0x24.
+					// 0x19 is translucent, not a character animation frame.
+					var characterPatternResult = IntegerFromFields(pageFields, 0x18, 1);
+					var animationTypeResult = IntegerFromFields(pageFields, 0x24, 0);
 					var characterName = ReadRm2kStringField(pageFields, 0x15);
 
 					if (!triggerResult.Success || !layerResult.Success || !freqResult.Success
-						|| !characterIndexResult.Success || !characterDirectionResult.Success)
+						|| !characterIndexResult.Success || !characterDirectionResult.Success
+						|| !characterPatternResult.Success || !animationTypeResult.Success)
 					{
 							return Failure($"Invalid page metadata", (int)pageChunkData["payload_offset"]);
 						}
@@ -1458,6 +1462,8 @@ public partial class Rm2kParser : RefCounted
 						{ "character_name", characterName },
 						{ "character_index", (int)characterIndexResult.Data["value"] },
 						{ "character_direction", (int)characterDirectionResult.Data["value"] },
+						{ "character_pattern", (int)characterPatternResult.Data["value"] },
+						{ "animation_type", (int)animationTypeResult.Data["value"] },
 						{ "conditions", conditionData },
 						{ "has_move_list", hasMoveList },
 						{ "has_command_list", hasList },

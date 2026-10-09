@@ -306,6 +306,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             // is moving. A command that starts a step returns immediately, so
             // the route consumes one command per update and the character then
             // spends the step budget walking before the next one is read.
+            RefreshEventPagePoses();
             UpdateEventMoveRoutes(elapsedTicks);
 
             // Game_Character::Update advances the movement budget and the walk
@@ -703,6 +704,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         pEvent.X = targetX;
         pEvent.Y = targetY;
         pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(direction);
+        if (!pEvent.FacingLocked) pEvent.FacingDirection = pEvent.Direction;
         _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
             Rm2kStepBudget.ScreenTileSize, direction);
         _eventRoutesMoved = true;
@@ -741,11 +743,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             // The route works in the liblcf order, so the event's stored byte is
             // converted rather than assigned directly.
-            var liblcf = Rm2kMoveRoute.LiblcfFromFacingDirection(pEvent.Direction);
+            // Explicit route turns start from visible facing and override a
+            // page lock; ordinary movement's automatic facing update does not.
+            var liblcf = Rm2kMoveRoute.LiblcfFromFacingDirection(pEvent.FacingDirection ?? pEvent.Direction);
             var named = Rm2kMoveRoute.FacingCommandDirection(pCommandId);
             if (named >= 0)
             {
                 pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(named);
+                pEvent.FacingDirection = pEvent.Direction;
                 _eventRoutesMoved = true;
                 return;
             }
@@ -754,16 +759,19 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 case Rm2kMoveRoute.Turn90DegreeRight:
                     pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(
                         Rm2kMoveRoute.TurnRight(liblcf));
+                    pEvent.FacingDirection = pEvent.Direction;
                     _eventRoutesMoved = true;
                     return;
                 case Rm2kMoveRoute.Turn90DegreeLeft:
                     pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(
                         Rm2kMoveRoute.TurnLeft(liblcf));
+                    pEvent.FacingDirection = pEvent.Direction;
                     _eventRoutesMoved = true;
                     return;
                 case Rm2kMoveRoute.Turn180Degree:
                     pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(
                         Rm2kMoveRoute.TurnHalf(liblcf));
+                    pEvent.FacingDirection = pEvent.Direction;
                     _eventRoutesMoved = true;
                     return;
             }
@@ -920,6 +928,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _renderedRenderer = null;
         _isRenderDirty = false;
         _renderedEventPages.Clear();
+        _appliedEventPages.Clear();
     }
 
     private string? ResolveGameDirectory()
@@ -2175,11 +2184,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 if (!TryReadInt(data, "id", out var id) || !TryReadInt(data, "x", out var x) || !TryReadInt(data, "y", out var y)) continue;
                 var mapEvent = new Rm2kMap.Event(id, x, y);
 
-                // LMT character fields, verified chunk ids 0x15, 0x16, 0x17 and
-                // 0x19. They are read here so the sprite builder sees the real
-                // direction and start pose instead of the defaults. A missing
-                // field keeps the RPG Maker default of facing down, which is
-                // what an unconditioned event uses.
+                // Retain legacy event-level metadata for compatibility. The
+                // active LMU page below is authoritative for graphic and pose.
                 if (data.TryGetValue("character_name", out var rawEventCharacterName)
                     && rawEventCharacterName.VariantType == Godot.Variant.Type.String)
                 {
@@ -2195,10 +2201,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     // stores 2 down, 4 left, 6 right, 8 up.
                     mapEvent.Direction = Rm2kCharacterSprite.FacingFromLiblcfDirection(eventDirection);
                 }
-                if (TryReadInt(data, "character_pattern", out var eventPattern))
-                {
-                    mapEvent.AnimationFrame = Rm2kCharacterAnimation.ClampFrame(eventPattern);
-                }
+                // LMU pose belongs to EventPage, not Event. Normal animation
+                // retains SaveMapEventBase's initial frame until it advances.
                 if (data.TryGetValue("pages", out var rawPages) && rawPages.VariantType == Godot.Variant.Type.Array)
                 {
                     foreach (var rawPage in rawPages.AsGodotArray())
@@ -2275,6 +2279,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                         {
                             page.Graphic["character_index"] = characterIndex;
                         }
+                        foreach (var poseField in new[] { "character_direction", "character_pattern", "animation_type" })
+                        {
+                            if (TryReadInt(pageData, poseField, out var poseValue)) page.Graphic[poseField] = poseValue;
+                        }
                         if (TryReadInt(pageData, "transparency", out var transparency))
                         {
                             page.Graphic["transparency"] = transparency;
@@ -2326,6 +2334,40 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     // Compare page identity against the last composition, without decoding images
     // or resetting live event/route state on every idle simulation tick.
     private readonly Dictionary<Rm2kMap.Event, Rm2kMap.EventPage?> _renderedEventPages = new();
+
+    private readonly Dictionary<Rm2kMap.Event, Rm2kMap.EventPage?> _appliedEventPages = new();
+
+    private static int PagePoseValue(Rm2kMap.EventPage pPage, string pField, int pDefault) =>
+        pPage.Graphic.TryGetValue(pField, out var raw) && raw is int value ? value : pDefault;
+
+    private void RefreshEventPagePoses()
+    {
+        foreach (var mapEvent in _mapEvents)
+        {
+            var page = Rm2kEventPageSelector.SelectActive(mapEvent, Simulation);
+            if (_appliedEventPages.TryGetValue(mapEvent, out var previous) && ReferenceEquals(previous, page)) continue;
+            _appliedEventPages[mapEvent] = page;
+            _isRenderDirty = true;
+            if (page == null) continue;
+            var direction = PagePoseValue(page, "character_direction", 2);
+            var pattern = PagePoseValue(page, "character_pattern", 1);
+            var animationType = PagePoseValue(page, "animation_type", 0);
+            var facing = Rm2kCharacterSprite.FacingFromLiblcfDirection(direction);
+            var stopping = !_eventStepStates.TryGetValue(mapEvent.Id, out var step) || step.RemainingStep <= 0;
+            // Pinned Game_Event::RefreshPage: only stopped direction/pattern
+            // changes reset movement direction. Fixed facing is independent.
+            if (stopping && (previous == null
+                || PagePoseValue(previous, "character_direction", 2) != direction
+                || PagePoseValue(previous, "character_pattern", 1) != pattern))
+            {
+                mapEvent.Direction = facing;
+                mapEvent.FacingDirection = facing;
+            }
+            mapEvent.FacingLocked = animationType is 2 or 3 or 4;
+            if (mapEvent.FacingLocked) mapEvent.FacingDirection = facing;
+            if (animationType is 4 or 5) mapEvent.AnimationFrame = Rm2kCharacterAnimation.ClampFrame(pattern);
+        }
+    }
 
     private bool HaveEventGraphicsChanged()
     {
@@ -2990,6 +3032,10 @@ ReadString(entry, "name", v => werte.Name = v);
         }
         _isRenderDirty = false;
 
+        // Initial composition also applies the starting page's pose exactly once.
+        RefreshEventPagePoses();
+        _isRenderDirty = false;
+
         // The Player does not re-raster the map when the player moves: it keeps
         // the two tile layers whole and scrolls them by
         // GetDisplayX() / (SCREEN_TILE_SIZE / TILE_SIZE) screen tiles, then by
@@ -3282,7 +3328,7 @@ ReadString(entry, "name", v => werte.Name = v);
             MapY = pEvent.Y,
             CharacterIndex = index,
             Stage = Rm2kCharacterSprite.StageForLayer(page.Layer),
-            FacingDirection = pEvent.Direction,
+            FacingDirection = pEvent.FacingDirection ?? pEvent.Direction,
             Frame = pEvent.AnimationFrame,
         };
     }

@@ -1,5 +1,82 @@
 ## Current card
 
+### Page-specific event pose — complete
+
+FINAL: K-PROD-RM2K-PAGE-POSE DONE for initial and page-transition pose rules.
+Final validator proc_3e71ad11a782 exited0; exactlog confirms **2835/2835** and
+UniversalRPG validation passed. Both audit deleg_770a5ed5 and review
+deleg_72c62b9b are resolved with no acceptance blocker. Final focused suites:
+runtime/pixel12/12, poseparser1/1, parser36/36, render19/19, routes7/7,
+activation8/8, input11/11. Explicit turn RED11/12 then12/12 caught visible-facing
+basis/lock override. Lockfalse mutation caught fixed2/3/4. Exact newgolden hashes
+match README; legacy capture preserved; no native visual-parity/export claim.
+
+Next READY implementation: K-PROD-RM2K-EVENT-ANIMATION. Pose transitions do not
+implement continuous/spin tick animation, spin's subsequent automatic-facing
+exception, route turn pacing, unsupported random/hero-relative commands or full
+parallel/page refresh. Those limitations are not complete engine functionality.
+All explicit RM2000/2003,XP,VX,VX Ace,MV/MZ and bothGUI production targets remain
+open. qa_patches/ unchanged; earlier pending entries below are historical.
+
+LATEST: K-PROD-RM2K-PAGE-POSE VERIFY. Implemented parser+bridge+native pose
+policy, separate visible facing and movementdirection, fixed/spin page exceptions,
+stopped/initial versusmidstep reset rule, unchangedpagecache, reference normal
+initialframe1. Runtime/pixel11/11,poseparser1/1,parser36/36,render19/19,
+routes7/7,activation8/8,input11/11 pass. Lockfalse mutation wascaught for2/3/4,
+restored/rebuilt; no mutationmarkerremains. Legacygoldenpreserved andnewcorrected
+developmentgoldenexactRGBA assertionisstronger. No originaldata/qapatches/export
+changed. Fullcontinuous/spin tickanimation is not implemented by page-pose rules.
+
+Canonical proc_da0d5d5eaf1a running; log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-page-pose-validation.log`.
+Precommit review deleg_72c62b9b pending; initial audit deleg_770a5ed5 alsoawaits
+delivery. Next: resolvefindings andvalidateexactfinalcount beforeDONE/commit/push.
+AllXP/VX/VXAce/MV/MZ/RM2K/GUIcompleteproductiontargets remainopen.
+
+Audit deleg_770a5ed5 delivered; most findings describe the older in-progress
+source and are already implemented. Verified its explicit-route exception in
+pinned game_character.cpp311-350: turn starts from visible facing and directly
+sets facing even while animation-locked. Added regression before fixing guards.
+Stopped proc_da0d5d5eaf1a explicitly before this source change; it is not final
+passing evidence. A fresh canonical run is required after the route correction.
+
+Explicit-turn RED11/12 was observed for visible-facing basis and lockoverride.
+Corrected named/90/180 facing commands only; ordinary movement retains page
+lockguard. Final suites12/12runtime,1/1poseparser,36/36parser,19/19render,
+7/7routes,8/8activation,11/11input pass. Audit deleg_770a5ed5 resolved.
+Review deleg_72c62b9b was steered to latestdiff; final canonicalproc_3e71ad11a782
+nowruns, log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-page-pose-final-validation.log`.
+Keep VERIFY until review and finalexit/count known. Earlier run is cancelled.
+
+Base main8b83021 verified clean except preserved qa_patches/; canonical2828/2828.
+Selected K-PROD-RM2K-PAGE-POSE. Primary Player0de2a9ab RefreshPage152-209:
+stopped first/change-dir-or-pattern resets direction/facing, fixed2/3/4 locks
+facing, fixedgraphic4/spin5 applies pagepattern. Direction and visible facing
+must remain distinct while moving. liblcf source pinned6854310c confirms
+direction0x17 default2, pattern0x18 default1, animation0x24 default0;
+existing comment0x19 for pattern is wrong (0x19 is translucent). Detection and
+parsing execute no gamecode. Read-only audit deleg_770a5ed5 pending.
+Add a file-based parser regression first, then native transition/pixel tests.
+
+Failure log: first pose parser fixture omitted required lower/upper tile data
+and was refused before page decoding. Added the same complete tile-layer shape
+as existing renderer fixtures; production parser unchanged. BehavioralRED pending.
+
+Second fixture failure identified the header length literal, not parser behavior:
+LcfMapUni was decoded. Derive prefix length from the actual ASCII byte array;
+never use a manually counted format length. Retry with corrected fixture.
+
+Pose parser1/1 and runtime11/11 green, including file-based startup and midstep
+types0/2/3/4/5. Normal initialframe reference fixed from0 to1 after RED10/11.
+Adjacent parser36/36, routes7/7, activation8/8 green; rendering18/19 exposed
+obsolete golden's hero-only tolerance. Compared old/newcaptures:5777 changed
+pixels, zero outside22 rawLMUevent rectangles plus startinghero. Inspected both
+images, preserved oldgolden asMap0001.legacy.png; updated developmentgolden only
+after realassetpixel/orientation tests passed. Replaced old16x32 mismatch
+tolerance with exactRGBA equality (stronger assertion). README measured hashes
+replace staleoldmetadata; no native visual-parity claim. Rerun required.
+
 ### Active event graphics — complete
 
 FINAL: K-PROD-RM2K-ACTIVE-GRAPHIC DONE for its original graphic/index/layer

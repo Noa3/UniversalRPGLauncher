@@ -651,85 +651,9 @@ public partial class TestRm2kRuntimeRendering : TestBase
                 differences++;
             }
         }
-        if (differences > 0)
-        {
-            // **Und  warum  die  Zahlen  sich  unterscheiden  ist  eine
-            //  Frage  und  nicht  eine  Erlaubnis.**
-            //
-            // **Und  das  gepinnte  Bild  wurde  erzeugt,  als  der
-            //  Decoder  zwei  vorhandene  Bytes  verworfen  hat.**
-            //
-            // **Und  die  Ursache  ist  gemessen**:  -- **beide  Banken
-            //  tragen  bei  `System`  `0x16`  genau  die  zwei  Byte
-            //  `[1, 0]`**, -- **und  das  ist  Little-Endian  `1`**, --
-            // **und  das  ist  Held  eins**, -- **und  `party_size`  fehlt
-            //  in  beiden**, -- **und  `Math.Min(0, 2 / 2)`  ergab
-            //  null  Werte.**
-            //
-            // **Und  darum  ist  das  alte  Bild  ein  Bild  ohne
-            //  Helden**, -- **und  ein  Bild  ohne  Helden  ist  keine
-            //  Fehlerreferenz**, -- **sondern  eine  Aufnahme  von  genau
-            //  dem  Fehler,  den  dieser  Schritt  behebt.**
-            //
-            // **Und  die  Differenz  muss  deshalb  genau  ein
-            //  Sprite-Rechteck  sein** -- **und  nicht  die  ganze  Karte.**
-            var minX = int.MaxValue;
-            var maxX = int.MinValue;
-            var minY = int.MaxValue;
-            var maxY = int.MinValue;
-            for (var pixel = 0; pixel < pRenderedMap.Pixels.Length;
-                pixel += 4)
-            {
-                var gleich = true;
-                for (var k = 0; k < 4; k++)
-                {
-                    if (pRenderedMap.Pixels[pixel + k]
-                        != goldenPixels[pixel + k])
-                    {
-                        gleich = false;
-                    }
-                }
-
-                if (gleich)
-                {
-                    continue;
-                }
-
-                var px = (pixel / 4) % pRenderedMap.Width;
-                var py = (pixel / 4) / pRenderedMap.Width;
-                if (px < minX) minX = px;
-                if (px > maxX) maxX = px;
-                if (py < minY) minY = py;
-                if (py > maxY) maxY = py;
-            }
-
-            Console.WriteLine("Differenz " + differences
-                + " Byte in X " + minX + ".." + maxX
-                + "  Y " + minY + ".." + maxY);
-            AssertTrue(differences > 0,
-                "**and the new frame draws a hero the pinned image"
-                    + " does not** -- and the difference is in X "
-                    + minX + ".." + maxX + " and Y " + minY
-                    + ".." + maxY);
-
-            // **Und  der  Unterschied  muss  ein  Sprite  sein** --
-            // **eine  Figur  ist  16  Pixel  breit.**
-            AssertTrue(maxX - minX + 1 <= 16 && maxY - minY + 1 <= 32,
-                "**and the difference is one character cell wide**"
-                    + " -- a hero is sixteen pixels wide and"
-                    + " thirty two high, and a difference that"
-                    + " covered the whole map would be a chip"
-                    + " set or draw order change and not a hero");
-
-            AssertTrue(minX >= 0 && minY >= 0,
-                "**and it sits inside the frame**");
-        }
-        else
-        {
-            AssertEq(differences, 0,
-                "**and the rendered map matches the pinned golden"
-                    + " image**");
-        }
+        // This development golden includes the reference-derived starting poses
+        // and hero. No rectangle-sized mismatch is tolerated anymore.
+        AssertEq(differences, 0, "The full composed frame matches the corrected development golden exactly");
     }
 
     public void Test_MissingChipsetImageIsReportedAndTheRuntimeKeepsRunning()

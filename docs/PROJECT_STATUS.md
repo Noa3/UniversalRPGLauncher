@@ -5,15 +5,26 @@
 
 ## Latest runtime correctness work
 
-The last completed canonical development suite passed **2828/2828**. Event
+The last completed canonical development suite passed **2835/2835**. Page pose
+now survives parser/host conversion with verified LMU0x17/0x18/0x24 defaults.
+Initial/stopped versus mid-step transitions separate visible facing from movement
+direction; fixed/spin page-pattern exceptions and explicit route-turn overrides
+are covered. Normal events start at reference frame1. Runtime/pixel12/12 and
+poseparser1/1 pass; both bounded reviews resolved and final canonical exited0.
+The development golden is preserved/refreshed and asserted with exact RGBA
+equality, not expanded tolerance. This is not native-engine visual parity.
+Continuous/spin tick animation, route pacing/expansion, transparency and full
+page/parallel lifecycle remain open; event animation is the next READY slice.
+
+Event
 graphics now use only the highest eligible page's charset, cell and draw layer;
 blank/missing/ineligible pages cannot reveal hidden lower graphics. Stationary
 condition changes invalidate the real composed frame without resetting live
 position, facing, pose, step budget or route. New runtime/pixel suite6/6 uses
 the native RM2000 host with a parsed map, controlled event pages and pinned
 real Chara1.png; this is not original-game visual parity. Two bounded reviews
-are resolved and canonical validation exited0. Reference-specific page pose
-resets, transparency and route/interpreter refresh remain separate open work.
+are resolved and canonical validation exited0. The page-pose follow-up above
+adds reference-specific transition rules; full animation/lifecycle stays open.
 
 Folder
 selection, startup and rescan now use isolated background inspection with visible
@@ -35,7 +46,7 @@ Its new suite passes **8/8**, including pinned native RM2000/2003 hosts using
 reference-derived command lists; full validation exited 0 with **2812/2812**,
 and independent bounded review found no introduced blocker.
 This is not original-game or visual parity, and running parallel-page refresh,
-page pose/route refresh, autorun repetition and single-main scheduling remain open.
+event animation/route refresh, autorun repetition and single-main scheduling remain open.
 
 Production gates remain open for complete RM2000/2003, XP, VX, VX Ace, MV/MZ and both GUI
 surfaces. Use `KANBAN.md`, `SESSION_STATE.md` and
