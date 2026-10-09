@@ -2,6 +2,9 @@
 
 ### K-PROD-RM2K-INPUT-COVERAGE — DONE (regression coverage only)
 
+Source/test checkpoint `65e576e` is published; exact origin/main readback matched
+65e576e4d34cb57d96a5265e71ecd2e0c4749962.
+
 Expanded native input suite **11/11**, decision-host **6/6** and interpreter
 **85/85** pass. Canonical log confirms **2804/2804** and the final
 `UniversalRPG validation passed.` marker. Nested tests observe child and caller

@@ -25,8 +25,12 @@ and test-runner processes rather than rerunning: final pass markers present,
 code, so report the recovered canonical markers rather than inventing one.
 Use a tracked background validator for future full-suite runs of this duration.
 
-Next action: checkpoint/publish the test-only extension and refreshed docs,
-then select the next READY RM2000/2003 runtime card from the repository queue.
+Publication completed: coverage/test/docs checkpoint `65e576e`, pushed and
+verified against origin/main (65e576e4d34cb57d96a5265e71ecd2e0c4749962).
+Next action: select the next independent RM2000/2003 runtime slice using the
+repository queue and measured reference/fixture gaps, not old DONE labels as
+evidence of full engine completeness. Source/test tree is clean; only the
+pre-existing qa_patches/ directory remains untracked and untouched.
 All four complete engine/GUI production criteria remain OPEN. Preserve original
 games/saves and qa_patches/. No export/distributable has been produced.
 
