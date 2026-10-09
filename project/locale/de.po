@@ -34,6 +34,24 @@ msgstr "Unterordner werden bis Tiefe 2 durchsucht."
 msgid "ACTION_CHOOSE_FOLDER"
 msgstr "Ordner auswaehlen"
 
+msgid "SCAN_CANCEL"
+msgstr "Suche abbrechen"
+
+msgid "SCAN_PROGRESS"
+msgstr "{directories} Ordner geprüft · {games} Spiele gefunden · {seconds} s\nPrüfe: {path}"
+
+msgid "SCAN_CANCELLING"
+msgstr "Abbruch angefordert — die aktuelle Prüfung wird noch beendet…"
+
+msgid "SCAN_CANCELLED"
+msgstr "Suche abgebrochen. Die bisherige Bibliothek bleibt erhalten."
+
+msgid "SCAN_FAILED"
+msgstr "Suche fehlgeschlagen: {error}. Die bisherige Bibliothek bleibt erhalten."
+
+msgid "SCAN_PARTIAL"
+msgstr "Unvollständige Suche: Suchlimit erreicht oder {count} Ordner nicht lesbar."
+
 msgid "ACTION_RESCAN"
 msgstr "Neu scannen"
 

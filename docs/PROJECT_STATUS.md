@@ -5,7 +5,18 @@
 
 ## Latest runtime correctness work
 
-The last completed canonical development suite passed **2812/2812**. Input
+The last completed canonical development suite passed **2822/2822**. Folder
+selection, startup and rescan now use isolated background inspection with visible
+activity, current path, directory/game counts, elapsed time and cancellation.
+Only the UI thread publishes successful current results; cancellation retains
+the previous library. Saved engine choices and all seven feedback locales have
+regressions. Explicit collection-root junctions remain supported, while linked
+descendants are excluded. The real rendered 11-game collection probe completed
+in 1010 ms with 28 rendered frames during scanning; this is not a universal
+throughput guarantee or a new distributable. Cancellation waits for current IO.
+Two read-only reviews are resolved; scan8/8 and UI20/20 pass.
+
+Input
 isolation and review coverage are published as `1985d0f` and `65e576e`.
 The active-page activation fix, published as `9ae27c1`, chooses the highest
 condition-eligible page before testing trigger kind and uses only its layer for

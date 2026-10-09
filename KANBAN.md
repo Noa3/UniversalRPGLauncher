@@ -1,5 +1,49 @@
 ## Active
 
+### K-PROD-LIBRARY-SCAN-FEEDBACK — DONE (responsive bounded scanning)
+
+Final validation proc_5904ca0973bc exited 0: **2822/2822**, followed by
+`UniversalRPG validation passed.` Both read-only audits are resolved:
+deleg_3f6ea4e0 confirmed pure-managed detection and the former duplicate Analyze;
+deleg_7e1bd963 found no hard blocker. Its selected-root-junction regression is
+fixed with a real Windows junction test; linked descendants remain excluded.
+Final scan **8/8**, UI **20/20**, integration **11/11**, plugins **25/25** pass.
+This completes the folder-scan bug, not full GUI rework or engine compatibility.
+The VERIFY/pending entries below are historical intermediate checkpoints.
+
+Implemented background traversal/detection with detached results and immutable
+progress, owner-thread publication and cooperative cancellation. Library scan
+**6/6**, integration **11/11**, launcher UI **19/19**, plugin detection **25/25**
+pass. The blocked UI regression measured **2016 ms** before fix and **0 ms**
+kickoff after; a separate real rendered collection probe measured **82 ms**
+startup, **1010 ms** total, **28 rendered frames**, **15 folders / 11 games**,
+visible activity/counters/path/cancel and successful completion. Screenshot
+inspected: no clipping. All seven locales have feedback/cancel/error strings.
+
+Additional stale-selection regression was observed red and fixed by freezing
+ItemList mouse/focus as well as signals. The earlier validator was explicitly
+stopped before this source change; final validator proc_465dae1b2ce8 and review
+deleg_7e1bd963 are pending. Detection audit deleg_3f6ea4e0 also awaits delivery.
+No DONE/commit claim yet. Cancellation waits for the current bounded inspection
+to return; it does not kill OS IO or foreign processes (none are executed).
+
+Review deleg_7e1bd963 found no hard blocker and confirmed detector thread safety.
+Its Windows-root-link UX finding was reproduced (**7/8** scan tests) and fixed:
+explicit collection-root junction selection is preserved, linked children stay
+excluded. Final focused suites: scan **8/8**, UI **20/20**, integration **11/11**,
+plugins **25/25**. New tests cover persisted explicit choices and all seven
+locales' feedback keys/placeholders. Previous canonical proc_465dae1b2ce8 passed
+**2819/2819**, but predates this root fix; final run is proc_5904ca0973bc.
+
+User reports parent-folder import looks frozen. Confirmed Main.RefreshLibrary
+sets status then synchronously scans/detects/persists on the render/input thread,
+so even its scanning label cannot repaint. Acceptance: startup/rescan/folder
+selection starts a background scan with immediate visible activity, current
+folder/count feedback and cancellation; UI remains responsive; no worker touches
+controls or shared Games/settings; stale/cancelled results cannot replace the
+prior library; close/reload cancels safely; traversal budgets and no-link/no-code
+safety remain; focused UI/library tests and canonical validation pass. Preserve
+saved explicit engine choices. Sprite successor is postponed for this user bug.
 ### K-PROD-RM2K-ACTIVE-GRAPHIC — READY
 
 Successor to the verified fresh-activation fix. Source-confirmed defect:

@@ -28,6 +28,24 @@ msgstr "Les sous-dossiers sont analysés jusqu'à une profondeur de 2."
 msgid "ACTION_CHOOSE_FOLDER"
 msgstr "Choisir un dossier"
 
+msgid "SCAN_CANCEL"
+msgstr "Annuler la recherche"
+
+msgid "SCAN_PROGRESS"
+msgstr "{directories} dossiers vérifiés · {games} jeux trouvés · {seconds} s\nVérification : {path}"
+
+msgid "SCAN_CANCELLING"
+msgstr "Annulation — attente de la fin de la vérification en cours…"
+
+msgid "SCAN_CANCELLED"
+msgstr "Recherche annulée. La bibliothèque précédente est conservée."
+
+msgid "SCAN_FAILED"
+msgstr "Échec de la recherche : {error}. La bibliothèque précédente est conservée."
+
+msgid "SCAN_PARTIAL"
+msgstr "Recherche partielle : limite atteinte ou {count} dossiers illisibles."
+
 msgid "ACTION_RESCAN"
 msgstr "Analyser à nouveau"
 

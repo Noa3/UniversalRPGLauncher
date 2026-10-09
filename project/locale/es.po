@@ -28,6 +28,24 @@ msgstr "Se exploran subcarpetas hasta una profundidad de 2."
 msgid "ACTION_CHOOSE_FOLDER"
 msgstr "Elegir carpeta"
 
+msgid "SCAN_CANCEL"
+msgstr "Cancelar búsqueda"
+
+msgid "SCAN_PROGRESS"
+msgstr "{directories} carpetas revisadas · {games} juegos encontrados · {seconds} s\nRevisando: {path}"
+
+msgid "SCAN_CANCELLING"
+msgstr "Cancelando — esperando a que termine la revisión actual…"
+
+msgid "SCAN_CANCELLED"
+msgstr "Búsqueda cancelada. Se conserva la biblioteca anterior."
+
+msgid "SCAN_FAILED"
+msgstr "Error de búsqueda: {error}. Se conserva la biblioteca anterior."
+
+msgid "SCAN_PARTIAL"
+msgstr "Búsqueda parcial: se alcanzó un límite o no se pudieron leer {count} carpetas."
+
 msgid "ACTION_RESCAN"
 msgstr "Buscar de nuevo"
 

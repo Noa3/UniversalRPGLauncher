@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Diagnostics;
+using System.Threading;
 using Godot;
 using UniversalRPG.App.Launcher;
 using UniversalRPG.App.Library;
@@ -97,6 +99,75 @@ public partial class TestLauncherUiSafety : TestBase
         var success = runtime.TrySaveSlot("test", out var error);
         AssertFalse(success);
         AssertTrue(!string.IsNullOrEmpty(error), "An I/O failure must be returned, not thrown.");
+    }
+
+    public void Test_RescanReturnsBeforeSlowDetectionAndOffersCancellation()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var registry = new EngineDetectionRegistry();
+        registry.Register(new BlockingScanDetector(entered, release));
+        var library = new GameLibrary(new GameDetector(registry), pSettingsPath: Path.Combine(_root, "scan.cfg"));
+        library.SetRootPath(_root, false);
+        Field<GameLibrary>("_library").Dispose();
+        typeof(Main).GetField("_library", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(_main, library);
+        var watch = Stopwatch.StartNew();
+        System.Threading.Tasks.Task? completion = null;
+        try
+        {
+            Invoke("RefreshLibrary");
+            watch.Stop();
+            GD.Print($"Library scan UI kickoff: {watch.ElapsedMilliseconds} ms while the fixture detector is blocked.");
+            AssertTrue(watch.Elapsed < TimeSpan.FromMilliseconds(500),
+                $"Folder scan must return to rendering before slow inspection completes; took {watch.ElapsedMilliseconds} ms");
+            AssertTrue(entered.Wait(TimeSpan.FromSeconds(3)), "The slow detector really started");
+            completion = Field<GameLibraryScan>("_scanOperation").Completion;
+            AssertTrue(Field<Button>("_cancelScanButton").Visible, "A scan immediately exposes a cancel control");
+            AssertTrue(Field<Control>("_scanPanel").Visible, "Visible activity is present before completion");
+            AssertEq(Field<ItemList>("_gameList").MouseFilter, Control.MouseFilterEnum.Ignore,
+                "A scan cannot change the visible selection while its signals are suppressed");
+            AssertEq(Field<ItemList>("_gameList").FocusMode, Control.FocusModeEnum.None,
+                "Keyboard selection is frozen with the old library snapshot");
+            _main._Process(0);
+            AssertTrue(Field<Label>("_scanDetails").Text.Contains(_root, StringComparison.Ordinal),
+                "The main-thread progress view identifies the directory being inspected");
+            Field<Button>("_cancelScanButton").EmitSignal(Button.SignalName.Pressed);
+            AssertTrue(Field<Button>("_cancelScanButton").Disabled, "Cancellation is acknowledged without blocking the UI");
+        }
+        finally
+        {
+            release.Set();
+            _main._ExitTree();
+            // Do not delete the fixture or its synchronization handles while a worker uses them.
+            if (completion != null)
+                AssertTrue(SpinWait.SpinUntil(() => completion.IsCompleted, TimeSpan.FromSeconds(3)), "The cancelled fixture scan stops");
+            library.Dispose();
+        }
+    }
+
+    public void Test_ScanFeedbackResolvesInEveryInterfaceLocale()
+    {
+        var keys = new[] { "SCAN_CANCEL", "SCAN_PROGRESS", "SCAN_CANCELLING", "SCAN_CANCELLED", "SCAN_FAILED", "SCAN_PARTIAL" };
+        foreach (var locale in new[] { "en", "de", "es", "fr", "ja", "ko", "zh_CN" })
+        {
+            var translation = GD.Load<Translation>($"res://locale/{locale}.po");
+            AssertTrue(translation != null, $"The {locale} scan translations are imported");
+            if (translation == null) continue;
+            foreach (var key in keys)
+            {
+                var message = translation.GetMessage(key).ToString();
+                AssertTrue(!string.IsNullOrEmpty(message) && message != key, $"{locale} resolves {key}");
+                var expected = key switch
+                {
+                    "SCAN_PROGRESS" => new[] { "{directories}", "{games}", "{seconds}", "{path}" },
+                    "SCAN_FAILED" => new[] { "{error}" },
+                    "SCAN_PARTIAL" => new[] { "{count}" },
+                    _ => Array.Empty<string>()
+                };
+                foreach (var placeholder in expected)
+                    AssertTrue(message.Contains(placeholder, StringComparison.Ordinal), $"{locale}/{key} preserves {placeholder}");
+            }
+        }
     }
 
     public void Test_WorkerProgressOnlyTouchesControlsDuringProcess()
@@ -453,6 +524,26 @@ public partial class TestLauncherUiSafety : TestBase
         {
             runner.RemoveChild(screenHost);
             screenHost.QueueFree();
+        }
+    }
+
+    private sealed class BlockingScanDetector : BuiltInEnginePlugin
+    {
+        private readonly ManualResetEventSlim _entered;
+        private readonly ManualResetEventSlim _release;
+
+        public BlockingScanDetector(ManualResetEventSlim entered, ManualResetEventSlim release)
+            : base("blocking-scan", "Blocking scan", "Deterministic scan fixture.", "fixture", 1, PluginCapability.Detection)
+        {
+            _entered = entered;
+            _release = release;
+        }
+
+        public override EngineDetectionProbe Detect(EngineInspectionContext context)
+        {
+            _entered.Set();
+            _release.Wait(TimeSpan.FromSeconds(2));
+            return Match(context.Snapshot, 900, "Fixture detection completed.", new[] { "scan fixture" });
         }
     }
 

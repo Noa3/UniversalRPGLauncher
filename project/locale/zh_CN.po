@@ -28,6 +28,24 @@ msgstr "扫描子文件夹，最大深度为 2。"
 msgid "ACTION_CHOOSE_FOLDER"
 msgstr "选择文件夹"
 
+msgid "SCAN_CANCEL"
+msgstr "取消扫描"
+
+msgid "SCAN_PROGRESS"
+msgstr "已检查 {directories} 个文件夹 · 已找到 {games} 个游戏 · {seconds} 秒\n正在检查：{path}"
+
+msgid "SCAN_CANCELLING"
+msgstr "正在取消 — 等待当前检查完成…"
+
+msgid "SCAN_CANCELLED"
+msgstr "扫描已取消。原有游戏库已保留。"
+
+msgid "SCAN_FAILED"
+msgstr "扫描失败：{error}。原有游戏库已保留。"
+
+msgid "SCAN_PARTIAL"
+msgstr "扫描未完成：已达到扫描上限，或有 {count} 个文件夹无法读取。"
+
 msgid "ACTION_RESCAN"
 msgstr "重新扫描"
 

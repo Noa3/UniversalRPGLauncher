@@ -1,5 +1,96 @@
 ## Current card
 
+### Folder scan completed — final checkpoint
+
+K-PROD-LIBRARY-SCAN-FEEDBACK is DONE for bounded responsive scanning.
+Final validator proc_5904ca0973bc exited 0 with **2822/2822** and the final
+`UniversalRPG validation passed.` marker. Both reviews have been delivered and
+resolved; no delegation or validator remains pending for this card. The audit
+confirms detection is pure managed; the review's explicit-root-junction finding
+was reproduced then fixed. Final targeted suites: scan8/8, UI20/20,
+integration11/11, plugins25/25. Seven locales and saved explicit engine choices
+are directly covered. Root-child link safety and previous-library preservation
+on cancellation remain in place. Cancellation is cooperative; existing IO is
+not forcibly terminated. The real rendered collection evidence below remains
+development-engine evidence, not a release export.
+
+Next repository card when autonomous production work resumes:
+K-PROD-RM2K-ACTIVE-GRAPHIC. The four full production targets remain incomplete.
+qa_patches/ was not changed or staged. Earlier pending statuses below are
+historical checkpoints, superseded by this final entry.
+
+### User-prioritized folder scan responsiveness (2026-10-09)
+
+Latest implementation/tests: GameLibraryScan is an isolated background job with
+immutable progress and detached results. Main immediately shows an indeterminate
+activity bar, folder/game counts, elapsed seconds/current path and Cancel; its
+_Process updates the real controls and applies results. Main-thread/root/generation
+publication guards prevent stale or cancelled snapshots overwriting the library.
+Previous entries remain on cancellation/failure. Explicit choices are snapshotted
+and applied in one Analyze, not a duplicate per-game inspection. Traversal stops
+at recognized roots, skips links/assets and retains depth4/4096-directory limits.
+Scene exit cancels without waiting or updating freed controls. Seven PO locales
+are updated. Detection still executes no imported code.
+
+Focused final results: scan **6/6**, integration **11/11**, launcher UI **19/19**,
+plugin detection **25/25**. Original blocked-detector UI failure: 2016 ms return;
+final implementation kickoff 0 ms while detector remains blocked. A separate
+stale visual-selection defect was caught (18/19 red): suppressed signals alone
+allowed highlight and _selectedGame to diverge; mouse/focus now freeze too,
+restoring after completion. The first full run proc_351abffc6d86 was explicitly
+stopped before that change; it is not passing evidence. Final canonical run
+proc_465dae1b2ce8 and bounded precommit review deleg_7e1bd963 are pending.
+
+Real rendered collection evidence from LibraryScanUiProbe, isolated scratch
+settings and read-only E:/RPGMakerGames: 82 ms kickoff, 1010 ms total, 28 rendered
+frames while scanning, 15 directories / 11 games, zero unreadable directories,
+no limit hit, progress visible and completion applied. Screenshot inspected:
+activity/counters/path/cancel are visible and unclipped. Files:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-scan-real-collection/result.json`
+and `scanning.png` beside it. This is development-engine UI evidence, not a new
+Windows export. No user configuration or original game data was modified.
+
+Next action: handle audit deleg_3f6ea4e0 and review deleg_7e1bd963 findings, then
+read final validator exit/count before DONE/staging/commit. No release export.
+Keep qa_patches/ unchanged. The active-graphic successor remains postponed.
+
+LATEST review follow-up: deleg_7e1bd963 found no hard blocker; confirmed pure
+managed detection and owner-thread publication/cancel guards. Windows explicit
+root junction behavior was a new UX regression: reproduced with a real owned
+junction (scan7/8 red), corrected to allow the explicitly selected collection
+root while still excluding all linked descendants. Final scan8/8, UI20/20,
+integration11/11 and plugins25/25 pass. Added direct persisted explicit-engine
+rescan test and actual imported Translation key/placeholder assertions across
+all seven locales; disposed the UI fixture library after its worker stops.
+
+Canonical proc_465dae1b2ce8 completed exit0 with2819/2819 before the junction
+follow-up; do not call that the final fixed-state validation. Refreshed canonical
+proc_5904ca0973bc is now running, log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-scan-feedback-junction-validation.log`.
+Detection audit deleg_3f6ea4e0 still awaits delivery. Final validator and audit
+must be handled before staging/commit. No original games/config touched.
+
+Base main 0d8e5e8 is clean except preserved qa_patches/. User asks to fix slow
+multi-game folder loading without feedback; K-PROD-LIBRARY-SCAN-FEEDBACK takes
+priority over the active-graphic READY card. Root cause confirmed: Main's folder
+signal calls RefreshLibrary synchronously; it sets a label then blocks on
+GameLibrary.Scan, so the label cannot repaint. Library recursion has depth4 /
+4096-directory limits, skips asset/tool folders and child links, but detection
+and persistence run synchronously and repeated explicit-choice analysis adds IO.
+
+Use one worker producing isolated results/progress; only main-thread _Process
+commits Games/settings and updates controls. Cancellation is cooperative between
+bounded inspections, never pretend current OS/detector IO was killed. Preserve
+prior entries on cancellation/failure and guard lifecycle/reentry. Godot official
+thread-safe API source retrieved from godotengine/godot-docs: no scene/UI worker
+access, one data-loading worker, references may cross threads. Read-only scan
+audit deleg_3f6ea4e0 is pending. Add a blocked-detector UI regression before fix.
+
+#### Failure log — scan implementation
+
+First build failed CS0104 in game_library.cs: both Godot.Environment and
+System.Environment are imported. Qualified CurrentManagedThreadId with System;
+no hypothesis about detector/runtime behavior changed. Rebuild required.
 ### Active event activation completed; graphic successor READY (2026-10-09)
 
 Source checkpoint `9ae27c1` is published and origin/main was read back as

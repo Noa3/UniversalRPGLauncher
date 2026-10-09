@@ -28,6 +28,24 @@ msgstr "サブフォルダーを深さ2まで検索します。"
 msgid "ACTION_CHOOSE_FOLDER"
 msgstr "フォルダーを選択"
 
+msgid "SCAN_CANCEL"
+msgstr "検索をキャンセル"
+
+msgid "SCAN_PROGRESS"
+msgstr "確認済みフォルダー {directories} · 検出ゲーム {games} · {seconds} 秒\n確認中: {path}"
+
+msgid "SCAN_CANCELLING"
+msgstr "キャンセル中 — 現在の確認が終了するまで待機しています…"
+
+msgid "SCAN_CANCELLED"
+msgstr "検索をキャンセルしました。以前のライブラリは保持されます。"
+
+msgid "SCAN_FAILED"
+msgstr "検索に失敗しました: {error}。以前のライブラリは保持されます。"
+
+msgid "SCAN_PARTIAL"
+msgstr "部分的な検索: 検索上限に達したか、{count} 個のフォルダーを読み取れませんでした。"
+
 msgid "ACTION_RESCAN"
 msgstr "再スキャン"
 

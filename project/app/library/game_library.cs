@@ -64,7 +64,9 @@ public partial class GameLibrary : RefCounted
 	private readonly string _settingsPath;
 	private readonly Dictionary<string, StoredGameRecord> _persistedRecords = new(StringComparer.Ordinal);
 	private bool _persistedRecordsLoaded;
-	private int _scannedDirectories;
+	private long _scanGeneration;
+	private readonly int _ownerThreadId = System.Environment.CurrentManagedThreadId;
+
 
 	private static readonly JsonSerializerOptions JsonOptions = new()
 	{
@@ -117,6 +119,7 @@ public partial class GameLibrary : RefCounted
 			return error;
 		}
 		RootPath = normalized;
+		_scanGeneration++;
 		if (pPersist)
 		{
 			SaveSettings();
@@ -126,17 +129,47 @@ public partial class GameLibrary : RefCounted
 
 	public List<GameEntry> Scan()
 	{
-		EnsurePersistedRecordsLoaded();
-		Games.Clear();
-		_scannedDirectories = 0;
-		if (!DirAccess.DirExistsAbsolute(RootPath))
-		{
-			return Games;
-		}
-		ScanDirectory(RootPath, 0);
-		Games.Sort((pLeft, pRight) => string.Compare(pLeft.Title, pRight.Title, StringComparison.OrdinalIgnoreCase));
-		PersistEntries();
+		using var scan = BeginScan();
+		scan.Completion.GetAwaiter().GetResult();
+		ApplyScan(scan);
 		return Games;
+	}
+
+	/// <summary>Snapshots user choices before starting isolated background inspection.</summary>
+	public GameLibraryScan BeginScan()
+	{
+		EnsurePersistedRecordsLoaded();
+		var records = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		foreach (var record in _persistedRecords.Values) records.TryAdd(record.Path, record.ExplicitPluginId);
+		return new GameLibraryScan(RootPath, ++_scanGeneration, path =>
+		{
+			var restored = records.TryGetValue(path, out var choice);
+			var playableChoice = !string.IsNullOrEmpty(choice)
+				&& _runtimeRegistry.TryGet(choice, out var plugin) && plugin != null
+				&& (plugin.Metadata.Capabilities & PluginCapability.Runtime) != 0;
+			// One fresh inspection applies the saved choice; do not read the same game twice.
+			var detection = _detector.Analyze(path, playableChoice ? choice : null);
+			var entry = new GameEntry(path, detection, detection.Report.SelectedCandidate?.PluginId ?? "",
+				DetermineCompatibility(detection)) { LoadedFromPersistence = restored };
+			if (playableChoice && !detection.Report.IsMalformed && !detection.Report.IsAmbiguous
+				&& detection.Report.SelectedCandidate?.PluginId == choice) entry.ExplicitPluginId = choice!;
+			return entry;
+		});
+	}
+
+	/// <summary>Commits a completed snapshot only on the owning/UI thread.</summary>
+	public bool ApplyScan(GameLibraryScan pScan)
+	{
+		if (pScan == null) throw new ArgumentNullException(nameof(pScan));
+		if (System.Environment.CurrentManagedThreadId != _ownerThreadId)
+			throw new InvalidOperationException("Scan results must be committed on the library's owning thread.");
+		if (pScan.IsCancellationRequested || !pScan.Completion.IsCompletedSuccessfully
+			|| pScan.Generation != _scanGeneration
+			|| !RootPath.Equals(pScan.RootPath, StringComparison.OrdinalIgnoreCase)) return false;
+		Games.Clear();
+		Games.AddRange(pScan.Completion.Result);
+		PersistEntries();
+		return true;
 	}
 
 	/// <summary>
@@ -163,60 +196,24 @@ public partial class GameLibrary : RefCounted
 		return entry;
 	}
 
-	private void ScanDirectory(string pPath, int pDepth)
+	private static readonly HashSet<string> GameRootMarkers = new(StringComparer.OrdinalIgnoreCase)
 	{
-		if (_scannedDirectories >= MaxScanDirectories)
-		{
-			return;
-		}
-		_scannedDirectories += 1;
+		"RPG_RT.ldb", "RPG_RT.lmt", "RPG_RT.ini", "Game.ini", "Game.exe", "index.html",
+		"package.json", "Game.dat", "BasicData", "Data", "www", "Scripts"
+	};
 
-		if (LooksLikeGameRoot(pPath))
-		{
-			var entry = ImportInternal(pPath);
-			if (entry != null && IsRecognized(entry.Detection))
-			{
-				Games.Add(entry);
-				return;
-			}
-		}
-		if (pDepth >= MaxScanDepth)
-		{
-			return;
-		}
-		using var directory = DirAccess.Open(pPath);
-		if (directory == null)
-		{
-			return;
-		}
-		foreach (var directoryName in directory.GetDirectories())
-		{
-			if (ShouldSkipDirectory(directoryName) || directory.IsLink(directoryName))
-			{
-				continue;
-			}
-			ScanDirectory(pPath.PathJoin(directoryName), pDepth + 1);
-		}
-	}
-
-	private static bool LooksLikeGameRoot(string pPath)
+	internal static bool LooksLikeGameRoot(string pPath)
 	{
 		try
 		{
-			var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			foreach (var entry in new DirectoryInfo(pPath).EnumerateFileSystemInfos())
 			{
-				if (!entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+				if (!entry.Attributes.HasFlag(FileAttributes.ReparsePoint) && GameRootMarkers.Contains(entry.Name))
 				{
-					names.Add(entry.Name);
+					return true;
 				}
 			}
-			return names.Contains("RPG_RT.ldb") || names.Contains("RPG_RT.lmt")
-				|| names.Contains("RPG_RT.ini") || names.Contains("Game.ini")
-				|| names.Contains("Game.exe") || names.Contains("index.html")
-				|| names.Contains("package.json") || names.Contains("Game.dat")
-				|| names.Contains("BasicData") || names.Contains("Data")
-				|| names.Contains("data") || names.Contains("www") || names.Contains("Scripts");
+			return false;
 		}
 		catch
 		{
@@ -224,7 +221,7 @@ public partial class GameLibrary : RefCounted
 		}
 	}
 
-	private static bool ShouldSkipDirectory(string pName)
+	internal static bool ShouldSkipDirectory(string pName)
 	{
 		return pName.StartsWith(".", StringComparison.Ordinal)
 			|| pName.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
@@ -311,7 +308,7 @@ public partial class GameLibrary : RefCounted
 		Games.Sort((pLeft, pRight) => string.Compare(pLeft.Title, pRight.Title, StringComparison.OrdinalIgnoreCase));
 	}
 
-	private static bool IsRecognized(GameDetector.DetectionResult pDetection)
+	internal static bool IsRecognized(GameDetector.DetectionResult pDetection)
 	{
 		return pDetection.Engine != GameDetector.EngineType.Unknown || pDetection.Candidates.Count > 0;
 	}

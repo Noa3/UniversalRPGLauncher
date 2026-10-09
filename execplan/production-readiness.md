@@ -8,6 +8,8 @@ A player must be able to run a supported game without losing progress, overwriti
 
 ## Progress
 
+- [x] Folder-scan responsiveness: isolated worker, immediate localized activity/path/counts/elapsed feedback, cooperative cancellation, guarded owner-thread publication and preserved prior library. Scan8/8, UI20/20, integration11/11 and plugins25/25 pass; final canonical validator exited0 with2822/2822. Both audits resolved; selected-root junction compatibility and saved explicit choices are regression-tested. Real rendered collection probe: 11games,1010ms,28frames while scanning. No release export or complete GUI/engine claim.
+
 - [x] (2026-10-09 13:28 UTC+8) Inspected repository instructions, checkpoint, status, architecture, roadmap and current save storage implementation on main 264af64.
 - [x] Storage IO reviewed, validated and published as 985e366. Safety suite 13/13; three runs of eight independent processes / 256 writes passed. Final mutex-bearing canonical run passed 2787/2787, and both IO reviews are resolved. This does not complete durable game-state persistence.
 - [ ] K-PROD-SAVE-STATE: preserve all authoritative durable state; reject unsupported or malformed saves before touching live state. Existing saves omit screen, timer, actors and party.

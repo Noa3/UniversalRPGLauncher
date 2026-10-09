@@ -28,6 +28,24 @@ msgstr "Subdirectories are scanned up to a depth of 2."
 msgid "ACTION_CHOOSE_FOLDER"
 msgstr "Choose directory"
 
+msgid "SCAN_CANCEL"
+msgstr "Cancel scan"
+
+msgid "SCAN_PROGRESS"
+msgstr "{directories} folders checked · {games} games found · {seconds} s\nInspecting: {path}"
+
+msgid "SCAN_CANCELLING"
+msgstr "Cancelling — waiting for the current inspection to finish…"
+
+msgid "SCAN_CANCELLED"
+msgstr "Scan cancelled. The previous library was kept."
+
+msgid "SCAN_FAILED"
+msgstr "Scan failed: {error}. The previous library was kept."
+
+msgid "SCAN_PARTIAL"
+msgstr "Partial scan: a scan limit was reached or {count} folders could not be read."
+
 msgid "ACTION_RESCAN"
 msgstr "Scan again"
 

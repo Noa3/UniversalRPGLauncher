@@ -109,6 +109,13 @@ public partial class Main : Control
 	private Rm2kGameScreen _gameScreen = null!;
 	private Label _status = null!;
 	private FileDialog _folderDialog = null!;
+	private Button _chooseFolderButton = null!;
+	private Button _rescanButton = null!;
+	private VBoxContainer _scanPanel = null!;
+	private Label _scanDetails = null!;
+	private Button _cancelScanButton = null!;
+	private GameLibraryScan? _scanOperation;
+	private long _scanStartedAt;
 	private OptionButton _languageMenu = null!;
 	private readonly RenderProfile _renderProfile = new();
 	private readonly Rm2kInputMapper _inputMapper = new();
@@ -163,6 +170,8 @@ public partial class Main : Control
 	public override void _ExitTree()
 	{
 		_closing = true;
+		_scanOperation?.Dispose();
+		_scanOperation = null;
 		if (IsInsideTree()) GetViewport().SizeChanged -= ApplyResponsiveLayout;
 		_launcher.Shutdown();
 	}
@@ -286,16 +295,35 @@ public partial class Main : Control
 		_folderPath.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
 		_folderPath.TooltipText = Tr("LIBRARY_SCAN_HINT");
 		folderText.AddChild(_folderPath);
-		var chooseButton = new Button();
+		var chooseButton = _chooseFolderButton = new Button();
 		chooseButton.Text = Tr("ACTION_CHOOSE_FOLDER");
 		chooseButton.CustomMinimumSize = new Vector2(170, 46);
 		chooseButton.Pressed += ChooseFolder;
 		folderRow.AddChild(chooseButton);
-		var refreshButton = new Button();
+		var refreshButton = _rescanButton = new Button();
 		refreshButton.Text = Tr("ACTION_RESCAN");
 		refreshButton.CustomMinimumSize = new Vector2(130, 46);
 		refreshButton.Pressed += RefreshLibrary;
 		folderRow.AddChild(refreshButton);
+
+		_scanPanel = new VBoxContainer { Name = "LibraryScanPanel", Visible = false };
+		page.AddChild(_scanPanel);
+		_scanPanel.AddChild(new ProgressBar
+		{
+			Name = "LibraryScanActivity", Indeterminate = true, ShowPercentage = false,
+			CustomMinimumSize = new Vector2(0, 14)
+		});
+		var scanRow = new HBoxContainer();
+		_scanPanel.AddChild(scanRow);
+		_scanDetails = new Label
+		{
+			Name = "LibraryScanDetails", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart
+		};
+		scanRow.AddChild(_scanDetails);
+		_cancelScanButton = new Button { Name = "CancelLibraryScan", Text = Tr("SCAN_CANCEL") };
+		_cancelScanButton.Pressed += CancelLibraryScan;
+		scanRow.AddChild(_cancelScanButton);
 
 		_body = new BoxContainer();
 		_body.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
@@ -548,10 +576,78 @@ public partial class Main : Control
 
 	private void RefreshLibrary()
 	{
+		if (_closing || _scanOperation != null || _launchInProgress) return;
 		_status.Text = Tr("STATUS_SCANNING");
+		_scanStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+		_scanPanel.Visible = true;
+		_scanDetails.Text = Tr("SCAN_PROGRESS").Replace("{directories}", "0").Replace("{games}", "0")
+			.Replace("{seconds}", "0").Replace("{path}", _library.RootPath);
+		_cancelScanButton.Disabled = false;
+		SetScanControls(true);
+		try { _scanOperation = _library.BeginScan(); }
+		catch (System.Exception exception)
+		{
+			_scanPanel.Visible = false;
+			SetScanControls(false);
+			_status.Text = Tr("SCAN_FAILED").Replace("{error}", exception.Message);
+		}
+	}
+
+	private void SetScanControls(bool busy)
+	{
+		_chooseFolderButton.Disabled = busy || _launchInProgress;
+		_rescanButton.Disabled = busy || _launchInProgress;
+		_languageMenu.Disabled = busy;
+		_gameList.SetBlockSignals(busy);
+		_gameList.MouseFilter = busy ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
+		_gameList.FocusMode = busy ? Control.FocusModeEnum.None : Control.FocusModeEnum.All;
+		_engineChoice.Disabled = busy || _launchInProgress;
+		_launchButton.Disabled = busy || _launchInProgress || _selectedGame == null
+			|| _launcher.GetSupport(_selectedGame).State != RuntimeLauncher.SupportState.Available;
+	}
+
+	private void CancelLibraryScan()
+	{
+		if (_scanOperation == null) return;
+		_scanOperation.Cancel();
+		_cancelScanButton.Disabled = true;
+		_status.Text = Tr("SCAN_CANCELLING");
+	}
+
+	private void ProcessLibraryScan()
+	{
+		var scan = _scanOperation;
+		if (scan == null) return;
+		var progress = scan.Progress;
+		var seconds = (System.Diagnostics.Stopwatch.GetTimestamp() - _scanStartedAt)
+			/ System.Diagnostics.Stopwatch.Frequency;
+		_scanDetails.Text = Tr("SCAN_PROGRESS")
+			.Replace("{directories}", progress.DirectoriesScanned.ToString())
+			.Replace("{games}", progress.GamesFound.ToString())
+			.Replace("{seconds}", seconds.ToString()).Replace("{path}", progress.CurrentPath);
+		_scanDetails.TooltipText = progress.CurrentPath;
+		if (!scan.Completion.IsCompleted) return;
+		_scanOperation = null;
+		_scanPanel.Visible = false;
+		SetScanControls(false);
+		try
+		{
+			scan.Completion.GetAwaiter().GetResult();
+			if (!_library.ApplyScan(scan)) { _status.Text = Tr("SCAN_CANCELLED"); return; }
+			DisplayLibrary();
+			if (progress.LimitReached || progress.UnreadableDirectories > 0)
+				_status.Text += " " + Tr("SCAN_PARTIAL").Replace("{count}", progress.UnreadableDirectories.ToString());
+		}
+		catch (System.OperationCanceledException) { _status.Text = Tr("SCAN_CANCELLED"); }
+		catch (System.Exception exception) { _status.Text = Tr("SCAN_FAILED").Replace("{error}", exception.Message); }
+		finally { scan.Dispose(); }
+	}
+
+	private void DisplayLibrary()
+	{
 		_gameList.Clear();
 		_selectedGame = null;
-		var games = _library.Scan();
+		var games = _library.Games;
 		foreach (var game in games)
 		{
 			var index = _gameList.AddItem($"{game.Title}  |  {game.Detection.GetEngineName()}");
@@ -641,7 +737,7 @@ public partial class Main : Control
 
 	private void SelectDetectedEngine(long pIndex)
 	{
-		if (_selectedGame == null || _launchInProgress || pIndex < 0
+		if (_selectedGame == null || _launchInProgress || _scanOperation != null || pIndex < 0
 			|| pIndex >= _engineChoice.ItemCount) return;
 		var pluginId = _engineChoice.GetItemMetadata((int)pIndex).AsString();
 		if (!_library.TrySelectEngine(_selectedGame, pluginId, out var error))
@@ -668,12 +764,14 @@ public partial class Main : Control
 
 	private void ChooseFolder()
 	{
+		if (_scanOperation != null || _launchInProgress) return;
 		_folderDialog.CurrentDir = _library.RootPath;
 		_folderDialog.PopupCenteredRatio(0.82f);
 	}
 
 	private void SetFolder(string pPath)
 	{
+		if (_scanOperation != null || _launchInProgress || _closing) return;
 		var error = _library.SetRootPath(pPath);
 		if (error != Error.Ok)
 		{
@@ -844,6 +942,8 @@ public partial class Main : Control
 
 	public override void _Process(double pDelta)
 	{
+		if (_closing) return;
+		ProcessLibraryScan();
 		// Background fetchers only enqueue plain text; all Godot calls stay here.
 		string? latestProgress = null;
 		while (_rtpProgress.TryDequeue(out var progress)) latestProgress = progress;
@@ -1394,7 +1494,7 @@ public partial class Main : Control
 
 	private async void LaunchSelectedGame()
 	{
-		if (_selectedGame == null || _launchInProgress || _closing) return;
+		if (_selectedGame == null || _launchInProgress || _scanOperation != null || _closing) return;
 		var game = _selectedGame;
 		var support = _launcher.GetSupport(game);
 		if (support.State != RuntimeLauncher.SupportState.Available)
