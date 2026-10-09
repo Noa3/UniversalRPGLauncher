@@ -1310,6 +1310,8 @@ public sealed class EventInterpreter
 	public int WaitFramesRemaining => _waitFramesRemaining;
 	public int CallDepth => _callStack.Count;
 	public bool IsRunning { get; private set; } = true;
+	/// <summary>Execution role fixed by the scheduler; nested calls retain their caller's role.</summary>
+	public bool IsParallel { get; internal init; }
 	public bool IsWaitingForDecision => IsRunning && _waitingForDecision;
 
 	/// <summary>Accepts a new decision only for an already-running wait.</summary>

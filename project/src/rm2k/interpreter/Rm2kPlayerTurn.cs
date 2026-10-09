@@ -32,17 +32,18 @@ public sealed class Rm2kPlayerTurn
     /// </summary>
     public bool Apply(Rm2kInputAction pAction)
     {
-        if (_state.IsPaused || _state.IsMenuOpen)
+        if (_state.IsPaused || _state.IsMenuOpen || _scheduler.IsMessageActive)
         {
             return false;
         }
         if (pAction == Rm2kInputAction.Confirm)
         {
-            // A decision awaited by an interpreter is not an action-event or
-            // vehicle turn. Rejected/duplicate keys must not fall through.
-            if (_scheduler.HasDecisionWait)
+            // All waiting interpreters observe a fresh decision. Only a main
+            // page consumes the player turn; parallel waits remain background work.
+            var decisionAccepted = _scheduler.HasDecisionWait && _scheduler.SubmitDecision();
+            if (_scheduler.HasBlockingInterpreter)
             {
-                return _scheduler.SubmitDecision();
+                return decisionAccepted;
             }
             // The Player tries the vehicle before it looks for events:
             //   if (Input::IsTriggered(Input::DECISION)) {
@@ -62,8 +63,7 @@ public sealed class Rm2kPlayerTurn
             // sign has to be boardable, and the sign is on the tile the player
             // is facing.
             if (_state.Boarding == null
-                && _state.Vehicles.Count > 0
-                && _scheduler.ActiveInterpreterCount == 0)
+                && _state.Vehicles.Count > 0)
             {
                 // The first boarding needs a boarding state to write into. One
                 // is created here and not by every reader, so a game that never
@@ -110,7 +110,7 @@ public sealed class Rm2kPlayerTurn
                 // as a step towards an encounter.
                 return true;
             }
-            return _scheduler.CheckActionEvent();
+            return _scheduler.CheckActionEvent() || decisionAccepted;
         }
 
         // **Und  jetzt  die  Menuetaste** -- **und  sie  gehoert  vor
@@ -139,7 +139,7 @@ public sealed class Rm2kPlayerTurn
         //  Befehls  und  nicht  ein  zweiter.**
         if (pAction == Rm2kInputAction.Menu)
         {
-            if (_scheduler.ActiveInterpreterCount > 0
+            if (_scheduler.HasBlockingInterpreter
                 || _state.WaitingFor
                     != GameSimulationState.WaitReason.None)
             {
@@ -176,9 +176,9 @@ public sealed class Rm2kPlayerTurn
         {
             return false;
         }
-        if (_scheduler.ActiveInterpreterCount > 0)
+        if (_scheduler.HasBlockingInterpreter)
         {
-            // A running event page blocks movement, like Game_Map::IsRunning.
+            // The main map interpreter blocks movement, not parallel pages.
             return false;
         }
         if (_state.TryMove(deltaX, deltaY))

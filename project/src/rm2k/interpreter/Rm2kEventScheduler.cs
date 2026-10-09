@@ -48,6 +48,9 @@ public sealed class Rm2kEventScheduler
 
     public int ActiveInterpreterCount => _active.Count;
     public int EventCount => _events.Count;
+    public bool HasBlockingInterpreter => _active.Values.Any(interpreter => interpreter.IsRunning && !interpreter.IsParallel);
+    public bool IsMessageActive => _presentation?.MessageVisible == true
+        || _state.WaitingFor == GameSimulationState.WaitReason.MessageOpen;
     public bool HasDecisionWait => _active.Values.Any(interpreter => interpreter.IsWaitingForDecision);
 
     public bool SubmitDecision()
@@ -328,7 +331,11 @@ public sealed class Rm2kEventScheduler
             var page = Rm2kEventPageSelector.Select(eventData, _state, pTrigger);
             if (page == null) continue;
             if (!restartWhenFinished && pStarted.Contains(eventData.Id)) continue;
-            _active[eventData.Id] = new EventInterpreter(_state, eventData.Id, page.Commands, _presentation, ResolveCommands, ApplyEventLocation, DeactivateEvent);
+            _active[eventData.Id] = new EventInterpreter(_state, eventData.Id, page.Commands, _presentation,
+                ResolveCommands, ApplyEventLocation, DeactivateEvent)
+            {
+                IsParallel = pTrigger == Rm2kEventTrigger.Parallel
+            };
             pStarted.Add(eventData.Id);
         }
     }
