@@ -1,5 +1,100 @@
 ## Current card
 
+### Input isolation and review coverage completed (2026-10-09)
+
+Production fix `1985d0f` is published and backed by validator exit 0 with
+2801/2801 and a no-blocker independent review. The separate coverage follow-up
+adds three regression scenarios only. Final focused results: native input
+**11/11**, decision-host **6/6**, interpreter **85/85**. Final canonical log
+contains **All 2804 tests passed** and **UniversalRPG validation passed.**
+Log: `C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-input-coverage-validation.log`.
+
+Nested-call tests prove execution with child/caller switch markers, retain
+blocking/non-blocking roles during the child wait, and observe return to the
+caller. A mixed main+parallel decision test requires both instances to end on
+the next frame after one key. Message-release tests require movement to resume
+after visibility/authoritative state clears and remain blocked if only a hidden
+window was cleared. No further production source change was necessary.
+
+#### Failure log — validation transport
+
+The foreground tool call lost its result at 420 seconds despite timeout=600.
+Hypothesis: tool transport timeout, not test failure. Inspected the exact log
+and test-runner processes rather than rerunning: final pass markers present,
+2804/2804, no surviving csharp_runner process. The tool did not return an exit
+code, so report the recovered canonical markers rather than inventing one.
+Use a tracked background validator for future full-suite runs of this duration.
+
+Next action: checkpoint/publish the test-only extension and refreshed docs,
+then select the next READY RM2000/2003 runtime card from the repository queue.
+All four complete engine/GUI production criteria remain OPEN. Preserve original
+games/saves and qa_patches/. No export/distributable has been produced.
+
+### Wait review resolved; input isolation active (2026-10-09)
+
+Source checkpoint `1985d0f` is now published and remote main verified as
+1985d0f533c305df0f2e36a73eaadb74cc375a9f. This contains exactly the four reviewed
+input-isolation code/test files and is backed by 2801/2801 validation.
+K-PROD-RM2K-INPUT-COVERAGE is IN PROGRESS and will add regression protection
+only; no production source change is planned unless a new test exposes a defect.
+
+LATEST: input-isolation validator proc_9bf97bab7452 completed exit 0 with
+**2801/2801**, including the new suite **8/8** and 142 existing build warnings.
+Independent review deleg_3a9b690a found no introduced correctness blocker.
+The original card acceptance is implemented and verified; its DONE scope is
+player input isolation, not complete RM2000/2003 scheduling or GUI parity.
+Checkpoint the four code/test files before starting the separate READY
+K-PROD-RM2K-INPUT-COVERAGE regressions named by review (nested execution role,
+main+parallel simultaneous decisions, and release after message clears).
+The existing decision-host suite already exercises two simultaneous parallel
+waits; the review's mixed main/parallel omission is the additional missing case.
+
+Input isolation is implemented and focused tests pass. EventInterpreter has an
+internal-init execution role without changing its public constructor signature;
+the scheduler assigns parallel role only when starting parallel pages. Player
+turns broadcast fresh decisions to current waits, block vehicles/actions only
+when a main page runs, and use the same main-role gate for movement/menu. Both
+the message window and authoritative MessageOpen block map input independently.
+Blocking is derived from live interpreter instances, not a separate stale flag.
+
+Regression evidence: main timed-wait action test initially 0/1, fixed to 1/1;
+parallel controls then 1/2, fixed to 2/2; message controls 2/3, fixed to 3/3.
+Five boundary regressions extend the final native player/scheduler suite to
+**8/8**. Existing decision-host **6/6**, duration **4/4**, interpreter **85/85**,
+vehicle-turn **8/8** pass on the final rebuilt source. No failed speculative
+fixes or ignored regressions. These are native integration tests, not complete
+real-game or GUI parity. New source remains unstaged/uncommitted pending:
+- canonical validator proc_9bf97bab7452;
+- independent bounded review deleg_3a9b690a.
+Validator log: `C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-input-isolation-validation.log`.
+Next action: handle exact review findings, read validator exit/count, then
+checkpoint only this verified four-file code/test slice and its documentation.
+
+Additional static call-flow verification under the continued production goal:
+Rm2kEngineRuntime.SubmitInput (340-346) invokes the actual modified player turn.
+Main._UnhandledInput (739-756) rejects key-up/echo, consumes message confirmation
+through DrueckeFort and returns before map SubmitInput. DrueckeFort (1604-1650)
+closes the authoritative message wait and resumes dialogue state but does not
+submit a decision. Main (824-834) consumes map arrows/Confirm even when the
+native turn returns false, so blocked input does not leak into launcher UI.
+ExecuteCallEvent (2158-2205) reuses the same interpreter and call stack rather
+than constructing a new instance, preserving its immutable execution role.
+These are source-level wiring checks, not newly executed GUI or gameplay tests.
+
+Review deleg_91f0fe9a found no blocker in the supported RM2000/RM2003 Wait
+slice. Published title identity `ce19f4c` and timed/decision waits `c35d65a`;
+remote main was read back as c35d65ad55c52acbc556fb341f998912c4604135.
+Canonical working-state validation passed 2793/2793 before these scoped commits.
+
+K-PROD-RM2K-INPUT-ISOLATION addressed this pre-fix evidence: Confirm lacked the
+main-running gate, and menu/movement used ActiveInterpreterCount rather than
+main/parallel role. A blanket count guard would fix autorun input while
+freezing every parallel page. Primary reference downloaded as data at EasyRPG
+commit 0de2a9ab466a133ac6e192a84bd761a1d81f5f14: Game_Player lines 285-360,
+Game_Map main interpreter construction, Game_Event parallel execution 580-606.
+Deterministic scheduler/player-turn regressions caught each defect before fixes.
+All four production gates remain open; qa_patches/ is preserved.
+
 ### Storage checkpoint published; RM2003 review pending (2026-10-09)
 
 K-PROD-SAVE-IO is DONE for bounded snapshot IO only. Source commit `985e366`

@@ -1,13 +1,54 @@
 ## Active
 
-### K-PROD-RM2003-DECISION-WAIT — VERIFY (runtime regressions passed)
+### K-PROD-RM2K-INPUT-COVERAGE — DONE (regression coverage only)
+
+Expanded native input suite **11/11**, decision-host **6/6** and interpreter
+**85/85** pass. Canonical log confirms **2804/2804** and the final
+`UniversalRPG validation passed.` marker. Nested tests observe child and caller
+switch markers, both execution roles and actual movement; mixed-role waits
+must both reach End after one key; message release checks both representations.
+No additional production-code change was needed.
+
+Review follow-up, separate from the green input-isolation fix: exercise nested
+CallEvent under both main and parallel roles, one fresh decision reaching a
+main and a parallel wait simultaneously, and ordinary input resuming after
+message state clears. The implementation is source-reviewed; these are missing
+regression scenarios, not known gameplay failures. Preserve the completed
+production fix before adding tests. Require focused and canonical validation.
+
+### K-PROD-RM2K-INPUT-ISOLATION — DONE (input-isolation slice only)
+
+Source checkpoint `1985d0f` is pushed; exact remote main readback matched
+1985d0f533c305df0f2e36a73eaadb74cc375a9f before starting the coverage follow-up.
+
+Native player/scheduler regressions **8/8**, existing decision-host **6/6**,
+duration **4/4**, interpreter **85/85** and vehicle-turn **8/8** pass. The first
+three behavioral tests each failed on their original defect before their fix.
+Role is immutable per execution instance; the original constructor API stays
+unchanged. Full validator proc_9bf97bab7452 completed with exit 0 and
+**2801/2801**; review deleg_3a9b690a found no introduced correctness blocker.
+Additional nested/mixed-decision/message-release coverage is tracked separately
+above. This does not establish complete scheduling, save/load or GUI parity.
+
+Pre-fix review finding: Confirm reached vehicles/action pages during a running
+timed-wait/autorun page, while movement/menu gates wrongly counted all parallel
+interpreters as blocking. Use the pinned EasyRPG main-map interpreter
+rule, not a blanket active-count guard. Acceptance: main pages suppress player
+actions/movement/menu; parallel pages alone do not; fresh decisions reach all
+waiting pages without blocking ordinary input when only parallel pages wait;
+active messages still suppress map input; clear/map replacement drops stale
+blocking state. Require targeted red-to-green tests and canonical validation.
+
+### K-PROD-RM2003-DECISION-WAIT — DONE (decision-wait slice only)
 
 New host/input integration suite **6/6**, timed-wait suite **4/4**, existing
 interpreter suite **85/85**, vehicle-decision suite **8/8** pass. Four of the
 original five new cases failed before implementation. The sixth verifies two
 parallel waits observing the same fresh decision. Full validator
 proc_c9550df807a6 completed with exit 0 and **2793/2793**. Independent review
-is deleg_91f0fe9a; await that verdict before DONE/commit of this runtime slice.
+deleg_91f0fe9a found no hard correctness blocker. Source is committed as
+`c35d65a`, pushed and verified against origin/main. Main/parallel input
+isolation is the separate follow-up card above, not a full-engine claim.
 
 Implement command 11410's decision-key mode through the actual runtime input,
 player turn and scheduler. Reference: EasyRPG Player
@@ -20,6 +61,9 @@ Regression tests drive Rm2kEngineRuntime.SubmitInput and host.Update with pinned
 RM2000/2003 fixtures. Full canonical validation required.
 
 ### K-PROD-TITLE-IDENTITY — DONE (title-dispatch slice only)
+
+Source checkpoint `ce19f4c` is published, with the final working-state suite
+passing 2793/2793. Unknown plugin commands remain unsupported.
 
 Fresh canonical validation after the title fix passed **2784/2784**, followed
 by **2787/2787** with the additional storage review tests. This establishes
@@ -37,6 +81,8 @@ proc_1f7aecca3af9 completed successfully with **2784/2784**. No title failure
 was hidden by that timeout.
 
 ### K-PROD-RM2K-WAIT — DONE (timed-wait slice only)
+
+Source checkpoint `c35d65a` is published with the decision-wait slice.
 
 Evidence: new duration suite **4/4**, existing interpreter suite **85/85**;
 `bash scripts/validate.sh` exit 0 with **2782/2782** tests. The pre-fix run
@@ -66,7 +112,7 @@ a complete opcode-name table or passing helper tests is not full engine support.
 
 Source checkpoint: `985e366`, pushed and verified against `origin/main`.
 Only the six reviewed storage/test/harness files were committed; the RM2003
-and title work remains separate in the working tree.
+and title work was separate then and is now published in its own checkpoints.
 
 Current evidence: final mutex-bearing `bash scripts/validate.sh` exit 0 with
 **2787/2787**. `TestMzSaveStoreSafety` **13/13**, including a real Windows

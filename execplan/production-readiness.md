@@ -15,7 +15,9 @@ A player must be able to run a supported game without losing progress, overwriti
 - [ ] Verify game command execution and plugin-to-native state synchronization; stop reporting blocked scripts as Finished.
 - [ ] Verify supported engine claims against actual complete gameplay paths, including battle, inventory, audio, event execution and save resumption.
 - [x] (2026-10-09 14:03 UTC+8) K-PROD-RM2K-WAIT corrected: full representable timed waits, zero-frame compatibility, invalid-duration diagnostics; new suite 4/4 and existing interpreter suite 85/85. Canonical validator passed 2782/2782. This is one completed RM2000/2003 slice, not engine completion.
-- [x] RM2003 decision-key Wait implemented through the native host/input/scheduler path; new integration suite 6/6, timed waits 4/4, existing interpreter 85/85 and vehicle turns 8/8 pass. Canonical run proc_c9550df807a6 passed 2793/2793; review deleg_91f0fe9a and publication of that separate runtime slice remain pending.
+- [x] RM2003 decision-key Wait reviewed and published as c35d65a; title identity published as ce19f4c. Decision-host 6/6, timed waits 4/4, existing interpreter 85/85 and vehicle turns 8/8 pass. Canonical run proc_c9550df807a6 passed 2793/2793; bounded read-only review found no blocker for the Wait slice.
+- [x] Main/parallel player input isolation verified with native integration 8/8, adjacent suites green, canonical validator proc_9bf97bab7452 exit 0 with 2801/2801, and read-only review deleg_3a9b690a finding no introduced blocker. The first three behavioral tests were observed red before their fixes. This is not full RM2000/2003 parity.
+- [x] Input review coverage added for nested calls under both execution roles, simultaneous main/parallel decisions and message-release recovery. Expanded native suite 11/11; canonical log confirms 2804/2804 and final validator pass marker. No additional production change was needed.
 - [ ] K-PROD-RM2K-RUNTIME: complete RM2000/2003 gameplay paths, including faithful timing, battle/event execution, menu actions, original-game asset handling and restart/resume coverage.
 - [ ] K-PROD-VX-RUNTIME: complete RPG Maker VX runtime execution and presentation, not detection/parsing only. VX is a separate acceptance target from VX Ace.
 - [ ] K-PROD-MVMZ-RUNTIME: complete MV and MZ runtime and plugin integration within the authorized sandbox, with verified durable state and save/load UI.
@@ -37,7 +39,7 @@ The historical statement that saving works end to end is narrower than a product
 
 ## Outcomes & Retrospective
 
-Storage IO is complete for the bounded-snapshot scope and published as 985e366, with two read-only reviews, 13/13 safety cases, and three independent-process concurrency runs passing. Canonical validation passed 2787/2787 for that working state. The subsequent decision-wait working tree passed 2793/2793 and still awaits its separate review/publication. There are 142 existing build warnings. Full durable game-state persistence, native-save interoperability, the four complete engine/GUI criteria and a tested distributable remain open. No release export was produced.
+Storage IO is complete for the bounded-snapshot scope and published as 985e366, with two read-only reviews, 13/13 safety cases, and three independent-process concurrency runs passing. Decision waits and title identity are published as c35d65a and ce19f4c. Main/parallel input isolation is reviewed and published as 1985d0f with canonical 2801/2801. The test-only review coverage extension passes native integration 11/11; the newest canonical log confirms 2804/2804 and the final validator pass marker. Full durable game-state persistence, native-save interoperability, the four complete engine/GUI criteria and a tested distributable remain open. No release export was produced.
 
 ## Context and Orientation
 

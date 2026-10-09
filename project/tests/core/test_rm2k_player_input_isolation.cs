@@ -167,6 +167,96 @@ public partial class TestRm2kPlayerInputIsolation : TestBase
         }
     }
 
+    public void Test_NestedCallsKeepTheOriginalExecutionRole()
+    {
+        foreach (var trigger in new[] { Rm2kEventTrigger.AutoStart, Rm2kEventTrigger.Parallel })
+        {
+            var state = NewState();
+            var calledPage = new Rm2kMap.EventPage { Trigger = (int)Rm2kEventTrigger.Action };
+            calledPage.Commands.Add(SetSwitch(7));
+            calledPage.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.Wait, new List<int> { 10, 0 }));
+            calledPage.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+            var called = new Rm2kMap.Event(902, 0, 0);
+            called.Pages.Add(calledPage);
+            var rootPage = new Rm2kMap.EventPage { Trigger = (int)trigger };
+            rootPage.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.CallEvent,
+                new List<int> { EventInterpreter.CallTargetMapEvent, 902, 1 }));
+            rootPage.Commands.Add(SetSwitch(8));
+            rootPage.Commands.Add(new Rm2kMap.EventCommand(EventInterpreter.End));
+            var root = new Rm2kMap.Event(900, 0, 0);
+            root.Pages.Add(rootPage);
+            var scheduler = new Rm2kEventScheduler(state);
+            scheduler.SetEvents(new[] { root, called });
+
+            scheduler.ExecuteFrame(); // Enter the called page.
+            scheduler.ExecuteFrame(); // Observe its marker.
+            scheduler.ExecuteFrame(); // Enter its timed wait.
+            AssertTrue(Switch(state, 7), "The called page really executed, rather than merely being registered");
+            AssertFalse(Switch(state, 8), "The caller has not resumed while its child waits");
+            AssertEq(scheduler.ActiveInterpreterCount, 1, "A nested call belongs to its original execution instance");
+            var parallel = trigger == Rm2kEventTrigger.Parallel;
+            AssertEq(scheduler.HasBlockingInterpreter, !parallel, "The child retains the caller's execution role");
+            new Rm2kPlayerTurn(state, scheduler).Apply(Rm2kInputAction.MoveRight);
+            AssertEq(state.MapX, parallel ? 3 : 2, "Calling an action page does not turn a parallel interpreter into a main one");
+            for (var i = 0; i < 70; i++) { scheduler.ExecuteFrame(); }
+            AssertTrue(Switch(state, 8), "The nested timed wait completes and returns to its original caller");
+        }
+    }
+
+    public void Test_OneDecisionResumesMainAndParallelWaitsTogether()
+    {
+        var state = NewState();
+        state.SupportsRpg2k3Commands = true;
+        var scheduler = new Rm2kEventScheduler(state);
+        scheduler.SetEvents(new[]
+        {
+            WaitingPage(Rm2kEventTrigger.AutoStart, decision: true),
+            WaitingPage(Rm2kEventTrigger.Parallel, decision: true, eventId: 902)
+        });
+        scheduler.ExecuteFrame();
+        scheduler.ExecuteFrame();
+        AssertEq(scheduler.ActiveInterpreterCount, 2, "Both roles remain waiting before a fresh decision");
+        var turn = new Rm2kPlayerTurn(state, scheduler);
+        AssertTrue(turn.Apply(Rm2kInputAction.Confirm), "One fresh decision is broadcast to both roles");
+        AssertFalse(turn.Apply(Rm2kInputAction.Confirm), "Neither wait accepts a duplicate decision");
+        scheduler.ExecuteFrame();
+        AssertEq(scheduler.ActiveInterpreterCount, 0, "Both continuations reach End on the same frame");
+        AssertFalse(scheduler.HasDecisionWait, "No parallel decision wait was left behind");
+        AssertFalse(scheduler.HasBlockingInterpreter, "No main decision wait was left behind");
+    }
+
+    public void Test_MessageReleaseRestoresOrdinaryPlayerInput()
+    {
+        foreach (var visibleWindow in new[] { true, false })
+        {
+            var state = NewState();
+            var presentation = new PresentationState();
+            var scheduler = new Rm2kEventScheduler(state, presentation);
+            scheduler.SetEvents(new[] { WaitingPage(Rm2kEventTrigger.Parallel) });
+            scheduler.ExecuteFrame();
+            if (visibleWindow) { presentation.ShowMessage("A background message"); }
+            else { state.WaitingFor = GameSimulationState.WaitReason.MessageOpen; }
+            var turn = new Rm2kPlayerTurn(state, scheduler);
+            turn.Apply(Rm2kInputAction.MoveRight);
+            AssertEq(state.MapX, 2, "Input stays blocked while the message is active");
+            presentation.DismissMessage();
+            if (!visibleWindow)
+            {
+                turn.Apply(Rm2kInputAction.MoveRight);
+                AssertEq(state.MapX, 2, "Hiding a window does not clear an authoritative message wait");
+                state.WaitingFor = GameSimulationState.WaitReason.None;
+            }
+            turn.Apply(Rm2kInputAction.MoveRight);
+            AssertEq(state.MapX, 3, "Once the actual message state clears, background pages no longer block input");
+            AssertFalse(scheduler.IsMessageActive, "The message gate reflects the completed release");
+        }
+    }
+
+    private static Rm2kMap.EventCommand SetSwitch(int id) => new(EventInterpreter.ControlSwitches,
+        new List<int> { EventInterpreter.TargetEvalSingle, id, id, EventInterpreter.SwitchModeOn });
+
+    private static bool Switch(GameSimulationState state, int id) => state.Switches.Count >= id && state.Switches[id - 1];
+
     private static GameSimulationState NewState()
     {
         var state = new GameSimulationState();
