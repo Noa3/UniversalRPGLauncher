@@ -2578,6 +2578,9 @@ public sealed class GameSimulationState
     /// </remarks>
     public bool SupportsRpg2k3ECommands { get; set; }
 
+    /// <summary>The basic RM2003 command set, independent of 2003E extensions.</summary>
+    public bool SupportsRpg2k3Commands { get; set; }
+
     /// <summary>Whether 5002 asked the game to exit.</summary>
     public bool ExitRequested { get; set; }
 
@@ -3002,6 +3005,7 @@ public sealed class GameSimulationState
         // not an RPG_RT scene name and made every scene test pass against a
         // fiction. An empty stack says what is true: nothing is open.
         SceneStack.Clear(); CurrentScene = "";
+        SupportsRpg2k3Commands = false;
         SupportsRpg2k3ECommands = false; ExitRequested = false;
         SupportsManiacPatch = false;
         AtbWaitMode = true; FullscreenRequested = false;

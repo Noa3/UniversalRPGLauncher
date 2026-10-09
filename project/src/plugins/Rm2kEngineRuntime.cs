@@ -207,6 +207,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             LoadCurrentMapEvents(null);
         }
+        Simulation.SupportsRpg2k3Commands = _pluginId == EnginePluginIds.RpgMaker2003;
         State = PluginRuntimeState.Initialized;
         return PluginOperationResult.Succeeded(new[]
         {

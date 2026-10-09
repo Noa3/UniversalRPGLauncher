@@ -1254,6 +1254,8 @@ public sealed class EventInterpreter
 	/// </remarks>
 	private const int SubCommandSentinel = -1;
 	private int _waitFramesRemaining;
+	private bool _waitingForDecision;
+	private bool _decisionRequested;
 
 	/// <summary>Suspended caller state for a bounded nested CallEvent.</summary>
 	private sealed class CallFrame
@@ -1308,6 +1310,22 @@ public sealed class EventInterpreter
 	public int WaitFramesRemaining => _waitFramesRemaining;
 	public int CallDepth => _callStack.Count;
 	public bool IsRunning { get; private set; } = true;
+	public bool IsWaitingForDecision => IsRunning && _waitingForDecision;
+
+	/// <summary>Accepts a new decision only for an already-running wait.</summary>
+	public bool SubmitDecision()
+	{
+		if (!IsWaitingForDecision || _decisionRequested || IsDecisionBlocked())
+		{
+			return false;
+		}
+		_decisionRequested = true;
+		return true;
+	}
+
+	private bool IsDecisionBlocked() => _state.IsPaused || _state.IsMenuOpen
+		|| _presentation?.MessageVisible == true
+		|| _state.WaitingFor == GameSimulationState.WaitReason.MessageOpen;
 
 	/// <summary>
 	/// Execute one frame of this event's commands.
@@ -1319,6 +1337,18 @@ public sealed class EventInterpreter
 		if (!IsRunning)
 		{
 			return false;
+		}
+
+		if (_waitingForDecision)
+		{
+			if (IsDecisionBlocked())
+			{
+				_decisionRequested = false;
+				return true;
+			}
+			if (!_decisionRequested) { return true; }
+			_waitingForDecision = false;
+			_decisionRequested = false;
 		}
 
 		if (_waitFramesRemaining > 0)
@@ -1430,8 +1460,7 @@ public sealed class EventInterpreter
 				return Advance();
 
 			case Wait:
-				ExecuteWait(cmd);
-				return Advance();
+				return ExecuteWait(cmd) ? Advance() : true;
 
 			case ControlSwitches:
 				ExecuteControlSwitches(cmd);
@@ -2467,13 +2496,39 @@ public sealed class EventInterpreter
 		return singleLine.Length <= 80 ? singleLine : singleLine[..80];
 	}
 
-	private void ExecuteWait(Rm2kMap.EventCommand pCmd)
+	private bool ExecuteWait(Rm2kMap.EventCommand pCmd)
 	{
-		// params[0] is a duration in tenths of a second (EasyRPG SetupWait);
-		// 0.0 seconds still waits exactly one frame.
+		var mode = pCmd.Parameters.Count > 1 ? Param(pCmd, 1) : 0;
+		if (_state.SupportsManiacPatch && (mode is not (0 or 1)
+			|| (mode == 0 && pCmd.Parameters.Count > 2 && Param(pCmd, 2) != 0)))
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Wait: unsupported Maniac mode {mode} skipped");
+			return true;
+		}
+		var supportsDecision = _state.SupportsRpg2k3Commands
+			|| _state.SupportsRpg2k3ECommands || _state.SupportsManiacPatch;
+		if (supportsDecision && pCmd.Parameters.Count > 1 && mode != 0)
+		{
+			if (IsDecisionBlocked()) { return false; }
+			// Do not retain any key sent before this command established its wait.
+			_waitingForDecision = true;
+			_decisionRequested = false;
+			_state.AddDiagnostic($"[Event {_eventId}] Wait for a fresh decision key");
+			return true;
+		}
+
+		// SetupWait uses tenths * 60 / 10; unlike screen-effect safety
+		// budgets, elapsed game time must not be silently shortened.
 		var tenths = Param(pCmd, 0);
-		WaitForFrames(tenths == 0 ? 1 : TenthsToFrames(tenths));
+		var frames = (long)tenths * 6;
+		if (pCmd.Parameters.Count == 0 || tenths < 0 || frames > int.MaxValue)
+		{
+			_state.AddDiagnostic($"[Event {_eventId}] Wait: invalid duration skipped");
+			return true;
+		}
+		_waitFramesRemaining = tenths == 0 ? 1 : (int)frames;
 		_state.AddDiagnostic($"[Event {_eventId}] Wait {_waitFramesRemaining} frames");
+		return true;
 	}
 
 	/// <summary>EasyRPG converts tenths of a second at 60 simulation frames per second.</summary>

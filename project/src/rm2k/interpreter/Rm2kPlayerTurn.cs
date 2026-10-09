@@ -38,6 +38,12 @@ public sealed class Rm2kPlayerTurn
         }
         if (pAction == Rm2kInputAction.Confirm)
         {
+            // A decision awaited by an interpreter is not an action-event or
+            // vehicle turn. Rejected/duplicate keys must not fall through.
+            if (_scheduler.HasDecisionWait)
+            {
+                return _scheduler.SubmitDecision();
+            }
             // The Player tries the vehicle before it looks for events:
             //   if (Input::IsTriggered(Input::DECISION)) {
             //       if (!GetOnOffVehicle()) { CheckActionEvent(); }

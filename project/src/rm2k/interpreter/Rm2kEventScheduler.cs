@@ -48,6 +48,17 @@ public sealed class Rm2kEventScheduler
 
     public int ActiveInterpreterCount => _active.Count;
     public int EventCount => _events.Count;
+    public bool HasDecisionWait => _active.Values.Any(interpreter => interpreter.IsWaitingForDecision);
+
+    public bool SubmitDecision()
+    {
+        var accepted = false;
+        foreach (var interpreter in _active.Values)
+        {
+            accepted |= interpreter.SubmitDecision();
+        }
+        return accepted;
+    }
 
     public void SetEvents(IEnumerable<Rm2kMap.Event> pEvents)
     {
