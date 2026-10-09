@@ -1013,6 +1013,7 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
 
     private readonly List<string> _termsCommands = new();
     private readonly List<bool> _menuFlags = new();
+    private IReadOnlyList<string> _titleCommandSymbols = Array.Empty<string>();
 
     /// <summary>
     /// And one of the game's own words, out of <c>terms.commands</c>.
@@ -1567,15 +1568,16 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
             Begriff(18, "New Game"),
             Begriff(11, "Options"),
         };
+        // Window_Command dispatches by symbol, never by localized caption.
+        var symbols = new List<string> { "newGame", "options" };
         TitleCommandSource = "the engine's own commands, and nothing else";
 
         var ausDemSandkasten = PluginHost?.TitleCommands();
         if (ausDemSandkasten is { Count: > 0 })
         {
-            befehle = ausDemSandkasten
-                .Where(p => p.Enabled)
-                .Select(p => p.Name)
-                .ToList();
+            var enabled = ausDemSandkasten.Where(command => command.Enabled).ToList();
+            befehle = enabled.Select(command => command.Name).ToList();
+            symbols = enabled.Select(command => command.Symbol).ToList();
             TitleCommandSource = "the executed plugins";
         }
         else
@@ -1594,12 +1596,16 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
                 if (dazu.Count > 0)
                 {
                     befehle.AddRange(dazu);
+                    // Parameter-only commands have no verified dispatch identity.
+                    symbols.AddRange(dazu.Select(_ => ""));
                     TitleCommandSource = "the plugins' parameters";
                 }
             }
         }
 
         TitleCommands = befehle;
+        _titleCommandSymbols = symbols;
+        TitleIndex = Math.Clamp(TitleIndex, 0, Math.Max(0, befehle.Count - 1));
     }
 
     /// <summary>
@@ -1828,7 +1834,8 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
             return false;
         }
 
-        if (TitleSelection == "New Game")
+        if (TitleIndex >= 0 && TitleIndex < _titleCommandSymbols.Count
+            && _titleCommandSymbols[TitleIndex] == "newGame")
         {
             return BeginNewGame();
         }
