@@ -1,5 +1,70 @@
 ## Current card
 
+### Active event graphics — complete
+
+FINAL: K-PROD-RM2K-ACTIVE-GRAPHIC DONE for its original graphic/index/layer
+and live-repaint acceptance. Canonical proc_f51f2ec16707 exited0; log confirms
+**2828/2828** and UniversalRPG validation passed. Both bounded reviews are
+resolved with no blockers. New6/6 covers runtimecomposed realcharset pixels and
+the route/step preservation; adjacent19/19,8/8,85/85,7/7,11/11 pass. Selection
+and invalidation regressions were observed RED before fixes; the deliberate
+invalidationmutation was detected and restored/rebuilt. No new release export.
+
+Next READY slice: K-PROD-RM2K-PAGE-POSE, reference-derived stopped/midstep
+direction/pattern behavior. This differs from current intentional live-pose
+preservation; fullpage refresh/parity remains incomplete. XP and VX Ace gates
+are independently tracked alongside RM2000/2003,VX,MV/MZ and bothGUI targets.
+qa_patches/ remains untouched. Earlier pending entries below are historical.
+
+Latest checkpoint: K-PROD-RM2K-ACTIVE-GRAPHIC VERIFY. Shared SelectActive owns
+graphics and trigger filtering; sprite builder takes only activepage and retains
+eventpose. Last-composed pagecache cleared on composition/renderteardown; Update
+polls pageidentity after scheduler/routes without image IO on idle unchanged
+pages. New native runtime/pixel suite6/6, renderer19/19, selector8/8,
+interpreter85/85, routes7/7 and input11/11 pass. Deliberate invalidationmutation
+failed4/6 (stationarypixel+visibility), then restored and rebuilt6/6. No mutation
+marker remains. Control pages are managed fixtures on a parsed realmap and real
+pinnedChara1.png, not a claim of originalgame/native visual parity.
+
+Canonical proc_f51f2ec16707 is running, exactlog:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-active-graphic-validation.log`.
+Initial audit deleg_d8aba418 delivered and resolved: it confirms the shared
+trigger-independent selector, active-only sprite construction and page-change
+invalidation after scheduler/routes without resetting event/route state.
+Its optional static-event scan optimization is deferred; the current poll does
+no IO, and unchanged-page frame allocation is regression-tested. Transparency,
+page-specific facing reset rules and route/interpreter refresh stay separate.
+Review deleg_5a470632 and canonical proc_f51f2ec16707 still pending. Next:
+resolve these gates before DONE or commit/push. qa_patches/ untouched, no export.
+XP/VX Ace acceptance gates are recorded in production-readiness plan.
+
+Base main355ec4c is clean except preserved qa_patches/; canonical2822/2822.
+Next slice K-PROD-RM2K-ACTIVE-GRAPHIC is selected. Confirmed first-graphic-page
+selection in TryBuildEventSprite and no stationary page-change invalidation in
+Update. Pinned EasyRPG Game_Event::RefreshPage152-208 resolves highest eligible
+page, applies its graphic and layer; current event movement/animation must not
+be reset by this bounded graphic fix. Add failing runtime pixel tests before
+editing production code. Read-only route/invalidation audit deleg_d8aba418 runs.
+XP and VX Ace are additional explicit full-runtime release targets; repeated
+VX requirement is the same VX gate. No engine-completion claim or new export.
+
+Failure log: initial new renderer fixture failed with NullReferenceException,
+not the desired behavioral signal. _heroSpriteProbe is a private property,
+not a field; corrected the test reflection after checking its declaration.
+Production source is unchanged; behavioral RED must still be observed.
+
+Behavioral RED observed: highest-page cell, layer and228 pinned opaque pixels
+failed. Selector/sprite correction fixes cell/layer. Pixel oracle still failed:
+test assumed tile center(+8), but pinned Game_Character::GetScreenX adds
+TILE_SIZE(+16). Read pinned source; corrected expected position only, not
+production renderer. Rerun required; stationary repaint not implemented yet.
+
+Stationary repaint RED observed1/2 (real Update retained old cell and pixels).
+Added last-composed page identity cache and idle invalidation with no image IO
+or movement reset on unchanged ticks; suite2/2 and adjacent85/85,8/8,19/19 green.
+Expanded coverage5/6 initially: mid-route fixture indexed absent switch1; added
+its explicit false switch like the other condition fixtures. Rerun required.
+
 ### Folder scan completed — final checkpoint
 
 K-PROD-LIBRARY-SCAN-FEEDBACK is DONE for bounded responsive scanning.

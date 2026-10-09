@@ -28,6 +28,14 @@ public static class Rm2kEventPageSelector
         GameSimulationState pState,
         Rm2kEventTrigger pTrigger)
     {
+        var page = SelectActive(pEvent, pState);
+        // Trigger queries must not reveal a page hidden by the active one.
+        return page?.Trigger == (int)pTrigger ? page : null;
+    }
+
+    /// <summary>The highest condition-matching page, independent of its trigger.</summary>
+    public static Rm2kMap.EventPage? SelectActive(Rm2kMap.Event pEvent, GameSimulationState pState)
+    {
         if (pEvent == null) throw new ArgumentNullException(nameof(pEvent));
         if (pState == null) throw new ArgumentNullException(nameof(pState));
 
@@ -38,8 +46,7 @@ public static class Rm2kEventPageSelector
             {
                 continue;
             }
-            // Trigger queries must not reveal a page hidden by the active one.
-            return page.Trigger == (int)pTrigger ? page : null;
+            return page;
         }
         return null;
     }

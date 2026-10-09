@@ -1,5 +1,8 @@
 ## Active
 
+User acceptance also explicitly includes complete XP and VX Ace runtimes.
+VX is listed twice in the request and remains one separate target, not VX Ace.
+
 ### K-PROD-LIBRARY-SCAN-FEEDBACK — DONE (responsive bounded scanning)
 
 Final validation proc_5904ca0973bc exited 0: **2822/2822**, followed by
@@ -44,7 +47,44 @@ controls or shared Games/settings; stale/cancelled results cannot replace the
 prior library; close/reload cancels safely; traversal budgets and no-link/no-code
 safety remain; focused UI/library tests and canonical validation pass. Preserve
 saved explicit engine choices. Sprite successor is postponed for this user bug.
-### K-PROD-RM2K-ACTIVE-GRAPHIC — READY
+### K-PROD-RM2K-PAGE-POSE — READY
+
+Successor to active graphic selection. Pinned EasyRPG Game_Event::RefreshPage
+182-209 resets page-specific facing/direction only while stopping when the
+direction/pattern changes, plus facing-lock and fixed/spin exceptions. The
+current host intentionally retains live facing/pattern during the graphic fix.
+Acceptance: preserve/parse the verified page direction/pattern/animation fields;
+apply reference-derived initial and transition rules through native Update,
+including stopped versus mid-step and unchanged-page cases. Do not reset event
+position or forced-route progress; add mutation-sensitive real-charset pixel
+regressions and canonical validation. Transparency and route/parallel lifecycle
+remain separate. Dependency: K-PROD-RM2K-ACTIVE-GRAPHIC.
+
+### K-PROD-RM2K-ACTIVE-GRAPHIC — DONE (active graphic/index/layer)
+
+Final canonical proc_f51f2ec16707 exited0 with **2828/2828** and the final
+validation pass marker. Both audit deleg_d8aba418 and review deleg_5a470632 are
+resolved; no blocker was found for the original acceptance criteria.
+The intermediate pending entries below are superseded. The new pixel suite
+uses the RM2000 native host with a parsed realmap/pinned realcharset and control
+pages; it is not original-game parity or a separately measured RM2003 image.
+Page-specific pose resets, transparency and route/interpreter lifecycle remain
+open; PAGE-POSE above carries the reference-confirmed next implementation slice.
+
+Implemented shared trigger-independent SelectActive and active-only charset,
+index and layer selection. Last-composed page identity invalidates stationary
+frames after live conditions change; unchanged pages perform no image IO or
+new frame allocation. Blank/missing/ineligible pages never reveal a lower one.
+No position/facing/pose/step/route reset was introduced.
+New runtime/pixel regressions **6/6** pass with real pinned Chara1.png and a
+parsed real map plus explicitly controlled event pages. Independent pixel
+oracle checks228 opaque pixels in cell3. Behavioral RED0/1 and1/2 observed;
+deliberately disabling page invalidation yielded4/6 then restored6/6.
+Adjacent renderer19/19, selector8/8, interpreter85/85, routes7/7 and input11/11
+pass. Canonical proc_f51f2ec16707 and review deleg_5a470632 are pending;
+Initial audit deleg_d8aba418 is resolved and agrees with this selection/dirty
+mechanism. Transparency, page-specific pose resets and route/interpreter refresh
+remain separate runtime work. No DONE/commit or parity claim.
 
 Successor to the verified fresh-activation fix. Source-confirmed defect:
 Rm2kEngineRuntime.TryBuildEventSprite scans low-to-high for the first graphic

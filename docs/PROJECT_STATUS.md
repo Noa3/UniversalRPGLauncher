@@ -5,7 +5,17 @@
 
 ## Latest runtime correctness work
 
-The last completed canonical development suite passed **2822/2822**. Folder
+The last completed canonical development suite passed **2828/2828**. Event
+graphics now use only the highest eligible page's charset, cell and draw layer;
+blank/missing/ineligible pages cannot reveal hidden lower graphics. Stationary
+condition changes invalidate the real composed frame without resetting live
+position, facing, pose, step budget or route. New runtime/pixel suite6/6 uses
+the native RM2000 host with a parsed map, controlled event pages and pinned
+real Chara1.png; this is not original-game visual parity. Two bounded reviews
+are resolved and canonical validation exited0. Reference-specific page pose
+resets, transparency and route/interpreter refresh remain separate open work.
+
+Folder
 selection, startup and rescan now use isolated background inspection with visible
 activity, current path, directory/game counts, elapsed time and cancellation.
 Only the UI thread publishes successful current results; cancellation retains
@@ -25,9 +35,9 @@ Its new suite passes **8/8**, including pinned native RM2000/2003 hosts using
 reference-derived command lists; full validation exited 0 with **2812/2812**,
 and independent bounded review found no introduced blocker.
 This is not original-game or visual parity, and running parallel-page refresh,
-sprite/route refresh, autorun repetition and single-main scheduling remain open.
+page pose/route refresh, autorun repetition and single-main scheduling remain open.
 
-Production gates remain open for complete RM2000/2003, VX, MV/MZ and both GUI
+Production gates remain open for complete RM2000/2003, XP, VX, VX Ace, MV/MZ and both GUI
 surfaces. Use `KANBAN.md`, `SESSION_STATE.md` and
 `execplan/production-readiness.md` for current verified slices and release gates.
 The audit and feature narrative below are historical evidence, not a current

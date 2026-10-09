@@ -322,7 +322,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             {
                 Simulation.UpdateCharacterAnimation(pMoving: false);
             }
-            if (moving || _isRenderDirty || _eventRoutesMoved)
+            if (moving || _isRenderDirty || _eventRoutesMoved || HaveEventGraphicsChanged())
             {
                 _isRenderDirty = true;
                 _eventRoutesMoved = false;
@@ -919,6 +919,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _renderedLayers = null;
         _renderedRenderer = null;
         _isRenderDirty = false;
+        _renderedEventPages.Clear();
     }
 
     private string? ResolveGameDirectory()
@@ -2322,6 +2323,23 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
     private List<Rm2kMap.Event> _mapEvents = new();
 
+    // Compare page identity against the last composition, without decoding images
+    // or resetting live event/route state on every idle simulation tick.
+    private readonly Dictionary<Rm2kMap.Event, Rm2kMap.EventPage?> _renderedEventPages = new();
+
+    private bool HaveEventGraphicsChanged()
+    {
+        if (_renderedRenderer == null) return false;
+        if (_renderedEventPages.Count != _mapEvents.Count) return true;
+        foreach (var mapEvent in _mapEvents)
+        {
+            if (!_renderedEventPages.TryGetValue(mapEvent, out var renderedPage)
+                || !ReferenceEquals(renderedPage, Rm2kEventPageSelector.SelectActive(mapEvent, Simulation)))
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// The three vehicles, built from the LMT start node when a map is loaded.
     /// Always three entries, in the order boat, ship, airship, so a caller can
@@ -3207,6 +3225,7 @@ ReadString(entry, "name", v => werte.Name = v);
     /// <param name="pOffsetY">Vertical camera offset in pixels.</param>
     private List<Rm2kCharacterSprite> BuildCharacterSprites(int pOffsetX = 0, int pOffsetY = 0)
     {
+        _renderedEventPages.Clear();
         var charsets = LoadCharSets();
         var sprites = new List<Rm2kCharacterSprite>();
         foreach (var mapEvent in _mapEvents)
@@ -3236,40 +3255,36 @@ ReadString(entry, "name", v => werte.Name = v);
     }
 
     /// <summary>
-    /// An event character from the first page that requests a graphic. The
-    /// Player shows the first page whose conditions hold, and this runtime does
-    /// not evaluate page conditions yet, so an unconditioned page is required
-    /// rather than guessing which page would be active.
+    /// Draws only the highest eligible page's graphic and layer, as
+    /// Game_Event::RefreshPage does. Retains the event's live movement/animation.
     /// </summary>
     private Rm2kCharacterSprite? TryBuildEventSprite(
         Rm2kMap.Event pEvent, Dictionary<string, Rm2kCharset> pCharsets)
     {
-        foreach (var page in pEvent.Pages)
+        var page = Rm2kEventPageSelector.SelectActive(pEvent, Simulation);
+        _renderedEventPages[pEvent] = page;
+        if (page == null || !page.Graphic.TryGetValue("character_name", out var rawName)
+            || rawName is not string name || name.Length == 0)
         {
-            if (!page.Graphic.TryGetValue("character_name", out var rawName)
-                || rawName is not string name || name.Length == 0)
-            {
-                continue;
-            }
-            if (!pCharsets.TryGetValue(name, out var charset))
-            {
-                Simulation.AddDiagnostic(
-                    $"RM2K event {pEvent.Id} references charset '{name}', which is not in CharSet.");
-                return null;
-            }
-            var index = page.Graphic.TryGetValue("character_index", out var rawIndex) && rawIndex is int i ? i : 0;
-            return new Rm2kCharacterSprite
-            {
-                Charset = charset,
-                MapX = pEvent.X,
-                MapY = pEvent.Y,
-                CharacterIndex = index,
-                Stage = Rm2kCharacterSprite.StageForLayer(page.Layer),
-                FacingDirection = pEvent.Direction,
-                Frame = pEvent.AnimationFrame,
-            };
+            return null;
         }
-        return null;
+        if (!pCharsets.TryGetValue(name, out var charset))
+        {
+            Simulation.AddDiagnostic(
+                $"RM2K event {pEvent.Id} references charset '{name}', which is not in CharSet.");
+            return null;
+        }
+        var index = page.Graphic.TryGetValue("character_index", out var rawIndex) && rawIndex is int i ? i : 0;
+        return new Rm2kCharacterSprite
+        {
+            Charset = charset,
+            MapX = pEvent.X,
+            MapY = pEvent.Y,
+            CharacterIndex = index,
+            Stage = Rm2kCharacterSprite.StageForLayer(page.Layer),
+            FacingDirection = pEvent.Direction,
+            Frame = pEvent.AnimationFrame,
+        };
     }
 
     /// <summary>
