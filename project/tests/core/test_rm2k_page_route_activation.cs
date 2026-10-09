@@ -15,19 +15,25 @@ public partial class TestRm2kActiveEventGraphic
 {
     private static byte[] AuthoredRoute(bool repeat, params Rm2kMap.MoveCommand[] commands)
     {
-        var vector = new List<byte>(TestRm2kParser.Ber(commands.Length));
+        var vector = new List<byte>();
         foreach (var command in commands)
         {
             vector.AddRange(TestRm2kParser.Ber(command.CommandId));
-            var text = Encoding.ASCII.GetBytes(command.ParameterString);
-            vector.AddRange(TestRm2kParser.Ber(text.Length));
-            vector.AddRange(text);
-            vector.AddRange(TestRm2kParser.Ber(command.ParameterA));
-            vector.AddRange(TestRm2kParser.Ber(command.ParameterB));
-            vector.AddRange(TestRm2kParser.Ber(command.ParameterC));
+            if (command.CommandId is 34 or 35)
+            {
+                var text = Encoding.ASCII.GetBytes(command.ParameterString);
+                vector.AddRange(TestRm2kParser.Ber(text.Length));
+                vector.AddRange(text);
+            }
+            if (command.CommandId is 32 or 33 or 34 or 35) vector.AddRange(TestRm2kParser.Ber(command.ParameterA));
+            if (command.CommandId == 35)
+            {
+                vector.AddRange(TestRm2kParser.Ber(command.ParameterB));
+                vector.AddRange(TestRm2kParser.Ber(command.ParameterC));
+            }
         }
         return TestRm2kParser.Struct(
-            TestRm2kParser.Chunk(0x0B, TestRm2kParser.Ber(commands.Length)),
+            TestRm2kParser.Chunk(0x0B, TestRm2kParser.Ber(vector.Count)),
             TestRm2kParser.Chunk(0x0C, vector.ToArray()),
             TestRm2kParser.Chunk(0x15, TestRm2kParser.Ber(repeat ? 1 : 0)));
     }
@@ -175,6 +181,9 @@ public partial class TestRm2kActiveEventGraphic
         HigherRouteRequiresSwitch();
         RouteTicks(1);
         var old = PageRoutes()[1];
+        // Direction commands have no parameters on wire. Exercise the native
+        // cursor comparison independently on the controlled typed page model.
+        _event.Pages[1].MoveRouteCommands[0].ParameterA = 99;
         _runtime.Simulation.Switches[0] = true;
         RouteTicks(1);
         var current = PageRoutes()[1];
@@ -372,6 +381,29 @@ public partial class TestRm2kActiveEventGraphic
         AssertEq((_event.X, _event.Y, _event.AnimationFrame, _event.AnimationCount, _event.StopCount,
             PageRoutes()[1].CurrentIndex, _runtime.EventRemainingStepForTest(1)), scalar);
         AssertTrue(pixels.SequenceEqual(_runtime.RenderedMap!.Pixels));
+    }
+
+    public void Test_NativeWaitRouteCommandSpendsItsOwnReferenceDelayBeforeMoving()
+    {
+        foreach (var frequency in new[] { 8, 7 })
+        {
+            StartAuthoredRouteMap(RoutePage(6, frequency, false,
+                new Rm2kMap.MoveCommand(Rm2kMoveRoute.Wait), new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
+            var initialDelay = frequency == 8 ? 0 : 2;
+            RouteTicks(initialDelay + 1);
+            AssertEq(PageRoutes()[1].CurrentIndex, 1, "Wait23 executes without being rejected or skipped");
+            AssertEq(_event.MaxStopCount, frequency == 8 ? 20 : 22, "Wait has20 frames plus the turn-frequency delay");
+            var delay = frequency == 8 ? 20 : 22;
+            RouteTicks(delay - 1);
+            AssertEq(_event.X, 8, "Wait spends its full frame budget before starting another command");
+            RouteTicks(1);
+            AssertEq(_event.X, 9);
+            AssertEq(_runtime.EventRemainingStepForTest(1), 256 - 16);
+            AssertFalse(_runtime.Simulation.Diagnostics.Any(message => message.Contains("unsupported command 23")));
+            RouteTicks(7);
+            AssertEq(EventSprite()!.Frame, 2);
+            AssertPinnedCellPixels(3, 2, 1);
+        }
     }
 
     public void Test_FileAuthoredMovementModeSurvivesTheHostBridge()

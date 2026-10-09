@@ -2232,7 +2232,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                         TryReadInt(pageData, "layer", out var layer);
                         page.Layer = layer;
                         // liblcf EventPage::move_route is LMU chunk 0x29, with
-                        // move_commands 0x0B/0x0C, repeat 0x15 and skippable 0x16.
+                        // 0x0B byte size/0x0C command bytes, repeat0x15/skippable0x16.
                         // A route that failed to decode is reported by the parser
                         // and leaves the page with an empty route, which is the
                         // same shape as a page that never had one.
@@ -2443,6 +2443,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     route.SetIndex(route.CurrentIndex + 1);
                     pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForTurn(route.MoveFrequency);
                     pEvent.StopCount = 0;
+                }
+                else if (id == Rm2kMoveRoute.Wait)
+                {
+                    pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForWait(route.MoveFrequency);
+                    pEvent.StopCount = 0;
+                    route.SetIndex(route.CurrentIndex + 1);
                 }
                 else if (id >= Rm2kMoveRoute.IncreaseMovementSpeed && id <= Rm2kMoveRoute.DecreaseMovementFrequence)
                 {

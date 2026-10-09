@@ -5,7 +5,21 @@
 
 ## Latest runtime correctness work
 
-The last completed canonical development run exited0 with **2866/2866** and the
+The latest canonical development run exited0 with **2872/2872** (2852 Core+
+20 Smoke), with final validator pass marker. Real LMU measurement exposed the
+old decoder's fabricated route vector count/universal parameter tuple. Native
+prefixless sparse opcode framing now decodes all286 nonempty routes in807 maps
+and27492 pages without errors; metadata size is advisory, signed parameter bit
+patterns and empty-route flags are tested. Production custom Wait23 uses its
+reference frame budget before the next step. Decoder14/14/native44/44 and
+adjacent suites pass; both audits resolved, format/wait mutations detected.
+See [movement coverage](MOVEMENT_COVERAGE.md) for per-mode/code evidence and
+remaining limitations. Next P0 is bounded toward-player route9(38); modes1..5,
+other route commands and full forced/collision lifecycle remain open. Build142
+existing warnings and shutdown3 CanvasItem RIDs/6 ObjectDB instances remain.
+No complete-engine/GUI or release claim.
+
+The preceding canonical development run exited0 with **2866/2866** and the
 final validator pass marker:2846 Core tests +20 Smoke checks. Custom page routes
 now start from production ticks, with an original cursor independent from forced
 routes, reference movement/frequency timing and repeat wrapping. Same-code page

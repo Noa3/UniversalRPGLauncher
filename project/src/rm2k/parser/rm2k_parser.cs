@@ -1472,7 +1472,7 @@ public partial class Rm2kParser : RefCounted
 						{ "has_move_list", hasMoveList },
 						{ "has_command_list", hasList },
 						// liblcf EventPage::move_route is LMU chunk 0x29, a
-						// rpg::MoveRoute: move_commands 0x0B and 0x0C, repeat 0x15,
+						// rpg::MoveRoute: 0x0B byte size and0x0C command bytes, repeat0x15,
 						// skippable 0x16.
 						{ "move_route_commands", moveRouteData["move_commands"] },
 						{ "move_route_count", (int)moveRouteData["command_count"] },

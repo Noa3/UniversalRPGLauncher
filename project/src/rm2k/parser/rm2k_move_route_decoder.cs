@@ -13,16 +13,16 @@ namespace UniversalRPG.Rm2k.Parser;
 /// <para>
 /// The fields come from liblcf's own <c>generator/csv/fields.csv</c>:
 /// <c>move_commands</c> is a <c>Vector&lt;MoveCommand&gt;</c> with 0x0B for the
-/// count and 0x0C for the entries, <c>repeat</c> is a flag at 0x15 that
+/// byte-size metadata and 0x0C for the entries, <c>repeat</c> is a flag at 0x15 that
 /// defaults to true, and <c>skippable</c> is a flag at 0x16 that defaults to
 /// false. The struct itself is LMU chunk 0x29 on an event page.
 /// </para>
 /// <para>
-/// An LCF array is stored as a count field followed by an array field that also
-/// carries the count, then the entries. A move command is
-/// <c>command_id</c>, <c>parameter_string</c> and the three integers
-/// <c>parameter_a</c>, <c>parameter_b</c> and <c>parameter_c</c>, all read as
-/// BER integers with a BER length prefixed string.
+/// Pinned liblcf RawStruct&lt;vector&lt;MoveCommand&gt;&gt; consumes the0x0C
+/// payload to its byte boundary without a command-count prefix. Ordinary
+/// commands contain only an opcode. Switch commands32/33 add A; graphic34
+/// adds a length-prefixed string and A; sound35 adds a string and A/B/C.
+/// The0x0B field is byte-size metadata, not a command count.
 /// </para>
 /// </remarks>
 public static class Rm2kMoveRouteDecoder
@@ -30,8 +30,6 @@ public static class Rm2kMoveRouteDecoder
 	/// <summary>liblcf EventPage::move_route, the LMU chunk holding the struct.</summary>
 	public const int MoveRouteChunk = 0x29;
 
-	/// <summary>liblcf MoveRoute::move_commands count field.</summary>
-	private const int MoveCommandsCount = 0x0B;
 
 	/// <summary>liblcf MoveRoute::move_commands array field.</summary>
 	private const int MoveCommandsArray = 0x0C;
@@ -43,9 +41,8 @@ public static class Rm2kMoveRouteDecoder
 	private const int SkippableField = 0x16;
 
 	/// <summary>
-	/// A route with more commands than this is refused rather than allocated.
-	/// The format has no such limit, but a corrupt count would otherwise ask for
-	/// an arbitrary allocation before a single command is validated.
+	/// A route with more commands than this is refused while walking its payload.
+	/// This is an application budget, not a count declared by the native vector.
 	/// </summary>
 	public const int MaxMoveCommands = 4096;
 
@@ -99,6 +96,8 @@ public static class Rm2kMoveRouteDecoder
 			return Failure($"The move route chunk 0x{MoveRouteChunk:X} is not a struct: {e.Message}");
 		}
 
+		if (ReadFlag(pFields, RepeatField, out var repeatValue)) repeat = repeatValue;
+		if (ReadFlag(pFields, SkippableField, out var skippableValue)) skippable = skippableValue;
 		if (!pFields.ContainsKey(MoveCommandsArray))
 		{
 			// The chunk exists but carries no move_commands, which is a route
@@ -118,8 +117,7 @@ public static class Rm2kMoveRouteDecoder
 		// whole map with it; a route that is not a chunk is an empty route with
 		// the reason recorded, which is what a page that never saved one looks
 		// like anyway.
-		if (!pFields.TryGetValue(MoveCommandsCount, out var rawCount)
-			|| !pFields.TryGetValue(MoveCommandsArray, out var rawArray))
+		if (!pFields.TryGetValue(MoveCommandsArray, out var rawArray))
 		{
 			return new Rm2kParser.ParseResult(true, null, new Godot.Collections.Dictionary
 			{
@@ -131,53 +129,30 @@ public static class Rm2kMoveRouteDecoder
 			});
 		}
 
-		if (rawCount.VariantType != Variant.Type.Dictionary
-			|| rawArray.VariantType != Variant.Type.Dictionary)
+		if (rawArray.VariantType != Variant.Type.Dictionary)
 		{
 			return Failure("The move route count or command field is not a chunk");
 		}
-		var countChunk = (Godot.Collections.Dictionary)rawCount;
 		var arrayChunk = (Godot.Collections.Dictionary)rawArray;
 
 		// Both chunks are indexed defensively: a real move route can carry a
 		// field with no payload, and a direct index would throw instead of
 		// letting the page keep its default.
-		if (!TryGetPayload(countChunk, out var countData)
-			|| !TryGetPayload(arrayChunk, out var arrayData))
+		if (!TryGetPayload(arrayChunk, out var arrayData))
 		{
 			return Failure("The move route count or command field carries no byte payload");
 		}
 
-		var countResult = DecodeCountField(countData);
-		if (!countResult.Success)
+		// RawStruct<vector<MoveCommand>> is bounded by the chunk's byte length,
+		// not an embedded command count. Ordinary commands are opcode-only.
+		if (arrayData.Length > LcfBinaryReader.MaxChunkBytes)
+			return Failure("Move route payload exceeds the chunk byte limit");
+		using var reader = new LcfBinaryReader(arrayData);
+		while (!reader.IsEof())
 		{
-			return Failure($"The move_commands count field 0x{MoveCommandsCount:X} is invalid: {countResult.Error!.Message}");
-		}
-		var declaredCount = (int)countResult.Data["value"];
-
-		var reader = new LcfBinaryReader(arrayData);
-		var arrayCount = reader.ReadBer();
-		if (reader.HasError())
-		{
-			return ReaderFailure(reader);
-		}
-		if (arrayCount < 0 || arrayCount > MaxMoveCommands)
-		{
-			return Failure($"The move route declares {arrayCount} commands, which is outside 0 to {MaxMoveCommands}", reader.GetPosition());
-		}
-
-		// The count field is checked against the same bound. A declared count
-		// past the limit is refused here rather than after the array has been
-		// walked, so a corrupt file cannot make the reader look for thousands
-		// of commands it will never find.
-		if (declaredCount < 0 || declaredCount > MaxMoveCommands)
-		{
-			return Failure($"The move route count field says {declaredCount}, which is outside 0 to {MaxMoveCommands}");
-		}
-
-		for (var index = 0; index < arrayCount; index++)
-		{
-			var commandResult = DecodeCommand(reader, index, arrayCount);
+			if (commands.Count >= MaxMoveCommands)
+				return Failure($"Move route command count is outside 0 to {MaxMoveCommands}", reader.GetPosition());
+			var commandResult = DecodeCommand(reader, commands.Count);
 			if (!commandResult.Success)
 			{
 				return commandResult;
@@ -185,28 +160,13 @@ public static class Rm2kMoveRouteDecoder
 			commands.Add((Godot.Collections.Dictionary)commandResult.Data);
 		}
 
-		if (ReadFlag(pFields, RepeatField, out var repeatValue))
-		{
-			repeat = repeatValue;
-		}
-		if (ReadFlag(pFields, SkippableField, out var skippableValue))
-		{
-			skippable = skippableValue;
-		}
-
-		// Both fields carry the count and a route stores no per-command length,
-		// so disagreeing counts would shift every following command. That is
-		// reported rather than resolved in favour of one of them.
-		if (declaredCount != arrayCount)
-		{
-			return Failure($"The move route count field says {declaredCount} but the array holds {arrayCount}", reader.GetPosition());
-		}
 
 		return new Rm2kParser.ParseResult(true, null, new Godot.Collections.Dictionary
 		{
 			{ "move_commands", new Godot.Collections.Array<Godot.Collections.Dictionary>(commands) },
 			{ "command_count", commands.Count },
-			{ "declared_count", declaredCount },
+			// Compatibility alias: there is no declared command count on wire.
+			{ "declared_count", commands.Count },
 			{ "repeat", repeat },
 			{ "skippable", skippable },
 		});
@@ -229,7 +189,7 @@ public static class Rm2kMoveRouteDecoder
 		return true;
 	}
 
-	private static Rm2kParser.ParseResult DecodeCommand(LcfBinaryReader pReader, int pIndex, int pCount)
+	private static Rm2kParser.ParseResult DecodeCommand(LcfBinaryReader pReader, int pIndex)
 	{
 		var commandId = pReader.ReadBer();
 		if (pReader.HasError())
@@ -237,21 +197,25 @@ public static class Rm2kMoveRouteDecoder
 			return ReaderFailure(pReader);
 		}
 
-		var stringLength = pReader.ReadBer();
-		if (pReader.HasError() || stringLength < 0 || stringLength > MaxParameterStringBytes)
+		var parameterString = "";
+		var parameterA = 0;
+		var parameterB = 0;
+		var parameterC = 0;
+		if (commandId is 34 or 35)
 		{
-			return Failure($"Move command {pIndex} of {pCount} has a string length outside 0 to {MaxParameterStringBytes}", pReader.GetPosition());
+			var stringLength = pReader.ReadBer();
+			if (pReader.HasError() || stringLength < 0 || stringLength > MaxParameterStringBytes)
+				return Failure($"Move command {pIndex} has a string length outside 0 to {MaxParameterStringBytes}", pReader.GetPosition());
+			var textBytes = pReader.ReadBytes(stringLength);
+			if (pReader.HasError()) return ReaderFailure(pReader);
+			parameterString = new LegacyTextDecoder().Decode(textBytes);
 		}
-		var textBytes = pReader.ReadBytes(stringLength);
-		if (pReader.HasError())
+		if (commandId is 32 or 33 or 34 or 35) parameterA = pReader.ReadSignedBer();
+		if (commandId == 35)
 		{
-			return ReaderFailure(pReader);
+			parameterB = pReader.ReadSignedBer();
+			parameterC = pReader.ReadSignedBer();
 		}
-		var parameterString = new LegacyTextDecoder().Decode(textBytes);
-
-		var parameterA = pReader.ReadBer();
-		var parameterB = pReader.ReadBer();
-		var parameterC = pReader.ReadBer();
 		if (pReader.HasError())
 		{
 			return ReaderFailure(pReader);
@@ -271,20 +235,6 @@ public static class Rm2kMoveRouteDecoder
 		return new Rm2kParser.ParseResult(true, null, command);
 	}
 
-	private static Rm2kParser.ParseResult DecodeCountField(byte[] pData)
-	{
-		if (pData.Length == 0)
-		{
-			return new Rm2kParser.ParseResult(true, null, new Godot.Collections.Dictionary { { "value", 0 } });
-		}
-		var reader = new LcfBinaryReader(pData);
-		var value = reader.ReadBer();
-		if (reader.HasError())
-		{
-			return ReaderFailure(reader);
-		}
-		return new Rm2kParser.ParseResult(true, null, new Godot.Collections.Dictionary { { "value", value } });
-	}
 
 	/// <summary>
 	/// Reads a liblcf flag field, which is a single BER byte. An absent or
@@ -311,7 +261,7 @@ public static class Rm2kMoveRouteDecoder
 		{
 			return false;
 		}
-		var reader = new LcfBinaryReader(data);
+		using var reader = new LcfBinaryReader(data);
 		pValue = reader.ReadBer() != 0;
 		return !reader.HasError();
 	}

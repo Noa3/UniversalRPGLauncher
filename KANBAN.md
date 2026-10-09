@@ -47,7 +47,48 @@ controls or shared Games/settings; stale/cancelled results cannot replace the
 prior library; close/reload cancels safely; traversal budgets and no-link/no-code
 safety remain; focused UI/library tests and canonical validation pass. Preserve
 saved explicit engine choices. Sprite successor is postponed for this user bug.
-### K-PROD-RM2K-MOVEMENT-COVERAGE — READY (P0)
+### K-PROD-RM2K-TOWARD-ROUTE — READY (P0, bounded command9)
+
+Successor to K-PROD-RM2K-MOVEMENT-COVERAGE. After Wait23, custom-route
+move-toward-player9(38) is the highest remaining unsupported opcode in the
+measured corpus. Trace pinned Player movement/axis/collision/facing semantics
+and existing helpers before editing. Implement only this production custom-route
+command, keeping movement modes1..5 and other commands explicitly unsupported.
+Acceptance: native file-authored route RED before implementation; source-backed
+direction/axis ties, blocked steps/skippable retry, facing/animation, frequency
+and route cursor timing, page/transfer lifecycle and scalar/batched coverage
+through the actual runtime. Use pinned real charset pixels, mutation detection,
+focused regressions and canonical validation. Reuse existing movement checks,
+do not add a parallel collision/route state machine or claim forced-route parity.
+
+### K-PROD-RM2K-MOVEMENT-COVERAGE — DONE (P0, measured bounded extension)
+
+FINAL canonicalproc_df731ce4d9c1 exited0: **2872/2872**, reconciled as2852
+Core+20Smoke, with final validator pass marker. Final decoder14/14/native44/44/
+legacyroute7/7/parser36/36/renderer19/19 green; both audits resolved, format and
+wait-delay mutations caught and restored. Clean corpus run exits0; all286
+nonemptyroutes now decode. No new build diagnostic;142warnings and existing
+shutdown3 CanvasItem RIDs/6 ObjectDB instances remain. No release/engine claim.
+Earlier progress entries below are superseded.
+
+Measured807maps/27492pages through native parser; all286nonempty route vectors
+failed initially, exposing a false synthetic wire format. Corrected prefixless
+sparse command framing and migrated fixtures on fix/rm2k-native-route-framing,
+keeping main823f961 green. Clean corpus rerun exits0 with all286routes decoded,
+0map/route failures and0skips. Aggregate evidence in docs/MOVEMENT_COVERAGE.md.
+Highest unsupported custom command isWait23(250); native wait43/44 RED was
+observed before its reference-delay implementation. Restored focused decoder
+11/11, native44/44, legacyroute7/7, parser36/36 and renderer19/19 pass.
+Incorrect ordinary-string mutation caught6/11; restored/rebuilt. Owned temporary
+probes removed; private paths remain only in local scratch evidence.
+Wire-format audit deleg_056c5448 resolved against actual updated code. Primary
+reader/writer confirms advisory size, optional0x0B and signed parameter bit
+patterns (reject positive-only recommendation). Empty-vector explicit flags
+13/14 RED corrected; decoder14/14 now passes, native44/44/legacy7/7 remain green.
+Wait budget mutation43/44 caught then restored. Final canonicalproc_df731ce4d9c1
+passed2872/2872. Precommitreviewdeleg_45231a32 resolved with no blocker; corrected stale
+class-comment count wording. Its support summary is not adopted: supported
+production commands are0..3,12..18,23,28..31 only. Bounded card DONE, not full engine.
 
 Successor to production custom page routes. Measure page movement modes and
 route command IDs in pinned/owned RM2000/2003 data using the repository parser,

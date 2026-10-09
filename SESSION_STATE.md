@@ -1,5 +1,85 @@
 ## Current card
 
+### Movement coverage and bounded Wait23 — completed
+
+FINAL: K-PROD-RM2K-MOVEMENT-COVERAGE DONE after canonical
+proc_df731ce4d9c1 exited0, **2872/2872** and final validator pass marker.
+Totals reconciled:2852 Core tests +20 Smoke checks. Decoder14/14,
+native runtime/pixel44/44, legacyroute7/7, parser36/36, renderer19/19 green.
+Wire auditdeleg_056c5448 and precommitreviewdeleg_45231a32 resolved against
+primary sources/current code with no blocker. Both format/Wait mutations caught
+and restored; empty-vector flags fixed after13/14RED. Clean parser-only corpus:
+807maps/27492pages,286nonemptyroutes decoded with0errors/skips. Temporary
+probes removed, sanitized evidence in docs/MOVEMENT_COVERAGE.md.
+The correction was developed coherently on fix/rm2k-native-route-framing from
+main823f961; the green tree is safe for fast-forward integration. Resolve exact
+integration commit/branch from git log/status on restart, not historical prose.
+No release export or complete-engine/GUI claim.
+No new normalized build warning;142 warnings/0errors. Known shutdown leaks
+remain3 CanvasItem RIDs/6 ObjectDB instances. qa_patches/ is untouched.
+Next READY/P0: K-PROD-RM2K-TOWARD-ROUTE, measured custom opcode9(38).
+Supported commands are0..3,12..18,23,28..31; all remaining commands/modes and
+full forced/interpreter/collision lifecycle stay explicitly open.
+Final log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-native-framing-wait-validation.log`.
+
+Earlier in-progress measurements below are historical and superseded.
+
+Selected K-PROD-RM2K-MOVEMENT-COVERAGE on main823f961, clean except preserved
+qa_patches/. Last canonical2866/2866. Measure movement modes and route opcodes
+from pinned and owned LMU files through the actual parser, with no imported
+script/executable execution. Derive supported modes/commands from production
+branches, then choose the next primary-source-backed bounded extension.
+
+Measurement:807maps/27492pages; modes0=25172,1=1787,2=15,3=19,4=272,5=3,6=224.
+All286 nonempty routes failed before correction;27206 were empty. Root cause
+confirmed from pinned liblcf6854310c lmu_movecommand.cpp/lmu_moveroute.cpp:
+vector0x0C has NO count prefix,0x0B is BYTE SIZE metadata, and command parameters
+are opcode-specific (ordinary onlyopcode,32/33 A,34 string+A,35 string+ABC).
+Moved the coherent semantics correction onto fix/rm2k-native-route-framing;
+main823f961 remains green. Literal[1,29] regression observed9/10 RED; correcting
+reader exposes7 old fixtures encoding the invented format (suite3/10), not
+evidence to restore the false format. Migrating fixture bytes and assertions
+to primary framing without removing bound/truncation checks.
+
+After-reader corpus JSON:807maps,27492pages,286routes decoded,0routeFailures;
+custom wait23=250, toward9=38, diagonals6=1/7=3, jump24=3/25=3, lock26=1.
+Probe wrote complete JSON then aborted during shutdown with many unsafe native
+RefCounted references (exit132); do not call it clean. Added periodic GC in the
+temporary probe, matching canonical runner's native cleanup strategy. Rerun
+with clean exit, then remove only the owned temporary probe files. Audit
+deleg_056c5448 pending. No merge/commit/push or new engine-completion claim.
+
+LATEST: native vector and all located route fixture builders migrated coherently
+on fix/rm2k-native-route-framing. Clean measured corpus run exited0 after periodic
+probe GC:807maps/27492pages,286nonemptyroutes decoded,0errors/skips. Actual dispatch
+derived from production source;3356all opcode instances,2733custom. Highest
+unsupported custom command wasWait23(250), so implemented reference wait delay
+after native43/44 RED (exit15), then44/44green at frequencies8/7 with movement
+and pinned charset pixels. Decoder11/11, legacyroute7/7, parser36/36 green.
+Wrong ordinary-string framing mutation caught6/11 and restored (rebuild next).
+Only owned temporary probe cs/cs.uid/tscn removed. Durable sanitized measurement
+in docs/MOVEMENT_COVERAGE.md; scratch JSON retains raw private paths locally.
+Reference audit is pending on size-metadata/optionalfields/signed parameters;
+resolve it, run final regressions/mutations/canonical and merge only when green.
+No premature main merge, release artifact or completed-card claim.
+
+Wire audit delivered and resolved against updated source. Advisory0x0B and
+optional size field are confirmed in liblcf SizeField::ReadLcf (dummy discarded).
+Do not adopt the audit's incorrect positive-only BER recommendation: primary
+writer_lcf.cpp WriteInt explicitly casts int32_t to uint32_t; reader int32_t
+overload calls ReadInt. Kept bounded ReadSignedBer for parameter int32 bit
+patterns and added literal negative-parameter/next-opcode test, which passes.
+Optional-size test also passes. Empty-route explicit flags13/14 RED exposed an
+early-return bug; moved flag decoding before the absent-vector return and
+disposed flag readers. Rebuild/targeted/canonical next, on the migration branch.
+
+Verification follow-up: decoder14/14 passes, but the next fresh native host
+process aborted during LcfBinaryReader construction with known Godot
+script.is_null (exit132), before route assertions. The quick run omitted editor
+import after the rebuild. Re-run the explicit import prerequisite; no source
+workaround/cache deletion. Final canonical always includes this prerequisite.
+
 ### Production page route activation — completed
 
 FINAL: K-PROD-RM2K-PAGE-ROUTE-ACTIVATION DONE. Tracked canonical

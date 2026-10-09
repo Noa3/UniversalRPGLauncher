@@ -125,22 +125,17 @@ public partial class TestRm2kEventMoveRoute : TestBase
 		}
 
 		// The route itself: LMU chunk 0x29, whose move_commands are 0x0B for
-		// the count and 0x0C for the entries, and whose repeat is 0x15.
+		// the byte size and 0x0C for prefixless entries, and repeat at0x15.
 		var commands = new List<byte[]>();
 		foreach (var id in pCommandIds)
 		{
 			commands.Add(TestRm2kParser.Ber(id));
-			commands.Add(TestRm2kParser.Ber(0));   // empty parameter string
-			commands.Add(TestRm2kParser.Ber(0));   // parameter_a
-			commands.Add(TestRm2kParser.Ber(0));   // parameter_b
-			commands.Add(TestRm2kParser.Ber(0));   // parameter_c
 		}
-		var array = new List<byte[]> { TestRm2kParser.Ber(pCommandIds.Length) };
-		array.AddRange(commands);
+		var array = Join(commands.ToArray());
 		var moveRoute = TestRm2kParser.Struct(new List<byte[]>
 		{
-            TestRm2kParser.Chunk(0x0B, TestRm2kParser.Ber(pCommandIds.Length)),
-            TestRm2kParser.Chunk(0x0C, Join(array.ToArray())),
+            TestRm2kParser.Chunk(0x0B, TestRm2kParser.Ber(array.Length)),
+            TestRm2kParser.Chunk(0x0C, array),
             TestRm2kParser.Chunk(0x15, TestRm2kParser.Ber(pRepeat ? 1 : 0)),
         }.ToArray());
 

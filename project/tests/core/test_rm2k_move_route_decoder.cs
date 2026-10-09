@@ -52,11 +52,14 @@ public partial class TestRm2kMoveRouteDecoder : TestBase
 		return [.. result];
 	}
 
-	/// <summary>One move command: id, BER length prefixed string, then a, b, c.</summary>
+	/// <summary>Pinned liblcf command-specific fields, with no vector count prefix.</summary>
 	private static byte[] Command(int pId, string pString = "", int pA = 0, int pB = 0, int pC = 0)
 	{
-		return Join(Ber(pId), Ber(pString.Length), System.Text.Encoding.ASCII.GetBytes(pString),
-			Ber(pA), Ber(pB), Ber(pC));
+		var parts = new List<byte[]> { Ber(pId) };
+		if (pId is 34 or 35) { parts.Add(Ber(pString.Length)); parts.Add(System.Text.Encoding.ASCII.GetBytes(pString)); }
+		if (pId is 32 or 33 or 34 or 35) parts.Add(Ber(pA));
+		if (pId == 35) { parts.Add(Ber(pB)); parts.Add(Ber(pC)); }
+		return Join(parts.ToArray());
 	}
 
 	private static Godot.Collections.Dictionary Chunk(byte[] pData)
@@ -107,14 +110,14 @@ public partial class TestRm2kMoveRouteDecoder : TestBase
 
 	public void Test_ASingleCommandDecodesWithItsThreeParameters()
 	{
-		var array = Join(Ber(1), Command(Rm2kMoveRoute.MoveDown, "", 7, 8, 9));
-		var result = Rm2kMoveRouteDecoder.Decode(Fields(1, array));
+		var array = Command(35, "", 7, 8, 9);
+		var result = Rm2kMoveRouteDecoder.Decode(Fields(array.Length, array));
 		AssertTrue(result.Success, $"a one command route parses: {result.Error?.Describe()}");
 		AssertEq((int)result.Data["command_count"], 1, "one command");
 
 		var commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)result.Data["move_commands"];
 		AssertEq(commands.Count, 1, "one command in the array");
-		AssertEq((int)commands[0]["command_id"], 2, "move_down is command 2");
+		AssertEq((int)commands[0]["command_id"], 35, "Only sound35 carries all three integer parameters");
 		AssertEq((int)commands[0]["parameter_a"], 7, "parameter_a");
 		AssertEq((int)commands[0]["parameter_b"], 8, "parameter_b");
 		AssertEq((int)commands[0]["parameter_c"], 9, "parameter_c");
@@ -124,7 +127,7 @@ public partial class TestRm2kMoveRouteDecoder : TestBase
 	{
 		// A route has no per-command length, so a reader that miscounts drifts
 		// silently. Asserting the whole id sequence is what catches that.
-		var array = Join(Ber(4),
+		var array = Join(
 			Command(0), Command(14), Command(23), Command(41));
 		var result = Rm2kMoveRouteDecoder.Decode(Fields(4, array));
 		AssertTrue(result.Success, $"a four command route parses: {result.Error?.Describe()}");
@@ -138,22 +141,21 @@ public partial class TestRm2kMoveRouteDecoder : TestBase
 
 	public void Test_AParameterStringIsLengthPrefixedAndDoesNotShiftTheNextCommand()
 	{
-		var array = Join(Ber(2),
-			Command(32, "switch id", 5), Command(33, "other"));
-		var result = Rm2kMoveRouteDecoder.Decode(Fields(2, array));
+		var array = Join(Command(34, "Chara1", 5), Command(35, "Sound1", 80, 100, 50));
+		var result = Rm2kMoveRouteDecoder.Decode(Fields(array.Length, array));
 		AssertTrue(result.Success, $"a route with strings parses: {result.Error?.Describe()}");
 		var commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)result.Data["move_commands"];
-		AssertEq((string)commands[0]["parameter_string"], "switch id", "the string is read whole");
-		AssertEq((int)commands[0]["command_id"], 32, "the first command is switch_on");
+		AssertEq((string)commands[0]["parameter_string"], "Chara1", "the string is read whole");
+		AssertEq((int)commands[0]["command_id"], 34, "the first command is change_graphic");
 		// The point of the test: the string length did not consume the next
 		// command's bytes.
-		AssertEq((int)commands[1]["command_id"], 33, "the second command is still switch_off");
-		AssertEq((string)commands[1]["parameter_string"], "other", "and its own string is read");
+		AssertEq((int)commands[1]["command_id"], 35, "the second command is still play_sound_effect");
+		AssertEq((string)commands[1]["parameter_string"], "Sound1", "and its own string is read");
 	}
 
 	public void Test_TheFlagsAreReadAndTheDefaultsHoldWhenTheyAreAbsent()
 	{
-		var array = Join(Ber(1), Command(0));
+		var array = Command(0);
 		var explicitResult = Rm2kMoveRouteDecoder.Decode(Fields(1, array, pRepeat: false, pSkippable: true));
 		AssertTrue(explicitResult.Success, "explicit flags parse");
 		AssertEq((bool)explicitResult.Data["repeat"], false, "repeat off is read");
@@ -165,25 +167,21 @@ public partial class TestRm2kMoveRouteDecoder : TestBase
 		AssertEq((bool)absentResult.Data["skippable"], false, "skippable defaults to false");
 	}
 
-	public void Test_ACountThatDisagreesWithTheArrayIsRefused()
+	public void Test_OuterPayloadLengthIsAuthoritativeInsteadOfInventingACount()
 	{
-		// Both 0x0B and 0x0C carry the count. Picking either one would desync the
-		// route, so the disagreement has to be reported.
-		var array = Join(Ber(2), Command(0), Command(0));
+		// 0x0B is size metadata; the RawStruct vector uses the actual0x0C length.
+		var array = Join(Command(0), Command(0));
 		var result = Rm2kMoveRouteDecoder.Decode(Fields(3, array));
-		AssertTrue(!result.Success, "a mismatched count is refused");
-		AssertTrue(result.Error!.Message.Contains("3") && result.Error!.Message.Contains("2"),
-			$"the message names both counts: {result.Error!.Message}");
+		AssertTrue(result.Success, "Size metadata cannot invent or drop commands");
+		AssertEq(result.Data["command_count"].AsInt32(), 2);
 	}
 
-	public void Test_ACountBeyondTheBoundIsRefusedBeforeAnythingIsAllocated()
+	public void Test_ActualCommandBudgetIsEnforcedWhileWalkingThePayload()
 	{
-		// The format has no such limit, so this is our own guard against a
-		// corrupt count asking for an arbitrary allocation.
-		// The array header has to be long enough to be read before the bound is
-		// reached, otherwise the reader reports a short read instead.
+		// Each zero byte is a valid opcode-only move_up. The native format has
+		// no command count; the application budget limits actual decoded items.
 		var tooMany = Rm2kMoveRouteDecoder.MaxMoveCommands + 1;
-		var result = Rm2kMoveRouteDecoder.Decode(Fields(tooMany, Join(Ber(tooMany))));
+		var result = Rm2kMoveRouteDecoder.Decode(Fields(tooMany, new byte[tooMany]));
 		AssertTrue(!result.Success, "a count past the bound is refused");
 		AssertTrue(result.Error!.Message.Contains("outside"),
 			$"the message says it is out of bounds: {result.Error!.Message}");
@@ -191,16 +189,16 @@ public partial class TestRm2kMoveRouteDecoder : TestBase
 
 	public void Test_ATruncatedArrayIsRefusedRatherThanReadingPastTheEnd()
 	{
-		// The array says two commands but carries one and a half. Reading on would
-		// consume the parameters of the first command as a second id.
-		var array = Join(Ber(2), Command(0), Ber(14));
-		var result = Rm2kMoveRouteDecoder.Decode(Fields(2, array));
+		// One complete opcode followed by a graphic string that exceeds the
+		// remaining payload must fail, never consume bytes outside the chunk.
+		var array = Join(Command(0), Ber(34), Ber(10), new byte[] { 65 });
+		var result = Rm2kMoveRouteDecoder.Decode(Fields(array.Length, array));
 		AssertTrue(!result.Success, "a truncated array is refused");
 	}
 
 	public void Test_AnEmptyArrayIsAValidEmptyRoute()
 	{
-		var result = Rm2kMoveRouteDecoder.Decode(Fields(0, Join(Ber(0))));
+		var result = Rm2kMoveRouteDecoder.Decode(Fields(0, System.Array.Empty<byte>()));
 		AssertTrue(result.Success, $"an empty array parses: {result.Error?.Describe()}");
 		AssertEq((int)result.Data["command_count"], 0, "with no commands");
 	}

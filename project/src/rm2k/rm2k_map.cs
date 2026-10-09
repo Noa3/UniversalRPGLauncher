@@ -169,7 +169,7 @@ public class Rm2kMap
 		public int Layer;
 
 		// liblcf EventPage::move_route, LMU chunk 0x29. The route is a
-		// rpg::MoveRoute struct: move_commands 0x0B size and 0x0C array,
+		// rpg::MoveRoute struct: 0x0B byte size, 0x0C prefixless command bytes,
 		// repeat 0x15, skippable 0x16. Defaults are false for skippable and
 		// true for repeat.
 		public List<MoveCommand> MoveRouteCommands { get; } = new();
