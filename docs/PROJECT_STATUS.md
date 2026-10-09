@@ -1,9 +1,28 @@
 # UniversalRPG — Project Status
 
-> **Last Updated:** 2026-10-04
+> **Last Updated:** 2026-10-09
 > **Current Phase:** Bounded RM2000/2003 runtime; Windows audit/export verified
 
-## Current verified audit
+## Latest runtime correctness work
+
+The last completed canonical development suite passed **2812/2812**. Input
+isolation and review coverage are published as `1985d0f` and `65e576e`.
+The active-page activation fix, published as `9ae27c1`, chooses the highest
+condition-eligible page before testing trigger kind and uses only its layer for
+tile activation.
+Its new suite passes **8/8**, including pinned native RM2000/2003 hosts using
+reference-derived command lists; full validation exited 0 with **2812/2812**,
+and independent bounded review found no introduced blocker.
+This is not original-game or visual parity, and running parallel-page refresh,
+sprite/route refresh, autorun repetition and single-main scheduling remain open.
+
+Production gates remain open for complete RM2000/2003, VX, MV/MZ and both GUI
+surfaces. Use `KANBAN.md`, `SESSION_STATE.md` and
+`execplan/production-readiness.md` for current verified slices and release gates.
+The audit and feature narrative below are historical evidence, not a current
+complete engine-capability matrix. No new release export was produced here.
+
+## Historical Windows audit (2026-10-04)
 
 The user-requested project audit passed **2670/2670 tests** and produced a
 Windows-x64 development build in `build/windows`. Release export, executable
@@ -16,7 +35,7 @@ compiler warnings and suite shutdown leak diagnostics. See
 use `bash scripts/build_windows.sh` to reproduce the validated export.
 
 
-## Executive Summary
+## Historical executive summary
 
 The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay compatibility is not established; the immediate critical path is expanding faithful RM2000/2003 parsing, renderer/system coverage, event counters, and walk animation beyond the bounded native event path, the working chipset passability, and the verified autotile animation steps.
 

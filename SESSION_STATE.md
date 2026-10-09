@@ -1,5 +1,67 @@
 ## Current card
 
+### Active event activation completed; graphic successor READY (2026-10-09)
+
+Source checkpoint `9ae27c1` is published and origin/main was read back as
+9ae27c1244e0b3a64439ea3089418bc7edaae761. It contains exactly the four reviewed
+activation source/test files, backed by validator exit 0 with **2812/2812**.
+Documentation is refreshed without claiming a new Windows export or full engine
+completion. Next highest-priority READY slice: K-PROD-RM2K-ACTIVE-GRAPHIC.
+
+LATEST: proc_5542a98625a3 completed exit 0; log confirms **2812/2812** and final
+validator pass marker. Review deleg_c44d04b3 found no introduced blocker.
+K-PROD-RM2K-ACTIVE-PAGE is DONE for fresh activation only; its source checkpoint
+is published as recorded above. Do not broaden that completed diff to sprite
+refresh; implement it behind its successor card and fresh regression evidence.
+
+Next READY card is K-PROD-RM2K-ACTIVE-GRAPHIC. Parent verified the review's
+source finding at Rm2kEngineRuntime.TryBuildEventSprite (3238-3272): it picks
+the first graphic-bearing page and its layer, not the active page. The comment
+also incorrectly states that page conditions are not evaluated. Fix only the
+active graphic/index/layer and repaint handoff, with real asset/pixel tests and
+mutation detection. Preserve existing movement/animation state. Missing asset
+evidence must be reported, not replaced with a fabricated bitmap.
+
+Implemented fresh activation fix: select the highest condition-eligible page
+before testing trigger kind; tile layer checks use that same selected page.
+Public APIs remain unchanged. A historical selector test incorrectly activated
+a lower touched page beneath an unconditional parallel page; its assertion now
+matches Game_Event::RefreshPage, without deleting or weakening coverage.
+
+New suite **8/8** covers all trigger kinds, same-trigger priority, live switch
+fallback, mixed automatic page priorities/roles, action/touch layers, and both
+pinned RM2000/2003 hosts with reference-derived commands. These are native host
+integration tests, not original-game or visual parity. Existing interpreter
+**85/85**, input **11/11**, decision-host **6/6**, vehicles **8/8**, plugin
+**25/25** pass. Build warning comparison against the previous verified baseline:
+142 warnings in both, no new warning signature or changed-file diagnostic.
+
+Expected RED evidence: trigger regression 0/1 before fix, 1/1 afterward;
+layer regression 1/2 before fix, 2/2 afterward. Boundary suite then passes 8/8.
+No speculative fix failure or ignored regression. Full canonical validation
+proc_5542a98625a3 passed 2812/2812 with exit 0; independent review
+deleg_c44d04b3 completed without an introduced blocker. Log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-active-page-validation.log`.
+The activation source is DONE/published. Preserve qa_patches/ and original games/saves.
+Already-running parallel cancellation, sprite/route page refresh, repeated
+autoruns and single-main scheduling remain open, separate runtime lifecycle gaps.
+
+At slice start, main b0eb884 was clean except preserved qa_patches/; canonical
+baseline was 2804/2804. No READY row remained in the existing runtime queue, so the next
+confirmed RM2000/2003 correctness gap has its own card above the historical
+completed slices: K-PROD-RM2K-ACTIVE-PAGE.
+
+Pre-fix root cause: Rm2kEventPageSelector.Select skipped pages of other trigger kinds
+before resolving highest eligible page; Rm2kEventScheduler.TriggerAt checked
+layer across all pages rather than that selected page. Primary reference at
+EasyRPG commit 0de2a9ab466a133ac6e192a84bd761a1d81f5f14 explicitly selects the
+highest condition-matching page first, then applies its trigger and layer.
+Both initial production selector callers were in the scheduler. The new trigger
+regression and layer/input regression caught each defect before fixes. The old
+touched-under-parallel assertion was corrected from the reference instead of
+treating its accidental green state as compatibility. Do not alter unrelated sprite,
+route, save, autorun-repeat or main-interpreter scheduling behavior in this card.
+
 ### Input isolation and review coverage completed (2026-10-09)
 
 Production fix `1985d0f` is published and backed by validator exit 0 with

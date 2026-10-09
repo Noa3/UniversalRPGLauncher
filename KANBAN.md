@@ -1,5 +1,46 @@
 ## Active
 
+### K-PROD-RM2K-ACTIVE-GRAPHIC — READY
+
+Successor to the verified fresh-activation fix. Source-confirmed defect:
+Rm2kEngineRuntime.TryBuildEventSprite scans low-to-high for the first graphic
+and stages that page's layer, ignoring the active page and live conditions.
+Acceptance: event charset/index/layer come only from the highest eligible page;
+a graphic-less active page never exposes a hidden lower graphic; missing active
+assets are diagnosed without falling back to a hidden page; condition changes
+are reflected on the real runtime repaint path. Use pinned asset/pixel evidence
+and mutation-sensitive renderer regressions plus canonical validation. Existing
+movement/animation state must be preserved; route refresh and parallel execution
+cancellation remain separate lifecycle work. Dependency: K-PROD-RM2K-ACTIVE-PAGE.
+
+### K-PROD-RM2K-ACTIVE-PAGE — DONE (fresh activation only)
+
+Source checkpoint `9ae27c1` is published; exact origin/main readback matched
+9ae27c1244e0b3a64439ea3089418bc7edaae761.
+
+New activation suite **8/8** includes both pinned native hosts with
+reference-derived command lists. Existing interpreter **85/85**, input
+**11/11**, decision-host **6/6**, vehicle **8/8** and plugin **25/25** pass.
+The trigger regression was observed 0/1 then 1/1; layer regression 1/2 then 2/2.
+Build still reports 142 warnings, with no new warning signature or diagnostic
+on a changed file. Full validator proc_5542a98625a3 completed exit 0 with
+**2812/2812**. Bounded review deleg_c44d04b3 found no introduced blocker.
+The sprite-selection defect was verified separately and has the successor card
+above; it is not claimed fixed by the activation change.
+
+Pre-fix confirmed defects: selector filtered trigger kinds before choosing the
+highest condition-matching page, allowing shadowed lower pages to run. Tile
+trigger filtering separately scanned every page for its layer, even when another
+page was active. Primary reference: EasyRPG Player
+0de2a9ab466a133ac6e192a84bd761a1d81f5f14 Game_Event::RefreshPage (152-240),
+which selects one highest eligible page and then applies its trigger/layer.
+Acceptance: only that page's trigger and layer may activate action, touch,
+autorun or parallel execution; a condition-failing higher page may fall back
+to the next eligible one; same-trigger priority remains highest-first; native
+scheduler/player tests and canonical validation pass. Already-running parallel
+page cancellation on refresh, sprite/route refresh, autorun repetition and
+single-main scheduling remain separate gaps; this card covers fresh activation.
+
 ### K-PROD-RM2K-INPUT-COVERAGE — DONE (regression coverage only)
 
 Source/test checkpoint `65e576e` is published; exact origin/main readback matched
