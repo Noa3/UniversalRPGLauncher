@@ -183,10 +183,9 @@ public partial class TestMzSaveStore : TestBase
     /// }
     /// </code>
     /// <para>
-    /// <strong>And the failure here is forced</strong>: a directory is put
-    /// where the temporary file goes, so the write cannot succeed. <strong>A
-    /// save that a crash left half-written is a save that a player loses a
-    /// game to.</strong>
+    /// The failure is forced by a non-finite value that cannot be serialized
+    /// into valid JSON. The safety suite also holds a Windows sharing lock
+    /// on the destination to verify preservation after a failed atomic swap.
     /// </para>
     /// </remarks>
     public void Test_EinFehlgeschlagenerSchreibvorgangFrisstNichts()
@@ -198,12 +197,9 @@ public partial class TestMzSaveStore : TestBase
             AssertTrue(MzSaveStore.Save(ordner, MzSaveStore.SlotName(2), erster, out _),
                 "**and the first save lands**");
 
-            // **And now the write is blocked**, by a directory where the
-            // temporary file would go.
-            var pfad = MzSaveStore.PathOf(ordner, "file2");
-            Directory.CreateDirectory(pfad + "_");
-
-            var (zweiter, _) = MzSaveContents.Capture(Fakten(), 2, 222);
+            // Block serialization before the atomic commit, independent of
+            // the staging-file naming strategy.
+            var zweiter = new MzValue(MzKind.Number) { Number = double.NaN };
             AssertFalse(MzSaveStore.Save(ordner, MzSaveStore.SlotName(2), zweiter, out var problem),
                 "**and the second save fails** -- and it said: " + problem);
 
