@@ -34,11 +34,12 @@ public static class Rm2kEventPageSelector
         for (var index = pEvent.Pages.Count - 1; index >= 0; index--)
         {
             var page = pEvent.Pages[index];
-            if (page.Trigger != (int)pTrigger || !ConditionsMatch(page, pState))
+            if (!ConditionsMatch(page, pState))
             {
                 continue;
             }
-            return page;
+            // Trigger queries must not reveal a page hidden by the active one.
+            return page.Trigger == (int)pTrigger ? page : null;
         }
         return null;
     }

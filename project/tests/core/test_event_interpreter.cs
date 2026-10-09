@@ -366,8 +366,8 @@ public partial class TestEventInterpreter : TestBase
 
 		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Action) == null,
 			"action trigger does not select touched or parallel pages");
-		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Touched) != null,
-			"touched trigger selects the touched page");
+		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Touched) == null,
+			"the highest eligible parallel page hides the lower touched page");
 		AssertTrue(Rm2kEventPageSelector.Select(eventData, state, Rm2kEventTrigger.Parallel) != null,
 			"parallel trigger selects the parallel page");
 	}

@@ -290,21 +290,13 @@ public sealed class Rm2kEventScheduler
             {
                 continue;
             }
-            var matched = false;
-            foreach (var page in eventData.Pages)
+            var page = Rm2kEventPageSelector.Select(eventData, _state, pTrigger);
+            if (page == null)
             {
-                if (page.Trigger != (int)pTrigger)
-                {
-                    continue;
-                }
-                var isSameLayer = page.Layer == LayerSame;
-                if (pRule == Rm2kTriggerLayerRule.MustBeSame ? !isSameLayer : isSameLayer)
-                {
-                    continue;
-                }
-                matched = true;
+                continue;
             }
-            if (!matched)
+            var isSameLayer = page.Layer == LayerSame;
+            if (pRule == Rm2kTriggerLayerRule.MustBeSame ? !isSameLayer : isSameLayer)
             {
                 continue;
             }
