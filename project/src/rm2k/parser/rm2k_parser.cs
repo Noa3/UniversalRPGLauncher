@@ -1367,11 +1367,12 @@ public partial class Rm2kParser : RefCounted
 					// 0x19 is translucent, not a character animation frame.
 					var characterPatternResult = IntegerFromFields(pageFields, 0x18, 1);
 					var animationTypeResult = IntegerFromFields(pageFields, 0x24, 0);
+					var moveSpeedResult = IntegerFromFields(pageFields, 0x25, 3);
 					var characterName = ReadRm2kStringField(pageFields, 0x15);
 
 					if (!triggerResult.Success || !layerResult.Success || !freqResult.Success
 						|| !characterIndexResult.Success || !characterDirectionResult.Success
-						|| !characterPatternResult.Success || !animationTypeResult.Success)
+						|| !characterPatternResult.Success || !animationTypeResult.Success || !moveSpeedResult.Success)
 					{
 							return Failure($"Invalid page metadata", (int)pageChunkData["payload_offset"]);
 						}
@@ -1464,6 +1465,7 @@ public partial class Rm2kParser : RefCounted
 						{ "character_direction", (int)characterDirectionResult.Data["value"] },
 						{ "character_pattern", (int)characterPatternResult.Data["value"] },
 						{ "animation_type", (int)animationTypeResult.Data["value"] },
+						{ "move_speed", (int)moveSpeedResult.Data["value"] },
 						{ "conditions", conditionData },
 						{ "has_move_list", hasMoveList },
 						{ "has_command_list", hasList },

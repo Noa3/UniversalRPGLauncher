@@ -1,5 +1,87 @@
 ## Current card
 
+### Event animation ticks — completed
+
+FINAL: K-PROD-RM2K-EVENT-ANIMATION DONE. Follow-up canonical completed with
+2847/2847 and final validator pass marker in
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-event-animation-followup-validation.log`.
+The foreground tool transport timed out after420s; the exact log subsequently
+showed completion and a scoped process check found no URPG C# test runner.
+This is recovered log evidence, not a claimed foreground exit code.
+Runtime/pixel24/24 and adjacent suites pass; both reviews are resolved and the
+live-route transfer defect is corrected. No new build diagnostic signatures;
+142 warnings remain. Shutdown diagnostics remain3 CanvasItem RIDs/6 ObjectDB
+instances, unchanged from the first animation canonical. No release export.
+
+Next: K-PROD-RM2K-PAGE-ROUTE-ACTIVATION READY/P0. Page route activation currently
+exists only via the explicit test seam; inspect pinned movement-mode/lifecycle
+and add failing native file-based coverage before production wiring. Hero idle
+batching, pause/jump reset and bounded repeated invalid-type diagnostics remain
+separate. All explicit engine/GUI production gates remain open. Earlier pending
+entries in this section are superseded by this final checkpoint.
+
+LATEST: K-PROD-RM2K-EVENT-ANIMATION VERIFY, review follow-up implemented.
+Runtime/pixel24/24 passes after clearing map-local routes/step budgets on load,
+Stop and Dispose. The live-route transfer regression was observed21/22 RED
+(old step, wrong initial facing, retained route, moved new event) before cleanup.
+Added termination checks for live routes and scalar/batched cross-map transfer
+with active timer, flash and shake; screen-tick mutation was caught23/24 and
+restored. The first canonical exited0/2844; final follow-up validation remains
+required. Review deleg_9b07d9f1 is resolved with this regression-backed cleanup.
+Route activation in production is still absent; movement tests use the existing
+explicit test seam and do not establish page-route activation or engine parity.
+Unsupported animation types still emit bounded per-tick diagnostics; reporting
+once per page activation and hero batching remain separate improvements.
+
+Added live Event.AnimationCount,
+reused Rm2kCharacterAnimation.Update, implemented spin counter/facing, type0..6
+predicates and LMU0x25 speed read/host bridge. Normal moving limits differ from
+continuous idle limits; counter-only ticks don't repaint. Interleaved scheduler,
+transfer, pose, route and animation per simulation tick after scalar/batch RED;
+timer/presentation/frame count also advance per tick. Final moving tick tracked
+separately so arrival animation uses the moving phase. Spin movement does not
+overwrite facing; explicit turns still override it. Existing goldens unchanged.
+
+Final focused: runtime/pixel21/21, poseparser1/1, parser36/36, renderer19/19,
+route7/7, activation8/8, input11/11, interpreter85/85. Source/binary rebuilt after
+late-boundary mutation caught19/21; restored21/21. Build142warnings/0errors;
+normalized signatures match prior page-pose build (including pre-existing parser
+and transfer nullability warnings). No new dependency or export.
+Review follow-up deleg_9b07d9f1: verified old map routes/steps are not cleared
+when LoadCurrentMapEvents installs new event objects. Added a regression for a
+transfer during an active route with reused ID1 and different speed/pose.
+Canonical proc_79b77df2652a completed exit0 before this follow-up; it is not the
+final fixed-state run. Keep VERIFY; test RED and targeted cleanup are next. Original games
+and qa_patches/ unchanged; controlled pages use actual pinned Chara1.png pixels.
+
+Canonical proc_79b77df2652a running, exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-event-animation-validation.log`.
+Initial audit deleg_0530668c is delivered and resolved: its required tick,
+speed, spin and final-movement handling are in the current implementation.
+It also confirms two separate existing gaps: paused/jumping reset-to-middle
+semantics and hero idle animation batching. Neither is exercised by the new
+event animator; keep them explicitly separate from event-timing completion.
+Precommit review deleg_9b07d9f1 and final count/exit still pending before
+DONE/commit/push. Jump/animation-pause route
+commands, diagonal trajectory/facing and complete page/parallel lifecycle remain
+separate; do not call this full engine compatibility or native visual parity.
+
+Failure log: continuous RED12/13, spin13/14, normalwalk14/15, batch15/16,
+file-speed16/17 plus parser0/1 were observed before the respective fixes.
+One verification command used a shortened non-existent editor path (exit127);
+reran the already-built suite with the verified pinned executable,15/15 green.
+This was a tool-path typo, not an engine/runtime failure.
+
+Base main4b58f6d clean except preserved qa_patches/; canonical2835/2835.
+Selected K-PROD-RM2K-EVENT-ANIMATION. Pinned Player UpdateAnimation176-215:
+spin increments count/rotates visible facing at the spin limit; normal/fixed
+continuous predicates1/3, unanimated4/6, stationary/continuous limits already
+exist in Rm2kCharacterAnimation.Update. Need per-event counts and per-tick route/
+animation interleaving, real frame invalidation and page move_speed0x25 default3.
+Visible spin facing must not follow ordinary movement; explicit turns remain
+overrides. Add one failing continuous runtime/pixel test first. Read-only audit
+deleg_0530668c pending. No new export or complete-engine claim.
+
 ### Page-specific event pose — complete
 
 FINAL: K-PROD-RM2K-PAGE-POSE DONE for initial and page-transition pose rules.

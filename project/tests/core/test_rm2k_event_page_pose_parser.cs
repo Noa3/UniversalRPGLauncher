@@ -18,7 +18,8 @@ public partial class TestRm2kEventPagePoseParser : TestBase
             TestRm2kParser.Chunk(0x17, TestRm2kParser.Ber(3)),
             TestRm2kParser.Chunk(0x18, TestRm2kParser.Ber(2)),
             TestRm2kParser.Chunk(0x19, TestRm2kParser.Ber(1)),
-            TestRm2kParser.Chunk(0x24, TestRm2kParser.Ber(4)));
+            TestRm2kParser.Chunk(0x24, TestRm2kParser.Ber(4)),
+            TestRm2kParser.Chunk(0x25, TestRm2kParser.Ber(6)));
         var defaultPage = TestRm2kParser.Struct();
         var path = ProjectSettings.GlobalizePath("user://page-pose-" + Guid.NewGuid().ToString("N") + ".lmu");
         try
@@ -34,6 +35,8 @@ public partial class TestRm2kEventPagePoseParser : TestBase
             AssertEq(authored["character_direction"].AsInt32(), 3);
             AssertTrue(authored.ContainsKey("character_pattern"), "Page pattern must survive parsing");
             AssertTrue(authored.ContainsKey("animation_type"), "Page animation type must survive parsing");
+            AssertTrue(authored.ContainsKey("move_speed"), "LMU0x25 move speed must survive parsing for animation timing");
+            if (authored.ContainsKey("move_speed")) AssertEq(authored["move_speed"].AsInt32(), 6);
             if (authored.ContainsKey("character_pattern")) AssertEq(authored["character_pattern"].AsInt32(), 2,
                 "0x18 pattern is not the 0x19 translucent flag");
             if (authored.ContainsKey("animation_type")) AssertEq(authored["animation_type"].AsInt32(), 4);
@@ -41,6 +44,7 @@ public partial class TestRm2kEventPagePoseParser : TestBase
             AssertEq(defaults["character_direction"].AsInt32(), 2, "Absent direction uses liblcf down, not up");
             if (defaults.ContainsKey("character_pattern")) AssertEq(defaults["character_pattern"].AsInt32(), 1);
             if (defaults.ContainsKey("animation_type")) AssertEq(defaults["animation_type"].AsInt32(), 0);
+            if (defaults.ContainsKey("move_speed")) AssertEq(defaults["move_speed"].AsInt32(), 3);
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

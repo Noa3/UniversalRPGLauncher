@@ -5,7 +5,23 @@
 
 ## Latest runtime correctness work
 
-The last completed canonical development suite passed **2835/2835**. Page pose
+The last completed canonical development suite passed **2847/2847**, with the
+final validator pass marker recovered from its exact log after a foreground
+transport timeout. Event animation now advances on simulation ticks with
+reference normal/continuous/fixed/spin predicates, live counters and parsed
+LMU0x25 speed. Frame/facing changes invalidate rendering; counter-only ticks do
+not recompose it. Movement and animation interleave per tick, including the
+final moving tick. Map replacement, Stop and Dispose discard map-local routes
+and step budgets so reused event IDs cannot inherit old movement or speed.
+Native runtime/pixel24/24 and adjacent suites pass, with timing and screen-tick
+mutations detected. Both bounded reviews are resolved. Build142warnings and
+shutdown3 CanvasItem RIDs/6 ObjectDB instances remain. Movement coverage uses
+the explicit existing test seam: production page-route activation is absent
+and has the next READY/P0 card. Full route/parallel lifecycle, hero idle
+batching, pause/jump reset, transparency and complete engine/GUI gates remain
+open; this is not native-engine visual parity or a new release export.
+
+The previous page-pose canonical passed **2835/2835**. Page pose
 now survives parser/host conversion with verified LMU0x17/0x18/0x24 defaults.
 Initial/stopped versus mid-step transitions separate visible facing from movement
 direction; fixed/spin page-pattern exceptions and explicit route-turn overrides
@@ -13,8 +29,8 @@ are covered. Normal events start at reference frame1. Runtime/pixel12/12 and
 poseparser1/1 pass; both bounded reviews resolved and final canonical exited0.
 The development golden is preserved/refreshed and asserted with exact RGBA
 equality, not expanded tolerance. This is not native-engine visual parity.
-Continuous/spin tick animation, route pacing/expansion, transparency and full
-page/parallel lifecycle remain open; event animation is the next READY slice.
+Continuous/spin event timing is implemented above; route pacing/expansion,
+transparency and full page/parallel lifecycle remain open.
 
 Event
 graphics now use only the highest eligible page's charset, cell and draw layer;

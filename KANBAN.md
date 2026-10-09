@@ -47,7 +47,58 @@ controls or shared Games/settings; stale/cancelled results cannot replace the
 prior library; close/reload cancels safely; traversal budgets and no-link/no-code
 safety remain; focused UI/library tests and canonical validation pass. Preserve
 saved explicit engine choices. Sprite successor is postponed for this user bug.
-### K-PROD-RM2K-EVENT-ANIMATION — READY
+### K-PROD-RM2K-PAGE-ROUTE-ACTIVATION — READY (P0)
+
+The event animator is live, but page routes currently enter _eventRoutes only
+through StartEventMoveRouteForTest. Trace the pinned page movement-mode and
+route lifecycle before wiring anything. Acceptance: retain the verified page
+movement mode through parser/host conversion and activate supported custom
+page routes from production map ticks, not a test-only entry point. Match page
+change/cancellation rules without restarting unchanged pages or replacing a
+forced route. Cover real file-authored pages, initial load, unchanged ticks,
+condition-driven page switches, map-local IDs, stop/dispose, exact movement and
+visible animation; observe RED before the wiring and run canonical validation.
+Keep unsupported movement/route commands explicit; do not claim complete route
+or parallel-interpreter lifecycle. Dependency: K-PROD-RM2K-EVENT-ANIMATION.
+
+### K-PROD-RM2K-EVENT-ANIMATION — DONE (bounded event tick animation)
+
+Final follow-up canonical log confirms **2847/2847** and
+`UniversalRPG validation passed.` The foreground transport timed out at420s;
+completion was recovered from the exact saved log and no URPG test runner
+remained. No foreground exit code is claimed. Both bounded reviews are resolved;
+the stale-map route finding was reproduced and fixed with24/24 runtime/pixel
+coverage, including live-route transfer, Stop/Dispose and timer/effect batching.
+Build remains142 warnings with no new normalized signature. Shutdown still
+reports3 CanvasItem RIDs and6 ObjectDB instances, unchanged from the first
+animation canonical run. This is not release, native-engine or full route parity.
+The intermediate VERIFY/pending entries below are historical.
+
+Implemented per-event animation counts, normal/continuous/fixed/spin predicates,
+reference speed tables and spin-only visible facing. Page move_speed0x25/default3
+is parsed and reaches the host; active route speed is respected. Event movement
+and animation now interleave per simulation tick, including the final moving
+tick, with no animation changes from render-only calls. Changed frames/facing
+invalidate the composed frame; counter-only ticks do not allocate a new frame.
+Expanded native runtime/pixel suite21/21 covers all0..6 types at rest/moving,
+all1..6 continuous/spin speed thresholds, fourth logical frame versus draw
+clamp, scalar/batched equivalence, file-based speed, retained page counters,
+real transfer with reused eventID and stop lifecycle. Adjacent poseparser1/1,
+parser36/36, renderer19/19, route7/7, activation8/8, input11/11, interpreter85/85
+pass. Failure-first continuous/spin/walk/batch/speed regressions were observed;
+late-spin-boundary mutation failed19/21 and was restored/rebuilt21/21.
+Build retains142 existing warnings, with no new normalized diagnostic signature.
+Canonical proc_79b77df2652a and review deleg_9b07d9f1 pending; initial reference
+audit deleg_0530668c is resolved; it confirms the implemented source requirements
+and names pre-existing hero idle batching and pause/jump reset gaps separately.
+Review follow-up: cleared map-local route/step state on map replacement, Stop
+and Dispose after live-route transfer21/22 RED. Runtime/pixel24/24 now passes,
+including reused IDs with different speed/pose, termination with live routes and
+cross-map batching with timer/flash/shake budgets. Screen-tick mutation caught
+23/24 and restored. First canonical exit0/2844 preceded this fix; final follow-up
+validator pending. Both reviews are resolved. No DONE/commit or parity claim.
+Production page-route activation is absent; movement tests use the existing test
+seam. This slice does not implement page-route activation or route expansion.
 
 Successor to page pose. Initial/frame-transition policy is implemented, but
 normal/continuous/spin event animation is not advanced with reference timing.

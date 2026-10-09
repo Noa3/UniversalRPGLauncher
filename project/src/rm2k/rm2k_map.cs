@@ -226,6 +226,7 @@ public class Rm2kMap
 		// Pinned SaveMapEventBase initializes normal animation at the middle frame.
 		// Page pattern (LMU0x18) overrides it only for fixed-graphic/spin types.
 		public int AnimationFrame = 1;
+		public int AnimationCount;
 
 		public Event(int pId = 0, int pX = 0, int pY = 0)
 		{

@@ -271,43 +271,20 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         var elapsedTicks = _clock.GetSimulationTicks() - beforeTicks;
         if (elapsedTicks > 0)
         {
-            Simulation.FrameCount += elapsedTicks;
-            Simulation.AdvanceTimers(elapsedTicks);
-            Presentation.Tick(elapsedTicks);
             for (var tick = 0; tick < elapsedTicks; tick++)
             {
+                Simulation.FrameCount++;
+                Simulation.AdvanceTimers(1);
+                Presentation.Tick(1);
                 _eventScheduler.ExecuteFrame();
+                TryCarryOutTransfer();
+                RefreshEventPagePoses();
+                UpdateEventMoveRoutes(1);
+                UpdateEventAnimations(1);
             }
 
-            // **Und ein Teleport wechselt die Karte, und 2879 von
-            //  diesem Spiel tun genau das.**
-            //
-            // **Und der Interpreter setzt `IsTransferPending` und
-            // sonst nichts**, -- **und dieser Host las das Feld
-            // nie**, -- **und damit konnte kein Spiel ueber seine
-            //  eigene Map hinaus laufen.**
-            //
-            // **Und `Game_Player::SetTransferData` schreibt den
-            // Zielpunkt, und `Game_Map::Refresh` laedt die neue
-            // Karte** -- **und beides gehoert an dieselbe Stelle,
-            //  direkt nach dem Scheduler und vor dem Rendern**, --
-            // **denn die neue Karte braucht ein Frame, in dem sie
-            //  gezeichnet wird.**
-            TryCarryOutTransfer();
-
-            // **Und eine Seite, die wartet, wartet weiter** --
-            // **und das ist richtig**, -- **denn das Aufloesen
-            // gehoert an eine Taste und nicht an einen
-            // Frame.**
-            TryCarryOutTransfer();
-
-            // Game_Character::UpdateMoveRoute runs once per update for every
-            // event with an active route, and it runs whether or not the player
-            // is moving. A command that starts a step returns immediately, so
-            // the route consumes one command per update and the character then
-            // spends the step budget walking before the next one is read.
-            RefreshEventPagePoses();
-            UpdateEventMoveRoutes(elapsedTicks);
+            // Interleave event movement and animation on simulation ticks, not
+            // render calls. Applying all movement first loses moving/idle phases.
 
             // Game_Character::Update advances the movement budget and the walk
             // animation once per update, not once per call into the runtime. The
@@ -507,6 +484,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 $"RM2K runtime cannot stop from state {State}.", "stop");
         }
         _eventScheduler.Clear();
+        ClearEventMovementState();
         _clock.Reset();
         Presentation.Reset();
         Simulation.Reset();
@@ -522,6 +500,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
     public void Dispose()
     {
+        ClearEventMovementState();
         State = PluginRuntimeState.Disposed;
         DatabaseData = null;
         MapTreeData = null;
@@ -593,6 +572,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         for (var tick = 0; tick < pTicks; tick++)
         {
+            _eventMovedThisTick.Clear();
             foreach (var mapEvent in _mapEvents)
             {
                 // An event with no route at all is skipped, but an event whose
@@ -611,6 +591,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 // none falls through to the command read, which finds nothing.
                 if (_eventStepStates.TryGetValue(mapEvent.Id, out var step))
                 {
+                    if (step.RemainingStep > 0) _eventMovedThisTick.Add(mapEvent.Id);
                     var advanced = Rm2kStepBudget.Advance(step.RemainingStep, route.MoveSpeed);
                     if (!advanced.Completed)
                     {
@@ -704,9 +685,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         pEvent.X = targetX;
         pEvent.Y = targetY;
         pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(direction);
-        if (!pEvent.FacingLocked) pEvent.FacingDirection = pEvent.Direction;
+        if (!pEvent.FacingLocked && !IsEventSpinning(pEvent)) pEvent.FacingDirection = pEvent.Direction;
         _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
             Rm2kStepBudget.ScreenTileSize, direction);
+        _eventMovedThisTick.Add(pEvent.Id);
         _eventRoutesMoved = true;
         return true;
     }
@@ -929,6 +911,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _isRenderDirty = false;
         _renderedEventPages.Clear();
         _appliedEventPages.Clear();
+        _eventMovedThisTick.Clear();
     }
 
     private string? ResolveGameDirectory()
@@ -2171,8 +2154,21 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return 0;
     }
 
+    private void ClearEventMovementState()
+    {
+        _eventRoutes.Clear();
+        _eventStepStates.Clear();
+        _eventMovedThisTick.Clear();
+        _eventRoutesMoved = false;
+    }
+
     private void LoadCurrentMapEvents(Godot.Collections.Dictionary? pMapData)
     {
+        // Event IDs are local to a map. Never attach an old map's route or
+        // unspent step to a newly loaded event that happens to reuse its ID.
+        ClearEventMovementState();
+        _renderedEventPages.Clear();
+        _appliedEventPages.Clear();
         var events = new List<Rm2kMap.Event>();
         if (pMapData != null && pMapData.TryGetValue("events", out var rawEvents)
             && rawEvents.VariantType == Godot.Variant.Type.Array)
@@ -2279,7 +2275,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                         {
                             page.Graphic["character_index"] = characterIndex;
                         }
-                        foreach (var poseField in new[] { "character_direction", "character_pattern", "animation_type" })
+                        foreach (var poseField in new[] { "character_direction", "character_pattern", "animation_type", "move_speed" })
                         {
                             if (TryReadInt(pageData, poseField, out var poseValue)) page.Graphic[poseField] = poseValue;
                         }
@@ -2336,6 +2332,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Dictionary<Rm2kMap.Event, Rm2kMap.EventPage?> _renderedEventPages = new();
 
     private readonly Dictionary<Rm2kMap.Event, Rm2kMap.EventPage?> _appliedEventPages = new();
+    private readonly HashSet<int> _eventMovedThisTick = new();
 
     private static int PagePoseValue(Rm2kMap.EventPage pPage, string pField, int pDefault) =>
         pPage.Graphic.TryGetValue(pField, out var raw) && raw is int value ? value : pDefault;
@@ -2381,6 +2378,48 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         return false;
     }
+
+    private void UpdateEventAnimations(int pTicks)
+    {
+        for (var tick = 0; tick < pTicks; tick++)
+        foreach (var mapEvent in _mapEvents)
+        {
+            if (!_appliedEventPages.TryGetValue(mapEvent, out var page) || page == null) continue;
+            var animationType = PagePoseValue(page, "animation_type", 0);
+            var speed = PagePoseValue(page, "move_speed", 3);
+            if (_eventRoutes.TryGetValue(mapEvent.Id, out var route)
+                && (route.Active || _eventStepStates.ContainsKey(mapEvent.Id))) speed = route.MoveSpeed;
+            speed = Math.Clamp(speed, 1, 6);
+            if (animationType == 5)
+            {
+                mapEvent.AnimationCount++;
+                if (mapEvent.AnimationCount >= Rm2kCharacterAnimation.SpinAnimFrames(speed))
+                {
+                    var facing = Rm2kMoveRoute.LiblcfFromFacingDirection(mapEvent.FacingDirection ?? mapEvent.Direction);
+                    mapEvent.FacingDirection = Rm2kMoveRoute.FacingFromLiblcfDirection((facing + 1) % 4);
+                    mapEvent.AnimationCount = 0;
+                    _isRenderDirty = true;
+                }
+                continue;
+            }
+            if (animationType is 4 or 6) continue;
+            if (animationType < 0 || animationType > 6)
+            {
+                Simulation.AddDiagnostic($"RM2K event {mapEvent.Id} has unsupported animation type {animationType}.");
+                continue;
+            }
+            var updated = Rm2kCharacterAnimation.Update(mapEvent.AnimationFrame, mapEvent.AnimationCount,
+                pStopCount: _eventMovedThisTick.Contains(mapEvent.Id) ? 0 : 1,
+                pSpeed: speed, pContinuous: animationType is 1 or 3);
+            if (mapEvent.AnimationFrame != updated.Frame) _isRenderDirty = true;
+            mapEvent.AnimationFrame = updated.Frame;
+            mapEvent.AnimationCount = updated.Count;
+        }
+    }
+
+    private bool IsEventSpinning(Rm2kMap.Event pEvent) =>
+        _appliedEventPages.TryGetValue(pEvent, out var page) && page != null
+        && PagePoseValue(page, "animation_type", 0) == 5;
 
     /// <summary>
     /// The three vehicles, built from the LMT start node when a map is loaded.
@@ -2947,6 +2986,7 @@ ReadString(entry, "name", v => werte.Name = v);
             var route = new Rm2kMoveRouteState(
                 page.MoveRouteCommands, page.MoveRouteRepeat, page.MoveRouteSkippable)
             {
+                MoveSpeed = Math.Clamp(PagePoseValue(page, "move_speed", 3), 1, 6),
                 MoveFrequency = page.MoveFrequency,
                 Direction = Rm2kMoveRoute.LiblcfFromFacingDirection(mapEvent.Direction),
             };
