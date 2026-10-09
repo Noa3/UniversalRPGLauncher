@@ -1,5 +1,96 @@
 ## Active
 
+### K-PROD-RM2003-DECISION-WAIT — VERIFY (runtime regressions passed)
+
+New host/input integration suite **6/6**, timed-wait suite **4/4**, existing
+interpreter suite **85/85**, vehicle-decision suite **8/8** pass. Four of the
+original five new cases failed before implementation. The sixth verifies two
+parallel waits observing the same fresh decision. Full validator
+proc_c9550df807a6 completed with exit 0 and **2793/2793**. Independent review
+is deleg_91f0fe9a; await that verdict before DONE/commit of this runtime slice.
+
+Implement command 11410's decision-key mode through the actual runtime input,
+player turn and scheduler. Reference: EasyRPG Player
+0de2a9ab466a133ac6e192a84bd761a1d81f5f14 CommandWait and wait_key_enter update.
+Acceptance: RM2003 mode 1 holds subsequent event commands until a fresh Confirm;
+pre-command/duplicate/unrelated/paused/message-dismissal keys do not leak into
+the wait; RM2000 preserves timed semantics; initialization derives the basic
+2003 command set from the selected engine without enabling 2003E extensions.
+Regression tests drive Rm2kEngineRuntime.SubmitInput and host.Update with pinned
+RM2000/2003 fixtures. Full canonical validation required.
+
+### K-PROD-TITLE-IDENTITY — DONE (title-dispatch slice only)
+
+Fresh canonical validation after the title fix passed **2784/2784**, followed
+by **2787/2787** with the additional storage review tests. This establishes
+localized command dispatch, not complete title/plugin-scene compatibility.
+
+Audit-confirmed defect: ChooseTitleCommand compared display captions to
+"New Game", although captions come from the game's localized terms and plugin
+commands already carry stable symbols. Fixed dispatch to the `newGame` symbol;
+retain unknown parameter-only plugin commands as unsupported rather than
+inferring behavior from names. New live-runtime regressions **2/2** cover a
+localized new-game caption and an Options caption that says "New Game".
+Existing title/game suite **12/12**, plugin-host suite **4/4**. The foreground
+validator hit the tool's 420-second call timeout; the tracked background rerun
+proc_1f7aecca3af9 completed successfully with **2784/2784**. No title failure
+was hidden by that timeout.
+
+### K-PROD-RM2K-WAIT — DONE (timed-wait slice only)
+
+Evidence: new duration suite **4/4**, existing interpreter suite **85/85**;
+`bash scripts/validate.sh` exit 0 with **2782/2782** tests. The pre-fix run
+failed long-duration preservation and exposed an overflow exception on hostile
+input. Timed Wait now uses a validated 64-bit intermediate and retains the
+full representable frame count instead of the shared ten-second effect cap.
+This does not establish complete RM2000/2003 gameplay support.
+
+First RM2000/2003 runtime correction under the user's production criteria:
+timed Wait command 11410 must not shorten durations above ten seconds.
+Reference: EasyRPG Player commit 0de2a9ab466a133ac6e192a84bd761a1d81f5f14,
+Game_Interpreter::SetupWait and CommandWait. Acceptance: positive durations
+convert tenths to 60-Hz frames exactly; zero waits one frame; malformed,
+negative and overflowing durations do not crash or silently wrap; long waits
+hold subsequent event commands until the requested time elapsed; focused tests
+and canonical validation pass. Decision-key waits and effect duration limits
+are separate measured gaps, not part of this timed-wait card.
+
+### Production acceptance criteria — OPEN
+
+User explicitly requires, in order: RM2000/2003 complete, RPG Maker VX complete,
+MV/MZ complete, and both launcher and in-game GUI reworked and complete.
+`execplan/production-readiness.md` tracks the release gates. A bounded bootstrap,
+a complete opcode-name table or passing helper tests is not full engine support.
+
+### K-PROD-SAVE-IO — DONE (bounded snapshot storage only)
+
+Source checkpoint: `985e366`, pushed and verified against `origin/main`.
+Only the six reviewed storage/test/harness files were committed; the RM2003
+and title work remains separate in the working tree.
+
+Current evidence: final mutex-bearing `bash scripts/validate.sh` exit 0 with
+**2787/2787**. `TestMzSaveStoreSafety` **13/13**, including a real Windows
+junction, reserved device names and exact depth boundaries. Independent review
+approved the initial hardening with coverage/boundary findings; these were
+addressed. A new cross-process harness reproduced File.Replace failures with
+only the in-process gate, then passed three runs of eight processes / 256
+committed writes each after adding a ten-second per-file named mutex.
+Final mutex-bearing canonical run proc_ee878430559d completed with exit 0 and
+**2787/2787**. Follow-up lock review deleg_3235e119 found no hard correctness
+blocker. The 10-second wait is retained as a bounded failure policy and includes
+an explicit timeout diagnostic; ownership faults are not silently swallowed.
+OS-session/path-alias/path-swap limits are documented. This closes storage IO,
+not complete save-game interoperability, durable state coverage or production.
+
+User goal: production completion. First release-blocking slice: harden the
+MV/MZ save storage boundary before exposing incomplete persistence to players.
+Acceptance: bounded compressed and expanded input/output, strict encoding,
+no path traversal, atomic concurrent writes, rejected writes preserve the last
+save, regression tests and canonical validation. Implementation plan:
+`execplan/production-readiness.md`. Full game-state preservation, managed
+per-game paths, save/load UI and native-engine interoperability remain separate
+release gates; this card must not claim complete production readiness.
+
 ### K-MZ-MV-RUNTIME — DONE (MV and MZ start in the launcher)
 
 Goal: make RPG Maker MV and MZ run, not just be detected. Acceptance: the

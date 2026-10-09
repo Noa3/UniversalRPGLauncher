@@ -1,5 +1,173 @@
 ## Current card
 
+### Storage checkpoint published; RM2003 review pending (2026-10-09)
+
+K-PROD-SAVE-IO is DONE for bounded snapshot IO only. Source commit `985e366`
+contains exactly the six reviewed storage/test/harness files and was pushed;
+`git ls-remote origin refs/heads/main` verified
+`985e366af4938c61fe1be1314d8a6492132b41bc` after publication.
+The first two push attempts timed out and remote main was read back as the old
+264af64. An existing authenticated GitHub CLI account was then used through a
+per-command credential helper; push/readback succeeded without reading tokens
+or changing global Git/credential configuration.
+
+Both independent IO reviews are resolved, with no hard correctness blocker.
+Retain the explicit ten-second lock timeout and session/path-alias/TOCTOU limits;
+the timeout text survives in SaveProblem, and cleanup faults are not hidden.
+Three independent-process harness runs passed (8 processes / 256 writes each).
+
+The newer full working-tree validator completed exit 0 with **2793/2793**,
+including RM2003 decision-wait tests **6/6**. Log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-decision-validation.log`.
+Review deleg_91f0fe9a remains pending; RM2003/timed-wait/title source and tests
+are still uncommitted and are NOT claimed to be in the published storage commit.
+After that review, checkpoint only the verified runtime/title slices. All four
+broad production criteria remain OPEN; RM2000/2003 stays first priority.
+Original game/save files and qa_patches/ remain untouched. No release export.
+
+### RM2003 decision-key Wait implemented; verification pending (2026-10-09)
+
+K-PROD-RM2003-DECISION-WAIT drives 11410 mode 1 through
+Rm2kEngineRuntime.SubmitInput -> Rm2kPlayerTurn -> scheduler -> interpreter.
+Per-interpreter wait/release flags do not queue keys before setup, prevent
+duplicate input from falling through to vehicles/actions and require a fresh
+key for sequential waits. Open messages and paused/menu state block setup or
+release, and a blocked frame drops any submitted decision. Basic 2003 command
+support comes from the selected plugin id via SupportsRpg2k3Commands, distinct
+from 2003E extensions; Reset clears the basic flag. RM2000 keeps timed semantics.
+Unsupported Maniac frame/variable wait modes are diagnosed, not silently
+interpreted as ordinary time waits.
+
+Reference: EasyRPG Player 0de2a9ab466a133ac6e192a84bd761a1d81f5f14,
+CommandWait + wait_key_enter branch. New pinned-host integration suite **6/6**;
+original pre-fix run **1/5** (four cases failed). Existing timed-wait **4/4**,
+interpreter **85/85**, vehicle-decision **8/8** all pass. These are real host
+integration tests with reference-derived command lists, not complete game or
+GUI parity evidence. Full canonical validation proc_c9550df807a6 and independent
+review deleg_91f0fe9a are pending; log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-decision-validation.log`.
+
+Prior mutex-bearing full validator completed exit 0 with **2787/2787**;
+follow-up storage review deleg_3235e119 has not arrived. No commit/staging yet,
+no release artifact produced. Preserve original games/saves and qa_patches/.
+All four broad user criteria remain OPEN; RM2000/2003 is the active priority.
+
+### IO review addressed; real cross-process lock verified (2026-10-09)
+
+Initial independent IO review deleg_59e65c51 found no core data-loss/limit bypass
+but identified missing junction/depth/device-name coverage and an untested
+cross-process guarantee. Added three regressions: actual Windows junction
+operations reject Save/TryLoad/Exists/Remove and leave target bytes unchanged;
+reserved device names are refused before IO; depth 99/100/101 is checked for
+both writer and reader. The device-name case failed before the fix; all **13/13**
+safety tests now pass. Defined depth as nested container count and removed dead
+local. Documented conservative cloud/reparse rejection and local path-swap race
+limitations; checksum is corruption detection, not authentication.
+
+Created tools/save-store-concurrency/ (Program.cs, csproj, README) referencing
+the real current URPG Debug assembly, with no copied implementation. Before
+mutex, eight independent worker processes failed with File.Replace sharing/
+access-denied errors. Added a per-canonical-file named mutex with a ten-second
+wait bound to Save and Remove; abandoned ownership is handled and resources are
+released in finally/Dispose. Three real runs then passed with eight processes,
+256 committed writes each, readable final data and no orphan staging files.
+
+Latest full validation before mutex passed **2787/2787** (exit 0). Final
+mutex-bearing canonical validation is running as proc_ee878430559d; log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-mutex-validation.log`.
+Follow-up lock/worker review is pending as deleg_3235e119. Do not mark storage
+DONE or stage/commit before both are resolved. Current safety tests **13/13**
+and standalone concurrency build (0 warnings/errors) passed after mutex.
+Title identity card is DONE: its full background validator passed 2784/2784,
+then the additional storage cases passed 2787/2787. All four broad production
+criteria remain OPEN. No release export was produced; qa_patches/ and original
+games/saves remain untouched.
+
+Failure log for this slice: cross-process harness failed once under in-process
+locking only; hypothesis confirmed by independent workers. Material fix is the
+per-file named mutex, then three successful cross-process reruns. No assertions
+were removed or weakened.
+
+### Audit results received; title identity fixed (2026-10-09)
+
+Two read-only production audit results arrived (deleg_b8170a7d). Findings are
+self-reports, not automatically accepted. Verified localized-title defect in
+ChooseTitleCommand and reference Window_Command.callOkHandler/currentSymbol:
+actions are dispatched by symbol, not display name. Preserve the symbols
+already returned by MzPluginHost.Command; fallback defaults use newGame/options;
+parameter-only plugin commands keep unknown identity and are refused.
+
+New title regressions failed before the fix and pass **2/2** now. Existing
+real-game/title tests **12/12** and plugin-host **4/4** pass. Build succeeded.
+Full validation was interrupted by the tool's 420-second foreground-call timeout;
+no matching Godot process remained. The same validator is now tracked in
+background proc_1f7aecca3af9, with log
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-title-validation-background.log`.
+Do not claim the new total or mark K-PROD-TITLE-IDENTITY DONE until exit/output
+are available. Current previously completed full result remains **2782/2782**.
+
+Audit findings queued, not silently promoted to implementation:
+- Save/load lacks player-facing UI and a managed production directory.
+- Save snapshots omit durable state and restore map id from player._mapId
+  instead of Game_Map._mapId (source inspection confirmed the reader).
+- Save info/character fields and load mutation order require transactional
+  state preservation and reference-format validation before exposing Continue.
+- Do NOT add SaveLoad capability merely because a self-roundtrip passes.
+- Do NOT broadly change variables to doubles on the audit's assertion:
+  the reference Game_Variables.setValue explicitly floors numeric values.
+  Arbitrary plugin values remain a separate unsupported-value/state question.
+- Do NOT infer @ ordering from the line occurring before Object.keys: adding
+  a property does not reorder already-existing JavaScript properties.
+
+Independent IO review deleg_59e65c51 has not been received; storage remains
+VERIFY and all current changes remain uncommitted. Original games/saves and
+qa_patches/ are preserved. Four user production criteria remain OPEN.
+
+### Production criteria update and RM2K timed-wait correction (2026-10-09)
+
+The user added four explicit completion criteria, in priority order:
+RM2000/2003 complete; RPG Maker VX complete; MV/MZ complete; launcher and
+in-game GUI rework complete. All remain OPEN. VX is not VX Ace. Keep work in
+KANBAN.md and the existing production execution plan, not a private backlog.
+
+Completed narrow card K-PROD-RM2K-WAIT: duration command 11410 silently capped
+long waits at 600 frames and threw OverflowException for large input.
+Reference retrieved as text only from EasyRPG Player commit
+0de2a9ab466a133ac6e192a84bd761a1d81f5f14: SetupWait uses duration * 60 / 10;
+zero waits one frame. ExecuteWait now validates duration/overflow and preserves
+full timed waits without changing effect budgets. New reference-derived suite
+4/4, existing interpreter suite 85/85; scripts/validate.sh exit 0 with
+**2782/2782** tests and 142 existing warnings. No full-game parity claim.
+Log: `C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-rm2k-wait-validation.log`.
+Known separate RM2K gaps observed here: decision-key Wait mode is ignored and
+screen effects still carry a ten-second budget. Next runtime slice should
+address the decision-key mode through the real input/scheduler path, with an
+explicit engine-generation gate and regressions for premature key presses.
+Storage review/audits remain pending; current code is uncommitted. Preserve
+qa_patches/ and all original game/save directories.
+
+### K-PROD-SAVE-IO — VERIFY (2026-10-09)
+
+Implemented storage hardening: 16 MiB limits on file/expanded JSON, 100-level
+and 250000-token limits, strict UTF-8, independent zlib checksum verification,
+safe leaf names and link/junction rejection, unique staging files with disk
+flush and atomic destination replacement, and cleanup restricted to owned
+staging files. Invalid graph/cycles/non-finite numbers are refused before
+writing. Windows locked-destination regression verifies commit-stage failure
+preserves old bytes; 16 concurrent writers leave a complete readable save.
+
+Fresh evidence: original six cases failed against baseline; final
+`bash scripts/validate.sh` exit 0, **2778/2778** tests,
+`TestMzSaveStoreSafety` **10/10**, 142 existing compiler warnings.
+Log: `C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-production-validation-final.log`.
+Independent storage review and two production audits are pending. Changes remain
+uncommitted until review is resolved. No release artifact/export was produced.
+
+Production goal remains OPEN. See execplan/production-readiness.md.
+Historical "saving works end to end" does not establish complete persistence:
+current snapshots omit screen/timer/actors/party and do not establish native
+save interoperability. Original games/saves and qa_patches/ remain untouched.
+
 ### CHECKPOINT 2026-10-08 — the trigger numbering was wrong, and it was wrong in a way its own remark disproved
 
 **And this is the biggest single find of the run, and it came out of the drift
