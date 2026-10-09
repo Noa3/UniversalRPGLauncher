@@ -674,6 +674,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             return false;
         }
+        var previousDirection = pEvent.Direction;
+        var previousFacing = pEvent.FacingDirection;
+        // Player Move selects direction/facing before MakeWay. Only skippable
+        // route failures restore the previous pose in UpdateMoveRoute.
+        pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(direction);
+        if (!pEvent.FacingLocked && !IsEventSpinning(pEvent)) pEvent.FacingDirection = pEvent.Direction;
         var (dx, dy) = Rm2kMoveRoute.DirectionDelta(direction);
         var targetX = pEvent.X + dx;
         var targetY = pEvent.Y + dy;
@@ -688,12 +694,16 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         if (!Simulation.IsPassableInDirection(targetX, targetY, enterBit)
             || !Simulation.IsPassableInDirection(pEvent.X, pEvent.Y, leaveBit))
         {
+            if (pRoute.Skippable)
+            {
+                pEvent.Direction = previousDirection;
+                pEvent.FacingDirection = previousFacing;
+            }
+            else if (pEvent.FacingDirection != previousFacing) _eventRoutesMoved = true;
             return false;
         }
         pEvent.X = targetX;
         pEvent.Y = targetY;
-        pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(direction);
-        if (!pEvent.FacingLocked && !IsEventSpinning(pEvent)) pEvent.FacingDirection = pEvent.Direction;
         _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
             Rm2kStepBudget.ScreenTileSize, direction);
         _eventMovedThisTick.Add(pEvent.Id);
@@ -705,8 +715,9 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     /// <summary>
     /// The direction a movement command selects. The eight named directions map
     /// straight onto the liblcf order; <c>move_forward</c> uses the current
-    /// facing, and the hero relative and random commands are refused rather than
-    /// guessed, because a wrong step desynchronises the route's position.
+    /// direction. Toward-hero selects the dominant axis, vertical on ties, on
+    /// the current non-looping movement surface. Other relative/random commands
+    /// are refused rather than guessed.
     /// </summary>
     private int ResolveEventStepDirection(Rm2kMap.Event pEvent, int pCommandId)
     {
@@ -718,6 +729,15 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         if (pCommandId == Rm2kMoveRoute.MoveForward)
         {
             return pEvent.Direction;
+        }
+        if (pCommandId == Rm2kMoveRoute.MoveTowardsHero)
+        {
+            // Pinned Player GetDirectionToCharacter: no alternate-axis fallback.
+            var sx = (long)pEvent.X - Simulation.MapX;
+            var sy = (long)pEvent.Y - Simulation.MapY;
+            return Math.Abs(sx) > Math.Abs(sy)
+                ? (sx > 0 ? Rm2kMoveRoute.MoveLeft : Rm2kMoveRoute.MoveRight)
+                : (sy > 0 ? Rm2kMoveRoute.MoveUp : Rm2kMoveRoute.MoveDown);
         }
         return -1;
     }
@@ -2427,20 +2447,21 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 }
                 var command = route.Current!;
                 var id = command.CommandId;
-                if (id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveLeft)
+                if ((id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveLeft)
+                    || id == Rm2kMoveRoute.MoveTowardsHero)
                 {
                     if (!TryBeginEventStep(pEvent, route, command))
                     {
                         if (!route.Skippable) { route.NoteMoveFailure(); break; }
                     }
-                    route.SetIndex(route.CurrentIndex + 1);
+                    route.ConsumeCommand();
                     pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForStep(route.MoveFrequency);
                     if (_eventStepStates.ContainsKey(pEvent.Id)) { AdvanceEventPageStep(pEvent, route); return; }
                 }
                 else if (id >= Rm2kMoveRoute.FaceUp && id <= Rm2kMoveRoute.Turn180Degree)
                 {
                     ApplyEventRouteFacingCommand(pEvent, route, id);
-                    route.SetIndex(route.CurrentIndex + 1);
+                    route.ConsumeCommand();
                     pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForTurn(route.MoveFrequency);
                     pEvent.StopCount = 0;
                 }
@@ -2448,12 +2469,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 {
                     pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForWait(route.MoveFrequency);
                     pEvent.StopCount = 0;
-                    route.SetIndex(route.CurrentIndex + 1);
+                    route.ConsumeCommand();
                 }
                 else if (id >= Rm2kMoveRoute.IncreaseMovementSpeed && id <= Rm2kMoveRoute.DecreaseMovementFrequence)
                 {
                     ApplyEventRouteFacingCommand(pEvent, route, id);
-                    route.SetIndex(route.CurrentIndex + 1);
+                    route.ConsumeCommand();
                 }
                 else
                 {

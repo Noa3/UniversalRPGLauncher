@@ -90,3 +90,35 @@ still leaks3 CanvasItem RIDs/6 ObjectDB instances. This is a completed bounded
 development card, not a complete engine or release. The next measured custom
 route gap is toward-player9(38); supported production branches remain cardinal
 0..3, face/turn12..18, Wait23 and speed/frequency28..31 only.
+
+## Toward-player command9 development follow-up
+
+The next bounded extension executes custom-route9 on the existing non-looping,
+static-terrain movement surface. Pinned Player `0de2a9ab`
+`Game_Character::GetDirectionToCharacter` selects the larger absolute distance
+axis; equal distances select vertical, and coincident coordinates select down.
+The route attempts exactly that direction, without the autonomous approach
+mode's alternate-axis fallback. Existing loop-map movement, dynamic character
+collision and production forced-route pacing remain unimplemented boundaries.
+
+The shared step path now selects attempted direction/automatic facing before
+passability. A non-skippable refusal retains it and invalidates changed visible
+pixels; a skippable refusal restores the previous direction and facing. Fixed
+facing remains independent. Completed production commands reset the failure
+streak without adopting the prototype runner's immediate repeat wrap/finish.
+
+Native command9 was observed44/45 RED before implementation; failed-facing
+45/46 RED and failure-count54/55 RED separately discriminated shared defects.
+The corrected candidate passes58/58 native runtime/pixel tests (14 added),
+route-state12/12, legacy routes7/7 and renderer19/19. Horizontal-tie mutation
+fails57/58; suppressed failed-turn repaint fails56/58, including real pixels.
+Both mutations are restored and rebuilt. There are no new build diagnostics.
+
+Reference auditdeleg_80c16c3d confirms source semantics and the existing loop/
+collision boundary; its original code snapshot predates the implementation.
+Precommit reviewdeleg_b0bfbe31 found no blocker in the updated implementation.
+Full canonicalproc_a0dd4b70fd42 exited0 with **2886/2886** (2866 Core+20
+Smoke) and the final validator pass marker. Supported production commands are
+now0..3,9,12..18,23,28..31. Build142 existing warnings and known shutdown leaks
+remain unchanged. Next bounded card: diagonal4..7, measured custom6(1)/7(3).
+This is not a completed release or a full engine-compatibility claim.

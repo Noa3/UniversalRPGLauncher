@@ -153,6 +153,16 @@ public sealed class Rm2kMoveRouteState
 	}
 
 	/// <summary>
+	/// Completes one command without the legacy runner's immediate wrap/finish.
+	/// Production page routes decide wrapping on their next eligible command tick.
+	/// </summary>
+	public void ConsumeCommand()
+	{
+		MoveFailureCount = 0;
+		CurrentIndex++;
+	}
+
+	/// <summary>
 	/// Advances the index past the command that was just handled.
 	/// <c>SetMoveFailureCount(0); ++current_index;</c> and then the wrap check:
 	/// a route whose index lands back on the start index has come all the way
@@ -161,8 +171,7 @@ public sealed class Rm2kMoveRouteState
 	/// </summary>
 	public void Advance()
 	{
-		MoveFailureCount = 0;
-		CurrentIndex++;
+		ConsumeCommand();
 
 		if (Commands.Count == 0)
 		{

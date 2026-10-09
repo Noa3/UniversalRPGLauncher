@@ -47,7 +47,37 @@ controls or shared Games/settings; stale/cancelled results cannot replace the
 prior library; close/reload cancels safely; traversal budgets and no-link/no-code
 safety remain; focused UI/library tests and canonical validation pass. Preserve
 saved explicit engine choices. Sprite successor is postponed for this user bug.
-### K-PROD-RM2K-TOWARD-ROUTE — READY (P0, bounded command9)
+### K-PROD-RM2K-DIAGONAL-ROUTE — READY (P0, bounded commands4..7)
+
+Dependency: K-PROD-RM2K-TOWARD-ROUTE. Remaining measured custom diagonals:
+6(1),7(3); support the four named diagonal commands4..7 coherently, not only
+those observed. Trace pinned Player Move/GetDx/GetDy/UpdateFacing before editing.
+Reuse the shared move-step/failure path. Reference movement tests the two
+cardinal paths (vertical then horizontal, otherwise horizontal then vertical),
+not a fabricated single diagonal passability bit. Acceptance: native LMU RED;
+all directions, both path orders and blocked source/intermediate/target edges;
+reference facing including fixed/spin and failed/skippable restore; one real
+step budget/cursor/frequency, pixel coverage and batch/lifecycle regression;
+mutation detection, focused suites and canonical validation. Keep loop maps,
+actor collisions, jump/lock/other commands and full forced parity explicitly open.
+
+### K-PROD-RM2K-TOWARD-ROUTE — DONE (P0, bounded command9)
+
+FINAL canonicalproc_a0dd4b70fd42 exited0: **2886/2886**, reconciled as2866
+Core+20Smoke, final validator pass marker. Native58/58, route-state12/12,
+legacy7/7/render19/19 green, both reviews resolved. No new build diagnostics;
+142warnings and existing shutdown3 CanvasItem RIDs/6 ObjectDB instances remain.
+Current production commands0..3,9,12..18,23,28..31 only. No full engine/GUI claim.
+
+Native RED44/45 (exit7) before whitelist/resolver; attempted failed-facing
+45/46 RED (exit5) before shared Move pose correction; retry failure count
+54/55 RED (exit2) before ConsumeCommand. Restored native58/58 (14 new tests),
+route-state12/12, legacy7/7 and renderer19/19 green; no new build diagnostics.
+Axis-tie mutation57/58 and failed-repaint mutation56/58 caught, restored/rebuilt.
+Referenceauditdeleg_80c16c3d resolved against updated code/source (its original
+code snapshot is stale); precommitreviewdeleg_b0bfbe31 resolved with no blocker.
+Final canonicalproc_a0dd4b70fd42 passed2886/2886. Source-backed non-looping scope only; loop-map,
+dynamic character collision and production forced-route parity remain open.
 
 Successor to K-PROD-RM2K-MOVEMENT-COVERAGE. After Wait23, custom-route
 move-toward-player9(38) is the highest remaining unsupported opcode in the

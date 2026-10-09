@@ -5,7 +5,19 @@
 
 ## Latest runtime correctness work
 
-The latest canonical development run exited0 with **2872/2872** (2852 Core+
+The latest canonical development run exited0 with **2886/2886** (2866 Core+
+20 Smoke). Native custom move-toward-player9 uses reference dominant-axis and
+vertical-tie/coincident-down selection without alternate-axis fallback. Shared
+refused non-skippable steps now show attempted facing; skippable failures restore
+pose. Command consumption clears the failure streak without early repeat wrap.
+Native58/58 (14 new tests) and adjacent suites pass; both reviews resolved,
+axis/repaint mutations detected. Production whitelist0..3,9,12..18,23,28..31;
+next bounded slice is diagonal4..7, measured custom6(1)/7(3). Loop movement,
+dynamic character collision, modes1..5, jump/other commands and full forced
+route parity remain open. Build142 warnings and shutdown3 CanvasItem RIDs/
+6 ObjectDB instances persist; no complete engine/GUI or release claim.
+
+The preceding canonical development run exited0 with **2872/2872** (2852 Core+
 20 Smoke), with final validator pass marker. Real LMU measurement exposed the
 old decoder's fabricated route vector count/universal parameter tuple. Native
 prefixless sparse opcode framing now decodes all286 nonempty routes in807 maps
@@ -14,7 +26,8 @@ patterns and empty-route flags are tested. Production custom Wait23 uses its
 reference frame budget before the next step. Decoder14/14/native44/44 and
 adjacent suites pass; both audits resolved, format/wait mutations detected.
 See [movement coverage](MOVEMENT_COVERAGE.md) for per-mode/code evidence and
-remaining limitations. Next P0 is bounded toward-player route9(38); modes1..5,
+remaining limitations. Its measured next slice was toward-player route9(38),
+implemented above within the bounded non-looping surface; modes1..5,
 other route commands and full forced/collision lifecycle remain open. Build142
 existing warnings and shutdown3 CanvasItem RIDs/6 ObjectDB instances remain.
 No complete-engine/GUI or release claim.

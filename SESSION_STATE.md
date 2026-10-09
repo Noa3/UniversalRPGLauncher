@@ -1,5 +1,74 @@
 ## Current card
 
+### Toward-player custom route9 — completed
+
+FINAL: K-PROD-RM2K-TOWARD-ROUTE DONE after canonicalproc_a0dd4b70fd42
+exited0 with **2886/2886** and final validator pass marker. Count reconciled:
+2866 Core tests +20 Smoke checks. Native58/58 (14 added), route-state12/12,
+legacy7/7 and renderer19/19 pass; no new normalized build diagnostic or mutation
+marker. Both referenceauditdeleg_80c16c3d and precommitreviewdeleg_b0bfbe31
+resolved with no blocker. Ties57/58 and failed-turn repaint56/58 mutations caught
+and restored. Failed-facing and retry-counter REDs corrected coherently for
+shared movement/command consumption, not just opcode9.
+Exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-toward-final-validation.log`.
+Current production whitelist:0..3,9,12..18,23,28..31. Non-looping static-terrain
+boundary only; loop movement, actor collisions, modes1..5, other commands and
+full production forced pacing remain open. Build142 existing warnings/0errors,
+shutdown3 CanvasItem RIDs/6 ObjectDB instances remain. No release/engine/GUI claim.
+qa_patches/ untouched. Green slice ready for verified commit/push on main.
+Next READY/P0: K-PROD-RM2K-DIAGONAL-ROUTE, measured custom6(1)/7(3), reusing the
+shared movement path and pinned two-order MakeWay/facing rules. Earlier pending
+entries below are superseded by this completed checkpoint.
+
+Referenceauditdeleg_80c16c3d delivered/resolved. Its code snapshot predates
+the changes, so its claim that9 is still unsupported is superseded by actual
+resolver/gate and58/58 execution. Source confirms axes/ties/coincidence, failed
+pose retention/restoration and existing unsupported loops/character collisions.
+Do not adopt its proposed IsMovementCommand-wide gate: only9 is added and
+random8/away10/forward11 remain diagnosed by native tests. Precommit review
+deleg_b0bfbe31 and canonical remain pending; see durable coverage follow-up.
+
+Selected K-PROD-RM2K-TOWARD-ROUTE on maindb3633f, clean except preserved
+qa_patches/. Baseline canonical2872/2872; last wire migration fully integrated
+and pushed. Read actual shared step resolver, production route gate and native
+fixture/pixel helpers. Pinned Player0de2a9ab game_character.cpp exact-byte
+matched upstream: GetDirectionToCharacter chooses dominant axis, vertical on
+tie (including coincident position -> down); route calls Move without alternate
+axis fallback; refused non-skippable moves retain attempted facing/direction,
+skippable ones restore both. Existing runtime does not implement looping-map
+movement or full dynamic character collisions; keep those explicit, not parity.
+Next: observe native command9 RED, implement shared resolver and production
+whitelist only, then lifecycle/timing/blocked/pixel coverage and canonical.
+
+Failure log (toward slice): first native opcode9 test44/45 RED exit7, then
+minimal resolver/production whitelist45/45 green. Next failed-facing test run
+aborted132 during LcfBinaryReader native registration in Setup BEFORE tests,
+despite editor import (script.is_null). Import is not proof this pre-existing
+intermittent engine problem is fixed. Captured full stack in scratch
+urpg-toward-facing-red.log; retry once after inspecting evidence, no cache
+deletion or production workaround, and require actual assertion RED.
+
+Facing retry reached actual45/46 RED (exit5); shared Move now selects pose
+before passability and restores it only for skippable failures, including
+cardinal siblings. Native46/46/legacy7/7 green. Expanded coverage54/55 exposed
+a fixture error: modifying fields in an already-bound page cannot trigger page
+identity pose refresh. Author fixed-facing LMU bytes before native loading,
+rather than change production page lifecycle or weaken facing/pixel assertions.
+
+LATEST: native58/58/route-state12/12/legacy7/7/render19/19 green after exact
+file-authored fixed pose; production retry counter54/55 RED exposed SetIndex
+not resetting the failure streak. Added ConsumeCommand (clear failure+increment,
+no legacy repeat wrap), used by all supported production arms and legacy Advance.
+This preserves existing page repeat semantics. Ties mutation57/58 caught and
+failed-turn repaint mutation56/58 caught including exact pinned pixels; restored.
+Coverage includes native9, dominant/ties/coincident, live hero retry, both edges,
+skippable pose/delay, locked facing, cursor/arrival/frequency, main/parallel gate,
+page rebind, stop/dispose/map ID reuse, forced seam precedence and scalar/batch.
+No full loop-map/dynamic collision/production forced-route parity claim.
+Reference auditdeleg_80c16c3d pending; rebuild/restored regressions and canonical
+next. qa_patches/ preserved, no commit/DONE yet.
+
 ### Movement coverage and bounded Wait23 — completed
 
 FINAL: K-PROD-RM2K-MOVEMENT-COVERAGE DONE after canonical
