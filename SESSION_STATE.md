@@ -18,8 +18,9 @@ Native71/71, route10/10, decoder14/14, state12/12, legacy7/7, renderer19/19,
 active-event-graphic72/72 green. Production whitelist: 0..3, 4..7, 9, 12..18,
 23, 28..31. Non-looping static-terrain boundary only.
 
-Next READY/P0: K-PROD-SAVE-STATE (MZ slice) — add missing screen, timer, actors,
-party entries to MzSaveContents. Then K-PROD-SAVE-UI for launcher integration.
+Next READY/P0: K-PROD-SAVE-STATE (MZ slice) — add TimerFrames, TimerWorking,
+Actors, Party to MzBranchFacts first, then implement screen, timer, actors,
+party entries in MzSaveContents. Then K-PROD-SAVE-UI for launcher integration.
 
 ### Toward-player custom route9 — completed
 

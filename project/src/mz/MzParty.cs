@@ -88,6 +88,9 @@ public sealed class MzParty
     /// The item ids in <c>Items.json</c>, or null when the caller has no list
     /// and every id is taken at its word.
     /// </param>
+    public MzParty()
+        : this(null, null) { }
+
     public MzParty(MzBranchFacts pFacts, IEnumerable<int> pKnownItems = null)
     {
         _facts = pFacts ?? new MzBranchFacts();

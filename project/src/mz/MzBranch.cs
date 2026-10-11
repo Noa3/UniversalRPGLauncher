@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UniversalRPG.Mz;
 
 namespace UniversalRPG.Web;
 
@@ -250,6 +251,10 @@ public sealed class MzBranchFacts
             Variables = Variables,
             SelfSwitches = SelfSwitches,
             Gold = Gold,
+            TimerFrames = TimerFrames,
+            TimerWorking = TimerWorking,
+            Actors = Actors,
+            Party = Party,
             PartyMembers = PartyMembers,
             Items = Items,
             KnownItems = KnownItems,
@@ -319,6 +324,35 @@ public sealed class MzBranchFacts
     /// </para>
     /// </remarks>
     public int Gold { get; set; }
+
+    /// <summary>
+    /// The game timer frames and whether it is running, from <c>$gameTimer</c>.
+    /// </summary>
+    public int TimerFrames { get; set; }
+
+    /// <summary>Whether the timer is counting down.</summary>
+    public bool TimerWorking { get; set; }
+
+    /// <summary>
+    /// The actors in the game, from <c>$gameActors</c>. Each actor carries
+    /// their name, nickname, class, level, exp, skills, and equips.
+    /// </summary>
+    public MzGameActors Actors
+    {
+        get => _actors ??= new MzGameActors();
+        set => _actors = value;
+    }
+    private MzGameActors? _actors;
+
+    /// <summary>
+    /// The party's inventory and gold, from <c>$gameParty</c>.
+    /// </summary>
+    public MzParty Party
+    {
+        get => _party ??= new MzParty();
+        set => _party = value;
+    }
+    private MzParty? _party;
 
     /// <summary>
     /// The film currently playing, and nothing when none is.
