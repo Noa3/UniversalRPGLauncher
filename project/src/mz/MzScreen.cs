@@ -362,7 +362,7 @@ public sealed class MzScreen
     }
 
 
-    private readonly Dictionary<int, Picture> _pictures = new();
+    internal readonly Dictionary<int, Picture> _pictures = new();
 
     /// <summary>
     /// What <c>$gameScreen</c> carries about the weather, and it is not a

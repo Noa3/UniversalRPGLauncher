@@ -70,10 +70,8 @@ public partial class TestMzSaveContents : TestBase
         // **And the entries are the engine's own names, and in its order.**
         var namen = string.Join(",", inhalt.Keys);
         Console.WriteLine($"MZ save: entries are {namen}, missing {fehlend.Count}");
-        AssertEq(namen, "system,switches,variables,selfSwitches,map,player",
-            "**and the entries are the engine's own names** -- and the four "
-            + "this runtime cannot write are left out rather than filled "
-            + "with something made up");
+        AssertEq(namen, "system,screen,timer,switches,variables,selfSwitches,actors,party,map,player",
+            "**and all ten engine entries are now written**");
 
         // **And each entry names its own class, and the name comes first.**
         var schalter = inhalt.Member("switches")!;
@@ -85,12 +83,18 @@ public partial class TestMzSaveContents : TestBase
         AssertEq(inhalt.Member("player")!.Member("@")?.StringOr(""), "Game_Player",
             "**and the player too** -- and the engine's player IS a "
             + "Game_Character, and its own name is Game_Player");
+        AssertEq(inhalt.Member("screen")!.Member("@")?.StringOr(""), "Game_Screen",
+            "**and the screen entry names its class**");
+        AssertEq(inhalt.Member("timer")!.Member("@")?.StringOr(""), "Game_Timer",
+            "**and the timer entry names its class**");
+        AssertEq(inhalt.Member("actors")!.Member("@")?.StringOr(""), "Game_Actors",
+            "**and the actors entry names its class**");
+        AssertEq(inhalt.Member("party")!.Member("@")?.StringOr(""), "Game_Party",
+            "**and the party entry names its class**");
 
-        // **And the four that are missing are named and not invented.**
-        AssertEq(string.Join(",", fehlend), "screen,timer,actors,party",
-            "**and the entries this runtime does not have are reported** -- "
-            + "and a save that silently dropped the party would be a save "
-            + "that loses a player's gold");
+        // **And no entries are missing anymore.**
+        AssertEq(fehlend.Count, 0,
+            "**and all ten engine entries are now written**");
     }
 
     /// <summary>

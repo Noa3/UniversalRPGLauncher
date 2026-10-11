@@ -1,26 +1,22 @@
 ## Current card
 
-### RM2K save state persistence — DONE
+### MZ save state persistence (branch facts) — DONE
 
-FINAL: K-PROD-SAVE-STATE (RM2K slice) DONE after canonical run exited 0 with
-**2901/2901** and `UniversalRPG validation passed.` marker. Rm2kSimulationSaveCodec
-now captures full durable state: PresentationState (pictures 1-100 with movement,
-tint, flash, shake, weather, transitions), Vehicle state (3 vehicles with position,
-ascent/descent), Event move routes (commands, cursor, repeat, skippable, failure
-count), Self-switches (map_event_switch keys). All existing save tests pass:
-TestRm2kSpeichernAmEchtenSpiel 2/2, TestRm2kSpeichernBuendeltFortschritt 3/3,
-TestGameSimulationState 20/20. Validation bounds on all new fields enforced.
-Failed loads leave running game unchanged. qa_patches/ untouched.
+FINAL: K-PROD-SAVE-STATE (MZ slice - branch facts) DONE after canonical run
+exited 0 with **2901/2901** and `UniversalRPG validation passed.` marker.
+MzBranchFacts now includes:
+- TimerFrames, TimerWorking: game timer state from $gameTimer
+- Actors (MzGameActors): actor name, nickname, class, level, exp, skills, equips
+- Party (MzParty): inventory items, gold
+Lazy initialization breaks circular MzBranchFacts↔MzParty dependency.
+At() method copies new fields. Canonical validation: **2901/2901** tests pass.
 
-Previous diagonal route completion:
-K-PROD-RM2K-DIAGONAL-ROUTE DONE after canonical run exited 0 with **2901/2901**.
-Native71/71, route10/10, decoder14/14, state12/12, legacy7/7, renderer19/19,
-active-event-graphic72/72 green. Production whitelist: 0..3, 4..7, 9, 12..18,
-23, 28..31. Non-looping static-terrain boundary only.
+Previous: K-PROD-SAVE-STATE (RM2K slice) DONE with full durable state
+(Rm2kSimulationSaveCodec: PresentationState, Vehicle, EventRoutes, SelfSwitches).
 
-Next READY/P0: K-PROD-SAVE-STATE (MZ slice) — add TimerFrames, TimerWorking,
-Actors, Party to MzBranchFacts first, then implement screen, timer, actors,
-party entries in MzSaveContents. Then K-PROD-SAVE-UI for launcher integration.
+Next READY/P0: K-PROD-SAVE-STATE (MZ slice - screen/timer/actors/party entries)
+— implement ScreenEntry, TimerEntry, ActorsEntry, PartyEntry in MzSaveContents.
+Then K-PROD-SAVE-UI for launcher integration.
 
 ### Toward-player custom route9 — completed
 

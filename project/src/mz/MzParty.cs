@@ -159,6 +159,16 @@ public sealed class MzParty
     /// <summary>What an event asked for and did not get, in order.</summary>
     public IReadOnlyList<string> Notices => _notices;
 
+    /// <summary>The party's gold.</summary>
+    public int Gold
+    {
+        get => _facts.Gold;
+        set => _facts.Gold = value;
+    }
+
+    /// <summary>The party's items dictionary.</summary>
+    public Dictionary<int, int> Items => _facts.Items;
+
     /// <summary>
     /// What a 126 does, and what it could not.
     /// </summary>

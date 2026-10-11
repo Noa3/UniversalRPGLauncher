@@ -73,9 +73,13 @@ public static class MzSaveContents
     {
         var contents = Obj(
             ("system", SystemEntry(pSavefileId, pFramesOnSave)),
+            ("screen", ScreenEntry(pFacts)),
+            ("timer", TimerEntry(pFacts)),
             ("switches", Switches(pFacts)),
             ("variables", Variables(pFacts)),
             ("selfSwitches", SelfSwitches(pFacts)),
+            ("actors", ActorsEntry(pFacts)),
+            ("party", PartyEntry(pFacts)),
             ("map", Map(pFacts)),
             ("player", Player(pFacts)));
 
@@ -292,6 +296,235 @@ public static class MzSaveContents
             ("_realX", Num(pFacts.Player.X)),
             ("_realY", Num(pFacts.Player.Y)),
             ("_direction", Num(pFacts.Player.Direction)));
+
+    private static MzValue ScreenEntry(MzBranchFacts pFacts)
+    {
+        if (pFacts.Screen == null) return Tagged("Game_Screen");
+        var screen = pFacts.Screen;
+        var screenObj = new MzValue(MzKind.Object);
+        screenObj.Keys.Add("@");
+        screenObj.Members["@"] = Str("Game_Screen");
+
+        // Tone: _tone, _toneTarget, _toneDuration
+        screenObj.Keys.Add("_tone");
+        var toneArr = new MzValue(MzKind.Array);
+        for (var i = 0; i < 4; i++)
+            toneArr.Items.Add(Num(i < screen.Tone.Length ? screen.Tone[i] : 0));
+        screenObj.Members["_tone"] = toneArr;
+
+        screenObj.Keys.Add("_toneTarget");
+        var toneTargetArr = new MzValue(MzKind.Array);
+        for (var i = 0; i < 4; i++)
+            toneTargetArr.Items.Add(Num(i < screen.TargetTone.Length ? screen.TargetTone[i] : 0));
+        screenObj.Members["_toneTarget"] = toneTargetArr;
+
+        screenObj.Keys.Add("_toneDuration");
+        screenObj.Members["_toneDuration"] = Num(screen.ToneDuration);
+
+        // Flash: _flashColor, _flashDuration
+        screenObj.Keys.Add("_flashColor");
+        var flashArr = new MzValue(MzKind.Array);
+        for (var i = 0; i < 4; i++)
+            flashArr.Items.Add(Num(i < screen.Flash.Length ? screen.Flash[i] : 0));
+        screenObj.Members["_flashColor"] = flashArr;
+
+        screenObj.Keys.Add("_flashDuration");
+        screenObj.Members["_flashDuration"] = Num(screen.FlashDuration);
+
+        // Brightness and fade: _brightness, _fadeOutDuration, _fadeInDuration
+        screenObj.Keys.Add("_brightness");
+        screenObj.Members["_brightness"] = Num(screen.Brightness);
+        screenObj.Keys.Add("_fadeOutDuration");
+        screenObj.Members["_fadeOutDuration"] = Num(screen.FadeOutDuration);
+        screenObj.Keys.Add("_fadeInDuration");
+        screenObj.Members["_fadeInDuration"] = Num(screen.FadeInDuration);
+
+        // Shake: _shakePower, _shakeSpeed, _shakeDuration, _shake, _shakeDirection
+        screenObj.Keys.Add("_shakePower");
+        screenObj.Members["_shakePower"] = Num(screen.ShakeOffset == 0 ? 0 : screen.ShakeOffset);
+        screenObj.Keys.Add("_shakeSpeed");
+        screenObj.Members["_shakeSpeed"] = Num(1);
+        screenObj.Keys.Add("_shakeDuration");
+        screenObj.Members["_shakeDuration"] = Num(screen.ShakeFramesLeft);
+        screenObj.Keys.Add("_shake");
+        screenObj.Members["_shake"] = Num(screen.ShakeOffset);
+        screenObj.Keys.Add("_shakeDirection");
+        screenObj.Members["_shakeDirection"] = Num(1);
+
+        // Weather: _weatherType, _weatherPower, _weatherPowerTarget, _weatherDuration
+        screenObj.Keys.Add("_weatherType");
+        screenObj.Members["_weatherType"] = Str(screen.Wetter.Typ);
+        screenObj.Keys.Add("_weatherPower");
+        screenObj.Members["_weatherPower"] = Num(screen.Wetter.Kraft);
+        screenObj.Keys.Add("_weatherPowerTarget");
+        screenObj.Members["_weatherPowerTarget"] = Num(screen.Wetter.KraftZiel);
+        screenObj.Keys.Add("_weatherDuration");
+        screenObj.Members["_weatherDuration"] = Num(screen.Wetter.Dauer);
+
+        // Pictures: _pictures array
+        screenObj.Keys.Add("_pictures");
+        var picsArr = new MzValue(MzKind.Array);
+        var maxPics = screen.MaxPictures;
+        for (var i = 0; i <= maxPics; i++)
+        {
+            if (screen._pictures.TryGetValue(i, out var pic))
+            {
+                picsArr.Items.Add(PictureEntry(pic));
+            }
+            else
+            {
+                picsArr.Items.Add(new MzValue(MzKind.Null));
+            }
+        }
+        screenObj.Members["_pictures"] = picsArr;
+
+        return screenObj;
+    }
+
+    private static MzValue PictureEntry(MzScreen.Picture pic)
+    {
+        var picObj = new MzValue(MzKind.Object);
+        picObj.Keys.Add("@");
+        picObj.Members["@"] = Str("Game_Picture");
+        picObj.Keys.Add("_name");
+        picObj.Members["_name"] = Str(pic.Name);
+        picObj.Keys.Add("_origin");
+        picObj.Members["_origin"] = Num(pic.Origin);
+        picObj.Keys.Add("_x");
+        picObj.Members["_x"] = Num(pic.X);
+        picObj.Keys.Add("_y");
+        picObj.Members["_y"] = Num(pic.Y);
+        picObj.Keys.Add("_scaleX");
+        picObj.Members["_scaleX"] = Num(pic.ScaleX);
+        picObj.Keys.Add("_scaleY");
+        picObj.Members["_scaleY"] = Num(pic.ScaleY);
+        picObj.Keys.Add("_opacity");
+        picObj.Members["_opacity"] = Num(pic.Opacity);
+        picObj.Keys.Add("_blendMode");
+        picObj.Members["_blendMode"] = Num(pic.BlendMode);
+        picObj.Keys.Add("_targetX");
+        picObj.Members["_targetX"] = Num(pic.TargetX);
+        picObj.Keys.Add("_targetY");
+        picObj.Members["_targetY"] = Num(pic.TargetY);
+        picObj.Keys.Add("_targetScaleX");
+        picObj.Members["_targetScaleX"] = Num(pic.TargetScaleX);
+        picObj.Keys.Add("_targetScaleY");
+        picObj.Members["_targetScaleY"] = Num(pic.TargetScaleY);
+        picObj.Keys.Add("_targetOpacity");
+        picObj.Members["_targetOpacity"] = Num(pic.TargetOpacity);
+        picObj.Keys.Add("_duration");
+        picObj.Members["_duration"] = Num(pic.Duration);
+        picObj.Keys.Add("_wholeDuration");
+        picObj.Members["_wholeDuration"] = Num(pic.WholeDuration);
+        picObj.Keys.Add("_easingType");
+        picObj.Members["_easingType"] = Num(pic.EasingType);
+        picObj.Keys.Add("_rotationSpeed");
+        picObj.Members["_rotationSpeed"] = Num(pic.Drehung);
+        picObj.Keys.Add("_toneTarget");
+        var toneT = new MzValue(MzKind.Array);
+        for (var i = 0; i < 4; i++)
+            toneT.Items.Add(Num(i < pic.TargetPictureTone.Length ? pic.TargetPictureTone[i] : 0));
+        picObj.Members["_toneTarget"] = toneT;
+        picObj.Keys.Add("_toneDuration");
+        picObj.Members["_toneDuration"] = Num(pic.PictureToneDuration);
+        return Tagged("Game_Picture", ("_data", picObj));
+    }
+
+    private static MzValue TimerEntry(MzBranchFacts pFacts)
+    {
+        var timerObj = new MzValue(MzKind.Object);
+        timerObj.Keys.Add("@");
+        timerObj.Members["@"] = Str("Game_Timer");
+        timerObj.Keys.Add("_frames");
+        timerObj.Members["_frames"] = Num(pFacts.TimerFrames);
+        timerObj.Keys.Add("_working");
+        timerObj.Members["_working"] = new MzValue(MzKind.Bool) { Boolean = pFacts.TimerWorking };
+        return timerObj;
+    }
+
+    private static MzValue ActorsEntry(MzBranchFacts pFacts)
+    {
+        var actorList = new MzValue(MzKind.Object);
+        actorList.Keys.Add("@");
+        actorList.Members["@"] = Str("Game_Actors");
+        var actorsData = new MzValue(MzKind.Array);
+        actorList.Keys.Add("_data");
+        actorList.Members["_data"] = actorsData;
+
+        if (pFacts.Actors != null)
+        {
+            var ids = new List<int>(pFacts.Actors._actoren.Keys);
+            ids.Sort();
+            foreach (var id in ids)
+            {
+                var actor = pFacts.Actors.Actor(id);
+                if (actor == null) continue;
+                var actorObj = new MzValue(MzKind.Object);
+                actorObj.Keys.Add("@");
+                actorObj.Members["@"] = Str("Game_Actor");
+                actorObj.Keys.Add("_actorId");
+                actorObj.Members["_actorId"] = Num(id);
+                actorObj.Keys.Add("_name");
+                actorObj.Members["_name"] = Str(actor.Name);
+                actorObj.Keys.Add("_nickname");
+                actorObj.Members["_nickname"] = Str(actor.Nickname);
+                actorObj.Keys.Add("_classId");
+                actorObj.Members["_classId"] = Num(actor.ClassId);
+                actorObj.Keys.Add("_level");
+                actorObj.Members["_level"] = Num(actor.Level);
+                actorObj.Keys.Add("_exp");
+                var expArr = new MzValue(MzKind.Array);
+                foreach (var e in actor.Exp)
+                    expArr.Items.Add(Num(e));
+                actorObj.Members["_exp"] = expArr;
+                actorObj.Keys.Add("_skills");
+                var skillsArr = new MzValue(MzKind.Array);
+                foreach (var s in actor.Skills)
+                    skillsArr.Items.Add(Num(s));
+                actorObj.Members["_skills"] = skillsArr;
+                actorObj.Keys.Add("_equips");
+                var equipsArr = new MzValue(MzKind.Array);
+                foreach (var e in actor.Equips())
+                {
+                    var equipObj = new MzValue(MzKind.Object);
+                    equipObj.Keys.Add("@");
+                    equipObj.Members["@"] = Str("Game_Item");
+                    equipObj.Keys.Add("_itemId");
+                    equipObj.Members["_itemId"] = Num(e?.Id ?? 0);
+                    equipsArr.Items.Add(equipObj);
+                }
+                actorObj.Members["_equips"] = equipsArr;
+                actorsData.Items.Add(actorObj);
+            }
+        }
+        return actorList;
+    }
+
+    private static MzValue PartyEntry(MzBranchFacts pFacts)
+    {
+        var partyObj = new MzValue(MzKind.Object);
+        partyObj.Keys.Add("@");
+        partyObj.Members["@"] = Str("Game_Party");
+        partyObj.Keys.Add("_gold");
+        partyObj.Members["_gold"] = Num(pFacts.Party?.Gold ?? 0);
+        partyObj.Keys.Add("_items");
+        var itemsObj = new MzValue(MzKind.Object);
+        itemsObj.Keys.Add("@");
+        itemsObj.Members["@"] = Str("Game_Party");
+        var itemsData = new MzValue(MzKind.Object);
+        if (pFacts.Party != null)
+        {
+            foreach (var kvp in pFacts.Party.Items)
+            {
+                itemsData.Keys.Add(kvp.Key.ToString());
+                itemsData.Members[kvp.Key.ToString()] = Num(kvp.Value);
+            }
+        }
+        itemsObj.Keys.Add("_data");
+        itemsObj.Members["_data"] = itemsData;
+        partyObj.Members["_items"] = itemsObj;
+        return partyObj;
+    }
 
     /// <summary>
     /// A JavaScript array with holes, which is what <c>_data</c> is.

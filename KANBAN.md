@@ -503,9 +503,16 @@ running game unchanged. Existing save tests pass: TestRm2kSpeichernAmEchtenSpiel
 2/2, TestRm2kSpeichernBuendeltFortschritt 3/3, TestGameSimulationState 20/20.
 Canonical validation **2901/2901** passed. qa_patches/ untouched.
 
-Next: K-PROD-SAVE-STATE (MZ slice) — add TimerFrames, TimerWorking,
-Actors, Party to MzBranchFacts first, then implement screen, timer, actors,
-party entries in MzSaveContents. Then K-PROD-SAVE-UI for launcher integration.
+### K-PROD-SAVE-STATE (MZ slice - branch facts) — DONE
+
+MzBranchFacts extended with TimerFrames, TimerWorking, Actors (MzGameActors),
+Party (MzParty). Lazy initialization breaks circular MzBranchFacts↔MzParty
+dependency. At() method copies new fields. Canonical validation **2901/2901**
+passed. qa_patches/ untouched.
+
+Next: K-PROD-SAVE-STATE (MZ slice - screen/timer/actors/party entries) —
+implement ScreenEntry, TimerEntry, ActorsEntry, PartyEntry in MzSaveContents.
+Then K-PROD-SAVE-UI for launcher integration.
 
 ### K-MZ-MV-RUNTIME — DONE (MV and MZ start in the launcher)
 

@@ -54,9 +54,22 @@ namespace UniversalRPG.Mz;
 /// </remarks>
 public sealed class MzGameActors
 {
-    private readonly Dictionary<int, MzActor> _actoren = new();
+    internal readonly Dictionary<int, MzActor> _actoren = new();
     private readonly Dictionary<int, MzAusrüstung> _waffen = new();
     private readonly Dictionary<int, MzAusrüstung> _rüstungen = new();
+
+    /// <summary>
+    /// All actor IDs in sorted order.
+    /// </summary>
+    public IEnumerable<int> ActorIds
+    {
+        get
+        {
+            var ids = new List<int>(_actoren.Keys);
+            ids.Sort();
+            return ids;
+        }
+    }
 
     /// <summary>And the equip slot kinds, as the data file writes them.</summary>
     /// <remarks>
@@ -179,6 +192,18 @@ public sealed class MzActor
     /// <summary>And the name a script may read.</summary>
     public string Name { get; set; } = "";
 
+    /// <summary>And the nickname.</summary>
+    public string Nickname { get; set; } = "";
+
+    /// <summary>And the class ID.</summary>
+    public int ClassId { get; set; }
+
+    /// <summary>And the level.</summary>
+    public int Level { get; set; }
+
+    /// <summary>And the experience array.</summary>
+    public List<long> Exp { get; } = new();
+
     /// <summary>And <c>equips()</c>, and it maps to nothing.</summary>
     /// <returns>
     /// The item per slot, -- <strong>and an empty slot is
@@ -213,6 +238,9 @@ public sealed class MzActor
     /// <summary>And how many skills it knows.</summary>
     /// <returns>The count, -- <strong>and for a test.</strong></returns>
     public int SkillAnzahl => _skills.Count;
+
+    /// <summary>All skill IDs this actor knows.</summary>
+    public IEnumerable<int> Skills => _skills;
 }
 
 /// <summary>One weapon or armour.</summary>
