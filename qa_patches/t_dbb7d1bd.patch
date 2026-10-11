@@ -1,0 +1,119 @@
+diff --git a/project/src/game_detector/game_detector.cs b/project/src/game_detector/game_detector.cs
+index 5245939..9736e2a 100644
+--- a/project/src/game_detector/game_detector.cs
++++ b/project/src/game_detector/game_detector.cs
+@@ -17,6 +17,7 @@ public partial class GameDetector : RefCounted
+     {
+         Unknown,
+         RpgMaker95,
++        Dante98,
+         RpgMaker2000,
+         RpgMaker2003,
+         RpgMakerXp,
+@@ -91,6 +92,7 @@ public partial class GameDetector : RefCounted
+             return Engine switch
+             {
+                 EngineType.RpgMaker95 => "RPG Maker 95",
++                EngineType.Dante98 => "RPG Tsukūru Dante 98",
+                 EngineType.RpgMaker2000 => "RPG Maker 2000",
+                 EngineType.RpgMaker2003 => "RPG Maker 2003",
+                 EngineType.RpgMaker2000_2003 => "RPG Maker 2000/2003",
+diff --git a/project/src/plugins/BuiltInEnginePlugins.cs b/project/src/plugins/BuiltInEnginePlugins.cs
+index 234a283..c83a29f 100644
+--- a/project/src/plugins/BuiltInEnginePlugins.cs
++++ b/project/src/plugins/BuiltInEnginePlugins.cs
+@@ -45,6 +45,7 @@ public static class BuiltInEnginePluginCatalog
+     public static IReadOnlyList<BuiltInEnginePlugin> CreatePlugins() => new BuiltInEnginePlugin[]
+     {
+         new RpgMaker95Plugin(),
++        new Dante98Plugin(),
+         new RpgMaker2000Plugin(),
+         new RpgMaker2003Plugin(),
+         new RpgMakerXpPlugin(),
+@@ -256,6 +257,27 @@ public sealed class RpgMaker95Plugin : BuiltInEnginePlugin
+     }
+ }
+ 
++public sealed class Dante98Plugin : BuiltInEnginePlugin
++{
++    public Dante98Plugin()
++        : base(EnginePluginIds.Dante98, "RPG Tsukūru Dante 98", "Detection-only PC-98 research boundary; no runtime or format aliasing.", "dante98", 21, PluginCapability.Detection)
++    {
++    }
++
++    public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
++    {
++        var marker = pContext.Snapshot.Files.FirstOrDefault(pFile =>
++            pFile.RelativePath.Equals("DANTE98.MRK", StringComparison.OrdinalIgnoreCase));
++        if (marker == null)
++        {
++            return EngineDetectionProbe.NoMatch("No explicit Dante 98 project marker was found; PC-98 media formats remain unclassified.");
++        }
++        return Match(pContext.Snapshot, 900,
++            "Explicit Dante 98 research marker matched; project remains detection-only.",
++            new[] { "DANTE98.MRK (marker only; content is not executed)" });
++    }
++}
++
+ public abstract class LcfPlugin : BuiltInEnginePlugin
+ {
+     private readonly string _engineToken;
+diff --git a/project/src/plugins/EnginePluginContract.cs b/project/src/plugins/EnginePluginContract.cs
+index 0887f1b..a0839b3 100644
+--- a/project/src/plugins/EnginePluginContract.cs
++++ b/project/src/plugins/EnginePluginContract.cs
+@@ -20,6 +20,7 @@ public static class EnginePluginIds
+ 	public const string RpgMakerMv = "rpg-maker-mv";
+ 	public const string RpgMakerMz = "rpg-maker-mz";
+ 	public const string RpgMaker95 = "rpg-maker-95";
++	public const string Dante98 = "rpg-tsukuru-dante-98";
+ 	public const string WolfRpg = "wolf-rpg";
+ 	public const string RpgMakerUnite = "rpg-maker-unite";
+ 
+@@ -36,6 +37,7 @@ public static class EnginePluginIds
+ 			GameDetector.EngineType.RpgMakerMv => RpgMakerMv,
+ 			GameDetector.EngineType.RpgMakerMz => RpgMakerMz,
+ 			GameDetector.EngineType.RpgMaker95 => RpgMaker95,
++			GameDetector.EngineType.Dante98 => Dante98,
+ 			GameDetector.EngineType.WolfRpg => WolfRpg,
+ 			GameDetector.EngineType.RpgMakerUnite => RpgMakerUnite,
+ 			_ => "",
+diff --git a/project/tests/core/TestPluginDetection.cs b/project/tests/core/TestPluginDetection.cs
+index 69efb42..c8160d3 100644
+--- a/project/tests/core/TestPluginDetection.cs
++++ b/project/tests/core/TestPluginDetection.cs
+@@ -16,6 +16,7 @@ public partial class TestPluginDetection : TestBase
+     {
+         DirAccess.MakeDirRecursiveAbsolute(TempBase);
+         CreateRm95("RM95");
++        WriteText(TempBase.PathJoin("Dante98/DANTE98.MRK"), "DANTE98 research fixture");
+         WriteText(TempBase.PathJoin("RM95Weak/RPG95.exe"), "metadata only");
+         CreateLcf("RM2K", "RM2000");
+         CreateLcf("RM2K3", "RM2003");
+@@ -50,6 +51,7 @@ public partial class TestPluginDetection : TestBase
+     public void Test_DetectRepresentativeLegacyAndModernEngines()
+     {
+         AssertEq(Analyze("RM95").SelectedCandidate?.EngineId, EnginePluginIds.RpgMaker95);
++        AssertEq(Analyze("Dante98").SelectedCandidate?.EngineId, EnginePluginIds.Dante98);
+         AssertEq(Analyze("RM2K").SelectedCandidate?.EngineId, EnginePluginIds.RpgMaker2000);
+         AssertEq(Analyze("RM2K3").SelectedCandidate?.EngineId, EnginePluginIds.RpgMaker2003);
+         AssertEq(Analyze("RMXP").SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerXp);
+@@ -206,10 +208,17 @@ public partial class TestPluginDetection : TestBase
+         AssertTrue(report.SelectedCandidate == null);
+     }
+ 
++    public void Test_Dante98DoesNotAliasGenericPc98Files()
++    {
++        WriteText(TempBase.PathJoin("GenericPc98/DANTE2"), "pc98 data");
++        var report = Analyze("GenericPc98");
++        AssertTrue(report.SelectedCandidate == null || report.SelectedCandidate.EngineId != EnginePluginIds.Dante98);
++    }
++
+     public void Test_BuiltInMetadataUsesStableIndependentEngineRanges()
+     {
+         var plugins = BuiltInEnginePluginCatalog.CreatePlugins();
+-        AssertEq(plugins.Count, 10);
++        AssertEq(plugins.Count, 11);
+         foreach (var plugin in plugins)
+         {
+             AssertTrue(plugin.Metadata.Validate().Success, $"Metadata validates for {plugin.Metadata.Id}");

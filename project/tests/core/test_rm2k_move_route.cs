@@ -21,6 +21,18 @@ namespace UniversalRPG.Tests.Core;
 /// </remarks>
 public partial class TestRm2kMoveRoute : TestBase
 {
+    public void Test_EightWayRuntimeMovementBridgeIsSeparateFromCardinalFacing()
+    {
+        byte[] expected = { 8, 6, 2, 4, 9, 3, 1, 7 };
+        for (var direction = 0; direction < expected.Length; direction++)
+        {
+            AssertEq(Rm2kMoveRoute.DirectionFromLiblcfDirection(direction), expected[direction]);
+            AssertEq(Rm2kMoveRoute.LiblcfFromMovementDirection(expected[direction]), direction);
+        }
+        foreach (var invalid in new byte[] { 0, 5, 255 })
+            AssertEq(Rm2kMoveRoute.LiblcfFromMovementDirection(invalid), -1);
+    }
+
     public void Test_TheCommandIdsMatchTheLiblcfEnum()
     {
         AssertEq(Rm2kMoveRoute.MoveUp, 0, "move_up");

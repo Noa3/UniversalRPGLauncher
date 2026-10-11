@@ -1,0 +1,129 @@
+diff --git a/SESSION_STATE.md b/SESSION_STATE.md
+index 5219b9f..f4168f7 100644
+--- a/SESSION_STATE.md
++++ b/SESSION_STATE.md
+@@ -10,7 +10,7 @@
+ 
+ ## Last verified baseline
+ 
+-`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `225/225`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
++`GODOT_BIN=E:/URPG/Godot_v4.7.2/Godot_v4.7.2-stable_mono_win64_console.exe ./scripts/validate.sh` passed on Windows: headless C# suite `244/244`, exit 0, .NET build `0` warnings / `0` errors. The Godot project now lives under `project/`; validate.sh handles both.
+ 
+ ## Layout note (2026-08-23)
+ 
+@@ -60,7 +60,7 @@ Fixture reconnaissance: `D:\NextCloud\Games\PornGames\SkiesInflateableAdventure`
+ 
+ ## Next action
+ 
+-|Continue K-032 integration: wire presentation state into the Godot runtime/UI entry point, then add safe choice/input presentation before claiming gameplay is fully functional.|
++MV/MZ/WOLF broad feature-completion remains unverified. This slice added bounded MV System.json metadata extraction and encrypted-asset diagnostics only; JavaScript execution, browser APIs, rendering, audio, input, saves, and plugins remain intentionally unsupported. Continue K-032 integration for the active RM2K path, then create focused runtime cards for any future bounded MV/MZ/WOLF capabilities.|
+ 
+ ## Completed K-012
+ 
+diff --git a/docs/PROJECT_STATUS.md b/docs/PROJECT_STATUS.md
+index c4bac05..6eff7e2 100644
+--- a/docs/PROJECT_STATUS.md
++++ b/docs/PROJECT_STATUS.md
+@@ -7,7 +7,7 @@
+ 
+ The project has a Godot 4.7.2 application foundation, localized game-library UI, bounded folder/ZIP inspection, registry-driven engine detection, persisted import metadata, legacy metadata decoding, a real bounded LCF container parser, and a minimal parser-backed RM2000/2003 runtime bootstrap validated against pinned EasyRPG TestGame fixtures. Full gameplay is not playable yet; the immediate critical path is expanding faithful RM2000/2003 parsing before event execution and rendering.
+ 
+-The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `217/217` tests.
++The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot project (including `project.godot`, `UniversalRPG.csproj` and `UniversalRPG.sln`) lives under `project/`; development docs, `scripts/validate.sh`, and the pinned Godot runtime under `tools/godot/` stay at the repository root. `scripts/validate.sh` runs restore, build, Godot import, and the C# core/smoke suite. The headless runner passed `244/244` tests.
+ 
+ ## Phase Status Overview
+ 
+@@ -83,6 +83,7 @@ The repository uses pure C#/.NET through the Godot 4.7.2 .NET editor. The Godot
+ 
+ **Limitations:**
+ - All built-in targets except Unite have a safe bounded bootstrap; RM2K/RM2K3 additionally parse LDB/LMT/LMU; full gameplay runtime is not implemented
++- MV metadata extraction now reads bounded `data/System.json` title data and reports `.rpgmvp`/`.rpgmvo`/`.rpgmvm` encrypted assets without executing JavaScript; MV remains detection/metadata-only
+ - Executables and libraries are inspected as bounded data only, never loaded or executed
+ - Archive import is read-only inspection; safe extraction/staging for future runtime assets remains separate work
+ 
+diff --git a/project/src/plugins/BuiltInEnginePlugins.cs b/project/src/plugins/BuiltInEnginePlugins.cs
+index 234a283..ab483dc 100644
+--- a/project/src/plugins/BuiltInEnginePlugins.cs
++++ b/project/src/plugins/BuiltInEnginePlugins.cs
+@@ -482,6 +482,51 @@ public abstract class WebRpgPlugin : BuiltInEnginePlugin
+ public sealed class RpgMakerMvPlugin : WebRpgPlugin
+ {
+     public RpgMakerMvPlugin() : base(EnginePluginIds.RpgMakerMv, "RPG Maker MV", "mv", "rpg_core.js", "js/rpg_core.js", 30) { }
++
++    /// <summary>
++    /// Extracts the small, useful subset of MV System.json metadata without
++    /// loading the browser runtime or evaluating plugin JavaScript.
++    /// </summary>
++    public static MvMetadataResult? ExtractMetadata(GameInspectionSnapshot pSnapshot)
++    {
++        var system = pSnapshot.Files.FirstOrDefault(pFile =>
++            pFile.RelativePath.Equals("data/System.json", StringComparison.OrdinalIgnoreCase)
++            || pFile.RelativePath.Equals("www/data/System.json", StringComparison.OrdinalIgnoreCase));
++        if (system == null || system.IsTruncated || system.Data.Length == 0 || system.Data.Length > 512 * 1024)
++        {
++            return null;
++        }
++
++        var text = System.Text.Encoding.UTF8.GetString(system.Data);
++        if (!text.TrimStart().StartsWith("{", StringComparison.Ordinal)
++            || !text.TrimEnd().EndsWith("}", StringComparison.Ordinal))
++        {
++            return null;
++        }
++
++        var titleMatch = System.Text.RegularExpressions.Regex.Match(
++            text, "\\\"gameTitle\\\"\\s*:\\s*\\\"((?:[^\\\"\\\\]|\\\\.)*)\\\"",
++            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
++        var encrypted = pSnapshot.Files.Any(pFile =>
++            pFile.RelativePath.EndsWith(".rpgmvp", StringComparison.OrdinalIgnoreCase)
++            || pFile.RelativePath.EndsWith(".rpgmvo", StringComparison.OrdinalIgnoreCase)
++            || pFile.RelativePath.EndsWith(".rpgmvm", StringComparison.OrdinalIgnoreCase));
++        return new MvMetadataResult
++        {
++            GameTitle = titleMatch.Success ? titleMatch.Groups[1].Value : "",
++            HasEncryptedFiles = encrypted,
++            Diagnostics = encrypted
++                ? new[] { "Encrypted MV assets detected; files remain metadata-only." }
++                : Array.Empty<string>(),
++        };
++    }
++}
++
++public sealed class MvMetadataResult
++{
++    public string GameTitle { get; init; } = "";
++    public bool HasEncryptedFiles { get; init; }
++    public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
+ }
+ 
+ /// <summary>
+diff --git a/project/tests/core/TestPluginDetection.cs b/project/tests/core/TestPluginDetection.cs
+index 69efb42..6ced12f 100644
+--- a/project/tests/core/TestPluginDetection.cs
++++ b/project/tests/core/TestPluginDetection.cs
+@@ -76,6 +76,25 @@ public partial class TestPluginDetection : TestBase
+         AssertTrue(oversized.SelectedCandidate == null || oversized.SelectedCandidate.EngineId != EnginePluginIds.RpgMakerMz);
+     }
+ 
++    public void Test_MvMetadataIsBoundedAndReportsEncryptedAssets()
++    {
++        var system = new InspectedGameFile("data/System.json", 27,
++            System.Text.Encoding.UTF8.GetBytes("{\"gameTitle\":\"MV Fixture\"}"), false, false);
++        var encrypted = new InspectedGameFile("img/system/Window.png.rpgmvp", 0,
++            Array.Empty<byte>(), false, false);
++        var snapshot = new GameInspectionSnapshot("mv-fixture", false, false,
++            new System.Collections.Generic.Dictionary<string, InspectedGameFile>
++            {
++                [system.RelativePath] = system,
++                [encrypted.RelativePath] = encrypted,
++            }, new System.Collections.Generic.List<EngineInspectionDiagnostic>());
++        var metadata = RpgMakerMvPlugin.ExtractMetadata(snapshot);
++        AssertTrue(metadata != null);
++        AssertEq(metadata!.GameTitle, "MV Fixture");
++        AssertTrue(metadata.HasEncryptedFiles);
++        AssertTrue(metadata.Diagnostics.Count == 1);
++    }
++
+     public void Test_AmbiguousAndUnknownResultsAreSafe()
+     {
+         var ambiguous = Analyze("Ambiguous");

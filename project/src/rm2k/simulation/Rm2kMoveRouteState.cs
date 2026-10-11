@@ -52,22 +52,22 @@ public sealed class Rm2kMoveRouteState
 	public int Direction { get; set; } = 2;
 
 	/// <summary>The player's <c>GetMoveRouteIndex()</c>.</summary>
-	public int CurrentIndex { get; private set; }
+	public int CurrentIndex { get; internal set; }
 
 	/// <summary>The player's <c>IsMoveRouteFinished()</c>.</summary>
-	public bool Finished { get; private set; }
+	public bool Finished { get; internal set; }
 
 	/// <summary>Whether a route is running at all.</summary>
-	public bool Active { get; private set; }
+	public bool Active { get; internal set; }
 
 	/// <summary>
 	/// The index the route was forced at, which is what the Player compares
 	/// against to notice that a repeating route came all the way round.
 	/// </summary>
-	public int StartIndex { get; private set; }
+	public int StartIndex { get; internal set; }
 
 	/// <summary>How many commands have been refused because the way was blocked.</summary>
-	public int MoveFailureCount { get; private set; }
+	public int MoveFailureCount { get; internal set; }
 
 	public Rm2kMoveRouteState(
 		IReadOnlyList<Rm2kMap.MoveCommand>? pCommands = null,
@@ -112,7 +112,7 @@ public sealed class Rm2kMoveRouteState
 	/// Whether the route has been overwritten by a forced route, which is what
 	/// the Player reports through <c>IsMoveRouteOverwritten</c>.
 	/// </summary>
-	public bool Overwritten { get; private set; }
+	public bool Overwritten { get; internal set; }
 
 	/// <summary><c>SetMoveRouteOverwritten</c>.</summary>
 	public void SetOverwritten(bool pForce)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using UniversalRPG.Rm2k.Presentation;
 using UniversalRPG.Rm2k.Rendering;
 
 namespace UniversalRPG.Rm2k.Simulation;
@@ -16,6 +17,7 @@ public sealed class GameSimulationState
     public const int MaxTroopMembers = 8;
     public const int MaxActorId = 50000;
     public const int MaxMapId = 1000;
+    public const int MaxEvents = 1000;
     public const int MaxSwitches = 50000;
     public const int MaxVariables = 50000;
     public const int MinActorLevel = 1;
@@ -1559,6 +1561,23 @@ public sealed class GameSimulationState
     /// one.
     /// </remarks>
     public Rm2kVehicleBoarding? Boarding { get; set; }
+
+    /// <summary>
+    /// Screen presentation state: pictures, tint, flash, shake, weather,
+    /// and transitions. From <c>Game_Screen</c>. Created on map load.
+    /// </summary>
+    public PresentationState? Presentation { get; set; }
+
+    /// <summary>
+    /// Active event move routes, keyed by event id. From
+    /// <c>Game_Character::UpdateMoveRoute</c>.
+    /// </summary>
+    public Dictionary<int, Rm2kMoveRouteState>? EventRoutes { get; set; }
+
+    /// <summary>
+    /// Self-switches for RM2K3, keyed by "mapId_eventId_switch".
+    /// </summary>
+    public Dictionary<string, bool>? SelfSwitches { get; set; }
 
     /// <summary>Per-tile direction masks (Rm2kChipset.Pass* bits); authoritative for movement.</summary>
     public Godot.Collections.Array<byte> PassabilityMasks { get; init; } = new();

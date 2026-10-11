@@ -218,11 +218,12 @@ public class Rm2kMap
 		// LMT chunk 0x16, liblcf Event::character_index.
 		public int CharacterIndex;
 
-		// Live movement direction: 2 down, 4 left, 6 right, 8 up.
+		// Live eight-way keypad movement: 2 down, 4 left, 6 right, 8 up,
+		// 1 down-left, 3 down-right, 7 up-left, 9 up-right.
 		// Authored direction is a page field, not an Event field.
 		public byte Direction = 2;
 
-		// Visible facing is distinct from movement direction for fixed animations.
+		// Visible cardinal facing is distinct from diagonal movement and fixed animations.
 		// Null preserves existing direction-only callers until a page initializes it.
 		public byte? FacingDirection;
 		public bool FacingLocked;

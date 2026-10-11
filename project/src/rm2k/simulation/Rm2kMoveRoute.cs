@@ -218,6 +218,24 @@ public static class Rm2kMoveRoute
     }
 
     /// <summary>
+    /// Runtime eight-way movement in keypad order. Visible facing stays cardinal
+    /// and must not be inferred by passing a diagonal through the facing bridge.
+    /// </summary>
+    public static byte DirectionFromLiblcfDirection(int pDirection) => pDirection switch
+    {
+        4 => 9, 5 => 3, 6 => 1, 7 => 7,
+        _ => FacingFromLiblcfDirection(pDirection)
+    };
+
+    /// <summary>Inverse runtime movement bridge; unknown directions are refused.</summary>
+    public static int LiblcfFromMovementDirection(byte pDirection) => pDirection switch
+    {
+        8 => 0, 6 => 1, 2 => 2, 4 => 3,
+        9 => 4, 3 => 5, 1 => 6, 7 => 7,
+        _ => -1
+    };
+
+    /// <summary>
     /// The passability bit a direction uses, from the RM2K bit order where down
     /// is 0x01, left 0x02, right 0x04 and up 0x08. The route's liblcf order has
     /// to be mapped onto it, because <c>IsPassableInDirection</c> speaks the bit

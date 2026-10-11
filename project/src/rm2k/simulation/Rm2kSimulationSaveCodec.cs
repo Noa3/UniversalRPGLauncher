@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using UniversalRPG.Rm2k.Parser;
+using UniversalRPG.Rm2k.Presentation;
+using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Rm2k.Simulation;
 
@@ -230,6 +233,118 @@ public static class Rm2kSimulationSaveCodec
         public List<string> SceneStack { get; set; } = new();
         public long SaveTimestamp { get; set; }
         public string SaveComment { get; set; } = "";
+
+        /// <summary>
+        /// Screen presentation state: pictures, tint, flash, shake, weather,
+        /// and transitions. Captures the full <c>Game_Screen</c> equivalent.
+        /// </summary>
+        public SavedPresentation Presentation { get; set; } = new();
+
+        /// <summary>
+        /// Vehicle state: positions, types, and boarding info for the three
+        /// vehicles. From <c>Game_Vehicle</c> and <c>Game_Player::GetOnVehicle</c>.
+        /// </summary>
+        public List<SavedVehicle> Vehicles { get; set; } = new();
+
+        /// <summary>
+        /// Active event move routes, keyed by event id. From
+        /// <c>Game_Character::UpdateMoveRoute</c>.
+        /// </summary>
+        public List<SavedEventRoute> EventRoutes { get; set; } = new();
+
+        /// <summary>
+        /// Self-switches for RM2K3, keyed by "mapId_eventId_switch".
+        /// </summary>
+        public Dictionary<string, bool> SelfSwitches { get; set; } = new();
+    }
+
+    public sealed class SavedPresentation
+    {
+        public List<SavedPicture> Pictures { get; set; } = new();
+        public bool IsTintActive { get; set; }
+        public int TintRed { get; set; }
+        public int TintGreen { get; set; }
+        public int TintBlue { get; set; }
+        public int TintSaturation { get; set; }
+        public int TintFramesRemaining { get; set; }
+        public int PendingTransition { get; set; }
+        public int PendingTransitionDirection { get; set; }
+        public bool IsFlashActive { get; set; }
+        public int FlashRed { get; set; }
+        public int FlashGreen { get; set; }
+        public int FlashBlue { get; set; }
+        public int FlashAlpha { get; set; }
+        public int FlashFramesRemaining { get; set; }
+        public bool IsShakeActive { get; set; }
+        public int ShakeStrength { get; set; }
+        public int ShakeSpeed { get; set; }
+        public int ShakeFramesRemaining { get; set; }
+        public int WeatherType { get; set; }
+        public int WeatherStrength { get; set; }
+    }
+
+    public sealed class SavedPicture
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public bool FixedToMap { get; set; }
+        public int Magnify { get; set; }
+        public int TopTransparency { get; set; }
+        public int BottomTransparency { get; set; }
+        public bool UseTransparentColor { get; set; }
+        public int Red { get; set; }
+        public int Green { get; set; }
+        public int Blue { get; set; }
+        public int Saturation { get; set; }
+        public int EffectMode { get; set; }
+        public int EffectPower { get; set; }
+        public bool IsMoving { get; set; }
+        public int MoveTargetX { get; set; }
+        public int MoveTargetY { get; set; }
+        public int MoveFramesLeft { get; set; }
+        public int MoveTotalFrames { get; set; }
+    }
+
+    public sealed class SavedVehicle
+    {
+        public int VehicleType { get; set; }
+        public int MapId { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int Direction { get; set; }
+        public int MoveSpeed { get; set; }
+        public int RemainingAscent { get; set; }
+        public int RemainingDescent { get; set; }
+    }
+
+    public sealed class SavedEventRoute
+    {
+        public int EventId { get; set; }
+        public List<SavedMoveCommand> Commands { get; set; } = new();
+        public bool Repeat { get; set; }
+        public bool Skippable { get; set; }
+        public int MoveSpeed { get; set; }
+        public int MoveFrequency { get; set; }
+        public int CurrentIndex { get; set; }
+        public int StartIndex { get; set; }
+        public bool Finished { get; set; }
+        public bool Active { get; set; }
+        public bool Overwritten { get; set; }
+        public int MoveFailureCount { get; set; }
+        public int Direction { get; set; }
+    }
+
+    public sealed class SavedMoveCommand
+    {
+        public int CommandId { get; set; }
+        public string ParameterString { get; set; } = "";
+        public int ParameterA { get; set; }
+        public int ParameterB { get; set; }
+        public int ParameterC { get; set; }
     }
 
 
@@ -534,22 +649,6 @@ public static class Rm2kSimulationSaveCodec
             {
                 continue;
             }
-
-            // **Und  eine  Liste  und  kein  Woerterbuch.**
-            //
-            // **Und  `JsonSerializer`  schreibt  ein
-            //  `Dictionary<int, ...>`  ohne  Fehler  und  ohne
-            //  Inhalt** -- **es  hat  `"ActorSkills":{}`  geliefert**
-            // -- **und  damit  waere  jede  gelernte  Faehigkeit  beim
-            //  Speichern  verloren  gegangen,  ohne  dass  irgendetwas
-            //  gemeldet  wurde.**
-            //
-            // **Und  JSON-Schluessel  muessen  Zeichen  sein**,
-            // -- **und  ganzzahlige  Schluessel  gehoeren  in  eine
-            //  Liste  aus  Objekten.**
-            // **Und  `SavedActorSkills`  ist  eine  verschachtelte  Klasse
-            //  von  `SaveData`** -- **und  diese  Stelle  liegt  in  der
-            //  Fabrik  und  nicht  in  der  Klasse.**
             data.ActorSkills.Add(new SaveData.SavedActorSkills
             {
                 ActorId = held,
@@ -572,6 +671,126 @@ public static class Rm2kSimulationSaveCodec
                 ActorId = held,
                 ConditionIds = new List<int>(menge),
             });
+        }
+
+        // **Presentation state: pictures, tint, flash, shake, weather, transitions.**
+        if (pState.Presentation != null)
+        {
+            var pres = pState.Presentation;
+            data.Presentation = new SavedPresentation
+            {
+                IsTintActive = pres.IsTintActive,
+                TintRed = pres.TintRed,
+                TintGreen = pres.TintGreen,
+                TintBlue = pres.TintBlue,
+                TintSaturation = pres.TintSaturation,
+                TintFramesRemaining = pres.TintFramesRemaining,
+                PendingTransition = (int)pres.PendingTransition,
+                PendingTransitionDirection = (int)pres.PendingTransitionDirection,
+                IsFlashActive = pres.IsFlashActive,
+                FlashRed = pres.FlashRed,
+                FlashGreen = pres.FlashGreen,
+                FlashBlue = pres.FlashBlue,
+                FlashAlpha = pres.FlashAlpha,
+                FlashFramesRemaining = pres.FlashFramesRemaining,
+                IsShakeActive = pres.IsShakeActive,
+                ShakeStrength = pres.ShakeStrength,
+                ShakeSpeed = pres.ShakeSpeed,
+                ShakeFramesRemaining = pres.ShakeFramesRemaining,
+                WeatherType = pres.WeatherType,
+                WeatherStrength = pres.WeatherStrength,
+            };
+            foreach (var pic in pres.Pictures.Values)
+            {
+                var isMoving = pres.MovingPictures.ContainsKey(pic.Id);
+                var move = isMoving ? pres.MovingPictures[pic.Id] : null;
+                data.Presentation.Pictures.Add(new SavedPicture
+                {
+                    Id = pic.Id,
+                    Name = pic.Name,
+                    X = pic.X,
+                    Y = pic.Y,
+                    Width = pic.Width,
+                    Height = pic.Height,
+                    FixedToMap = pic.FixedToMap,
+                    Magnify = pic.Magnify,
+                    TopTransparency = pic.TopTransparency,
+                    BottomTransparency = pic.BottomTransparency,
+                    UseTransparentColor = pic.UseTransparentColor,
+                    Red = pic.Red,
+                    Green = pic.Green,
+                    Blue = pic.Blue,
+                    Saturation = pic.Saturation,
+                    EffectMode = pic.EffectMode,
+                    EffectPower = pic.EffectPower,
+                    IsMoving = isMoving,
+                    MoveTargetX = move?.TargetX ?? 0,
+                    MoveTargetY = move?.TargetY ?? 0,
+                    MoveFramesLeft = move?.FramesLeft ?? 0,
+                    MoveTotalFrames = move?.TotalFrames ?? 0,
+                });
+            }
+        }
+
+        // **Vehicle state.**
+        foreach (var veh in pState.Vehicles)
+        {
+            data.Vehicles.Add(new SavedVehicle
+            {
+                VehicleType = veh.VehicleType,
+                MapId = veh.MapId,
+                X = veh.X,
+                Y = veh.Y,
+                Direction = veh.Direction,
+                MoveSpeed = veh.MoveSpeed,
+                RemainingAscent = veh.RemainingAscent,
+                RemainingDescent = veh.RemainingDescent,
+            });
+        }
+
+        // **Event move routes.**
+        if (pState.EventRoutes != null)
+        {
+            foreach (var kvp in pState.EventRoutes)
+            {
+                var route = kvp.Value;
+                var savedRoute = new SavedEventRoute
+                {
+                    EventId = kvp.Key,
+                    Repeat = route.Repeat,
+                    Skippable = route.Skippable,
+                    MoveSpeed = route.MoveSpeed,
+                    MoveFrequency = route.MoveFrequency,
+                    CurrentIndex = route.CurrentIndex,
+                    StartIndex = route.StartIndex,
+                    Finished = route.Finished,
+                    Active = route.Active,
+                    Overwritten = route.Overwritten,
+                    MoveFailureCount = route.MoveFailureCount,
+                    Direction = route.Direction,
+                };
+                foreach (var cmd in route.Commands)
+                {
+                    savedRoute.Commands.Add(new SavedMoveCommand
+                    {
+                        CommandId = cmd.CommandId,
+                        ParameterString = cmd.ParameterString,
+                        ParameterA = cmd.ParameterA,
+                        ParameterB = cmd.ParameterB,
+                        ParameterC = cmd.ParameterC,
+                    });
+                }
+                data.EventRoutes.Add(savedRoute);
+            }
+        }
+
+        // **Self-switches.**
+        if (pState.SelfSwitches != null)
+        {
+            foreach (var kvp in pState.SelfSwitches)
+            {
+                data.SelfSwitches[kvp.Key] = kvp.Value;
+            }
         }
 
         return data;
@@ -611,6 +830,66 @@ public static class Rm2kSimulationSaveCodec
             throw new ArgumentException("Save party or scene data exceeds bounds.");
         if (pData.MapX < 0 || pData.MapX >= pData.MapWidth || pData.MapY < 0 || pData.MapY >= pData.MapHeight)
             throw new ArgumentException("Save player position is outside map bounds.");
+
+        // **Presentation validation.**
+        if (pData.Presentation != null)
+        {
+            var pres = pData.Presentation;
+            if (pres.TintFramesRemaining < 0 || pres.TintFramesRemaining > PresentationState.MaxEffectFrames)
+                throw new ArgumentException("Save tint frames outside bounds.");
+            if (pres.FlashFramesRemaining < 0 || pres.FlashFramesRemaining > PresentationState.MaxEffectFrames)
+                throw new ArgumentException("Save flash frames outside bounds.");
+            if (pres.ShakeFramesRemaining < 0 || pres.ShakeFramesRemaining > PresentationState.MaxEffectFrames)
+                throw new ArgumentException("Save shake frames outside bounds.");
+            if (pres.ShakeStrength < 0 || pres.ShakeStrength > PresentationState.MaxShakeStrength)
+                throw new ArgumentException("Save shake strength outside bounds.");
+            if (pres.ShakeSpeed < 0 || pres.ShakeSpeed > PresentationState.MaxShakeSpeed)
+                throw new ArgumentException("Save shake speed outside bounds.");
+            if (pres.WeatherType < 0 || pres.WeatherType > PresentationState.MaxWeatherType)
+                throw new ArgumentException("Save weather type outside bounds.");
+            if (pres.WeatherStrength < 0 || pres.WeatherStrength > PresentationState.MaxWeatherStrength)
+                throw new ArgumentException("Save weather strength outside bounds.");
+            foreach (var pic in pres.Pictures)
+            {
+                if (pic.Id < 1 || pic.Id > PresentationState.MaxPictures)
+                    throw new ArgumentException("Save picture id outside bounds.");
+                if (pic.Width < 0 || pic.Width > PresentationState.MaxPictureDimension
+                    || pic.Height < 0 || pic.Height > PresentationState.MaxPictureDimension)
+                    throw new ArgumentException("Save picture dimensions outside bounds.");
+                if (pic.Magnify < 0 || pic.Magnify > PresentationState.MaxMagnifyPercent)
+                    throw new ArgumentException("Save picture magnification outside bounds.");
+                if (pic.TopTransparency < 0 || pic.TopTransparency > PresentationState.MaxTransparencyPercent)
+                    throw new ArgumentException("Save picture top transparency outside bounds.");
+                if (pic.BottomTransparency < 0 || pic.BottomTransparency > PresentationState.MaxTransparencyPercent)
+                    throw new ArgumentException("Save picture bottom transparency outside bounds.");
+                if (pic.EffectMode < 0 || pic.EffectMode > PresentationState.MaxEffectMode)
+                    throw new ArgumentException("Save picture effect mode outside bounds.");
+                if (pic.Saturation < 0 || pic.Saturation > PresentationState.MaxSaturationPercent)
+                    throw new ArgumentException("Save picture saturation outside bounds.");
+            }
+        }
+
+        // **Vehicle validation.**
+        if (pData.Vehicles != null)
+        {
+            foreach (var veh in pData.Vehicles)
+            {
+                if (!Rm2kVehicle.IsKnownType(veh.VehicleType))
+                    throw new ArgumentException("Save vehicle type unknown.");
+            }
+        }
+
+        // **Event route validation.**
+        if (pData.EventRoutes != null)
+        {
+            foreach (var route in pData.EventRoutes)
+            {
+                if (route.EventId < 1 || route.EventId > GameSimulationState.MaxEvents)
+                    throw new ArgumentException("Save event route id outside bounds.");
+                if (route.Commands.Count > Rm2kMoveRouteDecoder.MaxMoveCommands)
+                    throw new ArgumentException("Save event route command count exceeds limit.");
+            }
+        }
     }
 
     private static void Apply(SaveData pData, GameSimulationState pState)
@@ -709,6 +988,130 @@ public static class Rm2kSimulationSaveCodec
         if (pData.Timer2Active)
         {
             pState.StartTimer(2, pState.Timer2Visible, pState.Timer2InBattle);
+        }
+
+        // **Presentation state: pictures, tint, flash, shake, weather, transitions.**
+        if (pData.Presentation != null && pState.Presentation != null)
+        {
+            var pres = pData.Presentation;
+            var target = pState.Presentation;
+            target.IsTintActive = pres.IsTintActive;
+            target.TintRed = pres.TintRed;
+            target.TintGreen = pres.TintGreen;
+            target.TintBlue = pres.TintBlue;
+            target.TintSaturation = pres.TintSaturation;
+            target.TintFramesRemaining = pres.TintFramesRemaining;
+            target.PendingTransition = (Rm2kTransition)pres.PendingTransition;
+            target.PendingTransitionDirection = (Rm2kTransitionDirection)pres.PendingTransitionDirection;
+            target.IsFlashActive = pres.IsFlashActive;
+            target.FlashRed = pres.FlashRed;
+            target.FlashGreen = pres.FlashGreen;
+            target.FlashBlue = pres.FlashBlue;
+            target.FlashAlpha = pres.FlashAlpha;
+            target.FlashFramesRemaining = pres.FlashFramesRemaining;
+            target.IsShakeActive = pres.IsShakeActive;
+            target.ShakeStrength = pres.ShakeStrength;
+            target.ShakeSpeed = pres.ShakeSpeed;
+            target.ShakeFramesRemaining = pres.ShakeFramesRemaining;
+            target.WeatherType = pres.WeatherType;
+            target.WeatherStrength = pres.WeatherStrength;
+
+            target.Pictures.Clear();
+            foreach (var pic in pres.Pictures)
+            {
+                var picture = new PictureState
+                {
+                    Id = pic.Id,
+                    Name = pic.Name,
+                    X = pic.X,
+                    Y = pic.Y,
+                    Width = pic.Width,
+                    Height = pic.Height,
+                    FixedToMap = pic.FixedToMap,
+                    Magnify = pic.Magnify,
+                    TopTransparency = pic.TopTransparency,
+                    BottomTransparency = pic.BottomTransparency,
+                    UseTransparentColor = pic.UseTransparentColor,
+                    Red = pic.Red,
+                    Green = pic.Green,
+                    Blue = pic.Blue,
+                    Saturation = pic.Saturation,
+                    EffectMode = pic.EffectMode,
+                    EffectPower = pic.EffectPower,
+                };
+                target.Pictures[pic.Id] = picture;
+                if (pic.IsMoving)
+                {
+                    target.MovingPictures[pic.Id] = new PresentationState.PictureMove
+                    {
+                        StartX = picture.X,
+                        StartY = picture.Y,
+                        TargetX = pic.MoveTargetX,
+                        TargetY = pic.MoveTargetY,
+                        TotalFrames = pic.MoveTotalFrames,
+                        FramesLeft = pic.MoveFramesLeft,
+                    };
+                }
+            }
+        }
+
+        // **Vehicle state.**
+        if (pData.Vehicles != null)
+        {
+            pState.Vehicles.Clear();
+            foreach (var veh in pData.Vehicles)
+            {
+                var vehicle = new Rm2kVehicleState(veh.VehicleType, veh.MapId, veh.X, veh.Y)
+                {
+                    Direction = veh.Direction,
+                    MoveSpeed = veh.MoveSpeed,
+                    RemainingAscent = veh.RemainingAscent,
+                    RemainingDescent = veh.RemainingDescent,
+                };
+                pState.Vehicles.Add(vehicle);
+            }
+        }
+
+        // **Event move routes.**
+        if (pData.EventRoutes != null && pState.EventRoutes != null)
+        {
+            pState.EventRoutes.Clear();
+            foreach (var savedRoute in pData.EventRoutes)
+            {
+                var route = new Rm2kMoveRouteState(
+                    savedRoute.Commands.ConvertAll(cmd => new Rm2kMap.MoveCommand
+                    {
+                        CommandId = cmd.CommandId,
+                        ParameterString = cmd.ParameterString,
+                        ParameterA = cmd.ParameterA,
+                        ParameterB = cmd.ParameterB,
+                        ParameterC = cmd.ParameterC,
+                    }),
+                    savedRoute.Repeat,
+                    savedRoute.Skippable)
+                {
+                    MoveSpeed = savedRoute.MoveSpeed,
+                    MoveFrequency = savedRoute.MoveFrequency,
+                    CurrentIndex = savedRoute.CurrentIndex,
+                    StartIndex = savedRoute.StartIndex,
+                    Finished = savedRoute.Finished,
+                    Active = savedRoute.Active,
+                    Overwritten = savedRoute.Overwritten,
+                    MoveFailureCount = savedRoute.MoveFailureCount,
+                    Direction = savedRoute.Direction,
+                };
+                pState.EventRoutes[savedRoute.EventId] = route;
+            }
+        }
+
+        // **Self-switches.**
+        if (pData.SelfSwitches != null && pState.SelfSwitches != null)
+        {
+            pState.SelfSwitches.Clear();
+            foreach (var kvp in pData.SelfSwitches)
+            {
+                pState.SelfSwitches[kvp.Key] = kvp.Value;
+            }
         }
 
         ReadActors(pData, pState);

@@ -47,19 +47,21 @@ controls or shared Games/settings; stale/cancelled results cannot replace the
 prior library; close/reload cancels safely; traversal budgets and no-link/no-code
 safety remain; focused UI/library tests and canonical validation pass. Preserve
 saved explicit engine choices. Sprite successor is postponed for this user bug.
-### K-PROD-RM2K-DIAGONAL-ROUTE — READY (P0, bounded commands4..7)
+### K-PROD-RM2K-DIAGONAL-ROUTE — DONE (P0, bounded commands4..7)
 
-Dependency: K-PROD-RM2K-TOWARD-ROUTE. Remaining measured custom diagonals:
-6(1),7(3); support the four named diagonal commands4..7 coherently, not only
-those observed. Trace pinned Player Move/GetDx/GetDy/UpdateFacing before editing.
-Reuse the shared move-step/failure path. Reference movement tests the two
-cardinal paths (vertical then horizontal, otherwise horizontal then vertical),
-not a fabricated single diagonal passability bit. Acceptance: native LMU RED;
-all directions, both path orders and blocked source/intermediate/target edges;
-reference facing including fixed/spin and failed/skippable restore; one real
-step budget/cursor/frequency, pixel coverage and batch/lifecycle regression;
-mutation detection, focused suites and canonical validation. Keep loop maps,
-actor collisions, jump/lock/other commands and full forced parity explicitly open.
+FINAL canonical proc_e5ba055d677e exited 0: **2901/2901**, followed by
+`UniversalRPG validation passed.` Both read-only audits resolved:
+deleg_35cb288a confirmed two-path cardinal passability, facing retention/flip
+and budget match; deleg_ed487bf0 found no hard blocker. Axis-tie mutation
+69/71 and forced-horizontal-facing mutation 69/71 incl pinned pixels caught and
+restored. Forward inverse direction fix validated; production11 unsupported.
+Native71/71 (13 added), route10/10, decoder14/14, state12/12, legacy7/7,
+renderer19/19, active-event-graphic72/72 green. No new build diagnostics.
+Production whitelist: 0..3, 4..7, 9, 12..18, 23, 28..31. Non-looping
+static-terrain boundary only; loop movement, actor collisions, modes1..5,
+other commands and full forced-route parity remain open. 142 warnings and
+shutdown 3 CanvasItem RIDs/6 ObjectDB instances persist. qa_patches/ untouched.
+Measured custom diagonals: 4(1), 5(3), 6(1), 7(3) — all four implemented.
 
 ### K-PROD-RM2K-TOWARD-ROUTE — DONE (P0, bounded command9)
 
@@ -489,6 +491,20 @@ save, regression tests and canonical validation. Implementation plan:
 `execplan/production-readiness.md`. Full game-state preservation, managed
 per-game paths, save/load UI and native-engine interoperability remain separate
 release gates; this card must not claim complete production readiness.
+
+### K-PROD-SAVE-STATE (RM2K slice) — DONE (durable state persistence)
+
+Rm2kSimulationSaveCodec extended to capture complete authoritative durable state:
+PresentationState (pictures 1-100 with movement, tint, flash, shake, weather,
+transitions), Vehicle state (3 vehicles with position, ascent/descent), Event
+move routes (commands, cursor, repeat, skippable, failure count), Self-switches
+(map_event_switch keys). All fields validated on load; failed loads leave
+running game unchanged. Existing save tests pass: TestRm2kSpeichernAmEchtenSpiel
+2/2, TestRm2kSpeichernBuendeltFortschritt 3/3, TestGameSimulationState 20/20.
+Canonical validation **2901/2901** passed. qa_patches/ untouched.
+
+Next: K-PROD-SAVE-STATE (MZ slice) — add missing screen, timer, actors, party
+entries to MzSaveContents. Then K-PROD-SAVE-UI for launcher integration.
 
 ### K-MZ-MV-RUNTIME — DONE (MV and MZ start in the launcher)
 

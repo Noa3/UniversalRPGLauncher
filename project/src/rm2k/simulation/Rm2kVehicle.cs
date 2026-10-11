@@ -108,7 +108,7 @@ public static class Rm2kVehicle
 public sealed class Rm2kVehicleState
 {
 	/// <summary>liblcf <c>Game_Vehicle::Type</c>.</summary>
-	public int VehicleType { get; }
+	public int VehicleType { get; internal set; }
 
 	public int MapId { get; set; }
 	public int X { get; set; }
@@ -136,7 +136,7 @@ public sealed class Rm2kVehicleState
 	public int OriginalSpriteIndex { get; set; }
 
 	/// <summary>liblcf <c>EventPage::move_speed</c> for this vehicle.</summary>
-	public int MoveSpeed { get; }
+	public int MoveSpeed { get; internal set; }
 
 	/// <summary>Whether the airship is in the air, from <c>IsFlying</c>.</summary>
 	public bool IsFlying { get; set; }
@@ -146,10 +146,10 @@ public sealed class Rm2kVehicleState
 	/// <c>SCREEN_TILE_SIZE</c> budget of 256, not a pixel height, and the
 	/// altitude the sprite is drawn at is derived from it in whole tiles.
 	/// </summary>
-	public int RemainingAscent { get; private set; }
+	public int RemainingAscent { get; internal set; }
 
 	/// <summary>Remaining descent, from <c>remaining_descent</c>.</summary>
-	public int RemainingDescent { get; private set; }
+	public int RemainingDescent { get; internal set; }
 
 	/// <summary>
 	/// <c>SCREEN_TILE_SIZE</c>, the unit both ascent and descent are counted in.

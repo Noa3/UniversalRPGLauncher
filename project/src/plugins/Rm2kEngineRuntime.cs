@@ -678,21 +678,30 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         var previousFacing = pEvent.FacingDirection;
         // Player Move selects direction/facing before MakeWay. Only skippable
         // route failures restore the previous pose in UpdateMoveRoute.
-        pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(direction);
-        if (!pEvent.FacingLocked && !IsEventSpinning(pEvent)) pEvent.FacingDirection = pEvent.Direction;
         var (dx, dy) = Rm2kMoveRoute.DirectionDelta(direction);
+        pEvent.Direction = Rm2kMoveRoute.DirectionFromLiblcfDirection(direction);
+        if (!pEvent.FacingLocked && !IsEventSpinning(pEvent))
+        {
+            var facing = Rm2kMoveRoute.LiblcfFromFacingDirection(previousFacing ?? previousDirection);
+            // Player UpdateFacing retains either diagonal component, otherwise
+            // reverses the previous cardinal facing; it never draws a diagonal row.
+            if (direction < 4) facing = direction;
+            else if (facing != (dy < 0 ? 0 : 2) && facing != (dx < 0 ? 3 : 1))
+                facing = Rm2kMoveRoute.TurnHalf(facing);
+            pEvent.FacingDirection = Rm2kMoveRoute.FacingFromLiblcfDirection(facing);
+        }
         var targetX = pEvent.X + dx;
         var targetY = pEvent.Y + dy;
 
-        // Both ends of the step have to be passable, from
-        // Game_Map::CheckWay: the source is checked against the bit it is
-        // leaving through and the target against the bit it is entered
-        // through. Checking only the target lets a character step out of a tile
-        // it is not allowed to leave.
-        var leaveBit = Rm2kMoveRoute.PassabilityBitFromLiblcfDirection(direction);
-        var enterBit = Rm2kMoveRoute.OppositePassabilityBit(direction);
-        if (!Simulation.IsPassableInDirection(targetX, targetY, enterBit)
-            || !Simulation.IsPassableInDirection(pEvent.X, pEvent.Y, leaveBit))
+        // Player Move tries vertical->horizontal, then horizontal->vertical.
+        // Every leg uses the same source exit/destination entry checks as cardinal moves.
+        var passable = dx != 0 && dy != 0
+            ? (CanEventTakeCardinalStep(pEvent.X, pEvent.Y, 0, dy)
+                && CanEventTakeCardinalStep(pEvent.X, pEvent.Y + dy, dx, 0))
+                || (CanEventTakeCardinalStep(pEvent.X, pEvent.Y, dx, 0)
+                && CanEventTakeCardinalStep(pEvent.X + dx, pEvent.Y, 0, dy))
+            : CanEventTakeCardinalStep(pEvent.X, pEvent.Y, dx, dy);
+        if (!passable)
         {
             if (pRoute.Skippable)
             {
@@ -704,6 +713,9 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         pEvent.X = targetX;
         pEvent.Y = targetY;
+        // UpdateMoveRoute restores forward's facing after Move succeeds, not
+        // after a non-skippable refusal that returns before this point.
+        if (pCommand.CommandId == Rm2kMoveRoute.MoveForward) pEvent.FacingDirection = previousFacing;
         _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
             Rm2kStepBudget.ScreenTileSize, direction);
         _eventMovedThisTick.Add(pEvent.Id);
@@ -712,12 +724,16 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return true;
     }
 
+    // Shared static-terrain checks for each cardinal leg of either path.
+    private bool CanEventTakeCardinalStep(int pX, int pY, int pDeltaX, int pDeltaY) =>
+        Simulation.IsPassableInDirection(pX, pY, Rm2kChipset.DirectionBit(pDeltaX, pDeltaY))
+        && Simulation.IsPassableInDirection(pX + pDeltaX, pY + pDeltaY,
+            Rm2kChipset.DirectionBit(-pDeltaX, -pDeltaY));
+
     /// <summary>
-    /// The direction a movement command selects. The eight named directions map
-    /// straight onto the liblcf order; <c>move_forward</c> uses the current
-    /// direction. Toward-hero selects the dominant axis, vertical on ties, on
-    /// the current non-looping movement surface. Other relative/random commands
-    /// are refused rather than guessed.
+    /// Named commands use liblcf directions; forward converts the stored eight-way
+    /// runtime direction. Toward-hero uses the dominant axis, vertical on ties,
+    /// on the current non-looping surface. Other relative/random commands are refused.
     /// </summary>
     private int ResolveEventStepDirection(Rm2kMap.Event pEvent, int pCommandId)
     {
@@ -728,7 +744,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         if (pCommandId == Rm2kMoveRoute.MoveForward)
         {
-            return pEvent.Direction;
+            return Rm2kMoveRoute.LiblcfFromMovementDirection(pEvent.Direction);
         }
         if (pCommandId == Rm2kMoveRoute.MoveTowardsHero)
         {
@@ -2447,7 +2463,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 }
                 var command = route.Current!;
                 var id = command.CommandId;
-                if ((id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveLeft)
+                if ((id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveUpLeft)
                     || id == Rm2kMoveRoute.MoveTowardsHero)
                 {
                     if (!TryBeginEventStep(pEvent, route, command))

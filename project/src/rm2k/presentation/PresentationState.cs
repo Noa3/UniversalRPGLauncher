@@ -6,7 +6,7 @@ namespace UniversalRPG.Rm2k.Presentation;
 public sealed class ChoiceState
 {
     public IReadOnlyList<string> Options { get; init; } = Array.Empty<string>();
-    public int SelectedIndex { get; private set; } = -1;
+    public int SelectedIndex { get; internal set; } = -1;
 
     public bool Select(int pIndex)
     {
@@ -137,17 +137,17 @@ public sealed class PresentationState
     public const int MaxTransparencyPercent = 100;
     public const int MaxWeatherStrength = 2;
 
-    public bool MessageVisible { get; private set; }
-    public string MessageText { get; private set; } = "";
-    public ChoiceState? ActiveChoice { get; private set; }
-    public int? PendingInputVariableId { get; private set; }
-    public int? InputValue { get; private set; }
+    public bool MessageVisible { get; internal set; }
+    public string MessageText { get; internal set; } = "";
+    public ChoiceState? ActiveChoice { get; internal set; }
+    public int? PendingInputVariableId { get; internal set; }
+    public int? InputValue { get; internal set; }
 
     // Command 11610, Key Input Proc. It is a second, different prompt: the
     // number command asks for a number with the number pad, and this one asks
     // for whatever set of keys the game listed, and writes a code that is not
     // the key's own value.
-    public int? PendingKeyInputVariableId { get; private set; }
+    public int? PendingKeyInputVariableId { get; internal set; }
 
     /// <summary>
     /// The keys the pending 11610 accepts, in the order the reference tests
@@ -161,19 +161,19 @@ public sealed class PresentationState
     /// <summary>
     /// The variable the elapsed tenths go into while a timed 11610 waits, or 0.
     /// </summary>
-    public int PendingKeyInputTimeVariableId { get; private set; }
+    public int PendingKeyInputTimeVariableId { get; internal set; }
 
     /// <summary>
     /// Whether the pending 11610 reports the elapsed time, from
     /// <c>parameters[8]</c>.
     /// </summary>
-    public bool PendingKeyInputIsTimed { get; private set; }
+    public bool PendingKeyInputIsTimed { get; internal set; }
 
     /// <summary>
     /// Tenths a timed 11610 has waited, which the reference counts in frames
     /// and divides by six.
     /// </summary>
-    public int PendingKeyInputTenths { get; private set; }
+    public int PendingKeyInputTenths { get; internal set; }
     public Dictionary<int, PictureState> Pictures { get; } = new();
 
     // Screen effects (liblcf FlashScreen 11040, ShakeScreen 11050, WeatherEffects 11070).
@@ -182,11 +182,11 @@ public sealed class PresentationState
     // channels, not a colour the reader picks** — the reference passes r, g, b
     // and a saturation straight to the screen and never reads them back, so
     // what is stored here is what was asked for.
-    public bool IsTintActive { get; private set; }
+    public bool IsTintActive { get; internal set; }
 
-    public int TintRed { get; private set; }
-    public int TintGreen { get; private set; }
-    public int TintBlue { get; private set; }
+    public int TintRed { get; internal set; }
+    public int TintGreen { get; internal set; }
+    public int TintBlue { get; internal set; }
 
     /// <summary>
     /// The saturation in percent, from <c>parameters[3]</c>.
@@ -197,7 +197,7 @@ public sealed class PresentationState
     /// value that means "leave it alone" — and that is the value a game writes
     /// when it wants no tint.
     /// </remarks>
-    public int TintSaturation { get; private set; }
+    public int TintSaturation { get; internal set; }
 
     /// <summary>
     /// The tint's duration in frames, from <c>tenths * DEFAULT_FPS / 10</c>.
@@ -209,7 +209,7 @@ public sealed class PresentationState
     /// that hardcoded 6 would disagree with any game that declared another
     /// rate.
     /// </remarks>
-    public int TintFramesRemaining { get; private set; }
+    public int TintFramesRemaining { get; internal set; }
 
     /// <summary>
     /// The transition a command asked for, or <c>TransitionNone</c>.
@@ -219,7 +219,7 @@ public sealed class PresentationState
     /// sequence the renderer plays; nothing here plays it, and a value in this
     /// field is a request that a renderer may honour or may not.
     /// </remarks>
-    public Rm2kTransition PendingTransition { get; private set; }
+    public Rm2kTransition PendingTransition { get; internal set; }
 
     /// <summary>
     /// Whether the last transition was a show or an erase, from
@@ -227,7 +227,7 @@ public sealed class PresentationState
     /// </summary>
     public Rm2kTransitionDirection PendingTransitionDirection
     {
-        get; private set;
+        get; internal set;
     }
 
     /// <summary>
@@ -317,7 +317,13 @@ public sealed class PresentationState
 
     private readonly Dictionary<int, PictureMove> _movingPictures = new();
 
-    private sealed class PictureMove
+    /// <summary>
+    /// Internal moving pictures state for save/restore. Exposed for the
+    /// simulation save codec only.
+    /// </summary>
+    internal IDictionary<int, PictureMove> MovingPictures => _movingPictures;
+
+    public sealed class PictureMove
     {
         public int StartX { get; init; }
         public int StartY { get; init; }
@@ -415,20 +421,20 @@ public sealed class PresentationState
         };
     }
 
-    public bool IsFlashActive { get; private set; }
-    public int FlashRed { get; private set; }
-    public int FlashGreen { get; private set; }
-    public int FlashBlue { get; private set; }
-    public int FlashAlpha { get; private set; }
-    public int FlashFramesRemaining { get; private set; }
+    public bool IsFlashActive { get; internal set; }
+    public int FlashRed { get; internal set; }
+    public int FlashGreen { get; internal set; }
+    public int FlashBlue { get; internal set; }
+    public int FlashAlpha { get; internal set; }
+    public int FlashFramesRemaining { get; internal set; }
 
-    public bool IsShakeActive { get; private set; }
-    public int ShakeStrength { get; private set; }
-    public int ShakeSpeed { get; private set; }
-    public int ShakeFramesRemaining { get; private set; }
+    public bool IsShakeActive { get; internal set; }
+    public int ShakeStrength { get; internal set; }
+    public int ShakeSpeed { get; internal set; }
+    public int ShakeFramesRemaining { get; internal set; }
 
-    public int WeatherType { get; private set; }
-    public int WeatherStrength { get; private set; }
+    public int WeatherType { get; internal set; }
+    public int WeatherStrength { get; internal set; }
 
     /// <summary>
     /// Advances every moving picture by the frames that passed.
@@ -774,7 +780,7 @@ public sealed class PresentationState
     /// Whether the message window is transparent, from
     /// <c>parameters[0] != 0</c>.
     /// </summary>
-    public bool MessageTransparent { get; private set; }
+    public bool MessageTransparent { get; internal set; }
 
     /// <summary>
     /// Where the window sits, from <c>parameters[1]</c>: 0 top, 1 middle,
@@ -785,40 +791,40 @@ public sealed class PresentationState
     /// the middle where the top belongs, and every game that centres its
     /// dialogue would open its window at the top.
     /// </remarks>
-    public int MessagePosition { get; private set; }
+    public int MessagePosition { get; internal set; }
 
     /// <summary>
     /// Whether the window holds its position while the map scrolls, from
     /// <c>parameters[2] == 0</c> — **inverted, so a zero means fixed**.
     /// </summary>
-    public bool MessagePositionFixed { get; private set; } = true;
+    public bool MessagePositionFixed { get; internal set; } = true;
 
     /// <summary>
     /// Whether the map's events keep running while the message is open, from
     /// <c>parameters[3] != 0</c>.
     /// </summary>
-    public bool MessageContinuesEvents { get; private set; }
+    public bool MessageContinuesEvents { get; internal set; }
 
     // Face graphic, from 10130 Change Face Graphic. **A request, not a drawn
     // portrait** — nothing here loads a file, and a face that is "set" but has
     // no renderer behind it is what this reader can honestly say.
 
     /// <summary>The face file name, from the command's string field.</summary>
-    public string FaceName { get; private set; } = "";
+    public string FaceName { get; internal set; } = "";
 
     /// <summary>
     /// Which of the four faces in the file, from <c>parameters[0]</c>.
     /// </summary>
-    public int FaceIndex { get; private set; }
+    public int FaceIndex { get; internal set; }
 
     /// <summary>
     /// Whether the face sits on the right instead of the left, from
     /// <c>parameters[1] != 0</c>.
     /// </summary>
-    public bool FaceOnRight { get; private set; }
+    public bool FaceOnRight { get; internal set; }
 
     /// <summary>Whether the face is mirrored, from <c>parameters[2] != 0</c>.</summary>
-    public bool FaceFlipped { get; private set; }
+    public bool FaceFlipped { get; internal set; }
 
     /// <summary>The highest face index the file's four slots allow.</summary>
     public const int MaxFaceIndex = 3;
