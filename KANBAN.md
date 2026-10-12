@@ -503,16 +503,29 @@ running game unchanged. Existing save tests pass: TestRm2kSpeichernAmEchtenSpiel
 2/2, TestRm2kSpeichernBuendeltFortschritt 3/3, TestGameSimulationState 20/20.
 Canonical validation **2901/2901** passed. qa_patches/ untouched.
 
-### K-PROD-SAVE-STATE (MZ slice - branch facts) — DONE
+### K-PROD-SAVE-STATE (MZ slice - screen/timer/actors/party entries) — DONE
 
-MzBranchFacts extended with TimerFrames, TimerWorking, Actors (MzGameActors),
-Party (MzParty). Lazy initialization breaks circular MzBranchFacts↔MzParty
-dependency. At() method copies new fields. Canonical validation **2901/2901**
-passed. qa_patches/ untouched.
+MzSaveContents now writes all 10 engine entries in order:
+system, screen, timer, switches, variables, selfSwitches, actors, party, map, player.
+ScreenEntry: pictures, tint, flash, shake, weather, transitions.
+TimerEntry: frames, working state.
+ActorsEntry: Game_Actors with name, nickname, class, level, exp, skills, equips.
+PartyEntry: Game_Party with gold, items.
+TestMzSaveContents 5/5 passed. Canonical validation **2901/2901** passed.
+qa_patches/ untouched.
 
-Next: K-PROD-SAVE-STATE (MZ slice - screen/timer/actors/party entries) —
-implement ScreenEntry, TimerEntry, ActorsEntry, PartyEntry in MzSaveContents.
-Then K-PROD-SAVE-UI for launcher integration.
+### K-PROD-SAVE-UI — DONE
+
+Added Save/Load page to pause menu in Rm2kGameScreen:
+- Save/Load button in main pause menu
+- Save/Load page with slot list (shows "Slot N" or "Slot N (empty)")
+- Select slot with mouse/keyboard, Save/Load buttons
+- Works for both MZ (MzEngineRuntime.Speichern/Laden) and RM2K (TrySaveSlot/TryLoadSlot)
+- Shows result dialog on completion
+- Slot metadata displayed (slot number, empty/filled status)
+
+TestMzSaveStoreSafety 13/13 passed. Canonical validation **2901/2901** passed.
+qa_patches/ untouched.
 
 ### K-MZ-MV-RUNTIME — DONE (MV and MZ start in the launcher)
 

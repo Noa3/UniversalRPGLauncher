@@ -1,22 +1,23 @@
 ## Current card
 
-### MZ save state persistence (branch facts) — DONE
+### Save/Load UI (pause menu) — DONE
 
-FINAL: K-PROD-SAVE-STATE (MZ slice - branch facts) DONE after canonical run
-exited 0 with **2901/2901** and `UniversalRPG validation passed.` marker.
-MzBranchFacts now includes:
-- TimerFrames, TimerWorking: game timer state from $gameTimer
-- Actors (MzGameActors): actor name, nickname, class, level, exp, skills, equips
-- Party (MzParty): inventory items, gold
-Lazy initialization breaks circular MzBranchFacts↔MzParty dependency.
-At() method copies new fields. Canonical validation: **2901/2901** tests pass.
+FINAL: K-PROD-SAVE-UI DONE after canonical run exited 0 with **2901/2901**
+and `UniversalRPG validation passed.` marker.
 
-Previous: K-PROD-SAVE-STATE (RM2K slice) DONE with full durable state
-(Rm2kSimulationSaveCodec: PresentationState, Vehicle, EventRoutes, SelfSwitches).
+Added Save/Load page to pause menu in Rm2kGameScreen:
+- Save/Load button in main pause menu
+- Save/Load page with slot list (shows "Slot N" or "Slot N (empty)")
+- Select slot with mouse/keyboard, Save/Load buttons
+- Works for both MZ (MzEngineRuntime.Speichern/Laden) and RM2K (TrySaveSlot/TryLoadSlot)
+- Shows result dialog on completion
+- Slot metadata displayed (slot number, empty/filled status)
 
-Next READY/P0: K-PROD-SAVE-STATE (MZ slice - screen/timer/actors/party entries)
-— implement ScreenEntry, TimerEntry, ActorsEntry, PartyEntry in MzSaveContents.
-Then K-PROD-SAVE-UI for launcher integration.
+All tests pass: **2901/2901** canonical validation.
+
+Previous: K-PROD-SAVE-STATE (MZ slice - screen/timer/actors/party) DONE with all 10 engine entries.
+
+Next READY/P0: K-PROD-RM2K-RUNTIME for complete RM2000/2003 gameplay paths.
 
 ### Toward-player custom route9 — completed
 

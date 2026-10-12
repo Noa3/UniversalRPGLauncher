@@ -258,3 +258,24 @@ msgstr "Fuer dieses Spiel sind noch keine Cheats verfuegbar."
 
 msgid "GAME_CONTINUE_HINT"
 msgstr "(Enter oder Klick: weiter)"
+
+msgid "PAUSE_SAVE_LOAD"
+msgstr "Speichern/Laden"
+
+msgid "SAVE_LOAD_TITLE"
+msgstr "Speichern / Laden"
+
+msgid "SAVE_LOAD_INFO"
+msgstr "Wählen Sie einen Slot zum Speichern oder Laden. Leere Slots können beschrieben werden."
+
+msgid "SAVE_LOAD_SAVE"
+msgstr "Speichern"
+
+msgid "SAVE_LOAD_LOAD"
+msgstr "Laden"
+
+msgid "SAVE_RESULT_TITLE"
+msgstr "Speicherergebnis"
+
+msgid "LOAD_RESULT_TITLE"
+msgstr "Ladeergebnis"

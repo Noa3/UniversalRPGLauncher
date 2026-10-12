@@ -252,3 +252,30 @@ msgstr "No cheats are available for this game yet."
 
 msgid "GAME_CONTINUE_HINT"
 msgstr "(Enter or click: continue)"
+
+msgid "PAUSE_SAVE_LOAD"
+msgstr "Save/Load"
+
+msgid "SAVE_LOAD_TITLE"
+msgstr "Save / Load"
+
+msgid "SAVE_LOAD_INFO"
+msgstr "Select a slot to save or load. Empty slots can be saved to."
+
+msgid "SAVE_LOAD_SAVE"
+msgstr "Save"
+
+msgid "SAVE_LOAD_LOAD"
+msgstr "Load"
+
+msgid "SAVE_RESULT_TITLE"
+msgstr "Save Result"
+
+msgid "LOAD_RESULT_TITLE"
+msgstr "Load Result"
+
+msgid "SAVE_LOAD_SAVE"
+msgstr "Save"
+
+msgid "SAVE_LOAD_LOAD"
+msgstr "Load"
