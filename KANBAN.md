@@ -356,7 +356,7 @@ Demand and **parameters**, measured over the owned collection by
 | `11040` FlashScreen | 379 | **colour and level in RPG_RT's 0..31**, six parameters -- no subcommand, so every one of them is a single flash | **painted** |
 | `11050` ShakeScreen | 34 | **strength and speed up to 9** (15 values of exactly nine) | **painted** |
 | `11060` PanScreen | 43 | five parameters, 26 distinct forms | **painted** |
-| `11070` WeatherEffects | 0 in this game | -- |
+| `11070` WeatherEffects | 0 in this game | -- | **painted** (own card) |
 
 And it was not a rare path: Lisa issues a tint from a parallel page **150 times in
 300 frames**, which is a screen that is meant to change colour continuously.
@@ -596,8 +596,9 @@ not follow the player, the pan still moves it, and unlocking lets it follow agai
 that flips the right-pan sign fails exactly three of the suite's tests and was
 reverted.
 
-**Still open on this card:** weather, and the **continuous** forms of the shake and the
-flash, with their references already read so the next slice does not re-derive them.
+**Still open on this card:** the **continuous** forms of the shake and the flash, with
+their references already read so the next slice does not re-derive them. Weather is done
+on its own card (`K-PROD-RM2K-WEATHER`).
 
 * **A continuous flash is a single pulse today**: the interpreter calls `FlashOnce`
   for **both** the once and the begin subcommand, while the reference's `FlashBegin`
@@ -621,7 +622,60 @@ flash, with their references already read so the next slice does not re-derive t
 * **Weather** is a particle count from `Weather::GetMaxNumParticles(type)` with a
   strength.
 
-### K-PROD-RM2K-WEATHER — READY (state exists, nothing draws it)
+### K-PROD-RM2K-WEATHER — DONE (rain, snow, fog and sandstorm are drawn)
+
+**And the weather is painted now**, which closes the last of the five screen effects that
+were state only. `Rm2kWeatherState` holds the particles and the four per-frame rules,
+`Rm2kWeatherPainter` draws them, and the runtime draws the weather under the tone (which
+is what the reference does by toning its particle bitmaps -- one tone pass over the
+composed frame is the same picture).
+
+* **The tables are the reference's**: rain and snow `{20, 60, 100}` with a vector of 100,
+  fog 2, sandstorm `{128, 191, 255}` with a vector of 255, and the draw index is
+  **0-based** (`Clamp(strength, 0, 2)`), which is why strength zero draws twenty and not
+  nothing.
+* **The four rules are the reference's**: rain falls four rows and one column left per
+  frame and respawns one time in ten with twelve frames of life; snow drifts a random
+  column left and two or three rows down and respawns one time in twenty with thirty
+  frames; fog only advances its two layer counters; a sandstorm runs the fog and then a
+  full particle simulation with velocities, accelerations and `alpha += 2`.
+* **The particles need no asset**: a 6x24 streak with one white pixel per row at
+  `x = w - (y / 4) - 1` for rain, a 2x2 square for snow, a 16x16 tile of three greys or
+  tans for the fog and the sand, and a 1x2 pixel in four colours for the sandstorm.
+* **And the alpha is `min((abase + strength) * t, 255)`** with `abase` 5 for rain and 7
+  for snow, while the sandstorm uses the particle's own `alpha`.
+* **And the fog layers are opaque by their own table**: `{{32, 64, 96, 0}, {64, 80, 160,
+  255}}`, front and back by strength -- including the reference's own note that a hacked
+  strength of three shows no back layer.
+* **And the weather's particles are not saved**, which is the reference's behaviour: they
+  are transient and re-scattered from the restored type on load. That re-seed is
+  implemented, because without it a loaded rainy save would have the type and an empty
+  sky.
+
+**Three divergences are stated rather than hidden**, and none of them changes a rule:
+
+1. **The randomness is a dedicated deterministic stream** (`Rm2kEventRandom`) instead of
+   the engine's global `Rand`. The rules, the ranges and the chances are the reference's;
+   only the stream is ours, because this runtime's whole point is that a frame is a
+   function of its inputs.
+2. **The fog and sand overlay tile's noise is seeded** from the weather type instead of
+   drawn from `Rand` when the tile is built, for the same reason.
+3. **The weather is toned by the frame's own tone pass** rather than by toning each
+   particle bitmap first, which is the same picture because the tone covers both.
+
+Evidence: `TestRm2kWeather` **6/6** (the tables including the 0-based index and the
+clamp, the seeding that scatters only new particles, all four per-frame rules pinned
+against the reference's arithmetic, the drawn count per strength, the exact streak pixel
+and its blend, weather that is off leaving every byte identical, the fog covering the
+whole frame, and the opacity table), `TestRm2kRuntimeRendering` **27/27** including
+`Test_RegenFaerbtDasGemalteBildUndGibtEsZurueck` (rain changes the painted frame and
+turning it off gives the frame back **byte for byte**). A mutation that shifts the rain
+streak's column by one fails exactly the pixel test (5/6) and was reverted.
+
+**And turning the weather off needed its own dirty rule**: the frame is recomposed while
+the weather is on (its particles move every frame) *and* on the frame the type changes,
+or the last rainy frame would stay on the screen with the rain still on it -- which is
+exactly what the end-to-end test caught.
 
 **Measured demand: one command.** `11070` appears **once** in the whole owned
 collection (`TestRm2kEffektbefehleGemessen` measured 0 in Dragon Destiny, and the
@@ -629,14 +683,11 @@ corpus-wide scan found one). It is split out of `K-PROD-RM2K-SCREEN-EFFECTS` bec
 it is a particle system rather than a screen pass, and because a slice this size for
 one command should be a decision and not a by-product.
 
-**What exists already, and is faithful:** `PresentationState.WeatherType` and
-`WeatherStrength`, the interpreter's `11070` handling (the strength clamped to
-`MaxWeatherStrength`, unknown RM2K types folded to 0, with a diagnostic) and the save.
-**What does not exist: any drawing.** No file in `project/src/rm2k/rendering/` or
-`project/app/ui/` reads either field, so a game that turns on rain shows a dry screen.
-Note that the clamp at the command is **not** a defect: the reference stores the
-strength as it comes and clamps the particle index at the draw
-(`Clamp(strength, 0, 2)`), which is the same picture.
+**What stood here before the slice:** the type and the strength were set, clamped and
+saved, and no file in `project/src/rm2k/rendering/` or `project/app/ui/` read either
+field -- a game that turned on rain showed a dry screen. The clamp at the command was
+**not** the defect: the reference stores the strength as it comes and clamps the particle
+index at the draw (`Clamp(strength, 0, 2)`), which is the same picture.
 
 **The reference, pinned so the slice does not re-derive it** (EasyRPG
 `src/weather.h`/`weather.cpp` and `Game_Screen::UpdateWeather`):

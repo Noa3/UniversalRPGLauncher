@@ -1131,6 +1131,12 @@ public static class Rm2kSimulationSaveCodec
             target.ShakePositionX = pres.ShakePositionX;
             target.WeatherType = pres.WeatherType;
             target.WeatherStrength = pres.WeatherStrength;
+            // **And the weather's particles come back with its type**: they are
+            // transient and are not saved, which is the reference's own behaviour -- it
+            // scatters them when the weather changes, so a load reseeds from the type it
+            // restored. Without this a loaded rainy save would have the type and no
+            // particles at all, and the screen would be dry.
+            target.Weather.Seed(pres.WeatherType);
 
             target.Pictures.Clear();
             target.MovingPictures.Clear();

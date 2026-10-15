@@ -431,7 +431,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 || Presentation.FlashCurrentLevel != _appliedFlashLevel
                 || Presentation.ShakePositionX != _appliedShakePosition
                 || Simulation.PanCurrentX != _appliedPanX
-                || Simulation.PanCurrentY != _appliedPanY)
+                || Simulation.PanCurrentY != _appliedPanY
+                // **And weather dirties the frame twice over**: while it is on its
+                // particles move every frame, and the frame that turns it **off** has to
+                // be recomposed too, or the last rainy frame stays on the screen with the
+                // rain still on it.
+                || Presentation.WeatherType != Rm2kWeatherState.TypeNone
+                || Presentation.WeatherType != _appliedWeatherType
+                || Presentation.WeatherStrength != _appliedWeatherStrength)
             {
                 _isRenderDirty = true;
                 _eventRoutesMoved = false;
@@ -726,6 +733,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
 
     /// <summary>The vertical pan the current frame was drawn with.</summary>
     private int _appliedPanY = Rm2kMapCamera.DefaultPanY();
+
+    /// <summary>The weather type the current frame was drawn with.</summary>
+    private int _appliedWeatherType;
+
+    /// <summary>The weather strength the current frame was drawn with.</summary>
+    private int _appliedWeatherStrength;
 
     /// <summary>The tone the presentation is asking for right now.</summary>
     /// <returns>The tone, from the command's own 0 to 200 values.</returns>
@@ -4449,6 +4462,18 @@ ReadString(entry, "name", v => werte.Name = v);
         // touching a byte, so a frame nobody tinted is byte for byte the frame it
         // was before this pass existed.
         var tone = CurrentTone();
+        // **And the weather is drawn under the tone**, which is what the reference does
+        // by toning its particle bitmaps: the tone pass here covers the weather and the
+        // map in one go, and the result is the same picture.
+        if (Presentation.WeatherType != Rm2kWeatherState.TypeNone)
+        {
+            Rm2kWeatherPainter.Apply(
+                frame, Presentation.Weather, Presentation.WeatherType,
+                Presentation.WeatherStrength, Simulation.PanCurrentX, Simulation.PanCurrentY,
+                Presentation.ShakePositionX, 0, Presentation.WeatherType * 7919 + 13);
+        }
+        _appliedWeatherType = Presentation.WeatherType;
+        _appliedWeatherStrength = Presentation.WeatherStrength;
         Rm2kScreenTonePainter.Apply(frame, tone);
         _appliedTone = tone;
         // **And the flash is drawn over the tone**, because the engine's tone is

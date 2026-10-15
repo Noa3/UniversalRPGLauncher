@@ -573,6 +573,17 @@ public sealed class PresentationState
     public int WeatherStrength { get; internal set; }
 
     /// <summary>
+    /// The weather's particles, from the reference's <c>Game_Screen::particles</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the particles are the weather</strong>: the type and the strength
+    /// only say which rule runs and how many are drawn. They are transient state and
+    /// are not saved, which is also the reference's behaviour -- it re-scatters them
+    /// when the weather changes, so a load reseeds from the type it restored.
+    /// </remarks>
+    public Rm2kWeatherState Weather { get; } = new();
+
+    /// <summary>
     /// Advances every moving picture by the frames that passed.
     /// </summary>
     /// <remarks>
@@ -686,6 +697,7 @@ public sealed class PresentationState
         ShakePositionX = 0;
         WeatherType = 0;
         WeatherStrength = 0;
+        Weather.Clear();
     }
 
     /// <summary>Advances timed screen effects by whole simulation frames.</summary>
@@ -775,6 +787,16 @@ public sealed class PresentationState
                         IsShakeActive = false;
                     }
                 }
+            }
+        }
+        // **And the weather moves every frame**, from the reference's UpdateWeather,
+        // which runs in the same per-frame screen-effect update the tint, the flash and
+        // the shake run in.
+        if (WeatherType != Rm2kWeatherState.TypeNone)
+        {
+            for (var frame = 0; frame < pFrames; frame++)
+            {
+                Weather.Update(WeatherType, WeatherStrength);
             }
         }
     }
@@ -878,6 +900,12 @@ public sealed class PresentationState
         if (pStrength < 0 || pStrength > MaxWeatherStrength) return false;
         WeatherType = pType;
         WeatherStrength = pStrength;
+        // **And the particles grow with the weather**, from the reference's
+        // `OnWeatherChanged` -> `InitParticles`: only the particles that are new are
+        // scattered, so switching between weathers keeps the sky it already had. This
+        // runs on every command, which is what the reference's "only when changed" test
+        // amounts to, because seeding the same or a smaller type changes nothing.
+        Weather.Seed(pType);
         return true;
     }
 

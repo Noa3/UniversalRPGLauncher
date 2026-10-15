@@ -1,25 +1,26 @@
 ## Current card
 
-### K-PROD-RM2K-SCREEN-EFFECTS closed; K-PROD-RM2K-WEATHER split out (2026-10-15)
+### K-PROD-RM2K-WEATHER DONE; the five screen effects are complete (2026-10-15)
 
-Four of the five screen effects are painted (tint, flash, shake, pan) and the card is
-**DONE**; **weather** moved to its own **READY** card, with the measured demand (one
-`11070` in the whole owned collection) and the full reference pinned there: it is a
-particle system with four types, not a screen pass, and it is not drawn at all today.
-Nothing claims weather works.
+Tint, flash, shake and pan are painted on `K-PROD-RM2K-SCREEN-EFFECTS` (DONE), and
+**weather** -- rain, snow, fog and sandstorm -- is painted on its own card: the particle
+tables, the four per-frame rules, the procedural particles and the two fog layers, with
+three divergences stated (a dedicated deterministic RNG, a seeded overlay tile, and the
+weather toned by the frame's own tone pass). All five screen effects that were state only
+are now player-visible.
 
-### Canonical validation GREEN (2026-10-15, after the pan)
+### Canonical validation GREEN (2026-10-15, after the weather)
 
-`./scripts/validate.sh` exited **0** with **All 2961 tests passed** and the
-`UniversalRPG validation passed.` marker, **371** suite records and **zero**
-`ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-16.log`.
-2956 after `65a1241` plus the five new tests of the pan slice (three in the pan
-suite, one end to end, one save round trip). Earlier green runs of the same day:
-**2956** after `65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`,
-**2940** after `aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`,
-**2928** after `dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`,
-**2912** after `073a096`.
+`./scripts/validate.sh` exited **0** with **All 2968 tests passed** and the
+`UniversalRPG validation passed.` marker, **372** suite records (the new
+`TestRm2kWeather` among them) and **zero** `ERROR:   Test_` lines. Exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-17.log`.
+2961 after `6b8d15c` plus the seven new tests of the weather slice (six in its own suite
+and one end to end). Earlier green runs of the same day: **2961** after `6d9eb20`,
+**2956** after `65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940**
+after `aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after
+`dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`, **2912** after
+`073a096`.
 
 **And the run before it (`urpg-canonical-13.log`) failed on one test, which was a
 real find rather than the intermittent crash**: 2948 tests, **4 failing
