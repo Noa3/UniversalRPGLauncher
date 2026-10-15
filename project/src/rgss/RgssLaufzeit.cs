@@ -199,6 +199,31 @@ public sealed class RgssLaufzeit
         Messen("graphics_nil", "Graphics.nil?");
         Messen("graphics_name", "Graphics.class.name");
 
+        // **Und die beiden Werte, die `moveto` danach liest.** Gemessen in
+        // MicroQuests eigenen Skripten:
+        //
+        // ```ruby
+        // def make_encounter_count
+        //   if $game_map.map_id != 0
+        //     n = $game_map.encounter_step
+        //     @encounter_count = rand(n) + rand(n) + 1
+        //   end
+        // end
+        // ```
+        //
+        // -- **und `rand(n) + rand(n) + 1` mit einem nil ist genau *"undefined
+        // operator '+' for a Nil and a Nil"*.** Und `center` liest
+        // `CENTER_X`/`CENTER_Y`, die das Spiel selbst setzt.
+        Messen("encounter_step", "$game_map.encounter_step");
+        Messen("center_x", "CENTER_X");
+        Messen("center_y", "CENTER_Y");
+
+        // **Und `rand`, weil die Zeile `rand(n) + rand(n) + 1` heisst.**
+        // Ein `rand`, das nil gibt, macht daraus genau die Meldung, die
+        // das Spiel meldet: *"undefined operator '+' for a Nil and a Nil"*.
+        Messen("rand_probe", "rand(30)");
+        Messen("rand_art", "rand(30).class.name");
+
         // **Und der Host zaehlt mit.** Die Karte liest sich ausserhalb des
         // Spiels einwandfrei -- `RPG::Map` mit elf Feldern und `@width` darin --
         // **und im Spiel ist `$game_map.width` nil**, also ist die Frage, ob

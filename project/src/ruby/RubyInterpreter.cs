@@ -2276,6 +2276,32 @@ public sealed class RubyInterpreter
             }
         }
 
+        // **And `rand` is the other sentence every game writes.** Measured:
+        // MicroQuest's `make_encounter_count` is `n = $game_map.encounter_step`
+        // and then `@encounter_count = rand(n) + rand(n) + 1`, and a `rand` that
+        // answers nil makes that exactly *"undefined operator '+' for a Nil and
+        // a Nil"* -- which is the last setup step of a real XP game failing, and
+        // the only thing left before its first frame.
+        //
+        // **And it is the language's `rand` and not the engine's.** XP's own
+        // scripts call Ruby's, and a game that seeds it expects the numbers to
+        // follow.
+        if (methode == "rand"
+            && empfaenger.Kind == RubyValueKind.Symbol
+            && (empfaenger.Name == "self" || empfaenger.Name == "Kernel"))
+        {
+            // **And the host is asked first, and that is measured too.** Three
+            // tests failed when this branch answered straight away: they hand
+            // the reader a host whose `rand` answers six, and a reader that never
+            // asked it made the host's own answer unreachable -- and *"the host
+            // was called exactly once"* stopped being true. **So the order is the
+            // host, then this:** a host that knows the number wins, and a host
+            // that answers nil -- which is what a game's own script host does,
+            // measured -- leaves the language's `rand` to answer.
+            var vomHost = _host.CallMethod(empfaenger, methode, argumente);
+            return vomHost ?? Zufall(argumente);
+        }
+
         if (methode == "raise" && empfaenger.Name == "self")
         {
             throw RubyFehlerAus(argumente);
@@ -11659,7 +11685,7 @@ public sealed class RubyInterpreter
         or "require" or "require_relative" or "load"
         or "raise" or "loop"
         or "block_given?" or "iterator?"
-        or "format" or "sprintf" or "printf"
+        or "format" or "sprintf" or "printf" or "rand"
         or "Integer" or "Float" or "String" or "Array" or "Hash";
 
     private static bool IstFrage(string pMethode) => pMethode
@@ -12922,4 +12948,32 @@ public sealed class RubyInterpreter
 
         return werte;
     }
+
+    /// <summary>
+    /// Ruby's <c>rand</c>: an integer in <c>0...n</c>, or a float in <c>[0, 1)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the sequence is deterministic on purpose.</strong> A runtime
+    /// whose numbers change between two runs cannot be compared against itself,
+    /// and this repository measures by comparing -- so the generator is seeded
+    /// once, with a seed that is written down rather than taken from the clock.
+    /// </remarks>
+    private RubyValue Zufall(IReadOnlyList<RubyValue> pArgumente)
+    {
+        if (pArgumente.Count == 0)
+        {
+            return RubyValue.OfReal(_zufall.NextDouble());
+        }
+
+        var grenze = pArgumente[0];
+        if (grenze.Kind != RubyValueKind.Integer || grenze.Integer <= 0)
+        {
+            return RubyValue.OfReal(_zufall.NextDouble());
+        }
+
+        return RubyValue.OfInteger(_zufall.NextInt64(grenze.Integer));
+    }
+
+    /// <summary>The generator behind <c>rand</c>, seeded so a run is repeatable.</summary>
+    private readonly Random _zufall = new Random(20261015);
 }
