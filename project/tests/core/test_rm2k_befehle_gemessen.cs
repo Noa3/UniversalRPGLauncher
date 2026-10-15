@@ -134,24 +134,32 @@ public partial class TestRm2kBefehleGemessen : TestBase
 
         // **Und  jetzt  das  Ergebnis,  und  es  ist  eine  Messung.**
         //
+        // **Und  sie  ist  neu  gemessen,  seit  der  Ereignisbefehlsleser
+        //  keine  Seiten  mehr  verwirft:**  **eine  Seite  und  zwei
+        //  Befehle  mehr  als  vorher**, -- **und  die  alten  Zahlen
+        //  waren  Zahlen  ueber  den  Leser.**
+        //
         // <code>
-        /// lesbare Seiten: 105  verschiedene Befehle: 10
-        /// 10      : 164    10110 : 186
-        /// 10210   : 105    10220 :  82
-        /// 13310   :  82    13410 :  82
+        /// lesbare Seiten: 106  verschiedene Befehle: 12
+        /// 10      : 164    10110 : 190
+        /// 10210   : 107    10220 :  82
+        /// 10480   :   1    11030 :   1
+        /// 13260   :   1    13310 :  82
+        /// 13410   :  82    20110 :   4
         /// 23310   :  82    23311 :  82
         /// </code>
         //
         // **Und  `10210`  ist  "Attack"**, -- **und  das  Spiel  schreibt
-        //  es  auf  jeder  der  105  Seiten**, -- **und  `10220`  ist
-        //  "Skill"**, -- **und  es  steht  auf  82**.
+        //  es  auf  107  der  106  Seiten**  -- **weil  zwei  Seiten  es
+        //  zweimal  tragen**, -- **und  `10220`  ist  "Skill"**, -- **und
+        //  es  steht  auf  82**.
         //
         // **Und  `10230`  ist  "Subskill"  und  kommt  null  Mal  vor**,
         // -- **und  das  ist  der  Grund,  warum  kein  Dialog  fuer
         //  eine  Unterfaehigkeit  gebaut  wird.**
-        AssertEq(105, zaehler[10210],
-            "**and every one of the hundred and five troop pages"
-                + " carries 10210, Attack**");
+        AssertEq(107, zaehler[10210],
+            "**and the troop pages carry 10210, Attack, a hundred and"
+                + " seven times**");
 
         AssertEq(82, zaehler[10220],
             "**and eighty two carry 10220, Skill**");
@@ -190,10 +198,10 @@ public partial class TestRm2kBefehleGemessen : TestBase
                 + " game, because the game never asks for one");
 
         // **Und  Gegenstand  und  Spezial  stehen  in  keiner  der
-        //  hundertfuenf  Seiten.**
-        AssertEq(10, zaehler.Count,
-            "**and exactly ten distinct commands exist across the"
-                + " hundred and five troop pages** -- and the"
+        //  hundertsechs  Seiten.**
+        AssertEq(12, zaehler.Count,
+            "**and exactly twelve distinct commands exist across the"
+                + " hundred and six troop pages** -- and the"
                 + " ones the host does not execute are absent from"
                 + " the game, so implementing them would be code"
                 + " for nothing rather than a missing feature");

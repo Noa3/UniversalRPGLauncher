@@ -1,15 +1,43 @@
 ## Current card
 
-### Canonical validation GREEN (2026-10-15, after ec1ecdb)
+### Canonical validation GREEN (2026-10-15, after the BER/tint fixes)
 
-`./scripts/validate.sh` exited **0** with **All 2921 tests passed** and the
+`./scripts/validate.sh` exited **0** with **All 2928 tests passed** and the
 `UniversalRPG validation passed.` marker, 368 suite records and **zero**
 `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-4.log`.
-This run is the whole repository on top of the movement types 2..5: 2917 tests
-after `d474a91` plus the four new ones. The known shutdown noise (3 CanvasItem
-RIDs, 6 ObjectDB instances) is unchanged. Earlier green runs of the same day:
-**2917** after `d474a91`, **2912** after `073a096`.
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-6.log`.
+2921 after `ec1ecdb` plus the seven new tests of this slice (three parser, two
+screen, two real-game). The run before it, `urpg-canonical-5.log`, is the one
+that **caught the three measurement tests the page fix moved** -- 105 readable
+troop pages became 106 and 10 distinct commands became 12, and each was
+re-measured rather than loosened. The known shutdown noise (3 CanvasItem RIDs, 6
+ObjectDB instances) is unchanged. Earlier green runs of the same day: **2921**
+after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
+
+### K-PROD-RM2K-RUNTIME-DIAGNOSTICS — MEASURED, two defects fixed (this commit)
+
+Measured by starting each owned RM2K game through the real plugin path for 300
+frames and counting `Simulation.Diagnostics` by kind, in 30-frame blocks because
+the runtime caps the list at a hundred. Two of the kinds were defects:
+
+- **`BER integer overflow` dropped 337 event pages** (244 in Dragon Destiny, 93
+  in Pom Gets Wi-Fi): the event command decoder read its int32 fields with the
+  unsigned BER reader, and liblcf writes a negative parameter as five groups
+  (`LcfWriter::WriteInt` casts to uint32), which that reader refuses. The move
+  route decoder already used `ReadSignedBer`. Fixed; after it, 0 pages with an
+  error field in all three games.
+- **The tint range was a colour channel's**: saturation was bounded to 0..100
+  while the format writes 0..200 with 100 neutral for the channels *and* the
+  saturation, so all 150 tints Lisa issues in 300 frames were refused. Fixed with
+  its own bound (`MaxTintValue`), and three fixtures that used the out-of-format
+  255 were corrected.
+
+Both have regression tests at the real game:
+`Test_JedeSeiteJederKarteLiestIhreBefehle` (743 maps, no page refuses) and
+`Test_EinSpielDasSeinenBildschirmTintetWirdNichtAbgelehnt` (300 frames of Lisa,
+0 refusals, at least one applied tint). **Still open on this card:** the
+diagnostic channel is noise -- 150 successful-tint and 150 switch messages in 300
+frames against a hundred-entry cap, which is how the BER defect stayed hidden.
 
 ### K-PROD-RM2K-MOVE-TYPES — DONE (all six types)
 

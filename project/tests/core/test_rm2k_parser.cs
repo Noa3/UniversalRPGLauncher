@@ -45,6 +45,116 @@ partial class TestRm2kParser : TestBase
 		return bytes.ToArray();
 	}
 
+	/// <summary>
+	/// A command parameter written by liblcf as a negative number is read back
+	/// as that number.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And this is the defect that dropped 337 pages of the owned
+	/// collection.</strong> <c>LcfWriter::WriteInt</c> casts the value to
+	/// <c>uint32_t</c> and writes seven-bit groups from bit 28 down, so
+	/// <c>-1</c> becomes <c>8F FF FF FF 7F</c> -- five groups that assemble to
+	/// 4294967295. <c>LcfReader::ReadInt</c> assembles into an <c>int</c> and
+	/// wraps, which is why liblcf reads it as <c>-1</c>; a reader that refuses
+	/// any value above <c>int.MaxValue &gt;&gt; 7</c> refuses the whole command
+	/// list of every page that holds one such parameter.
+	/// </para>
+	/// <para>
+	/// <strong>And the same file already did it right for move routes</strong>,
+	/// which read <c>parameter_a/b/c</c> with <c>ReadSignedBer</c>: the event
+	/// command decoder simply was not carried along.
+	/// </para>
+	/// </remarks>
+	public void Test_EventCommandDecoderReadsALiblcfNegativeParameter()
+	{
+		var bytes = new List<byte>();
+		bytes.AddRange(Ber(10320));
+		bytes.AddRange(Ber(0));
+		bytes.AddRange(Ber(0));
+		bytes.AddRange(Ber(1));
+		bytes.AddRange(LiblcfInt(-1));
+		bytes.AddRange(new byte[] { 0, 0, 0, 0 });
+
+		var result = Rm2kEventCommandDecoder.Decode(bytes.ToArray());
+
+		AssertTrue(result.Success,
+			"**and the page decodes** -- and the refusal is: "
+				+ (result.Error?.Message ?? "none"));
+		if (!result.Success)
+		{
+			return;
+		}
+		var commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)result.Data["commands"];
+		AssertEq(commands.Count, 1);
+		var parameters = (long[])commands[0]["parameters"];
+		AssertEq(parameters.Length, 1);
+		AssertEq((int)parameters[0], -1,
+			"**and the parameter is minus one**, as liblcf writes and reads it");
+	}
+
+	/// <summary>
+	/// Negative and positive parameters survive side by side.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And the encoding is length-sensitive, not value-sensitive:</strong>
+	/// <c>-2</c> is five groups and <c>7</c> is one, so a reader that mishandles
+	/// either end loses the parameters after it as well.
+	/// </remarks>
+	public void Test_EventCommandDecoderReadsMixedSignParameters()
+	{
+		var bytes = new List<byte>();
+		bytes.AddRange(Ber(10320));
+		bytes.AddRange(Ber(0));
+		bytes.AddRange(Ber(0));
+		bytes.AddRange(Ber(3));
+		bytes.AddRange(Ber(7));
+		bytes.AddRange(LiblcfInt(-2));
+		bytes.AddRange(Ber(0));
+		bytes.AddRange(new byte[] { 0, 0, 0, 0 });
+
+		var result = Rm2kEventCommandDecoder.Decode(bytes.ToArray());
+
+		AssertTrue(result.Success,
+			"**and the page decodes** -- and the refusal is: "
+				+ (result.Error?.Message ?? "none"));
+		if (!result.Success)
+		{
+			return;
+		}
+		var commands = (Godot.Collections.Array<Godot.Collections.Dictionary>)result.Data["commands"];
+		var parameters = (long[])commands[0]["parameters"];
+		AssertEq(parameters.Length, 3);
+		AssertEq((int)parameters[0], 7);
+		AssertEq((int)parameters[1], -2);
+		AssertEq((int)parameters[2], 0);
+	}
+
+	/// <summary>
+	/// Encodes an integer the way <c>LcfWriter::WriteInt</c> does.
+	/// </summary>
+	/// <param name="pValue">The value.</param>
+	/// <returns>The bytes.</returns>
+	/// <remarks>
+	/// <strong>And it is a copy of the writer, not of the reader</strong>,
+	/// because a fixture built with the reader under test proves only that the
+	/// two agree: the cast to <c>uint32_t</c> is what makes <c>-1</c> five
+	/// groups long.
+	/// </remarks>
+	private static byte[] LiblcfInt(int pValue)
+	{
+		var value = (uint)pValue;
+		var bytes = new List<byte>();
+		for (var shift = 28; shift >= 0; shift -= 7)
+		{
+			if (value >= (1u << shift) || shift == 0)
+			{
+				bytes.Add((byte)(((value >> shift) & 0x7F) | (shift > 0 ? 0x80 : 0)));
+			}
+		}
+		return bytes.ToArray();
+	}
+
 	public void Test_EventCommandDecoderReadsTerminatedCommandVector()
 	{
 		var bytes = new List<byte>();
@@ -92,6 +202,39 @@ partial class TestRm2kParser : TestBase
 		AssertEq((int)conditions["switch_a_id"], 3);
 		AssertEq((int)conditions["variable_id"], 7);
 		AssertEq((int)conditions["variable_value"], 42);
+	}
+
+	/// <summary>
+	/// A condition's variable value may be negative, and is read as such.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And it is the same defect class as the event commands</strong>:
+	/// liblcf declares every condition field an <c>int32_t</c>, including
+	/// <c>variable_value</c>, and the writer's cast to <c>uint32_t</c> makes a
+	/// negative one five groups long -- which an unsigned reader refuses. No page
+	/// of the owned collection exercises it today, so this is the class fixed at
+	/// its second site rather than a bug that was reported.
+	/// </remarks>
+	public void Test_EventPageConditionReadsANegativeVariableValue()
+	{
+		var fields = new Godot.Collections.Dictionary
+		{
+			{ 0x01, new Godot.Collections.Dictionary { { "data", new byte[] { 0b00000101 } } } },
+			{ 0x04, new Godot.Collections.Dictionary { { "data", Ber(7) } } },
+			{ 0x05, new Godot.Collections.Dictionary { { "data", LiblcfInt(-5) } } },
+		};
+
+		var result = Rm2kEventPageConditionDecoder.Decode(fields);
+
+		AssertTrue(result.Success,
+			"**and the condition decodes** -- and the refusal is: "
+				+ (result.Error?.Message ?? "none"));
+		if (!result.Success)
+		{
+			return;
+		}
+		AssertEq((int)result.Data["variable_value"], -5,
+			"**and the value is minus five**, as liblcf writes and reads it");
 	}
 
 	internal static byte[] Chunk(int pId, byte[] pPayload)

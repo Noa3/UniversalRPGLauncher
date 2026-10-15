@@ -7439,8 +7439,9 @@ public sealed class EventInterpreter
 			Param(pCmd, 0), Param(pCmd, 1), Param(pCmd, 2), Param(pCmd, 3), frames))
 			{
 			_state.AddDiagnostic(
-				$"[Event {_eventId}] Tint screen refused: a channel was outside"
-				+ " 0 to 255 or the saturation outside 0 to 100");
+				$"[Event {_eventId}] Tint screen refused: a channel or the"
+				+ " saturation was outside the format's 0 to 200, where 100 is"
+				+ " neutral");
 			return;
 	}
 		_state.AddDiagnostic(

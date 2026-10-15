@@ -90,11 +90,15 @@ public partial class TestRm2kSeitenzahlUndBedingung : TestBase
         // **Und  es  gibt  keine  Reihenfolge  zu  lesen.**
         //
         // **Und  das  ist  keine  Vermutung,  sondern  eine  Messung:**
-        // **alle  105  gelesenen  Truepen  haben  genau  eine  Seite.**
+        // **alle  106  gelesenen  Truepen  haben  genau  eine  Seite.**
+        // **Und  die  Zahl  war  105,  solange  der  Ereignisbefehlsleser
+        //  Seiten  mit  einem  negativen  Parameter  verwarf** -- **eine
+        //  Zahl  aus  dem  alten  Leser  ist  eine  Zahl  ueber  den  Leser
+        //  und  nicht  ueber  das  Spiel.**
         AssertEq(1, seitenProTruppe.Count,
             "**and every page count is the same**");
 
-        AssertEq(105, seitenProTruppe[1],
+        AssertEq(106, seitenProTruppe[1],
             "**and that number is one** -- and so \"the first"
                 + " page\" is not a decision this runner made, it"
                 + " is the whole of what the game wrote");

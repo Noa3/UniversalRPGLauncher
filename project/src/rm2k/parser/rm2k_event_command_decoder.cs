@@ -37,20 +37,25 @@ public static class Rm2kEventCommandDecoder
                 });
             }
 
-            var code = reader.ReadBer();
-            var indent = reader.ReadBer();
+            // **And every one of these is a liblcf <c>int32</c>**, so they are
+            // read as signed compressed integers: the writer casts to uint32
+            // and a negative parameter is therefore five groups long, which an
+            // unsigned reader refuses outright. The move route decoder in this
+            // same folder already reads its parameters this way.
+            var code = reader.ReadSignedBer();
+            var indent = reader.ReadSignedBer();
             if (reader.HasError())
             {
                 return ReaderFailure(reader);
             }
-            var stringLength = reader.ReadBer();
+            var stringLength = reader.ReadSignedBer();
             if (reader.HasError() || stringLength < 0 || stringLength > MaxStringBytes)
             {
                 return Failure("Event command string length is outside bounds", reader.GetPosition());
             }
             var textBytes = reader.ReadBytes(stringLength);
             var text = new LegacyTextDecoder().Decode(textBytes);
-            var parameterCount = reader.ReadBer();
+            var parameterCount = reader.ReadSignedBer();
             if (reader.HasError() || parameterCount < 0 || parameterCount > MaxParameters)
             {
                 return Failure("Event command parameter count is outside bounds", reader.GetPosition());
@@ -58,7 +63,7 @@ public static class Rm2kEventCommandDecoder
             var parameters = new List<int>(parameterCount);
             for (var parameter = 0; parameter < parameterCount; parameter++)
             {
-                parameters.Add(reader.ReadBer());
+                parameters.Add(reader.ReadSignedBer());
                 if (reader.HasError())
                 {
                     return ReaderFailure(reader);

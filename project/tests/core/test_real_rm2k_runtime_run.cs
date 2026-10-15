@@ -825,4 +825,164 @@ public partial class TestRealRm2kRuntimeRun : TestBase
 
         return teile.Count == 0 ? "still" : string.Join(" ", teile);
     }
+
+    /// <summary>
+    /// Every page of every map of the finished game reads its commands.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the regression test for a defect that hid in plain
+    /// sight:</strong> the event command decoder read its parameters as unsigned
+    /// compressed integers, so a page holding a negative parameter -- which
+    /// liblcf writes as five groups, because the writer casts to <c>uint32_t</c>
+    /// -- was refused whole with "BER integer overflow". Measured before the
+    /// fix: **244 pages of this game and 93 of another** could not be read, and
+    /// the runtime's only trace was one diagnostic on one page of the start map.
+    /// </para>
+    /// <para>
+    /// <strong>And the reason it has to walk every map</strong> is that a page
+    /// that cannot be read is invisible until the player reaches that map: the
+    /// start map alone showed one.
+    /// </para>
+    /// </remarks>
+    public void Test_JedeSeiteJederKarteLiestIhreBefehle()
+    {
+        UeberspringeWennKeinSpiel();
+        var wurzel = Wurzel();
+        if (wurzel == null)
+        {
+            return;
+        }
+
+        var parser = new UniversalRPG.Rm2k.Parser.Rm2kParser();
+        var maps = Directory.EnumerateFiles(wurzel, "*.lmu").OrderBy(pPath => pPath).ToList();
+        var refused = new List<string>();
+        var pages = 0;
+        foreach (var map in maps)
+        {
+            var result = parser.ParseMap(map);
+            if (!result.Success)
+            {
+                refused.Add($"{Path.GetFileName(map)}: the map itself: "
+                    + (result.Error?.Describe() ?? "unknown"));
+                continue;
+            }
+            var data = result.Data;
+            if (!data.ContainsKey("events"))
+            {
+                continue;
+            }
+            foreach (var entry in (Godot.Collections.Array<Godot.Collections.Dictionary>)data["events"])
+            {
+                var pageList = (Godot.Collections.Array<Godot.Collections.Dictionary>)entry["pages"];
+                for (var pageIndex = 0; pageIndex < pageList.Count; pageIndex++)
+                {
+                    pages++;
+                    foreach (var key in pageList[pageIndex].Keys)
+                    {
+                        var name = key.ToString();
+                        if (!name.Contains("error", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+                        var text = pageList[pageIndex][key].AsString();
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            refused.Add($"{Path.GetFileName(map)} event {entry["id"]}"
+                                + $" page {pageIndex + 1}: {name}: {text}");
+                        }
+                    }
+                }
+            }
+        }
+
+        AssertTrue(maps.Count > 100,
+            "**and the game really has maps to walk** -- it has " + maps.Count);
+        AssertTrue(pages > 1000,
+            "and its maps really have pages -- " + pages + " were read");
+        AssertEq(refused.Count, 0,
+            "**and not one page refused its commands**, because a refused page is"
+                + " content the player cannot reach and cannot report; the first"
+                + " refusals are: " + string.Join(" | ", refused.Take(5)));
+    }
+
+    /// <summary>
+    /// A game that tints its screen is not refused.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the regression test for the second defect of the same
+    /// measurement:</strong> the tint's saturation was bounded to 0 to 100, while
+    /// the format's own range is 0 to 200 with 100 neutral for the three channels
+    /// and the saturation alike. One owned game issues this command from a
+    /// parallel page, and every single one was refused -- 150 of them in 300
+    /// frames, which is a screen that never changes colour.
+    /// </para>
+    /// <para>
+    /// <strong>And the assertion is about refusals, not about pixels</strong>,
+    /// because the tint is state in this runtime and no renderer paints it yet:
+    /// what is testable is that the command is accepted and stored.
+    /// </para>
+    /// </remarks>
+    public void Test_EinSpielDasSeinenBildschirmTintetWirdNichtAbgelehnt()
+    {
+        const string tintGame = "E:/RPGMakerGames/Lisa";
+        if (!Directory.Exists(tintGame))
+        {
+            return;
+        }
+
+        var game = new PluginGameInfo
+        {
+            GameDirectory = tintGame,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        };
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(game);
+        AssertTrue(started.Success,
+            "**and the game starts** -- and the refusal is: " + started.Error?.Message);
+        if (host.Runtime is not Rm2kEngineRuntime runtime)
+        {
+            AssertTrue(false, "**and the host built an RM2K runtime**");
+            return;
+        }
+
+        var refusals = 0;
+        var applied = 0;
+        for (var frame = 0; frame < 300; frame++)
+        {
+            runtime.Update(1.0 / 60.0);
+            if ((frame + 1) % 30 != 0)
+            {
+                continue;
+            }
+            foreach (var line in runtime.Simulation.Diagnostics)
+            {
+                if (line.Contains("Tint screen refused", StringComparison.Ordinal))
+                {
+                    refusals++;
+                }
+                else if (line.Contains("Tint screen r", StringComparison.Ordinal))
+                {
+                    applied++;
+                }
+            }
+            // **And the diagnostics are read in blocks**, because the runtime
+            // keeps at most a hundred and a single read at the end would count
+            // the cap instead of the game.
+            runtime.Simulation.ClearDiagnostics();
+        }
+
+        AssertEq(refusals, 0,
+            "**and not one tint of this game was refused**, because the format"
+                + " writes 0 to 200 and the bound has to be the format's; the"
+                + " refusals counted are " + refusals);
+        AssertTrue(applied > 0,
+            "**and the game really tinted**, or the test measured a page that"
+                + " never ran; applied tints: " + applied);
+        host.Stop();
+    }
 }

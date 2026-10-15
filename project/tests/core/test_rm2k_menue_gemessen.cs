@@ -137,8 +137,13 @@ public partial class TestRm2kMenueGemessen : TestBase
             "**and save access is changed a hundred and ninety"
                 + " times**");
 
-        AssertEq(60, zaehler[11960],
-            "**and menu access is changed sixty times** -- and"
+        // **And the number moved from sixty to sixty four when the event command
+        // decoder stopped refusing pages that hold a negative parameter**: those
+        // pages were dropped whole before, so a count taken from the old reader
+        // was a count of what the reader could read and not of what the game
+        // wrote.
+        AssertEq(64, zaehler[11960],
+            "**and menu access is changed sixty four times** -- and"
                 + " that is the command that forbids the menu"
                 + " key, which the input test already proves");
 

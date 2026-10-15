@@ -250,17 +250,72 @@ distribution -- and common events are where RM2000 games keep their parallel
 processes and their battle logic. Closing that hole is the honest next step for
 this card.
 
-### K-PROD-RM2K-RUNTIME-DIAGNOSTICS — READY, measure what the runtime reports
+### K-PROD-RM2K-RUNTIME-DIAGNOSTICS — MEASURED: two real defects, both fixed
 
-Since no opcode is missing, the demand list for fidelity work has to come from
-the runtime itself. Run each owned RM2K game for a bounded number of frames
-through the real plugin path and count `Simulation.Diagnostics` by kind, then
-work that list in demand order. This is the same shape as the movement audit
-that produced the 1,787-page number, and it needs the same discipline: bounded
-frames, no game executable, a temporary probe removed after collection, and the
-counts recorded here. Two known items belong on that list already: the title
-screen's **Options** (`Options - not implemented yet` in the runtime) and the
-route commands 24/25/26 named under the loop-map card.
+The demand list for fidelity work came from the runtime itself: each owned RM2K
+game was started through the real plugin path, run 300 frames, and its
+`Simulation.Diagnostics` counted by kind in 30-frame blocks (the runtime keeps at
+most a hundred, so a single read at the end would count the cap).
+
+| Game | Map | Diagnostics | Kinds |
+|---|---:|---:|---:|
+| Dragon Destiny | 742 | 13 | 6 |
+| Lisa | 1 | 304 | 6 |
+| Pom Gets Wi-Fi v1-04 | 3 | 9 | 4 |
+
+**And two of those kinds were defects, not information.**
+
+**1. `BER integer overflow` dropped 337 event pages.** The event command decoder
+read `code`, `indent`, the string length, the parameter count **and every
+parameter** with `ReadBer` -- the unsigned reader, which refuses any value above
+`int.MaxValue >> 7`. But `LcfWriter::WriteInt` casts to `uint32_t` and writes
+seven-bit groups from bit 28 down, so **a negative parameter is five groups
+long**: `-1` is `8F FF FF FF 7F`, which assembles to 4294967295, and
+`LcfReader::ReadInt` assembles into an `int` and wraps -- which is why liblcf
+reads it as `-1`. Measured reach: **244 pages of Dragon Destiny and 93 of Pom
+Gets Wi-Fi** could not be read, and the runtime's only trace was one diagnostic
+on one page of the start map. **The move route decoder in the same folder
+already used `ReadSignedBer` for its parameters**; the event command decoder
+simply was not carried along. After the fix: **0 pages with an error field in
+all three games**.
+
+**2. The tint range was a colour channel's, not the format's.** `TintScreen`
+bounded the three channels to 0..255 and the saturation to 0..100, with a comment
+claiming the saturation "is a percentage". The command's own parameters say
+otherwise: measured over the collection, `11030` (2,917 instances in Dragon
+Destiny alone) writes `[200,200,200,200]`, `[100,100,100,100]` and
+`[200,0,0,200]` -- so the range is **0 to 200 for the channels and the saturation
+alike, with 100 neutral**, which is exactly what the engine restores on a map
+change (`Game_Screen::OnMapChange`). Lisa issues this command from a parallel
+page and **all 150 of its tints in 300 frames were refused**, which is a screen
+that never changes colour. The bound is now its own (`MaxTintValue = 200`,
+`NeutralTintValue = 100`, `IsTintValue`) instead of borrowing `IsChannel`, and
+three fixtures that had used 255 were corrected, because 255 is out of format for
+a tint and only passed while the bound was wrong. After the fix the same run
+reports **150 applied tints and 0 refusals**.
+
+Regression coverage, both of them at the real game so they cannot be satisfied by
+a synthetic fixture: `Test_JedeSeiteJederKarteLiestIhreBefehle` walks all 743 maps
+of Dragon Destiny and asserts no page refuses its commands, and
+`Test_EinSpielDasSeinenBildschirmTintetWirdNichtAbgelehnt` runs Lisa 300 frames
+and asserts no tint is refused while at least one is applied.
+
+**And three measurement tests had to be re-measured, which is the point of
+pinning numbers.** Reading more content changes what the counts say:
+`TestRm2kBefehleGemessen` moved from 105 readable troop pages and 10 distinct
+commands to **106 and 12** (two pages carry `10210` twice, so 107 instances), and
+`TestRm2kSeitenzahlUndBedingung` from 105 to **106**, while
+`TestRm2kMenueGemessen`'s `11960` count moved from 60 to **64**. **A number taken
+from the old reader was a number about the reader and not about the game**, and
+each updated assertion says so where it stands.
+
+**And the third kind is still open: the diagnostic channel is noise.** The same
+300 frames of Lisa write **150 successful-tint messages and 150 "Switches 1-10 ->
+OFF" messages** -- normal operation narrated as diagnostics -- against a hundred
+entry cap, so real findings are crowded out and evicted. That is exactly how the
+BER defect stayed hidden, and it is why the measurement above had to read in
+blocks. Making the trace channel separate from the problem channel is the next
+step for this card.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 

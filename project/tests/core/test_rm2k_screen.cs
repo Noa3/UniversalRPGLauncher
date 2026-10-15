@@ -340,14 +340,14 @@ public partial class TestRm2kScreen : TestBase
 	public void Test_SaturationHundredIsUntintedAndZeroIsATint()
 	{
 		var (interpreter, presentation, _) = Run(
-			Tint(255, 0, 0, pSaturation: 100));
+			Tint(200, 0, 0, pSaturation: 100));
 		interpreter.ExecuteFrame();
 		AssertEq(
 			presentation.TintSaturation, 100,
 			"**and 100 is stored as 100**, because it means the screen keeps its"
 			+ $" colours; the saturation is {presentation.TintSaturation}");
 
-		var (zweit, pres2, _) = Run(Tint(255, 0, 0, pSaturation: 0));
+		var (zweit, pres2, _) = Run(Tint(200, 0, 0, pSaturation: 0));
 		zweit.ExecuteFrame();
 		AssertEq(
 			pres2.TintSaturation, 0,
@@ -361,8 +361,11 @@ public partial class TestRm2kScreen : TestBase
 	/// </summary>
 	public void Test_TheTintEndsWhenItsFramesAreUp()
 	{
-		var (_, presentation, _) = Run(Tint(0, 0, 255, 60, pTenths: 5));
-		presentation.TintScreen(0, 0, 255, 60, 30);
+		// **And the colour is in the format's own range**: the tint takes 0 to
+		// 200 with 100 neutral, so a fixture of 255 was outside it and only
+		// passed while the bound was wrongly a colour channel's.
+		var (_, presentation, _) = Run(Tint(0, 0, 200, 60, pTenths: 5));
+		presentation.TintScreen(0, 0, 200, 60, 30);
 
 		presentation.Tick(10);
 		AssertEq(
@@ -432,12 +435,78 @@ public partial class TestRm2kScreen : TestBase
 	}
 
 	/// <summary>
+	/// A tint of two hundred is the format's own maximum and is accepted.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And this is the second defect the runtime-diagnostics measurement
+	/// found:</strong> one owned game issues this command 150 times in 300 frames
+	/// and every one of them was refused with "a channel was outside 0 to 255 or
+	/// the saturation outside 0 to 100". The command's own parameters say why --
+	/// measured over the whole collection, the editor writes <c>[200,200,200,200]</c>,
+	/// <c>[100,100,100,100]</c> and <c>[200,0,0,200]</c>, so the range is
+	/// <strong>0 to 200 for the three channels and for the saturation, with 100
+	/// as the neutral value</strong>, which is exactly what the engine restores
+	/// on a map change.
+	/// </para>
+	/// <para>
+	/// <strong>So a saturation bound of 0 to 100 is not a conservative check but
+	/// a wrong one</strong>, and it refused every tint a game writes above
+	/// neutral.
+	/// </para>
+	/// </remarks>
+	public void Test_ATintOfTwoHundredIsAccepted()
+	{
+		var (interpreter, presentation, state) = Run(Tint(200, 200, 200, 200, pTenths: 10));
+		interpreter.ExecuteFrame();
+
+		AssertEq(
+			presentation.IsTintActive, true,
+			"**and the tint of the format's own maximum is applied**, because"
+			+ " 200 is what the editor writes and 100 is neutral; the tint is"
+			+ $" {presentation.IsTintActive} and the saturation"
+			+ $" {presentation.TintSaturation}");
+		AssertEq(presentation.TintSaturation, 200);
+		AssertTrue(
+			!ContainsDiagnostic(state, "refused"),
+			"and nothing was refused; the diagnostics are"
+			+ $" {state.Diagnostics.Count}");
+	}
+
+	/// <summary>
+	/// The presentation takes the whole format range and refuses beyond it.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And 255 is outside it</strong>, which is the value a reader that
+	/// confused the tint range with a colour channel would have accepted: the
+	/// bound is the format's, not a byte's.
+	/// </remarks>
+	public void Test_TheTintRangeIsZeroToTwoHundred()
+	{
+		var presentation = new PresentationState();
+
+		AssertTrue(presentation.TintScreen(0, 0, 0, 0, 10),
+			"**and the bottom of the range is accepted**, because a tint of"
+			+ " zero is a fully tinted screen and not an absent one");
+		AssertTrue(presentation.TintScreen(200, 200, 200, 200, 10),
+			"and the top of the range is accepted");
+		AssertTrue(!presentation.TintScreen(201, 0, 0, 0, 10),
+			"**and one past the top is refused**");
+		AssertTrue(!presentation.TintScreen(0, 0, 0, 201, 10),
+			"**and so is a saturation past the top**");
+		AssertTrue(!presentation.TintScreen(255, 255, 255, 100, 10),
+			"**and 255 is not in this range**, whatever a colour channel allows");
+		AssertTrue(!presentation.TintScreen(-1, 0, 0, 0, 10),
+			"and neither is a negative value");
+	}
+
+	/// <summary>
 	/// A new game starts with no tint and no pending transition.
 	/// </summary>
 	public void Test_ATintDoesNotSurviveANewGame()
 	{
 		var (interpreter, presentation, _) = Run(
-			Tint(255, 0, 0, 100, 20), Transition(EventInterpreter.ShowScreen, 0));
+			Tint(200, 0, 0, 100, 20), Transition(EventInterpreter.ShowScreen, 0));
 		interpreter.ExecuteFrame();
 		interpreter.ExecuteFrame();
 		AssertEq(

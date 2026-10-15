@@ -106,6 +106,19 @@ public sealed class PresentationState
     public const int MaxPictureNameCharacters = 256;
     public const int MaxPictureDimension = 8192;
     public const int MaxColorChannel = 255;
+
+    /// <summary>
+    /// The top of the screen tint range, which is not a colour channel's.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the editor writes this range for the three channels and for
+    /// the saturation alike</strong>, so a tint of 255 is out of format while a
+    /// flash of 255 is in it.
+    /// </remarks>
+    public const int MaxTintValue = 200;
+
+    /// <summary>The neutral tint value, which the engine restores on a map change.</summary>
+    public const int NeutralTintValue = 100;
     public const int MaxEffectFrames = 600; // 10 seconds at 60 Hz, matching EventInterpreter.MaxWaitFrames
     public const int MaxShakeStrength = 8;
     public const int MaxShakeSpeed = 8;
@@ -237,10 +250,15 @@ public sealed class PresentationState
     public bool TintScreen(
         int pRed, int pGreen, int pBlue, int pSaturation, int pFrames)
     {
-        // **Saturation is bounded separately from the channels**, because it is
-        // a percentage and not a colour: 0 to 100, and 100 is untinted.
-        if (!IsChannel(pRed) || !IsChannel(pGreen) || !IsChannel(pBlue)
-            || pSaturation < 0 || pSaturation > 100
+        // **And the range is the format's own, which is not a colour channel's
+        // and not a percentage.** The editor writes 0 to 200 for the three
+        // channels *and* for the saturation, and 100 is the neutral value --
+        // the engine restores exactly 100 on a map change, and measured over
+        // the owned collection the commands carry [200,200,200,200],
+        // [100,100,100,100] and [200,0,0,200]. A saturation bound of 0 to 100
+        // refused every tint above neutral, which is most of them.
+        if (!IsTintValue(pRed) || !IsTintValue(pGreen) || !IsTintValue(pBlue)
+            || !IsTintValue(pSaturation)
             || pFrames < 0 || pFrames > MaxEffectFrames)
         {
             return false;
@@ -628,6 +646,18 @@ public sealed class PresentationState
     }
 
     private static bool IsChannel(int pValue) => pValue >= 0 && pValue <= MaxColorChannel;
+
+    /// <summary>
+    /// Whether a value is inside the tint range the editor writes.
+    /// </summary>
+    /// <param name="pValue">A channel or a saturation.</param>
+    /// <returns>Whether it is in range.</returns>
+    /// <remarks>
+    /// <strong>And it is its own range and not <see cref="IsChannel"/></strong>:
+    /// a screen tint is not a colour channel, so 255 belongs to a flash and not
+    /// to a tint, and a shared check would accept one and refuse the other.
+    /// </remarks>
+    private static bool IsTintValue(int pValue) => pValue >= 0 && pValue <= MaxTintValue;
 
     public bool BeginInput(int pVariableId)
     {

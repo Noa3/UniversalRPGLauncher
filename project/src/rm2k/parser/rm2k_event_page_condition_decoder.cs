@@ -60,7 +60,12 @@ public static class Rm2kEventPageConditionDecoder
         }
         var data = rawData.AsByteArray();
         var reader = new LcfBinaryReader(data);
-        var value = reader.ReadBer();
+        // **And every condition field is a liblcf int32_t**, so the value is
+        // read as a signed compressed integer: a negative `variable_value` is
+        // five groups long, because the writer casts to uint32, and the unsigned
+        // reader refuses exactly that. This is the second site of the same
+        // defect the event command decoder had.
+        var value = reader.ReadSignedBer();
         if (reader.HasError() || !reader.IsEof())
         {
             return new Rm2kParser.ParseResult(false, new Rm2kParser.ParseError(reader.ErrorOffset, $"Invalid condition integer field 0x{pId:x2}"));
