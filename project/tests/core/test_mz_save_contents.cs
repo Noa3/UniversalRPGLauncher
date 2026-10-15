@@ -140,6 +140,49 @@ public partial class TestMzSaveContents : TestBase
     }
 
     /// <summary>
+    /// A save that carries what the reader does not put back says so, entry by entry.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the two lists answer different questions.</strong> <c>Missing</c> is about
+    /// the file: an entry the engine writes and this save has not got. <c>Unapplied</c> is
+    /// about the reader: the entry is right there in the file and the load leaves it behind.
+    /// The gold, the actors and the screen were written, carried through the file, and then
+    /// dropped on load -- a save that loses a player's gold without saying so.
+    ///
+    /// <strong>And the invariant is the point, not the list:</strong> the test does not copy
+    /// <c>AppliedEntries</c> and compare, because that would be the same staleness one layer
+    /// further out. It asserts that every entry the save carries is either applied or named,
+    /// which is what the old six-entry list failed without anything noticing.
+    /// </remarks>
+    public void Test_WasDerLeserNichtZurueckschreibtWirdBenannt()
+    {
+        var fakten = Fakten();
+        var (inhalt, fehlend) = MzSaveContents.Capture(fakten, 1, 60);
+        AssertEq(fehlend.Count, 0,
+            "**the writer builds all ten of the engine's entries**, so nothing is missing here");
+
+        AssertTrue(MzJson.TryParse(MzJson.Write(inhalt), out var gelesen, out var fehler), fehler);
+        AssertTrue(MzSaveContents.TryRestore(gelesen!, out var geladen, out var problem), problem);
+
+        foreach (var name in new[] { "screen", "actors", "party._gold" })
+        {
+            AssertTrue(geladen!.Unapplied.Contains(name),
+                $"**{name} is named as not put back**, rather than dropped on load");
+        }
+
+        // **Und die Invariante**: jeder Eintrag, den die Datei traegt, ist entweder
+        // angewendet oder benannt.
+        foreach (var name in MzSaveContents.EngineEntries)
+        {
+            if (inhalt.Member(name) == null) continue;
+            AssertTrue(MzSaveContents.AppliedEntries.Contains(name)
+                    || geladen!.Unapplied.Contains(name),
+                $"**{name} is either applied or named** -- neither list may forget an entry the"
+                    + " save carries");
+        }
+    }
+
+    /// <summary>
     /// And a hole in a JavaScript array is a hole and not a zero.
     /// </summary>
     /// <remarks>

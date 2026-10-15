@@ -53,9 +53,22 @@ public static class MzSaveContents
             "selfSwitches", "actors", "party", "map", "player",
         };
 
-    /// <summary>The entries this runtime can build and read back.</summary>
-    public static readonly IReadOnlyList<string> WrittenEntries =
-        new[] { "system", "switches", "variables", "selfSwitches", "map", "player" };
+    /// <summary>
+    /// The entries <see cref="TryRestore"/> puts back into a running game.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a list of what a reader does is a claim about the reader, so it has to
+    /// match it.</strong> This list used to name six entries -- <c>system</c>, <c>switches</c>,
+    /// <c>variables</c>, <c>selfSwitches</c>, <c>map</c>, <c>player</c> -- and it was wrong in
+    /// both directions: the writer had grown <c>screen</c>, <c>timer</c>, <c>actors</c> and
+    /// <c>party</c> since, and <c>timer</c> was read back although the list did not name it.
+    /// Nothing read the list, so nothing caught it. It is corrected, and the test that pins it
+    /// asserts the invariant rather than a copy of the list: what is applied plus what is
+    /// named as unapplied is every entry the save carries, so the two cannot drift apart
+    /// without a test failing.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> AppliedEntries =
+        new[] { "system", "timer", "switches", "variables", "selfSwitches", "map", "player" };
 
     /// <summary>
     /// Builds a save from the facts of a running game.
@@ -158,6 +171,24 @@ public static class MzSaveContents
             }
         }
 
+        // **And what this reader does not put back is named, not dropped quietly.** A save
+        // that carried the party's gold and lost it on load would be a save that loses a
+        // player's gold; the entry is present in the file, so it is not in `Missing` -- it is
+        // in the reader's own list of what it did not apply.
+        var unapplied = new List<string>();
+        foreach (var name in EngineEntries)
+        {
+            if (pContents.Member(name) == null) continue;
+            var applied = false;
+            foreach (var known in AppliedEntries)
+            {
+                if (known == name) applied = true;
+            }
+            if (!applied) unapplied.Add(name);
+        }
+        // And `party` is applied only in part: the members come back, the gold does not.
+        if (party?.Member("_gold") != null) unapplied.Add("party._gold");
+
         pLoaded = new MzLoadedSave
         {
             Switches = switches,
@@ -174,6 +205,7 @@ public static class MzSaveContents
             TimerWorking = timer?.Member("_working")?.BoolOr(false) ?? false,
             PartyMembers = partyMembers,
             Missing = MissingFrom(pContents),
+            Unapplied = unapplied,
         };
         return true;
     }
@@ -789,6 +821,18 @@ public sealed class MzLoadedSave
     /// The engine's entries this save does not carry.
     /// </summary>
     public IReadOnlyList<string> Missing { get; init; } = new List<string>();
+
+    /// <summary>
+    /// The entries this save carries and this reader does not put back.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the two lists are different questions.</strong> <c>Missing</c> is about the
+    /// file -- an entry the engine writes and this save has not got. This one is about the
+    /// reader: the entry is right there in the file and the runtime loads the save without it,
+    /// so a player would see their gold, their actors or their screen state quietly reset.
+    /// Named, it is a known gap; dropped, it is a save that lies about itself.
+    /// </remarks>
+    public IReadOnlyList<string> Unapplied { get; init; } = new List<string>();
 
     /// <summary>
     /// Party members (actor IDs in the party) from Game_Party._actors.

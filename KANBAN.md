@@ -758,6 +758,35 @@ leaves the frame byte for byte as it was; the four updates are pinned by tests a
 the reference's arithmetic, and one end-to-end test drives a real game with the weather
 turned on.
 
+### K-PROD-MZ-SAVE-RESTORE — READY (the load leaves the gold, the actors and the screen behind)
+
+**And the writer is complete while the reader is not.** `MzSaveContents.Capture` builds all ten
+of the engine's entries -- `system`, `screen`, `timer`, `switches`, `variables`,
+`selfSwitches`, `actors`, `party`, `map`, `player` -- and the screen carries the tone, its
+target and duration, the flash colour and duration, brightness and the shake fields; each actor
+carries `_actorId`, `_name`, `_nickname`, `_classId`, `_level`, `_exp`, `_skills` and
+`_equips`; the party carries `_gold` and `_actors`.
+
+**And `TryRestore` reads back only part of that.** It reads switches, variables, selfSwitches,
+the map's figures, the player, the system's slot and frame, the timer, and the party's members.
+It does **not** read `screen`, it does **not** read `actors`, and it does not read
+`party._gold` -- so a save written by this runtime and loaded by this runtime silently resets
+the gold, every actor's level and equipment, and the screen's tone, flash and brightness. The
+file has them; the load drops them.
+
+**That is now named rather than silent.** `MzLoadedSave.Unapplied` lists the entries a save
+carries and the reader does not apply, the runtime reports them in its load message, and a test
+pins the invariant instead of a copy of the list: what is applied plus what is named is every
+entry the save carries. The list this replaced -- six entries, of which one was not even read
+and four were missing -- was wrong in both directions and nothing read it, which is why nothing
+caught it.
+
+**What implementing the restore needs:** `MzBranchFacts.Screen` is `{ get; init; }`, so the
+screen state cannot be applied to a running game at all today; the actors and the party need
+the same treatment `Facts.Player` already has (`StandAt`). Then the reader fills them and the
+`Unapplied` entries disappear one by one -- each one only when a test shows the value coming
+back through the file, not when the field is merely assigned.
+
 ### K-PROD-RM2K-EVENT-SPRITE-OFFSET — DONE (2026-10-15, every event walk is drawn between the tiles)
 
 The hero's sprite carried the unspent step as a pixel offset; the **event** sprite was built

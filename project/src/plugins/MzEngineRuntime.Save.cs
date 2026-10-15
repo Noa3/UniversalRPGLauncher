@@ -291,6 +291,14 @@ public sealed partial class MzEngineRuntime
                 + "written from";
         }
 
+        // **Und was der Leser nicht zurueckschreibt, wird benannt**: der Eintrag steht in
+        // der Datei und die Runde laedt die Datei trotzdem ohne ihn.
+        if (save.Unapplied.Count > 0)
+        {
+            bericht += $"; the save carries {string.Join(", ", save.Unapplied)}, "
+                + "which this runtime does not put back yet";
+        }
+
         return bericht;
     }
 

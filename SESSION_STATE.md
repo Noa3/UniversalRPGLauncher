@@ -1,28 +1,31 @@
 ## Current card
 
-### Route commands complete: 8, 10 and 11 as route commands (2026-10-15)
+### MZ save: what the load leaves behind is named, not silent (2026-10-15)
 
-`move_random` (8) turns to one of the four cardinals (the reference's `TurnRandom()` rolls
-0..3, never a diagonal), `move_away_from_hero` (10) walks away along the dominant axis, and
-`move_forward` (11) keeps the direction the character already has. The dispatch reaches them
-through the same movement branch as the eight named directions, so the interpreter's forced
-routes get them too. **With that every route command the format defines is executed.** The
-test that asserted these three did *nothing* ("does not whitelabel") was the honest
-description of a missing command, not a property of the format; three behaviour tests replace
-it, and a mutation that resolved `away` like `towards` was caught by the new away test.
+`MzSaveContents.Capture` writes all ten of the engine's entries, and `TryRestore` reads back
+only part of them: it does **not** read `screen`, it does **not** read `actors`, and it does not
+read `party._gold` -- so a save written and loaded by this runtime silently resets the gold,
+every actor's level and equipment, and the screen's tone, flash and brightness. That is now
+named: `MzLoadedSave.Unapplied` lists what a save carries and the reader does not apply, the
+runtime reports it in its load message, and the test pins the invariant (applied plus named is
+every entry the save carries) rather than a copy of the list. The list this replaced -- six
+entries, one of them not even read and four missing -- was wrong in both directions and nothing
+read it. What the actual restore needs is stated in `K-PROD-MZ-SAVE-RESTORE`:
+`MzBranchFacts.Screen` is `{ get; init; }`, so screen state cannot be applied to a running game
+at all yet.
 
-### Canonical validation GREEN (2026-10-15, after the relative route commands)
+### Canonical validation GREEN (2026-10-15, after the MZ save naming)
 
-`./scripts/validate.sh` exited **0** with **All 2982 tests passed** and the
+`./scripts/validate.sh` exited **0** with **All 2983 tests passed** and the
 `UniversalRPG validation passed.` marker, **373** suite records and **zero**
 `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-22.log`.
-2980 after `8fb6cea`, minus the replaced test and plus the three behaviour tests. Earlier
-green runs of the same day: **2980** after `8fb6cea`, **2975** after `4e4bc76`, **2974** after
-`b942abf`, **2973** after `9687b5f`, **2968** after `45b4b21`, **2961** after `6d9eb20`,
-**2956** after `65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940** after
-`aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after `dec3936`,
-**2921** after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-23.log`.
+2982 after `33f41c5` plus the MZ save test. Earlier green runs of the same day: **2982** after
+`33f41c5`, **2980** after `8fb6cea`, **2975** after `4e4bc76`, **2974** after `b942abf`,
+**2973** after `9687b5f`, **2968** after `45b4b21`, **2961** after `6d9eb20`, **2956** after
+`65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940** after `aa8017f`,
+**2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after `dec3936`, **2921** after
+`ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
 
 **And the run before it (`urpg-canonical-13.log`) failed on one test, which was a
 real find rather than the intermittent crash**: 2948 tests, **4 failing
