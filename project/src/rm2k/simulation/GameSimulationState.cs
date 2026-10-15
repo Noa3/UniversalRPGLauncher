@@ -1628,6 +1628,30 @@ public sealed class GameSimulationState
 
     public int MapWidth { get; private set; }
     public int MapHeight { get; private set; }
+
+    /// <summary>
+    /// The map's scroll type, from the LMU's <c>scroll_type</c> chunk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is what makes a map loop</strong>: the engine's enum is none 0,
+    /// vertical 1, horizontal 2, both 3, so a direction loops when its bit is set. Four
+    /// of the eight hundred and six owned maps are <c>both</c>.
+    /// </para>
+    /// <para>
+    /// <strong>And it is a map property and not a camera one</strong>, which is why it
+    /// lives here: the camera, the player's movement and the events' movement all have to
+    /// wrap the same way, and a reader that only wrapped the camera would have the player
+    /// walk into an invisible wall at the edge of a looping map.
+    /// </para>
+    /// </remarks>
+    public int ScrollType { get; set; }
+
+    /// <summary>Whether the map loops horizontally, which is bit one of the type.</summary>
+    public bool LoopHorizontal => (ScrollType & 2) != 0;
+
+    /// <summary>Whether the map loops vertically, which is bit zero of the type.</summary>
+    public bool LoopVertical => (ScrollType & 1) != 0;
     public Godot.Collections.Array<bool> PassableTiles { get; init; } = new();
 
     /// <summary>
@@ -3098,12 +3122,52 @@ public sealed class GameSimulationState
 
     public bool IsPassableInDirection(int pX, int pY, byte pDirectionBit)
     {
+        // **And the lookup wraps on a looping map**, which is the reference's own
+        // behaviour for terrain and passability alike: `Game_Map::RoundX` runs before the
+        // chip lookup, so the tile the player is walking into from the last column is the
+        // first column's tile and not an empty one.
+        pX = RoundX(pX);
+        pY = RoundY(pY);
         if (pX < 0 || pY < 0 || pX >= MapWidth || pY >= MapHeight)
         {
             return false;
         }
         var index = pX + pY * MapWidth;
         return index < PassabilityMasks.Count && (PassabilityMasks[index] & pDirectionBit) == pDirectionBit;
+    }
+
+    /// <summary>
+    /// Wraps a column into the map when it loops horizontally.
+    /// </summary>
+    /// <param name="pX">The column.</param>
+    /// <returns>The column, wrapped when the map loops.</returns>
+    /// <remarks>
+    /// <strong>And this is the reference's <c>Game_Map::RoundX</c> exactly</strong>:
+    /// <c>LoopHorizontal() ? Utils::PositiveModulo(x, GetTilesX()) : x</c>. It is used for
+    /// the candidate position of every step and for every passability lookup, so a
+    /// looping map wraps in one place instead of in each caller.
+    /// </remarks>
+    public int RoundX(int pX)
+    {
+        if (!LoopHorizontal || MapWidth <= 0)
+        {
+            return pX;
+        }
+        var wrapped = pX % MapWidth;
+        return wrapped < 0 ? wrapped + MapWidth : wrapped;
+    }
+
+    /// <summary>Wraps a row into the map when it loops vertically.</summary>
+    /// <param name="pY">The row.</param>
+    /// <returns>The row, wrapped when the map loops.</returns>
+    public int RoundY(int pY)
+    {
+        if (!LoopVertical || MapHeight <= 0)
+        {
+            return pY;
+        }
+        var wrapped = pY % MapHeight;
+        return wrapped < 0 ? wrapped + MapHeight : wrapped;
     }
 
     public bool TryMove(int pDeltaX, int pDeltaY)
@@ -3113,8 +3177,14 @@ public sealed class GameSimulationState
             AddDiagnostic("Movement requires exactly one cardinal tile step.");
             return false;
         }
-        var targetX = MapX + pDeltaX;
-        var targetY = MapY + pDeltaY;
+        // **And the candidate position is wrapped before it is checked**, which is the
+        // reference's `Game_Character::Move` -> `Game_Map::RoundX`/`RoundY`: on a looping
+        // map the tile beside the last column is the first one, so the step is legal and
+        // the passability that decides it is the wrapped tile's. A reader that checked
+        // the unwrapped target would put an invisible wall at the edge of a map the engine
+        // wraps around.
+        var targetX = RoundX(MapX + pDeltaX);
+        var targetY = RoundY(MapY + pDeltaY);
         FacingDirection = (byte)(pDeltaX > 0 ? 6 : pDeltaX < 0 ? 4 : pDeltaY > 0 ? 2 : 8);
         if (MapWidth <= 0 || MapHeight <= 0 || targetX < 0 || targetX >= MapWidth || targetY < 0 || targetY >= MapHeight)
         {

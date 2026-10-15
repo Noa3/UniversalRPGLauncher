@@ -1267,7 +1267,13 @@ public partial class Rm2kParser : RefCounted
 		var chipsetResult = IntegerFromFields(fields, 0x01, 1);
 		var widthResult = IntegerFromFields(fields, 0x02, 20);
 		var heightResult = IntegerFromFields(fields, 0x03, 15);
-		foreach (var result in new[] { chipsetResult, widthResult, heightResult })
+		// **And the scroll type is what makes a map loop.** Verified against liblcf's
+		// `rpg::Map` chunk table: `0x0B` is `scroll_type`, and the engine's own enum is
+		// none 0, vertical 1, horizontal 2, both 3 -- so a map loops in a direction when
+		// its bit is set. The chunk was already read and never surfaced, which is why the
+		// camera's loop parameters were dead code.
+		var scrollResult = IntegerFromFields(fields, 0x0B, 0);
+		foreach (var result in new[] { chipsetResult, widthResult, heightResult, scrollResult })
 		{
 			if (!result.Success)
 			{
@@ -1544,6 +1550,7 @@ public partial class Rm2kParser : RefCounted
 			{ "chipset_id", (int)chipsetResult.Data["value"] },
 			{ "width", width },
 			{ "height", height },
+			{ "scroll_type", (int)scrollResult.Data["value"] },
 			{ "lower_layer", (int[])lowerResult.Data["tiles"] },
 			{ "upper_layer", (int[])upperResult.Data["tiles"] },
 			{ "event_count", events.Count },

@@ -37,6 +37,17 @@ public static class Rm2kSimulationSaveCodec
         public int MapY { get; set; }
 
         /// <summary>
+        /// The map's scroll type, from the LMU's <c>scroll_type</c> chunk.
+        /// </summary>
+        /// <remarks>
+        /// **And it is part of the map's identity**, like its id and its dimensions: it
+        /// comes from the map file rather than from the save, but this reader restores a
+        /// map by dimensions and id, so a load that did not carry it would turn a looping
+        /// map into a walled one until the map was entered again.
+        /// </remarks>
+        public int ScrollType { get; set; }
+
+        /// <summary>
         /// The camera's pan, from <c>SavePartyLocation</c>.
         /// </summary>
         /// <remarks>
@@ -663,6 +674,7 @@ public static class Rm2kSimulationSaveCodec
         {
             GameTitle = pState.GameTitle,
             MapId = pState.MapId, MapX = pState.MapX, MapY = pState.MapY,
+            ScrollType = pState.ScrollType,
             PanCurrentX = pState.PanCurrentX, PanCurrentY = pState.PanCurrentY,
             PanFinishX = pState.PanFinishX, PanFinishY = pState.PanFinishY,
             PanSpeed = pState.PanSpeed, IsPanLocked = pState.IsPanLocked,
@@ -991,6 +1003,7 @@ public static class Rm2kSimulationSaveCodec
     {
         pState.ConfigureMap(pData.MapId, pData.MapWidth, pData.MapHeight, pData.PassableTiles);
         pState.MapX = pData.MapX; pState.MapY = pData.MapY; pState.FacingDirection = pData.FacingDirection;
+        pState.ScrollType = pData.ScrollType;
         // **And the pan comes back with the save.** The reference keeps it in
         // `SavePartyLocation` (`pan_current_x`, `pan_finish_x`, `pan_speed`,
         // `pan_state`), so a load in the middle of a panorama pan resumes with the

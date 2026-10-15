@@ -1,26 +1,23 @@
 ## Current card
 
-### K-PROD-RM2K-WEATHER DONE; the five screen effects are complete (2026-10-15)
+### K-PROD-RM2K-LOOP-MAPS DONE (2026-10-15)
 
-Tint, flash, shake and pan are painted on `K-PROD-RM2K-SCREEN-EFFECTS` (DONE), and
-**weather** -- rain, snow, fog and sandstorm -- is painted on its own card: the particle
-tables, the four per-frame rules, the procedural particles and the two fog layers, with
-three divergences stated (a dedicated deterministic RNG, a seeded overlay tile, and the
-weather toned by the frame's own tone pass). All five screen effects that were state only
-are now player-visible.
+The LMU's `scroll_type` is parsed, the state carries it, and the camera, the passability
+lookups and every step (player and events) wrap through `RoundX`/`RoundY` -- the four
+looping maps of the corpus now wrap instead of walling the player in. The save carries the
+scroll type as part of the map's identity.
 
-### Canonical validation GREEN (2026-10-15, after the weather)
+### Canonical validation GREEN (2026-10-15, after the loop maps)
 
-`./scripts/validate.sh` exited **0** with **All 2968 tests passed** and the
-`UniversalRPG validation passed.` marker, **372** suite records (the new
-`TestRm2kWeather` among them) and **zero** `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-17.log`.
-2961 after `6b8d15c` plus the seven new tests of the weather slice (six in its own suite
-and one end to end). Earlier green runs of the same day: **2961** after `6d9eb20`,
-**2956** after `65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940**
-after `aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after
-`dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`, **2912** after
-`073a096`.
+`./scripts/validate.sh` exited **0** with **All 2973 tests passed** and the
+`UniversalRPG validation passed.` marker, **373** suite records (the new
+`TestRm2kLoopMaps` among them) and **zero** `ERROR:   Test_` lines. Exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-18.log`.
+2968 after `45b4b21` plus the five new tests of the loop-map slice. Earlier green runs of
+the same day: **2968** after `45b4b21`, **2961** after `6d9eb20`, **2956** after
+`65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940** after `aa8017f`,
+**2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after `dec3936`, **2921**
+after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
 
 **And the run before it (`urpg-canonical-13.log`) failed on one test, which was a
 real find rather than the intermittent crash**: 2948 tests, **4 failing

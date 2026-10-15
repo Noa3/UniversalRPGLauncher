@@ -948,8 +948,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             else if (pEvent.FacingDirection != previousFacing) _eventRoutesMoved = true;
             return false;
         }
-        pEvent.X = targetX;
-        pEvent.Y = targetY;
+        // **And the event lands on the wrapped tile too**: the passability check above
+        // already looked at the wrapped target, so a step across a looping map's edge has
+        // to store the wrapped position as well, or the event would be placed outside the
+        // map it just walked around.
+        pEvent.X = Simulation.RoundX(targetX);
+        pEvent.Y = Simulation.RoundY(targetY);
         _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
             Rm2kStepBudget.ScreenTileSize, pDirection);
         _eventMovedThisTick.Add(pEvent.Id);
@@ -1224,10 +1228,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         const int margin = Rm2kMapCamera.TileSize * 2;
         var screenX = pEvent.X * Rm2kMapCamera.TileSize
             - Rm2kMapCamera.OffsetPixelsX(Rm2kMapCamera.PositionX(
-                Simulation.MapX, Math.Max(1, Simulation.MapWidth), ScreenWidth));
+                Simulation.MapX, Math.Max(1, Simulation.MapWidth), ScreenWidth,
+                Simulation.LoopHorizontal));
         var screenY = pEvent.Y * Rm2kMapCamera.TileSize
             - Rm2kMapCamera.OffsetPixelsY(Rm2kMapCamera.PositionY(
-                Simulation.MapY, Math.Max(1, Simulation.MapHeight), ScreenHeight));
+                Simulation.MapY, Math.Max(1, Simulation.MapHeight), ScreenHeight,
+                Simulation.LoopVertical));
         return screenX >= -margin && screenX <= ScreenWidth + margin
             && screenY >= -margin && screenY <= ScreenHeight + margin;
     }
@@ -1892,6 +1898,11 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         var lowerLayer = TryReadIntArray(pMapData, "lower_layer");
         var upperLayer = TryReadIntArray(pMapData, "upper_layer");
         TryReadInt(pMapData, "chipset_id", out var chipsetId);
+        // **And the map's scroll type comes with it**, because a looping map has to wrap
+        // in the camera *and* in every movement: without it the player walks into an
+        // invisible wall at the edge of a map the engine wraps around.
+        TryReadInt(pMapData, "scroll_type", out var scrollType);
+        Simulation.ScrollType = scrollType;
         ReadChipsetData(DatabaseData, chipsetId);
         LoadVehicles(pMapTreeData, mapId);
         Simulation.ChipsetAnimationType = _chipsetAnimationType;
@@ -4558,7 +4569,8 @@ ReadString(entry, "name", v => werte.Name = v);
     private int ResolveCameraOffsetX()
     {
         var position = Rm2kMapCamera.PositionX(
-            FollowX(), _renderedLayers!.Width, ScreenWidth, false, Simulation.PanCurrentX);
+            FollowX(), _renderedLayers!.Width, ScreenWidth, Simulation.LoopHorizontal,
+            Simulation.PanCurrentX);
         var pixels = Rm2kMapCamera.OffsetPixelsX(position);
         return pixels + Presentation.ShakePositionX;
     }
@@ -4605,7 +4617,8 @@ ReadString(entry, "name", v => werte.Name = v);
     private int ResolveCameraOffsetY()
     {
         var position = Rm2kMapCamera.PositionY(
-            FollowY(), _renderedLayers!.Height, ScreenHeight, false, Simulation.PanCurrentY);
+            FollowY(), _renderedLayers!.Height, ScreenHeight, Simulation.LoopVertical,
+            Simulation.PanCurrentY);
         return Rm2kMapCamera.OffsetPixelsY(position);
     }
 

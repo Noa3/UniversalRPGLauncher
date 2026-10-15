@@ -158,7 +158,39 @@ Focused evidence for the movement types, all re-run after the last edit:
   `+20` to `+2000` fails exactly the two wall-turn tests and nothing else
   (79/81, reverted to 81/81).
 
-### K-PROD-RM2K-LOOP-MAPS — READY, measured demand 4 of 806 maps
+### K-PROD-RM2K-LOOP-MAPS — DONE (the four looping maps wrap)
+
+**And the map loops now.** The parser surfaces the LMU's `scroll_type`, the camera wraps
+through it, and so does every movement:
+
+* **The parser** reads chunk `0x0B` into `scroll_type` (default 0, the format's own) --
+  the chunk was already read generically and never surfaced, which is why
+  `Rm2kMapCamera`'s loop parameters were dead code.
+* **The state** carries `ScrollType` with `LoopHorizontal` (bit one) and `LoopVertical`
+  (bit zero), and `RoundX`/`RoundY` are the reference's `Game_Map::RoundX`/`RoundY`
+  exactly: `LoopHorizontal ? PositiveModulo(x, tilesX) : x`.
+* **Every passability and terrain lookup wraps** through `IsPassableInDirection`, which is
+  the reference's own order (`RoundX` runs before the chip lookup).
+* **Every step wraps its candidate position before it is checked** --
+  `Game_Character::Move`'s `RoundX(x + dx)` -- for the player in `TryMove` and for the
+  events in their step path, and the event lands on the wrapped tile too.
+* **The camera wraps** through `PositionX`/`PositionY`, including the event-visibility
+  computation the toward/away movement modes use.
+* **And the save carries the scroll type**, because this reader restores a map by id and
+  dimensions: without it a load would turn a looping map into a walled one until the map
+  was entered again.
+
+Evidence: `TestRm2kLoopMaps` **5/5** -- the parser's `scroll_type` for 3, 2 and a map
+without the chunk; `RoundX`/`RoundY` wrapping only on a looping map; a step across the
+edge being refused without the loop and landing on the first column with it (both ways
+round); the camera wrapping to the far end for a player at the left edge; and the four
+measured maps of the corpus parsed by name, with a guard that either all four are present
+or none are, so a missing game cannot make the test look green by skipping. A mutation
+that drops the wrap from `TryMove` fails exactly the step test and was reverted. The four
+files are on disk (`Dragon Destiny/Map0196.lmu`, `Lisa/Map0039/40/42.lmu`) and were parsed
+by the test, so the measurement is a check and not a skip.
+
+**The original note, kept for the record** -- the state before this slice:
 
 **The map's `scroll_type` is ignored entirely today.** The parser never reads
 chunk `0x0B`, `Rm2kMap` has no such field, and both camera call sites
