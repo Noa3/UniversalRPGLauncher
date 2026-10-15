@@ -200,26 +200,97 @@ public sealed class GameSimulationState
     /// <summary>Whether the camera is held, from <c>11060</c>'s lock and unlock.</summary>
     public bool IsPanLocked { get; set; }
 
-    /// <summary>Whether a pan is running.</summary>
-    public bool IsPanActive { get; set; }
-
-    /// <summary>Where the pan is going, in tiles.</summary>
-    public int PanTargetX { get; set; }
-
-    /// <summary>Where the pan is going, vertically.</summary>
-    public int PanTargetY { get; set; }
-
-    /// <summary>How fast the pan runs, in the editor's own 1 to 6 scale.</summary>
+    /// <summary>
+    /// The column the camera followed when the lock was taken.
+    /// </summary>
     /// <remarks>
-    /// <strong>Clamped to 1 to 6 and not refused.</strong> The reference writes
-    /// <c>Utils::Clamp&lt;int&gt;(com.parameters[3], 1, 6)</c>, so a game that
-    /// wrote a zero or a nine gets the nearest speed and the pan still runs —
-    /// <strong>and a reader that refused would have stopped the event on a
-    /// number the engine repairs.</strong>
+    /// <strong>And the lock freezes the follow at the command, not at the frame.</strong>
+    /// The reference's <c>LockPan</c> only sets <c>pan_state</c>, and the map's own
+    /// scroll position -- which the camera is -- simply stays where it was; here the
+    /// camera is derived from the player, so the player's position has to be captured
+    /// where the lock happens. Capturing it later, in the renderer, would move the
+    /// camera by whatever the player did in between.
     /// </remarks>
-    public int PanSpeed { get; set; } = 3;
+    public int PanLockedFollowX { get; set; }
 
-    /// <summary>The frames the pan has left.</summary>
+    /// <summary>The row the camera followed when the lock was taken.</summary>
+    public int PanLockedFollowY { get; set; }
+
+    /// <summary>
+    /// Holds the camera, from the reference's <c>Game_Player::LockPan</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a lock does not stop a running pan</strong>: the reference's
+    /// <c>UpdateScroll</c> returns at once while locked, while <c>UpdatePan</c> keeps
+    /// scrolling the same map. Freezing the whole camera would stop a pan that a locked
+    /// cutscene is usually waiting for.
+    /// </remarks>
+    public void LockPan()
+    {
+        IsPanLocked = true;
+        PanLockedFollowX = MapX;
+        PanLockedFollowY = MapY;
+    }
+
+    /// <summary>Releases the camera, from the reference's <c>Game_Player::UnlockPan</c>.</summary>
+    public void UnlockPan()
+    {
+        IsPanLocked = false;
+    }
+
+    /// <summary>
+    /// Whether a pan is still running.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is derived and not stored</strong>, because that is the
+    /// reference's own definition: <c>Game_Player::IsPanActive()</c> is
+    /// <c>GetPanX() != GetTargetPanX() || GetPanY() != GetTargetPanY()</c>. A stored
+    /// flag could say a pan is running after it has arrived, and would have to be
+    /// kept in step by hand.
+    /// </remarks>
+    public bool IsPanActive => PanCurrentX != PanFinishX || PanCurrentY != PanFinishY;
+
+    /// <summary>
+    /// Where the pan is right now, in the map's own sub-units (256 per tile).
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it starts at the default pan and not at zero</strong>, which is
+    /// <c>Game_Player::GetDefaultPanX()</c>: the pan is the whole offset from the
+    /// player-centred view, not an addition on top of it. A reader that started at
+    /// zero would jump the camera by nine tiles the first time a game panned.
+    /// </remarks>
+    public int PanCurrentX { get; set; } = Rm2kMapCamera.DefaultPanX();
+
+    /// <summary>Where the pan is right now, vertically.</summary>
+    public int PanCurrentY { get; set; } = Rm2kMapCamera.DefaultPanY();
+
+    /// <summary>
+    /// Where the pan is heading, in the map's own sub-units.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is absolute and accumulates</strong>: the reference's
+    /// <c>StartPan</c> does <c>pan_finish_x += distance</c> (with the sign of the
+    /// direction), so two pans to the right scroll twice as far. A model that stored
+    /// the command's distance as a delta would pan to the same place twice.
+    /// </remarks>
+    public int PanFinishX { get; set; } = Rm2kMapCamera.DefaultPanX();
+
+    /// <summary>Where the pan is heading, vertically.</summary>
+    public int PanFinishY { get; set; } = Rm2kMapCamera.DefaultPanY();
+
+    /// <summary>
+    /// The pan's step per frame, which is the reference's <c>2 &lt;&lt; speed</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is a step in sub-units and not the editor's own 1 to 6</strong>:
+    /// <c>Game_Player::StartPan</c> writes <c>data()->pan_speed = 2 &lt;&lt; speed</c>,
+    /// so the editor's speed 3 is sixteen sub-units per frame and a pan of five tiles
+    /// takes eighty frames -- not the two a tile-counted reader would wait. The
+    /// editor's value is clamped to 1 to 6 first, so the shift cannot overflow.
+    /// </remarks>
+    public int PanSpeed { get; set; } = 2 << 3;
+
+    /// <summary>The frames the pan's wait has left, for the interpreter.</summary>
     public int PanFramesLeft { get; set; }
 
     /// <summary>What the last pan command asked for.</summary>
@@ -230,6 +301,116 @@ public sealed class GameSimulationState
 
     /// <summary>How far the last pan asked to scroll, in tiles.</summary>
     public int PanLastDistance { get; set; }
+
+    /// <summary>
+    /// Starts a pan, from the reference's <c>Game_Player::StartPan</c>.
+    /// </summary>
+    /// <param name="pDirection">The pan's direction.</param>
+    /// <param name="pDistance">The distance, in tiles.</param>
+    /// <param name="pSpeed">The editor's speed, clamped to 1 to 6 by the caller.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the distance is tiles scaled to sub-units</strong>
+    /// (<c>distance *= SCREEN_TILE_SIZE</c>) and added to the **absolute** finish, so
+    /// pans accumulate in the direction they are repeated.
+    /// </para>
+    /// <para>
+    /// <strong>And the four signs are the reference's own, and they are not the
+    /// screen's.</strong> They are written in the pan's own value space, where the
+    /// camera is <c>GetSpriteX() - GetPanX()</c>: a pan upwards **grows**
+    /// <c>pan_finish_y</c>, a pan to the right **shrinks** <c>pan_finish_x</c>. A
+    /// reader that used the screen's signs would pan a cutscene the wrong way, which
+    /// looks like a game bug rather than a reader bug.
+    /// </para>
+    /// <para>
+    /// <strong>And a direction outside the four moves nothing and still sets the
+    /// speed</strong>: the reference casts the command's parameter straight to its
+    /// four-valued enum and its chain has no else arm, so 4 to 7 falls through. That
+    /// is the engine's behaviour, not an oversight here.
+    /// </para>
+    /// </remarks>
+    public void StartPan(PanDirection pDirection, int pDistance, int pSpeed)
+    {
+        var distance = pDistance * Rm2kMapCamera.ScreenTileSize;
+        switch (pDirection)
+        {
+            case PanDirection.Up:
+                PanFinishY += distance;
+                break;
+            case PanDirection.Right:
+                PanFinishX -= distance;
+                break;
+            case PanDirection.Down:
+                PanFinishY -= distance;
+                break;
+            case PanDirection.Left:
+                PanFinishX += distance;
+                break;
+        }
+        PanSpeed = 2 << pSpeed;
+    }
+
+    /// <summary>
+    /// Sends the pan back to the player-centred view, from
+    /// <c>Game_Player::ResetPan</c>.
+    /// </summary>
+    /// <param name="pSpeed">The editor's speed, clamped to 1 to 6 by the caller.</param>
+    /// <remarks>
+    /// <strong>And the reset aims at the default pan and not at zero</strong>, because
+    /// zero is not where the camera rests: <c>GetDefaultPanX()</c> is the offset of a
+    /// player-centred view. Aiming at zero would scroll the camera half a screen past
+    /// the player.
+    /// </remarks>
+    public void ResetPan(int pSpeed)
+    {
+        PanFinishX = Rm2kMapCamera.DefaultPanX();
+        PanFinishY = Rm2kMapCamera.DefaultPanY();
+        PanSpeed = 2 << pSpeed;
+    }
+
+    /// <summary>
+    /// One frame of the pan, from the reference's <c>Game_Player::UpdatePan</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the step is the pan's own speed, capped by what is left</strong>:
+    /// <c>dx = min(step, abs(remain))</c> with the remainder's sign, so the pan lands
+    /// exactly on its finish instead of overshooting and coming back. The reference
+    /// also scrolls the map by the same amounts; here the camera is derived from the
+    /// player and the pan together, so moving the pan moves the camera.
+    /// </remarks>
+    public void UpdatePan()
+    {
+        if (!IsPanActive)
+        {
+            return;
+        }
+        var step = PanSpeed > 0 ? PanSpeed : 1;
+        var remainX = PanCurrentX - PanFinishX;
+        var remainY = PanCurrentY - PanFinishY;
+        var dx = Math.Min(step, Math.Abs(remainX));
+        var dy = Math.Min(step, Math.Abs(remainY));
+        PanCurrentX -= remainX >= 0 ? dx : -dx;
+        PanCurrentY -= remainY >= 0 ? dy : -dy;
+    }
+
+    /// <summary>
+    /// How long the pan has left, from the reference's <c>Game_Player::GetPanWait</c>.
+    /// </summary>
+    /// <returns>The frames, rounded up.</returns>
+    /// <remarks>
+    /// <strong>And it is measured from where the pan <em>is</em> to where it is
+    /// going</strong>, over the pan's own step: <c>distance / speed + (distance %
+    /// speed != 0)</c> with <c>distance = max(|current - finish|)</c>. A reader that
+    /// divided the command's tile count by the editor's speed would wait two frames
+    /// where the engine waits eighty.
+    /// </remarks>
+    public int GetPanWait()
+    {
+        var distance = Math.Max(
+            Math.Abs(PanCurrentX - PanFinishX), Math.Abs(PanCurrentY - PanFinishY));
+        var step = PanSpeed > 0 ? PanSpeed : 1;
+        return distance / step + (distance % step != 0 ? 1 : 0);
+    }
 
     /// <summary>
     /// Whether the event waits for movement to finish, from <c>11340</c>.
@@ -255,10 +436,14 @@ public sealed class GameSimulationState
     public void HaltAllMovement()
     {
         ProceedWithMovement = false;
-        // **And the pans stop with them**, because a command that stops
-        // everything and leaves the camera sliding stops less than everything.
-        IsPanActive = false;
-        PanFramesLeft = 0;
+        // **And the pan is deliberately left alone**, because the reference's
+        // `11350` calls `Game_Map::RemoveAllPendingMoves()` and nothing else: that
+        // function cancels the player's, the vehicles' and the events' move routes
+        // and never touches `pan_current`, `pan_finish` or `pan_state`. An earlier
+        // version of this method also stopped the pan, with the reasoning that "a
+        // command that stops everything and leaves the camera sliding stops less
+        // than everything" -- plausible, and wrong: it made a cutscene that halts
+        // movement freeze a camera the engine keeps panning.
     }
 
     /// <summary>The parallax background, from <c>11720</c>.</summary>

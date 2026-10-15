@@ -350,7 +350,7 @@ Demand and **parameters**, measured over the owned collection by
 | `11030` TintScreen | 2,924 | 0..200 with 100 neutral |
 | `11040` FlashScreen | 379 | **colour and level in RPG_RT's 0..31**, six parameters -- no subcommand, so every one of them is a single flash | **painted** |
 | `11050` ShakeScreen | 34 | **strength and speed up to 9** (15 values of exactly nine) | **painted** |
-| `11060` PanScreen | 43 | five parameters, 26 distinct forms |
+| `11060` PanScreen | 43 | five parameters, 26 distinct forms | **painted** |
 | `11070` WeatherEffects | 0 in this game | -- |
 
 And it was not a rare path: Lisa issues a tint from a parallel page **150 times in
@@ -541,9 +541,58 @@ cutoff fails exactly the pinned-position test (3/4) and was reverted. The save
 carries the shake's offset with its frames, for the same reason the flash's level
 does.
 
-**Still open on this card:** pan, weather, and the **continuous** forms of the shake
-and the flash, with their references already read so the next slice does not
-re-derive them.
+**And the pan moves the camera now**, and modelling it the way the reference does
+found **four more claims that were not true**, all measured against
+`Game_Player::StartPan`/`ResetPan`/`UpdatePan`/`GetPanWait` and
+`Game_Interpreter_Map::CommandPanScreen`:
+
+1. **The wait was off by a factor of forty.** The runtime computed
+   `distance / speed` on **tiles** with the editor's speed — a five tile pan at speed
+   three waited **2** frames. The reference's `GetPanWait` measures the remaining
+   distance in the map's own sub-units over the pan's step of `2 << speed`, which is
+   `1280 / 16 =` **80** frames. A cutscene waiting two frames for an eighty frame pan
+   runs its next lines while the camera is still sliding.
+2. **The pan's target was a delta and not an absolute finish.** The runtime stored
+   `distance * step` per command, so two pans to the right panned to the same place
+   and the second command looked ignored. The reference adds to `pan_finish_x`
+   (`distance *= SCREEN_TILE_SIZE` first), so pans accumulate — and `ResetPan` aims at
+   `GetDefaultPanX()` and not at zero, because zero is not where a player-centred
+   camera rests.
+3. **`11350` stopped the pan**, on the reasoning that "a command that stops everything
+   and leaves the camera sliding stops less than everything". The reference's `11350`
+   calls `Game_Map::RemoveAllPendingMoves()` and nothing else, and that function only
+   cancels the player's, the vehicles' and the events' move routes.
+4. **A direction outside the four moved one step on each axis** — the diagonal case.
+   The reference hands the command's direction straight into a four-valued enum whose
+   chain has no else arm, so 4 to 7 adds **no** distance while `pan_speed` is set
+   anyway.
+
+And the pan **was not saved at all**, while the reference keeps `pan_current_x`,
+`pan_finish_x`, `pan_speed` and `pan_state` in `SavePartyLocation`; a load therefore
+put the camera back on the player and undid the shot.
+
+The camera itself is derived from the player here rather than being a scroll position
+the follow writes, so the pan is the offset in that derivation (`GetSpriteX() -
+GetPanX()`, exactly the reference's shape) and **the lock freezes the follow and not
+the camera**: `Game_Player::UpdateScroll` returns at once while locked, while
+`UpdatePan` keeps scrolling the same map — so a locked cutscene can still pan, which
+is usually what it is waiting for. The frozen value is captured by `LockPan()` where
+the command runs, not by the renderer, because the player may still move in that
+frame.
+
+Evidence: `TestRm2kPanScreen` **16/16** (the absolute finish with the pan's own signs,
+the accumulating second pan, the diagonal fall-through, the step of `2 << speed`, the
+eighty and ninety six frame waits, the rounding, the landing on the finish, and
+`11350` leaving the pan alone), `TestRm2kRuntimeRendering` **26/26** including
+`Test_EinPanVerschiebtDieKameraUndDieSperreHaeltDenFollow` (a pan moves the drawn
+camera one pixel per frame and thirty two pixels over two tiles, a locked camera does
+not follow the player, the pan still moves it, and unlocking lets it follow again),
+`TestRm2kPictureSave` **6/6** (a pan saved half way resumes frame by frame). A mutation
+that flips the right-pan sign fails exactly three of the suite's tests and was
+reverted.
+
+**Still open on this card:** weather, and the **continuous** forms of the shake and the
+flash, with their references already read so the next slice does not re-derive them.
 
 * **A continuous flash is a single pulse today**: the interpreter calls `FlashOnce`
   for **both** the once and the begin subcommand, while the reference's `FlashBegin`
@@ -559,9 +608,13 @@ re-derive them.
   `newpos = amplitude * sin((time_left * 4 * (speed + 2)) % 256 * PI / 128) * -1`
   with a cutoff of `(speed * amplitude / 8) + 1`, and `Update` decrements the time
   left, restarting at `kShakeContinuousTimeStart = 65535` for a continuous shake.
-* **Pan** moves the camera position (`Game_Screen::PanScreen` wraps
-  `pan_x`/`pan_y` by `pan_limit_x`/`pan_limit_y`), and **weather** is a particle
-  count from `Weather::GetMaxNumParticles(type)` with a strength.
+* **Pan** is done above. The note that stood here was **wrong** and is corrected for
+  the record: it said `Game_Screen::PanScreen` wraps `pan_x`/`pan_y` by the pan limits.
+  That is `Game_Screen::OnMapScrolled`, the *panorama* scroll; the camera pan this
+  command drives is `Game_Player`'s, with `pan_current_x/y`, `pan_finish_x/y`,
+  `pan_speed` and `pan_state` in `SavePartyLocation`.
+* **Weather** is a particle count from `Weather::GetMaxNumParticles(type)` with a
+  strength.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 

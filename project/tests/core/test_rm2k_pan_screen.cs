@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Presentation;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
 
@@ -93,38 +94,89 @@ public partial class TestRm2kPanScreen : TestBase
             GameSimulationState.PanDirection.Right,
             "the direction");
         AssertEq(state.PanLastDistance, 6, "the distance");
-        AssertEq(state.PanSpeed, 3, "the speed");
+        AssertEq(state.PanSpeed, 2 << 3,
+            "**and the speed became the pan's own step of 2 << 3** — sixteen sub-units"
+                + " per frame, which is what the reference's StartPan writes, and not"
+                + " the editor's 1 to 6 that the command carried");
+        AssertEq(state.PanFinishX,
+            Rm2kMapCamera.DefaultPanX() - 6 * Rm2kMapCamera.ScreenTileSize,
+            "**and the finish is absolute and in sub-units**: a pan right shrinks it by"
+                + " six tiles of 256, because the camera is GetSpriteX() - GetPanX()");
         AssertEq(state.IsPanActive, true, "and the pan is running");
     }
 
     /// <summary>
-    /// A diagonal is one step on each axis, and not two.
+    /// A direction outside the reference's four moves nothing, and still sets the
+    /// speed.
     /// </summary>
-    public void Test_ADiagonalIsOneStepOnEachAxis()
+    /// <remarks>
+    /// <strong>And this is the reference's own fall-through</strong>:
+    /// <c>CommandPanScreen</c> hands the command's direction straight to
+    /// <c>StartPan</c>, whose chain tests four values and has no else arm — so 4 to 7
+    /// adds no distance while <c>pan_speed</c> is set anyway. The earlier version of
+    /// this test asserted that a diagonal moved "one step on each axis", which no
+    /// reference says: it was the old delta model's own invention.
+    /// </remarks>
+    public void Test_EineDiagonaleBewegtNichtsUndSetztDasTempo()
     {
         var (_, state) = Run(Pan(2, 5, 4, 3, 0));
 
-        AssertEq(state.PanTargetX, 4,
-            "a four step pan to the upper right moves four on x");
-        AssertEq(state.PanTargetY, -4,
-            "and four up on y, and not eight — a diagonal is one step on each "
-                + "axis, and a reader that added them would have ended past the "
-                + "corner");
+        AssertEq(state.PanFinishX, Rm2kMapCamera.DefaultPanX(),
+            "**a diagonal leaves the pan where it was**");
+        AssertEq(state.PanFinishY, Rm2kMapCamera.DefaultPanY(),
+            "**on both axes**, because the reference's chain falls through");
+        AssertEq(state.PanSpeed, 16, "and it still sets the speed");
+        AssertEq(state.IsPanActive, false,
+            "and no pan is running, because there is nowhere to go");
     }
 
     /// <summary>
-    /// A cardinal moves one axis only.
+    /// A cardinal moves one axis, with the pan's own signs.
     /// </summary>
-    public void Test_ACardinalMovesOneAxisOnly()
+    /// <remarks>
+    /// <strong>And the signs are not the screen's.</strong> The reference's
+    /// <c>StartPan</c> grows <c>pan_finish_y</c> for a pan up and shrinks
+    /// <c>pan_finish_x</c> for a pan right, because the camera is
+    /// <c>GetSpriteX() - GetPanX()</c>. A reader that used the screen's signs would pan
+    /// a cutscene the wrong way, which reads as a game bug rather than a reader bug.
+    /// </remarks>
+    public void Test_EineHimmelsrichtungBewegtEineAchse()
     {
         var (_, up) = Run(Pan(2, 0, 5, 3, 0));
-        AssertEq(up.PanTargetX, 0, "a pan up does not move x");
-        AssertEq(up.PanTargetY, -5, "a five step pan up moves five up");
+        AssertEq(up.PanFinishX, Rm2kMapCamera.DefaultPanX(),
+            "a pan up does not move x");
+        AssertEq(up.PanFinishY,
+            Rm2kMapCamera.DefaultPanY() + 5 * Rm2kMapCamera.ScreenTileSize,
+            "**and a five tile pan up grows the finish by five tiles of sub-units**");
 
         var (_, right) = Run(Pan(2, 1, 5, 3, 0));
-        AssertEq(right.PanTargetX, 5,
-            "a five step pan right moves five right");
-        AssertEq(right.PanTargetY, 0, "and a pan right does not move y");
+        AssertEq(right.PanFinishX,
+            Rm2kMapCamera.DefaultPanX() - 5 * Rm2kMapCamera.ScreenTileSize,
+            "**and a pan right shrinks it**");
+        AssertEq(right.PanFinishY, Rm2kMapCamera.DefaultPanY(),
+            "and a pan right does not move y");
+    }
+
+    /// <summary>
+    /// Two pans in the same direction accumulate.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is what an absolute finish buys</strong>: the reference's
+    /// <c>StartPan</c> adds to <c>pan_finish_x</c>, so a cutscene that pans right twice
+    /// scrolls twice as far. A reader that stored the command's distance as a delta
+    /// would pan to the same place twice and the second command would look ignored.
+    /// </remarks>
+    public void Test_ZweiPansInDieselbeRichtungAddierenSich()
+    {
+        var (interpreter, state) = Start(
+            Pan(2, 1, 5, 3, 0), Pan(2, 1, 5, 3, 0));
+        interpreter.ExecuteFrame();
+        var nachDemErsten = state.PanFinishX;
+        interpreter.ExecuteFrame();
+
+        AssertEq(state.PanFinishX,
+            nachDemErsten - 5 * Rm2kMapCamera.ScreenTileSize,
+            "**and the second pan scrolls another five tiles**");
     }
 
     /// <summary>
@@ -134,14 +186,16 @@ public partial class TestRm2kPanScreen : TestBase
     public void Test_TheSpeedIsClampedAndNotRefused()
     {
         var (_, low) = Run(Pan(2, 1, 6, 0, 0));
-        AssertEq(low.PanSpeed, 1,
-            "a speed of zero is repaired to one, and the pan still runs");
+        AssertEq(low.PanSpeed, 2 << 1,
+            "a speed of zero is repaired to one, and the pan's step is 2 << 1");
 
         var (_, high) = Run(Pan(2, 1, 6, 9, 0));
-        AssertEq(high.PanSpeed, 6, "a speed of nine is repaired to six");
-        AssertEq(high.PanFramesLeft, 1,
-            "and it still has a frame to run — a reader that refused would "
-                + "have stopped the event on a number the engine repairs");
+        AssertEq(high.PanSpeed, 2 << 6,
+            "a speed of nine is repaired to six, so the step is 2 << 6");
+        AssertEq(high.PanFramesLeft, 12,
+            "**and a six tile pan at that step takes twelve frames**, not the one a"
+                + " tile-counted reader would have waited — a reader that refused the"
+                + " speed would have stopped the event on a number the engine repairs");
     }
 
     /// <summary>
@@ -217,21 +271,80 @@ public partial class TestRm2kPanScreen : TestBase
     }
 
     /// <summary>
-    /// The wait is the distance over the speed, rounded up.
+    /// The wait is the remaining distance over the pan's own step, rounded up.
     /// </summary>
-    public void Test_TheWaitIsTheRoundedDistanceOverTheSpeed()
+    /// <remarks>
+    /// <strong>And the distance is the sub-unit one</strong>: five tiles are 1280
+    /// sub-units and the step at speed three is 16, so the engine waits eighty frames.
+    /// The earlier version of this test divided the tile count by the editor's speed
+    /// and expected two — a wait a cutscene would have outrun by a factor of forty.
+    /// </remarks>
+    public void Test_DieWartezeitIstDieEntfernungDurchDasPanTempo()
     {
-        // Fuenf bei drei: 5/3 = 1 und 5%3 != 0, also zwei.
-        var (_, rounded) = Run(Pan(2, 1, 5, 3, 1));
-        AssertEq(rounded.PanFramesLeft, 2,
-            "a five tile pan at speed three waits two frames and not one — "
-                + "the reference rounds up, so a pan never ends the frame it "
-                + "started in");
+        var (_, five) = Run(Pan(2, 1, 5, 3, 1));
+        AssertEq(five.PanFramesLeft, 80,
+            "**a five tile pan at speed three waits eighty frames**");
 
-        // Sechs bei drei: 6/3 = 2 und 6%3 == 0, also zwei. Nicht drei.
-        var (_, even) = Run(Pan(2, 1, 6, 3, 1));
-        AssertEq(even.PanFramesLeft, 2,
-            "a six tile pan at speed three waits exactly two frames");
+        var (_, six) = Run(Pan(2, 1, 6, 3, 1));
+        AssertEq(six.PanFramesLeft, 96, "and a six tile pan waits ninety six");
+    }
+
+    /// <summary>
+    /// The wait rounds up when the remaining distance is not a whole step.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the rounding is the reference's own
+    /// <c>distance / speed + (distance % speed != 0)</c></strong>: it is what stops a
+    /// pan from ending the frame it started in and from being a frame short.
+    /// </remarks>
+    public void Test_DieWartezeitRundetAuf()
+    {
+        var state = new GameSimulationState { PanSpeed = 16 };
+        state.PanFinishX = state.PanCurrentX - 100;
+
+        AssertEq(state.GetPanWait(), 7,
+            "**a hundred sub-units at a step of sixteen is seven frames** — six whole"
+                + " steps and a remainder, which rounds up");
+    }
+
+    /// <summary>
+    /// The pan walks towards its finish and lands on it exactly.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the step is capped by what is left</strong>, which is what makes it
+    /// land instead of overshooting: the reference's
+    /// <c>dx = min(step, abs(remain))</c>, signed by the remainder.
+    /// </remarks>
+    public void Test_DerPanLaeuftAufSeinZielZuUndLandetGenau()
+    {
+        var state = new GameSimulationState { PanSpeed = 2 << 3 };
+        state.PanFinishX = state.PanCurrentX - 5 * Rm2kMapCamera.ScreenTileSize;
+
+        var frames = 0;
+        while (state.IsPanActive && frames < 1000)
+        {
+            state.UpdatePan();
+            frames++;
+        }
+
+        AssertEq(frames, 80,
+            "**five tiles at sixteen sub-units per frame is eighty frames**");
+        AssertEq(state.PanCurrentX, state.PanFinishX,
+            "**and the pan lands exactly on its finish**");
+
+        // Und eine Strecke, die nicht aufgeht, landet trotzdem.
+        var krumm = new GameSimulationState { PanSpeed = 16 };
+        krumm.PanFinishX = krumm.PanCurrentX - 100;
+        var schritte = 0;
+        while (krumm.IsPanActive && schritte < 100)
+        {
+            krumm.UpdatePan();
+            schritte++;
+        }
+
+        AssertEq(schritte, 7, "a hundred sub-units is seven steps");
+        AssertEq(krumm.PanCurrentX, krumm.PanFinishX,
+            "**and the last step is the remainder and not the whole step**");
     }
 
     /// <summary>
@@ -289,9 +402,17 @@ public partial class TestRm2kPanScreen : TestBase
     }
 
     /// <summary>
-    /// 11350 stops the map's pending moves and the running pan.
+    /// 11350 stops the map's pending moves and does not stop the camera.
     /// </summary>
-    public void Test_11350StopsTheMapAndTheCamera()
+    /// <remarks>
+    /// <strong>And the camera keeps panning</strong>, because the reference's
+    /// <c>11350</c> calls <c>Game_Map::RemoveAllPendingMoves()</c> and nothing else:
+    /// that function cancels the player's, the vehicles' and the events' move routes,
+    /// and never touches <c>pan_current</c>, <c>pan_finish</c> or <c>pan_state</c>. The
+    /// earlier version of this test asserted the opposite, on the reasoning that a
+    /// command which stops everything must stop the camera too — plausible, and wrong.
+    /// </remarks>
+    public void Test_11350StopptDieBewegungUndNichtDieKamera()
     {
         // **One ExecuteFrame runs one command**, which is the shape every
         // other command in this interpreter has -- so the two setup commands
@@ -312,10 +433,9 @@ public partial class TestRm2kPanScreen : TestBase
 
         AssertEq(state.ProceedWithMovement, false,
             "11350 clears the wait for movement");
-        AssertEq(state.IsPanActive, false,
-            "and 11350 stops the camera — the reference's call is on the "
-                + "map's move list, and a reader that left a pan running "
-                + "stopped less than everything");
+        AssertEq(state.IsPanActive, true,
+            "**and the pan keeps running**, because the reference's call is on the map's"
+                + " move list and the pan is not on it");
     }
 
     /// <summary>

@@ -35,6 +35,23 @@ public static class Rm2kSimulationSaveCodec
         public int MapId { get; set; }
         public int MapX { get; set; }
         public int MapY { get; set; }
+
+        /// <summary>
+        /// The camera's pan, from <c>SavePartyLocation</c>.
+        /// </summary>
+        /// <remarks>
+        /// **And the pan belongs in the save at all**, which it did not before: the
+        /// reference keeps <c>pan_current_x</c>, <c>pan_finish_x</c>, <c>pan_speed</c>
+        /// and <c>pan_state</c> in the party location, so a save taken in the middle of
+        /// a panorama pan resumes with the camera where the player left it. A reader
+        /// that saved none of it snapped the camera back to the player on every load.
+        /// </remarks>
+        public int PanCurrentX { get; set; }
+        public int PanCurrentY { get; set; }
+        public int PanFinishX { get; set; }
+        public int PanFinishY { get; set; }
+        public int PanSpeed { get; set; }
+        public bool IsPanLocked { get; set; }
         public byte FacingDirection { get; set; }
         public int Gold { get; set; }
         public int FrameCount { get; set; }
@@ -646,6 +663,9 @@ public static class Rm2kSimulationSaveCodec
         {
             GameTitle = pState.GameTitle,
             MapId = pState.MapId, MapX = pState.MapX, MapY = pState.MapY,
+            PanCurrentX = pState.PanCurrentX, PanCurrentY = pState.PanCurrentY,
+            PanFinishX = pState.PanFinishX, PanFinishY = pState.PanFinishY,
+            PanSpeed = pState.PanSpeed, IsPanLocked = pState.IsPanLocked,
             FacingDirection = pState.FacingDirection, Gold = pState.Gold,
             FrameCount = pState.FrameCount, Steps = pState.Steps,
             Timer1Active = pState.Timer1Active, Timer2Active = pState.Timer2Active,
@@ -971,6 +991,21 @@ public static class Rm2kSimulationSaveCodec
     {
         pState.ConfigureMap(pData.MapId, pData.MapWidth, pData.MapHeight, pData.PassableTiles);
         pState.MapX = pData.MapX; pState.MapY = pData.MapY; pState.FacingDirection = pData.FacingDirection;
+        // **And the pan comes back with the save.** The reference keeps it in
+        // `SavePartyLocation` (`pan_current_x`, `pan_finish_x`, `pan_speed`,
+        // `pan_state`), so a load in the middle of a panorama pan resumes with the
+        // camera where the player left it. A reader that saved nothing snapped the
+        // camera back to the player on every load.
+        pState.PanCurrentX = pData.PanCurrentX; pState.PanCurrentY = pData.PanCurrentY;
+        pState.PanFinishX = pData.PanFinishX; pState.PanFinishY = pData.PanFinishY;
+        pState.PanSpeed = pData.PanSpeed; pState.IsPanLocked = pData.IsPanLocked;
+        // **And a locked camera comes back locked to where the player is in the save.**
+        // The reference's frozen position is the map's own scroll, which is a value this
+        // reader derives rather than stores; the player's saved position is the closest
+        // thing to it, and it is exact whenever the player stood still between the lock
+        // and the save -- which is what a locked camera is for.
+        pState.PanLockedFollowX = pData.MapX;
+        pState.PanLockedFollowY = pData.MapY;
         pState.Gold = pData.Gold; pState.FrameCount = pData.FrameCount; pState.Steps = pData.Steps;
         pState.Switches.Clear(); foreach (var value in pData.Switches) pState.Switches.Add(value);
         pState.Variables.Clear(); foreach (var value in pData.Variables) pState.Variables.Add(value);

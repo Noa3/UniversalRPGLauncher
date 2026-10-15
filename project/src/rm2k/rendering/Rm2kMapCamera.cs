@@ -77,10 +77,14 @@ public static class Rm2kMapCamera
     /// instead of by 16 would place the viewport far outside the map.
     /// </remarks>
     public static int PositionX(
-        int pPlayerX, int pMapTilesX, int pScreenWidth = DefaultScreenWidth, bool pLoopHorizontal = false)
+        int pPlayerX, int pMapTilesX, int pScreenWidth = DefaultScreenWidth,
+        bool pLoopHorizontal = false, int? pPanX = null)
     {
         var mapWidth = pMapTilesX * ScreenTileSize;
-        var x = pPlayerX * ScreenTileSize - DefaultPanX(pScreenWidth);
+        // **And the pan replaces the default pan rather than adding to it**, which is
+        // the reference's own shape: Game_Player::GetPanX() starts at
+        // GetDefaultPanX() and the camera is GetSpriteX() - GetPanX().
+        var x = pPlayerX * ScreenTileSize - (pPanX ?? DefaultPanX(pScreenWidth));
         if (pLoopHorizontal)
         {
             return PositiveModulo(x, mapWidth);
@@ -105,10 +109,11 @@ public static class Rm2kMapCamera
     /// offset in screen tiles.
     /// </summary>
     public static int PositionY(
-        int pPlayerY, int pMapTilesY, int pScreenHeight = DefaultScreenHeight, bool pLoopVertical = false)
+        int pPlayerY, int pMapTilesY, int pScreenHeight = DefaultScreenHeight,
+        bool pLoopVertical = false, int? pPanY = null)
     {
         var mapHeight = pMapTilesY * ScreenTileSize;
-        var y = pPlayerY * ScreenTileSize - DefaultPanY(pScreenHeight);
+        var y = pPlayerY * ScreenTileSize - (pPanY ?? DefaultPanY(pScreenHeight));
         if (pLoopVertical)
         {
             return PositiveModulo(y, mapHeight);

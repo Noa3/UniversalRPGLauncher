@@ -6310,14 +6310,14 @@ public sealed class EventInterpreter
 		switch (mode)
 		{
 			case 0:
-				_state.IsPanLocked = true;
+				_state.LockPan();
 				_state.PanLastMode = GameSimulationState.PanMode.Lock;
 				// **A lock does not stop a pan that is already running** — the
 				// reference calls `LockPan()` and nothing else, and a reader
 				// that halted the pan would freeze a camera mid-scroll.
 				break;
 			case 1:
-				_state.IsPanLocked = false;
+				_state.UnlockPan();
 				_state.PanLastMode = GameSimulationState.PanMode.Unlock;
 				break;
 			case 2:
@@ -6327,22 +6327,20 @@ public sealed class EventInterpreter
 					_state.PanLastMode = GameSimulationState.PanMode.Pan;
 					_state.PanLastDirection = direction;
 					_state.PanLastDistance = distance;
-					_state.PanSpeed = speed;
-					_state.PanTargetX = distance * StepOf(direction, 0);
-					_state.PanTargetY = distance * StepOf(direction, 1);
-					_state.PanFramesLeft = FramesFor(distance, speed);
-					_state.IsPanActive = true;
+					// **The reference's own StartPan**: the distance is tiles scaled to
+					// sub-units and added to the absolute finish, and the speed becomes
+					// the pan's step of `2 << speed`.
+					_state.StartPan(direction, distance, speed);
+					// **And the wait is measured after the pan was started**, from where
+					// the pan is to where it is going -- `GetPanWait`, whose distance is
+					// the larger of the two remaining ones over the pan's own step.
+					_state.PanFramesLeft = _state.GetPanWait();
 					break;
 				}
 			case 3:
 				_state.PanLastMode = GameSimulationState.PanMode.Reset;
-				_state.PanSpeed = speed;
-				_state.PanFramesLeft = FramesFor(
-					Math.Max(Math.Abs(_state.PanTargetX), Math.Abs(_state.PanTargetY)),
-					speed);
-				_state.PanTargetX = 0;
-				_state.PanTargetY = 0;
-				_state.IsPanActive = true;
+				_state.ResetPan(speed);
+				_state.PanFramesLeft = _state.GetPanWait();
 				break;
 			default:
 				// **An unknown mode does nothing at all, and says so.** The

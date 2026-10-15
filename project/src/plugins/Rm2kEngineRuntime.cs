@@ -357,6 +357,11 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 Simulation.FrameCount++;
                 Simulation.AdvanceTimers(1);
                 Presentation.Tick(1);
+                // **And the camera's own pan steps with the frame**, from the
+                // reference's `Game_Player::UpdatePan`: it walks the pan towards its
+                // finish and the camera follows, because the camera here is derived
+                // from the player's position and the pan together.
+                Simulation.UpdatePan();
                 _eventScheduler.ExecuteFrame();
                 TryCarryOutTransfer();
                 RefreshEventPagePoses();
@@ -424,7 +429,9 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             if (moving || _isRenderDirty || _eventRoutesMoved || HaveEventGraphicsChanged()
                 || !CurrentTone().Equals(_appliedTone)
                 || Presentation.FlashCurrentLevel != _appliedFlashLevel
-                || Presentation.ShakePositionX != _appliedShakePosition)
+                || Presentation.ShakePositionX != _appliedShakePosition
+                || Simulation.PanCurrentX != _appliedPanX
+                || Simulation.PanCurrentY != _appliedPanY)
             {
                 _isRenderDirty = true;
                 _eventRoutesMoved = false;
@@ -708,6 +715,17 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     /// the map once and never again.
     /// </remarks>
     private int _appliedShakePosition;
+
+    /// <summary>The pan the current frame was drawn with.</summary>
+    /// <remarks>
+    /// <strong>And a pan has to dirty the frame for the same reason a shake does</strong>:
+    /// it moves the camera every frame, so a pan on a still screen would otherwise
+    /// move the map once and never again.
+    /// </remarks>
+    private int _appliedPanX = Rm2kMapCamera.DefaultPanX();
+
+    /// <summary>The vertical pan the current frame was drawn with.</summary>
+    private int _appliedPanY = Rm2kMapCamera.DefaultPanY();
 
     /// <summary>The tone the presentation is asking for right now.</summary>
     /// <returns>The tone, from the command's own 0 to 200 values.</returns>
@@ -4396,6 +4414,8 @@ ReadString(entry, "name", v => werte.Name = v);
         // **And the offset the frame was actually drawn with is remembered**, so a
         // shake that moves the screen dirties the frame the same way a tone does.
         _appliedShakePosition = Presentation.ShakePositionX;
+        _appliedPanX = Simulation.PanCurrentX;
+        _appliedPanY = Simulation.PanCurrentY;
         var frame = new Rm2kPixelBuffer(ScreenWidth, ScreenHeight);
         CopyViewport(_lowerLayerPixels, frame, offsetX, offsetY);
 
@@ -4512,9 +4532,45 @@ ReadString(entry, "name", v => werte.Name = v);
     /// </remarks>
     private int ResolveCameraOffsetX()
     {
-        var position = Rm2kMapCamera.PositionX(Simulation.MapX, _renderedLayers!.Width, ScreenWidth);
+        var position = Rm2kMapCamera.PositionX(
+            FollowX(), _renderedLayers!.Width, ScreenWidth, false, Simulation.PanCurrentX);
         var pixels = Rm2kMapCamera.OffsetPixelsX(position);
         return pixels + Presentation.ShakePositionX;
+    }
+
+    /// <summary>
+    /// The column the camera follows, which is frozen while the pan is locked.
+    /// </summary>
+    /// <returns>The player's column, or the one the lock was taken at.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And a lock freezes the follow and not the camera.</strong> The
+    /// reference's <c>Game_Player::UpdateScroll</c> returns at once when
+    /// <c>IsPanLocked()</c>, so the map stops following the player -- while
+    /// <c>UpdatePan</c> keeps scrolling the same map, lock or no lock. Freezing the
+    /// whole camera instead would have stopped a pan that a locked cutscene is
+    /// usually waiting for.
+    /// </para>
+    /// <para>
+    /// <strong>And the frozen value is the player's own position</strong>, because the
+    /// camera here is derived from the player and the pan together rather than being a
+    /// scroll position the follow writes: holding the player side still is what "the
+    /// map no longer follows" means in this model.
+    /// </para>
+    /// </remarks>
+    private int FollowX()
+    {
+        // **And the frozen value is the one the lock command captured**, not the one
+        // the renderer happens to see: the lock runs inside a frame, and the player may
+        // still move in it. See GameSimulationState.LockPan.
+        return Simulation.IsPanLocked ? Simulation.PanLockedFollowX : Simulation.MapX;
+    }
+
+    /// <summary>The row the camera follows, frozen with <see cref="FollowX"/>.</summary>
+    /// <returns>The player's row, or the one the lock was taken at.</returns>
+    private int FollowY()
+    {
+        return Simulation.IsPanLocked ? Simulation.PanLockedFollowY : Simulation.MapY;
     }
 
     /// <summary>
@@ -4523,7 +4579,8 @@ ReadString(entry, "name", v => werte.Name = v);
     /// </summary>
     private int ResolveCameraOffsetY()
     {
-        var position = Rm2kMapCamera.PositionY(Simulation.MapY, _renderedLayers!.Height, ScreenHeight);
+        var position = Rm2kMapCamera.PositionY(
+            FollowY(), _renderedLayers!.Height, ScreenHeight, false, Simulation.PanCurrentY);
         return Rm2kMapCamera.OffsetPixelsY(position);
     }
 

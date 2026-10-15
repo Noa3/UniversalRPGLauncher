@@ -192,4 +192,49 @@ public partial class TestRm2kPictureSave : TestBase
             "**and both reach zero exactly**");
         AssertEq(restored.Presentation.IsFlashActive, false);
     }
+
+    /// <summary>
+    /// A pan saved half way through comes back where the camera was.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the pan was not saved at all before</strong>, which the reference
+    /// does save: it keeps <c>pan_current_x</c>, <c>pan_finish_x</c>, <c>pan_speed</c>
+    /// and <c>pan_state</c> in the party location. A reader that saved none of it put
+    /// the camera back on the player on every load, which for a cutscene that pans
+    /// across a landscape means the load undoes the shot.
+    /// </remarks>
+    public void Test_EinPanWirdGespeichertUndWeitergefuehrt()
+    {
+        var original = CreateState();
+        original.StartPan(GameSimulationState.PanDirection.Right, 5, 3);
+        original.UpdatePan();
+        original.UpdatePan();
+        var panNachZwei = original.PanCurrentX;
+        AssertTrue(panNachZwei != original.PanFinishX,
+            "**and the pan is still running** when the save is taken");
+        original.LockPan();
+
+        var restored = CreateState();
+        AssertTrue(Rm2kSimulationSaveCodec.TryRestore(
+            Rm2kSimulationSaveCodec.Serialize(original), restored, out var error), error);
+        AssertEq(restored.PanCurrentX, panNachZwei,
+            "**and the load keeps the pan the camera was showing**");
+        AssertEq(restored.PanFinishX, original.PanFinishX,
+            "**and where it was going**");
+        AssertEq(restored.PanSpeed, original.PanSpeed, "and the pan's step");
+        AssertEq(restored.IsPanLocked, true, "and the lock");
+        AssertEq(restored.PanLockedFollowX, restored.MapX,
+            "and a locked camera holds the player's saved column, because the"
+                + " reference's frozen value is the map's own scroll and this reader"
+                + " derives it rather than storing it");
+
+        for (var frame = 0; frame < 5; frame++)
+        {
+            original.UpdatePan();
+            restored.UpdatePan();
+            AssertEq(restored.PanCurrentX, original.PanCurrentX,
+                "**and every remaining frame of the pan is the frame it would have"
+                    + " been without the save**");
+        }
+    }
 }
