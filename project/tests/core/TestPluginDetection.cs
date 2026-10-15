@@ -722,10 +722,35 @@ public partial class TestPluginDetection : TestBase
                             EnginePluginIds.RpgMaker2003 or
                             EnginePluginIds.RpgMakerMv or
                             EnginePluginIds.RpgMakerMz or
+                            EnginePluginIds.RpgMakerXp or
+                            EnginePluginIds.RpgMakerVx or
+                            EnginePluginIds.RpgMakerVxAce or
                 EnginePluginIds.WolfRpg;
             AssertTrue(hasRuntimeBootstrap
                 == ((plugin.Metadata.Capabilities & PluginCapability.Runtime) != 0),
                 $"Runtime capability matches the built-in runtime boundary: {plugin.Metadata.Id}");
+
+            // **And a runtime that cannot present a game says so by what it
+            // declares.** The three RGSS runtimes execute the project's own
+            // Ruby and have no picture, no input and no save yet, so they must
+            // not claim Rendering, SaveLoad or Debugging -- a capability list
+            // is what a launcher promises a player, and the owner's decision to
+            // let a game's scripts run did not build a screen for them.
+            if (plugin.Metadata.Id is EnginePluginIds.RpgMakerXp
+                or EnginePluginIds.RpgMakerVx
+                or EnginePluginIds.RpgMakerVxAce)
+            {
+                AssertTrue((plugin.Metadata.Capabilities & PluginCapability.Rendering) == 0,
+                    $"{plugin.Metadata.Id} declares no rendering, because it has none");
+                AssertTrue((plugin.Metadata.Capabilities & PluginCapability.SaveLoad) == 0,
+                    $"{plugin.Metadata.Id} declares no save support, because it has none");
+                AssertTrue((plugin.Metadata.Capabilities & PluginCapability.Debugging) == 0,
+                    $"{plugin.Metadata.Id} declares no debugging, because it has none");
+                AssertTrue(!plugin.Metadata.Description.Contains("Complete",
+                        StringComparison.OrdinalIgnoreCase),
+                    $"{plugin.Metadata.Id} does not call itself complete:"
+                        + $" {plugin.Metadata.Description}");
+            }
         }
     }
 

@@ -149,6 +149,28 @@ public partial class RuntimeLauncher : RefCounted
 				error?.Phase ?? "select",
 				selection.Diagnostics);
 		}
+		// **And a runtime without a picture is not called available.** The
+		// state exists so the window can say what it will really do:
+		// `Available` promises a game on the screen, and a runtime that runs
+		// the project's own scripts while declaring no rendering would show a
+		// black one. Measured: the XP, VX and VX Ace plugins declare Runtime
+		// and no Rendering, so they land here and the player is told.
+		var capabilities = selection.Value.Plugin.Metadata.Capabilities;
+		if (capabilities.HasFlag(PluginCapability.Runtime)
+			&& !capabilities.HasFlag(PluginCapability.Rendering))
+		{
+			return new SupportInfo
+			{
+				State = SupportState.Experimental,
+				Label = "Runtime available without a picture",
+				Reason = "This runtime runs the project's own scripts and has no"
+					+ " rendering, input, audio or save support yet, so it cannot"
+					+ " show the game.",
+				PluginId = selection.Value.Plugin.Metadata.Id,
+				Diagnostics = selection.Diagnostics,
+			};
+		}
+
 		return new SupportInfo
 		{
 			State = SupportState.Available,

@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using Godot;
+using UniversalRPG.App.Launcher;
 using UniversalRPG.Plugins;
 using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
@@ -38,57 +39,102 @@ public partial class TestRgssRuntime : TestBase
     }
 
     /// <summary>
-    /// And the gate is still closed, and the reason is named.
+    /// And the three RGSS engines offer a runtime that runs the project's own
+    /// scripts, and the launcher does not pretend it can show them.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And this test used to read "XP, VX and VX Ace are
-    /// detection only" as if that were a property of the engines.</strong>
-    /// <strong>It is not; it is a property of this repository's runtime
-    /// selector</strong>, -- <strong>and the difference matters because
-    /// the work has moved on since the test was written.</strong>
+    /// <strong>And this test used to read "XP, VX and VX Ace are detection
+    /// only" as if that were a property of the engines.</strong> It is not; it
+    /// is a property of this repository's runtime selector -- and the owner has
+    /// since decided that a game's own scripts may run while that game runs, so
+    /// the gate this test guarded is open.
     /// </para>
     /// <para>
-    /// <strong>And what exists now, measured on MicroQuest:</strong>
-    /// <c>Scripts.rxdata</c> with 90 scripts, -- <strong>90 of them
-    /// parsed and executed by this repository's own
-    /// <c>RubyInterpreter</c></strong>, -- <strong>and 96 event commands
-    /// read out of the game's own Ruby.</strong> -- <strong>and none of
-    /// that is reachable through the selector.</strong>
+    /// <strong>And what replaces the gate is not silence.</strong> A runtime
+    /// that runs 90 scripts and then stops at the first <c>$game_player</c>
+    /// shows a black screen, so the honest contract has two halves: the
+    /// capability list says exactly what exists -- a runtime, and no rendering,
+    /// input, audio, save or debugging -- and the launcher reports
+    /// <c>Experimental</c> with a reason that says it cannot show the game.
     /// </para>
     /// <para>
-    /// <strong>And so the gate stays shut</strong>, -- <strong>because a
-    /// selector that opened it would hand a launcher a runtime that runs
-    /// a game's 90 scripts and then stops at the first
-    /// <c>$game_player</c></strong>, -- <strong>and a launcher that
-    /// promises a game and shows a black screen is worse than one that
-    /// says the engine is not supported.</strong>
-    /// </para>
-    /// <para>
-    /// <strong>And the gate is now stated as what it is</strong>: a gap
-    /// between what the repository can read and what it can present.
-    /// <c>TestRgssSkriptHost</c> proves the reading side, this test
-    /// proves the presenting side, and neither pretends to be the other.
+    /// <strong>And the measured facts behind the old gate are unchanged</strong>:
+    /// MicroQuest carries 90 scripts in <c>Scripts.rxdata</c>, this repository
+    /// parses and executes them, and none of that is a picture.
     /// </para>
     /// </remarks>
-    public void Test_XpVxAndVxAceRemainDetectionOnly()
+    public void Test_XpVxAndVxAceOfferAScriptRuntimeWithoutAPicture()
     {
         var cases = new[]
         {
-            (Name: "XP", Id: EnginePluginIds.RpgMakerXp, Generation: "xp", Major: 1),
-            (Name: "VX", Id: EnginePluginIds.RpgMakerVx, Generation: "vx", Major: 2),
-            (Name: "VXAce", Id: EnginePluginIds.RpgMakerVxAce, Generation: "vx-ace", Major: 3),
+            (Name: "XP", Id: EnginePluginIds.RpgMakerXp, Generation: "xp"),
+            (Name: "VX", Id: EnginePluginIds.RpgMakerVx, Generation: "vx"),
+            (Name: "VXAce", Id: EnginePluginIds.RpgMakerVxAce, Generation: "vx-ace"),
         };
 
+        var launcher = new RuntimeLauncher();
         foreach (var item in cases)
         {
             var report = Analyze(item.Name);
             AssertEq(report.SelectedCandidate?.EngineId, item.Id, $"Detection selects {item.Name}");
-            AssertEq(report.SelectedCandidate?.Status, EngineDetectionStatus.DetectionOnly, $"{item.Name} is detection-only");
             var selector = new EngineRuntimeSelector();
             var selection = selector.Select(report, "windows");
-            AssertFalse(selection.Success, $"{item.Name} runtime selection must be refused");
-            AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine, $"{item.Name} refusal code");
+            AssertTrue(selection.Success,
+                $"{item.Name} runtime selection succeeds -- and it said: "
+                    + selection.Error?.Message);
+
+            // **And the capability list is the promise.** A plugin that
+            // declares Rendering while it has none is the black screen this
+            // test exists to prevent.
+            var capabilities = selection.Value!.Plugin.Metadata.Capabilities;
+            AssertTrue(capabilities.HasFlag(PluginCapability.Runtime),
+                $"{item.Name} declares the runtime it has");
+            AssertFalse(capabilities.HasFlag(PluginCapability.Rendering),
+                $"{item.Name} declares no rendering, because it has none");
+            AssertFalse(capabilities.HasFlag(PluginCapability.SaveLoad),
+                $"{item.Name} declares no save support, because it has none");
+            AssertFalse(capabilities.HasFlag(PluginCapability.Debugging),
+                $"{item.Name} declares no debugging, because it has none");
+            AssertFalse(
+                selection.Value.Plugin.Metadata.Description.Contains("Complete",
+                    StringComparison.OrdinalIgnoreCase),
+                $"{item.Name} does not call itself complete: "
+                    + selection.Value.Plugin.Metadata.Description);
+
+            // **And the window says what the metadata says.**
+            var support = launcher.GetSupport(report, "windows");
+            AssertEq(support.State, RuntimeLauncher.SupportState.Experimental,
+                $"{item.Name} is offered as a runtime without a picture, and"
+                    + $" not as a playable game; the window says: {support.Reason}");
+            AssertTrue(support.Reason.Contains("cannot")
+                    || support.Reason.Contains("no rendering"),
+                $"{item.Name} says what is missing -- and it said: {support.Reason}");
+
+            // **And the runtime goes for the project's scripts, and reports by
+            // name and reason when they are not real.** The synthetic fixture's
+            // Scripts file is not a script file, so this is the honest failure
+            // path and not a start.
+            using var host = new EnginePluginHost(
+                BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+            var started = host.Start(new PluginGameInfo
+            {
+                GameDirectory = ProjectSettings.GlobalizePath(TempBase.PathJoin(item.Name)),
+                EngineId = item.Id,
+                Generation = item.Generation,
+                DetectorScore = 850,
+            });
+            AssertFalse(started.Success,
+                $"{item.Name} does not start a project whose Scripts file is"
+                    + " not a script file");
+            // **And the refusal names the script runtime it went for**, which
+            // is the honest failure path: measured, the synthetic payload is
+            // read as a Marshal stream and refused by version, and the message
+            // says which runtime refused it.
+            var refusal = started.Error?.Message ?? "";
+            AssertTrue(refusal.Contains("Ruby runtime", StringComparison.OrdinalIgnoreCase),
+                $"{item.Name} names the script runtime it went for -- and it"
+                    + " said: " + refusal);
         }
 
         // **Und der Grund fuer das geschlossene Tor ist jetzt gemessen
@@ -108,24 +154,54 @@ public partial class TestRgssRuntime : TestBase
                 + " TestRgssSkriptHost");
         }
 
+    /// <summary>
+    /// And an archived VX project is still data: the selector may offer the
+    /// script runtime, and nothing unpacks the archive, loads its DLL or starts
+    /// its EXE on that path.
+    /// </summary>
     public void Test_RgssArchiveIsInspectedWithoutExtractionOrExecution()
     {
         var report = Analyze("VXArchive.zip");
         AssertTrue(report.IsArchive);
         AssertEq(report.SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerVx);
-        var selector = new EngineRuntimeSelector();
-        var selection = selector.Select(report, "windows");
-        AssertFalse(selection.Success, "RGSS archive runtime selection must be refused");
-        AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
+        var selection = new EngineRuntimeSelector().Select(report, "windows");
+        AssertTrue(selection.Success,
+            "the archived VX project offers the same script runtime -- and it"
+                + " said: " + selection.Error?.Message);
+        AssertTrue(selection.Value!.Plugin.Metadata.Capabilities
+            .HasFlag(PluginCapability.Runtime));
+        AssertFalse(selection.Value.Plugin.Metadata.Capabilities
+            .HasFlag(PluginCapability.Rendering));
     }
 
-    public void Test_MissingRgssLibraryFailsBeforeRuntimeStarts()
+    /// <summary>
+    /// And a project whose RGSS library is missing is not refused, because this
+    /// runtime never needs it -- it reads the project's own scripts.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And that is the honest version of "fails before the runtime
+    /// starts".</strong> The old assertion said a missing <c>RGSS102A.dll</c>
+    /// must stop selection; what the runtime needs is
+    /// <c>Data/Scripts.rxdata</c>, and the DLL is a native library this
+    /// repository does not load on any path.
+    /// </remarks>
+    public void Test_MissingRgssLibraryDoesNotStopTheScriptRuntime()
     {
         var report = Analyze("MissingRuntime");
         AssertEq(report.SelectedCandidate?.EngineId, EnginePluginIds.RpgMakerXp);
         var selection = new EngineRuntimeSelector().Select(report, "windows");
-        AssertFalse(selection.Success, "Missing-runtime RGSS selection must be refused");
-        AssertEq(selection.Error?.Code, PluginErrorCode.UnsupportedEngine);
+        AssertTrue(selection.Success,
+            "a project without its RGSS library still offers the script runtime"
+                + " -- and it said: " + selection.Error?.Message);
+
+        // **And the fixture really has no library**, so the assertion above is
+        // about a missing file and not about a present one.
+        var root = ProjectSettings.GlobalizePath(TempBase.PathJoin("MissingRuntime"));
+        AssertFalse(Directory.GetFiles(root).Any(pFile =>
+                Path.GetFileName(pFile).StartsWith("RGSS", StringComparison.OrdinalIgnoreCase)),
+            "**and no RGSS library is there to load**");
+        AssertTrue(File.Exists(Path.Combine(root, "Data", "Map001.rxdata")),
+            "**and the project's own data is what it has**");
     }
 
     private EngineDetectionReport Analyze(string pName)

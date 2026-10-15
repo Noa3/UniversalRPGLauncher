@@ -363,7 +363,11 @@ public sealed class RpgMaker2000Plugin : LcfPlugin
 {
     public RpgMaker2000Plugin()
         : base(EnginePluginIds.RpgMaker2000, "RPG Maker 2000", "rm2k", "rm2000", 50,
-            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime | PluginCapability.SaveLoad | PluginCapability.Debugging) { }
+            // **And `Rendering` is declared because this runtime really paints**:
+            // measured, it composes a map and a title screen into a pixel
+            // buffer, which is what the bit means.
+            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime
+                | PluginCapability.Rendering | PluginCapability.SaveLoad | PluginCapability.Debugging) { }
 
     public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
         => PluginResult<IEngineRuntime>.Succeeded(new Rm2kEngineRuntime(Metadata.Id, pContext.Game));
@@ -373,7 +377,10 @@ public sealed class RpgMaker2003Plugin : LcfPlugin
 {
     public RpgMaker2003Plugin()
         : base(EnginePluginIds.RpgMaker2003, "RPG Maker 2003", "rm2k3", "rm2003", 50,
-            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime | PluginCapability.SaveLoad | PluginCapability.Debugging) { }
+            // **And `Rendering` is declared because this runtime really paints**:
+            // 2003 shares the 2000 reader and the same painted map.
+            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime
+                | PluginCapability.Rendering | PluginCapability.SaveLoad | PluginCapability.Debugging) { }
 
     public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
         => PluginResult<IEngineRuntime>.Succeeded(new Rm2kEngineRuntime(Metadata.Id, pContext.Game));
@@ -385,6 +392,7 @@ public abstract class RgssPlugin : BuiltInEnginePlugin
     private readonly string _dataExtension;
     private readonly string _archiveExtension;
 
+    // Legacy detection-only constructor
     protected RgssPlugin(string pId, string pName, string pGeneration, string pPrefix, string pDataExtension, string pArchiveExtension, int pPriority)
         : base(pId, pName, $"Detection-only {pName} boundary until a bounded Ruby runtime is available.", pGeneration, pPriority, PluginCapability.Detection | PluginCapability.Parsing)
     {
@@ -429,19 +437,154 @@ public abstract class RgssPlugin : BuiltInEnginePlugin
     }
 }
 
-public sealed class RpgMakerXpPlugin : RgssPlugin
+public sealed class RpgMakerXpPlugin : BuiltInEnginePlugin
 {
-    public RpgMakerXpPlugin() : base(EnginePluginIds.RpgMakerXp, "RPG Maker XP", "xp", "rgss1", ".rxdata", ".rgssad", 40) { }
+    private readonly string _runtimePrefix = "rgss1";
+    private readonly string _dataExtension = ".rxdata";
+    private readonly string _archiveExtension = ".rgssad";
+
+    public RpgMakerXpPlugin()
+        : base(EnginePluginIds.RpgMakerXp, "RPG Maker XP", "Runs this project's own Ruby scripts from Data/Scripts.rxdata in process. Rendering, input, audio and save are not implemented, so a launched game has no picture yet.", "xp", 40,
+            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime)
+    {
+    }
+
+    public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
+    {
+        var snapshot = pContext.Snapshot;
+        var ini = IniText(snapshot);
+        var library = IniValue(snapshot, "Library");
+        var runtime = library.StartsWith(_runtimePrefix, StringComparison.OrdinalIgnoreCase)
+            || snapshot.Files.Any(pFile => System.IO.Path.GetFileName(pFile.RelativePath).StartsWith(_runtimePrefix, StringComparison.OrdinalIgnoreCase));
+        var data = HasExtension(snapshot, _dataExtension);
+        var archive = HasExtension(snapshot, _archiveExtension);
+        if (!runtime && !data && !archive && !ini.Contains(_runtimePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return EngineDetectionProbe.NoMatch("No matching RGSS runtime, data, or archive signature was found.");
+        }
+        var evidence = new List<string>();
+        var score = 250;
+        if (runtime)
+        {
+            evidence.Add($"{_runtimePrefix} runtime library (inspected as data only)");
+            score += 400;
+        }
+        if (data)
+        {
+            evidence.Add($"Data/*{_dataExtension}");
+            score += 220;
+        }
+        if (archive)
+        {
+            evidence.Add($"*{_archiveExtension} archive (not decrypted or executed)");
+            score += 150;
+        }
+        var version = RuntimeVersion(library);
+        return Match(snapshot, score, "RGSS runtime and data signatures matched.", evidence, IniValue(snapshot, "Title"), version, IniValue(snapshot, "RTP") == "" ? IniValue(snapshot, "RTP1") : IniValue(snapshot, "RTP"));
+    }
+
+    public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
+        => PluginResult<IEngineRuntime>.Succeeded(new XpEngineRuntime(Metadata.Id, pContext.Game));
 }
 
-public sealed class RpgMakerVxPlugin : RgssPlugin
+public sealed class RpgMakerVxPlugin : BuiltInEnginePlugin
 {
-    public RpgMakerVxPlugin() : base(EnginePluginIds.RpgMakerVx, "RPG Maker VX", "vx", "rgss2", ".rvdata", ".rgss2a", 40) { }
+    private readonly string _runtimePrefix = "rgss2";
+    private readonly string _dataExtension = ".rvdata";
+    private readonly string _archiveExtension = ".rgss2a";
+
+    public RpgMakerVxPlugin()
+        : base(EnginePluginIds.RpgMakerVx, "RPG Maker VX", "Runs this project's own Ruby scripts from Data/Scripts.rvdata in process. Rendering, input, audio and save are not implemented, so a launched game has no picture yet.", "vx", 40,
+            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime)
+    {
+    }
+
+    public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
+    {
+        var snapshot = pContext.Snapshot;
+        var ini = IniText(snapshot);
+        var library = IniValue(snapshot, "Library");
+        var runtime = library.StartsWith(_runtimePrefix, StringComparison.OrdinalIgnoreCase)
+            || snapshot.Files.Any(pFile => System.IO.Path.GetFileName(pFile.RelativePath).StartsWith(_runtimePrefix, StringComparison.OrdinalIgnoreCase));
+        var data = HasExtension(snapshot, _dataExtension);
+        var archive = HasExtension(snapshot, _archiveExtension);
+        if (!runtime && !data && !archive && !ini.Contains(_runtimePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return EngineDetectionProbe.NoMatch("No matching RGSS runtime, data, or archive signature was found.");
+        }
+        var evidence = new List<string>();
+        var score = 250;
+        if (runtime)
+        {
+            evidence.Add($"{_runtimePrefix} runtime library (inspected as data only)");
+            score += 400;
+        }
+        if (data)
+        {
+            evidence.Add($"Data/*{_dataExtension}");
+            score += 220;
+        }
+        if (archive)
+        {
+            evidence.Add($"*{_archiveExtension} archive (not decrypted or executed)");
+            score += 150;
+        }
+        var version = RuntimeVersion(library);
+        return Match(snapshot, score, "RGSS runtime and data signatures matched.", evidence, IniValue(snapshot, "Title"), version, IniValue(snapshot, "RTP") == "" ? IniValue(snapshot, "RTP1") : IniValue(snapshot, "RTP"));
+    }
+
+    public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
+        => PluginResult<IEngineRuntime>.Succeeded(new VxEngineRuntime(Metadata.Id, pContext.Game));
 }
 
-public sealed class RpgMakerVxAcePlugin : RgssPlugin
+public sealed class RpgMakerVxAcePlugin : BuiltInEnginePlugin
 {
-    public RpgMakerVxAcePlugin() : base(EnginePluginIds.RpgMakerVxAce, "RPG Maker VX Ace", "vx-ace", "rgss3", ".rvdata2", ".rgss3a", 40) { }
+    private readonly string _runtimePrefix = "rgss3";
+    private readonly string _dataExtension = ".rvdata2";
+    private readonly string _archiveExtension = ".rgss3a";
+
+    public RpgMakerVxAcePlugin()
+        : base(EnginePluginIds.RpgMakerVxAce, "RPG Maker VX Ace", "Runs this project's own Ruby scripts from Data/Scripts.rvdata2 in process. Rendering, input, audio and save are not implemented, so a launched game has no picture yet.", "vx-ace", 40,
+            PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime)
+    {
+    }
+
+    public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
+    {
+        var snapshot = pContext.Snapshot;
+        var ini = IniText(snapshot);
+        var library = IniValue(snapshot, "Library");
+        var runtime = library.StartsWith(_runtimePrefix, StringComparison.OrdinalIgnoreCase)
+            || snapshot.Files.Any(pFile => System.IO.Path.GetFileName(pFile.RelativePath).StartsWith(_runtimePrefix, StringComparison.OrdinalIgnoreCase));
+        var data = HasExtension(snapshot, _dataExtension);
+        var archive = HasExtension(snapshot, _archiveExtension);
+        if (!runtime && !data && !archive && !ini.Contains(_runtimePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return EngineDetectionProbe.NoMatch("No matching RGSS runtime, data, or archive signature was found.");
+        }
+        var evidence = new List<string>();
+        var score = 250;
+        if (runtime)
+        {
+            evidence.Add($"{_runtimePrefix} runtime library (inspected as data only)");
+            score += 400;
+        }
+        if (data)
+        {
+            evidence.Add($"Data/*{_dataExtension}");
+            score += 220;
+        }
+        if (archive)
+        {
+            evidence.Add($"*{_archiveExtension} archive (not decrypted or executed)");
+            score += 150;
+        }
+        var version = RuntimeVersion(library);
+        return Match(snapshot, score, "RGSS runtime and data signatures matched.", evidence, IniValue(snapshot, "Title"), version, IniValue(snapshot, "RTP") == "" ? IniValue(snapshot, "RTP1") : IniValue(snapshot, "RTP"));
+    }
+
+    public override PluginResult<IEngineRuntime> CreateRuntime(EnginePluginRuntimeContext pContext)
+        => PluginResult<IEngineRuntime>.Succeeded(new VxAceEngineRuntime(Metadata.Id, pContext.Game));
 }
 
 public abstract class WebRpgPlugin : BuiltInEnginePlugin
@@ -571,7 +714,10 @@ public sealed class RpgMakerMvPlugin : WebRpgPlugin
         //  derselbe  Leser;  ein  Lauf  mit  dem  MV-Bit  und  MZ-Bildern
         //  waere  ein  Spiel,  das  startet  und  eine  leere  Karte
         //  zeigt.
-        PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime) { }
+        // **And `Rendering` is declared because MV really paints**: measured,
+        // it composes an encrypted tileset into a pixel buffer.
+        PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime
+            | PluginCapability.Rendering) { }
 
     /// <summary>
     /// Builds the same runtime MZ gets, with the generation named MV.
@@ -773,7 +919,10 @@ public sealed class RpgMakerMzPlugin : WebRpgPlugin
         // deaktiviert, und der Lauf ist unerreichbar, obwohl das Backend
         // fertig ist.** `SaveLoad` folgt erst mit einem geprueften
         // Spielstandformat, `Debugging` mit dem Pause-Overlay fuer MZ.
-        PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime) { }
+        // **And `Rendering` is declared because MZ really paints**: measured,
+        // 672x864 with 310 colours out of the game's own tileset.
+        PluginCapability.Detection | PluginCapability.Parsing | PluginCapability.Runtime
+            | PluginCapability.Rendering) { }
     private const int MaxSystemJsonBytes = 512 * 1024; // 512 KiB cap
 
     public override EngineDetectionProbe Detect(EngineInspectionContext pContext)
