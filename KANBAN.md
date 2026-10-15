@@ -81,6 +81,59 @@ the previous ends, which no measurement says the engine does. Unblock: a
 condition evaluator measured against the engine, plus a test that a page the
 engine would not select is never run.
 
+### K-PROD-RM2K-MOVE-TYPES — READY (measured need, reference pinned)
+
+Priority 1: RM2000/2003 runtime correctness. `Rm2kEngineRuntime` reports
+`autonomous movement type N is not implemented` for every page whose
+`move_type` is 1..5, and `docs/MOVEMENT_COVERAGE.md` measured what that costs:
+**mode 1 random 1,787 pages**, mode 4 toward player 272, mode 3 horizontal 19,
+mode 2 vertical 15, mode 5 away 3 -- against mode 6 custom 224, which is
+implemented. Random alone is the largest single gap in the RM2K runtime.
+
+Reference read today and stored in scratch (`easyrpg-game_character.cpp`
+sha256 `56c1283aa344e0c81222cb64218581da22c11b7843a9b9780b3ee8696b88e008`,
+`game_event.cpp`, `game_character.h`):
+
+- Gate before any mode runs (`Game_Event::UpdateSelfMovement`): the page
+  exists, not paused, **no forced route active**, `StopCount >= MaxStopCount`,
+  and either messages continue events or no interpreter is running.
+- `IsStopCountActive()` is `StopCount < MaxStopCount`; `SetMaxStopCountForStep`
+  is `freq >= 8 ? 0 : 1 << (9 - freq)`, `ForTurn` uses `1 << (8 - freq)`.
+- Random: `draw = Rand(0,9)` -- 30% keep direction, 20% turn left, 20% turn
+  right, 10% turn 180, **20% wait `Rand(0, MaxStopCount)` and return**. Then
+  `Move(direction)`. If the move failed: when waiting for foreground execution
+  or `StopCount >= MaxStopCount + 60` set `StopCount = 0`, otherwise restore
+  direction and (unless facing is locked) facing. Finally
+  `MaxStopCount = ForStep(freq) * (Rand(0,3) + 3) / 5`.
+- Cycle (vertical starts `Down`, horizontal starts `Right`): return while
+  `StopCount < MaxStopCount`; `reverse = ReverseDir(default)`;
+  `move_dir = Direction`, and if it is not the reverse it becomes `default`;
+  `Move(move_dir)`; if that failed and `StopCount >= MaxStopCount + 20`, also
+  `Move(ReverseDir(move_dir))`; then the same failure handling; `MaxStopCount =
+  ForStep(freq)`.
+- Toward/away: `in_sight` is the event's screen position within the viewport
+  plus a 64-pixel offset. Not in sight: a random direction. In sight:
+  `draw = Rand(0,9)` -- 0 keeps the direction, 1 takes a random one, otherwise
+  the direction to (or away from) the player. Then `Move(dir)`, the same
+  failure handling, `MaxStopCount = ForStep(freq)`.
+
+What the runtime still needs before this can be written, and why it is a card
+and not a one-line change: there is **no event RNG** (only `Rm2kDamageRandom`
+inside battles) and no relative-turn or `ReverseDir` helper, so a
+deterministic, save-stable source has to be chosen and seeded, and its state
+belongs in the simulation save. `StopCount` plumbing exists -- the scheduler
+sets `pStopCount: _eventMovedThisTick.Contains(id) ? 0 : 1` -- and
+`Rm2kStepBudget` already mirrors the three frequency tables; the camera
+helpers (`Rm2kMapCamera.PositionX/OffsetPixelsX`) give the screen position the
+toward/away rule needs.
+
+Acceptance: a failing test per mode with an injected deterministic RNG
+(straight/turn-left/turn-right/turn-180/wait for random, the reverse rule for
+the cycles, in-sight and out-of-sight for toward/away, the failure handling,
+and the `MaxStopCount` value after each action); the "not implemented"
+diagnostic gone for 1..5; focused suites and the canonical validator green.
+Do not ship a mode whose random draw or stop-count rule is guessed.
+
 ### K-PROD-LIBRARY-SCAN-FEEDBACK — DONE (responsive bounded scanning)
 
 Final validation proc_5904ca0973bc exited 0: **2822/2822**, followed by
