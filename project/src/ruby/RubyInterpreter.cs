@@ -2559,6 +2559,35 @@ public sealed class RubyInterpreter
 
 
 
+        // **And an object whose class the runtime does not know answers its own fields.** The
+        // engine's data classes are the engine's, not the scripts': `$data_system.start_x` is
+        // answered out of `@start_x` without any script ever writing `attr_reader :start_x`, and a
+        // game reads those fields on every frame. Measured on a real XP game, this is exactly
+        // where the setup stopped: `$game_player.moveto($data_system.start_x,
+        // $data_system.start_y)` reported *"undefined operator '%' for a Nil and a Nil"* because
+        // both were nil.
+        //
+        // **And the rule is deliberately narrow.** It applies only when the script side does not
+        // know the class, because for a script object a name that is not a method is a
+        // `NoMethodError` in Ruby -- a blanket field fallback would answer a value for a typo in
+        // the game's own code and hide it, which is the one thing this reader must never do.
+        if (empfaenger.Kind == RubyValueKind.Object && empfaenger.AusDaten)
+        {
+            // **And both stores are read.** A script object keeps its fields in `Felder` (by
+            // name), **and a Marshal-loaded data object keeps them in `Members`** (by symbol
+            // value) -- **and a reader that knows only one of the two finds half of them.**
+            if (empfaenger.Felder.TryGetValue("@" + methode, out var datenfeld))
+            {
+                return datenfeld;
+            }
+
+            if (empfaenger.Members.TryGetValue(
+                RubyValue.OfSymbol("@" + methode), out var datenmitglied))
+            {
+                return datenmitglied;
+            }
+        }
+
         // **Und ein Aufruf auf einen Namen geht die Kette nach oben.**
         // `A.x` where `x` is `def self.x` in `A`'s base class is a call
         // that Ruby finds by walking `RCLASS_SUPER`,
@@ -10595,6 +10624,21 @@ public sealed class RubyInterpreter
             }
 
             return false;
+        }
+
+        // **Und ein Datenobjekt antwortet die Feldnamen, die es traegt.** Und
+        // das gehoert hierher, weil `respond_to?` und der Aufruf dieselbe
+        // Antwort geben muessen: ein Spiel schreibt
+        // `if $data_system.respond_to?(:start_x)` und ruft es dann, und zwei
+        // Antworten auf dieselbe Frage sind ein Spiel, das den einen Zweig
+        // nimmt und im anderen landet.
+        if (pEmpfaenger.Kind == RubyValueKind.Object
+            && pEmpfaenger.AusDaten
+            && (pEmpfaenger.Felder.ContainsKey("@" + pName)
+                || pEmpfaenger.Members.ContainsKey(
+                    RubyValue.OfSymbol("@" + pName))))
+        {
+            return true;
         }
 
         // **Der Host zuerst, und ueber seine eigene Liste.** Der Host weiss,

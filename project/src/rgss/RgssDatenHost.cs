@@ -144,7 +144,14 @@ public sealed class RgssDatenHost : IRubyHost
             // -- **und ein Leser, der seinen eigenen Wertbaum in das
             // Objekt steckte, wuerde dem Spiel eine Klasse geben, die
             // es nie gesehen hat.**
-            return AlsRuby(new MarshalReader(bytes).Read(), 0);
+            // **Und der Wert traegt mit, dass er aus einer Datei kommt.**
+            // Das ist die Tatsache, die ein Datenobjekt von einem Skriptobjekt
+            // unterscheidet: **`$data_system.start_x` ist `@start_x` und hat
+            // nie eine Methode gehabt**, -- **und `held.x` auf einem eigenen
+            // Objekt ist ein `NoMethodError` und darf keiner werden.**
+            var datenwert = AlsRuby(new MarshalReader(bytes).Read(), 0);
+            datenwert.MarkiereAlsDaten();
+            return datenwert;
         }
         catch (MarshalFormatException)
         {

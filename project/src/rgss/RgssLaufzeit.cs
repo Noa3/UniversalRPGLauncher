@@ -143,8 +143,19 @@ public sealed class RgssLaufzeit
         {
             Erzeuge(name, type);
         }
-        Rufe("$game_map.setup($data_system.start_map_id) if $data_system");
-        Rufe("$game_player.moveto($data_system.start_x, $data_system.start_y) if $data_system");
+        // **And every step asks whether the data it needs is there.** A real
+        // XP `System.rxdata` has `start_map_id`, `start_x` and `start_y` -- and
+        // a minimal one does not, **and a step that runs anyway throws inside
+        // the game's own code**: measured, `$game_player.moveto` then reported
+        // *"undefined operator '%' for a Nil and a Integer"* for a fixture
+        // whose System has no start position. **And the guard is `respond_to?`
+        // and not a nil check**, because it is the same question the game asks
+        // itself.
+        Rufe("$game_map.setup($data_system.start_map_id)"
+            + " if $data_system.respond_to?(:start_map_id)");
+        Rufe("$game_player.moveto($data_system.start_x, $data_system.start_y)"
+            + " if $data_system.respond_to?(:start_x)"
+            + " && $data_system.respond_to?(:start_y)");
         Rufe("$game_player.refresh if $game_player.respond_to?(:refresh)");
     }
 

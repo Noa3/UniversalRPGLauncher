@@ -207,6 +207,51 @@ public sealed class RubyValue : IEquatable<RubyValue>
         new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Whether this value came out of a data file.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is what tells the engine's data objects from the scripts' own.</strong> A
+    /// data object answers a field it never defined a method for -- `$data_system.start_x` is
+    /// `@start_x`, and no script ever writes `attr_reader :start_x`, because in XP that class is
+    /// the engine's and not the scripts'. **And a script object does not:** a name that is not a
+    /// method is a `NoMethodError` in Ruby, and a runtime that answered a field there would turn a
+    /// typo in the game's own code into a value that looks like game state.
+    ///
+    /// **And the class name does not decide it.** Measured on a real XP game: the scripts do define
+    /// `RPG::System`, so "the scripts do not know this class" was false and the fallback did not
+    /// apply -- and `$data_system.start_x` was still nil. What decides it is where the object came
+    /// from, and this flag is set by the data host when it loads one.
+    /// </remarks>
+    public bool AusDaten { get; set; }
+
+    /// <summary>
+    /// Marks this value, and everything inside it, as loaded from a data file.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it goes all the way down on purpose.</strong> `$data_actors[0].name` is a field
+    /// of an object inside an array inside a global, and a reader that marked only the root would
+    /// answer the root's fields and not the ones a game reads on every frame.
+    /// </remarks>
+    public void MarkiereAlsDaten()
+    {
+        AusDaten = true;
+        foreach (var feld in Felder.Values)
+        {
+            feld.MarkiereAlsDaten();
+        }
+
+        foreach (var feld in Members.Values)
+        {
+            feld.MarkiereAlsDaten();
+        }
+
+        foreach (var feld in Items)
+        {
+            feld.MarkiereAlsDaten();
+        }
+    }
+
+    /// <summary>
     /// Whether this value is a list rather than a whole value.
     /// </summary>
     /// <remarks>

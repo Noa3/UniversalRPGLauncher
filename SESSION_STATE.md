@@ -10,10 +10,16 @@ host takes a name as written and the runtime asked for `Data/Actors` without its
 runtime now carries its generation's extension (`.rxdata`/`.rvdata`/`.rvdata2`) and the setup
 problems went **13 -> 1**.
 
-**And the remaining one names the next step:** `$game_player.moveto` gets
-`undefined operator '%' for a Nil and a Nil`, so `$data_system.start_x` is nil -- a Marshal-loaded
-object whose engine-provided data class answers `start_x` from `@start_x`. That needs a generic
-attribute reader for Marshal objects, and it is the next slice.
+**And the data objects answer their fields now** (next slice, done): a Marshal-loaded object
+answers `start_x` out of `@start_x`, `respond_to?` agrees with the call, and the deciding fact is
+where the object came from -- `RgssDatenHost` marks every value it loads, recursively, because the
+scripts *do* define `RPG::System` and "the class is unknown" was the wrong test. Measured on the
+real `System.rxdata`: 36 fields, `start_x` = 9, and the game's error moved from *"'%' for a Nil and
+a Nil"* to *"'%' for a Integer and a Nil"*.
+
+**And that names the next step:** `$game_map.width` is nil, so `@map` is not set -- the map's own
+data object did not arrive, or `setup` did not load it (`$game_map.update` moved past
+`@scroll_rest`, so `setup` did run). Still not graphics.
 
 ### XP/VX/VX Ace: measured what a real game needs, and fixed a Ruby defect (2026-10-15)
 

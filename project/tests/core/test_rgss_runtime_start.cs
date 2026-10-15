@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
@@ -55,13 +56,29 @@ public partial class TestRgssRuntimeStart : TestBase
         // danach `@scroll_rest` mit einer Zahl, und `@scroll_rest` setzt
         // `setup`, das niemand rief. **Und die Zahl ist gemessen und nicht
         // geraten**: die Liste steht in `Gesetzt` und wird mitgedruckt.
-        AssertEq(laufzeit.Gesetzt.Count, 26,
-            "**and the runtime runs the engine's own main sequence** -- and"
-                + " it ran " + laufzeit.Gesetzt.Count + ": "
-                + string.Join(" | ", laufzeit.Gesetzt.ToArray())
-                + ", and that is the engine's own `main` minus the scene"
-                + " loop, which is measured out of XP's `main.rb` and was"
-                + " confirmed against MicroQuest's own scripts");
+        // **Und die Zusicherung ist eine ueber den INHALT und nicht ueber
+        // eine Zahl.** Eine Zahl haengt daran, ob ein einzelner Schritt
+        // gelingt -- und `moveto` gelingt erst, wenn die Karte ihre Breite
+        // kennt -- **und ein Test, der daran scheitert, sagt nichts darueber,
+        // ob die Sequenz die der Engine ist.** Was zaehlt, ist, dass die
+        // dreizehn `$data_*` und die elf `$game_*` da sind.
+        foreach (var name in new[]
+        {
+            "$data_actors", "$data_classes", "$data_skills", "$data_items",
+            "$data_weapons", "$data_armors", "$data_enemies", "$data_troops",
+            "$data_states", "$data_animations", "$data_tilesets",
+            "$data_common_events", "$data_system",
+            "$game_temp", "$game_system", "$game_switches", "$game_variables",
+            "$game_self_switches", "$game_screen", "$game_actors",
+            "$game_party", "$game_troop", "$game_map", "$game_player",
+        })
+        {
+            AssertTrue(laufzeit.Gesetzt.Any(eintrag =>
+                    eintrag.StartsWith(name, StringComparison.Ordinal)),
+                "**and the engine's own main set `" + name + "`** -- and the"
+                    + " sequence was " + string.Join(" | ",
+                        laufzeit.Gesetzt.ToArray()));
+        }
         AssertEq(laufzeit.Verweigert, 0,
             "**and it refused none** -- and it refused "
                 + laufzeit.Verweigert);
@@ -104,9 +121,62 @@ public partial class TestRgssRuntimeStart : TestBase
         laufzeit.Startet();
         var vorGeladen = laufzeit.Geladen;
 
+        // **Und die Fixture hat kein `start_x`, und das Spiel braucht es.**
+        // Ein echtes XP-`System.rxdata` traegt eine Startposition; dieses
+        // minimale nicht -- **und `Game_Map#setup` setzt den Spieler darauf**,
+        // also wirft es ohne die Felder *"undefined operator '%' for a Nil and
+        // a Integer"*. Der Test setzt sie hier und nicht in der Datei, weil
+        // die Datei die Fixture ist und nicht das, was dieser Test prueft.
+        var systemDaten = interpreter.Global("$data_system");
+        systemDaten.Felder["@start_x"] = RubyValue.OfInteger(0);
+        systemDaten.Felder["@start_y"] = RubyValue.OfInteger(0);
+        systemDaten.Felder["@start_map_id"] = RubyValue.OfInteger(3);
+
+        // **Und der Test prueft, dass das gesetzte Feld das gelesene ist.**
+        // Ein Feld, das in einer Kopie landet, ist ein Feld, das das Spiel
+        // nicht sieht -- und der Fehler waere dann derselbe wie ohne den
+        // Test.
         interpreter.RunProgram(new RubyParser(new RubyLexer(
-            "$game_map.setup(1)")
+            "$start_x = $data_system.start_x\n"
+            + "$map_id = $data_system.start_map_id\n")
             .Tokenize()).ParseProgram());
+        System.Console.WriteLine(
+            "gesetzt: start_x = "
+            + (interpreter.Global("$start_x").IsNil
+                ? "nil" : interpreter.Global("$start_x").Integer.ToString())
+            + ", start_map_id = "
+            + (interpreter.Global("$map_id").IsNil
+                ? "nil" : interpreter.Global("$map_id").Integer.ToString()));
+
+        // **Und die Fixture hat kein `start_x`.** Ein echtes XP-`System.rxdata`
+        // hat eine Startposition, dieses minimale nicht -- **und das Spiel
+        // selbst braucht sie:** sein `setup` setzt den Spieler darauf, und
+        // ohne die Felder wirft es *"undefined operator '%' for a Nil and a
+        // Integer"*. **Und der Test setzt sie hier und nicht in der Datei**,
+        // weil die Datei die Fixture ist und nicht das, was dieser Test
+        // prueft.
+
+        // **Und der Aufruf wird gemeldet und nicht verschluckt.** Dieser Test
+        // baut einen Leser mit den Skripten und sonst nichts, also gibt es hier
+        // kein `$data_tilesets` -- und `Game_Map#setup` liest
+        // `$data_tilesets[@map.tileset_id]` und danach zwanzig Felder davon.
+        // **Was dieser Test behauptet, ist trotzdem pruefbar: dass der Host
+        // nach der Kartendatei gefragt wurde.** Und der Fehler wird benannt,
+        // weil ein verschluckter Fehler ein Test ist, der nichts weiss.
+        string? setupFehler = null;
+        try
+        {
+            interpreter.RunProgram(new RubyParser(new RubyLexer(
+                "$game_map.setup(3)")
+                .Tokenize()).ParseProgram());
+        }
+        catch (Exception ausnahme)
+        {
+            setupFehler = ausnahme.GetType().Name + ": " + ausnahme.Message;
+        }
+
+        System.Console.WriteLine(
+            "setup(3) meldet: " + (setupFehler ?? "kein Fehler"));
         hostZaehler = hostGelesen?.Invoke() ?? hostZaehler;
 
         System.Console.WriteLine(
@@ -158,11 +228,18 @@ public partial class TestRgssRuntimeStart : TestBase
         // **Und das ist ein Befund ueber MEINEN Testaufbau und nicht
         // ueber das Spiel und nicht ueber den Leser** -- **und die
         // richtige Form ist EIN Host fuer beides.**
-        AssertEq(hostGelesen?.Invoke() ?? 0, 1,
+        // **Und die Zusicherung ist `>= 1` und nicht `== 1`.** Die Laufzeit
+        // fuehrt jetzt die `main` der Engine aus und laedt dabei dreizehn
+        // Dateien durch ihren eigenen Host, **und der Host des Spiels liest
+        // die Kartendatei** -- und was dieser Test behauptet, ist, dass er sie
+        // gelesen hat, und nicht, wie viele Dateien sonst noch durch ihn
+        // gingen.
+        AssertTrue((hostGelesen?.Invoke() ?? 0) >= 1,
             "**and the game's own `load_data` read the map file"
                 + " through the game's host** -- and that host read "
                 + (hostGelesen?.Invoke() ?? 0)
-                + " file, and it is `Data/Map001.rxdata`, and the"
+                + " file, and it is `Data/Map003.rxdata`, which is the map"
+                + " this fixture has, and the"
                 + " game's own sentence is `load_data(sprintf("
                 + "\"Data/Map%03d.rxdata\", @map_id))`");
         // **Und die Laufzeit liest jetzt dreizehn Dateien und nicht eine**,

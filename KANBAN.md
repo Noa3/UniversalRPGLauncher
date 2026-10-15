@@ -836,9 +836,31 @@ which is what the engine's C++ data classes do; `$game_map.update` moved past it
 same time (`@scroll_rest`, which `setup` sets, is no longer the failure), so the map is being set up
 now.
 
+**And the data objects answer their fields now.** The engine's data classes are the engine's and
+not the scripts': `$data_system.start_x` is answered out of `@start_x` without any script ever
+writing `attr_reader :start_x`. That is now implemented -- and the deciding fact is **where the
+object came from**, not what class it names: measured on the real game, the scripts *do* define
+`RPG::System`, so "the scripts do not know this class" was false and the fallback never applied.
+`RgssDatenHost` marks every value it loads, all the way down (`$data_actors[0].name` is a field of
+an object inside an array), and the interpreter answers a field name for a marked object -- and only
+for a marked one, because a *script* object's `held.x` is a `NoMethodError` in Ruby, and a blanket
+fallback would turn a typo in the game's own code into a value that looks like game state.
+`respond_to?` gives the same answer as the call, which it has to: a game writes
+`if $data_system.respond_to?(:start_x)` and then calls it.
+
+Measured on the real `System.rxdata`: `ClassName RPG::System`, 36 fields, `start_x` **9**, and the
+game's own error moved from *"'%' for a Nil and a Nil"* to *"'%' for a Integer and a Nil"* -- so
+`start_x` arrives and `$game_map.width` is the nil that is left.
+
+**And the next step is named by that:** `$game_map.width` is nil, so `@map` is not set -- the map's
+own data object did not arrive, or `setup` did not load it. `$game_map.update` moved past
+`@scroll_rest` at the same time, so `setup` ran. That is the next measurement, and it is still not
+graphics.
+
 **Progress measure:** the problem count in `TestRealXpRuntimeRun` and `SetupProblems`. Measured so
 far: two script problems after five frames when the card was written, one after the `or` fix; and
-thirteen setup problems, one after the extension fix.
+thirteen setup problems, one after the extension fix; and the setup error now names a *value* that
+is missing rather than an object that answers nothing.
 
 ### K-PROD-MZ-FACTS-COPY — DONE (2026-10-15, the copy carries the game's state)
 

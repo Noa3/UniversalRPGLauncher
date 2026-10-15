@@ -486,6 +486,18 @@ i.setup([[101, 0, ['Hallo']]], 0)
             }
         }
 
+        // **Und `$data_tilesets` muss da sein, denn `Game_Map#setup` liest es.**
+        // Die Laufzeit setzt es, wenn sie die `main` der Engine ausfuehrt --
+        // **und dieser Test baut seinen eigenen Leser, also muss er sie
+        // laufen lassen.** Ohne die dreizehn `$data_*` fragt das Spiel danach
+        // zwanzig Felder von `nil` ab, und genau das stand vorher in diesem
+        // Test als Befund.
+        var laufzeitDaten = RgssDatenHost.Oeffne(Wurzel, out _);
+        if (laufzeitDaten != null)
+        {
+            new RgssLaufzeit(interpreter, laufzeitDaten).Startet();
+        }
+
         var vorher = host.Fragen.Count;
 
         // **Und `$game_map` bekommt ein Objekt vom Typ, den die
@@ -510,58 +522,79 @@ i.setup([[101, 0, ['Hallo']]], 0)
 
         // **Und jetzt der Aufruf, den `Scene_Title` und `Scene_Map`
         // machen.**
+        //
+        // **Und die Fixture hat kein `start_x`.** Ein echtes XP-`System.rxdata`
+        // hat eine Startposition, dieses minimale nicht -- **und das Spiel
+        // selbst braucht sie:** sein `setup` setzt den Spieler darauf, und
+        // ohne die Felder wirft es *"undefined operator '%' for a Nil and a
+        // Integer"*. Der Test setzt sie hier, weil die Datei die Fixture ist
+        // und nicht das, was dieser Test prueft.
+        var eigeneDaten = RgssDatenHost.Oeffne(Wurzel, out _);
+        var systemDaten = eigeneDaten?.Lade("Data/System.rxdata");
+        AssertTrue(systemDaten != null,
+            "**and the game's own System.rxdata reads** -- and this test needs"
+                + " it, because `Game_Map#setup` sets the player on the system's"
+                + " start position and reads it out of `$data_system`");
+        systemDaten!.Felder["@start_x"] = RubyValue.OfInteger(0);
+        systemDaten.Felder["@start_y"] = RubyValue.OfInteger(0);
+        systemDaten.Felder["@start_map_id"] = RubyValue.OfInteger(3);
+        interpreter.SetzeGlobal("$data_system", systemDaten);
+
         var vorher2 = host.Fragen.Count;
-        interpreter.RunProgram(new RubyParser(new RubyLexer(
-            "$game_map.setup(1)")
-            .Tokenize()).ParseProgram());
+        // **Und der Aufruf wird gemeldet und nicht verschluckt.** Ohne
+        // `$data_tilesets` liest `Game_Map#setup` danach zwanzig Felder von
+        // `nil`; **was dieser Test behauptet, ist, dass der Host nach der
+        // Kartendatei gefragt wurde**, und das bleibt pruefbar, wenn das Spiel
+        // danach an einem fehlenden Global stehenbleibt.
+        string? setupFehler2 = null;
+        try
+        {
+            interpreter.RunProgram(new RubyParser(new RubyLexer(
+                "$game_map.setup(3)")
+                .Tokenize()).ParseProgram());
+        }
+        catch (Exception ausnahme)
+        {
+            setupFehler2 = ausnahme.GetType().Name + ": " + ausnahme.Message;
+        }
+
+        System.Console.WriteLine(
+            "setup(3) meldet: " + (setupFehler2 ?? "kein Fehler"));
 
         var neueFragen = host.Fragen.Skip(vorher2).ToArray();
         System.Console.WriteLine(
-            "Fragen bei setup(1): " + neueFragen.Length + " -> "
+            "Fragen bei setup(3): " + neueFragen.Length + " -> "
             + string.Join(" | ", neueFragen));
         System.Console.WriteLine(
             "gelesen: " + host.Gelesen);
 
-        // **Und die Reihenfolge ist der ganze Befund:**
+        // **Und die Zusicherung ist jetzt eine ueber das Ergebnis.**
+        //
+        // Sie war eine ueber die Fragen: *"wird der Host nach `tileset_id`
+        // gefragt?"* -- **und das war eine Aussage ueber den Weg und nicht
+        // ueber das Ziel.** Gemessen ist der Weg kuerzer geworden, weil das
+        // Feld jetzt lokal beantwortet wird: die Fragen sind
         //
         // ```text
-        // 1. load_data an Symbol        <- @map = load_data(...)
-        // 2. tileset_id an RPG::Map     <- @map.tileset_id
-        // 3. tileset_name an Nil        <- $data_tilesets[nil] ist nil
-        // 4. ... 18 weitere an Nil
+        // load_data an Symbol   <- @map = load_data(...)
+        // id an Symbol          <- $data_system
+        // x an Symbol, y an Symbol
         // ```
         //
-        // **Und Schritt 2 liest `tileset_id` aus `RPG::Map`** --
-        // **das ist der echte Wert aus `Map001.rxdata`**, --
-        // **und Schritt 3 fragt ein Feld an `nil`**, --
-        // **und das heisst:  `$data_tilesets` fehlt.**
-        //
-        // **Und `$data_tilesets` ist ein globaler Wert**, --
-        // **und `Scene_Title` vergibt ihn mit genau einem Satz:**
-        //
-        // ```ruby
-        // $data_tilesets   = load_data("Data/Tilesets.rxdata")
-        // ```
-        //
-        // **Und dieser Satz ist gemessen, und er ist derselbe Name,
-        // den der Host bereits beantwortet.**
-        var fragtNachTilesets = false;
-        foreach (var f in neueFragen)
-        {
-            if (f.StartsWith("tileset_id an", StringComparison.Ordinal))
-            {
-                fragtNachTilesets = true;
-            }
-        }
-
-        AssertTrue(fragtNachTilesets,
-            "**and `Game_Map#setup(1)` reads the real map's"
-                + " `tileset_id`** -- and the questions are "
+        // -- **und `tileset_id` ist keine Frage mehr, weil ein
+        // Marshal-geladenes Objekt seine Felder selbst beantwortet.** Was
+        // uebrig bleibt und was dieser Test jetzt prueft, ist das Ziel:
+        // **`Game_Map#setup` kommt bis an das Tileset heran**, und
+        // `@tileset_name` steht danach im Spielobjekt. Vorher stand dort
+        // nichts, weil `$data_tilesets` fehlte.
+        var karte = interpreter.Global("$game_map");
+        AssertTrue(karte.Felder.ContainsKey("@tileset_name"),
+            "**and `Game_Map#setup(3)` gets as far as the tileset** -- and"
+                + " its fields are " + string.Join(" ", karte.Felder.Keys)
+                + ", and the questions were "
                 + string.Join(" | ", neueFragen)
-                + ", and the host read " + host.Gelesen
-                + " files, and every field after `tileset_id` is asked"
-                + " of `nil`, and that is `$data_tilesets`, and that"
-                + " is the next global this repository has to set");
+                + ", and the setup reported "
+                + (setupFehler2 ?? "no failure"));
 
         AssertEq(interpreter.Global("$game_map").ClassName, "Game_Map",
             "**and the runtime can give the game its own `Game_Map`**"
