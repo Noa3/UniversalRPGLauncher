@@ -70,6 +70,49 @@ they really paint. TestRgssRuntime 6/6, TestPluginDetection 25/25,
 TestLauncherUiSafety 26/26. What remains is rendering, input, audio and save
 for the three engines, which is the real "XP/VX/VX Ace complete" work.
 
+### K-PROD-RM2K-MOVE-TYPES — VERIFY (mode 1 random implemented; canonical in flight)
+
+Priority 1: RM2000/2003 runtime correctness. **Mode 1 (random) is implemented**
+and covers the largest measured gap: 1,787 pages of the collection, against
+mode 4 toward player 272, mode 3 horizontal 19, mode 2 vertical 15, mode 5 away
+3. Modes 2..5 still report `not implemented`.
+
+Reference (EasyRPG Player, read from source and kept in scratch):
+`game_event.cpp` `MoveTypeRandom` / `SetMaxStopCountForRandom` /
+`Game_Character::Update`'s increment, `game_character.cpp`
+`GetDirection90DegreeLeft/Right/180 = (dir+3|1|2)%4`, `IsStopCountActive =
+StopCount < MaxStopCount`, `GetMaxStopCountForStep = freq>=8 ? 0 : 1<<(9-freq)`,
+and `Rand::GetRandomNumber` being **inclusive** on both ends (so `Rand(0,9)` is
+ten buckets). `game_character.cpp` sha256
+`56c1283aa344e0c81222cb64218581da22c11b7843a9b9780b3ee8696b88e008`.
+
+Implemented: `Rm2kEventRandom` (a deterministic, seedable stream of its own, so
+a test can predict a walk and a save can continue one), `EventRandom` on the
+runtime, the page binding rule (random takes the step table times
+`(Rand(0,3)+3)/5`, custom the turn table, everything else the step table), the
+five-branch table, the failure branch (clear the stop count when the count has
+passed the maximum by sixty or a blocking interpreter is running, otherwise
+restore direction and facing), and the step itself through the new
+`TryBeginDirectedStep`, which the route command path now shares.
+
+**And the ripple was found and handled, not hidden.** A page that names no
+movement type parses as random -- the format's own default -- so hand-built
+test pages without the field started walking. Two pre-existing tests were
+measuring the autonomous walk instead of their own subject and now say
+`MoveType = 0` explicitly (`Test_NormalWalkingUsesMovingLimitThenSettles...`,
+the `CreateRouteGame` fixture); the mode-policy test now asserts that random
+never executes the page's embedded route, for mode 1 and for an absent field.
+
+Focused evidence: TestRm2kActiveEventGraphic **77/77** (five new tests: the
+drawn first delay, the four moving branches with the redrawn delay, the wait
+branch, a refused step restoring the pose, and no "not implemented" report),
+TestRm2kEventMoveRoute 7/7, TestRm2kMoveRoute 10/10,
+TestRm2kRuntimeRendering 19/19, TestRm2kActiveEventPage 8/8,
+TestRm2kRealFixtures 12/12, TestRealRm2kRuntimeRun 6/6,
+TestRm2kSpielstandAmEchtenSpiel 2/2, TestRm2kPictureSave 3/3,
+TestRm2kEventPagePoseParser 1/1. The canonical validator is running; the card
+is VERIFY until it is green.
+
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
 `Rm2kBattleRunner` + `rm2k_troop_page_decoder` add multi-page troop decoding
@@ -80,59 +123,6 @@ diagnostic claims otherwise, and `FindNextValidPage` runs the next page when
 the previous ends, which no measurement says the engine does. Unblock: a
 condition evaluator measured against the engine, plus a test that a page the
 engine would not select is never run.
-
-### K-PROD-RM2K-MOVE-TYPES — READY (measured need, reference pinned)
-
-Priority 1: RM2000/2003 runtime correctness. `Rm2kEngineRuntime` reports
-`autonomous movement type N is not implemented` for every page whose
-`move_type` is 1..5, and `docs/MOVEMENT_COVERAGE.md` measured what that costs:
-**mode 1 random 1,787 pages**, mode 4 toward player 272, mode 3 horizontal 19,
-mode 2 vertical 15, mode 5 away 3 -- against mode 6 custom 224, which is
-implemented. Random alone is the largest single gap in the RM2K runtime.
-
-Reference read today and stored in scratch (`easyrpg-game_character.cpp`
-sha256 `56c1283aa344e0c81222cb64218581da22c11b7843a9b9780b3ee8696b88e008`,
-`game_event.cpp`, `game_character.h`):
-
-- Gate before any mode runs (`Game_Event::UpdateSelfMovement`): the page
-  exists, not paused, **no forced route active**, `StopCount >= MaxStopCount`,
-  and either messages continue events or no interpreter is running.
-- `IsStopCountActive()` is `StopCount < MaxStopCount`; `SetMaxStopCountForStep`
-  is `freq >= 8 ? 0 : 1 << (9 - freq)`, `ForTurn` uses `1 << (8 - freq)`.
-- Random: `draw = Rand(0,9)` -- 30% keep direction, 20% turn left, 20% turn
-  right, 10% turn 180, **20% wait `Rand(0, MaxStopCount)` and return**. Then
-  `Move(direction)`. If the move failed: when waiting for foreground execution
-  or `StopCount >= MaxStopCount + 60` set `StopCount = 0`, otherwise restore
-  direction and (unless facing is locked) facing. Finally
-  `MaxStopCount = ForStep(freq) * (Rand(0,3) + 3) / 5`.
-- Cycle (vertical starts `Down`, horizontal starts `Right`): return while
-  `StopCount < MaxStopCount`; `reverse = ReverseDir(default)`;
-  `move_dir = Direction`, and if it is not the reverse it becomes `default`;
-  `Move(move_dir)`; if that failed and `StopCount >= MaxStopCount + 20`, also
-  `Move(ReverseDir(move_dir))`; then the same failure handling; `MaxStopCount =
-  ForStep(freq)`.
-- Toward/away: `in_sight` is the event's screen position within the viewport
-  plus a 64-pixel offset. Not in sight: a random direction. In sight:
-  `draw = Rand(0,9)` -- 0 keeps the direction, 1 takes a random one, otherwise
-  the direction to (or away from) the player. Then `Move(dir)`, the same
-  failure handling, `MaxStopCount = ForStep(freq)`.
-
-What the runtime still needs before this can be written, and why it is a card
-and not a one-line change: there is **no event RNG** (only `Rm2kDamageRandom`
-inside battles) and no relative-turn or `ReverseDir` helper, so a
-deterministic, save-stable source has to be chosen and seeded, and its state
-belongs in the simulation save. `StopCount` plumbing exists -- the scheduler
-sets `pStopCount: _eventMovedThisTick.Contains(id) ? 0 : 1` -- and
-`Rm2kStepBudget` already mirrors the three frequency tables; the camera
-helpers (`Rm2kMapCamera.PositionX/OffsetPixelsX`) give the screen position the
-toward/away rule needs.
-
-Acceptance: a failing test per mode with an injected deterministic RNG
-(straight/turn-left/turn-right/turn-180/wait for random, the reverse rule for
-the cycles, in-sight and out-of-sight for toward/away, the failure handling,
-and the `MaxStopCount` value after each action); the "not implemented"
-diagnostic gone for 1..5; focused suites and the canonical validator green.
-Do not ship a mode whose random draw or stop-count rule is guessed.
 
 ### K-PROD-LIBRARY-SCAN-FEEDBACK — DONE (responsive bounded scanning)
 

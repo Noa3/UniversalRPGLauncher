@@ -500,6 +500,18 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private string? _saveDirectory;
 
     /// <summary>
+    /// The stream the autonomous movement types draw from.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is reachable, because a test that cannot seed it cannot
+    /// predict a random walk.</strong> The engine's own generator is not
+    /// repeatable, so a reader that wants a replayable run keeps one of its
+    /// own -- and the draws that decide movement are the ones a save file has
+    /// to be able to continue.
+    /// </remarks>
+    public Rm2kEventRandom EventRandom { get; } = new();
+
+    /// <summary>
     /// And it writes one slot.
     /// </summary>
     /// <param name="pSlot">The slot name.</param>
@@ -807,18 +819,45 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             return false;
         }
+        var previousFacing = pEvent.FacingDirection;
+        var started = TryBeginDirectedStep(pEvent, direction, pRoute.Skippable);
+        // UpdateMoveRoute restores forward's facing after Move succeeds, not
+        // after a non-skippable refusal that returns before this point.
+        if (started && pCommand.CommandId == Rm2kMoveRoute.MoveForward)
+        {
+            pEvent.FacingDirection = previousFacing;
+        }
+        return started;
+    }
+
+    /// <summary>
+    /// Attempts one step in an explicit direction, with the engine's pose and
+    /// passability rules.
+    /// </summary>
+    /// <param name="pEvent">The event that would step.</param>
+    /// <param name="pDirection">The liblcf direction to step in.</param>
+    /// <param name="pRestoreOnFailure">
+    /// Whether a refused step restores the previous direction and facing. A
+    /// skippable route command does; a non-skippable one keeps the attempted
+    /// pose, and an autonomous movement type decides in its own failure branch
+    /// because the engine decides there by the stop count.
+    /// </param>
+    /// <returns>Whether the step started.</returns>
+    private bool TryBeginDirectedStep(
+        Rm2kMap.Event pEvent, int pDirection, bool pRestoreOnFailure)
+    {
         var previousDirection = pEvent.Direction;
         var previousFacing = pEvent.FacingDirection;
         // Player Move selects direction/facing before MakeWay. Only skippable
         // route failures restore the previous pose in UpdateMoveRoute.
-        var (dx, dy) = Rm2kMoveRoute.DirectionDelta(direction);
-        pEvent.Direction = Rm2kMoveRoute.DirectionFromLiblcfDirection(direction);
+        var (dx, dy) = Rm2kMoveRoute.DirectionDelta(pDirection);
+        pEvent.Direction = Rm2kMoveRoute.DirectionFromLiblcfDirection(pDirection);
         if (!pEvent.FacingLocked && !IsEventSpinning(pEvent))
         {
             var facing = Rm2kMoveRoute.LiblcfFromFacingDirection(previousFacing ?? previousDirection);
             // Player UpdateFacing retains either diagonal component, otherwise
             // reverses the previous cardinal facing; it never draws a diagonal row.
-            if (direction < 4) facing = direction;
+            if (pDirection < 4) facing = pDirection;
             else if (facing != (dy < 0 ? 0 : 2) && facing != (dx < 0 ? 3 : 1))
                 facing = Rm2kMoveRoute.TurnHalf(facing);
             pEvent.FacingDirection = Rm2kMoveRoute.FacingFromLiblcfDirection(facing);
@@ -836,7 +875,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             : CanEventTakeCardinalStep(pEvent.X, pEvent.Y, dx, dy);
         if (!passable)
         {
-            if (pRoute.Skippable)
+            if (pRestoreOnFailure)
             {
                 pEvent.Direction = previousDirection;
                 pEvent.FacingDirection = previousFacing;
@@ -846,15 +885,100 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         pEvent.X = targetX;
         pEvent.Y = targetY;
-        // UpdateMoveRoute restores forward's facing after Move succeeds, not
-        // after a non-skippable refusal that returns before this point.
-        if (pCommand.CommandId == Rm2kMoveRoute.MoveForward) pEvent.FacingDirection = previousFacing;
         _eventStepStates[pEvent.Id] = (pEvent.X, pEvent.Y,
-            Rm2kStepBudget.ScreenTileSize, direction);
+            Rm2kStepBudget.ScreenTileSize, pDirection);
         _eventMovedThisTick.Add(pEvent.Id);
         pEvent.StopCount = 0;
         _eventRoutesMoved = true;
         return true;
+    }
+
+    /// <summary>
+    /// The step delay the random movement type uses, which the engine draws.
+    /// </summary>
+    /// <param name="pFrequency">The page's movement frequency, one to eight.</param>
+    /// <returns>The drawn delay, in frames.</returns>
+    /// <remarks>
+    /// <strong><c>Game_Event::SetMaxStopCountForRandom</c>:</strong> the step
+    /// value times <c>(Rand(0,3) + 3) / 5</c>, so between six tenths and six
+    /// fifths of the step table's own delay -- and the integer division is the
+    /// engine's, which truncates.
+    /// </remarks>
+    private int MaxStopCountForRandom(int pFrequency) =>
+        Rm2kStepBudget.MaxStopCountForStep(pFrequency)
+            * (EventRandom.NextInclusive(0, 3) + 3) / 5;
+
+    /// <summary>
+    /// And a page whose movement type is random walks the engine's own table.
+    /// </summary>
+    /// <param name="pEvent">The event that walks.</param>
+    /// <param name="pRoute">Its page route, which carries speed and frequency.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>Measured in <c>Game_Event::MoveTypeRandom</c>:</strong> one draw
+    /// from zero to nine -- three tenths keep the direction, two tenths turn
+    /// left, two tenths turn right, one tenth turns around, and two tenths wait
+    /// for a drawn stop count and return. The step is then attempted, and a
+    /// refused one either clears the stop count or puts the pose back the way
+    /// it was before the turn.
+    /// </para>
+    /// <para>
+    /// <strong>And the delay afterwards is drawn again</strong>, so a random
+    /// page's rhythm is not the plain step table.
+    /// </para>
+    /// </remarks>
+    private void UpdateEventSelfMovementRandom(Rm2kMap.Event pEvent, Rm2kMoveRouteState pRoute)
+    {
+        var draw = EventRandom.NextInclusive(0, 9);
+        var previousDirection = pEvent.Direction;
+        var previousFacing = pEvent.FacingDirection;
+        // The engine turns a direction with plain arithmetic, so a diagonal
+        // lands on a cardinal. The runtime keeps the event's direction as the
+        // RPG Maker byte, so the turn happens in the liblcf order and is
+        // converted back; an unknown byte falls back to the visible facing.
+        var direction = Rm2kMoveRoute.LiblcfFromMovementDirection(previousDirection);
+        if (direction < 0)
+        {
+            direction = Rm2kMoveRoute.LiblcfFromFacingDirection(
+                previousFacing ?? previousDirection);
+        }
+        if (draw < 3)
+        {
+            // Straight on, which is the whole of the first three tenths.
+        }
+        else if (draw < 5)
+        {
+            direction = (direction + 3) % 4;
+        }
+        else if (draw < 7)
+        {
+            direction = (direction + 1) % 4;
+        }
+        else if (draw < 8)
+        {
+            direction = (direction + 2) % 4;
+        }
+        else
+        {
+            pEvent.StopCount = EventRandom.NextInclusive(0, pEvent.MaxStopCount);
+            return;
+        }
+
+        var started = TryBeginDirectedStep(pEvent, direction, false);
+        if (!started)
+        {
+            if (_eventScheduler.HasBlockingInterpreter
+                || pEvent.StopCount >= pEvent.MaxStopCount + 60)
+            {
+                pEvent.StopCount = 0;
+            }
+            else
+            {
+                pEvent.Direction = previousDirection;
+                pEvent.FacingDirection = previousFacing;
+            }
+        }
+        pEvent.MaxStopCount = MaxStopCountForRandom(pRoute.MoveFrequency);
     }
 
     // Shared static-terrain checks for each cardinal leg of either path.
@@ -3178,15 +3302,22 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             };
             route.Force(cursor);
             _eventPageRoutes[mapEvent.Id] = route;
-            mapEvent.MaxStopCount = page.MoveType == 6
-                ? Rm2kStepBudget.MaxStopCountForTurn(route.MoveFrequency)
-                : Rm2kStepBudget.MaxStopCountForStep(route.MoveFrequency);
+            // **And each movement type gets its own first delay**, which the
+            // engine draws when the page becomes active: measured in
+            // `Game_Event::RefreshPage`, random takes the step table times a
+            // draw, custom the turn table, and every other type the step table.
+            mapEvent.MaxStopCount = page.MoveType switch
+            {
+                1 => MaxStopCountForRandom(route.MoveFrequency),
+                6 => Rm2kStepBudget.MaxStopCountForTurn(route.MoveFrequency),
+                _ => Rm2kStepBudget.MaxStopCountForStep(route.MoveFrequency),
+            };
             if (_eventRoutes.TryGetValue(mapEvent.Id, out var forced))
             {
                 forced.MoveSpeed = route.MoveSpeed;
                 forced.MoveFrequency = route.MoveFrequency;
             }
-            if (page.MoveType != 0 && page.MoveType != 6)
+            if (page.MoveType != 0 && page.MoveType != 1 && page.MoveType != 6)
                 Simulation.AddDiagnostic($"RM2K event {mapEvent.Id} autonomous movement type {page.MoveType} is not implemented.");
         }
     }
@@ -3214,6 +3345,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         var canMove = Presentation.MessageContinuesEvents || !_eventScheduler.HasBlockingInterpreter;
         _appliedEventPages.TryGetValue(pEvent, out var page);
+        // **And a page that walks on its own walks here.** The engine's switch
+        // runs exactly one movement type per frame, behind one gate: the page
+        // exists, nothing is blocked, and the stop count has run out. A random
+        // page therefore sits where a custom one does and not beside it.
+        if (page != null && page.MoveType == 1 && canMove && pEvent.StopCount >= pEvent.MaxStopCount)
+        {
+            UpdateEventSelfMovementRandom(pEvent, route);
+        }
         if (page != null && page.MoveType == 6 && canMove && route.Active && pEvent.StopCount >= pEvent.MaxStopCount)
         {
             var start = route.CurrentIndex;

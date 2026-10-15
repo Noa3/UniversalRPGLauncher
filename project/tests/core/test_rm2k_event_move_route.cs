@@ -146,6 +146,13 @@ public partial class TestRm2kEventMoveRoute : TestBase
             TestRm2kParser.Chunk(0x16, TestRm2kParser.Ber(0)),   // character index
             TestRm2kParser.Chunk(0x17, TestRm2kParser.Ber(2)),   // facing down
             TestRm2kParser.Chunk(0x15, System.Text.Encoding.ASCII.GetBytes("Chara1")),
+            // **And the page stands still of its own accord.** This file is
+            // about the routes a game forces on an event, and a page that names
+            // no movement type is a random one -- the format's own default --
+            // which now really walks once the forced route is spent. Measured:
+            // without this the event kept stepping and a test that pins where a
+            // finished route leaves it measured the autonomous walk instead.
+            TestRm2kParser.Chunk(0x1F, TestRm2kParser.Ber(0)),   // stationary
             TestRm2kParser.Chunk(0x29, moveRoute),
         };
 

@@ -321,6 +321,13 @@ public partial class TestRm2kActiveEventGraphic
     public void Test_NormalWalkingUsesMovingLimitThenSettlesWithoutContinuousAnimation()
     {
         var page = Page("Chara1", 3, 2);
+        // **And the page stands still of its own accord.** The model's default
+        // movement type is one, random -- which is the format's own default --
+        // and a random page now really walks, so an animation test that wants
+        // to watch one route go by has to say so. Measured: without this the
+        // event kept stepping after the route was spent, and the "settled at
+        // rest" assertions were measuring the autonomous walk instead.
+        page.MoveType = 0;
         page.MoveRouteCommands.Add(new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight));
         page.MoveRouteRepeat = false;
         _event.Pages.Add(page);

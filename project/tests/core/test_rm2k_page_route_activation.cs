@@ -332,13 +332,32 @@ public partial class TestRm2kActiveEventGraphic
 
     public void Test_NonCustomModesCannotExecuteAnEmbeddedCustomRoute()
     {
-        foreach (var mode in new int?[] { 0, null, 1, 2, 3, 4, 5, 99 })
+        // **And mode 1 is no longer one of them, and neither is an absent
+        // field.** A page that names no movement type parses as one, which is
+        // the format's own default, so both are random pages now: what this
+        // test pins is that a mode which is not custom never reads the page's
+        // embedded route commands, and modes 2 to 5 and an unknown mode still
+        // say so.
+        foreach (var mode in new int?[] { 0, 2, 3, 4, 5, 99 })
         {
             StartAuthoredRouteMap(RoutePage(mode, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
             RouteTicks(40);
             AssertEq(_event.X, 8);
             AssertEq(_runtime.EventRemainingStepForTest(1), -1);
             if (mode != 0) AssertEq(_runtime.Simulation.Diagnostics.Count(message => message.Contains("autonomous movement type")), 1);
+        }
+
+        // **And the random mode does not execute it either**, whether the page
+        // named it or left the field out. Its own table decides where it goes,
+        // and the authored command's cursor is never touched.
+        foreach (var mode in new int?[] { 1, null })
+        {
+            StartAuthoredRouteMap(RoutePage(mode, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveLeft)));
+            RouteTicks(40);
+            AssertEq(PageRoutes()[1].CurrentIndex, 0,
+                $"A random page (mode {mode?.ToString() ?? "absent"}) never advances the embedded route's cursor");
+            AssertEq(_runtime.Simulation.Diagnostics.Count(message => message.Contains("autonomous movement type")), 0,
+                "and it is implemented, so it does not complain");
         }
     }
 
