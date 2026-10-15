@@ -196,6 +196,23 @@ public sealed class RgssLaufzeit
         // **und wenn sie hier nil sind, ist der Host nicht in der Kette.**
         Messen("graphics_width", "Graphics.width");
         Messen("graphics_height", "Graphics.height");
+        // **And the engine's own `main` opens a scene, and this runtime has to
+        // as well.** Measured: `main.rb` ends with `$scene = Scene_Title.new`,
+        // and without it nothing ever runs -- the globals update and the frame
+        // stays empty, because the scene is what draws and what reads input.
+        //
+        // **And the failure is reported and not hidden.** `Scene_Title` is the
+        // game's own class and its `initialize` builds windows, so the first
+        // missing graphics class names itself right here instead of the game
+        // stopping silently.
+        // **And without a `defined?` guard, because that guard is a silent
+        // skip.** Measured: `defined?(Scene_Title)` answers nil in this reader,
+        // so the step was skipped, the scene was never created and the frame
+        // reported no problems at all -- a game that looks healthy because
+        // nothing ran. **A step that cannot run has to say so**, and this one
+        // names the first class the game asks for and does not have.
+        Rufe("$scene = Scene_Title.new");
+
         Messen("graphics_nil", "Graphics.nil?");
         Messen("graphics_name", "Graphics.class.name");
 

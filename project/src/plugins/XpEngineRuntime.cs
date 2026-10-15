@@ -466,17 +466,44 @@ public sealed class XpEngineRuntime : IEngineRuntime
         }
     }
 
+    /// <summary>
+    /// Runs one statement of the frame, and names it if it throws.
+    /// </summary>
+    private void RufeSzene(string pQuelltext)
+    {
+        if (_interpreter == null) return;
+
+        try
+        {
+            _interpreter.RunProgram(new RubyParser(
+                new RubyLexer(pQuelltext).Tokenize()).ParseProgram());
+        }
+        catch (Exception ausnahme)
+        {
+            Melde("scene", pQuelltext, ausnahme);
+        }
+    }
+
     private void RunSceneUpdate()
     {
         if (_interpreter == null) return;
 
         try
         {
-            // Run current scene's main/update
-            _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                "$scene.main if $scene && $scene.respond_to?(:main)").Tokenize()).ParseProgram());
-            _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                "$scene.update if $scene && $scene.respond_to?(:update)").Tokenize()).ParseProgram());
+            // **And this is the body of the engine's own loop, and not the
+            // loop.** XP's `Scene_Title#main` is
+            // `loop do Graphics.update; Input.update; update; break if $scene != self end`
+            // -- **and a runtime that called `main` would sit in that loop
+            // forever**, because there is no scene change to break on. **So the
+            // runtime is the loop**, and what it runs each frame is the three
+            // statements inside it.
+            //
+            // **And each one is named if it throws**, because "the scene failed"
+            // says nothing about whether it was the picture, the input or the
+            // game's own update.
+            RufeSzene("Graphics.update");
+            RufeSzene("Input.update");
+            RufeSzene("$scene.update if $scene");
         }
         catch (Exception ausnahme)
         {
