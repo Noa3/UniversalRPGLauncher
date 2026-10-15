@@ -5,6 +5,53 @@
 
 ## Latest runtime correctness work
 
+### Latest verified runtime fixes (commit 4f14979)
+
+RM2K save/resume: a picture movement whose total frames, remaining frames or
+stored origin cannot describe a running movement is now refused before any
+mutation of the live state, instead of being restored as interpolation state.
+Slot listing, the title's Continue availability and Continue itself all read
+the codec's own slot extension; they searched `*.lsd` while the codec writes
+`<slot>.json`, so a game that had saved listed no slot, offered no Continue and
+loaded nothing on Continue. Driven and observed RED then GREEN on a real game's
+title: `Slots: slotA`, `[New Game, Continue, Options]`, saved gold restored.
+`TestRm2kPictureSave` 3/3, `TestRm2kSpielstandAmEchtenSpiel` 2/2.
+
+A crash in the MV/MZ troop-page path was found and fixed in the working tree:
+`MzBattleRunner.Lade` handed `null` to `MzTroopPageDecoder.TryDecode` while
+holding the parsed database, so every battle frame threw a
+NullReferenceException. `TestMvParallelPageDepth` passes 1/1 and the page
+reaches index 440; all seven MZ suites remain green. That fix is not committed
+because its file set belongs to an unfinished slice.
+
+### Current launcher GUI verification
+
+The launcher provides local title/engine/folder search, stable sorted
+selection, local sorting without rescanning, result counts and helpful empty
+states. Preferences and technical evidence are collapsed by default. Ctrl+F
+focuses search, focus borders are visible, and compact layouts scroll without
+forcing horizontal overflow. All seven interface locales include the new text.
+Integer scaling is synchronized with the game view; the previously ineffective
+manual factor editor now accurately states that scaling fits the window.
+
+Fresh GUI26/26 and scan8/8 tests pass, as does a real OpenGL capture/input probe
+at320,375,768,1100 and1440px. The launcher slice is **not committed**: a
+stash-verified partial build proved it needs an MZ symbol that only exists in
+uncommitted work, so it stays in the tree until that slice lands. No complete
+GUI, full engine compatibility or release readiness is claimed.
+
+### Open owner decision: RGSS Ruby execution
+
+Untracked XP/VX/VX Ace runtime files execute the game's own
+`Data/Scripts.rxdata`, declare `Runtime|SaveLoad|Debugging` and describe
+themselves as complete runtimes, while containing no rendering at all, stubbing
+the classes their scripts subclass as empty modules and swallowing every
+failure. `TestRgssRuntime` 3/6 and `TestPluginDetection` 24/25 fail against the
+repository's detection-only policy tests. Nothing was reverted or committed;
+the direction needs the owner's decision.
+
+The older successful canonical counts below are historical, not this run.
+
 The latest canonical development run exited0 with **2886/2886** (2866 Core+
 20 Smoke). Native custom move-toward-player9 uses reference dominant-axis and
 vertical-tie/coincident-down selection without alternate-axis fallback. Shared

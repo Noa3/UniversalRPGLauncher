@@ -1,6 +1,106 @@
 ## Current card
 
-### Save/Load UI (pause menu) — DONE
+### K-PROD-RM2K-SAVE-PICTURE-CONTINUITY — DONE (commit 4f14979)
+
+Origin and stale-movement regressions pass 2/2; the malformed-timing
+regression that was left unrun at the pause now exists, was observed RED in
+the full validator, and passes 3/3 with production validation in
+`Rm2kSimulationSaveCodec.Validate` (total frames, remaining frames and a
+stored origin for every moving picture, refused before any mutation).
+
+### K-PROD-RM2K-SAVE-SLOT-LISTING — DONE (commit 4f14979)
+
+Root cause found by driving a real game's title: `SaveSlots`, `HasAnySaveFile`
+and `ContinueGame` searched `*.lsd` while the codec writes `<slot>.json`, so a
+game that had saved listed no slot, offered no Continue, and Continue loaded
+nothing. All three now read `Rm2kSimulationSaveCodec.SlotExtension`; observed
+RED (empty slot list, `[New Game, Options]`, Continue fell through to Options)
+and GREEN (`Slots: slotA`, `[New Game, Continue, Options]`, gold 4242 restored).
+
+### K-PROD-MV-TROOP-PAGE-CRASH — fix in tree, NOT committed
+
+`MzBattleRunner.Lade` passed `null` to `MzTroopPageDecoder.TryDecode` while
+holding the parsed database; the decoder dereferenced it, so every battle
+frame threw a NullReferenceException. Reproduced with the full stack (the test
+framework now reports type and stack), fixed at the call site plus a null
+refusal in the decoder. `TestMvParallelPageDepth` GREEN 1/1, page reaches
+index 440; all seven MZ suites still green. Left uncommitted because the file
+set it belongs to (MzEngineRuntime battle wiring, MzBattleRunner,
+MzTroopPageDecoder, MzZugfolge) is another slice's unfinished work.
+
+### K-PROD-RGSS-RUBY — BLOCKED, owner decision required
+
+Untracked `XpEngineRuntime`/`VxEngineRuntime`/`VxAceEngineRuntime` plus the
+`BuiltInEnginePlugins` rewrite declare `Runtime|SaveLoad|Debugging` and
+"Complete RPG Maker XP/VX/VX Ace runtime with Ruby execution". Measured facts:
+`Initialize` executes the game's own `Data/Scripts.rxdata` through
+`RubyLexer`/`RubyParser`/`RubyInterpreter`; the three files are identical
+copies apart from names; **zero** occurrences of a framebuffer or pixel buffer
+in any of them; the "built-in classes" are empty `module X end` stubs for
+things the game's scripts subclass; every failure is swallowed by an empty
+`catch`. `TestRgssRuntime` (3/6) and `TestPluginDetection` (24/25) fail
+because the repository's own detection-only policy tests contradict this
+state. This is the one place in the tree that executes foreign Ruby, which
+`AGENTS.md:26` forbids and which the recorded owner override covered for
+sandboxed plugin JavaScript, not for RGSS. Not touched, not reverted, not
+committed; a question to the owner is open.
+
+### K-PROD-GUI-LIBRARY — VERIFY (GUI checks pass; commit blocked by MZ WIP)
+
+26/26 GUI tests and 8/8 scan tests pass, and the rendered OpenGL probe passes
+320/375/768/1100/1440px with typed search, Ctrl+F, empty and preferences
+states. The launcher slice **cannot be committed on its own**: a stash-verified
+partial build proved `Main.cs` needs `MzEngineRuntime.ChoiceIndex`'s setter,
+which only exists in the uncommitted MZ WIP. It stays in the tree until that
+slice lands.
+
+
+### Historical Save/Load UI checkpoint — previously marked DONE
+
+### K-PROD-RM2K-SAVE-PICTURE-CONTINUITY — PAUSED
+USER STEERING: paused this slice for launcher/main-menu GUI rework. Origin and
+stale-movement regressions passed 2/2; the malformed-timing regression was unrun
+at the pause and has since failed in full validation as expected. Its production
+validation is NOT implemented. No DONE/commit.
+Current work is K-PROD-GUI-LIBRARY below; preserve this pending save work.
+
+### GUI implementation history (superseded by VERIFY checkpoint above)
+
+Rework the launcher library, not imported games' own menus. Preserve runtime
+selection/sandbox policies and existing scan cancellation. Add local search and
+sorting with stable selection, readable empty/filter states, compact settings,
+responsive library/details layout and keyboard focus. Inspection found sorted
+rows selected the unsorted library index; reproduce through real ItemList signal.
+Main.cs already has unrelated audio/save/runtime edits: retain them, no bulk commit.
+GUI evidence: sorted-selection RED 20/21, then identity mapping GREEN 21/21.
+Search/sort/preferences first RED 21/24, implemented attached controls in
+Main.LibraryUi.cs. Next run 22/24 identified two harness assumptions: assigning
+LineEdit.Text does not emit a user TextChanged signal; and compact full-page
+scroll is intentional, while the launch action must remain outside DETAILS
+scroll. Tests now send the real edit signal and assert the specific scroll owner.
+GUI focused suite GREEN 24/24. Real OpenGL probe caught width overflow at375:
+the engine OptionButton sized itself to its longest hidden candidate (446px).
+Diagnostic traversal identified that exact minimum; disabled longest-item sizing
+and enabled text clipping, with wrapping engine labels. No resize/viewport test
+was weakened. Retest five widths and real keyboard search next.
+
+Resumed on main 0e2cf76 with 22 pre-existing modified files and 8 untracked
+runtime/UI files; preserve all of them. No staging, discard or bulk commit.
+Fresh baseline rebuild exit 0; TestGameSimulationState 20/20 (40 runner checks
+including smoke). Work is limited to Rm2kSimulationSaveCodec.cs and a new focused
+picture-save suite, plus checkpoint/queue. Found incomplete picture movement
+DTO (original StartX/StartY missing) and stale MovingPictures after Apply.
+Next: demonstrate continuity RED, then minimal codec fix and regression matrix.
+Failure log: new TestRm2kPictureSave 0/1, exit 6, with five trajectory
+assertions failing at resumed frames 1..5. Initial restored coordinates, remaining
+time and final destination still matched, proving a self-roundtrip is insufficient.
+Added nullable original movement origins to the version-1 DTO/capture/restore;
+next verify GREEN, then stale movements and pre-apply timing validation.
+Origin fix GREEN 1/1. Next stale-movement regression 1/2 RED, exit 4:
+loading a stationary picture retained the old movement and moved (30,40) to
+(30,60) on the next three ticks. Apply now clears target.MovingPictures together
+with target.Pictures, before installing only the saved movement entries.
+Older DONE/canonical claims below are historical, not current-run evidence.
 
 FINAL: K-PROD-SAVE-UI DONE after canonical run exited 0 with **2901/2901**
 and `UniversalRPG validation passed.` marker.

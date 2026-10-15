@@ -1,7 +1,72 @@
 ## Active
 
 User acceptance also explicitly includes complete XP and VX Ace runtimes.
+
+### K-PROD-GUI-LIBRARY — VERIFY (GUI green; commit blocked by uncommitted MZ WIP)
+
+Implemented local title/engine/path search, stable sorted row identity and
+selection preservation, local sort without rescans, result counts and empty
+states, collapsible preferences/technical details, Ctrl+F and visible focus.
+Responsive outer scroll plus minimum list height preserve access on narrow
+windows. Engine choice no longer forces the longest hidden item's width.
+Scaling controls now synchronize with the actual game view; the old unused
+manual-factor editor is replaced by truthful fit-to-window information.
+GUI tests26/26, scan8/8; rendered OpenGL probe passes320/375/768/1100/1440px,
+typed filtering, Ctrl+F, empty and preferences states. New labels in all7 locales.
+A stash-verified partial build proved the slice cannot be committed alone:
+`Main.cs` uses `MzEngineRuntime.ChoiceIndex`'s setter, which exists only in the
+uncommitted MZ WIP. It stays in the tree until that slice lands, and no
+compatibility/sandbox claim is made from it.
+
+Launcher/main-menu rework: clear primary launch action, local search/sort,
+stable row-to-game identity, usable empty/filter states, collapsible preferences
+and technical details, responsive sizing and keyboard focus. Do not advertise
+new engine compatibility. Require selection/search/sort/scan safety regressions,
+build and rendered viewport checks. Full in-game GUI rework is a separate scope.
+
+### K-PROD-RM2K-SAVE-PICTURE-CONTINUITY — DONE (commit 4f14979)
+
+Bounded restart/resume slice under K-PROD-RM2K-RUNTIME / K-PROD-SAVE-STATE.
+Picture saves omitted the original interpolation origin and restored it from
+the current position, so later ticks changed the trajectory; loading also left
+old picture movements in the target dictionary. Both fixed with observed RED
+then GREEN (3/3), plus production timing validation in `Validate`: a moving
+picture whose total frames, remaining frames or stored origin cannot describe a
+running movement is refused before any mutation. Existing full-durable-state
+DONE wording is still not proof of complete persistence; native LSD
+interoperability and other omitted state remain separate gates.
 VX is listed twice in the request and remains one separate target, not VX Ace.
+
+### K-PROD-RM2K-SAVE-SLOT-LISTING — DONE (commit 4f14979)
+
+`SaveSlots`, `HasAnySaveFile` and `ContinueGame` searched `*.lsd` while the
+codec writes `<slot>.json`, so a game that had saved listed no slot, offered no
+Continue, and Continue loaded nothing. All three now read
+`Rm2kSimulationSaveCodec.SlotExtension`. Observed RED on a real game's title
+(empty slot list, `[New Game, Options]`, Continue fell through to Options) and
+GREEN (`Slots: slotA`, `[New Game, Continue, Options]`, gold 4242 restored).
+Original LSD files are deliberately not listed until a reader for them exists,
+because advertising a slot the runtime cannot load is a lie.
+
+### K-PROD-MV-TROOP-PAGE-CRASH — fix in tree, NOT committed
+
+`MzBattleRunner.Lade` passed `null` to `MzTroopPageDecoder.TryDecode` while
+holding the parsed database; the decoder dereferenced it on its first line, so
+every battle frame threw a NullReferenceException. The test framework now
+reports exception type and stack, which located it exactly. Fixed at the call
+site plus a null refusal in the decoder. `TestMvParallelPageDepth` GREEN 1/1
+reaching index 440; all seven MZ suites still green. Uncommitted because the
+file set it belongs to is another slice's unfinished work.
+
+### K-PROD-RGSS-RUBY — BLOCKED (owner decision required)
+
+See `SESSION_STATE.md`. Untracked XP/VX/VX Ace runtimes execute the game's own
+`Data/Scripts.rxdata`, declare `Runtime|SaveLoad|Debugging` and "complete
+runtime", contain no rendering at all, stub the classes their scripts subclass
+as empty modules and swallow every failure. `TestRgssRuntime` 3/6 and
+`TestPluginDetection` 24/25 fail against the repository's own detection-only
+policy. Not touched, not reverted, not committed; the owner decides the
+direction.
 
 ### K-PROD-LIBRARY-SCAN-FEEDBACK — DONE (responsive bounded scanning)
 
