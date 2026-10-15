@@ -758,6 +758,21 @@ leaves the frame byte for byte as it was; the four updates are pinned by tests a
 the reference's arithmetic, and one end-to-end test drives a real game with the weather
 turned on.
 
+### K-PROD-RM2K-EVENT-SPRITE-OFFSET — READY (every event walk is drawn tile to tile)
+
+**And this is why the jump cannot be seen yet.** The hero's sprite carries the unspent step as
+a pixel offset -- `Rm2kStepBudget.PixelOffsetX/`Y from `Simulation.RemainingStep`, the
+`GetSpriteX`/`GetSpriteY` shape -- but the **event** sprite is built with `MapX = pEvent.X`
+and no offset at all, so every event that walks is drawn snapped to its tile: an event that
+takes eight frames to cross a tile is drawn standing still and then teleporting. The
+reference has one sprite-position rule for every character (`Game_Character::GetSpriteX`),
+so this is a gap, not a design decision.
+
+**Acceptance:** an event's sprite interpolates while its step is unspent, through the same
+`PixelOffsetX/Y` the hero uses; a test asserts that an event mid-step has a non-zero offset
+and a drawn position strictly between its old and its new tile, that a stationary event has
+zero offset, and that the frame renderer places it there (not merely that the field is set).
+
 ### K-PROD-RM2K-ROUTE-JUMP — READY (24 and 25, six measured instances)
 
 **And this is what is left of the route commands.** `lock_facing` (26) and its twin 27 are
@@ -774,30 +789,53 @@ command it does not implement and a smaller error than the route stopping dead.
 
 * **`BeginMoveRouteJump(current_index, route)`** scans forward from `begin_jump + 1`:
   * every **movement** command (0..11) first sets the direction -- `move_up`..`move_upleft`
-    assign it, `move_random` turns randomly, `move_towards_hero`/`move_away_from_hero` turn
-    towards or away, and `move_forward` uses the direction the character already has -- and
-    then accumulates `jdx += GetDxFromDirection(GetDirection())` and the same for `jdy`.
-    So a route of `move_forward` after a turn jumps along the **new** direction.
-  * every **facing** command (12..22) turns the character without accumulating anything.
-  * at **`end_jump`** it calls `Jump(GetX() + jdx, GetY() + jdy)` and returns whether that
-    succeeded; the outer loop's increment then passes the `end_jump`.
-  * **if the route ends without an `end_jump`** the index backs up by one and the jump is
-    **skipped**, returning true -- so an unterminated jump is not a crash and not a jump.
-* **`Jump(x, y)`** returns true (a no-op) unless the character `IsStopping()`; it sets the
-  direction from the larger of `dx`/`dy` (vertical on a tie), sets `jumping`, sets the
-  facing **unless the facing is locked**, and calls `MakeWay` for the tiles it crosses.
-* **The arc** is `MoveRouteJump`: the drawn position is the tile minus
-  `(GetX() - GetBeginJumpX()) * GetRemainingStep()` on each axis, over the step budget
-  the jump sets -- the same budget shape the normal step uses.
+    (0..7) assign it, `move_random` (8) turns randomly, `move_towards_hero` (9) and
+    `move_away_from_hero` (10) turn towards or away, `move_forward` (11) keeps the direction
+    -- and then **unconditionally** accumulates `jdx += GetDxFromDirection(GetDirection())`
+    and the same for `jdy`, outside the inner switch. So a route of `move_forward` after a
+    turn jumps along the **new** direction, and even a code inside 0..11 that the inner
+    switch does not name still accumulates.
+  * every **facing** command from `face_up` to `face_away_from_hero` (**12..18**) turns the
+    character without accumulating anything. **19..22 (`turn_right`, `turn_left`,
+    `turn_180`, `turn_random`) are outside that range and fall through**: in a jump scan they
+    neither turn nor accumulate -- faithful, and a real difference from executing them.
+  * anything else (23 and up) also falls through, and the scan **continues past it**.
+  * at **`end_jump`** it computes `new_x = GetX() + jdx`, `new_y = GetY() + jdy`, calls
+    `Jump(new_x, new_y)`, and on success calls `SetMaxStopCountForStep()`; then it **returns
+    whether the jump succeeded**, and the caller's own index increment passes the `end_jump`.
+  * **if the route ends without an `end_jump`** the index backs up by one (`--current_index`)
+    and the jump is **skipped**, returning true -- so an unterminated jump is neither a crash
+    nor a jump, and the command that ended the scan is processed normally afterwards.
+* **`Jump(x, y)`**:
+  * `if (!IsStopping()) return true;` -- a jump while a step is in flight is a **no-op that
+    reports success**, not a failure.
+  * the direction comes from the larger delta: `|dy| >= |dx|` gives down/up, otherwise
+    right/left (a tie is vertical).
+  * `SetJumping(true)`; and if either delta is non-zero, the facing is set **unless it is
+    locked**, and `MakeWay` is asked for the crossed tiles.
+  * **No tile is checked**: `Jump` never asks whether the destination is passable, which is
+    the whole point of a jump -- a route jumps *over* an obstacle. Only `MakeWay` can refuse,
+    and it refuses over a *character*, not over a chip. (Dynamic character collision is a
+    named open gap, so `MakeWay` has nothing to refuse here yet.)
+  * on a looping map the target is wrapped and `begin_x`/`begin_y` shift by the same amount,
+    so the arc still starts where the character was.
+  * finally `SetBeginJumpX/Y`, `SetX/Y`, `SetJumping(true)` and
+    `SetRemainingStep(SCREEN_TILE_SIZE)`.
+* **The arc** is the drawn position while the jump is in the air: the tile minus the tile
+  delta times the unspent step, on **both** axes at once --
+  `x = GetX() * 256 - (GetX() - GetBeginJumpX()) * GetRemainingStep()`, the same for y. So a
+  diagonal jump is a straight diagonal, which is why it needs the event sprite offset
+  (`K-PROD-RM2K-EVENT-SPRITE-OFFSET`) before it can be seen at all.
 * And a failed jump either restores the previous direction and facing (a skippable route)
   or rewinds the index and counts a move failure (a route that is not).
 
 **Acceptance:** a route of `begin_jump` … `end_jump` jumps the accumulated distance in one
-movement, with the turns between the two commands applied first; a jump that is not closed
-by an `end_jump` is skipped and the route continues; a locked facing survives the jump; a
-jump into an impassable tile fails the way the reference fails it; the three measured
-`begin_jump` instances of the corpus are exercised in a test, and the diagnostic that names
-the command disappears once it is implemented.
+movement, with the turns between the two commands applied first; `move_forward` inside the
+jump accumulates along the direction the scan just turned to; a jump that is not closed by an
+`end_jump` is skipped and the route continues at the command that ended the scan; a jump
+lands on an impassable tile (that is what a jump is for); a locked facing survives the jump;
+the three measured `begin_jump` instances of the corpus are exercised in a test, and the
+diagnostic that names the command disappears once it is implemented.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
