@@ -1,4 +1,43 @@
 ## Current card
+### XP: the scene's setup never runs, and the loop belongs to the game (2026-10-15)
+
+A real XP game now runs its whole startup without a problem: 90 scripts parsed and executed, 0 failed;
+setup problems 0; script problems after 5 frames 0; the map is loaded (20x15, map_id 1); its events
+arrive as `RPG::Event` objects with x and y; the tilesets load (51); the player is at 9,6; `Graphics`
+answers 640x480 and counts frames; `Input` answers `false` rather than nil; `rand` is real. **And
+nothing is drawn.**
+
+The diagnostics were exposed to find out why, and they answered precisely: `diagnostics = 0, distinct
+names = 0` -- **the game asks for nothing that is missing.** Nothing is built because the scene's setup
+never runs. XP's `Scene_Title#main` is where the windows and the sprites are created:
+
+```ruby
+def main
+  @command_window = Window_Command.new(192, [...])   # setup -- never runs
+  Graphics.transition
+  loop do
+    Graphics.update      # only this runs, as the runtime's frame
+    Input.update
+    update
+    break if $scene != self
+  end
+end
+```
+
+So the scene updates a screen it never built, asks for nothing, and draws nothing, while every report
+says zero problems.
+
+**And the next step is an inversion, not another stub:** in a real RGSS host the game's `main` is the
+loop and `Graphics.update` is the frame -- it presents one frame and returns, and the game calls it
+again. So `Graphics.update` has to drive the runtime's frame (advance it, and later render), the
+game's `main` has to be started once instead of `update` being called each frame, and the runtime's own
+`Update()` must not drive the scene a second time. **That is the honest way to get the setup to run
+instead of reimplementing which statements a scene performs before its loop.**
+
+The instrument for the next gap is already in place: `XpEngineRuntime.Diagnostics` lists the names a
+game asked for and the runtime could not answer, deduplicated and printed by
+`TestRealXpRuntimeRun` as `FEHLT <name>`.
+
 ### XP: the map loads, and its events do not survive the hash (2026-10-15)
 
 One host instead of two made the map load: `$game_map.width` went from nil to **20**, `$game_map.height`
