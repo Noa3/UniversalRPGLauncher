@@ -10,6 +10,54 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "LAUNCHER_SETTINGS"
+msgstr "Ajustes"
+
+msgid "LAUNCHER_LANGUAGE"
+msgstr "Idioma"
+
+msgid "LAUNCHER_RENDER_MODE"
+msgstr "Modo de imagen"
+
+msgid "LAUNCHER_FAITHFUL"
+msgstr "Fiel al original"
+
+msgid "LAUNCHER_ENHANCED"
+msgstr "Mejorado"
+
+msgid "LAUNCHER_INTEGER_SCALE"
+msgstr "Escalado entero"
+
+msgid "LAUNCHER_SCALE_FACTOR"
+msgstr "Factor de escala"
+
+msgid "LAUNCHER_SCALE_AUTO"
+msgstr "Ajustar a la ventana"
+
+msgid "LAUNCHER_SEARCH"
+msgstr "Buscar título, motor o carpeta…"
+
+msgid "LAUNCHER_RESULTS"
+msgstr "{shown} de {total} juegos"
+
+msgid "LAUNCHER_EMPTY_TITLE"
+msgstr "Tu biblioteca está vacía"
+
+msgid "LAUNCHER_EMPTY_BODY"
+msgstr "Elige tu carpeta de juegos arriba. Los juegos aparecerán aquí tras el análisis."
+
+msgid "LAUNCHER_NO_MATCHES"
+msgstr "No hay juegos que coincidan"
+
+msgid "LAUNCHER_NO_MATCHES_BODY"
+msgstr "Prueba otro título, motor o carpeta, o borra la búsqueda."
+
+msgid "LAUNCHER_TECHNICAL"
+msgstr "Detalles técnicos"
+
+msgid "LAUNCHER_SHORTCUT"
+msgstr "Ctrl+F: Buscar · Intro: Biblioteca · Tab: Navegar"
+
 msgid "APP_SUBTITLE"
 msgstr "Detecta juegos locales de RPG Maker. Los entornos nativos se desarrollan paso a paso."
 

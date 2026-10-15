@@ -10,6 +10,54 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "LAUNCHER_SETTINGS"
+msgstr "Settings"
+
+msgid "LAUNCHER_LANGUAGE"
+msgstr "Interface language"
+
+msgid "LAUNCHER_RENDER_MODE"
+msgstr "Rendering mode"
+
+msgid "LAUNCHER_FAITHFUL"
+msgstr "Faithful"
+
+msgid "LAUNCHER_ENHANCED"
+msgstr "Enhanced"
+
+msgid "LAUNCHER_INTEGER_SCALE"
+msgstr "Integer scaling"
+
+msgid "LAUNCHER_SCALE_FACTOR"
+msgstr "Scale factor"
+
+msgid "LAUNCHER_SCALE_AUTO"
+msgstr "Fit to window"
+
+msgid "LAUNCHER_SEARCH"
+msgstr "Search title, engine or folder…"
+
+msgid "LAUNCHER_RESULTS"
+msgstr "{shown} of {total} games"
+
+msgid "LAUNCHER_EMPTY_TITLE"
+msgstr "Your library is empty"
+
+msgid "LAUNCHER_EMPTY_BODY"
+msgstr "Choose your games folder above. Games will appear here after scanning."
+
+msgid "LAUNCHER_NO_MATCHES"
+msgstr "No games match your search"
+
+msgid "LAUNCHER_NO_MATCHES_BODY"
+msgstr "Try another title, engine or folder name, or clear the search field."
+
+msgid "LAUNCHER_TECHNICAL"
+msgstr "Technical details"
+
+msgid "LAUNCHER_SHORTCUT"
+msgstr "Ctrl+F: Search · Enter: Library · Tab: Navigate"
+
 msgid "APP_SUBTITLE"
 msgstr "Detect local RPG Maker games. Native runtimes are built step by step."
 
@@ -279,3 +327,21 @@ msgstr "Save"
 
 msgid "SAVE_LOAD_LOAD"
 msgstr "Load"
+
+msgid "SORT_TOOLTIP"
+msgstr "Sort games by"
+
+msgid "SORT_BY_TITLE"
+msgstr "Title"
+
+msgid "SORT_BY_ENGINE"
+msgstr "Engine"
+
+msgid "SORT_BY_PLAYTIME"
+msgstr "Playtime"
+
+msgid "SORT_BY_LAST_PLAYED"
+msgstr "Last played"
+
+msgid "TERM_CONTINUE"
+msgstr "Continue"

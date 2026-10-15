@@ -1,5 +1,6 @@
+using System;
+using System.IO;
 using Godot;
-using UniversalRPG.Mz;
 using UniversalRPG.Web;
 
 namespace UniversalRPG.App.Ui;
@@ -19,7 +20,7 @@ namespace UniversalRPG.App.Ui;
 /// </para>
 /// <para>
 /// <strong>And this is the same shape as
-/// <c>Rm2kMapPreview</c>:</strong> -- <strong>the host hands over a
+/// <c>Rm2kAudioOutput</c>:</strong> -- <strong>the host hands over a
 /// plain value, this turns it into something Godot can show or
 /// hear, and nothing in between knows which host it came
 /// from.</strong>
@@ -54,7 +55,6 @@ public partial class MzAudioOutput : Node
     private const int Kanaele = 4;
 
     private readonly AudioStreamPlayer[] _player = new AudioStreamPlayer[Kanaele];
-    private readonly AudioStreamOggVorbis[] _stream = new AudioStreamOggVorbis[Kanaele];
     private readonly string[] _geladen = new string[Kanaele];
     private readonly string[] _ordner =
     {
@@ -125,6 +125,7 @@ public partial class MzAudioOutput : Node
     /// </summary>
     /// <param name="pKanal">Which channel.</param>
     /// <param name="pFrames">How many frames are left.</param>
+    /// <param name="pLautstärke">The volume (0-100).</param>
     /// <remarks>
     /// <para>
     /// <strong>And the engine moves the volume down by the number it
@@ -164,9 +165,7 @@ public partial class MzAudioOutput : Node
         }
     }
 
-    /// <summary>
-    /// And one channel, and whether its file was there.
-    /// </summary>
+    /// <summary>And one channel, and whether its file was there.</summary>
     /// <param name="pKanal">Which one.</param>
     /// <returns>
     /// Whether the name is not empty and the file could be read,
@@ -200,7 +199,7 @@ public partial class MzAudioOutput : Node
             }
 
             var roh = System.IO.File.ReadAllBytes(pfad);
-            var offen = MzVerschluesselung.Entschluessele(roh, _schluessel);
+            var offen = UniversalRPG.Mz.MzVerschluesselung.Entschluessele(roh, _schluessel);
             if (offen == null)
             {
                 // **Und  die  Datei  ist  nicht  verschluesselt.**
@@ -209,7 +208,6 @@ public partial class MzAudioOutput : Node
             }
 
             var stream = AudioStreamOggVorbis.LoadFromBuffer(offen);
-            _stream[pIndex] = stream;
             _geladen[pIndex] = name;
             player.Stream = stream;
         }

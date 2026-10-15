@@ -73,6 +73,25 @@ public partial class TestLauncherUiSafety : TestBase
             "The Continue button must resume the event, not only hide its text.");
     }
 
+    public void Test_SortedRowSelectsTheGameActuallyDisplayed()
+    {
+        var library = Field<GameLibrary>("_library");
+        var zulu = SelectedEntry();
+        zulu.Title = "Zulu";
+        var alpha = SelectedEntry();
+        alpha.Title = "Alpha";
+        alpha.Path += "/alpha";
+        library.Games.AddRange(new[] { zulu, alpha });
+        Invoke("DisplayLibrary");
+        var list = Field<ItemList>("_gameList");
+        AssertTrue(list.GetItemText(0).StartsWith("Alpha", StringComparison.Ordinal));
+        list.EmitSignal(ItemList.SignalName.ItemSelected, 0L);
+        AssertEq(Field<Label>("_detailsTitle").Text, "Alpha",
+            "Selecting sorted row zero must not select the unsorted library's first game");
+        AssertTrue(ReferenceEquals(Field<GameLibrary.GameEntry>("_selectedGame"), alpha));
+        AssertEq(library.Games[0].Title, "Zulu", "View sorting must not rewrite the library snapshot");
+    }
+
     public void Test_RuntimeStopsWhenLauncherLeavesTree()
     {
         StartRuntime();
@@ -80,6 +99,67 @@ public partial class TestLauncherUiSafety : TestBase
         _main._ExitTree();
         AssertFalse(launcher.ActiveRuntimeState == PluginRuntimeState.Running,
             "Scene reload/close must not leave a running host behind.");
+    }
+
+    public void Test_SearchFiltersLocallyAndClearsTheHiddenSelection()
+    {
+        var search = _main.FindChild("LibrarySearch", true, false) as LineEdit;
+        AssertTrue(search != null, "The real library exposes a search field");
+        if (search == null) return;
+        var entry = SelectedEntry();
+        entry.Title = "Alpha Adventure";
+        Field<GameLibrary>("_library").Games.Add(entry);
+        Invoke("DisplayLibrary");
+        search.Text = " ALPHA ";
+        search.EmitSignal(LineEdit.SignalName.TextChanged, search.Text);
+        AssertEq(Field<ItemList>("_gameList").ItemCount, 1);
+        search.Text = "no matching title";
+        search.EmitSignal(LineEdit.SignalName.TextChanged, search.Text);
+        AssertEq(Field<ItemList>("_gameList").ItemCount, 0);
+        AssertTrue(Field<Button>("_launchButton").Disabled, "An invisible selection cannot launch");
+        AssertTrue(Field<object?>("_selectedGame") == null);
+        search.Text = "";
+        search.EmitSignal(LineEdit.SignalName.TextChanged, search.Text);
+        AssertEq(Field<ItemList>("_gameList").ItemCount, 1);
+        AssertEq(Field<Label>("_detailsTitle").Text, entry.Title);
+        AssertTrue(Field<object?>("_scanOperation") == null, "Filtering never starts a disk scan");
+    }
+
+    public void Test_SortPreservesSelectionWithoutStartingADiskScan()
+    {
+        var sort = _main.FindChild("LibrarySort", true, false) as OptionButton;
+        AssertTrue(sort != null, "The library exposes local sort controls");
+        if (sort == null) return;
+        var library = Field<GameLibrary>("_library");
+        var first = SelectedEntry(); first.Title = "Zulu";
+        var second = SelectedEntry(); second.Title = "Alpha"; second.Path += "/alpha";
+        library.Games.AddRange(new[] { first, second });
+        Invoke("DisplayLibrary");
+        Field<ItemList>("_gameList").EmitSignal(ItemList.SignalName.ItemSelected, 1L);
+        sort.Select(1);
+        sort.EmitSignal(OptionButton.SignalName.ItemSelected, 1L);
+        AssertTrue(Field<object?>("_scanOperation") == null);
+        AssertTrue(ReferenceEquals(Field<GameLibrary.GameEntry>("_selectedGame"), first));
+    }
+
+    public void Test_PreferencesAndTechnicalDetailsAreCollapsedUntilRequested()
+    {
+        foreach (var (buttonName, panelName) in new[]
+        {
+            ("LauncherPreferencesButton", "LauncherPreferences"),
+            ("TechnicalDetailsButton", "TechnicalDetails"),
+        })
+        {
+            var button = _main.FindChild(buttonName, true, false) as Button;
+            var panel = _main.FindChild(panelName, true, false) as Control;
+            AssertTrue(button != null && panel != null, $"{buttonName} has an attached panel");
+            if (button == null || panel == null) continue;
+            AssertFalse(panel.Visible, "Technical controls do not dominate the initial library screen");
+            button.ButtonPressed = true;
+            AssertTrue(panel.Visible);
+            button.ButtonPressed = false;
+            AssertFalse(panel.Visible);
+        }
     }
 
     public void Test_StartButtonUsesFullDetectionReport()
@@ -90,6 +170,24 @@ public partial class TestLauncherUiSafety : TestBase
         Invoke("SelectGame", 0L);
         AssertFalse(Field<Button>("_launchButton").Disabled,
             "A verified selection must not be refused by an enum-only report.");
+    }
+
+    public void Test_LauncherScalingControlsSynchronizeWithTheGameScreen()
+    {
+        var mode = _main.FindChildren("*", "OptionButton", true, false).OfType<OptionButton>()
+            .Single(p => p.TooltipText == _main.Tr("LAUNCHER_RENDER_MODE"));
+        var scaling = _main.FindChildren("*", "CheckButton", true, false).OfType<CheckButton>().Single();
+        var screen = Field<Rm2kGameScreen>("_gameScreen");
+        bool ViewScaling() => (bool)typeof(Rm2kGameScreen)
+            .GetField("_integerScale", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(screen)!;
+        mode.Select(1);
+        mode.EmitSignal(OptionButton.SignalName.ItemSelected, 1L);
+        scaling.ButtonPressed = false;
+        AssertFalse(ViewScaling());
+        mode.Select(0);
+        mode.EmitSignal(OptionButton.SignalName.ItemSelected, 0L);
+        AssertTrue(scaling.ButtonPressed, "Faithful mode restores the visible integer-scaling toggle");
+        AssertTrue(ViewScaling(), "The game view uses the same scaling policy");
     }
 
     public void Test_UnwritableSaveDirectoryReturnsError()
@@ -128,6 +226,9 @@ public partial class TestLauncherUiSafety : TestBase
                 "A scan cannot change the visible selection while its signals are suppressed");
             AssertEq(Field<ItemList>("_gameList").FocusMode, Control.FocusModeEnum.None,
                 "Keyboard selection is frozen with the old library snapshot");
+            AssertTrue(Field<OptionButton>("_librarySort").Disabled);
+            AssertFalse(Field<LineEdit>("_librarySearch").Editable,
+                "Search and sort cannot change the projection while a scan is publishing a replacement snapshot");
             _main._Process(0);
             AssertTrue(Field<Label>("_scanDetails").Text.Contains(_root, StringComparison.Ordinal),
                 "The main-thread progress view identifies the directory being inspected");
@@ -164,6 +265,28 @@ public partial class TestLauncherUiSafety : TestBase
                     "SCAN_PARTIAL" => new[] { "{count}" },
                     _ => Array.Empty<string>()
                 };
+                foreach (var placeholder in expected)
+                    AssertTrue(message.Contains(placeholder, StringComparison.Ordinal), $"{locale}/{key} preserves {placeholder}");
+            }
+        }
+    }
+
+    public void Test_LibraryReworkResolvesInEveryInterfaceLocale()
+    {
+        var keys = new[] { "LAUNCHER_SETTINGS", "LAUNCHER_LANGUAGE", "LAUNCHER_RENDER_MODE", "LAUNCHER_FAITHFUL",
+            "LAUNCHER_ENHANCED", "LAUNCHER_INTEGER_SCALE", "LAUNCHER_SCALE_FACTOR", "LAUNCHER_SEARCH", "LAUNCHER_RESULTS",
+            "LAUNCHER_EMPTY_TITLE", "LAUNCHER_EMPTY_BODY", "LAUNCHER_NO_MATCHES", "LAUNCHER_NO_MATCHES_BODY",
+            "LAUNCHER_TECHNICAL", "LAUNCHER_SHORTCUT", "LAUNCHER_SCALE_AUTO" };
+        foreach (var locale in new[] { "en", "de", "es", "fr", "ja", "ko", "zh_CN" })
+        {
+            var translation = GD.Load<Translation>($"res://locale/{locale}.po");
+            AssertTrue(translation != null);
+            if (translation == null) continue;
+            foreach (var key in keys)
+            {
+                var message = translation.GetMessage(key).ToString();
+                AssertTrue(!string.IsNullOrEmpty(message) && message != key, $"{locale} resolves {key}");
+                var expected = key == "LAUNCHER_RESULTS" ? new[] { "{shown}", "{total}" } : Array.Empty<string>();
                 foreach (var placeholder in expected)
                     AssertTrue(message.Contains(placeholder, StringComparison.Ordinal), $"{locale}/{key} preserves {placeholder}");
             }
@@ -208,7 +331,11 @@ public partial class TestLauncherUiSafety : TestBase
     {
         AssertTrue(HasScrollAncestor(Field<Label>("_detailsEvidence")),
             "Long detection details must scroll instead of pushing controls off-screen.");
-        AssertFalse(HasScrollAncestor(Field<Button>("_launchButton")));
+        var launch = Field<Button>("_launchButton");
+        var detailsScroll = launch.GetParent().GetChildren().OfType<ScrollContainer>().Single();
+        AssertTrue(detailsScroll.IsAncestorOf(Field<Label>("_detailsEvidence")));
+        AssertFalse(detailsScroll.IsAncestorOf(launch),
+            "The launch action stays outside the independently scrolling details, even when the compact page scrolls");
     }
 
     public void Test_StopLivesInTheGamePauseMenuAndNotInTheLauncher()

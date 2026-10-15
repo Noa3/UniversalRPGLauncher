@@ -10,6 +10,54 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "LAUNCHER_SETTINGS"
+msgstr "설정"
+
+msgid "LAUNCHER_LANGUAGE"
+msgstr "표시 언어"
+
+msgid "LAUNCHER_RENDER_MODE"
+msgstr "렌더링 모드"
+
+msgid "LAUNCHER_FAITHFUL"
+msgstr "원본 충실"
+
+msgid "LAUNCHER_ENHANCED"
+msgstr "향상"
+
+msgid "LAUNCHER_INTEGER_SCALE"
+msgstr "정수 배율"
+
+msgid "LAUNCHER_SCALE_FACTOR"
+msgstr "확대 배율"
+
+msgid "LAUNCHER_SCALE_AUTO"
+msgstr "창에 맞추기"
+
+msgid "LAUNCHER_SEARCH"
+msgstr "제목, 엔진 또는 폴더 검색…"
+
+msgid "LAUNCHER_RESULTS"
+msgstr "전체 {total}개 중 {shown}개"
+
+msgid "LAUNCHER_EMPTY_TITLE"
+msgstr "라이브러리가 비어 있습니다"
+
+msgid "LAUNCHER_EMPTY_BODY"
+msgstr "위에서 게임 폴더를 선택하세요. 검색이 끝나면 게임이 여기에 표시됩니다."
+
+msgid "LAUNCHER_NO_MATCHES"
+msgstr "일치하는 게임이 없습니다"
+
+msgid "LAUNCHER_NO_MATCHES_BODY"
+msgstr "다른 제목, 엔진 또는 폴더 이름으로 검색하거나 검색어를 지우세요."
+
+msgid "LAUNCHER_TECHNICAL"
+msgstr "기술 정보"
+
+msgid "LAUNCHER_SHORTCUT"
+msgstr "Ctrl+F: 검색 · Enter: 목록 · Tab: 이동"
+
 msgid "APP_SUBTITLE"
 msgstr "로컬 RPG Maker 게임을 감지합니다. 네이티브 런타임은 단계적으로 개발 중입니다."
 

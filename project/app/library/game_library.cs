@@ -57,6 +57,13 @@ public partial class GameLibrary : RefCounted
 	}
 
 	public string RootPath { get; private set; } = "";
+
+	/// <summary>
+	/// Where the launcher stores per-game saves, isolated from the original
+	/// game directories. This is the launcher's own data folder.
+	/// </summary>
+	public static string SaveRoot => ProjectSettings.GlobalizePath("user://saves");
+
 	public List<GameEntry> Games { get; } = new();
 
 	private readonly GameDetector _detector;

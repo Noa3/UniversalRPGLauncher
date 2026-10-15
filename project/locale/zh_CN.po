@@ -10,6 +10,54 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "LAUNCHER_SETTINGS"
+msgstr "设置"
+
+msgid "LAUNCHER_LANGUAGE"
+msgstr "界面语言"
+
+msgid "LAUNCHER_RENDER_MODE"
+msgstr "渲染模式"
+
+msgid "LAUNCHER_FAITHFUL"
+msgstr "忠于原作"
+
+msgid "LAUNCHER_ENHANCED"
+msgstr "增强"
+
+msgid "LAUNCHER_INTEGER_SCALE"
+msgstr "整数缩放"
+
+msgid "LAUNCHER_SCALE_FACTOR"
+msgstr "缩放倍数"
+
+msgid "LAUNCHER_SCALE_AUTO"
+msgstr "适应窗口"
+
+msgid "LAUNCHER_SEARCH"
+msgstr "搜索标题、引擎或文件夹…"
+
+msgid "LAUNCHER_RESULTS"
+msgstr "显示 {shown} 个，共 {total} 个游戏"
+
+msgid "LAUNCHER_EMPTY_TITLE"
+msgstr "游戏库为空"
+
+msgid "LAUNCHER_EMPTY_BODY"
+msgstr "请在上方选择游戏文件夹。扫描完成后，游戏将显示在这里。"
+
+msgid "LAUNCHER_NO_MATCHES"
+msgstr "没有匹配的游戏"
+
+msgid "LAUNCHER_NO_MATCHES_BODY"
+msgstr "请尝试其他标题、引擎或文件夹名称，或清空搜索框。"
+
+msgid "LAUNCHER_TECHNICAL"
+msgstr "技术详情"
+
+msgid "LAUNCHER_SHORTCUT"
+msgstr "Ctrl+F：搜索 · Enter：游戏列表 · Tab：导航"
+
 msgid "APP_SUBTITLE"
 msgstr "检测本地 RPG Maker 游戏。原生运行时正在逐步开发。"
 

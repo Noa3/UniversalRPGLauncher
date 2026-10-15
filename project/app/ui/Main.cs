@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Godot;
 using UniversalRPG.App.Launcher;
@@ -62,8 +64,9 @@ public partial class Main : Control
 	/// seen is a battle that did not happen.
 	/// </summary>
 	private Rm2kBattleView _battleView = null!;
-	private MzAudioOutput _mzAudio = null!;
-	private MzMapPreview _mzMap = new();
+private MzAudioOutput _mzAudio = null!;
+    private Rm2kAudioOutput _rm2kAudio = null!;
+    private MzMapPreview _mzMap = new();
 	private VBoxContainer _presentationControls = null!;
 	private Button _dismissMessageButton = null!;
 	private HBoxContainer _choiceButtons = null!;
@@ -122,6 +125,13 @@ public partial class Main : Control
 	private readonly System.Collections.Concurrent.ConcurrentQueue<string> _rtpProgress = new();
 	private bool _launchInProgress;
 	private volatile bool _closing;
+	private GameSortMode _sortMode = GameSortMode.Title;
+
+	private enum GameSortMode
+	{
+		Title,
+		Engine,
+	}
 
 	public Main()
 	{
@@ -200,6 +210,11 @@ public partial class Main : Control
 		appTheme.SetStylebox("panel", "ItemList", MakeStyleBox(ColorPanelLight, ColorBorder, 1, 9));
 		appTheme.SetStylebox("selected", "ItemList", MakeStyleBox(ColorAccent, ColorAccent, 0, 6));
 		appTheme.SetStylebox("selected_focus", "ItemList", MakeStyleBox(ColorAccent, Colors.White, 1, 6));
+		appTheme.SetStylebox("focus", "Button", MakeStyleBox(Colors.Transparent, ColorAccent, 2, 9));
+		appTheme.SetStylebox("normal", "LineEdit", MakeStyleBox(ColorPanelLight, ColorBorder, 1, 9));
+		appTheme.SetStylebox("focus", "LineEdit", MakeStyleBox(Colors.Transparent, ColorAccent, 2, 9));
+		appTheme.SetColor("font_color", "LineEdit", ColorText);
+		appTheme.SetColor("font_placeholder_color", "LineEdit", ColorMuted);
 		Theme = appTheme;
 	}
 
@@ -215,10 +230,16 @@ public partial class Main : Control
 		_pageMargin.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
 		AddChild(_pageMargin);
 
-		var page = new VBoxContainer();
-		_pageMargin.AddChild(page);
+		var pageScroll = new ScrollContainer
+		{
+			Name = "LauncherScroll", HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+		};
+		_pageMargin.AddChild(pageScroll);
+		var page = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+			SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+		pageScroll.AddChild(page);
 
-		var header = new HBoxContainer();
+		var header = _headerRow = new BoxContainer();
 		page.AddChild(header);
 
 		var brand = new VBoxContainer();
@@ -227,7 +248,7 @@ public partial class Main : Control
 
 		var title = new Label();
 		title.Text = "UNIVERSALRPG";
-		title.AddThemeFontSizeOverride("font_size", 32);
+		title.AddThemeFontSizeOverride("font_size", 28);
 		title.AddThemeColorOverride("font_color", ColorAccent);
 		brand.AddChild(title);
 
@@ -237,50 +258,14 @@ public partial class Main : Control
 		subtitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		brand.AddChild(subtitle);
 
-		_languageMenu = new OptionButton();
-		_languageMenu.TooltipText = Tr("LANGUAGE_TOOLTIP");
-		foreach (var localeData in InterfaceLocales)
-		{
-			var label = localeData.Locale == "auto" ? Tr(localeData.Label) : localeData.Label;
-			_languageMenu.AddItem(label);
-			_languageMenu.SetItemMetadata(_languageMenu.ItemCount - 1, localeData.Locale);
-		}
-		_languageMenu.Select(GetLocaleMenuIndex());
-		_languageMenu.ItemSelected += ChangeLocale;
-		header.AddChild(_languageMenu);
-		var renderMode = new OptionButton();
-		renderMode.TooltipText = "Rendering compatibility mode";
-		renderMode.AddItem("Faithful");
-		renderMode.AddItem("Enhanced");
-		renderMode.ItemSelected += pIndex => _renderProfile.TrySetMode(
-			pIndex == 0 ? RenderCompatibilityMode.Faithful : RenderCompatibilityMode.Enhanced);
-		header.AddChild(renderMode);
-		var integerScale = new CheckButton();
-		integerScale.Text = "Integer scale";
-		integerScale.ButtonPressed = _renderProfile.IntegerScaling;
-		integerScale.Toggled += pEnabled =>
-		{
-			if (!_renderProfile.TrySetIntegerScaling(pEnabled))
-			{
-				integerScale.ButtonPressed = true;
-			}
-		};
-		header.AddChild(integerScale);
-		var scale = new SpinBox();
-		scale.TooltipText = "Integer scale factor (1-8)";
-		scale.MinValue = RenderProfile.MinIntegerScale;
-		scale.MaxValue = RenderProfile.MaxIntegerScale;
-		scale.Step = 1;
-		scale.Value = _renderProfile.IntegerScale;
-		scale.ValueChanged += pValue => _renderProfile.TrySetIntegerScale((int)pValue);
-		header.AddChild(scale);
+		BuildLauncherPreferences(page, header);
 
 		var folderPanel = new PanelContainer();
 		page.AddChild(folderPanel);
 		var folderMargin = new MarginContainer();
 		SetMargins(folderMargin, 16);
 		folderPanel.AddChild(folderMargin);
-		var folderRow = new HBoxContainer();
+		var folderRow = _folderRow = new BoxContainer();
 		folderMargin.AddChild(folderRow);
 		var folderText = new VBoxContainer();
 		folderText.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -339,19 +324,36 @@ public partial class Main : Control
 		_gamesPanel.AddChild(gamesMargin);
 		var gamesColumn = new VBoxContainer();
 		gamesMargin.AddChild(gamesColumn);
+		var gamesHeader = _libraryHeader = new BoxContainer();
+		gamesColumn.AddChild(gamesHeader);
 		var gamesHeading = new Label();
 		gamesHeading.Text = Tr("LIBRARY_FOUND_GAMES");
 		gamesHeading.AddThemeFontSizeOverride("font_size", 14);
 		gamesHeading.AddThemeColorOverride("font_color", ColorAccent);
-		gamesColumn.AddChild(gamesHeading);
+		gamesHeading.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+		gamesHeader.AddChild(gamesHeading);
+		var sortBox = _librarySort = new OptionButton { Name = "LibrarySort" };
+		sortBox.TooltipText = Tr("SORT_TOOLTIP");
+		sortBox.AddItem(Tr("SORT_BY_TITLE"));
+		sortBox.AddItem(Tr("SORT_BY_ENGINE"));
+		sortBox.ItemSelected += pIndex => { _sortMode = (GameSortMode)pIndex; RefreshLibraryView(); };
+		sortBox.CustomMinimumSize = new Vector2(150, 30);
+		gamesHeader.AddChild(sortBox);
+		BuildLibrarySearch(gamesColumn);
 		_gameList = new ItemList();
+		_gameList.CustomMinimumSize = new Vector2(0, 150);
 		_gameList.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		_gameList.AllowReselect = true;
-		_gameList.ItemSelected += SelectGame;
-		_gameList.ItemActivated += SelectGame;
+		_gameList.ItemSelected += SelectVisibleGame;
+		_gameList.ItemActivated += SelectVisibleGame;
 		gamesColumn.AddChild(_gameList);
+		var navigationHint = new Label { Text = Tr("LAUNCHER_SHORTCUT"),
+			AutowrapMode = TextServer.AutowrapMode.WordSmart };
+		navigationHint.AddThemeFontSizeOverride("font_size", 12);
+		navigationHint.AddThemeColorOverride("font_color", ColorMuted);
+		gamesColumn.AddChild(navigationHint);
 
-		var detailsPanel = new PanelContainer();
+		var detailsPanel = _detailsPanel = new PanelContainer();
 		detailsPanel.CustomMinimumSize = new Vector2(430, 260);
 		detailsPanel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 		detailsPanel.SizeFlagsStretchRatio = 1.2f;
@@ -379,19 +381,25 @@ public partial class Main : Control
 		_detailsTitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		details.AddChild(_detailsTitle);
 		_detailsEngine = new Label();
+		_detailsEngine.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		_detailsEngine.AddThemeColorOverride("font_color", ColorMuted);
 		details.AddChild(_detailsEngine);
 		_engineChoice = new OptionButton();
+		_engineChoice.FitToLongestItem = false;
+		_engineChoice.ClipText = true;
 		_engineChoice.TooltipText = Tr("ENGINE_CHOICE_TOOLTIP");
 		_engineChoice.ItemSelected += SelectDetectedEngine;
 		details.AddChild(_engineChoice);
 		_detailsPath = new Label();
 		_detailsPath.AddThemeColorOverride("font_color", ColorMuted.Darkened(0.08f));
 		_detailsPath.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		details.AddChild(_detailsPath);
-		_mzAudio = new MzAudioOutput();
-		AddChild(_mzAudio);
-		_mzMap.CustomMinimumSize = new Vector2(0, 220);
+		_technicalDetails = new VBoxContainer { Name = "TechnicalDetails", Visible = false };
+		_technicalDetails.AddChild(_detailsPath);
+_mzAudio = new MzAudioOutput();
+        AddChild(_mzAudio);
+        _rm2kAudio = new Rm2kAudioOutput();
+        AddChild(_rm2kAudio);
+        _mzMap.CustomMinimumSize = new Vector2(0, 220);
 		_mzMap.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		details.AddChild(_mzMap);
 		_mapPreview = new Rm2kMapPreview();
@@ -411,10 +419,15 @@ public partial class Main : Control
 		_detailsEvidence = new Label();
 		_detailsEvidence.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
 		_detailsEvidence.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		details.AddChild(_detailsEvidence);
+		_technicalDetails.AddChild(_detailsEvidence);
 		_runtimeState = new Label();
 		_runtimeState.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		details.AddChild(_runtimeState);
+		var technicalToggle = new Button { Name = "TechnicalDetailsButton",
+			Text = Tr("LAUNCHER_TECHNICAL"), ToggleMode = true };
+		technicalToggle.Toggled += pOpen => _technicalDetails.Visible = pOpen;
+		details.AddChild(technicalToggle);
+		details.AddChild(_technicalDetails);
 		_presentationState = new Label();
 		_presentationState.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		_presentationState.AddThemeColorOverride("font_color", ColorAccent);
@@ -522,7 +535,7 @@ public partial class Main : Control
 			GetTree().Quit();
 		};
 		_gameScreen.LanguageRequested += RequestLocale;
-		_gameScreen.IntegerScaleRequested += pEnabled => _renderProfile.TrySetIntegerScaling(pEnabled);
+		_gameScreen.IntegerScaleRequested += SetLauncherIntegerScaling;
 		_gameScreen.SetIntegerScale(_renderProfile.IntegerScaling);
 		_gameScreen.SetLanguageSelection(GetSavedLocale());
 		AddChild(_gameScreen);
@@ -598,6 +611,8 @@ public partial class Main : Control
 		_chooseFolderButton.Disabled = busy || _launchInProgress;
 		_rescanButton.Disabled = busy || _launchInProgress;
 		_languageMenu.Disabled = busy;
+		_librarySort.Disabled = busy || _launchInProgress;
+		_librarySearch.Editable = !busy && !_launchInProgress;
 		_gameList.SetBlockSignals(busy);
 		_gameList.MouseFilter = busy ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
 		_gameList.FocusMode = busy ? Control.FocusModeEnum.None : Control.FocusModeEnum.All;
@@ -645,26 +660,13 @@ public partial class Main : Control
 
 	private void DisplayLibrary()
 	{
-		_gameList.Clear();
-		_selectedGame = null;
-		var games = _library.Games;
-		foreach (var game in games)
-		{
-			var index = _gameList.AddItem($"{game.Title}  |  {game.Detection.GetEngineName()}");
-			_gameList.SetItemTooltip(index, game.Path);
-		}
-		if (games.Count == 0)
-		{
-			ClearDetails();
-			_status.Text = Tr("STATUS_NO_GAMES");
-		}
-		else
-		{
-			_gameList.Select(0);
-			SelectGame(0);
-			_status.Text = TrN("STATUS_ONE_GAME", "STATUS_MANY_GAMES", games.Count)
-				.Replace("{count}", games.Count.ToString());
-		}
+		DisplayLibraryProjection();
+	}
+
+	private void SelectVisibleGame(long pIndex)
+	{
+		if (_scanOperation != null || _launchInProgress || pIndex < 0 || pIndex >= _gameList.ItemCount) return;
+		SelectGame(_gameList.GetItemMetadata((int)pIndex).AsInt32());
 	}
 
 	private void SelectGame(long pIndex)
@@ -745,21 +747,21 @@ public partial class Main : Control
 			_status.Text = error;
 			return;
 		}
-		var index = _library.Games.IndexOf(_selectedGame);
-		if (index >= 0) SelectGame(index);
+		DisplayLibrary();
 	}
 
 	private void ClearDetails()
 	{
+		_selectedGame = null;
 		_engineChoice.Visible = false;
 		_detailsTitle.Text = Tr("DETAIL_NO_GAMES");
 		_detailsEngine.Text = "";
 		_detailsPath.Text = _library.RootPath;
 		_detailsEvidence.Text = Tr("DETAIL_DETECTION_SUPPORT");
-		_runtimeState.Text = Tr("DETAIL_RUNTIME_DEVELOPMENT");
+		_runtimeState.Text = "";
 		_presentationState.Text = "";
 		_launchButton.Disabled = true;
-		_launchButton.Text = Tr("ACTION_NOT_PLAYABLE");
+		_launchButton.Text = Tr("DETAIL_NO_SELECTION");
 	}
 
 	private void ChooseFolder()
@@ -822,6 +824,47 @@ public partial class Main : Control
 		if (_launcher.ActiveRuntime is MzEngineRuntime mzRuntime)
 		{
 			var mzAction = _inputMapper.Resolve(pEvent);
+			var mzKeyEvent = pEvent as InputEventKey;
+			if (mzKeyEvent != null && (!mzKeyEvent.Pressed || mzKeyEvent.Echo))
+			{
+				return;
+			}
+
+			// MZ message box handling
+			if (mzRuntime.MessageVisible && mzAction == Rm2kInputAction.Confirm)
+			{
+				if (mzRuntime.CloseMessage())
+				{
+					GetViewport().SetInputAsHandled();
+				}
+				return;
+			}
+
+			// MZ choice handling
+			if (mzRuntime.ChoicePending)
+			{
+				var index = mzRuntime.ChoiceIndex;
+				if (mzAction is Rm2kInputAction.MoveUp or Rm2kInputAction.MoveLeft) index--;
+				if (mzAction is Rm2kInputAction.MoveDown or Rm2kInputAction.MoveRight) index++;
+				if (mzAction is Rm2kInputAction.MoveUp or Rm2kInputAction.MoveLeft or Rm2kInputAction.MoveDown or Rm2kInputAction.MoveRight)
+				{
+					index = Mathf.PosMod(index, mzRuntime.ChoiceOptions.Count);
+					mzRuntime.ChoiceIndex = index;
+					GetViewport().SetInputAsHandled();
+				}
+				else if (mzAction == Rm2kInputAction.Confirm)
+				{
+					if (mzRuntime.ChoiceIndex < 0)
+					{
+						mzRuntime.ChoiceIndex = 0;
+					}
+					mzRuntime.Facts.AnswerChoice(mzRuntime.ChoiceIndex + 1); // 1-based
+					GetViewport().SetInputAsHandled();
+				}
+				return;
+			}
+
+			// MZ movement input
 			if (mzAction != UniversalRPG.Rm2k.Input.Rm2kInputAction.None
 				&& mzRuntime.SubmitInput(mzAction))
 			{
@@ -1076,15 +1119,21 @@ public partial class Main : Control
 				mz.ChoicePending ? mz.ChoiceOptions : null,
 				mz.ChoicePending ? mz.ChoiceIndex : -1,
 				false, 0);
-		}
-		else
-		{
-			_mzAudio.StoppeAlle();
-		}
+}
+        else
+        {
+            _mzAudio.StoppeAlle();
+        }
 
-		if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
-		{
-			UpdatePresentationControls(rm2k);
+        if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2k)
+        {
+            // **Und der RM2K-Lauf bekommt seine vier Kanaele**
+            _rm2kAudio.SetzeWurzel(
+                rm2k.GameDirectory,
+                rm2k.EncryptionKey);
+            _rm2kAudio.SetzeKanaele(rm2k.Simulation.Audio);
+
+            UpdatePresentationControls(rm2k);
 			var presentation = rm2k.Presentation;
 			if (presentation.MessageVisible)
 			{
@@ -1137,13 +1186,17 @@ public partial class Main : Control
 			{
 				_presentationState.Text += $"\nRendered pixels: {rm2k.RenderedMap.Width}x{rm2k.RenderedMap.Height}";
 			}
-		}
-	}
+}
+        else
+        {
+            _rm2kAudio.StoppeAlle();
+        }
+    }
 
 
-	/// <summary>
-	/// And the menu panel with the party's own numbers.
-	/// </summary>
+    /// <summary>
+    /// And the menu panel with the party's own numbers.
+    /// </summary>
 	/// <remarks>
 	/// <para>
 	/// <strong>And every number here is the game's</strong>, --
@@ -1368,11 +1421,12 @@ public partial class Main : Control
 					var button = new Button { Text = presentation.ActiveChoice.Options[index] };
 					button.ToggleMode = true;
 					button.ButtonPressed = presentation.ActiveChoice.SelectedIndex == index;
-					button.Pressed += () => presentation.SelectChoice(choiceIndex);
-					_choiceButtons.AddChild(button);
-				}
-			}
-		}
+button.Pressed += () => presentation.SelectChoice(choiceIndex);
+				_choiceButtons.AddChild(button);
+}
+        _choiceButtons.Visible = presentation.ActiveChoice != null;
+    }
+}
 		// **Und  das  Menue  wird  sichtbar.**
 		//
 		// **Und  die  Menüetaste  hat  das  Menue  geoeffnet**, -- **und
@@ -1503,6 +1557,7 @@ public partial class Main : Control
 			return;
 		}
 		_launchInProgress = true;
+		SetScanControls(true);
 		_launchButton.Disabled = true;
 		_engineChoice.Disabled = true;
 		try
@@ -1544,6 +1599,25 @@ public partial class Main : Control
 			_status.Text = result.Message;
 			foreach (var diagnostic in result.Diagnostics)
 				_status.Text += $"\n[{diagnostic.Severity}/{diagnostic.Code}] {diagnostic.Message}";
+
+			// **Und der verwaltete Speicherort wird gesetzt**, -- **denn ein
+			// Spiel, das in den Import-Ordner schreibt, aendert Daten, die
+			// ihm nicht gehoeren**. Der Launcher besitzt einen Ordner pro
+			// Spiel unter seinem eigenen Datenverzeichnis.
+			if (_launcher.ActiveRuntime is MzEngineRuntime mzRuntime)
+			{
+				var saveDir = Path.Combine(
+					GameLibrary.SaveRoot,
+					Uri.EscapeDataString(game.Path));
+				mzRuntime.SaveDirectory = saveDir;
+			}
+			else if (_launcher.ActiveRuntime is Rm2kEngineRuntime rm2kRuntime)
+			{
+				var saveDir = Path.Combine(
+					GameLibrary.SaveRoot,
+					Uri.EscapeDataString(game.Path));
+				rm2kRuntime.SaveDirectory = saveDir;
+			}
 		}
 		catch (System.Exception exception)
 		{
@@ -1555,6 +1629,7 @@ public partial class Main : Control
 			_launchInProgress = false;
 			if (!_closing)
 			{
+				SetScanControls(false);
 				_engineChoice.Disabled = false;
 				_launchButton.Disabled = _selectedGame == null
 					|| _launcher.GetSupport(_selectedGame).State != RuntimeLauncher.SupportState.Available;
@@ -1564,8 +1639,13 @@ public partial class Main : Control
 
 	private void ApplyResponsiveLayout()
 	{
-		var compact = GetViewportRect().Size.X < 820;
+		var width = GetViewportRect().Size.X;
+		var compact = width < 1000;
 		_body.Vertical = compact;
+		_headerRow.Vertical = width < 600;
+		_folderRow.Vertical = width < 700;
+		_libraryHeader.Vertical = width < 600;
+		_detailsPanel.CustomMinimumSize = new Vector2(compact ? 0 : 430, 260);
 		_gamesPanel.CustomMinimumSize = new Vector2(compact ? 0 : 390, _gamesPanel.CustomMinimumSize.Y);
 		var margin = compact ? 14 : 28;
 		SetMargins(_pageMargin, margin);

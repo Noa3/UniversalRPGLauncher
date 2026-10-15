@@ -10,6 +10,54 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+msgid "LAUNCHER_SETTINGS"
+msgstr "Einstellungen"
+
+msgid "LAUNCHER_LANGUAGE"
+msgstr "Sprache"
+
+msgid "LAUNCHER_RENDER_MODE"
+msgstr "Darstellungsmodus"
+
+msgid "LAUNCHER_FAITHFUL"
+msgstr "Originalgetreu"
+
+msgid "LAUNCHER_ENHANCED"
+msgstr "Erweitert"
+
+msgid "LAUNCHER_INTEGER_SCALE"
+msgstr "Ganzzahlige Skalierung"
+
+msgid "LAUNCHER_SCALE_FACTOR"
+msgstr "Skalierungsfaktor"
+
+msgid "LAUNCHER_SCALE_AUTO"
+msgstr "An Fenster anpassen"
+
+msgid "LAUNCHER_SEARCH"
+msgstr "Titel, Engine oder Ordner suchen…"
+
+msgid "LAUNCHER_RESULTS"
+msgstr "{shown} von {total} Spielen"
+
+msgid "LAUNCHER_EMPTY_TITLE"
+msgstr "Deine Bibliothek ist leer"
+
+msgid "LAUNCHER_EMPTY_BODY"
+msgstr "Wähle oben deinen Spieleordner. Nach dem Scan erscheinen deine Spiele hier."
+
+msgid "LAUNCHER_NO_MATCHES"
+msgstr "Keine passenden Spiele gefunden"
+
+msgid "LAUNCHER_NO_MATCHES_BODY"
+msgstr "Versuche einen anderen Titel, eine Engine oder einen Ordnernamen, oder leere das Suchfeld."
+
+msgid "LAUNCHER_TECHNICAL"
+msgstr "Technische Details"
+
+msgid "LAUNCHER_SHORTCUT"
+msgstr "Strg+F: Suche · Enter: Bibliothek · Tab: Navigation"
+
 msgid "APP_SUBTITLE"
 msgstr "Lokale RPG-Maker-Spiele erkennen. Native Laufzeiten entstehen schrittweise."
 
@@ -279,3 +327,21 @@ msgstr "Speicherergebnis"
 
 msgid "LOAD_RESULT_TITLE"
 msgstr "Ladeergebnis"
+
+msgid "SORT_TOOLTIP"
+msgstr "Spiele sortieren nach"
+
+msgid "SORT_BY_TITLE"
+msgstr "Titel"
+
+msgid "SORT_BY_ENGINE"
+msgstr "Engine"
+
+msgid "SORT_BY_PLAYTIME"
+msgstr "Spielzeit"
+
+msgid "SORT_BY_LAST_PLAYED"
+msgstr "Zuletzt gespielt"
+
+msgid "TERM_CONTINUE"
+msgstr "Fortsetzen"

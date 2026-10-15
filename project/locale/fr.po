@@ -10,6 +10,54 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
+msgid "LAUNCHER_SETTINGS"
+msgstr "Paramètres"
+
+msgid "LAUNCHER_LANGUAGE"
+msgstr "Langue"
+
+msgid "LAUNCHER_RENDER_MODE"
+msgstr "Mode de rendu"
+
+msgid "LAUNCHER_FAITHFUL"
+msgstr "Fidèle à l’original"
+
+msgid "LAUNCHER_ENHANCED"
+msgstr "Amélioré"
+
+msgid "LAUNCHER_INTEGER_SCALE"
+msgstr "Échelle entière"
+
+msgid "LAUNCHER_SCALE_FACTOR"
+msgstr "Facteur d’échelle"
+
+msgid "LAUNCHER_SCALE_AUTO"
+msgstr "Adapter à la fenêtre"
+
+msgid "LAUNCHER_SEARCH"
+msgstr "Rechercher un titre, moteur ou dossier…"
+
+msgid "LAUNCHER_RESULTS"
+msgstr "{shown} jeux sur {total}"
+
+msgid "LAUNCHER_EMPTY_TITLE"
+msgstr "Votre bibliothèque est vide"
+
+msgid "LAUNCHER_EMPTY_BODY"
+msgstr "Choisissez votre dossier de jeux ci-dessus. Les jeux apparaîtront ici après l’analyse."
+
+msgid "LAUNCHER_NO_MATCHES"
+msgstr "Aucun jeu ne correspond"
+
+msgid "LAUNCHER_NO_MATCHES_BODY"
+msgstr "Essayez un autre titre, moteur ou dossier, ou effacez la recherche."
+
+msgid "LAUNCHER_TECHNICAL"
+msgstr "Détails techniques"
+
+msgid "LAUNCHER_SHORTCUT"
+msgstr "Ctrl+F : Rechercher · Entrée : Bibliothèque · Tab : Naviguer"
+
 msgid "APP_SUBTITLE"
 msgstr "Détecte les jeux RPG Maker locaux. Les moteurs natifs sont développés progressivement."
 

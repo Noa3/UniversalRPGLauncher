@@ -10,6 +10,54 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "LAUNCHER_SETTINGS"
+msgstr "設定"
+
+msgid "LAUNCHER_LANGUAGE"
+msgstr "表示言語"
+
+msgid "LAUNCHER_RENDER_MODE"
+msgstr "描画モード"
+
+msgid "LAUNCHER_FAITHFUL"
+msgstr "オリジナルに忠実"
+
+msgid "LAUNCHER_ENHANCED"
+msgstr "拡張"
+
+msgid "LAUNCHER_INTEGER_SCALE"
+msgstr "整数倍拡大"
+
+msgid "LAUNCHER_SCALE_FACTOR"
+msgstr "拡大倍率"
+
+msgid "LAUNCHER_SCALE_AUTO"
+msgstr "ウィンドウに合わせる"
+
+msgid "LAUNCHER_SEARCH"
+msgstr "タイトル・エンジン・フォルダーを検索…"
+
+msgid "LAUNCHER_RESULTS"
+msgstr "全{total}件中{shown}件"
+
+msgid "LAUNCHER_EMPTY_TITLE"
+msgstr "ライブラリは空です"
+
+msgid "LAUNCHER_EMPTY_BODY"
+msgstr "上のボタンでゲームフォルダーを選んでください。スキャン後にゲームが表示されます。"
+
+msgid "LAUNCHER_NO_MATCHES"
+msgstr "一致するゲームがありません"
+
+msgid "LAUNCHER_NO_MATCHES_BODY"
+msgstr "別のタイトル・エンジン・フォルダー名で検索するか、検索欄を空にしてください。"
+
+msgid "LAUNCHER_TECHNICAL"
+msgstr "技術情報"
+
+msgid "LAUNCHER_SHORTCUT"
+msgstr "Ctrl+F：検索 · Enter：一覧 · Tab：移動"
+
 msgid "APP_SUBTITLE"
 msgstr "ローカルのRPGツクール製ゲームを検出します。ネイティブランタイムは段階的に開発中です。"
 
