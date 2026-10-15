@@ -1,5 +1,14 @@
 ## Current card
 
+### Comments in English: this session's 62 German ones are converted (2026-10-15)
+
+The standing rule is English code comments. This session's commits added 62 German comment
+lines across eleven files; they are rewritten in English with the same content, and a check
+against the base commit now reports zero for this session. A separate card
+(`K-PROD-COMMENT-LANGUAGE`) names the 425 German comment lines added by other sessions since
+the rule date, with the files and the check to use. The older bulk (~7,900 lines in 335 files)
+predates the rule and is left alone.
+
 ### MZ save: the gold comes back, and it exposed a split brain (2026-10-15)
 
 `party._gold` is read back (`MzLoadedSave.Gold`), the runtime applies it, and the load message

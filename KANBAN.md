@@ -758,6 +758,34 @@ leaves the frame byte for byte as it was; the four updates are pinned by tests a
 the reference's arithmetic, and one end-to-end test drives a real game with the weather
 turned on.
 
+### K-PROD-COMMENT-LANGUAGE — READY (code comments are English; 425 lines were added in German anyway)
+
+**And the rule is not a preference.** Code and code comments in this repository are English;
+chat and reports are German. A count of comment lines added to `.cs` files **since the rule
+date (2026-10-07)** finds **425 German ones**, across the runtime plugins, the MZ and RM2K
+test suites and the launcher UI. This session contributed 62 of them -- in the route-command
+work, the event sprite offset, the jump and the MZ save changes -- and those are converted
+already; the check that finds them compares the working tree against the base commit, so it
+reports zero for this session's changes.
+
+**What is left is other sessions' additions, by file, largest first:** `MzEngineRuntime.cs` 109,
+`test_real_mz_page_run.cs` 46, `Rm2kEngineRuntime.cs` 29, `test_mz_echtes_spiel_startet.cs` 22,
+`test_real_mv_runtime_run.cs` 17, `test_rm2k_page_route_activation.cs` 16, `Main.cs` 16,
+`test_rm2k_toward_route.cs` 14, `test_mz_balloon.cs` 12, `test_rm2k_weather.cs` 10 -- and a long
+tail behind them.
+
+**And the older bulk is not the same problem.** Roughly 7,900 German comment lines sit in 335
+files, but the large ones predate the rule (`RubyInterpreter.cs` was last touched 2026-10-02);
+those are history, not a violation, and rewriting them would be a huge comment-only diff across
+code nothing else is changing. The card is about the lines added *after* the rule, and it asks
+for them to be converted file by file with the affected suite run for each -- a comment-only
+change still has to be checked, because a botched block replacement can swallow the line after
+it.
+
+**The check to use:** diff the working tree against the base commit, collect `//` and `///`
+lines that match German markers and do not read as English, and subtract the same set from the
+base. Zero is the target for any new work.
+
 ### K-PROD-MZ-SAVE-RESTORE — IN PROGRESS (the gold is back; the actors and the screen are named)
 
 **And the gold exposed a split brain, which was the real defect.** `MzBranchFacts.Party`'s
