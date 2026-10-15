@@ -254,6 +254,11 @@ public sealed class RgssLaufzeit
         Messen("rpg_nil", "RPG.nil?");
         Messen("rpg_cache_nil", "RPG::Cache.nil?");
         Messen("cache_kurz_nil", "Cache.nil?");
+        Messen("rechnung", "0 / 32");
+        Messen("oy_probe", "Window_Base.new(0, 0, 100, 100).oy");
+        Messen("top_row_probe", "Window_Base.new(0, 0, 100, 100).top_row");
+        Messen("hoehe_probe", "Window_Base.new(0, 0, 100, 100).height");
+        Messen("cmd_probe", "Window_Command.new(160, []).top_row");
         Messen("rpg_konstanten", "RPG.constants.size");
 
         Messen("input_trigger", "Input.trigger?(Input::C)");
