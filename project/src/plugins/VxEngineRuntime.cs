@@ -161,7 +161,7 @@ public sealed class VxEngineRuntime : IEngineRuntime
         RunGameScripts();
 
         // Initialize runtime globals
-        _laufzeit = new RgssLaufzeit(_interpreter, _datenHost);
+        _laufzeit = new RgssLaufzeit(_interpreter, _datenHost, ".rvdata");
         _laufzeit.Startet();
 
         _scriptsRun = true;

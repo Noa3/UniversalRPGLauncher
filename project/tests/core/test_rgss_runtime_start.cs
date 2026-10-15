@@ -46,12 +46,22 @@ public partial class TestRgssRuntimeStart : TestBase
             + ", geladen: " + laufzeit.Geladen
             + ", verweigert: " + laufzeit.Verweigert);
 
-        AssertEq(laufzeit.Gesetzt.Count, 3,
-            "**and the runtime sets three globals** -- and it sets "
-                + laufzeit.Gesetzt.Count + ": "
+        // **Und die Zahl ist jetzt die der Engine und nicht mehr drei.**
+        // **`RgssLaufzeit.Startet` fuehrt aus, was XP's eigenes `main`
+        // ausfuehrt** -- dreizehn `$data_*`-Ladungen, elf `$game_*`-Objekte,
+        // `$game_map.setup`, `moveto` und `refresh` -- **weil drei Globals
+        // genug waren, damit die Skripte LADEN, und nicht genug fuer ein
+        // Frame:** an einem echten Spiel gemessen verglich `$game_map.update`
+        // danach `@scroll_rest` mit einer Zahl, und `@scroll_rest` setzt
+        // `setup`, das niemand rief. **Und die Zahl ist gemessen und nicht
+        // geraten**: die Liste steht in `Gesetzt` und wird mitgedruckt.
+        AssertEq(laufzeit.Gesetzt.Count, 26,
+            "**and the runtime runs the engine's own main sequence** -- and"
+                + " it ran " + laufzeit.Gesetzt.Count + ": "
                 + string.Join(" | ", laufzeit.Gesetzt.ToArray())
-                + ", and all three are measured out of MicroQuest's own"
-                + " scripts");
+                + ", and that is the engine's own `main` minus the scene"
+                + " loop, which is measured out of XP's `main.rb` and was"
+                + " confirmed against MicroQuest's own scripts");
         AssertEq(laufzeit.Verweigert, 0,
             "**and it refused none** -- and it refused "
                 + laufzeit.Verweigert);
@@ -155,7 +165,12 @@ public partial class TestRgssRuntimeStart : TestBase
                 + " file, and it is `Data/Map001.rxdata`, and the"
                 + " game's own sentence is `load_data(sprintf("
                 + "\"Data/Map%03d.rxdata\", @map_id))`");
-        AssertEq(laufzeit.Geladen, 1,
+        // **Und die Laufzeit liest jetzt dreizehn Dateien und nicht eine**,
+        // **weil sie die dreizehn `$data_*` der Engine-`main` laedt** -- und
+        // der Punkt dieses Tests bleibt derselbe: `Scene_Title` schreibt
+        // `$data_tilesets = load_data("Data/Tilesets.rxdata")` selbst, und
+        // die Datei kommt durch den Host.
+        AssertEq(laufzeit.Geladen, 13,
             "**and the runtime read the tileset file through its own"
                 + " host** -- and it read " + laufzeit.Geladen
                 + ", and `Scene_Title` writes exactly"

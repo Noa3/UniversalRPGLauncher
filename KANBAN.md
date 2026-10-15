@@ -813,13 +813,32 @@ the five threw, instead of "the per-frame globals") gave:
   object is nil**, so the game's own `update` compares nil with a number. That is the next step,
   and it is still not graphics.
 
-**So the order is: complete the per-frame globals first, then the graphics.** The scripts are the
-demand signal -- each remaining problem names the next thing to build -- and the graphics API
-surface only becomes visible once the game gets far enough to ask for a `Bitmap`. Implementing
-`Bitmap`/`Sprite`/`Tilemap` before that would be guessing at an API the games have not yet named.
+**And the globals are done, measured step by step.** The runtime used to set **three** globals --
+`$data_tilesets`, `$game_map`, `$game_player` -- which was enough for the scripts to *load* and not
+enough for a frame. `RgssLaufzeit.Startet` now runs the engine's own `main` minus the scene loop:
+thirteen `$data_*` loads, eleven `$game_*` objects, then `$game_map.setup($data_system.start_map_id)`,
+`$game_player.moveto(start_x, start_y)` and `refresh`. Every step is guarded and named in a new
+`Fehlgeschlagen` list, readable as `XpEngineRuntime.SetupProblems`, because one try around the whole
+sequence would turn a missing file into a game with no state and no reason.
 
-**Progress measure:** the problem count in `TestRealXpRuntimeRun` (2 after the first five frames
-when this card was written, 1 after the `or` fix), and a first frame with pixels in it.
+**And the first run of that found the extension.** All thirteen data globals were refused, because
+the data host takes a name as written -- the engine's own `load_data` writes the extension itself --
+and the runtime was asking for `Data/Actors` instead of `Data/Actors.rxdata`. The runtime now takes
+its generation's extension (`.rxdata`, `.rvdata`, `.rvdata2`), and the setup problems went from
+**thirteen to one**.
+
+**The one that is left names the next step exactly:** `$game_player.moveto` reports
+`undefined operator '%' for a Nil and a Nil`, so `$data_system.start_x` is nil -- the object comes
+from the Marshal reader, and the engine's own data classes answer `start_x` out of `@start_x`
+without the scripts ever defining that method. **So the next step is a generic attribute reader for
+Marshal-loaded objects** (`obj.name` answered from `@name` when the object has no such method),
+which is what the engine's C++ data classes do; `$game_map.update` moved past its first nil at the
+same time (`@scroll_rest`, which `setup` sets, is no longer the failure), so the map is being set up
+now.
+
+**Progress measure:** the problem count in `TestRealXpRuntimeRun` and `SetupProblems`. Measured so
+far: two script problems after five frames when the card was written, one after the `or` fix; and
+thirteen setup problems, one after the extension fix.
 
 ### K-PROD-MZ-FACTS-COPY — DONE (2026-10-15, the copy carries the game's state)
 

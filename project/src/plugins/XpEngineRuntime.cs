@@ -41,6 +41,19 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// </summary>
     public IReadOnlyList<string> ScriptProblems => _scriptProblems;
 
+    /// <summary>
+    /// The setup steps the RGSS runtime could not run, with their reason.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the same shape as <see cref="ScriptProblems"/> on purpose:</strong> a
+    /// global the engine's own <c>main</c> would have set and this runtime could not is a gap the
+    /// game will hit later, and it has to be readable by name before that happens rather than
+    /// after.
+    /// </remarks>
+    public IReadOnlyList<string> SetupProblems => _laufzeit == null
+        ? (IReadOnlyList<string>)Array.Empty<string>()
+        : _laufzeit.Fehlgeschlagen;
+
     private readonly List<string> _scriptProblems = new();
 
     /// <summary>How many distinct failures the run remembers.</summary>
@@ -161,7 +174,9 @@ public sealed class XpEngineRuntime : IEngineRuntime
         RunGameScripts();
 
         // Initialize runtime globals
-        _laufzeit = new RgssLaufzeit(_interpreter, _datenHost);
+        // **And the extension is XP's own**: the data host takes the name as written, and a
+        // runtime that leaves it out gets thirteen refusals and a game with no data.
+        _laufzeit = new RgssLaufzeit(_interpreter, _datenHost, ".rxdata");
         _laufzeit.Startet();
 
         _scriptsRun = true;

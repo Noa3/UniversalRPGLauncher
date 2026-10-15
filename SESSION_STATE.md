@@ -1,5 +1,20 @@
 ## Current card
 
+### XP: the engine's own main sequence, and the extension it needs (2026-10-15)
+
+`RgssLaufzeit.Startet` set three globals; it now runs what the engine's `main` does -- thirteen
+`$data_*` loads, eleven `$game_*` objects, `$game_map.setup(start_map_id)`, `$game_player.moveto`
+and `refresh` -- with every step guarded and named in a new `Fehlgeschlagen` list
+(`XpEngineRuntime.SetupProblems`). The first run refused all thirteen data globals because the data
+host takes a name as written and the runtime asked for `Data/Actors` without its extension; the
+runtime now carries its generation's extension (`.rxdata`/`.rvdata`/`.rvdata2`) and the setup
+problems went **13 -> 1**.
+
+**And the remaining one names the next step:** `$game_player.moveto` gets
+`undefined operator '%' for a Nil and a Nil`, so `$data_system.start_x` is nil -- a Marshal-loaded
+object whose engine-provided data class answers `start_x` from `@start_x`. That needs a generic
+attribute reader for Marshal objects, and it is the next slice.
+
 ### XP/VX/VX Ace: measured what a real game needs, and fixed a Ruby defect (2026-10-15)
 
 The RGSS layer has no graphics at all -- no `Bitmap`, `Sprite`, `Tilemap`, `Viewport` or `Plane`

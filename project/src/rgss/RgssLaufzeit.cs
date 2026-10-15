@@ -42,12 +42,26 @@ public sealed class RgssLaufzeit
     /// </summary>
     /// <param name="pInterpreter">The interpreter with the scripts already run.</param>
     /// <param name="pDaten">The data host, or null for a game with no data.</param>
-    public RgssLaufzeit(RubyInterpreter pInterpreter, RgssDatenHost? pDaten)
+    /// <param name="pErweiterung">
+    /// The data file extension, which is the generation's own: `.rxdata` for XP, `.rvdata` for VX
+    /// and `.rvdata2` for VX Ace. **And it has to be passed in**, because the data host takes a
+    /// name as written -- the engine's own `load_data` writes the extension itself, and a caller
+    /// that leaves it out asks for a file that is not there. Measured: thirteen refusals for
+    /// thirteen globals, every one of them because the extension was missing.
+    /// </param>
+    public RgssLaufzeit(
+        RubyInterpreter pInterpreter, RgssDatenHost? pDaten, string pErweiterung = ".rxdata")
     {
         _interpreter = pInterpreter
             ?? throw new ArgumentNullException(nameof(pInterpreter));
         _daten = pDaten;
+        Erweiterung = pErweiterung;
     }
+
+    /// <summary>
+    /// The data file extension this runtime resolves names against.
+    /// </summary>
+    public string Erweiterung { get; }
 
     /// <summary>
     /// The globals this runtime set, in the order it set them.
@@ -108,23 +122,129 @@ public sealed class RgssLaufzeit
     /// </remarks>
     public void Startet()
     {
-        Setze("data_tilesets", "Data/Tilesets.rxdata");
-        Erzeuge("$game_map", "Game_Map");
-        Erzeuge("$game_player", "Game_Player");
+        // **And this is the engine's own `main`, minus the scene loop.** Measured against XP's
+        // `main.rb`: it loads thirteen `$data_*` globals, builds eleven `$game_*` objects, then
+        // calls `$game_map.setup($data_system.start_map_id)`, moves the player to the system's
+        // start position and refreshes them. **And what was here before was three globals** --
+        // `$data_tilesets`, `$game_map` and `$game_player` -- which was enough for the scripts to
+        // load and not enough for a frame: measured on a real game, `$game_map.update` then
+        // compared `@scroll_rest` with a number, and `@scroll_rest` is set by `setup`, which
+        // nobody ever called.
+        //
+        // **And every step is guarded and named.** A game whose `System.rxdata` is missing must
+        // still get the globals that are there, and a failure has to say which one it was: one
+        // try around the whole sequence would turn a missing file into a game with no state and
+        // no reason.
+        foreach (var (name, file) in DataFiles)
+        {
+            Setze(name, file);
+        }
+        foreach (var (name, type) in GameObjects)
+        {
+            Erzeuge(name, type);
+        }
+        Rufe("$game_map.setup($data_system.start_map_id) if $data_system");
+        Rufe("$game_player.moveto($data_system.start_x, $data_system.start_y) if $data_system");
+        Rufe("$game_player.refresh if $game_player.respond_to?(:refresh)");
     }
+
+    /// <summary>
+    /// The data globals the engine's own <c>main</c> loads, in its own order.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the names are the engine's, and the files are named without their
+    /// extension</strong> -- the data host resolves `.rxdata`, `.rvdata` and `.rvdata2`, so one
+    /// list serves XP, VX and VX Ace. **And a file that is not there is refused and counted**,
+    /// which is the difference between a game that runs without its troops and one that does not
+    /// start.
+    /// </remarks>
+    private static readonly (string Name, string File)[] DataFiles =
+    {
+        ("data_actors", "Data/Actors"),
+        ("data_classes", "Data/Classes"),
+        ("data_skills", "Data/Skills"),
+        ("data_items", "Data/Items"),
+        ("data_weapons", "Data/Weapons"),
+        ("data_armors", "Data/Armors"),
+        ("data_enemies", "Data/Enemies"),
+        ("data_troops", "Data/Troops"),
+        ("data_states", "Data/States"),
+        ("data_animations", "Data/Animations"),
+        ("data_tilesets", "Data/Tilesets"),
+        ("data_common_events", "Data/CommonEvents"),
+        ("data_system", "Data/System"),
+    };
+
+    /// <summary>
+    /// The game objects the engine's own <c>main</c> builds, in its own order.
+    /// </summary>
+    private static readonly (string Name, string Type)[] GameObjects =
+    {
+        ("$game_temp", "Game_Temp"),
+        ("$game_system", "Game_System"),
+        ("$game_switches", "Game_Switches"),
+        ("$game_variables", "Game_Variables"),
+        ("$game_self_switches", "Game_SelfSwitches"),
+        ("$game_screen", "Game_Screen"),
+        ("$game_actors", "Game_Actors"),
+        ("$game_party", "Game_Party"),
+        ("$game_troop", "Game_Troop"),
+        ("$game_map", "Game_Map"),
+        ("$game_player", "Game_Player"),
+    };
+
+    /// <summary>
+    /// Runs one setup step, and names it if it throws.
+    /// </summary>
+    private void Rufe(string pQuelltext)
+    {
+        try
+        {
+            _interpreter.RunProgram(new RubyParser(
+                new RubyLexer(pQuelltext).Tokenize()).ParseProgram());
+            Gesetzt.Add(pQuelltext);
+        }
+        catch (Exception ausnahme)
+        {
+            Fehlgeschlagen.Add(pQuelltext + " -- " + ausnahme.Message);
+        }
+    }
+
+    /// <summary>
+    /// The setup steps that threw, with their reason.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a step that fails is reported and the rest still runs.</strong> A game with a
+    /// missing data file is a game that is missing that file, not a game that refuses to start --
+    /// and a runtime that threw here would take the other twelve globals down with it.
+    /// </remarks>
+    public List<string> Fehlgeschlagen { get; } = new List<string>();
 
     private void Setze(string pName, string pDatei)
     {
         if (_daten == null)
         {
             Verweigert++;
+            Fehlgeschlagen.Add("$" + pName + " -- no data host");
             return;
         }
 
-        var wert = _daten.Lade(pDatei);
+        UniversalRPG.Rgss.RubyValue? wert;
+        try
+        {
+            wert = _daten.Lade(pDatei + Erweiterung);
+        }
+        catch (Exception ausnahme)
+        {
+            Verweigert++;
+            Fehlgeschlagen.Add("$" + pName + " aus " + pDatei + " -- " + ausnahme.Message);
+            return;
+        }
+
         if (wert == null)
         {
             Verweigert++;
+            Fehlgeschlagen.Add("$" + pName + " -- " + pDatei + " is not there");
             return;
         }
 
@@ -137,8 +257,6 @@ public sealed class RgssLaufzeit
         // **Und der Aufruf laeuft durch das Spiel selbst** --
         // **und nicht durch einen C#-Konstruktor** --
         // **und das heisst:  `Game_Map#initialize` laeuft.**
-        _interpreter.RunProgram(new RubyParser(new RubyLexer(
-            pName + " = " + pTyp + ".new").Tokenize()).ParseProgram());
-        Gesetzt.Add(pName + " als " + pTyp + ".new");
+        Rufe(pName + " = " + pTyp + ".new");
     }
 }

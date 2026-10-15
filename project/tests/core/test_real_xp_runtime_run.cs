@@ -63,6 +63,11 @@ public partial class TestRealXpRuntimeRun : TestBase
                 + $"data {lauf.RuntimeInfo.DataFilePaths.Count}, "
                 + $"inspected {lauf.RuntimeInfo.InspectedFileCount}"));
         Console.WriteLine("XP: script problems = " + lauf.ScriptProblems.Count);
+        Console.WriteLine("XP: setup problems = " + lauf.SetupProblems.Count);
+        foreach (var problem in lauf.SetupProblems.Take(20))
+        {
+            Console.WriteLine("XP:   SETUP " + problem);
+        }
         foreach (var problem in lauf.ScriptProblems.Take(40))
         {
             Console.WriteLine("XP:   " + problem);
