@@ -4976,6 +4976,21 @@ public sealed class RubyParser
             // weitergibt.**
             RubyTokenKind.Operator => Current.Text is "-" or "!" or "~"
                 or "*" or "&",
+
+            // **And `self` is a keyword, and it begins a value.**
+            // Measured on a real XP game: the engine's own
+            // `Window_Selectable#top_row` is `return self.oy / 32`, and the
+            // Return node came out with **no children** -- so the expression
+            // was left standing as the next statement, the method answered
+            // nil, and the comparison after it raised:
+            // `NoMethodError: undefined operator '<' for a Integer and a Nil`.
+            // **And the keywords that begin a value are the ones below**, while
+            // `if`, `unless`, `while` and `case` after a `return` are the other
+            // Ruby -- `return if a` is a bare return with a modifier, and this
+            // list deliberately does not carry those, because a reader that did
+            // would have made `return if a` return a condition.
+            RubyTokenKind.Keyword => Current.Text is "self" or "nil" or "true"
+                or "false" or "not" or "super" or "yield",
             _ => false,
         };
     }
