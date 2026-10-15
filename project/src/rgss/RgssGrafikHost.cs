@@ -102,7 +102,10 @@ public sealed class RgssGrafikHost : IRubyHost
     {
         get
         {
-            var namen = new List<string> { "update", "wait" };
+            // **And the helper the cache calls is one of the names.** A host that
+            // answers a name and does not declare it is a host whose own answers
+            // read as gaps -- measured, and that is what the message did.
+            var namen = new List<string> { "update", "wait", "BildGroesse" };
             if (Fallback != null)
             {
                 namen.AddRange(Fallback.KnownMethods);

@@ -2836,8 +2836,20 @@ public sealed class RubyInterpreter
             // das ist es nicht.**
             //
 
-            _diagnostics.Add(
-                $"{empfaenger.Name} has no method '{methode}' on this "
+            // **And a nil is not the same answer as an unknown name.**
+            // Measured: `RPG::Cache` asked the host for an image size, the host
+            // answered nil because the file is not there -- this game ships no
+            // Windowskins and takes its windowskin from the RTP -- **and the
+            // message said "self has no method 'BildGroesse' on this host"**,
+            // which is a different fact and a false one. **A host declares the
+            // names it answers**, so a name it declares and answers nil for is a
+            // nil and not a gap.
+            var kennt = _host.KnownMethods.Contains(methode, StringComparer.Ordinal);
+            _diagnostics.Add(kennt
+                ? $"{empfaenger.Name}.{methode} answered nil, and the name is "
+                    + "one this host declares; a nil from a host is an answer "
+                    + "and not a missing method"
+                : $"{empfaenger.Name} has no method '{methode}' on this "
                     + "host; the interpreter does not guess, and a method "
                     + "that is not implemented is a fact about the host "
                     + "and not about the script");
