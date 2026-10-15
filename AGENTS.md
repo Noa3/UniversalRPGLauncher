@@ -25,6 +25,24 @@ Do not invent a parallel private roadmap and do not spend a session only rewriti
 - Godot 4.7.2 stable is the pinned engine line for this repository unless a deliberate upgrade card changes it.
 - Imported games are untrusted input. Never execute game EXEs, DLLs, Ruby, JavaScript, shell commands, or native plugins during detection/parsing tests.
 
+### A game's own scripts run while that game runs (user decision, 2026-10-15)
+
+The rule above is about **detection and parsing**, and it stays. What is
+allowed is the running game:
+
+- **A game's plugins and its own scripts may be executed while that game
+  runs**, for the maker engine the game belongs to -- JavaScript for MV/MZ,
+  Ruby for XP/VX/VX Ace. The user asked for this explicitly and accepted the
+  risk: a game's menus, windows and messages are what its scripts make them,
+  and reading only parameters cannot reproduce that.
+- **Detection and parsing still execute nothing.** A probe, a detector or a
+  parser never starts an interpreter.
+- **Failures are reported by name and reason**, and the run continues. An
+  empty `catch` that hides a failing script is not an implementation.
+- **Claims have to match what the runtime does.** A runtime that executes
+  scripts but cannot render, take input or save does not describe itself as a
+  complete runtime, and does not declare capabilities it has not implemented.
+
 ### Plugin JavaScript: allowed while a game runs, in a sandbox (user decision, 2026-10-07)
 
 The rule above is about **detection and parsing**, and it stays. What changed
