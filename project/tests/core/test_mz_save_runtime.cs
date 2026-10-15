@@ -72,7 +72,7 @@ public partial class TestMzSaveRuntime : TestBase
             lauf.Facts.Switches[7] = true;
             lauf.Facts.Variables[3] = 99;
             lauf.Facts.SelfSwitches["2,5,A"] = true;
-            // **Und das Gold**, weil ein Speichern und Laden es sonst still verliert.
+            // **And the gold**, because a save and a load would otherwise lose it quietly.
             lauf.Facts.Gold = 4321;
             var (x, y) = (lauf.PlayerX, lauf.PlayerY);
             lauf.Facts.Player.StandAt(lauf.CurrentMapId, x + 1, y, 6);

@@ -254,10 +254,10 @@ public sealed partial class MzEngineRuntime
             }
         }
 
-        // **Und das Gold kommt zurueck.** Die Mitglieder werden oben gesetzt; ohne das Gold
-        // waere ein Speichern und Laden ein Spiel, das still sein Geld verliert. Angewendet
-        // wird es nur, wenn die Datei den `party`-Eintrag ueberhaupt traegt -- fehlt er,
-        // steht das in `Missing`, und dann ist der jetzige Stand ehrlicher als eine Null.
+        // **And the gold comes back.** The members are set above; without the gold, a
+        // save and a load would be a game that quietly loses its money. It is applied
+        // only when the file carries the `party` entry at all -- when it does not, that
+        // is named in `Missing`, and then the current value is more honest than a zero.
         var parteiGeladen = true;
         foreach (var eintrag in save.Missing)
         {
@@ -305,8 +305,8 @@ public sealed partial class MzEngineRuntime
                 + "written from";
         }
 
-        // **Und was der Leser nicht zurueckschreibt, wird benannt**: der Eintrag steht in
-        // der Datei und die Runde laedt die Datei trotzdem ohne ihn.
+        // **And what the reader does not put back is named**: the entry is in the file
+        // and the load takes the file without it.
         if (save.Unapplied.Count > 0)
         {
             bericht += $"; the save carries {string.Join(", ", save.Unapplied)}, "

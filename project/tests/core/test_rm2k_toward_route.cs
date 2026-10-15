@@ -245,18 +245,12 @@ public partial class TestRm2kActiveEventGraphic
     /// <c>move_random</c> (8) is a route command: one tile, one of the four cardinals.
     /// </summary>
     /// <remarks>
-    /// <strong>And  dieser  Test  hiess  frueher  "does  not  whitelabel"</strong>  und
-    /// verlangte,  dass  die  drei  relativen  Formen  <em>nichts</em>  tun  und  einmal
-    /// gemeldet  werden.  Das  war  die  ehrliche  Beschreibung  eines  fehlenden  Befehls,
-    /// keine  Eigenschaft  des  Formats:  die  Referenz  fuehrt  alle  drei  aus,  und  die
-    /// autonomen  Bewegungsmodi  konnten  sie  hier  schon  --  nur  der  Routen-Dispatch
-    /// nicht.  Jetzt  fuehrt  er  sie  aus,  also  pruefen  die  Tests  ihr  Verhalten
-    /// statt  ihrer  Abwesenheit.
-    ///
-    /// <strong>Und  zufaellig  heisst  nicht  beliebig:</strong>  <c>TurnRandom()</c>
-    /// wuerfelt  eine  der  vier  Himmelsrichtungen,  nie  eine  Diagonale  und  nie  eine
-    /// Nullbewegung,  also  ist  genau  das  die  pruefbare  Aussage.
-    /// </remarks>
+    /// <strong>And this test used to be called "does not whitelabel"</strong> and
+    /// demanded that the three relative forms do <em>nothing</em> and be reported once.
+    /// That was the honest description of a missing command, not a property of the
+    /// format: the reference executes all three, and the autonomous movement modes
+    /// could already do them here -- only the route dispatch could not. Now it does, so
+    /// the tests check their behaviour instead of their absence.
     public void Test_MoveRandomIstEinRoutenBefehl()
     {
         StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRandom)));
@@ -294,11 +288,10 @@ public partial class TestRm2kActiveEventGraphic
     /// <c>move_forward</c> (11) keeps the direction the event already has.
     /// </summary>
     /// <remarks>
-    /// <strong>Und  die  Erwartung  wird  aus  der  Figur  gelesen,  nicht  gesetzt:</strong>
-    /// der  Test  nimmt  die  Richtung,  die  die  Seite  der  Figur  gegeben  hat,  und
-    /// prueft,  dass  der  Schritt  genau  dorthin  ging.  Eine  fest  verdrahtete  Erwartung
-    /// wuerde  nur  beweisen,  dass  die  Seite  diese  Richtung  hat.
-    /// </remarks>
+    /// <strong>And the expectation is read from the figure, not set:</strong> the test
+    /// takes the direction the page gave the figure and checks that the step went
+    /// exactly there. A hard-coded expectation would only prove that the page has that
+    /// direction.
     public void Test_MoveForwardIstEinRoutenBefehl()
     {
         StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveForward)));

@@ -183,51 +183,21 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         ReadTitleFromSystem();
         ReadMenuFromSystem();
 
-        // **Und  der  Zustand  bekommt  dieselbe  Bank** -- **denn
-        //  `10710`  laeuft  im  Interpreter  und  nicht  im  Host**,
-        // **und  ohne  die  Bank  bleiben  seine  Gegner
-        //  leer.**
+        // **And the state gets the same bank** -- because `10710` runs in the
+        // interpreter and not in the host, and without the bank its opponents keep
+        // nothing.
         Simulation.DatabaseData = database.Data;
 
         // **Und  die  Heldenbank  wandert  in  den  Zustand.**
         //
-        // **Und  vorher  las  der  Host  sie  nur  fuer  Sprite-Namen**,
-        // -- **und  `GetOrCreateActorValues`  erfand  sonst  leere
-        //  Werte** -- **und  das  Menue  zeigte  darum  einen  Helden
-        //  ohne  Namen  und  ohne  Maximalwerte.**
-        //
-        // **Und  das  war  eine  stille  Luecke**, -- **denn  die  Werte
-        //  waren  vorhanden  und  nur  nirgends  angefasst.**
+        // **And before, the host read them only for sprite names** -- not for their
+        // values -- and the menu therefore showed a hero with no values at all.
         ReadActorValues(database.Data);
 
-        // **Und  die  Party  kommt  aus  dem  System-Chunk  der  Bank.**
-        //
-        // **Und  EasyRPG Players  `Game_Party::SetupNewGame` macht  es
-        //  genauso**:  -- **`data.party = lcf::Data::system.party`** --
-        // -- **und  nicht  aus  einer  Karte  und  nicht  aus  einem
-        //  Befehl.**
-        //
-        // **Und  Dragon  Destinys  Party  ist  `[1, 0]`  in  den
-        //  Rohbytes**, -- **und  das  ist  Little-Endian  `1`**, --
-        // **und  das  ist  Held  eins**, -- **und  der  Decoder  meldete
-        //  vorher  eine  leere  Party**, -- **weil  `party_size`  im
-        //  Spiel  fehlt  und  ein  fehlendes  Groessenfeld  die
-        //  vorhandenen  Bytes  nicht  verwerfen  darf.**
+        // **And the party comes from the bank's system chunk.**
         ReadStartParty(database.Data);
 
-        // **Und  die  Helden  kommen  mit  ihren  gelernten
-        //  Faehigkeiten  in  den  Zustand.**
-        //
-        // **Und  das  ist  das  sechste  Feld  dieser  Gestalt**, --
-        // **geschrieben  von  einem  Test  und  gefuellt  von  nichts,
-        //  was  ein  Spiel  erreichen  koennte.**  **Und  es  hat  den
-        //  Schlag  gekostet**:  -- **denn  `ErsteAngriffsfaehigkeit`
-        //  fragt  `FaehigkeitenVon`,  und  das  fragt  `SkillsOf`,  und
-        //  das  las  eine  Menge,  die  niemand  gefuellt  hat.**
-        //
-        // **Und  es  passiert  hier  und  nicht  erst  beim
-        //  Kampfstart**, -- **denn  ein  Held  lernt  nicht  erst
-        //  waehrend  eines  Kampfes.**
+        // **And the heroes come with their learned skills.**
         var heldenGeladen = UniversalRPG.Rm2k.Simulation
             .Rm2kHeldLaden.LadeAlle(Simulation, database.Data);
         if (heldenGeladen > 0)
@@ -237,9 +207,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 + " heroes carry their learned skills");
         }
 
-        // **Und  jetzt  die  Animationstabelle** -- **denn
-        //  `11210`  wird  792  Mal  geschrieben  und  ohne  diese
-        //  Tabelle  spielt  jede  dieser  Animationen  nichts.**
+        // **And now the animation table** -- because `11210` is written 792 times, and
+        // without it the menu has nothing to draw.
         var anims = UniversalRPG.Rm2k.Simulation.Rm2kHeldLaden
             .LadeAnimationen(Simulation, database.Data);
         if (anims > 0)
@@ -837,8 +806,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     // The tile is reached. The route may already be finished,
                     // which is why this is not gated on the route still running.
                     _eventStepStates.Remove(mapEvent.Id);
-                    // **Und der Sprung endet mit seinem Schritt**: danach wird die Figur
-                    // wieder auf ihrer Kachel gezeichnet.
+                    // **And the jump ends with its step**: after that the figure is drawn on its
+                    // tile again.
                     _eventJumpBegins.Remove(mapEvent.Id);
                     _eventRoutesMoved = true;
                 }
@@ -1316,8 +1285,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             if (!pEvent.FacingLocked) pEvent.FacingDirection = pEvent.Direction;
         }
-        // **Und auf einer Loop-Map wandert der Startpunkt mit dem Wickeln**, damit der
-        // Bogen dort beginnt, wo die Figur stand.
+        // **And on a looping map the begin position travels with the wrap**, so the arc
+        // starts where the figure stood.
         var targetX = Simulation.RoundX(pTargetX);
         var targetY = Simulation.RoundY(pTargetY);
         if (Simulation.LoopHorizontal && (pTargetX < 0 || pTargetX >= Simulation.MapWidth))
@@ -1472,15 +1441,15 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         }
         if (pCommandId == Rm2kMoveRoute.MoveAwayFromHero)
         {
-            // **Und weg vom Helden ist die eigene Regel, nicht die Negation der Achse**:
-            // Pinned GetDirectionAwayCharacter, dieselbe dominante Achse, umgekehrt.
+            // **And away from the hero is its own rule, not the negation of one axis**:
+            // pinned GetDirectionAwayCharacter, the same dominant axis, reversed.
             return DirectionToOrFromHero(pEvent, false);
         }
         if (pCommandId == Rm2kMoveRoute.MoveRandom)
         {
-            // **Und `move_random` dreht zufaellig auf eine der vier Himmelsrichtungen**,
-            // nicht auf eine Diagonale: TurnRandom() wuerfelt 0..3. Der Wurf kommt aus
-            // demselben deterministischen Generator wie die autonome Bewegung.
+            // **And `move_random` turns to one of the four cardinal directions at random**,
+            // never a diagonal: TurnRandom() rolls 0..3. The roll comes from the same
+            // deterministic generator the autonomous movement uses.
             return EventRandom.NextInclusive(0, 3);
         }
         return -1;
@@ -3864,10 +3833,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 }
                 var command = route.Current!;
                 var id = command.CommandId;
-                // **Und die drei relativen Formen gehoeren dazu**: `move_random` (8),
-                // `move_away_from_hero` (10) und `move_forward` (11) sind Routen-Befehle
-                // wie die acht Richtungen -- die autonomen Bewegungsmodi konnten sie
-                // schon, der Routen-Dispatch hat sie verworfen.
+                // **And the three relative forms belong here too**: `move_random` (8),
+                // `move_away_from_hero` (10) and `move_forward` (11) are route commands like the
+                // eight directions -- the autonomous movement modes could already do them, the
+                // route dispatch refused them.
                 if ((id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveForward)
                     || id == Rm2kMoveRoute.MoveTowardsHero)
                 {
@@ -3899,10 +3868,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 }
                 else if (id == Rm2kMoveRoute.BeginJump)
                 {
-                    // **Und der Sprung wird vorher ausgescannt**: die Referenz liest ab
-                    // `begin_jump + 1` voraus, dreht dabei und sammelt die Strecke, und
-                    // erst `end_jump` springt. Ohne `end_jump` faellt der Sprung aus und
-                    // die Route laeuft weiter.
+                    // **And the jump is scanned ahead first**: the reference reads forward from
+                    // `begin_jump + 1`, turns as it goes and collects the distance, and only
+                    // `end_jump` jumps. Without an `end_jump` the jump is dropped and the route runs
+                    // on.
                     if (!TryExecuteRouteJump(pEvent, route))
                     {
                         if (!route.Skippable) { route.NoteMoveFailure(); break; }
@@ -5031,12 +5000,10 @@ ReadString(entry, "name", v => werte.Name = v);
             var sprite = TryBuildEventSprite(mapEvent, charsets);
             if (sprite != null)
             {
-                // **Und  addiert,  nicht  ersetzt** --  derselbe  Defekt,  den  der
-                // Helden-Zweig  unten  schon  beschreibt:  eine  Zuweisung  loescht  den
-                // Offset  des  unverbrauchten  Schritts,  und  ein  laufendes  Event
-                // schnappt  auf  seine  Kachel  zurueck,  statt  dazwischen  zu  laufen.
-                // Der  Kamera-Offset  ist  ein  eigener  Scroll,  der  auf  jeden  Sprite
-                // aufgeschlagen  wird.
+                // **And it is added, not replaced** -- the same defect the hero branch below
+                // already describes: an assignment drops the unspent step's offset, and a
+                // walking event snaps back onto its tile instead of being drawn between them.
+                // The camera offset is a scroll of its own, added to every sprite.
                 sprite.PixelOffsetX += pOffsetX;
                 sprite.PixelOffsetY += pOffsetY;
                 sprites.Add(sprite);
@@ -5079,10 +5046,9 @@ ReadString(entry, "name", v => werte.Name = v);
             return null;
         }
         var index = page.Graphic.TryGetValue("character_index", out var rawIndex) && rawIndex is int i ? i : 0;
-        // **Und  ein  Event  wird  zwischen  den  Kacheln  gezeichnet,  solange  sein
-        // Schritt  unverbraucht  ist** --  wie  der  Held.  `GetSpriteX`/`GetSpriteY`
-        // sind  eine  Regel  fuer  jede  Figur,  und  ein  Event  auf  seiner  logischen
-        // Kachel  steht  acht  Frames  still  und  springt  dann  eine  Kachel  weit.
+        // **And an event is drawn between the tiles while its step is unspent** -- like
+        // the hero. `GetSpriteX`/`GetSpriteY` are one rule for every figure, and an event
+        // on its logical tile stands still for eight frames and then jumps a tile.
         var stepRemaining = 0;
         var stepDirection = pEvent.Direction;
         if (_eventStepStates.TryGetValue(pEvent.Id, out var step))
@@ -5096,10 +5062,9 @@ ReadString(entry, "name", v => werte.Name = v);
             MapX = pEvent.X,
             MapY = pEvent.Y,
             CharacterIndex = index,
-            // **Und  die  Richtung  ist  schon  der  Karten-Code**: der Schritt-Zustand
-            // haelt  0..3  (oben/rechts/unten/links), genau  was  `PixelOffsetX`  will --
-            // nicht  das  Facing-Byte  der  Seite,  das  erst  `FacingFromFacingDirection`
-            // uebersetzt.
+            // **And the direction is already the map code**: the step state holds 0..3
+            // (up/right/down/left), exactly what `PixelOffsetX` wants -- not the page's
+            // facing byte, which `FacingFromFacingDirection` translates first.
             PixelOffsetX = _eventJumpBegins.TryGetValue(pEvent.Id, out var jumpBeginX)
                 ? Rm2kStepBudget.JumpPixelOffsetX(jumpBeginX.X, pEvent.X, stepRemaining)
                 : Rm2kStepBudget.PixelOffsetX(pEvent.X, stepRemaining, stepDirection),

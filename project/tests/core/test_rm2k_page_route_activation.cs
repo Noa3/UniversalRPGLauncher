@@ -88,13 +88,11 @@ public partial class TestRm2kActiveEventGraphic
     /// An event's sprite is drawn between the tiles while its step is unspent.
     /// </summary>
     /// <remarks>
-    /// <strong>And  nur  der  Held  interpolierte.</strong>  Der  Event-Sprite  wurde  mit
-    /// seiner  logischen  Kachel  und  ohne  Offset  gebaut,  also  stand  jedes  laufende
-    /// Event  acht  Frames  still  und  sprang  dann  eine  Kachel  weit  --  obwohl  die
-    /// Referenz  eine  einzige  Sprite-Positionsregel  hat,  `Game_Character::GetSpriteX`,
-    /// fuer  jede  Figur.  Und  das  ist  auch  die  Bedingung  dafuer,  dass  der  Bogen
-    /// eines  Routen-Sprungs  ueberhaupt  sichtbar  werden  kann.
-    /// </remarks>
+    /// <strong>And only the hero interpolated.</strong> The event sprite was built with
+    /// its logical tile and no offset, so every walking event stood still for eight
+    /// frames and then jumped a tile -- although the reference has one sprite-position
+    /// rule, `Game_Character::GetSpriteX`, for every figure. And that is also the
+    /// condition for a route jump's arc to become visible at all.
     public void Test_EinLaufendesEventWirdZwischenDenKachelnGezeichnet()
     {
         StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
@@ -109,8 +107,8 @@ public partial class TestRm2kActiveEventGraphic
                 + " the camera offset alone cannot produce: the event is on a one-tile map");
         AssertEq(sprite.PixelOffsetY, 0, "**and the step is horizontal**, so only x moves");
 
-        // **Und ein stehendes Event hat keinen Offset**: die Kachel, auf der es steht,
-        // ist auch die, auf der es gezeichnet wird.
+        // **And a stationary event has no offset**: the tile it stands on is the tile it
+        // is drawn on.
         StartAuthoredRouteMap(RoutePage(0, 8, false));
         RouteTicks(2);
         _runtime.MarkFrameDirtyForTest();
@@ -288,21 +286,15 @@ public partial class TestRm2kActiveEventGraphic
 
     public void Test_UnhandledPageRouteCommandIsWalkedPastAndTheRouteContinues()
     {
-        // **Und  die  Route  laeuft  weiter**:  die  Referenz  hat  `default: break;`
-        // und  zaehlt  danach  den  Index  hoch,  also  geht  ein  Befehl,  den  sie
-        // nicht  kennt,  vorbei  --  und  der  Rest  der  Route  laeuft.  **Und  die
-        // eigene  Repo-Regel  sagt  dasselbe**:  "Failures are reported by name and
-        // reason, and the run continues."
-        //
-        // **Und  dieser  Test  verlangte  frueher  das  Gegenteil**:  die  Route
-        // musste  an  einem  unbekannten  Befehl  stehenbleiben,  damit  nichts
-        // "still verschwindet".  Das  ist  die  groessere  Abweichung  --  ein  Event
-        // bleibt  stehen,  wo  die  Engine  weitergeht.
+        // **And the route runs on**: the reference has `default: break;` and then counts
+        // the index up, so a command it does not know is walked past -- and the rest of
+        // the route runs. **And the repository's own rule says the same**: "Failures are
+        // reported by name and reason, and the run continues."
         StartAuthoredRouteMap(RoutePage(6, 8, true,
             new Rm2kMap.MoveCommand(Rm2kMoveRoute.SwitchOn) { ParameterA = 1 }, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
-        // **Und ein Tick genuegt**: die Route laeuft in einem Tick bis zum ersten
-        // Schritt, und die Route wiederholt sich danach -- vierzig Ticks haetten
-        // das Event weiter bewegt und nichts ueber diesen Befehl gesagt.
+        // **And one tick is enough**: the route runs to the first step within one tick,
+        // and the route repeats afterwards -- forty ticks would have moved the event
+        // further and said nothing about this command.
         RouteTicks(1);
         AssertEq(_event.X, 9,
             "**the step after the unhandled command happens**, because the route walks past"
@@ -328,8 +320,7 @@ public partial class TestRm2kActiveEventGraphic
             new Rm2kMap.MoveCommand(Rm2kMoveRoute.LockFacing),
             new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
         // **Und ein Tick genuegt**: die Route laeuft in einem Tick bis zum ersten
-        // Schritt -- die Sperre setzt keinen Stop-Count, also folgt der naechste
-        // Befehl sofort.
+        // step -- the lock sets no stop count, so the next command follows at once.
         RouteTicks(1);
         AssertEq(_event.FacingLocked, true,
             "**and a locked facing stays locked**");

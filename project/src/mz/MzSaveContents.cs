@@ -190,8 +190,8 @@ public static class MzSaveContents
             }
             if (!applied) unapplied.Add(name);
         }
-        // **Und das Gold ist kein Teilfall mehr**: es wird oben gelesen und von der Runde
-        // angewendet, also steht es nicht mehr unter dem, was dieser Leser liegen laesst.
+        // **And the gold is no longer a partial case**: it is read above and applied by
+        // the load, so it is not among what this reader leaves behind.
 
         pLoaded = new MzLoadedSave
         {

@@ -157,8 +157,8 @@ public partial class TestMzSaveContents : TestBase
     public void Test_WasDerLeserNichtZurueckschreibtWirdBenannt()
     {
         var fakten = Fakten();
-        // **Und ein Gold, das kein Standardwert ist**: eine Null waere von einer
-        // vergessenen Null nicht zu unterscheiden.
+        // **And a gold that is not a default value**: a zero could not be told apart
+        // from a forgotten zero.
         fakten.Party.Gold = 4321;
         var (inhalt, fehlend) = MzSaveContents.Capture(fakten, 1, 60);
         AssertEq(fehlend.Count, 0,
@@ -178,8 +178,8 @@ public partial class TestMzSaveContents : TestBase
         AssertTrue(!geladen.Unapplied.Contains("party._gold"),
             "**and the gold is no longer named**, because it is applied now");
 
-        // **Und die Invariante**: jeder Eintrag, den die Datei traegt, ist entweder
-        // angewendet oder benannt.
+        // **And the invariant**: every entry the file carries is either applied or
+        // named.
         foreach (var name in MzSaveContents.EngineEntries)
         {
             if (inhalt.Member(name) == null) continue;
