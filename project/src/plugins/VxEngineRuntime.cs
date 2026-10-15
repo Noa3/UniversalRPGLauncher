@@ -353,11 +353,146 @@ public sealed class VxEngineRuntime : IEngineRuntime
             "module Tone\nend",
             "module Rect\nend",
             "module Viewport\nend",
-            "module Sprite\nend",
-            "module Bitmap\nend",
+            // **And `Sprite` is the second, and the game said so by name:**
+            // *"Sprite has no method 'bitmap='"*. A sprite is what every visible
+            // thing in an RPG Maker game is -- the player, the events, the
+            // pictures -- so this class is on the path to a first frame.
+            //
+            // **And it holds its state and does not draw**, for the same reason
+            // `Window` does: there is no surface. **And its fields are real**,
+            // because a game sets `bitmap`, `x`, `y`, `z`, `opacity`, `src_rect`,
+            // `ox`, `oy` and `visible` and reads them back.
+            "class Sprite\n"
+                + "  def initialize(viewport = nil)\n"
+                + "    @viewport = viewport\n"
+                + "    @bitmap = nil\n"
+                + "    @src_rect = nil\n"
+                + "    @x = 0; @y = 0; @z = 0\n"
+                + "    @ox = 0; @oy = 0\n"
+                + "    @opacity = 255\n"
+                + "    @visible = true\n"
+                + "    @angle = 0\n"
+                + "    @zoom_x = 1.0; @zoom_y = 1.0\n"
+                + "    @mirror = false\n"
+                + "    @bush_depth = 0\n"
+                + "    @blend_type = 0\n"
+                + "    @color = nil\n"
+                + "    @tone = nil\n"
+                + "  end\n"
+                + "  attr_accessor :bitmap\n"
+                + "  attr_accessor :src_rect\n"
+                + "  attr_accessor :x\n"
+                + "  attr_accessor :y\n"
+                + "  attr_accessor :z\n"
+                + "  attr_accessor :ox\n"
+                + "  attr_accessor :oy\n"
+                + "  attr_accessor :opacity\n"
+                + "  attr_accessor :visible\n"
+                + "  attr_accessor :angle\n"
+                + "  attr_accessor :zoom_x\n"
+                + "  attr_accessor :zoom_y\n"
+                + "  attr_accessor :mirror\n"
+                + "  attr_accessor :bush_depth\n"
+                + "  attr_accessor :blend_type\n"
+                + "  attr_accessor :color\n"
+                + "  attr_accessor :tone\n"
+                + "  attr_reader :viewport\n"
+                + "  def update; end\n"
+                + "  def dispose; end\n"
+                + "  def disposed?; false; end\n"
+                + "end",
+            // **And `Bitmap` is what a window builds its contents out of, and
+            // the game asked for it without a name of its own:** *"nil has no
+            // method 'clear'"* is `Window_Base#initialize` calling `clear` on the
+            // bitmap it made -- so the bitmap came back nil, because there was no
+            // `Bitmap` at all.
+            //
+            // **And it holds a size and does not draw.** `width`, `height`,
+            // `clear` and `dispose` are real, and the drawing calls are not here
+            // yet -- **and they will be named the same way this class was**, by
+            // the game asking for them.
+            "class Bitmap\n"
+                + "  def initialize(w, h = nil)\n"
+                + "    @width = w; @height = h || w\n"
+                + "    @font = nil\n"
+                + "    @disposed = false\n"
+                + "  end\n"
+                + "  attr_reader :width\n"
+                + "  attr_reader :height\n"
+                + "  attr_accessor :font\n"
+                + "  def clear; end\n"
+                + "  def dispose; @disposed = true; end\n"
+                + "  def disposed?; @disposed; end\n"
+                + "  def get_pixel(x, y); nil; end\n"
+                + "  def set_pixel(x, y, c); end\n"
+                + "  def blt(x, y, src, rect = nil, opacity = 255); end\n"
+                + "  def blt(x, y, src, rect, opacity); end\n"
+                + "  def stretch_blt(dr, src, sr = nil, opacity = 255); end\n"
+                + "  def fill_rect(x, y, w, h, c); end\n"
+                + "  def fill_rect(r, c); end\n"
+                + "  def gradient_fill_rect(x, y, w, h, c1, c2, v = false); end\n"
+                + "  def draw_text(x, y, w, h, s, a = 0); end\n"
+                + "  def draw_text(r, s, a = 0); end\n"
+                + "  def text_size(s); [0, 0]; end\n"
+                + "  def hline(x, y, w, c = nil); end\n"
+                + "  def vline(x, y, h, c = nil); end\n"
+                + "end",
             "module Plane\nend",
             "module Tilemap\nend",
-            "module Window\nend",
+            // **And `Window` is the first class the game's own setup builds.**
+            // Measured, and it named itself: *"Window does not have initialize,
+            // so super has no method to call"*, *"self has no method 'active'"*,
+            // *"'contents'"*, *"'contents='"*, and *"nil has no method 'clear'"*
+            // on the bitmap it was going to build. **And this is a class and not
+            // a module**, because a scene writes `Window.new(x, y, w, h)`.
+            //
+            // **And it holds its state and does not draw.** There is no surface,
+            // so `update`, `open`, `close` and `dispose` do nothing and say so --
+            // **and the fields are real**, because a game reads and writes them
+            // and a window whose `contents` were nil would be a window whose
+            // every drawing call is a nil.
+            "class Window\n"
+                + "  def initialize(x = 0, y = 0, w = 0, h = 0)\n"
+                + "    @x = x; @y = y; @width = w; @height = h\n"
+                + "    @contents = nil\n"
+                + "    @active = false\n"
+                + "    @visible = true\n"
+                + "    @opacity = 255\n"
+                + "    @back_opacity = 192\n"
+                + "    @contents_opacity = 255\n"
+                + "    @windowskin = nil\n"
+                + "    @title = nil\n"
+                + "    @pause = false\n"
+                + "    @cursor_rect = nil\n"
+                + "    @ox = 0; @oy = 0; @z = 100\n"
+                + "    @stretch = false\n"
+                + "  end\n"
+                + "  attr_accessor :x\n"
+                + "  attr_accessor :y\n"
+                + "  attr_accessor :width\n"
+                + "  attr_accessor :height\n"
+                + "  attr_accessor :contents\n"
+                + "  attr_accessor :active\n"
+                + "  attr_accessor :visible\n"
+                + "  attr_accessor :opacity\n"
+                + "  attr_accessor :back_opacity\n"
+                + "  attr_accessor :contents_opacity\n"
+                + "  attr_accessor :windowskin\n"
+                + "  attr_accessor :title\n"
+                + "  attr_accessor :pause\n"
+                + "  attr_accessor :cursor_rect\n"
+                + "  attr_accessor :ox\n"
+                + "  attr_accessor :oy\n"
+                + "  attr_accessor :z\n"
+                + "  attr_accessor :stretch\n"
+                + "  def clear; @contents = nil; end\n"
+                + "  def update; end\n"
+                + "  def open; end\n"
+                + "  def close; end\n"
+                + "  def dispose; end\n"
+                + "  def disposed?; false; end\n"
+                + "  def open?; true; end\n"
+                + "end",
             "module Window_Base\nend",
             "module Window_Selectable\nend",
             "module Window_Command\nend",
