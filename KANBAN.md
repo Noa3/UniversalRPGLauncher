@@ -158,6 +158,76 @@ Focused evidence for the movement types, all re-run after the last edit:
   `+20` to `+2000` fails exactly the two wall-turn tests and nothing else
   (79/81, reverted to 81/81).
 
+### K-PROD-RM2K-LOOP-MAPS — READY, measured demand 4 of 806 maps
+
+**The map's `scroll_type` is ignored entirely today.** The parser never reads
+chunk `0x0B`, `Rm2kMap` has no such field, and both camera call sites
+(`Rm2kEngineRuntime` around the two `PositionX`/`PositionY` calls) pass no loop
+flag -- so `Rm2kMapCamera`'s `pLoopHorizontal`/`pLoopVertical` parameters and
+its `PositiveModulo` wrapping are dead code today.
+
+**Measured, read-only, over the owned collection** (806 LMU files, all 806
+parsed, `scroll_type` chunk `0x0B` read straight from the bytes; no game
+executable, script or plugin was run):
+
+| `scroll_type` | Maps |
+|---|---:|
+| 0 none | 802 |
+| 3 both | 4 |
+
+The four looping maps are `Dragon Destiny/Map0196.lmu`, `Lisa/Map0039.lmu`,
+`Lisa/Map0040.lmu` and `Lisa/Map0042.lmu` -- all "both", none vertical-only and
+none horizontal-only. **So this is a real but small gap: four maps of 806.** It
+is pinned rather than implemented because the command-coverage measurement below
+has a far larger reach for "RM2000/2003 complete".
+
+Reference, read from source (liblcf master `src/generated/lcf/lmu/chunks.h` and
+`src/generated/lcf/rpg/map.h`, EasyRPG Player `src/game_map.cpp`):
+
+* LMU chunk **`scroll_type = 0x0B`**.
+* `rpg::Map::ScrollType`: **`none = 0, vertical = 1, horizontal = 2, both = 3`**
+  -- vertical is one and horizontal is two, the opposite of the obvious guess.
+* `Game_Map::LoopHorizontal()` is `scroll_type == horizontal || both`, and
+  `LoopVertical()` is `scroll_type == vertical || both`.
+* `Game_Map::RoundX(x)` is `Utils::PositiveModulo(x, GetTilesX())` when looping,
+  otherwise `x`, and the same for `Y`. `Game_Character::Move` wraps the
+  **candidate** position with `RoundX(x + dx)`/`RoundY(y + dy)` **before** the
+  passability check, so a step off one edge lands on the other and is then
+  tested there.
+* The camera arithmetic in this repository is the same shape: `PositionX` and
+  `PositionY` already return the wrapped screen-tile position when their loop
+  parameter is set.
+
+The work is then: parse `0x0B` into `Rm2kMap`, carry the two flags into the
+simulation, pass them to both camera call sites and to the sight test, and wrap
+the candidate tile in the step path (player and events, route and autonomous)
+before the passability check.
+
+**And the measurement itself found a trap worth keeping:** the LCF BER is
+seven-bit groups with the **most significant group first**
+(`value = (value << 7) | (byte & 0x7F)`, which is what
+`LcfBinaryReader.ReadBer` does). A scanner that reads it little-endian parses
+159 of 806 maps and silently reports the wrong distribution -- the first scan
+said 2 looping maps, the corrected one says 4.
+
+### K-PROD-RM2K-COMMAND-COVERAGE — READY, measurement first
+
+The audit's own words are that `EventInterpreter` "supports a bounded command
+subset and skips unsupported commands diagnostically", and the runtime reports
+`page route stopped at unsupported command {id}`. What no one has measured is
+**which event command codes the collection actually uses and which of those the
+interpreter does not implement** -- the route-opcode distribution in
+`docs/MOVEMENT_COVERAGE.md` covers move routes only, not event commands. That
+measurement is the next step, with the repository's own parser (never a
+hand-written reader): it decides which commands are worth implementing, in
+demand order, instead of implementing whatever is next in the format's list.
+
+Two smaller gaps are already named and measured, so they can be taken first if
+the coverage run has to wait: **route commands 24 (begin jump, 3 instances), 25
+(end jump, 3) and 26 (lock facing, 1)** out of 2,733 custom-route commands, and
+the title screen's **Options** item, which the runtime still reports as
+`Options - not implemented yet`.
+
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
 `Rm2kBattleRunner` + `rm2k_troop_page_decoder` add multi-page troop decoding
