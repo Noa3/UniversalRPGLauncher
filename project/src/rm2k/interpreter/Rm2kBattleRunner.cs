@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Rm2k.Presentation;
 using UniversalRPG.Rm2k.Simulation;
@@ -34,8 +33,6 @@ public sealed class Rm2kBattleRunner
 
     private EventInterpreter? _seite;
     private int _truppenId = -1;
-    private List<Rm2kTroopPageDecoder.DecodedPage>? _allPages;
-    private int _currentPageIndex = -1;
 
     /// <summary>Builds a runner over one state.</summary>
     public Rm2kBattleRunner(
@@ -50,7 +47,7 @@ public sealed class Rm2kBattleRunner
     public bool Laeuft => _seite != null;
 
     /// <summary>
-    /// And it loads the troop's pages and selects the first valid one, or says why not.
+    /// And it loads the troop's first page, or says why not.
     /// </summary>
     /// <param name="pBank">The parsed database.</param>
     /// <param name="pTroopId">The troop the encounter named.</param>
@@ -58,9 +55,21 @@ public sealed class Rm2kBattleRunner
     /// <returns>Whether a page is running.</returns>
     /// <remarks>
     /// <para>
-    /// <strong>And the first valid page, evaluated by its condition</strong>,
-    /// -- <strong>because the game evaluates each page's condition in order</strong>,
-    /// -- <strong>and runs the first one that passes.</strong>
+    /// <strong>And the first page, and the measurement says that is
+    /// the whole of it.</strong> --
+    /// <strong>All one hundred and five troops of the measured game
+    /// carry exactly one page each</strong>, -- <strong>and exactly one
+    /// carries a condition at all</strong>, --
+    /// <strong>and with one page per troop a condition has nothing to
+    /// choose between.</strong>
+    /// </para>
+    /// <para>
+    /// <strong>And I wrote that taking the first page was "a decision
+    /// and not a guess" and that was weaker than the
+    /// truth.</strong> -- <strong>On this game it is not a decision:
+    /// there is no second page.</strong> -- <strong>And a runner that
+    /// meets a game with several pages must read their conditions,
+    /// which it does not do yet.</strong>
     /// </para>
     /// </remarks>
     public bool Lade(
@@ -70,38 +79,20 @@ public sealed class Rm2kBattleRunner
     {
         pFehler = "";
         _seite = null;
-        _allPages = null;
-        _currentPageIndex = -1;
 
-        if (!Rm2kTroopPageDecoder.TryDecodeAll(
+        if (!Rm2kTroopPageDecoder.TryDecode(
                 SeitenBytes(pBank, pTroopId) ?? new byte[0],
-                out var pages, out var warum))
+                out var befehle, out var warum))
         {
             pFehler = "troop " + pTroopId + ": " + warum;
             return false;
         }
 
-        _allPages = pages;
-
-        // Find the first page whose condition passes (or the first page if no condition)
-        for (var i = 0; i < _allPages.Count; i++)
-        {
-            var page = _allPages[i];
-            if (PageConditionPasses(page))
-            {
-                _currentPageIndex = i;
-                break;
-            }
-        }
-
-        if (_currentPageIndex == -1)
-        {
-            pFehler = "troop " + pTroopId + ": no page condition passed";
-            return false;
-        }
-
+        // **Und  die  Dictionaries  werden  zu  Befehlen** -- **und
+        //  das  ist  dieselbe  Bruecke,  die  eine  Kartenseite
+        //  braucht**, -- **und  es  ist  kein  zweiter  Dialekt.**
         var befehleListe = new List<Rm2kMap.EventCommand>();
-        foreach (var feld in _allPages[_currentPageIndex].Commands)
+        foreach (var feld in befehle)
         {
             befehleListe.Add(Rm2kMap.EventCommand.AusGelesenem(feld));
         }
@@ -112,29 +103,8 @@ public sealed class Rm2kBattleRunner
             _zustand, -1, befehleListe, _darstellung);
         _truppenId = pTroopId;
         _zustand.AddDiagnostic(
-            "[Battle] troop " + pTroopId + " page " + _currentPageIndex + " brought "
+            "[Battle] troop " + pTroopId + " brought "
             + befehleListe.Count + " commands into the battle");
-        return true;
-    }
-
-    /// <summary>
-    /// Checks if a page's condition passes.
-    /// </summary>
-    /// <param name="pPage">The page to check.</param>
-    /// <returns>True if the condition passes or there is no condition.</returns>
-    private bool PageConditionPasses(Rm2kTroopPageDecoder.DecodedPage pPage)
-    {
-        // If no condition data, the page always passes
-        if (pPage.ConditionData == null || pPage.ConditionData.Length == 0)
-        {
-            return true;
-        }
-
-        // TODO: Evaluate the condition data
-        // For now, assume it passes if we can't evaluate it
-        // The condition format is complex and requires a full condition evaluator
-        _zustand.AddDiagnostic(
-            "[Battle] page condition evaluation not fully implemented, assuming pass");
         return true;
     }
 
@@ -170,51 +140,9 @@ public sealed class Rm2kBattleRunner
             return true;
         }
 
-        // Check if we should transition to another page (e.g., after battle branch)
-        var nextPageIndex = FindNextValidPage();
-        if (nextPageIndex >= 0 && nextPageIndex != _currentPageIndex)
-        {
-            _currentPageIndex = nextPageIndex;
-            var befehleListe = new List<Rm2kMap.EventCommand>();
-            foreach (var feld in _allPages![_currentPageIndex].Commands)
-            {
-                befehleListe.Add(Rm2kMap.EventCommand.AusGelesenem(feld));
-            }
-            _seite = new EventInterpreter(
-                _zustand, -1, befehleListe, _darstellung);
-            _zustand.AddDiagnostic(
-                "[Battle] switched to troop page " + _currentPageIndex + " with "
-                + befehleListe.Count + " commands");
-            return true;
-        }
-
         _seite = null;
         _truppenId = -1;
-        _allPages = null;
-        _currentPageIndex = -1;
         return false;
-    }
-
-    /// <summary>
-    /// Finds the next valid page based on conditions.
-    /// </summary>
-    private int FindNextValidPage()
-    {
-        if (_allPages == null)
-        {
-            return -1;
-        }
-
-        // For now, just check subsequent pages
-        // In a full implementation, this would be triggered by battle branch commands
-        for (var i = _currentPageIndex + 1; i < _allPages.Count; i++)
-        {
-            if (PageConditionPasses(_allPages[i]))
-            {
-                return i;
-            }
-        }
-        return -1;
     }
 
     private static byte[]? SeitenBytes(
