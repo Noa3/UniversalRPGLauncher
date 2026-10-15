@@ -2988,10 +2988,21 @@ public sealed class RubyInterpreter
             return ergebnis;
         }
 
-        _diagnostics.Add(
-            $"{Describe(empfaenger)} has no method '{methode}' on this host; "
-            + "the interpreter does not guess, and a method that is not "
-            + "implemented is a fact about the host and not about the script");
+        // **And a nil from the host is an answer, and not a missing method.**
+        // Measured: this is where the report came from -- the site the earlier
+        // probe did not cover -- and the host HAD answered. `RPG::Cache` asked
+        // for an image size, the host answered nil because the file is not there
+        // (this game ships no Windowskins and takes its windowskin from the RTP),
+        // **and the message said the host has no such method.** A host declares
+        // the names it answers, so a declared name that answers nil is a nil.
+        var kenntAntwort = _host.KnownMethods.Contains(methode, StringComparer.Ordinal);
+        _diagnostics.Add(kenntAntwort
+            ? Describe(empfaenger) + "." + methode + " answered nil, and the name"
+                + " is one this host declares; a nil from a host is an answer and"
+                + " not a missing method"
+            : Describe(empfaenger) + " has no method '" + methode + "' on this host;"
+                + " the interpreter does not guess, and a method that is not"
+                + " implemented is a fact about the host and not about the script");
         return RubyValue.Nil;
     }
     /// <summary>
