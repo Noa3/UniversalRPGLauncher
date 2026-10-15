@@ -58,19 +58,38 @@ public partial class TestRm2kEventPagePoseParser : TestBase
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
-    internal static byte[] MapWithPages(params byte[][] pages)
+    internal static byte[] MapWithPages(params byte[][] pages) =>
+        MapWithPages(20, 15, 8, 8, pages);
+
+    /// <summary>
+    /// A map of a chosen size, with the event at a chosen tile.
+    /// </summary>
+    /// <param name="pWidth">The map width in tiles.</param>
+    /// <param name="pHeight">The map height in tiles.</param>
+    /// <param name="pEventX">The event's tile column.</param>
+    /// <param name="pEventY">The event's tile row.</param>
+    /// <param name="pages">The event's pages.</param>
+    /// <returns>The LMU bytes.</returns>
+    /// <remarks>
+    /// <strong>And a bigger map is what makes the engine's two-tile screen
+    /// margin testable at all</strong>: at twenty by fifteen the whole map is
+    /// one screen, so every event is in sight and the out-of-sight branch of the
+    /// player-seeking movement types would be unreachable.
+    /// </remarks>
+    internal static byte[] MapWithPages(
+        int pWidth, int pHeight, int pEventX, int pEventY, params byte[][] pages)
     {
         var mapEvent = TestRm2kParser.Struct(
-            TestRm2kParser.Chunk(0x02, TestRm2kParser.Ber(8)),
-            TestRm2kParser.Chunk(0x03, TestRm2kParser.Ber(8)),
+            TestRm2kParser.Chunk(0x02, TestRm2kParser.Ber(pEventX)),
+            TestRm2kParser.Chunk(0x03, TestRm2kParser.Ber(pEventY)),
             TestRm2kParser.Chunk(0x05, TestRm2kParser.StructArray(pages)));
         var bytes = new List<byte>();
         var header = Encoding.ASCII.GetBytes("LcfMapUnit");
         bytes.AddRange(TestRm2kParser.Ber(header.Length));
         bytes.AddRange(header);
-        bytes.AddRange(TestRm2kParser.Chunk(0x02, TestRm2kParser.Ber(20)));
-        bytes.AddRange(TestRm2kParser.Chunk(0x03, TestRm2kParser.Ber(15)));
-        var lower = new byte[20 * 15 * 2];
+        bytes.AddRange(TestRm2kParser.Chunk(0x02, TestRm2kParser.Ber(pWidth)));
+        bytes.AddRange(TestRm2kParser.Chunk(0x03, TestRm2kParser.Ber(pHeight)));
+        var lower = new byte[pWidth * pHeight * 2];
         var upper = new byte[lower.Length];
         for (var index = 0; index < lower.Length; index += 2)
         {

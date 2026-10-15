@@ -70,15 +70,15 @@ they really paint. TestRgssRuntime 6/6, TestPluginDetection 25/25,
 TestLauncherUiSafety 26/26. What remains is rendering, input, audio and save
 for the three engines, which is the real "XP/VX/VX Ace complete" work.
 
-### K-PROD-RM2K-MOVE-TYPES — DONE for mode 1 (commit d474a91); modes 2..5 READY
+### K-PROD-RM2K-MOVE-TYPES — DONE (all six types; mode 1 in d474a91, modes 2..5 in this commit)
 
-Priority 1: RM2000/2003 runtime correctness. **Mode 1 (random) is implemented
-and canonically green**: `./scripts/validate.sh` exited 0 with **All 2917 tests
-passed** and the pass marker, 368 suite records and no failing test method
-(log `scratch/urpg-canonical-3.log`). It covers the largest measured gap --
-1,787 pages of the collection -- against mode 4 toward player 272, mode 3
-horizontal 19, mode 2 vertical 15 and mode 5 away 3. **Modes 2..5 still report
-`not implemented`** and are the next slice; their reference is pinned below.
+Priority 1: RM2000/2003 runtime correctness. **All six autonomous movement types
+are implemented**: mode 1 (random) canonically green in `d474a91` (`All 2917
+tests passed`), and modes 2..5 -- the two cycles, towards and away -- in this
+commit, with `./scripts/validate.sh` evidence in `SESSION_STATE.md`. Measured
+demand over the collection: random 1,787 pages, toward player 272, custom 224,
+horizontal 19, vertical 15, away 3. **No movement type reports
+`not implemented` any more**; only a mode outside the format's range does.
 
 Reference (EasyRPG Player, read from source and kept in scratch):
 `game_event.cpp` `MoveTypeRandom` / `MoveTypeCycle` / `MoveTypeCycleLeftRight` /
@@ -91,6 +91,29 @@ Reference (EasyRPG Player, read from source and kept in scratch):
 `Rand::GetRandomNumber` being **inclusive** on both ends (so `Rand(0,9)` is ten
 buckets). `game_character.cpp` sha256
 `56c1283aa344e0c81222cb64218581da22c11b7843a9b9780b3ee8696b88e008`.
+
+**And the engine's direction order is now pinned from the Player's own enum**,
+not from a table: `Up = 0, Right, Down, Left, UpRight, DownRight, DownLeft,
+UpLeft`, so `ReverseDir` is `(dir + 2) % 4` for the four cardinals and the
+vertical cycle starts at `Down` and the horizontal one at `Right` -- which is
+what `MoveTypeCycleUpDown`/`MoveTypeCycleLeftRight` call with. The earlier
+attempt to re-read liblcf's generated header failed (0 bytes, twice), and this
+replaces it with a source that was actually read.
+
+**And the two-tile sight margin is 32 pixels, not 64.** `MoveTypeTowardsOrAway
+Player` uses `constexpr int offset = TILE_SIZE * 2`, and `TILE_SIZE` is 16, so
+the earlier note in this card (and in `SESSION_STATE.md`) that said ±64 was
+wrong and is corrected here.
+
+**And the map position unit is a sixteenth of a pixel**, which is what made the
+first implementation of the sight test wrong: `Rm2kStepBudget.ScreenTileSize` is
+**256**, the engine's internal sub-pixel tile, not the 16 pixel screen tile. A
+sight test that multiplied a tile index by 256 put every event thousands of
+pixels off the screen, so modes 4 and 5 both took the random out-of-sight branch
+and walked the same path. The fix uses `Rm2kMapCamera.TileSize` for the event's
+screen position and the camera's own `PositionX`/`OffsetPixelsX` for the
+viewport -- and the measurement that found it was a tick-by-tick print of the
+event's path, not a guess.
 
 Implemented: `Rm2kEventRandom` (a deterministic, seedable stream of its own, so
 a test can predict a walk and a save can continue one), `EventRandom` on the
@@ -109,25 +132,31 @@ measuring the autonomous walk instead of their own subject and now say
 the `CreateRouteGame` fixture); the mode-policy test now asserts that random
 never executes the page's embedded route, for mode 1 and for an absent field.
 
-What modes 2..5 still need, all measured and none of it guessed: the cycles
-(`vertical` starts `Down`, `horizontal` starts `Right`) return while the stop
-count is short, take `default` unless the current direction is already its
-reverse, and try `ReverseDir(move_dir)` once more when the first attempt failed
-and the count has passed the maximum by twenty; toward/away test whether the
-event is in sight -- its screen position within the viewport plus 64 pixels --
-and then draw from zero to nine, where zero keeps the direction, one takes a
-random one and the rest takes the direction to (or away from) the player. The
-camera helpers (`Rm2kMapCamera.PositionX/OffsetPixelsX`) and the
-toward-player direction rule already exist for the route command.
+Focused evidence for the movement types, all re-run after the last edit:
 
-Focused evidence for mode 1: TestRm2kActiveEventGraphic **77/77** (five new
-tests: the drawn first delay, the four moving branches with the redrawn delay,
-the wait branch, a refused step restoring the pose, and no "not implemented"
-report), TestRm2kEventMoveRoute 7/7, TestRm2kMoveRoute 10/10,
-TestRm2kRuntimeRendering 19/19, TestRm2kActiveEventPage 8/8,
-TestRm2kRealFixtures 12/12, TestRealRm2kRuntimeRun 6/6,
-TestRm2kSpielstandAmEchtenSpiel 2/2, TestRm2kPictureSave 3/3,
-TestRm2kEventPagePoseParser 1/1.
+* `TestRm2kActiveEventGraphic` **81/81** -- the container that holds the
+  movement-type tests, the page-route-activation tests, the diagonal and
+  towards-route tests and the event-animation tests. Nine new tests cover the
+  six types: the drawn first delay and the five branches of the random type,
+  the vertical and the horizontal cycle walking their line **and turning round
+  at a wall** (the way out is walled off by clearing the source and destination
+  edge bits, as the engine's own passability works), towards closing the gap and
+  away opening it over a run of pure player-rule draws, the out-of-sight branch
+  on a map bigger than one screen, and that no implemented mode reports itself
+  as missing while an unknown mode still does.
+* The fixture grew an honest overload: `MapWithPages(width, height, eventX,
+  eventY, pages)`, because at the old twenty by fifteen the whole map is one
+  screen and the out-of-sight branch would have been unreachable.
+* `TestRm2kEventMoveRoute` 7/7, `TestRm2kMoveRoute` 10/10,
+  `TestRm2kMoveRouteDecoder` 14/14, `TestRm2kRuntimeRendering` 19/19,
+  `TestRm2kRealFixtures` 12/12, `TestRealRm2kRuntimeRun` 6/6,
+  `TestRm2kSpielstandAmEchtenSpiel` 2/2, `TestRm2kPictureSave` 3/3,
+  `TestRm2kEventPagePoseParser` 1/1.
+* **Two mutations were caught, one of them by the real defect.** The away type
+  was wrong in the tree and the test said so by itself ("mode 5 opens it: 16
+  tiles become 14"); and raising the cycle's second-attempt threshold from
+  `+20` to `+2000` fails exactly the two wall-turn tests and nothing else
+  (79/81, reverted to 81/81).
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 

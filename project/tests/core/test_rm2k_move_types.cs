@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
+using UniversalRPG.Plugins;
 using UniversalRPG.Rm2k;
+using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Rm2k.Simulation;
 
 namespace UniversalRPG.Tests.Core;
@@ -258,5 +262,217 @@ public partial class TestRm2kActiveEventGraphic
             }
         }
         return (-1, -1);
+    }
+
+    /// <summary>
+    /// Starts an authored map of a chosen size with its event on a chosen tile.
+    /// </summary>
+    /// <param name="pWidth">The map width in tiles.</param>
+    /// <param name="pHeight">The map height in tiles.</param>
+    /// <param name="pEventX">The event's tile column.</param>
+    /// <param name="pEventY">The event's tile row.</param>
+    /// <param name="pages">The event's pages.</param>
+    private void StartSizedRouteMap(
+        int pWidth, int pHeight, int pEventX, int pEventY, params byte[][] pages)
+    {
+        _host.Dispose();
+        File.WriteAllBytes(Path.Combine(_root, "Map0001.lmu"),
+            TestRm2kEventPagePoseParser.MapWithPages(pWidth, pHeight, pEventX, pEventY, pages));
+        _host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = _host.Start(new PluginGameInfo
+        {
+            GameDirectory = _root,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        });
+        AssertTrue(started.Success, started.Error?.Message ?? "The authored map starts");
+        _runtime = (Rm2kEngineRuntime)_host.Runtime!;
+        _event = ((List<Rm2kMap.Event>)typeof(Rm2kEngineRuntime)
+            .GetField("_mapEvents", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(_runtime)!).Single();
+        for (var index = 0; index < _runtime.Simulation.PassabilityMasks.Count; index++)
+        {
+            _runtime.Simulation.PassabilityMasks[index] = 15;
+        }
+    }
+
+    /// <summary>The walkable distance from the event to the hero, in tiles.</summary>
+    /// <returns>The Manhattan distance.</returns>
+    private int DistanceToHero() =>
+        Math.Abs(_event.X - _runtime.Simulation.MapX)
+            + Math.Abs(_event.Y - _runtime.Simulation.MapY);
+
+    /// <summary>
+    /// And a vertical cycle walks its line, and turns round at a wall.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Measured in <c>Game_Event::MoveTypeCycle</c>:</strong> the page
+    /// takes the default direction -- down for the vertical cycle -- and keeps
+    /// the reverse only once it is already walking it, which is how it turns
+    /// round. A wall is answered by a second attempt the other way, once the
+    /// stop count has passed the maximum by twenty.
+    /// </remarks>
+    public void Test_VerticalCycleWalksItsLineAndTurnsRoundAtAWall()
+    {
+        StartAuthoredRouteMap(RoutePage(2, MoveFrequency, false));
+        RouteTicks(60);
+        AssertEq(_event.X, 8, "A vertical cycle never leaves its column");
+        AssertTrue(_event.Y > 8,
+            $"and it walks down while the way is open, and it is at {_event.Y}");
+        AssertTrue(!_runtime.Simulation.Diagnostics.Any(pLine =>
+                pLine.Contains("movement type 2 is not implemented")),
+            "and it is implemented, so it does not complain");
+
+        // The way down is walled off: no down exit on the event's tile, no up
+        // entry on the one below it.
+        StartAuthoredRouteMap(RoutePage(2, MoveFrequency, false));
+        _runtime.Simulation.PassabilityMasks[8 + 8 * 20] &= unchecked((byte)~1);
+        _runtime.Simulation.PassabilityMasks[8 + 9 * 20] &= unchecked((byte)~8);
+        RouteTicks(60);
+        AssertEq(_event.X, 8, "and a walled column still holds its column");
+        AssertTrue(_event.Y < 8,
+            $"and the second attempt walks the other way, and it is at {_event.Y}");
+    }
+
+    /// <summary>
+    /// And a horizontal cycle walks its line the same way.
+    /// </summary>
+    public void Test_HorizontalCycleWalksItsLineAndTurnsRoundAtAWall()
+    {
+        StartAuthoredRouteMap(RoutePage(3, MoveFrequency, false));
+        RouteTicks(60);
+        AssertEq(_event.Y, 8, "A horizontal cycle never leaves its row");
+        AssertTrue(_event.X > 8,
+            $"and it walks right while the way is open, and it is at {_event.X}");
+
+        StartAuthoredRouteMap(RoutePage(3, MoveFrequency, false));
+        _runtime.Simulation.PassabilityMasks[8 + 8 * 20] &= unchecked((byte)~4);
+        _runtime.Simulation.PassabilityMasks[9 + 8 * 20] &= unchecked((byte)~2);
+        RouteTicks(60);
+        AssertEq(_event.Y, 8, "and a walled row still holds its row");
+        AssertTrue(_event.X < 8,
+            $"and the second attempt walks the other way, and it is at {_event.X}");
+    }
+
+    /// <summary>
+    /// And the player-seeking types walk closer, or farther, over a run of pure
+    /// player-rule draws.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the distance is the assertion, not the direction</strong>,
+    /// because the rule depends on where the hero happens to stand: what the
+    /// engine promises is that a towards page closes the gap and an away page
+    /// opens it. The seeds are chosen so every one of the first four draws takes
+    /// the player rule and none of them keeps a direction or draws at random.
+    /// </remarks>
+    public void Test_TowardsPlayerWalksCloserAndAwayWalksFarther()
+    {
+        foreach (var (mode, closer) in new[] { (4, true), (5, false) })
+        {
+            StartAuthoredRouteMap(RoutePage(mode, MoveFrequency, false));
+            var seed = SeedWithActionDrawsAbove(4, 2);
+            AssertTrue(seed > 0,
+                "a seed whose first four draws all take the player rule exists");
+            _runtime.EventRandom.Seed(seed);
+            var before = DistanceToHero();
+            Console.WriteLine($"mode {mode}: parsed page MoveType={_event.Pages[0].MoveType},"
+                + $" hero at ({_runtime.Simulation.MapX}, {_runtime.Simulation.MapY}),"
+                + $" event at ({_event.X}, {_event.Y}), distance {before}");
+            RouteTicks(40);
+            var after = DistanceToHero();
+            Console.WriteLine($"mode {mode}: event at ({_event.X}, {_event.Y}),"
+                + $" distance {after}, direction {_event.Direction}");
+            if (closer)
+            {
+                AssertTrue(after < before,
+                    $"mode {mode} closes the gap: {before} tiles become {after}");
+            }
+            else
+            {
+                AssertTrue(after > before,
+                    $"mode {mode} opens it: {before} tiles become {after}");
+            }
+            AssertTrue(!_runtime.Simulation.Diagnostics.Any(pLine =>
+                    pLine.Contains($"movement type {mode} is not implemented")),
+                $"and mode {mode} is implemented, so it does not complain");
+        }
+    }
+
+    /// <summary>
+    /// And a player-seeking page that is off the screen takes a random
+    /// direction instead of looking for the hero.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Measured in <c>MoveTypeTowardsOrAwayPlayer</c>:</strong> the
+    /// engine first asks whether the event lies within the screen plus a margin
+    /// of two tiles. This map is bigger than one screen on purpose: at twenty by
+    /// fifteen every event is in sight, and the branch would be unreachable.
+    /// The first draw of the rule is the direction, so a seed whose first draw
+    /// is zero walks up -- while the player rule would have walked left, which
+    /// is what the second assertion rules out.
+    /// </remarks>
+    public void Test_PlayerSeekingPageOutOfSightTakesARandomDirection()
+    {
+        StartSizedRouteMap(60, 40, 30, 20, RoutePage(4, MoveFrequency, false));
+        AssertTrue(_event.X * Rm2kMapCamera.TileSize > 320 + 64,
+            "the event stands beyond the screen's margin");
+        AssertTrue(_runtime.Simulation.MapX * Rm2kMapCamera.TileSize < 320,
+            "and the camera cannot follow it, because the hero is on the first screen");
+
+        var seed = SeedWithFirstDraw(0);
+        AssertTrue(seed > 0, "a seed whose first draw is zero exists");
+        _runtime.EventRandom.Seed(seed);
+        for (var guard = 0; guard < 4 && _event.MaxStopCount == 0; guard++)
+        {
+            RouteTicks(1);
+        }
+        var y = _event.Y;
+        RouteTicks(_event.MaxStopCount + 1);
+        AssertEq(_event.Y, y - 1, "and the out-of-sight draw of zero walks up");
+        AssertEq(_event.X, 30,
+            "and not the direction the player rule would have taken");
+    }
+
+    /// <summary>Finds a seed whose first draw from zero to three is a value.</summary>
+    /// <param name="pWanted">The draw to look for.</param>
+    /// <returns>The seed.</returns>
+    private static int SeedWithFirstDraw(int pWanted)
+    {
+        for (var seed = 1; seed < 200000; seed++)
+        {
+            var probe = new Rm2kEventRandom();
+            probe.Seed(seed);
+            if (probe.NextInclusive(0, 3) == pWanted)
+            {
+                return seed;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Finds a seed whose first draws all stay above a bound.
+    /// </summary>
+    /// <param name="pCount">How many draws to check.</param>
+    /// <param name="pMinimum">The lowest draw that is still the player rule.</param>
+    /// <returns>The seed.</returns>
+    private static int SeedWithActionDrawsAbove(int pCount, int pMinimum)
+    {
+        for (var seed = 1; seed < 500000; seed++)
+        {
+            var probe = new Rm2kEventRandom();
+            probe.Seed(seed);
+            var fits = true;
+            for (var draw = 0; draw < pCount && fits; draw++)
+            {
+                fits = probe.NextInclusive(0, 9) >= pMinimum;
+            }
+            if (fits)
+            {
+                return seed;
+            }
+        }
+        return -1;
     }
 }

@@ -967,18 +967,204 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         var started = TryBeginDirectedStep(pEvent, direction, false);
         if (!started)
         {
-            if (_eventScheduler.HasBlockingInterpreter
-                || pEvent.StopCount >= pEvent.MaxStopCount + 60)
+            ApplyAutonomousFailure(pEvent, previousDirection, previousFacing);
+        }
+        pEvent.MaxStopCount = MaxStopCountForRandom(pRoute.MoveFrequency);
+    }
+
+    /// <summary>
+    /// And a refused autonomous step either clears the stop count or puts the
+    /// pose back, which is the engine's own choice.
+    /// </summary>
+    /// <param name="pEvent">The event whose step was refused.</param>
+    /// <param name="pPreviousDirection">Its direction before the attempt.</param>
+    /// <param name="pPreviousFacing">Its facing before the attempt.</param>
+    /// <remarks>
+    /// <strong>Measured in every <c>MoveType*</c> of <c>Game_Event</c>:</strong>
+    /// the engine clears the stop count when the page waits for a foreground
+    /// interpreter or when the count has passed the maximum by sixty, and
+    /// otherwise restores the direction and -- unless the facing is locked --
+    /// the facing.
+    /// </remarks>
+    private void ApplyAutonomousFailure(
+        Rm2kMap.Event pEvent, byte pPreviousDirection, byte? pPreviousFacing)
+    {
+        if (_eventScheduler.HasBlockingInterpreter
+            || pEvent.StopCount >= pEvent.MaxStopCount + 60)
+        {
+            pEvent.StopCount = 0;
+        }
+        else
+        {
+            pEvent.Direction = pPreviousDirection;
+            pEvent.FacingDirection = pPreviousFacing;
+        }
+    }
+
+    /// <summary>The liblcf direction a vertical cycle starts with: down.</summary>
+    private const int LiblcfDown = 2;
+
+    /// <summary>The liblcf direction a horizontal cycle starts with: right.</summary>
+    private const int LiblcfRight = 1;
+
+    /// <summary>
+    /// And a page whose movement type cycles walks one line and back.
+    /// </summary>
+    /// <param name="pEvent">The event that walks.</param>
+    /// <param name="pRoute">Its page route, which carries speed and frequency.</param>
+    /// <param name="pDefaultDirection">
+    /// Down for the vertical cycle, right for the horizontal one.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <strong>Measured in <c>Game_Event::MoveTypeCycle</c>:</strong> the page
+    /// takes the default direction unless it is already walking the reverse of
+    /// it, in which case it keeps going -- which is how the cycle turns around
+    /// at the end of its line. A refused step is tried once more the other way,
+    /// but only after the stop count has passed the maximum by twenty.
+    /// </para>
+    /// <para>
+    /// <strong>And the delay afterwards is the plain step table</strong>, not
+    /// the random type's drawn one.
+    /// </para>
+    /// </remarks>
+    private void UpdateEventSelfMovementCycle(
+        Rm2kMap.Event pEvent, Rm2kMoveRouteState pRoute, int pDefaultDirection)
+    {
+        var previousDirection = pEvent.Direction;
+        var previousFacing = pEvent.FacingDirection;
+        var reverse = (pDefaultDirection + 2) % 4;
+        var current = Rm2kMoveRoute.LiblcfFromMovementDirection(previousDirection);
+        if (current < 0)
+        {
+            current = Rm2kMoveRoute.LiblcfFromFacingDirection(
+                previousFacing ?? previousDirection);
+        }
+        var direction = current == reverse ? reverse : pDefaultDirection;
+        var started = TryBeginDirectedStep(pEvent, direction, false);
+        if (!started && pEvent.StopCount >= pEvent.MaxStopCount + 20)
+        {
+            // **And once more the other way**, which is what turns the cycle
+            // around at a wall.
+            started = TryBeginDirectedStep(pEvent, (direction + 2) % 4, false);
+        }
+        if (!started)
+        {
+            ApplyAutonomousFailure(pEvent, previousDirection, previousFacing);
+        }
+        pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForStep(pRoute.MoveFrequency);
+    }
+
+    /// <summary>
+    /// And a page whose movement type seeks the player, or flees from him.
+    /// </summary>
+    /// <param name="pEvent">The event that walks.</param>
+    /// <param name="pRoute">Its page route, which carries speed and frequency.</param>
+    /// <param name="pTowards">Whether the page moves towards the player.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>Measured in <c>MoveTypeTowardsOrAwayPlayer</c>:</strong> the
+    /// engine first asks whether the event is on the screen, within a margin of
+    /// two tiles. Out of sight it takes a random direction. In sight it draws
+    /// from zero to nine: zero keeps the direction it has, one takes a random
+    /// one, and the other eight take the direction to the player -- or away
+    /// from him, which is the same rule with the sign turned round.
+    /// </para>
+    /// <para>
+    /// <strong>And the delay afterwards is the plain step table.</strong>
+    /// </para>
+    /// </remarks>
+    private void UpdateEventSelfMovementTowardsOrAway(
+        Rm2kMap.Event pEvent, Rm2kMoveRouteState pRoute, bool pTowards)
+    {
+        var previousDirection = pEvent.Direction;
+        var previousFacing = pEvent.FacingDirection;
+        int direction;
+        if (!IsEventOnScreen(pEvent))
+        {
+            direction = EventRandom.NextInclusive(0, 3);
+        }
+        else
+        {
+            var draw = EventRandom.NextInclusive(0, 9);
+            if (draw == 0)
             {
-                pEvent.StopCount = 0;
+                direction = Rm2kMoveRoute.LiblcfFromMovementDirection(previousDirection);
+                if (direction < 0)
+                {
+                    direction = Rm2kMoveRoute.LiblcfFromFacingDirection(
+                        previousFacing ?? previousDirection);
+                }
+            }
+            else if (draw == 1)
+            {
+                direction = EventRandom.NextInclusive(0, 3);
             }
             else
             {
-                pEvent.Direction = previousDirection;
-                pEvent.FacingDirection = previousFacing;
+                direction = DirectionToOrFromHero(pEvent, pTowards);
             }
         }
-        pEvent.MaxStopCount = MaxStopCountForRandom(pRoute.MoveFrequency);
+        var started = TryBeginDirectedStep(pEvent, direction, false);
+        if (!started)
+        {
+            ApplyAutonomousFailure(pEvent, previousDirection, previousFacing);
+        }
+        pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForStep(pRoute.MoveFrequency);
+    }
+
+    /// <summary>
+    /// The direction from an event to the hero, or away from him.
+    /// </summary>
+    /// <param name="pEvent">The event that looks.</param>
+    /// <param name="pTowards">Whether to look towards him.</param>
+    /// <returns>The liblcf direction.</returns>
+    /// <remarks>
+    /// <strong>Pinned <c>GetDirectionToCharacter</c> and
+    /// <c>GetDirectionAwayCharacter</c>:</strong> the dominant axis decides,
+    /// the vertical wins a tie, and a coincidence reads as down -- up when the
+    /// sign is turned round. The route command <c>MoveTowardsHero</c> uses the
+    /// same rule, and this is that rule in one place.
+    /// </remarks>
+    private int DirectionToOrFromHero(Rm2kMap.Event pEvent, bool pTowards)
+    {
+        var sx = (long)pEvent.X - Simulation.MapX;
+        var sy = (long)pEvent.Y - Simulation.MapY;
+        if (Math.Abs(sx) > Math.Abs(sy))
+        {
+            // Right is one and left is three in the engine's order.
+            return pTowards ? (sx > 0 ? 3 : 1) : (sx > 0 ? 1 : 3);
+        }
+        // Up is zero and down is two.
+        return pTowards ? (sy > 0 ? 0 : 2) : (sy > 0 ? 2 : 0);
+    }
+
+    /// <summary>
+    /// Whether an event is on the screen, within the engine's two-tile margin.
+    /// </summary>
+    /// <param name="pEvent">The event to place.</param>
+    /// <returns>Whether it is in sight.</returns>
+    /// <remarks>
+    /// <strong>Measured in <c>MoveTypeTowardsOrAwayPlayer</c>:</strong> the
+    /// event's screen position must lie between minus the margin and the screen
+    /// size plus the margin, on both axes, where the margin is two tiles. The
+    /// camera arithmetic is the simulation's own, so this needs no painted
+    /// frame and no renderer.
+    /// </remarks>
+    private bool IsEventOnScreen(Rm2kMap.Event pEvent)
+    {
+        // **The map position unit is a sixteenth of a pixel**, so a tile is
+        // sixteen pixels on the screen while the camera's own offset is stored
+        // in that smaller unit and divided back down.
+        const int margin = Rm2kMapCamera.TileSize * 2;
+        var screenX = pEvent.X * Rm2kMapCamera.TileSize
+            - Rm2kMapCamera.OffsetPixelsX(Rm2kMapCamera.PositionX(
+                Simulation.MapX, Math.Max(1, Simulation.MapWidth), ScreenWidth));
+        var screenY = pEvent.Y * Rm2kMapCamera.TileSize
+            - Rm2kMapCamera.OffsetPixelsY(Rm2kMapCamera.PositionY(
+                Simulation.MapY, Math.Max(1, Simulation.MapHeight), ScreenHeight));
+        return screenX >= -margin && screenX <= ScreenWidth + margin
+            && screenY >= -margin && screenY <= ScreenHeight + margin;
     }
 
     // Shared static-terrain checks for each cardinal leg of either path.
@@ -3317,7 +3503,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 forced.MoveSpeed = route.MoveSpeed;
                 forced.MoveFrequency = route.MoveFrequency;
             }
-            if (page.MoveType != 0 && page.MoveType != 1 && page.MoveType != 6)
+            if (page.MoveType < 0 || page.MoveType > 6)
                 Simulation.AddDiagnostic($"RM2K event {mapEvent.Id} autonomous movement type {page.MoveType} is not implemented.");
         }
     }
@@ -3352,6 +3538,17 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         if (page != null && page.MoveType == 1 && canMove && pEvent.StopCount >= pEvent.MaxStopCount)
         {
             UpdateEventSelfMovementRandom(pEvent, route);
+        }
+        // **And the two cycles and the two player-seeking types sit behind the
+        // same gate**, because the engine's switch runs exactly one of them.
+        if (page != null && page.MoveType is 2 or 3 && canMove && pEvent.StopCount >= pEvent.MaxStopCount)
+        {
+            UpdateEventSelfMovementCycle(pEvent, route,
+                page.MoveType == 2 ? LiblcfDown : LiblcfRight);
+        }
+        if (page != null && page.MoveType is 4 or 5 && canMove && pEvent.StopCount >= pEvent.MaxStopCount)
+        {
+            UpdateEventSelfMovementTowardsOrAway(pEvent, route, page.MoveType == 4);
         }
         if (page != null && page.MoveType == 6 && canMove && route.Active && pEvent.StopCount >= pEvent.MaxStopCount)
         {

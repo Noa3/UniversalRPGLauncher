@@ -11,13 +11,17 @@ earlier green run; the known shutdown noise (3 CanvasItem RIDs, 6 ObjectDB
 instances) is unchanged. The previous green run of the same day was **2912**
 tests after 073a096.
 
-### K-PROD-RM2K-MOVE-TYPES — mode 1 DONE, modes 2..5 next
+### K-PROD-RM2K-MOVE-TYPES — DONE (all six types)
 
-Mode 1 (random, 1,787 measured pages) walks the engine's own table; see the
-KANBAN card for the pinned reference and the focused evidence. Modes 2 (vertical
-15), 3 (horizontal 19), 4 (toward player 272) and 5 (away 3) still report
-`not implemented`; the reference for all four is recorded in the card, so the
-next session starts from measurement rather than from guessing.
+Modes 1..5 walk the engine's own rules and no page reports `not implemented`
+any more; an unknown mode outside the format's range still does. See the KANBAN
+card for the pinned reference (including the Player's direction enum, which
+replaces the failed liblcf attempt), the corrected two-tile sight margin (32
+pixels, not 64), the sub-pixel unit that made the first sight test wrong, and
+the focused evidence with its two caught mutations. Measured demand: random
+1,787 pages, toward 272, custom 224, horizontal 19, vertical 15, away 3.
+**Still open in this area:** mode 6 (custom, 224 pages) exists, and the route
+commands 24..41 remain unsupported.
 
 ### Pushed 2026-10-15: ten commits on main (0e2cf76..d474a91)
 
