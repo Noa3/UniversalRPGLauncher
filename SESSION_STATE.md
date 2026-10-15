@@ -1,58 +1,54 @@
 ## Current card
 
-### K-PROD-RM2K-SAVE-PICTURE-CONTINUITY — DONE (commit 4f14979)
+### Pushed 2026-10-15: four commits on main (0e2cf76..1b6e2a3)
 
-Origin and stale-movement regressions pass 2/2; the malformed-timing
-regression that was left unrun at the pause now exists, was observed RED in
-the full validator, and passes 3/3 with production validation in
-`Rm2kSimulationSaveCodec.Validate` (total frames, remaining frames and a
-stored origin for every moving picture, refused before any mutation).
+- `4f14979` fix(rm2k): picture movement timing validation + the slot extension
+  that listing, the title's Continue and Continue itself all read.
+- `58588bd` docs: checkpoint.
+- `e05f239` feat(mz): battle pages wired, troop-page crash fixed, the plugin
+  host's merged title contract pinned by exact assertions instead of
+  substrings.
+- `9fe9b5b` feat(ui): launcher library rework (search, sort, identity
+  selection, collapsed settings, honest scaling).
+- `fd9d203` docs(agents): a game's own scripts may run while that game runs
+  (owner decision, 2026-10-15).
+- `1b6e2a3` feat(rgss): XP/VX/VX Ace offer a script runtime; capability list,
+  description, launcher state and failure reporting made honest.
 
-### K-PROD-RM2K-SAVE-SLOT-LISTING — DONE (commit 4f14979)
+### Verified on the exact committed states
 
-Root cause found by driving a real game's title: `SaveSlots`, `HasAnySaveFile`
-and `ContinueGame` searched `*.lsd` while the codec writes `<slot>.json`, so a
-game that had saved listed no slot, offered no Continue, and Continue loaded
-nothing. All three now read `Rm2kSimulationSaveCodec.SlotExtension`; observed
-RED (empty slot list, `[New Game, Options]`, Continue fell through to Options)
-and GREEN (`Slots: slotA`, `[New Game, Continue, Options]`, gold 4242 restored).
+dotnet build 0 errors. TestRm2kPictureSave 3/3,
+TestRm2kSpielstandAmEchtenSpiel 2/2, TestMzBattleProcessing 5/5 (4/5 with the
+null restored, so the regression catches the defect), TestMvParallelPageDepth
+1/1, TestMzSaveRuntime 2/2, TestMzSaveStore 5/5, TestMzSaveStoreSafety 13/13,
+TestMzMenuAndPlugins 4/4, TestMzPluginHost 4/4, TestMzCommandWindow 3/3,
+TestMzEchtesSpielStartet 12/12, TestRgssRuntime 6/6, TestPluginDetection
+25/25, TestLauncherUiSafety 26/26, TestMvEchtesSpielStartet 6/6,
+TestRealRm2kRuntimeRun 6/6, TestRealMzRuntimeRun 10/10, TestRealMvRuntimeRun
+3/3, TestGameLibraryScan 8/8.
 
-### K-PROD-MV-TROOP-PAGE-CRASH — fix in tree, NOT committed
+### Open: the RM2K battle multi-page slice is NOT committed
 
-`MzBattleRunner.Lade` passed `null` to `MzTroopPageDecoder.TryDecode` while
-holding the parsed database; the decoder dereferenced it, so every battle
-frame threw a NullReferenceException. Reproduced with the full stack (the test
-framework now reports type and stack), fixed at the call site plus a null
-refusal in the decoder. `TestMvParallelPageDepth` GREEN 1/1, page reaches
-index 440; all seven MZ suites still green. Left uncommitted because the file
-set it belongs to (MzEngineRuntime battle wiring, MzBattleRunner,
-MzTroopPageDecoder, MzZugfolge) is another slice's unfinished work.
+`Rm2kBattleRunner` and `rm2k_troop_page_decoder` (both modified, uncommitted)
+add multi-page troop decoding, and they are half-migrated: `PageConditionPasses`
+carries `TODO: Evaluate the condition data` and returns true for every
+non-empty condition, so "the first page whose condition passes" is still the
+first page while the diagnostic claims otherwise; `FindNextValidPage` runs the
+next page when the previous one ends, which no measurement says the engine
+does. Not committed, not reverted. Unblock condition: a condition evaluator
+measured against the engine, and a test that a page the engine would not
+select is not run.
 
-### K-PROD-RGSS-RUBY — BLOCKED, owner decision required
+### The launcher does not offer a picture it cannot show
 
-Untracked `XpEngineRuntime`/`VxEngineRuntime`/`VxAceEngineRuntime` plus the
-`BuiltInEnginePlugins` rewrite declare `Runtime|SaveLoad|Debugging` and
-"Complete RPG Maker XP/VX/VX Ace runtime with Ruby execution". Measured facts:
-`Initialize` executes the game's own `Data/Scripts.rxdata` through
-`RubyLexer`/`RubyParser`/`RubyInterpreter`; the three files are identical
-copies apart from names; **zero** occurrences of a framebuffer or pixel buffer
-in any of them; the "built-in classes" are empty `module X end` stubs for
-things the game's scripts subclass; every failure is swallowed by an empty
-`catch`. `TestRgssRuntime` (3/6) and `TestPluginDetection` (24/25) fail
-because the repository's own detection-only policy tests contradict this
-state. This is the one place in the tree that executes foreign Ruby, which
-`AGENTS.md:26` forbids and which the recorded owner override covered for
-sandboxed plugin JavaScript, not for RGSS. Not touched, not reverted, not
-committed; a question to the owner is open.
+XP, VX and VX Ace are selectable and reported as `Experimental` (the state
+existed and was unused) because they declare Runtime without Rendering. RM2K,
+2003, MV and MZ now declare Rendering, which they really do (measured: RM2K
+320x240, MZ 672x864 with 310 colours, MV 768x576). Wolf declares no rendering
+and therefore also reports Experimental, which is honest for a plain-data
+slice. If the owner wants these engines launchable anyway, the gate in
+`Main.cs` (line ~735) is the one place that decides it.
 
-### K-PROD-GUI-LIBRARY — VERIFY (GUI checks pass; commit blocked by MZ WIP)
-
-26/26 GUI tests and 8/8 scan tests pass, and the rendered OpenGL probe passes
-320/375/768/1100/1440px with typed search, Ctrl+F, empty and preferences
-states. The launcher slice **cannot be committed on its own**: a stash-verified
-partial build proved `Main.cs` needs `MzEngineRuntime.ChoiceIndex`'s setter,
-which only exists in the uncommitted MZ WIP. It stays in the tree until that
-slice lands.
 
 
 ### Historical Save/Load UI checkpoint — previously marked DONE

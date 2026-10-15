@@ -2,7 +2,7 @@
 
 User acceptance also explicitly includes complete XP and VX Ace runtimes.
 
-### K-PROD-GUI-LIBRARY — VERIFY (GUI green; commit blocked by uncommitted MZ WIP)
+### K-PROD-GUI-LIBRARY — DONE (commit 9fe9b5b)
 
 Implemented local title/engine/path search, stable sorted row identity and
 selection preservation, local sort without rescans, result counts and empty
@@ -13,10 +13,6 @@ Scaling controls now synchronize with the actual game view; the old unused
 manual-factor editor is replaced by truthful fit-to-window information.
 GUI tests26/26, scan8/8; rendered OpenGL probe passes320/375/768/1100/1440px,
 typed filtering, Ctrl+F, empty and preferences states. New labels in all7 locales.
-A stash-verified partial build proved the slice cannot be committed alone:
-`Main.cs` uses `MzEngineRuntime.ChoiceIndex`'s setter, which exists only in the
-uncommitted MZ WIP. It stays in the tree until that slice lands, and no
-compatibility/sandbox claim is made from it.
 
 Launcher/main-menu rework: clear primary launch action, local search/sort,
 stable row-to-game identity, usable empty/filter states, collapsible preferences
@@ -48,25 +44,42 @@ GREEN (`Slots: slotA`, `[New Game, Continue, Options]`, gold 4242 restored).
 Original LSD files are deliberately not listed until a reader for them exists,
 because advertising a slot the runtime cannot load is a lie.
 
-### K-PROD-MV-TROOP-PAGE-CRASH — fix in tree, NOT committed
+### K-PROD-MZ-BATTLE-PAGES — DONE (commit e05f239)
 
 `MzBattleRunner.Lade` passed `null` to `MzTroopPageDecoder.TryDecode` while
 holding the parsed database; the decoder dereferenced it on its first line, so
-every battle frame threw a NullReferenceException. The test framework now
-reports exception type and stack, which located it exactly. Fixed at the call
-site plus a null refusal in the decoder. `TestMvParallelPageDepth` GREEN 1/1
-reaching index 440; all seven MZ suites still green. Uncommitted because the
-file set it belongs to is another slice's unfinished work.
+every battle frame threw a NullReferenceException, and the reason was
+discarded. Fixed at the call site plus a null refusal in the decoder, with a
+regression that was verified to catch the defect by restoring the null (4/5).
+`MzEngineRuntime.BattleProblem` now names why a page could not be read and
+deliberately does not end the battle, because ending it moved
+`TestMvParallelPageDepth` from index 440 to 445 -- a transfer-command question
+that needs its own measurement.
 
-### K-PROD-RGSS-RUBY — BLOCKED (owner decision required)
+### K-PROD-RGSS-SCRIPT-RUNTIME — DONE (commits fd9d203, 1b6e2a3)
 
-See `SESSION_STATE.md`. Untracked XP/VX/VX Ace runtimes execute the game's own
-`Data/Scripts.rxdata`, declare `Runtime|SaveLoad|Debugging` and "complete
-runtime", contain no rendering at all, stub the classes their scripts subclass
-as empty modules and swallow every failure. `TestRgssRuntime` 3/6 and
-`TestPluginDetection` 24/25 fail against the repository's own detection-only
-policy. Not touched, not reverted, not committed; the owner decides the
-direction.
+Owner decision 2026-10-15: a game's own scripts may run while that game runs,
+so XP, VX and VX Ace offer a runtime instead of sitting behind a detection-only
+gate. The gate was replaced with honest claims, not with silence: the three
+declare Detection|Parsing|Runtime and no Rendering/SaveLoad/Debugging, their
+descriptions say they run the project's own scripts and cannot show a game,
+the launcher reports the previously unused `Experimental` state with a reason,
+and every failing script, stub, update and scene is recorded by name and reason
+instead of an empty catch. RM2K/2003, MV and MZ now declare Rendering because
+they really paint. TestRgssRuntime 6/6, TestPluginDetection 25/25,
+TestLauncherUiSafety 26/26. What remains is rendering, input, audio and save
+for the three engines, which is the real "XP/VX/VX Ace complete" work.
+
+### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
+
+`Rm2kBattleRunner` + `rm2k_troop_page_decoder` add multi-page troop decoding
+and are not committed: `PageConditionPasses` carries `TODO: Evaluate the
+condition data` and returns true for every non-empty condition, so the
+"first page whose condition passes" is still the first page while the
+diagnostic claims otherwise, and `FindNextValidPage` runs the next page when
+the previous ends, which no measurement says the engine does. Unblock: a
+condition evaluator measured against the engine, plus a test that a page the
+engine would not select is never run.
 
 ### K-PROD-LIBRARY-SCAN-FEEDBACK — DONE (responsive bounded scanning)
 
