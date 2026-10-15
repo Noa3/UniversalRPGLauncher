@@ -156,13 +156,13 @@ public sealed class VxEngineRuntime : IEngineRuntime
         // host -- and `load_data` inside the game then reached the wrong one:
         // measured, `Game_Map#setup` read `Data/Map001.rxdata` and got nil, so
         // `$game_map.width` was nil and the map was never read.
-        // **And the chain is data, then graphics, then the game's own host.**
-        // Measured: `Game_Player#center` reads `Graphics.width` and
-        // `Graphics.height`, and the module was an empty stub -- so both were
-        // nil and `moveto` reported *"undefined operator '+' for a Nil and a
-        // Nil"*. **And that was the last step between that game and its first
-        // frame.**
-        _datenHost.Fallback = new RgssGrafikHost { Fallback = _scriptHost };
+        // **And the chain is the data host and then the game's own host.**
+        // `Graphics` used to be answered by a host here, and that was a second
+        // source of truth for one module: measured, the reader resolves
+        // `Graphics.width` on the module itself, so the host never fired and
+        // the empty stub was what answered nil. **And one module has one
+        // place.**
+        _datenHost.Fallback = _scriptHost;
         _interpreter = new RubyInterpreter(_datenHost);
 
         // Define built-in RGSS classes before running scripts
@@ -189,7 +189,49 @@ public sealed class VxEngineRuntime : IEngineRuntime
         {
             // Core modules
             "module RGSS\nend",
-            "module Graphics\nend",
+            // **And `Graphics` is not an empty stub, because a game reads it
+            // before it draws anything.** Measured: `Game_Player#center` clamps
+            // the player against `Graphics.width` and `Graphics.height`, and an
+            // empty module answers nil -- so `moveto` reported *"undefined
+            // operator '+' for a Nil and a Nil"*, and that was the last step
+            // between that game and its first frame.
+            //
+            // **And the state lives in globals and not in module instance
+            // variables, and that is measured:** a module with `@breite` and
+            // `def self.breite; @breite; end` answers nil in this reader, so a
+            // module that kept its numbers that way would report a picture of
+            // no size. **And the numbers are the engine's own:** RGSS 1.0 opens
+            // 640x480, and the game's `Game.ini` carries no size at all --
+            // measured, it has `Library`, `Scripts`, `Title` and the RTP names.
+            //
+            // **And this does not draw, and it says so.** `update` counts frames
+            // and returns, because there is no surface yet; the transitions and
+            // the fades are empty for the same reason. **And the counter is
+            // real**, because `Graphics.frame_count` is what a game times itself
+            // with.
+            "module Graphics\n"
+                + "  $graphics_width = 640\n"
+                + "  $graphics_height = 480\n"
+                + "  $graphics_frames = 0\n"
+                + "  $graphics_rate = 40\n"
+                + "  $graphics_brightness = 255\n"
+                + "  def self.width; $graphics_width; end\n"
+                + "  def self.height; $graphics_height; end\n"
+                + "  def self.frame_count; $graphics_frames; end\n"
+                + "  def self.frame_rate; $graphics_rate; end\n"
+                + "  def self.frame_rate=(v); $graphics_rate = v; end\n"
+                + "  def self.brightness; $graphics_brightness; end\n"
+                + "  def self.brightness=(v); $graphics_brightness = v; end\n"
+                + "  def self.update; $graphics_frames = $graphics_frames + 1; end\n"
+                + "  def self.wait(n); $graphics_frames = $graphics_frames + n; end\n"
+                + "  def self.resize_screen(w, h);\n"
+                + "    $graphics_width = w; $graphics_height = h; end\n"
+                + "  def self.freeze; end\n"
+                + "  def self.transition; end\n"
+                + "  def self.transition=(v); end\n"
+                + "  def self.fadein(t); end\n"
+                + "  def self.fadeout(t); end\n"
+                + "end",
             "module Input\nend",
             "module Font\nend",
             "module Color\nend",
