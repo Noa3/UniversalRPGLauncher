@@ -183,7 +183,13 @@ public sealed class XpEngineRuntime : IEngineRuntime
         // host -- and `load_data` inside the game then reached the wrong one:
         // measured, `Game_Map#setup` read `Data/Map001.rxdata` and got nil, so
         // `$game_map.width` was nil and the map was never read.
-        _datenHost.Fallback = _scriptHost;
+        // **And the chain is data, then graphics, then the game's own host.**
+        // Measured: `Game_Player#center` reads `Graphics.width` and
+        // `Graphics.height`, and the module was an empty stub -- so both were
+        // nil and `moveto` reported *"undefined operator '+' for a Nil and a
+        // Nil"*. **And that was the last step between that game and its first
+        // frame.**
+        _datenHost.Fallback = new RgssGrafikHost { Fallback = _scriptHost };
         _interpreter = new RubyInterpreter(_datenHost);
 
         // Define built-in RGSS classes before running scripts

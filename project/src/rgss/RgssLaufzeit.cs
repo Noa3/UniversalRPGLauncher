@@ -191,6 +191,14 @@ public sealed class RgssLaufzeit
         Messen("raw_event1_x", "load_data(\"Data/Map001.rxdata\").events[1].x");
         Messen("raw_event1_y", "load_data(\"Data/Map001.rxdata\").events[1].y");
 
+        // **Und die Bildflaeche, weil der letzte Fehler dort sitzt.**
+        // `Game_Player#center` liest `Graphics.width` und `Graphics.height`, --
+        // **und wenn sie hier nil sind, ist der Host nicht in der Kette.**
+        Messen("graphics_width", "Graphics.width");
+        Messen("graphics_height", "Graphics.height");
+        Messen("graphics_nil", "Graphics.nil?");
+        Messen("graphics_name", "Graphics.class.name");
+
         // **Und der Host zaehlt mit.** Die Karte liest sich ausserhalb des
         // Spiels einwandfrei -- `RPG::Map` mit elf Feldern und `@width` darin --
         // **und im Spiel ist `$game_map.width` nil**, also ist die Frage, ob

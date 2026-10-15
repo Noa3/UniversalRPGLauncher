@@ -82,6 +82,23 @@ public partial class TestRgssDataFields : TestBase
                 + " nil** -- and a reader that invented a value here would"
                 + " be inventing game state");
 
+        // **Und die Frage, die den Grafik-Slice entscheidet:** traegt der
+        // Leser ein Modul mit eigenen Instanzvariablen und `def self.x`?
+        // **Denn `Graphics.width` ist genau das**, und ein Modul ohne
+        // Instanzvariablen braucht eine andere Form.
+        interpreter.RunProgram(new RubyParser(new RubyLexer(
+            "module GrafikProbe\n"
+            + "  @breite = 640\n"
+            + "  def self.breite; @breite; end\n"
+            + "end\n"
+            + "$probe = GrafikProbe.breite\n")
+            .Tokenize()).ParseProgram());
+        System.Console.WriteLine(
+            "Modul-Instanzvariable: "
+            + (interpreter.Global("$probe").IsNil
+                ? "nil"
+                : interpreter.Global("$probe").Integer.ToString()));
+
         // **Und `sprintf` ist der Satz, mit dem jedes XP-Skript seine
         // Kartendatei nennt:** `load_data(sprintf("Data/Map%03d.rxdata",
         // @map_id))`, gemessen in MicroQuest's eigenem `Game_Map#setup`.

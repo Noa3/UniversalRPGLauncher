@@ -2762,6 +2762,24 @@ public sealed class RubyInterpreter
                 return typAntwort;
             }
 
+            // **And the host is asked for a type receiver as well.**
+            //
+            // **And that was the defect, measured:** `Graphics` is a type the
+            // built-in stubs create, -- **and `Graphics.width` ran into the
+            // diagnostic *"Graphics has no method 'width' on this host"* right
+            // here and returned nil without ever asking the host.** Measured:
+            // the host received no call at all for `width`, while
+            // `Game_Player#center` clamped `Graphics.width` and
+            // `Graphics.height` against nil and `moveto` reported *"undefined
+            // operator '+' for a Nil and a Nil"*. **And the built-in modules are
+            // empty**, so the type does not have the method -- **and the host is
+            // where the engine keeps its own methods.**
+            var hostAntwort = _host.CallMethod(empfaenger, methode, argumente);
+            if (hostAntwort != null)
+            {
+                return hostAntwort;
+            }
+
             // **Und der Aufruf endet hier, und nicht bei
             // `EigeneMethode`.** Ruby 1.8.1's `rb_call` geht in die
             // Singleton-Kette, **und die endet nach `Module`, und
