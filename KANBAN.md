@@ -334,6 +334,59 @@ numbers normalised**, not one refused animation; the first number is the message
 count. The second number is the one that matters, and it is zero. A normalising
 probe that drops the numbers can make a count look like a value.
 
+### K-PROD-RM2K-SCREEN-EFFECTS — READY, measured and fully referenced
+
+**Measured: five screen effects are state only.** `project/src/rm2k/rendering/`
+and `project/app/ui/` contain **zero** references to `TintRed`, `FlashRed`,
+`ShakeStrength`, `WeatherType`, `IsTintActive`, `IsFlashActive` or
+`IsShakeActive`. The commands are accepted, stored in `PresentationState`, counted
+down by its `Tick`, saved by the codec -- and nothing paints them. A game that
+tints its screen shows an untinted screen.
+
+Demand over the owned collection (all-route distribution, so these are the
+command counts the games actually write):
+
+| Command | Instances |
+|---|---:|
+| `11030` TintScreen | 2,924 |
+| `11040` FlashScreen | 395 |
+| `11050` ShakeScreen | 129 |
+| `11060` PanScreen | 48 |
+| `11070` WeatherEffects | 1 |
+
+And it is not a rare path: Lisa issues a tint from a parallel page **150 times in
+300 frames**, which is a screen that is meant to change colour continuously.
+
+Reference, read from EasyRPG Player master (`src/game_screen.h`, `src/bitmap.cpp`):
+
+* **The command's 0..200 becomes a tone with 128 as neutral**:
+  `Game_Screen::GetTone()` is `Tone(red * 128 / 100, green * 128 / 100, blue *
+  128 / 100, sat * 128 / 100)`. So a command value of 100 is the no-op, 0 is
+  black and 200 is 256 before clamping -- and the tint range this repository now
+  enforces (0..200) is the same range this conversion assumes.
+* `Bitmap::ToneBlit` (line 898) returns to a plain blit when
+  `tone == Tone(128,128,128,128)`, and splits the work into
+  `apply_sat = tone.gray != 128` and `apply_tone = red/green/blue != 128`.
+* **Saturation** (`saturation_tone`, line 860) is a Y'CbCr scaling, "Algorithm
+  from OpenPDN": `lum = (7471 * b + 38470 * g + 19595 * r) >> 16`, then each
+  channel `clamp((lum * 1024 + (c - lum) * sat) >> 10)` where
+  `sat = gray > 128 ? 1024 + (gray - 128) * 16 : gray * 8`. When both apply, the
+  saturation runs **first**, then the colour.
+* **Colour** (`color_tone`, line 883) is a hard-light lookup:
+  `hard_light.table[tone.c][channel]`, with the table built at line 841 as
+  `i <= 128 ? (2 * i * j) / 255 : 255 - 2 * (255 - i) * (255 - j) / 255`, clamped
+  to 0..255. It is a 256x256 byte table, built once.
+
+Where it belongs: the RM2K frame is composed into a `Rm2kPixelBuffer` of 320x240
+in the runtime's frame path (around the `_renderedRenderer` stages), so the tone
+is a pass over the finished frame -- after the sprites -- and it must be an exact
+no-op at the neutral tone so that no existing rendering test changes its pixels.
+`Shake` is a camera offset rather than a pixel effect (`Rm2kMapCamera`), and
+`Pan` is a camera position, so those two are a separate, smaller slice.
+
+Order of work: **tint first** (2,924 instances, and the state side is already
+correct and tested), then flash, then shake, then pan, then weather.
+
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
 `Rm2kBattleRunner` + `rm2k_troop_page_decoder` add multi-page troop decoding
