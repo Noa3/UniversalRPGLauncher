@@ -1072,6 +1072,13 @@ public sealed class MzBranchFacts
             SelfSwitches = SelfSwitches,
             Gold = Gold,
             PartyMembers = PartyMembers,
+            // **And the actors, because `Facts` is replaced on every map load.** Without
+            // this, `$gameActors` was filled at start-up and thrown away the moment a map was
+            // entered: a save then wrote an empty `actors` entry and a branch asking an
+            // actor's level found nobody, no matter how well the file had been read. Measured
+            // on the real project -- the loader reported nine entries and eight actors, and
+            // the running game reported zero.
+            Actors = Actors,
             Items = Items,
             KnownItems = KnownItems,
             Screen = Screen,

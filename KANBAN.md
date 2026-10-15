@@ -786,7 +786,28 @@ it.
 lines that match German markers and do not read as English, and subtract the same set from the
 base. Zero is the target for any new work.
 
-### K-PROD-MZ-GAME-ACTORS — READY (Actors.json is read for the player's sprite and nothing else)
+### K-PROD-MZ-FACTS-COPY — READY (WithCharacters drops 38 of the facts' properties)
+
+**And this is what hid the actor loading.** `MzEngineRuntime` replaces its facts on **every map
+load**: `Facts = Facts.WithCharacters(figuren, Facts.Player)`. The copy carries 18 properties and
+**not** the other 38, measured by listing the class's public properties and subtracting the ones
+the copy assigns. `Actors` was one of them, so `$gameActors` was filled at start-up and thrown
+away the moment a map was entered -- the loader reported nine entries and eight actors while the
+running game reported zero, which is what the save test caught.
+
+**The rest of the list, measured:** `AnimationAsked`, `AnimationGestartet`, `AnimationLaengen`,
+`Anzeige`, `Begegnungszaehler`, `BilderReserviert`, `ChoiceOptions`, `ChoicePending`,
+`EigenesFenster`, `EventId`, `ExpOrders`, `HpOrders`, `ItemsAreKnown`, `Kampf`, `LetzterLaden`,
+`LevelOrders`, `Map`, `MapId`, `MaxItems`, `MoviePlaying`, `MpOrders`, `Namen`, `NamensText`,
+`NamensZiel`, `ParamOrders`, `Party`, `Profile`, `Recovered`, `Rollen`, `Spiel`, `Spitznamen`,
+`States`, `Szene`, `Taktischpunkte`, `TimerFrames`, `TimerWorking` -- `Actors` is fixed and the
+others are not, because each one needs a decision rather than a sweep: `Map` and `MapId` are set
+by the map load that calls this, `Party` is the party object whose gold is carried separately,
+and the order lists and the choice state are per-page state that a copy must not lose by
+accident. The card asks for that decision field by field, with a test per field that shows the
+value surviving a map load -- which is the shape of evidence the actors needed too.
+
+### K-PROD-MZ-GAME-ACTORS — DONE (2026-10-15, $gameActors is built from Actors.json)
 
 **And this is the gap the save work walked into.** `E:/RPGMakerGames/CamelliaCoronation-Win` has
 **nine** actors in `data/Actors.json`, and the runtime reads that file -- but only to take actor
@@ -795,15 +816,23 @@ and walk clock. Nothing is ever put into `$gameActors`, so `Facts.Actors.Anzahl`
 a real project. Two consequences, both measured: a save writes an empty `actors` entry, and a
 branch or a menu that asks an actor's level, class, skills or equipment finds no actor at all.
 
-**What the load needs from it:** `Game_Actors.prototype.actor` builds a `Game_Actor` per id --
-`_actorId`, `_name`, `_nickname`, `_classId`, `_level` (from `initialLevel`, or one), `_exp`,
-`_skills` and `_equips` from the database's `Actor` entry. Then the save restore that is already
-implemented has something to restore in a real game, and the actor checks in events have
-something to read.
+**And it is done, and it took two fixes rather than one.** `LoadGameActors` now builds every
+actor from the file the way `Game_Actor.prototype.setup` does -- name, nickname, class,
+`initialLevel` as the level, `initExp`'s zero at the class's own index, `initSkills`' class
+learnings up to that level (read from `Classes.json`, which `MzBattleRunner` already parses) and
+`initEquips`' own `equips` array, which holds item ids rather than objects. An entry with no id
+is skipped rather than given one, because the engine's array is sparse and a hole is an actor
+that does not exist.
 
-**And the test that proves the save path today places an actor itself**, with the reason written
-next to it, because the real project offers none: the file-to-reader-to-apply path is covered,
-the database-to-`$gameActors` path is not.
+**And the second fix is why the first one looked broken:** the loader reported nine entries and
+eight actors while the running game reported zero, because `Facts` is replaced on every map load
+and `WithCharacters` did not carry `Actors`. That is now `K-PROD-MZ-FACTS-COPY`, together with the
+other 37 properties that copy drops.
+
+**Evidence:** the real project's own values, asserted in the runtime suite -- actor 1 is Camellia
+with class 7, level **21** from `initialLevel`, non-empty skills from the class's learnings and
+the database's equipment `[2,0,0,3,0]` -- and the save/load message now reads
+`8 actor(s) restored` where it read `0` before.
 
 ### K-PROD-MZ-SAVE-RESTORE — DONE (2026-10-15, the screen, the actors and the gold all come back)
 

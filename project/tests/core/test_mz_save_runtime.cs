@@ -79,16 +79,32 @@ public partial class TestMzSaveRuntime : TestBase
             // **And the screen and an actor**, because a load that skipped them would bring
             // the game back with a clear screen and a hero at level one.
             lauf.Facts.Screen.StarteTon(new int[] { 30, -20, 0, 0 }, 0);
-            // **And an actor**: the project has nine in `Actors.json`, but the runtime does
-            // not load them into `$gameActors` -- it reads that file only for the player's
-            // graphic and walk clock. So the test places an actor itself, to walk the whole
-            // way file -> reader -> apply; the gap itself is named in K-PROD-MZ-GAME-ACTORS.
-            var heldId = 7;
-            lauf.Facts.Actors.Setze(heldId, new MzActor
-            {
-                Id = heldId, Name = "Testheld", ClassId = 1, Level = 17,
-            });
+            // **And the actors come from the project's own `Actors.json`**, which is the
+            // point: before this the file was read for actor 1's sprite and walk clock alone
+            // and `$gameActors` stayed empty, so a save wrote an empty `actors` entry. These
+            // values are the project's, not the test's -- Camellia, class 7, initialLevel 21,
+            // and the database's own equipment -- and a loader that invented them would fail
+            // here.
+            var heldId = 1;
             var held = lauf.Facts.Actors.Actor(heldId);
+            AssertTrue(held != null,
+                "**the real project's actor 1 is in $gameActors** -- and the runtime reported "
+                    + $"{lauf.Facts.Actors.Anzahl} actor(s)");
+            AssertTrue(lauf.Facts.Actors.Anzahl > 1,
+                "**and not only one**: the file has nine entries and eight of them are actors");
+            if (held != null)
+            {
+                AssertEq(held.Name, "Camellia", "**with the name from the database**");
+                AssertEq(held.ClassId, 7, "and the class from the database");
+                AssertEq(held.Level, 21,
+                    "**and `initialLevel` as the level**, not one -- the engine's own setup "
+                        + "reads it from the entry");
+                AssertTrue(held.SkillAnzahl > 0,
+                    "**and the class's learnings up to that level**, which is `initSkills`");
+                AssertTrue(held.Equips().Count > 0 && held.Equips()[0]?.Id == 2,
+                    "**and the database's own equipment**, which is `initEquips`");
+            }
+            if (held != null) held.Level = 17;
             var (x, y) = (lauf.PlayerX, lauf.PlayerY);
             lauf.Facts.Player.StandAt(lauf.CurrentMapId, x + 1, y, 6);
 

@@ -7301,6 +7301,115 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
             Facts.AnimationLaengen[paar.Key] = paar.Value;
         }
     }
+    /// <summary>
+    /// Fills <c>$gameActors</c> from <c>Actors.json</c>, the way the engine builds its actors.
+    /// </summary>
+    /// <param name="pActors">The parsed <c>Actors.json</c>.</param>
+    /// <remarks>
+    /// <strong>And this is <c>Game_Actor.prototype.setup</c>, field for field.</strong> The
+    /// name, the nickname and the class come from the entry; the level is
+    /// <c>initialLevel</c> and not one; <c>initExp</c> puts a zero at the class's own index;
+    /// <c>initSkills</c> takes the class's learnings up to that level; and <c>initEquips</c>
+    /// takes the entry's own <c>equips</c> array, which holds item ids rather than objects.
+    ///
+    /// <strong>And an entry with no id is skipped rather than given one.</strong> The engine's
+    /// array is sparse and indexed by id, so a hole is an actor that does not exist -- inventing
+    /// an id for it would put a character in the game that the database never named.
+    /// </remarks>
+    private void LoadGameActors(MzDataFile pActors)
+    {
+        var classes = LoadClasses();
+        var geladen = 0;
+        foreach (var entry in pActors.Root.Items)
+        {
+            var id = entry.Member("id")?.IntOr(0) ?? 0;
+            if (id <= 0) continue;
+            var classId = entry.Member("classId")?.IntOr(0) ?? 0;
+            var level = entry.Member("initialLevel")?.IntOr(1) ?? 1;
+            var actor = new MzActor
+            {
+                Id = id,
+                Name = entry.Member("name")?.StringOr("") ?? "",
+                Nickname = entry.Member("nickname")?.StringOr("") ?? "",
+                ClassId = classId,
+                Level = level,
+            };
+
+            // `initExp`: one zero, at the class's own index.
+            for (var index = 0; index < classId; index++)
+            {
+                actor.Exp.Add(0);
+            }
+            actor.Exp.Add(0);
+
+            // `initSkills`: the class's learnings whose level the actor has reached. The
+            // engine's own order is the file's, and a learning above the level is not known.
+            var skills = new List<int>();
+            if (classes.TryGetValue(classId, out var klasse))
+            {
+                var learnings = klasse.Member("learnings");
+                if (learnings?.Kind == MzKind.Array)
+                {
+                    foreach (var learning in learnings.Items)
+                    {
+                        var atLevel = learning.Member("level")?.IntOr(0) ?? 0;
+                        var skillId = learning.Member("skillId")?.IntOr(0) ?? 0;
+                        if (atLevel <= level && skillId > 0) skills.Add(skillId);
+                    }
+                }
+            }
+            actor.SetSkills(skills);
+
+            // `initEquips`: the entry's own array, which is item ids.
+            var equips = entry.Member("equips");
+            if (equips?.Kind == MzKind.Array)
+            {
+                for (var slot = 0; slot < equips.Items.Count; slot++)
+                {
+                    var itemId = equips.Items[slot].IntOr(0);
+                    actor.SetzeSlot(slot, itemId > 0
+                        ? new MzAusrüstung { Id = itemId }
+                        : null);
+                }
+            }
+
+            Facts.Actors.Setze(id, actor);
+            geladen++;
+        }
+    }
+
+    /// <summary>
+    /// The classes of the game, by class id, from <c>Classes.json</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a missing or broken file is an empty lookup, not a failed start.</strong>
+    /// The classes are needed for an actor's learned skills; a game whose class file cannot be
+    /// read still has actors, names, levels and equipment, and losing all of that because one
+    /// file is unreadable would be the wrong trade.
+    /// </remarks>
+    private Dictionary<int, MzValue> LoadClasses()
+    {
+        var result = new Dictionary<int, MzValue>();
+        var pfad = Path.Combine(_game.GameDirectory, "data", "Classes.json");
+        if (!File.Exists(pfad)) return result;
+        try
+        {
+            var classes = MzDataFile.Read("data/Classes.json", File.ReadAllBytes(pfad));
+            foreach (var entry in classes.Root.Items)
+            {
+                var id = entry.Member("id")?.IntOr(0) ?? 0;
+                if (id > 0) result[id] = entry;
+            }
+        }
+        catch (MzDataException)
+        {
+            // **And a class file that will not parse is an empty lookup, not a failed
+            // start**: the actors still have their names, levels and equipment, and losing
+            // those because one file is unreadable would be the wrong trade.
+        }
+        return result;
+    }
+
     private void ReadCharacters()
     {
         var dateien = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -7368,6 +7477,14 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
             TilesetProblem = ausnahme.Message;
             return;
         }
+
+        // **And every actor in the file goes into `$gameActors`, not only actor 1.** The
+        // engine's `Game_Actors.prototype.actor` builds a `Game_Actor` lazily out of
+        // `$dataActors`, and `Game_Actor.prototype.setup` fills it from that entry. Before
+        // this the file was read for actor 1's sprite and walk clock alone, so `Facts.Actors`
+        // stayed empty for a real project: a save wrote an empty `actors` entry, and a branch
+        // asking an actor's level, class, skills or equipment found nobody.
+        LoadGameActors(actors);
 
         MzValue? erste = null;
         foreach (var darsteller in actors.Root.Items)

@@ -1,5 +1,20 @@
 ## Current card
 
+### K-PROD-MZ-GAME-ACTORS DONE (2026-10-15): $gameActors is built from Actors.json
+
+`LoadGameActors` builds every actor the way `Game_Actor.prototype.setup` does: name, nickname,
+class, `initialLevel` as the level, `initExp`'s zero at the class's index, `initSkills`' class
+learnings up to that level (from `Classes.json`) and `initEquips`' own `equips` array of item
+ids. The real project now reports eight actors where it reported none, actor 1 is Camellia with
+class 7 and level 21, and the save/load message reads `8 actor(s) restored`.
+
+**And the loading looked broken until a second defect was found:** `MzEngineRuntime` replaces its
+facts on every map load (`Facts = Facts.WithCharacters(...)`), and that copy did not carry
+`Actors` -- so the actors were filled at start-up and dropped the moment a map was entered.
+Measured by listing the class's public properties and subtracting the ones the copy assigns:
+**38 are dropped**, `Actors` is fixed, and the rest are named field by field in
+`K-PROD-MZ-FACTS-COPY` because each needs a decision rather than a sweep.
+
 ### And a flaky fixture was found and fixed (2026-10-15)
 
 One canonical run came back **red** with a single failure:
