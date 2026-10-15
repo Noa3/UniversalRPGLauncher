@@ -66,7 +66,13 @@ public abstract partial class TestBase : RefCounted
 		}
 		catch (Exception exception)
 		{
-			Fail($"Unhandled exception: {exception.InnerException?.Message ?? exception.Message}");
+			// **And a crash has to name where it happened.** A null
+			// reference reported as one line of prose costs an hour of
+			// guessing which line threw it; the type and the stack name the
+			// file and the line, and the message alone does not.
+			var inner = exception.InnerException ?? exception;
+			Fail($"Unhandled exception: {inner.GetType().Name}: {inner.Message}"
+				+ $"{System.Environment.NewLine}{inner.StackTrace}");
 		}
 		finally
 		{

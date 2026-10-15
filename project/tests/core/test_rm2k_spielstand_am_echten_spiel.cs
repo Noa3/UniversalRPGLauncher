@@ -224,4 +224,95 @@ public partial class TestRm2kSpielstandAmEchtenSpiel : TestBase
         AssertTrue(slotFehler.Length > 0,
             "**and the refusal is in words**");
     }
+
+    /// <summary>
+    /// And the title offers Continue exactly when it has a slot it can load.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the title, the slot list and the Continue command all
+    /// looked for a different file extension than the codec writes</strong>,
+    /// -- so a game that saved could offer no Continue and no slots at all.
+    /// </para>
+    /// <para>
+    /// <strong>A command that loads nothing is a lie</strong>, and so is a
+    /// slot list that hides a slot the runtime can really read. This test
+    /// drives the real title of a real game through both states.
+    /// </para>
+    /// </remarks>
+    public void Test_TitelBietetContinueNurMitEinemErreichbarenSlot()
+    {
+        if (!File.Exists(Spiel + "/RPG_RT.ldb"))
+        {
+            return;
+        }
+
+        // **And the save directory is this test's own**, -- because the
+        // original game belongs to the user and a test does not write into
+        // it, and because a leftover slot from an earlier run would make the
+        // first assertion true for the wrong reason.
+        var ordner = ProjectSettings.GlobalizePath(
+            "user://rm2k-titel-" + OS.GetProcessId());
+        DirAccess.MakeDirRecursiveAbsolute(ordner);
+        foreach (var alt in Directory.GetFiles(ordner))
+        {
+            File.Delete(alt);
+        }
+
+        using var host = new EnginePluginHost(
+            BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var start = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Spiel,
+            EngineId = EnginePluginIds.RpgMaker2000,
+            Generation = "rm2k",
+            DetectorScore = 3,
+        });
+        if (!start.Success)
+        {
+            AssertTrue(false, "**and the game starts**");
+            return;
+        }
+
+        var lauf = (Rm2kEngineRuntime)host.Runtime!;
+        lauf.SaveDirectory = ordner;
+
+        AssertTrue(lauf.PaintTitle(), "**and the title paints**");
+        Console.WriteLine("Titel ohne Slot: ["
+            + string.Join(", ", lauf.TitleCommands) + "]");
+        AssertTrue(!lauf.TitleCommands.Contains("Continue"),
+            "**and a title with no reachable slot offers no Continue**");
+
+        lauf.Simulation.Gold = 4242;
+        var geschrieben = lauf.TrySaveSlot("slotA", out var hostFehler);
+        Console.WriteLine("Titel-Slot geschrieben: " + geschrieben
+            + " -> " + hostFehler);
+        AssertTrue(geschrieben, hostFehler);
+        AssertEq(1, lauf.SaveSlots().Count,
+            "**and the slot list holds the slot that was just written**");
+
+        AssertTrue(lauf.PaintTitle(), "**and the title paints again**");
+        Console.WriteLine("Titel mit Slot: ["
+            + string.Join(", ", lauf.TitleCommands) + "]");
+        AssertTrue(lauf.TitleCommands.Contains("Continue"),
+            "**and now the title offers Continue**");
+
+        var ziel = lauf.TitleCommands.ToList().IndexOf("Continue");
+        lauf.MoveTitleCursor(ziel - lauf.TitleIndex);
+        AssertEq("Continue", lauf.TitleSelection,
+            "**and the cursor stands on Continue**");
+
+        lauf.Simulation.Gold = 0;
+        AssertTrue(lauf.ChooseTitleCommand(),
+            "**and choosing Continue runs**");
+        Console.WriteLine("nach Continue: Gold " + lauf.Simulation.Gold
+            + "  Titel sichtbar " + lauf.TitleVisible
+            + "  Problem: " + lauf.TitleProblem);
+        AssertTrue(!lauf.TitleVisible,
+            "**and the title screen is behind the player**");
+        AssertEq(4242, lauf.Simulation.Gold,
+            "**and the gold is the slot's own again**");
+        AssertEq("", lauf.TitleProblem,
+            "**and continuing reported no problem**");
+    }
 }

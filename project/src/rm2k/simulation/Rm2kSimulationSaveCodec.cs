@@ -12,6 +12,20 @@ namespace UniversalRPG.Rm2k.Simulation;
 public static class Rm2kSimulationSaveCodec
 {
     public const int MaxPayloadBytes = 1024 * 1024;
+
+    /// <summary>
+    /// And the extension a runtime-owned slot really has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is not the original LSD format</strong>, so it is not
+    /// the original LSD extension either. The writer, the reader and every
+    /// caller that lists or searches slots read this one constant, because a
+    /// listing that guesses the extension hides every slot the game wrote.
+    /// </para>
+    /// </remarks>
+    public const string SlotExtension = ".json";
+
     private const int CurrentVersion = 1;
 
     public sealed class SaveData
@@ -303,6 +317,9 @@ public static class Rm2kSimulationSaveCodec
         public int EffectMode { get; set; }
         public int EffectPower { get; set; }
         public bool IsMoving { get; set; }
+        // Nullable for version-1 snapshots written before movement origins were stored.
+        public int? MoveStartX { get; set; }
+        public int? MoveStartY { get; set; }
         public int MoveTargetX { get; set; }
         public int MoveTargetY { get; set; }
         public int MoveFramesLeft { get; set; }
@@ -552,7 +569,7 @@ public static class Rm2kSimulationSaveCodec
             var root = Path.GetFullPath(pSaveDirectory);
             var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                 + Path.DirectorySeparatorChar;
-            var candidate = Path.GetFullPath(Path.Combine(root, pSlot + ".json"));
+            var candidate = Path.GetFullPath(Path.Combine(root, pSlot + SlotExtension));
             if (!candidate.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 pError = "Save slot escapes the save directory.";
@@ -724,6 +741,8 @@ public static class Rm2kSimulationSaveCodec
                     EffectMode = pic.EffectMode,
                     EffectPower = pic.EffectPower,
                     IsMoving = isMoving,
+                    MoveStartX = move?.StartX,
+                    MoveStartY = move?.StartY,
                     MoveTargetX = move?.TargetX ?? 0,
                     MoveTargetY = move?.TargetY ?? 0,
                     MoveFramesLeft = move?.FramesLeft ?? 0,
@@ -866,6 +885,26 @@ public static class Rm2kSimulationSaveCodec
                     throw new ArgumentException("Save picture effect mode outside bounds.");
                 if (pic.Saturation < 0 || pic.Saturation > PresentationState.MaxSaturationPercent)
                     throw new ArgumentException("Save picture saturation outside bounds.");
+                if (pic.IsMoving)
+                {
+                    // **A movement that claims to be running has to carry a
+                    // coherent timeline**, because the codec restores it as
+                    // live interpolation state: a total of zero has no frame
+                    // to interpolate over, a remaining count outside the total
+                    // cannot be reached, and a finished movement (no frames
+                    // left) is removed by the presentation itself and must not
+                    // come back as a moving picture.
+                    if (pic.MoveTotalFrames < 1 || pic.MoveTotalFrames > PresentationState.MaxEffectFrames)
+                        throw new ArgumentException("Save picture movement total frames outside bounds.");
+                    if (pic.MoveFramesLeft < 1 || pic.MoveFramesLeft > pic.MoveTotalFrames)
+                        throw new ArgumentException("Save picture movement remaining frames outside bounds.");
+                    // **The origin is what makes the trajectory resumable.** A
+                    // version-1 snapshot written before origins were stored has
+                    // none, and inventing one from the current position would
+                    // silently change the path the picture is already on.
+                    if (pic.MoveStartX == null || pic.MoveStartY == null)
+                        throw new ArgumentException("Save picture movement is missing its origin.");
+                }
             }
         }
 
@@ -1017,6 +1056,7 @@ public static class Rm2kSimulationSaveCodec
             target.WeatherStrength = pres.WeatherStrength;
 
             target.Pictures.Clear();
+            target.MovingPictures.Clear();
             foreach (var pic in pres.Pictures)
             {
                 var picture = new PictureState
@@ -1044,8 +1084,8 @@ public static class Rm2kSimulationSaveCodec
                 {
                     target.MovingPictures[pic.Id] = new PresentationState.PictureMove
                     {
-                        StartX = picture.X,
-                        StartY = picture.Y,
+                        StartX = pic.MoveStartX ?? picture.X,
+                        StartY = pic.MoveStartY ?? picture.Y,
                         TargetX = pic.MoveTargetX,
                         TargetY = pic.MoveTargetY,
                         TotalFrames = pic.MoveTotalFrames,

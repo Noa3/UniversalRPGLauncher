@@ -10,6 +10,7 @@ using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Rm2k.Presentation;
 using UniversalRPG.Rm2k.Simulation;
+using UniversalRPG.Web;
 
 namespace UniversalRPG.Plugins;
 
@@ -31,6 +32,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Rm2kPlayerTurn _playerTurn;
     private readonly Rm2kRendererAdapter _rendererAdapter = new();
     private readonly Rm2kSpriteAdapter _spriteAdapter = new();
+
+    /// <summary>The battle runner for troop pages.</summary>
+    private Rm2kBattleRunner? _battleRunner;
+
     private bool _debugToolsEnabled;
 
     public Rm2kEngineRuntime(string pPluginId, PluginGameInfo pGame)
@@ -53,6 +58,76 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     public int SimulationTicks => _clock.GetSimulationTicks();
     public bool DebugToolsEnabled => _debugToolsEnabled;
 
+    /// <summary>The currently painted map or title screen.</summary>
+    public Rm2kPixelBuffer? PaintedMap { get; private set; }
+
+    /// <summary>The title screen background image from the system chunk.</summary>
+    public string TitleImageName { get; private set; } = "";
+
+    /// <summary>The game over screen image from the system chunk.</summary>
+    public string GameoverImageName { get; private set; } = "";
+
+    /// <summary>The project's own game title from the system chunk.</summary>
+    public string GameTitle { get; private set; } = "";
+
+    /// <summary>Whether the title screen is currently shown.</summary>
+    public bool TitleVisible { get; private set; }
+
+    /// <summary>Which title command the cursor is on.</summary>
+    public int TitleIndex { get; private set; }
+
+    /// <summary>The currently selected title command.</summary>
+    public string TitleSelection =>
+        TitleIndex >= 0 && TitleIndex < TitleCommands.Count
+            ? TitleCommands[TitleIndex]
+            : "";
+
+    /// <summary>Why the title screen is not shown, empty when it is.</summary>
+    public string TitleProblem { get; private set; } = "";
+
+    /// <summary>The commands the title screen offers.</summary>
+    public IReadOnlyList<string> TitleCommands { get; private set; } = Array.Empty<string>();
+
+    /// <summary>The symbols for each title command (newGame, continue, options).</summary>
+    private readonly List<string> _titleCommandSymbols = new();
+
+    /// <summary>The main menu commands from the system chunk (Item, Skill, Equip, Status, Save, Quit).</summary>
+    public IReadOnlyList<string> MenuCommands { get; private set; } = Array.Empty<string>();
+
+    /// <summary>Whether any menu is open.</summary>
+    public bool MenuVisible => CurrentMenu != Rm2kMenuState.Closed;
+
+    /// <summary>Current menu state (main menu or submenu).</summary>
+    public Rm2kMenuState CurrentMenu { get; private set; } = Rm2kMenuState.Closed;
+
+    /// <summary>Whether the main menu (not a submenu) is open.</summary>
+    public bool MainMenuVisible => CurrentMenu == Rm2kMenuState.Main;
+
+    /// <summary>Whether a submenu is open.</summary>
+    public bool SubMenuVisible => CurrentMenu > Rm2kMenuState.Main;
+
+    /// <summary>Which menu command the cursor is on.</summary>
+    public int MenuIndex { get; private set; }
+
+    /// <summary>The symbols for each menu command.</summary>
+    private readonly List<string> _menuCommandSymbols = new();
+    /// <summary>Submenu commands and symbols.</summary>
+    private IReadOnlyList<string> _subMenuCommands = Array.Empty<string>();
+    private IReadOnlyList<string> _subMenuSymbols = Array.Empty<string>();
+    private int _subMenuIndex = 0;
+
+    /// <summary>Currently selected save slot in save/load menu.</summary>
+    private int _saveSlotIndex = 0;
+
+    /// <summary>The last menu command report.</summary>
+    public string MenuReport { get; private set; } = "";
+
+    /// <summary>The game's directory path.</summary>
+    public string GameDirectory { get; private set; } = "";
+
+    /// <summary>The encryption key for the game's assets.</summary>
+    public string EncryptionKey { get; private set; } = "";
+
     public PluginOperationResult Initialize(EnginePluginRuntimeContext pContext)
     {
         if (State != PluginRuntimeState.Created)
@@ -64,6 +139,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         {
             return Fail(PluginErrorCode.InvalidGame, "RM2K/RM2K3 runtime requires an imported game directory.", "initialize");
         }
+        GameDirectory = root;
+        EncryptionKey = GetEncryptionKey(root);
 
         var databasePath = FindRootFile(root, "RPG_RT.ldb");
         var mapTreePath = FindRootFile(root, "RPG_RT.lmt");
@@ -101,6 +178,10 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         DatabaseData = database.Data;
         MapTreeData = mapTree.Data;
         CurrentMapData = currentMap;
+
+        // Read title screen data from the system chunk
+        ReadTitleFromSystem();
+        ReadMenuFromSystem();
 
         // **Und  der  Zustand  bekommt  dieselbe  Bank** -- **denn
         //  `10710`  laeuft  im  Interpreter  und  nicht  im  Host**,
@@ -282,6 +363,45 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 RefreshEventPageRoutes();
                 UpdateEventMoveRoutes(1);
                 UpdateEventAnimations(1);
+
+                // Battle runner: process troop page if a battle is active
+                if (Simulation.IsBattleActive)
+                {
+                    if (_battleRunner == null)
+                    {
+                        _battleRunner = new Rm2kBattleRunner(Simulation, Presentation);
+                        if (Simulation.DatabaseData != null && Simulation.ActiveTroopId > 0)
+                        {
+                            _battleRunner.Lade(Simulation.DatabaseData, Simulation.ActiveTroopId, out var _);
+                        }
+                    }
+                    if (_battleRunner != null && _battleRunner.Laeuft)
+                    {
+                        var battleContinues = _battleRunner.Schritt();
+                        if (!battleContinues)
+                        {
+                            // Battle page finished - determine outcome
+                            var result = Simulation.Result;
+                            bool isVictory = result == GameSimulationState.BattleResult.Victory;
+                            bool isEscape = result == GameSimulationState.BattleResult.Escape;
+                            BeendeKampf(isVictory);
+                            _battleRunner = null;
+                        }
+                    }
+                }
+            }
+
+            // Handle Game Over state
+            if (Simulation.IsGameOverActive && !TitleVisible)
+            {
+                PaintGameover();
+            }
+
+            // Handle Title Requested state (return to title screen)
+            if (Simulation.IsTitleRequested && !TitleVisible)
+            {
+                PaintTitle();
+                Simulation.IsTitleRequested = false;
             }
 
             // Interleave event movement and animation on simulation ticks, not
@@ -365,10 +485,19 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     {
         get
         {
+            if (_saveDirectory != null)
+            {
+                return _saveDirectory;
+            }
             var root = ResolveGameDirectory();
             return System.IO.Path.Combine(root ?? ".", "Save");
         }
+        set
+        {
+            _saveDirectory = value;
+        }
     }
+    private string? _saveDirectory;
 
     /// <summary>
     /// And it writes one slot.
@@ -428,8 +557,12 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             return slots;
         }
 
+        // **And the list holds the slots the codec really writes.** A listing
+        // that searches for another extension reports an empty list for a
+        // directory full of saves, and the pause menu then shows no slot at
+        // all -- which is why the extension comes from the codec itself.
         foreach (var datei in System.IO.Directory.GetFiles(
-            SaveDirectory, "*.json"))
+            SaveDirectory, "*" + Rm2kSimulationSaveCodec.SlotExtension))
         {
             slots.Add(System.IO.Path.GetFileNameWithoutExtension(
                 datei));
@@ -2199,6 +2332,637 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         return 0;
     }
 
+    /// <summary>
+    /// Reads title_name, gameover_name, and game_title from the system chunk.
+    /// </summary>
+    private void ReadTitleFromSystem()
+    {
+        TitleImageName = ReadSystemString("title_name");
+        GameoverImageName = ReadSystemString("gameover_name");
+        GameTitle = ReadSystemString("game_title");
+    }
+
+    /// <summary>
+    /// Reads menu_commands from the system chunk.
+    /// </summary>
+    private void ReadMenuFromSystem()
+    {
+        if (DatabaseData != null
+            && DatabaseData.TryGetValue("system", out var rawSystem)
+            && rawSystem.VariantType == Godot.Variant.Type.Dictionary)
+        {
+            var system = rawSystem.AsGodotDictionary();
+            if (system.TryGetValue("menu_commands", out var rawCommands)
+                && rawCommands.VariantType == Godot.Variant.Type.Array)
+            {
+                var commands = rawCommands.AsGodotArray<int>();
+                var names = new List<string>();
+                var symbols = new List<string>();
+
+                // RM2K menu command mapping: 0=Item, 1=Skill, 2=Equip, 3=Status, 4=Save, 5=Quit
+                var commandNames = new[] { "Item", "Skill", "Equip", "Status", "Save", "Quit" };
+                var commandSymbols = new[] { "item", "skill", "equip", "status", "save", "quit" };
+
+                foreach (var cmd in commands)
+                {
+                    if (cmd >= 0 && cmd < commandNames.Length)
+                    {
+                        names.Add(commandNames[cmd]);
+                        symbols.Add(commandSymbols[cmd]);
+                    }
+                }
+
+                MenuCommands = names;
+                _menuCommandSymbols.Clear();
+                _menuCommandSymbols.AddRange(symbols);
+                MenuIndex = 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Loads and renders the title screen background.
+    /// </summary>
+    /// <returns>Whether the title screen was successfully painted.</returns>
+    public bool PaintTitle()
+    {
+        PaintedMap = null;
+        TitleProblem = "";
+        if (TitleImageName.Length == 0)
+        {
+            TitleProblem = "The project's RPG_RT.ldb names no title_name, "
+                + "and a title screen with nothing on it is not a title "
+                + "screen.";
+            return false;
+        }
+
+        var pixel = new Rm2kPixelBuffer(ScreenWidth, ScreenHeight);
+        var root = ResolveGameDirectory();
+        if (root == null)
+        {
+            TitleProblem = "Cannot resolve game directory for title screen.";
+            return false;
+        }
+
+        // Try both .png and .bmp extensions (RM2K uses both)
+        var tried = false;
+        foreach (var ext in new[] { ".png", ".bmp" })
+        {
+            var path = Path.Combine(root, "Title", TitleImageName + ext);
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+            tried = true;
+            if (Rm2kIndexedImage.TryLoad(path, out var image, out var error))
+            {
+                // Blit the entire image to the pixel buffer
+                if (image.TryBlitRectangle(0, 0, image.Width, image.Height, pixel, 0, 0))
+                {
+                    PaintedMap = pixel;
+                    TitleVisible = true;
+                    TitleIndex = 0;
+                    ReadTitleCommands();
+                    return true;
+                }
+                else
+                {
+                    TitleProblem = $"Title image \"{TitleImageName}{ext}\" could not be blitted to screen buffer.";
+                    return false;
+                }
+            }
+            else
+            {
+                TitleProblem = $"Title image \"{TitleImageName}{ext}\" could not be decoded: {error}";
+                return false;
+            }
+        }
+
+        if (!tried)
+        {
+            TitleProblem = $"The project names the title \"{TitleImageName}\", "
+                + "and this runtime read no such file under img/Title/ (tried .png and .bmp).";
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Loads and renders the game over screen background.
+    /// </summary>
+    /// <returns>Whether the game over screen was successfully painted.</returns>
+    public bool PaintGameover()
+    {
+        PaintedMap = null;
+        TitleProblem = "";
+        if (GameoverImageName.Length == 0)
+        {
+            TitleProblem = "The project's RPG_RT.ldb names no gameover_name, "
+                + "and a game over screen with nothing on it is not a game over "
+                + "screen.";
+            return false;
+        }
+
+        var pixel = new Rm2kPixelBuffer(ScreenWidth, ScreenHeight);
+        var root = ResolveGameDirectory();
+        if (root == null)
+        {
+            TitleProblem = "Cannot resolve game directory for game over screen.";
+            return false;
+        }
+
+        // Try both .png and .bmp extensions (RM2K uses both)
+        var tried = false;
+        foreach (var ext in new[] { ".png", ".bmp" })
+        {
+            var path = Path.Combine(root, "Title", GameoverImageName + ext);
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+            tried = true;
+            if (Rm2kIndexedImage.TryLoad(path, out var image, out var error))
+            {
+                // Blit the entire image to the pixel buffer
+                if (image.TryBlitRectangle(0, 0, image.Width, image.Height, pixel, 0, 0))
+                {
+                    PaintedMap = pixel;
+                    TitleVisible = false; // Game over is not title
+                    return true;
+                }
+                else
+                {
+                    TitleProblem = $"Game over image \"{GameoverImageName}{ext}\" could not be blitted to screen buffer.";
+                    return false;
+                }
+            }
+            else
+            {
+                TitleProblem = $"Game over image \"{GameoverImageName}{ext}\" could not be decoded: {error}";
+                return false;
+            }
+        }
+
+        if (!tried)
+        {
+            TitleProblem = $"The project names the game over \"{GameoverImageName}\", "
+                + "and this runtime read no such file under img/Title/ (tried .png and .bmp).";
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Sets up the title commands (New Game, Continue, Options).
+    /// </summary>
+    private void ReadTitleCommands()
+    {
+        var befehle = new List<string>();
+        var symbole = new List<string>();
+
+        // New Game - always available
+        befehle.Add("New Game");
+        symbole.Add("newGame");
+
+        // Continue - only if save file exists
+        if (HasAnySaveFile())
+        {
+            befehle.Add("Continue");
+            symbole.Add("continue");
+        }
+
+        // Options - always available
+        befehle.Add("Options");
+        symbole.Add("options");
+
+        TitleCommands = befehle;
+        _titleCommandSymbols.Clear();
+        _titleCommandSymbols.AddRange(symbole);
+        TitleIndex = Math.Clamp(TitleIndex, 0, Math.Max(0, befehle.Count - 1));
+    }
+
+    /// <summary>
+    /// Checks if any save file exists for this game.
+    /// </summary>
+    private bool HasAnySaveFile()
+    {
+        var saveDir = SaveDirectory;
+        if (string.IsNullOrEmpty(saveDir) || !Directory.Exists(saveDir))
+        {
+            return false;
+        }
+        // **And the title asks the same question the slot list answers**, --
+        // because a title that offers Continue while its own listing finds
+        // nothing is a title that offers a command it cannot keep.
+        var files = Directory.GetFiles(saveDir, "*" + Rm2kSimulationSaveCodec.SlotExtension);
+        return files.Length > 0;
+    }
+
+    /// <summary>
+    /// Moves the title cursor up or down.
+    /// </summary>
+    public bool MoveTitleCursor(int pStep)
+    {
+        if (!TitleVisible || TitleCommands.Count == 0)
+        {
+            return false;
+        }
+
+        var count = TitleCommands.Count;
+        TitleIndex = ((TitleIndex + pStep) % count + count) % count;
+        return true;
+    }
+
+    /// <summary>
+    /// Chooses the current title command.
+    /// </summary>
+    /// <returns>Whether the choice did something.</returns>
+    public bool ChooseTitleCommand()
+    {
+        if (!TitleVisible)
+        {
+            return false;
+        }
+
+        if (TitleIndex >= 0 && TitleIndex < _titleCommandSymbols.Count
+            && _titleCommandSymbols[TitleIndex] == "newGame")
+        {
+            // Start new game
+            TitleVisible = false;
+            StartNewGame();
+            return true;
+        }
+
+        if (TitleIndex >= 0 && TitleIndex < _titleCommandSymbols.Count
+            && _titleCommandSymbols[TitleIndex] == "continue")
+        {
+            // Continue game
+            TitleVisible = false;
+            ContinueGame();
+            return true;
+        }
+
+        if (TitleIndex >= 0 && TitleIndex < _titleCommandSymbols.Count
+            && _titleCommandSymbols[TitleIndex] == "options")
+        {
+            // Options - not implemented yet
+            TitleProblem = $"The title offers \"{TitleSelection}\", and that "
+                + "command has no scene in this runtime yet.";
+            return false;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Opens the main menu.
+    /// </summary>
+    public void OpenMenu()
+    {
+        if (CurrentMenu != Rm2kMenuState.Closed)
+        {
+            return;
+        }
+        CurrentMenu = Rm2kMenuState.Main;
+        MenuIndex = 0;
+        _subMenuIndex = 0;
+        Simulation.IsMainMenuActive = true;
+    }
+
+    public void CloseMenu()
+    {
+        if (CurrentMenu == Rm2kMenuState.Closed)
+        {
+            return;
+        }
+        CurrentMenu = Rm2kMenuState.Closed;
+        MenuIndex = 0;
+        _subMenuIndex = 0;
+        Simulation.IsMainMenuActive = false;
+    }
+
+    public bool MoveMenuCursor(int pStep)
+    {
+        var commands = GetCurrentMenuCommands();
+        if (commands.Count == 0)
+        {
+            return false;
+        }
+        var count = commands.Count;
+        var index = GetCurrentMenuIndex();
+        index = ((index + pStep) % count + count) % count;
+        SetCurrentMenuIndex(index);
+        return true;
+    }
+
+    public bool ChooseMenuCommand()
+    {
+        var commands = GetCurrentMenuCommands();
+        var index = GetCurrentMenuIndex();
+        if (index < 0 || index >= commands.Count)
+        {
+            return false;
+        }
+        var symbol = GetCurrentMenuSymbol(index);
+        var command = commands[index];
+        MenuReport = command + " (" + symbol + ")";
+
+        if (CurrentMenu == Rm2kMenuState.Main)
+        {
+            return HandleMainMenuCommand(symbol, command);
+        }
+        return HandleSubMenuCommand(symbol, command);
+    }
+
+    // Submenu support fields
+    private IReadOnlyList<string> GetCurrentMenuCommands()
+        => CurrentMenu == Rm2kMenuState.Main ? MenuCommands : _subMenuCommands;
+
+    private IReadOnlyList<string> GetCurrentMenuSymbols()
+        => CurrentMenu == Rm2kMenuState.Main ? _menuCommandSymbols : _subMenuSymbols;
+
+    private int GetCurrentMenuIndex()
+        => CurrentMenu == Rm2kMenuState.Main ? MenuIndex : _subMenuIndex;
+
+    private void SetCurrentMenuIndex(int pIndex)
+    {
+        if (CurrentMenu == Rm2kMenuState.Main)
+        {
+            MenuIndex = pIndex;
+        }
+        else
+        {
+            _subMenuIndex = pIndex;
+        }
+    }
+
+    private string GetCurrentMenuSymbol(int pIndex)
+    {
+        var symbols = GetCurrentMenuSymbols();
+        return pIndex < symbols.Count ? symbols[pIndex] : GetCurrentMenuCommands()[pIndex];
+    }
+
+    private bool HandleMainMenuCommand(string pSymbol, string pCommand)
+    {
+        switch (pSymbol)
+        {
+            case "item":
+                OpenItemMenu();
+                return true;
+            case "skill":
+                OpenSkillMenu();
+                return true;
+            case "equip":
+                OpenEquipMenu();
+                return true;
+            case "status":
+                OpenStatusMenu();
+                return true;
+            case "formation":
+                OpenFormationMenu();
+                return true;
+            case "options":
+                OpenOptionsMenu();
+                return true;
+            case "save":
+                OpenSaveMenu();
+                return true;
+            case "quit":
+                OpenGameEndMenu();
+                return true;
+            default:
+                Simulation.AddDiagnostic("the menu asked for " + MenuReport + ", and this runtime has no handler for it yet");
+                return true;
+        }
+    }
+
+    private bool HandleSubMenuCommand(string pSymbol, string pCommand)
+    {
+        if (pSymbol == "cancel" || pCommand == "Cancel")
+        {
+            CloseSubMenu();
+            return true;
+        }
+
+        if (CurrentMenu == Rm2kMenuState.Save)
+        {
+            if (pSymbol.StartsWith("slot"))
+            {
+                _saveSlotIndex = int.Parse(pSymbol.Substring(4)) - 1;
+                return true;
+            }
+            if (pSymbol == "save")
+            {
+                var result = TrySaveSlot((_saveSlotIndex + 1).ToString(), out var problem);
+                if (result)
+                {
+                    Simulation.AddDiagnostic("Game saved to slot " + (_saveSlotIndex + 1));
+                }
+                else
+                {
+                    Simulation.AddDiagnostic("Save failed: " + problem);
+                }
+                return true;
+            }
+            if (pSymbol == "load")
+            {
+                var result = TryLoadSlot((_saveSlotIndex + 1).ToString(), out var problem);
+                if (result)
+                {
+                    Simulation.AddDiagnostic("Game loaded from slot " + (_saveSlotIndex + 1));
+                }
+                else
+                {
+                    Simulation.AddDiagnostic("Load failed: " + problem);
+                }
+                CloseSubMenu();
+                return true;
+            }
+        }
+
+        if (CurrentMenu == Rm2kMenuState.GameEnd)
+        {
+            if (pSymbol == "toTitle")
+            {
+                Simulation.AddDiagnostic("Returning to title screen");
+                TitleVisible = true;
+                CloseSubMenu();
+                Simulation.IsGameOverActive = false;
+                return true;
+            }
+        }
+
+        Simulation.AddDiagnostic("the submenu " + CurrentMenu + " asked for " + MenuReport + ", and this runtime has no handler for it yet");
+        return true;
+    }
+
+    private void OpenItemMenu()
+    {
+        _subMenuCommands = new[] { "Items", "Weapons", "Armors", "Key Items", "All" };
+        _subMenuSymbols = new[] { "items", "weapons", "armors", "keyItems", "all" };
+        CurrentMenu = Rm2kMenuState.Item;
+        _subMenuIndex = 0;
+        Simulation.AddDiagnostic("opened Item menu");
+    }
+
+    private void OpenSkillMenu()
+    {
+        _subMenuCommands = new[] { "Skills" };
+        _subMenuSymbols = new[] { "skills" };
+        CurrentMenu = Rm2kMenuState.Skill;
+        _subMenuIndex = 0;
+        Simulation.AddDiagnostic("opened Skill menu");
+    }
+
+    private void OpenEquipMenu()
+    {
+        _subMenuCommands = new[] { "Equip", "Optimize", "Clear" };
+        _subMenuSymbols = new[] { "equip", "optimize", "clear" };
+        CurrentMenu = Rm2kMenuState.Equip;
+        _subMenuIndex = 0;
+        Simulation.AddDiagnostic("opened Equip menu");
+    }
+
+    private void OpenStatusMenu()
+    {
+        _subMenuCommands = new[] { "Status" };
+        _subMenuSymbols = new[] { "status" };
+        CurrentMenu = Rm2kMenuState.Status;
+        _subMenuIndex = 0;
+        Simulation.AddDiagnostic("opened Status menu");
+    }
+
+    private void OpenFormationMenu()
+    {
+        _subMenuCommands = new[] { "Formation" };
+        _subMenuSymbols = new[] { "formation" };
+        CurrentMenu = Rm2kMenuState.Formation;
+        _subMenuIndex = 0;
+        Simulation.AddDiagnostic("opened Formation menu");
+    }
+
+    private void OpenOptionsMenu()
+    {
+        _subMenuCommands = new[] { "Volume", "Always Dash", "Command Remember", "Touch UI" };
+        _subMenuSymbols = new[] { "volume", "alwaysDash", "commandRemember", "touchUI" };
+        CurrentMenu = Rm2kMenuState.Options;
+        _subMenuIndex = 0;
+        Simulation.AddDiagnostic("opened Options menu");
+    }
+
+    private void OpenSaveMenu()
+    {
+        var saveDir = SaveDirectory;
+        if (!string.IsNullOrEmpty(saveDir) && !Directory.Exists(saveDir))
+        {
+            Directory.CreateDirectory(saveDir);
+        }
+        var cmds = new List<string>();
+        var syms = new List<string>();
+        for (int i = 1; i <= 10; i++)
+        {
+            var slotExists = File.Exists(Path.Combine(saveDir ?? "", "Save" + i + ".json"));
+            var label = slotExists ? ("Slot " + i) : ("Slot " + i + " (empty)");
+            cmds.Add(label);
+            syms.Add("slot" + i);
+        }
+        cmds.Add("Save");
+        cmds.Add("Load");
+        syms.Add("save");
+        syms.Add("load");
+        _subMenuCommands = cmds.ToArray();
+        _subMenuSymbols = syms.ToArray();
+        CurrentMenu = Rm2kMenuState.Save;
+        _subMenuIndex = 0;
+        _saveSlotIndex = 0;
+        Simulation.AddDiagnostic("opened Save menu");
+    }
+
+    private void OpenGameEndMenu()
+    {
+        _subMenuCommands = new[] { "To Title", "Cancel" };
+        _subMenuSymbols = new[] { "toTitle", "cancel" };
+        CurrentMenu = Rm2kMenuState.GameEnd;
+        _subMenuIndex = 0;
+        Simulation.AddDiagnostic("opened Game End menu");
+    }
+
+    private void CloseSubMenu()
+    {
+        CurrentMenu = Rm2kMenuState.Main;
+        _subMenuIndex = 0;
+        _subMenuCommands = Array.Empty<string>();
+        _subMenuSymbols = Array.Empty<string>();
+        MenuIndex = 0;
+        Simulation.AddDiagnostic("closed submenu, back to main menu");
+    }
+
+    /// <summary>
+    /// Starts a new game by initializing the simulation.
+    /// </summary>
+    private void StartNewGame()
+    {
+        // Reset simulation to new game state
+        Simulation.Reset();
+        // Re-read actor values and starting party from database
+        if (DatabaseData != null)
+        {
+            ReadActorValues(DatabaseData);
+            ReadStartParty(DatabaseData);
+            UniversalRPG.Rm2k.Simulation.Rm2kHeldLaden.LadeAlle(Simulation, DatabaseData);
+            UniversalRPG.Rm2k.Simulation.Rm2kHeldLaden.LadeAnimationen(Simulation, DatabaseData);
+        }
+        // Load the starting map
+        if (MapTreeData != null)
+        {
+            var mapPath = PickStartMap(ResolveGameDirectory(), MapTreeData);
+            if (mapPath != null)
+            {
+                var map = _parser.ParseMap(mapPath);
+                if (map.Success)
+                {
+                    CurrentMapData = map.Data;
+                    ConfigureSimulationMap(CurrentMapData, MapTreeData, mapPath);
+                    LoadCurrentMapEvents(CurrentMapData);
+                    var renderResult = _rendererAdapter.CreateFramebuffer(CurrentMapData);
+                    if (renderResult.Success && renderResult.Framebuffer != null)
+                    {
+                        Framebuffer = renderResult.Framebuffer;
+                    }
+                }
+            }
+        }
+        Simulation.AddDiagnostic("RM2K new game started from title");
+    }
+
+    /// <summary>
+    /// Continues a saved game.
+    /// </summary>
+    private void ContinueGame()
+    {
+        // Try to load the most recent save
+        var saveDir = SaveDirectory;
+        if (!string.IsNullOrEmpty(saveDir) && Directory.Exists(saveDir))
+        {
+            // **And the newest slot is the newest file the codec writes**, --
+            // not the newest file of a format this runtime cannot read.
+            var files = Directory.GetFiles(saveDir, "*" + Rm2kSimulationSaveCodec.SlotExtension);
+            if (files.Length > 0)
+            {
+                // Sort by last write time, newest first
+                Array.Sort(files, (a, b) => File.GetLastWriteTime(b).CompareTo(File.GetLastWriteTime(a)));
+                var latestSave = Path.GetFileNameWithoutExtension(files[0]);
+                var result = TryLoadSlot(latestSave, out var error);
+                if (result)
+                {
+                    Simulation.AddDiagnostic("RM2K continued from save: " + latestSave);
+                }
+                else
+                {
+                    TitleProblem = "Could not load save: " + error;
+                }
+            }
+        }
+    }
+
     private void ClearEventMovementState()
     {
         _eventRoutes.Clear();
@@ -3790,6 +4554,33 @@ ReadString(entry, "name", v => werte.Name = v);
         catch (InvalidCastException)
         {
             return false;
+        }
+    }
+
+    private string GetEncryptionKey(string pRoot)
+    {
+        var pfad = Path.Combine(pRoot, "RPG_RT.ini");
+        if (!File.Exists(pfad))
+        {
+            return "";
+        }
+
+        try
+        {
+            var text = File.ReadAllText(pfad);
+            foreach (var line in text.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("EncryptionKey=", StringComparison.OrdinalIgnoreCase))
+                {
+                    return trimmed.Substring("EncryptionKey=".Length).Trim();
+                }
+            }
+            return "";
+        }
+        catch (Exception)
+        {
+            return "";
         }
     }
 
