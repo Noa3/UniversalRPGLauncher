@@ -864,6 +864,14 @@ public sealed class RubyInterpreter
             RubyNodeKind.Return => EvaluateReturn(pNode),
             RubyNodeKind.Case => EvaluateCase(pNode),
             RubyNodeKind.For => EvaluateFor(pNode),
+
+            // **And a Range is a value, and it was a refusal.**
+            // Measured on a real XP game: `for i in 0...n` in the engine's own
+            // `Window_Command` reported *"this interpreter does not evaluate a
+            // Range node, and the node is in the tree"* -- **and the parser was
+            // right and the evaluator was not**, which is what that message is
+            // for. `0...n` is how every window's loop is written.
+            RubyNodeKind.Range => EvaluateRange(pNode),
             RubyNodeKind.Class => DefineType(pNode, true),
             RubyNodeKind.Module => DefineType(pNode, false),
             RubyNodeKind.Def => DefineMethod(pNode, false),
@@ -12806,6 +12814,25 @@ public sealed class RubyInterpreter
 
 
 
+
+    /// <summary>
+    /// A range, as the parser wrote it: two ends and whether the last counts.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the operator is the parser's own.</strong> `..` includes the
+    /// end and `...` does not, and the difference is the whole reason a range is
+    /// not an array: `0...n` has n numbers and `0..n` has n + 1.
+    /// </remarks>
+    private RubyValue EvaluateRange(RubyNode pNode)
+    {
+        var anfang = pNode.Children.Count > 0
+            ? Evaluate(pNode.Children[0])
+            : RubyValue.Nil;
+        var ende = pNode.Children.Count > 1
+            ? Evaluate(pNode.Children[1])
+            : RubyValue.Nil;
+        return RubyValue.OfRange(anfang, ende, pNode.Operator == "...");
+    }
 
     private RubyValue Refuse(RubyNode pNode)
     {

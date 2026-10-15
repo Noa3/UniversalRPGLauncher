@@ -56,6 +56,16 @@ public enum RubyValueKind
     /// <summary>A name, which is a thing you refer to rather than a thing you hold.</summary>
     Symbol,
 
+    /// <summary>A range, for <c>0...n</c> and <c>a..b</c>.</summary>
+    /// <remarks>
+    /// <strong>And it is its own kind and not an array.</strong> A game writes
+    /// <c>for i in 0...n</c> and <c>(1..3).include?(x)</c>, and a reader that
+    /// turned a range into an array would answer a list where the game asked a
+    /// question -- **and <c>1..3</c> is not <c>[1, 2, 3]</c>**: it has a beginning,
+    /// an end and whether the end is included.
+    /// </remarks>
+    Range,
+
     /// <summary>A pattern, which is data and is never matched by this reader.</summary>
     /// <remarks>
     /// A regular expression is kept as its source and its options. Nothing here
@@ -300,6 +310,60 @@ public sealed class RubyValue : IEquatable<RubyValue>
 
     public static RubyValue OfBoolean(bool pValue) =>
         new(RubyValueKind.Boolean) { Boolean = pValue };
+
+    /// <summary>A range as a value, with its items already walked.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the items are materialised, and that is a limit and it is
+    /// written down.</strong> <c>for i in 0...20</c> is what a window's loop is
+    /// written with, and walking twenty numbers is nothing; **a range of a
+    /// million would be a million values in memory**, so anything larger than
+    /// <see cref="Grenze"/> keeps its bounds and reports them rather than
+    /// pretending.
+    /// </para>
+    /// <para>
+    /// <strong>And <c>IsList</c> is set on purpose</strong>, so that every list
+    /// method this reader already has -- <c>each</c>, <c>to_a</c>, <c>size</c>,
+    /// <c>first</c>, <c>last</c>, <c>include?</c> -- works on a range without a
+    /// second implementation of each of them.
+    /// </para>
+    /// </remarks>
+    public static RubyValue OfRange(
+        RubyValue pAnfang, RubyValue pEnde, bool pAusschliesslich)
+    {
+        var liste = new List<RubyValue>();
+        if (pAnfang.Kind == RubyValueKind.Integer
+            && pEnde.Kind == RubyValueKind.Integer)
+        {
+            var von = pAnfang.Integer;
+            var bis = pEnde.Integer - (pAusschliesslich ? 1 : 0);
+            for (var i = von; i <= bis && liste.Count < Grenze; i++)
+            {
+                liste.Add(OfInteger(i));
+            }
+        }
+
+        return new(RubyValueKind.Range)
+        {
+            RangeBegin = pAnfang,
+            RangeEnd = pEnde,
+            RangeExclusive = pAusschliesslich,
+            Items = liste,
+            IsList = true,
+        };
+    }
+
+    /// <summary>How many items a range walks before it stops.</summary>
+    public const int Grenze = 100000;
+
+    /// <summary>The range's beginning.</summary>
+    public RubyValue? RangeBegin { get; private init; }
+
+    /// <summary>The range's end.</summary>
+    public RubyValue? RangeEnd { get; private init; }
+
+    /// <summary>Whether the end is not part of the range.</summary>
+    public bool RangeExclusive { get; private init; }
 
     /// <summary>A block as a value.</summary>
     public static RubyValue OfBlock(RubyNode pBlock) => new(RubyValueKind.Proc)
