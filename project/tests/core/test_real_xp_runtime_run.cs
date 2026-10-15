@@ -77,6 +77,23 @@ public partial class TestRealXpRuntimeRun : TestBase
             Console.WriteLine("XP:   " + problem);
         }
 
+        // **Und die Namen, die das Spiel verlangt hat und die es nicht gibt.**
+        // Der Leser antwortet mit nil und einer Diagnose statt mit einer
+        // Ausnahme, also sind die Luecken still -- **und die Liste der Namen ist
+        // der Bedarf.** Sie wird hier dedupliziert gedruckt, weil ein Name, den
+        // ein Spiel jeden Frame fragt, sonst jede Zeile fuellt.
+        var namen = lauf.Diagnostics
+            .Select(d => d.Split(' ')[0])
+            .Distinct()
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+        Console.WriteLine("XP: diagnostics = " + lauf.Diagnostics.Count
+            + ", distinct names = " + namen.Length);
+        foreach (var name in namen.Take(60))
+        {
+            Console.WriteLine("XP:   FEHLT " + name);
+        }
+
         AssertTrue(lauf.ScriptProblems.Count >= 0,
             "**and every problem is named rather than swallowed**: the count is what the "
                 + "rendering work has to bring down, and the list is where it says why");

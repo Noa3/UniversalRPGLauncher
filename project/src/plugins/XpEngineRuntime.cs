@@ -68,6 +68,22 @@ public sealed class XpEngineRuntime : IEngineRuntime
         ? (IReadOnlyList<string>)Array.Empty<string>()
         : _laufzeit.Zustand;
 
+    /// <summary>
+    /// The names the game asked for and the runtime could not answer.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the demand list, and it is the reason it is
+    /// exposed.</strong> Measured: the setup and the first frames report no
+    /// problems at all, and nothing is drawn -- because the reader answers an
+    /// unknown name with nil and a diagnostic rather than an exception, so the
+    /// gaps are silent. **A list of names is what a game actually needs**, and
+    /// it is the honest way to find the next class instead of guessing which
+    /// one to build.
+    /// </remarks>
+    public IReadOnlyList<string> Diagnostics => _interpreter == null
+        ? (IReadOnlyList<string>)Array.Empty<string>()
+        : _interpreter.Diagnostics;
+
     private readonly List<string> _scriptProblems = new();
 
     /// <summary>How many distinct failures the run remembers.</summary>
