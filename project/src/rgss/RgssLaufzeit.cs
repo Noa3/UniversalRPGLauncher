@@ -253,6 +253,8 @@ public sealed class RgssLaufzeit
         // findet.**
         Messen("rpg_nil", "RPG.nil?");
         Messen("rpg_cache_nil", "RPG::Cache.nil?");
+        Messen("cache_kurz_nil", "Cache.nil?");
+        Messen("rpg_konstanten", "RPG.constants.size");
 
         Messen("input_trigger", "Input.trigger?(Input::C)");
         Messen("input_dir4", "Input.dir4");

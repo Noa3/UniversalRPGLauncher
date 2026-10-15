@@ -536,6 +536,46 @@ public sealed class VxEngineRuntime : IEngineRuntime
             "module Game_Troop\nend",
             "module Game_Interpreter\nend",
             "module RPG\nend",
+            // **And `RPG::Cache` is where an XP game's images come from, and it
+            // was the last thing the scene's setup waited for.** Measured: *"the
+            // constant RPG::Cache is not defined by this host"*, with the nil
+            // title and windowskin reads that follow from it.
+            //
+            // **And the nested form is written `RPG::Cache` and not nested
+            // `module` statements, because that is what this list already does
+            // and what the reader resolves.** The list writes `module RPG::Actor`
+            // and the constant lookup asks for the full path; measured, `Cache`
+            // alone answers nil and so did `RPG::Cache`, while `RPG` was there.
+            //
+            // **And the folder names are XP's own layout and not a reading of one
+            // game.** Measured, this game ships Graphics with Battlers, Pictures
+            // and Titles and nothing else, and takes its windowskin from the RTP,
+            // which its Game.ini names as `RTP1=Standard`.
+            //
+            // **And a missing image is nil and a name.** The host reads the
+            // file's own size out of the PNG header and reports the path it
+            // looked for when there is none.
+            "module RPG::Cache\n"
+                + "  def self.Bild(art, name)\n"
+                + "    groesse = BildGroesse(art, name)\n"
+                + "    return nil if groesse == nil\n"
+                + "    Bitmap.new(groesse[0], groesse[1])\n"
+                + "  end\n"
+                + "  def self.windowskin(n); Bild(:windowskins, n); end\n"
+                + "  def self.picture(n); Bild(:pictures, n); end\n"
+                + "  def self.battleback_name(n); Bild(:battlebacks, n); end\n"
+                + "  def self.battleback(n); Bild(:battlebacks, n); end\n"
+                + "  def self.animation(n); Bild(:animations, n); end\n"
+                + "  def self.character(n, hue = 0); Bild(:characters, n); end\n"
+                + "  def self.tileset(n); Bild(:tilesets, n); end\n"
+                + "  def self.autotile(n); Bild(:autotiles, n); end\n"
+                + "  def self.battler(n, hue = 0); Bild(:battlers, n); end\n"
+                + "  def self.fog(n); Bild(:fogs, n); end\n"
+                + "  def self.panorama(n); Bild(:panoramas, n); end\n"
+                + "  def self.title(n); Bild(:titles, n); end\n"
+                + "  def self.clear; end\n"
+                + "end",
+
             "module RPG::Actor\nend",
             "module RPG::Class\nend",
             "module RPG::Skill\nend",
