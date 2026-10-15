@@ -423,7 +423,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             }
             if (moving || _isRenderDirty || _eventRoutesMoved || HaveEventGraphicsChanged()
                 || !CurrentTone().Equals(_appliedTone)
-                || Presentation.FlashCurrentLevel != _appliedFlashLevel)
+                || Presentation.FlashCurrentLevel != _appliedFlashLevel
+                || Presentation.ShakePositionX != _appliedShakePosition)
             {
                 _isRenderDirty = true;
                 _eventRoutesMoved = false;
@@ -699,6 +700,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     /// would otherwise be painted once and never again.
     /// </remarks>
     private double _appliedFlashLevel;
+
+    /// <summary>The shake offset the current frame was drawn with.</summary>
+    /// <remarks>
+    /// <strong>And a shake has to dirty the frame for the same reason</strong>: the
+    /// offset swings every frame, so a shake on a still screen would otherwise move
+    /// the map once and never again.
+    /// </remarks>
+    private int _appliedShakePosition;
 
     /// <summary>The tone the presentation is asking for right now.</summary>
     /// <returns>The tone, from the command's own 0 to 200 values.</returns>
@@ -4384,6 +4393,9 @@ ReadString(entry, "name", v => werte.Name = v);
         var offsetY = ResolveCameraOffsetY();
         AppliedCameraOffsetX = offsetX;
         AppliedCameraOffsetY = offsetY;
+        // **And the offset the frame was actually drawn with is remembered**, so a
+        // shake that moves the screen dirties the frame the same way a tone does.
+        _appliedShakePosition = Presentation.ShakePositionX;
         var frame = new Rm2kPixelBuffer(ScreenWidth, ScreenHeight);
         CopyViewport(_lowerLayerPixels, frame, offsetX, offsetY);
 
@@ -4479,16 +4491,30 @@ ReadString(entry, "name", v => werte.Name = v);
 
     /// <summary>
     /// The horizontal camera offset in pixels, from
-    /// <c>Game_Map::GetDisplayX</c> and <c>Game_Player::GetDefaultPanX</c>.
-    /// The screen shake the Player adds on top is deliberately not applied: it
-    /// is presentation state and would couple a cosmetic effect to the
-    /// deterministic core.
+    /// <c>Game_Map::GetDisplayX</c> and <c>Game_Player::GetDefaultPanX</c>, plus
+    /// the screen shake.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the shake belongs here and not in the simulation.</strong> The
+    /// reference adds it to the same display origin this method computes --
+    /// <c>GetDisplayX() = position_x + GetShakeOffsetX() * 16</c>, where the map's
+    /// own position counts 256 sub-units per tile and the shake counts pixels -- and
+    /// it is read only by the sprite set that draws the map and its characters.
+    /// </para>
+    /// <para>
+    /// <strong>So this stays a drawing offset</strong>: the movement logic keeps
+    /// using the unshaken camera, which is the boundary the earlier version of this
+    /// comment was protecting, and the reference draws the same line --
+    /// <c>Game_Character::GetScreenX</c>, which decides whether a chasing event can
+    /// still see the player, does not go through <c>GetDisplayX</c>.
+    /// </para>
+    /// </remarks>
     private int ResolveCameraOffsetX()
     {
         var position = Rm2kMapCamera.PositionX(Simulation.MapX, _renderedLayers!.Width, ScreenWidth);
         var pixels = Rm2kMapCamera.OffsetPixelsX(position);
-        return pixels;
+        return pixels + Presentation.ShakePositionX;
     }
 
     /// <summary>
@@ -4506,31 +4532,41 @@ ReadString(entry, "name", v => werte.Name = v);
     /// where the layer is transparent. This is the same rule the verified
     /// chipset blit uses, so a wall tile can still hide a character.
     /// </summary>
-    private static void CopyViewportOver(
+    internal static void CopyViewportOver(
         Rm2kPixelBuffer pLayer, Rm2kPixelBuffer pFrame, int pOffsetX, int pOffsetY)
     {
-        var width = Math.Min(pLayer.Width - pOffsetX, pFrame.Width);
-        var height = Math.Min(pLayer.Height - pOffsetY, pFrame.Height);
+        // **And the source window is clipped on both sides**, because a screen shake
+        // moves the camera past the map's own edges: the part of the layer that lands
+        // inside the frame is copied, and the rest of the frame keeps what it has.
+        var sourceX = Math.Max(0, pOffsetX);
+        var sourceY = Math.Max(0, pOffsetY);
+        var targetX = Math.Max(0, -pOffsetX);
+        var targetY = Math.Max(0, -pOffsetY);
+        var width = Math.Min(pLayer.Width - sourceX, pFrame.Width - targetX);
+        var height = Math.Min(pLayer.Height - sourceY, pFrame.Height - targetY);
         if (width <= 0 || height <= 0)
         {
             return;
         }
         for (var row = 0; row < height; row++)
         {
-            var source = ((pOffsetY + row) * pLayer.Width + pOffsetX) * 4;
-            var destination = row * pFrame.Width * 4;
+            var source = ((sourceY + row) * pLayer.Width + sourceX) * 4;
+            var destination = ((targetY + row) * pFrame.Width + targetX) * 4;
             for (var column = 0; column < width; column++)
             {
+                // **And both cursors advance on every column**, whether or not the
+                // layer had something to say about it: a transparent pixel keeps the
+                // frame's own pixel, but the next opaque one still belongs one pixel
+                // further right. Advancing only the source shifted the rest of the
+                // row left by the number of transparent pixels in front of it.
                 var alpha = pLayer.Pixels[source + 3];
-                if (alpha == 0)
+                if (alpha != 0)
                 {
-                    source += 4;
-                    continue;
+                    pFrame.Pixels[destination] = pLayer.Pixels[source];
+                    pFrame.Pixels[destination + 1] = pLayer.Pixels[source + 1];
+                    pFrame.Pixels[destination + 2] = pLayer.Pixels[source + 2];
+                    pFrame.Pixels[destination + 3] = alpha;
                 }
-                pFrame.Pixels[destination] = pLayer.Pixels[source];
-                pFrame.Pixels[destination + 1] = pLayer.Pixels[source + 1];
-                pFrame.Pixels[destination + 2] = pLayer.Pixels[source + 2];
-                pFrame.Pixels[destination + 3] = alpha;
                 source += 4;
                 destination += 4;
             }
@@ -4550,20 +4586,26 @@ ReadString(entry, "name", v => werte.Name = v);
     /// layer, which is laid over the characters already drawn, so clearing
     /// there would erase them.
     /// </param>
-    private static void CopyViewport(
+    internal static void CopyViewport(
         Rm2kPixelBuffer pLayer, Rm2kPixelBuffer pFrame, int pOffsetX, int pOffsetY)
     {
         pFrame.Clear();
-        var width = Math.Min(pLayer.Width - pOffsetX, pFrame.Width);
-        var height = Math.Min(pLayer.Height - pOffsetY, pFrame.Height);
+        // **And the window is clipped on both sides**, because a screen shake moves the
+        // camera past the map's own edges and a negative offset used to make
+        // TryCopyRegion refuse the whole region, leaving a black screen instead of a
+        // shifted map. What lies outside the layer stays black, which is the border the
+        // Player shows for a map smaller than the screen.
+        var sourceX = Math.Max(0, pOffsetX);
+        var sourceY = Math.Max(0, pOffsetY);
+        var targetX = Math.Max(0, -pOffsetX);
+        var targetY = Math.Max(0, -pOffsetY);
+        var width = Math.Min(pLayer.Width - sourceX, pFrame.Width - targetX);
+        var height = Math.Min(pLayer.Height - sourceY, pFrame.Height - targetY);
         if (width <= 0 || height <= 0)
         {
             return;
         }
-        // A map that is smaller than the screen in one direction has no room to
-        // scroll in that direction, so the offset is zero there and the layer is
-        // shown unshifted. That is the Player's black border case.
-        pLayer.TryCopyRegion(pOffsetX, pOffsetY, width, height, pFrame, 0, 0);
+        pLayer.TryCopyRegion(sourceX, sourceY, width, height, pFrame, targetX, targetY);
     }
 
     /// <summary>

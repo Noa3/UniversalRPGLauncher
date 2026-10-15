@@ -1,12 +1,14 @@
 ## Current card
 
-### Canonical validation GREEN (2026-10-15, after the flash)
+### Canonical validation GREEN (2026-10-15, after the shake)
 
-`./scripts/validate.sh` exited **0** with **All 2948 tests passed** and the
-`UniversalRPG validation passed.` marker, **370** suite records (one of them the
-new `TestRm2kFlash`) and **zero** `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-14.log`.
-2942 after `a1fed99` plus the six new tests of the flash slice.
+`./scripts/validate.sh` exited **0** with **All 2956 tests passed** and the
+`UniversalRPG validation passed.` marker, **371** suite records (the new
+`TestRm2kShake` among them) and **zero** `ERROR:   Test_` lines. Exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-15.log`.
+2948 after `1352ef2` plus the eight new tests of the shake slice (four over the
+offset's arithmetic against pinned reference numbers, one end to end, and three at
+the pixel over the two viewport copies).
 
 **And the run before it (`urpg-canonical-13.log`) failed on one test, which was a
 real find rather than the intermittent crash**: 2948 tests, **4 failing
@@ -15,11 +17,11 @@ assertions in 1 test method** --
 `FlashOnce(255, 128, 64, 192, 30)`, a colour channel's values where the format has
 RPG_RT's 0..31, so with the range in place the flash was refused and the tick
 assertions under it ("Expected 12, got 0") had been passing over a flash that never
-started. Corrected to `{31, 20, 8, 31}`, suite 81/81, and `canonical-14` is green.
-Earlier green runs of the same day: **2942** after `a1fed99`, **2940** after
-`aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after
-`dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`, **2912** after
-`073a096`.
+started. Corrected to `{31, 20, 8, 31}`, suite 81/81, and every run after it has
+been green. Earlier green runs of the same day: **2948** after `1352ef2`, **2942**
+after `a1fed99`, **2940** after `aa8017f`, **2937** after `ce9f798`, **2930** after
+`b5aef4a`, **2928** after `dec3936`, **2921** after `ec1ecdb`, **2917** after
+`d474a91`, **2912** after `073a096`.
 
 **And `urpg-canonical-9.log` is the run that died on the known intermittent native
 crash** (segmentation fault in `godotsharp_dictionary_destroy` during

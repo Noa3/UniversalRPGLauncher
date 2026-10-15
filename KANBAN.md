@@ -349,7 +349,7 @@ Demand and **parameters**, measured over the owned collection by
 |---|---:|---|
 | `11030` TintScreen | 2,924 | 0..200 with 100 neutral |
 | `11040` FlashScreen | 379 | **colour and level in RPG_RT's 0..31**, six parameters -- no subcommand, so every one of them is a single flash | **painted** |
-| `11050` ShakeScreen | 34 | **strength and speed up to 9** (15 values of exactly nine) |
+| `11050` ShakeScreen | 34 | **strength and speed up to 9** (15 values of exactly nine) | **painted** |
 | `11060` PanScreen | 43 | five parameters, 26 distinct forms |
 | `11070` WeatherEffects | 0 in this game | -- |
 
@@ -479,8 +479,71 @@ therefore measuring less than they claimed:
   81/81 again. **A test that writes a value the format cannot hold is not a test of
   the format.**
 
-**Still open on this card:** shake, pan, weather, and the **continuous** flash, with
-their references already read so the next slice does not re-derive them.
+**And the shake is drawn too** -- as a **drawing** offset, which is where the
+reference draws the line as well. The renderer's own comment said the shake was
+"deliberately not applied" because it "would couple a cosmetic effect to the
+deterministic core"; that worry is right, and the reference resolves it the same
+way: `Game_Map::GetDisplayX() = position_x + GetShakeOffsetX() * 16` feeds only the
+sprite set that draws the map, while `Game_Character::GetScreenX` -- which decides
+whether a chasing event can still see the player -- does not go through it. So the
+offset is added to the camera's *pixel* offset and the movement logic keeps using
+the unshaken camera; the end-to-end test asserts exactly that (the camera moves, the
+simulation's map position does not).
+
+* **The arithmetic is the reference's `Shake::NextPosition`**:
+  `amplitude = 1 + 2 * strength`, `angle = ((time_left * 4 * (speed + 2)) % 256) * PI / 128`,
+  the value is negated, and **the clamp is what makes it a shake**:
+  `cutoff = (speed * amplitude / 8) + 1` holds the new offset within that distance
+  of the current one. The numbers in the test are computed once from that formula and
+  pinned: strength 4 with speed 4 reads `5, 6, 1, -3, -7, -9, -7, -3` -- where the
+  first frame asks for 8 and the cutoff of 5 holds it to 5 -- and a strength and
+  speed of 1 creeps at one pixel per frame instead of jumping to its sine.
+* **And the offset is in pixels**: the map's own position counts 256 sub-units per
+  16 pixel tile and the reference multiplies the shake by 16, so the two cancel; a
+  strength of nine moves the screen by up to nineteen pixels.
+* **And there is no vertical twin**, which is the reference's behaviour and not an
+  omission here: `UpdateScreenEffects` updates `shake_position` alone and
+  `GetShakeOffsetY()` returns a field nothing ever writes.
+* **And a second shake does not throw the screen back to the middle** -- the
+  reference's own remark on its `ShakeOnce` ("multiple shakes which interrupt each
+  other flow smoothly") -- while `ShakeEnd` does zero the offset, because its
+  `Update` is guarded by `time_left > 0` and would never reach the reset. Both are
+  tested.
+
+**And drawing it found two defects in the viewport copies that the shake only made
+visible**, because the camera had always been clamped inside the map and the offset
+was therefore never negative:
+
+1. **A negative offset emptied the frame.** `CopyViewport` handed the region to
+   `TryCopyRegion` as it was, and that call **refuses a negative source** -- so a
+   shake to the left produced a **black screen** instead of a shifted map, and
+   `CopyViewportOver` indexed behind the array and threw. Both now clip the window
+   on both sides: what lands inside the frame is copied, what lies outside the layer
+   stays black, which is the border the Player shows for a map smaller than the
+   screen.
+2. **The over-copy advanced the source on a transparent pixel but not the
+   destination**, so every opaque pixel behind a transparent one in the same row was
+   written one column too far left -- a wall tile drawn through it could hide the
+   wrong part of a character. Both cursors advance on every column now, and the
+   transparent pixel simply keeps the frame's own.
+
+Evidence: `TestRm2kShake` **4/4** (the pinned reference positions, the cutoff keeping
+a slow shake from jumping, the interrupting second shake, and `ShakeEnd`),
+`TestRm2kRuntimeRendering` **25/25** including
+`Test_EinShakeVerschiebtDasGemalteBildUndGibtEsZurueck` (the camera carries the
+offset, the painted frame moves with it, the simulation's map position does not, and
+the frame is **byte for byte** what it was once the shake is over) and three pixel
+tests over the two copy routines (`Test_DieObereSchichtBleibtAusgerichtet`,
+`Test_EinNegativerOffsetVerschiebtDieSchichtNachRechts`,
+`Test_EinNegativerOffsetMachtDenFrameNichtSchwarz` -- the last two failed with an
+exception and with 0 where 200 belonged before the fix). A mutation that drops the
+cutoff fails exactly the pinned-position test (3/4) and was reverted. The save
+carries the shake's offset with its frames, for the same reason the flash's level
+does.
+
+**Still open on this card:** pan, weather, and the **continuous** forms of the shake
+and the flash, with their references already read so the next slice does not
+re-derive them.
 
 * **A continuous flash is a single pulse today**: the interpreter calls `FlashOnce`
   for **both** the once and the begin subcommand, while the reference's `FlashBegin`
@@ -488,7 +551,9 @@ their references already read so the next slice does not re-derive them.
   at the saturation when the time runs out (`FlashEnd` clears all four). The
   measurement says this game never writes the seventh parameter, so nothing here
   needs it yet -- but that is one game's data and not the format.
-* **Shake** is a **camera offset**, not a pixel pass: `src/shake.h`
+* **Shake** is done above; what stays open is its **continuous** form
+  (`ShakeBegin` uses `kShakeContinuousTimeStart = 65535`). Its reference, for the
+  record: `src/shake.h`
   `NextPosition(strength, speed, time_left, position)` computes
   `amplitude = 1 + 2 * strength`,
   `newpos = amplitude * sin((time_left * 4 * (speed + 2)) % 256 * PI / 128) * -1`

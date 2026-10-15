@@ -549,6 +549,26 @@ public sealed class PresentationState
     public int ShakeSpeed { get; internal set; }
     public int ShakeFramesRemaining { get; internal set; }
 
+    /// <summary>
+    /// How far the shake has moved the screen right now, in pixels.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And it is the drawn position and not the command's strength</strong>:
+    /// the engine's <c>Shake::NextPosition</c> swings it back and forth between the
+    /// frames that are left, and <c>Game_Map::GetDisplayX</c> adds it to the map's
+    /// own origin -- so this is what the player sees move.
+    /// </para>
+    /// <para>
+    /// <strong>And there is no vertical twin</strong>, which is the reference's own
+    /// behaviour rather than an omission here: <c>UpdateScreenEffects</c> updates
+    /// <c>shake_position</c> alone, and <c>GetShakeOffsetY()</c> returns
+    /// <c>shake_position_y</c>, a field that nothing ever writes -- so the shake is
+    /// horizontal. A vertical offset would be an invention.
+    /// </para>
+    /// </remarks>
+    public int ShakePositionX { get; internal set; }
+
     public int WeatherType { get; internal set; }
     public int WeatherStrength { get; internal set; }
 
@@ -663,6 +683,7 @@ public sealed class PresentationState
         ShakeStrength = 0;
         ShakeSpeed = 0;
         ShakeFramesRemaining = 0;
+        ShakePositionX = 0;
         WeatherType = 0;
         WeatherStrength = 0;
     }
@@ -733,13 +754,63 @@ public sealed class PresentationState
         }
         if (IsShakeActive)
         {
-            ShakeFramesRemaining -= pFrames;
-            if (ShakeFramesRemaining <= 0)
+            // **And the shake moves the screen instead of only counting down.**
+            // The engine's Shake::Update takes a frame off and then computes a new
+            // position from the frames that are left, so the offset swings back and
+            // forth instead of standing still until it vanishes.
+            for (var frame = 0; frame < pFrames && IsShakeActive; frame++)
             {
-                IsShakeActive = false;
-                ShakeFramesRemaining = 0;
+                if (ShakeFramesRemaining > 0)
+                {
+                    ShakeFramesRemaining -= 1;
+                    if (ShakeFramesRemaining > 0)
+                    {
+                        ShakePositionX = ShakeNextPosition(
+                            ShakeStrength, ShakeSpeed, ShakeFramesRemaining, ShakePositionX);
+                    }
+                    else
+                    {
+                        ShakePositionX = 0;
+                        ShakeFramesRemaining = 0;
+                        IsShakeActive = false;
+                    }
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// One step of the shake, straight from the reference's <c>Shake::NextPosition</c>.
+    /// </summary>
+    /// <param name="pStrength">The shake's strength.</param>
+    /// <param name="pSpeed">The shake's speed.</param>
+    /// <param name="pTimeLeft">The frames still left.</param>
+    /// <param name="pPosition">The current offset.</param>
+    /// <returns>The new offset, in pixels.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the reference's arithmetic, not an approximation of it</strong>:
+    /// <c>amplitude = 1 + 2 * strength</c>, the angle is
+    /// <c>((time_left * 4 * (speed + 2)) % 256) * PI / 128</c>, and the value is
+    /// negated. <strong>And the clamp is what makes it a shake and not a jump</strong>:
+    /// the new offset is held within <c>cutoff = (speed * amplitude / 8) + 1</c> of
+    /// the current one, so a fast shake moves further per frame than a slow one.
+    /// </para>
+    /// <para>
+    /// <strong>And the offset is in pixels</strong>: the reference adds it to the
+    /// map's display origin as <c>GetShakeOffsetX() * 16</c> while the map's own
+    /// position counts 256 sub-units per 16 pixel tile, so the two cancel and a
+    /// strength of nine moves the screen by up to nineteen pixels.
+    /// </para>
+    /// </remarks>
+    public static int ShakeNextPosition(
+        int pStrength, int pSpeed, int pTimeLeft, int pPosition)
+    {
+        var amplitude = 1 + 2 * pStrength;
+        var angle = (pTimeLeft * 4 * (pSpeed + 2)) % 256 * Math.PI / 128;
+        var newPosition = (int)(amplitude * Math.Sin(angle) * -1);
+        var cutoff = (pSpeed * amplitude / 8) + 1;
+        return Math.Clamp(newPosition, pPosition - cutoff, pPosition + cutoff);
     }
 
     /// <summary>
@@ -798,6 +869,7 @@ public sealed class PresentationState
     {
         IsShakeActive = false;
         ShakeFramesRemaining = 0;
+        ShakePositionX = 0;
     }
 
     public bool SetWeather(int pType, int pStrength)

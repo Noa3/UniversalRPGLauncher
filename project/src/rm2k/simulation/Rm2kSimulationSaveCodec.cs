@@ -309,6 +309,16 @@ public static class Rm2kSimulationSaveCodec
         public int ShakeStrength { get; set; }
         public int ShakeSpeed { get; set; }
         public int ShakeFramesRemaining { get; set; }
+        /// <summary>
+        /// How far the shake has moved the screen, in pixels.
+        /// </summary>
+        /// <remarks>
+        /// **And the offset is saved with the frames**, for the same reason the flash's
+        /// level and the tint's target are: a load in the middle of a shake that kept only
+        /// the frames would come back with the screen at rest and then swing from there,
+        /// while the player was watching a shake in progress.
+        /// </remarks>
+        public int ShakePositionX { get; set; }
         public int WeatherType { get; set; }
         public int WeatherStrength { get; set; }
     }
@@ -739,6 +749,7 @@ public static class Rm2kSimulationSaveCodec
                 ShakeStrength = pres.ShakeStrength,
                 ShakeSpeed = pres.ShakeSpeed,
                 ShakeFramesRemaining = pres.ShakeFramesRemaining,
+                ShakePositionX = pres.ShakePositionX,
                 WeatherType = pres.WeatherType,
                 WeatherStrength = pres.WeatherStrength,
             };
@@ -1082,6 +1093,7 @@ public static class Rm2kSimulationSaveCodec
             target.ShakeStrength = pres.ShakeStrength;
             target.ShakeSpeed = pres.ShakeSpeed;
             target.ShakeFramesRemaining = pres.ShakeFramesRemaining;
+            target.ShakePositionX = pres.ShakePositionX;
             target.WeatherType = pres.WeatherType;
             target.WeatherStrength = pres.WeatherStrength;
 
