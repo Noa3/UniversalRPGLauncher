@@ -1,5 +1,26 @@
 ## Current card
 
+### K-PROD-MZ-FACTS-COPY DONE (2026-10-15): the map-load copy carries the game's state
+
+`WithCharacters` now carries 62 of the facts' properties -- the timer, the movie, the battle,
+`$gameSystem`, the scene stack, the map scroll and display, the names and profiles, the pending
+animations and their callback, the database lookups, the message state and the rest -- where it
+carried 24 and dropped 38. Nineteen of them needed `{ get; init; }` before a copy could assign
+them at all, and four are filled by loop rather than assigned (assigning the same list made that
+loop write into the collection it was reading, which the behaviour test caught).
+
+**And the guard is a source-parsing invariant**: the test reads the copy's own source for the
+names it assigns and the collections it fills, and requires that set plus a declared exception
+list to be exactly the class's properties, so a property nobody decided about fails. The
+exceptions are the two parameters, `Party`, and the three computed properties.
+
+**A note on this session's detours, honestly:** three of my own mistakes cost most of the time
+here -- a `write_file` that kept being refused because of pagination, a Python script whose
+`nl` came from the wrong file so its test edit silently did not apply, and an error grep that
+matched `error CS` only, which hid `error GD0001: Missing partial modifier` and made a test suite
+that never compiled look like one that never ran. The suite only became visible after the class
+was marked `partial` -- test classes derive from `GodotObject` and the generator requires it.
+
 ### K-PROD-MZ-GAME-ACTORS DONE (2026-10-15): $gameActors is built from Actors.json
 
 `LoadGameActors` builds every actor the way `Game_Actor.prototype.setup` does: name, nickname,

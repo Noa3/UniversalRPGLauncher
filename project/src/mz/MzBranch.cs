@@ -494,7 +494,7 @@ public sealed class MzBranchFacts
     /// wrote only the hit points back is a different command.</strong>
     /// </para>
     /// </remarks>
-    public HashSet<int> Recovered { get; } = new();
+    public HashSet<int> Recovered { get; init; } = new();
 
     /// <summary>
     /// The states that went onto actors and off them, in the order the
@@ -506,7 +506,7 @@ public sealed class MzBranchFacts
     /// and a page that adds poison, takes it away and adds it again is three
     /// commands and not one.</strong>
     /// </remarks>
-    public List<MzStateChange> States { get; } = new();
+    public List<MzStateChange> States { get; init; } = new();
 
     /// <summary>
     /// The HP orders the run gave, in order, and no party's health.
@@ -519,16 +519,16 @@ public sealed class MzBranchFacts
     /// <c>Actors.json</c> and <c>Classes.json</c></strong>, <strong>and
     /// this repository does not keep an actor.</strong>
     /// </remarks>
-    public List<MzHpOrder> HpOrders { get; } = new();
+    public List<MzHpOrder> HpOrders { get; init; } = new();
 
     /// <summary>The MP orders the run gave, in order.</summary>
-    public List<MzActorOrder<string>> MpOrders { get; } = new();
+    public List<MzActorOrder<string>> MpOrders { get; init; } = new();
 
     /// <summary>The experience orders the run gave, in order.</summary>
-    public List<MzActorOrder<string>> ExpOrders { get; } = new();
+    public List<MzActorOrder<string>> ExpOrders { get; init; } = new();
 
     /// <summary>The level orders the run gave, in order.</summary>
-    public List<MzActorOrder<string>> LevelOrders { get; } = new();
+    public List<MzActorOrder<string>> LevelOrders { get; init; } = new();
 
     /// <summary>
     /// The parameter orders the run gave, with the parameter's own id.
@@ -539,7 +539,7 @@ public sealed class MzBranchFacts
     /// ein Attribut</strong>, <strong>und <c>paramMax</c> gibt 999999,
     /// 9999 und 999.</strong>
     /// </remarks>
-    public List<MzActorOrder<int>> ParamOrders { get; } = new();
+    public List<MzActorOrder<int>> ParamOrders { get; init; } = new();
 
     /// <summary>
     /// Where the game is showing, and what it can go back to.
@@ -550,13 +550,13 @@ public sealed class MzBranchFacts
     /// are different operations</strong> -- <strong>so this is a stack
     /// and not a flag.</strong>
     /// </remarks>
-    public MzSceneStack Szene { get; } = new();
+    public MzSceneStack Szene { get; init; } = new();
 
     /// <summary>
     /// What <c>$gameMap._scrollRest</c> holds, which is the whole of
     /// <c>204</c>.
     /// </summary>
-    public MzMapScroll Rollen { get; } = new();
+    public MzMapScroll Rollen { get; init; } = new();
 
     /// <summary>
     /// How the map looks, and not what is on it.
@@ -567,7 +567,7 @@ public sealed class MzBranchFacts
     /// dieser Reihe, die kein Darsteller und kein Kartenstand
     /// anfassen.</strong>
     /// </remarks>
-    public MzMapDisplay Anzeige { get; } = new();
+    public MzMapDisplay Anzeige { get; init; } = new();
 
     /// <summary>
     /// Whether the run is holding a reservation on tileset images, and the
@@ -593,7 +593,7 @@ public sealed class MzBranchFacts
     /// Darsteller im Helden steht oder nicht**, <strong>und das
     /// braucht die <c>Actors.json</c> dieses Spiels.</strong>
     /// </remarks>
-    public Dictionary<int, string> Namen { get; } = new();
+    public Dictionary<int, string> Namen { get; init; } = new();
 
     /// <summary>
     /// The troop in the battle, and it is <c>$gameTroop</c> for the
@@ -606,7 +606,7 @@ public sealed class MzBranchFacts
     /// [this._indent] = n; })</c></strong>, <strong>and that is where
     /// <c>601</c>, <c>602</c> and <c>603</c> read it.</strong>
     /// </remarks>
-    public MzBattle Kampf { get; } = new();
+    public MzBattle Kampf { get; init; } = new();
 
     /// <summary>
     /// Who the name editor was opened for, and what it was given.
@@ -653,7 +653,7 @@ public sealed class MzBranchFacts
     /// <c>128 Change Armor</c> neighbour reading an empty option
     /// list.</strong>
     /// </remarks>
-    public MzSystem Spiel { get; } = new();
+    public MzSystem Spiel { get; init; } = new();
 
     /// <summary>
     /// <c>$gamePlayer.makeEncounterCount()</c>, and <c>136</c> throws it
@@ -709,10 +709,10 @@ public sealed class MzBranchFacts
     /// lose both.</strong>
     /// </para>
     /// </remarks>
-    public Dictionary<int, string> Spitznamen { get; } = new();
+    public Dictionary<int, string> Spitznamen { get; init; } = new();
 
     /// <summary>And the third one, which is a face rather than a name.</summary>
-    public Dictionary<int, string> Profile { get; } = new();
+    public Dictionary<int, string> Profile { get; init; } = new();
 
     /// <summary>
     /// <c>$gameActors.actor(n)._tp</c>, and it is a number per actor.
@@ -723,7 +723,7 @@ public sealed class MzBranchFacts
     /// <c>this._tp = 0;</c></strong> -- <strong>and a game gains
     /// tactical points from skills, not from the start.</strong>
     /// </remarks>
-    public Dictionary<int, int> Taktischpunkte { get; } = new();
+    public Dictionary<int, int> Taktischpunkte { get; init; } = new();
 
     /// <summary>
     /// The class each actor stands in, as a 321 ordered it.
@@ -735,7 +735,7 @@ public sealed class MzBranchFacts
     /// this repository keeps no actor</strong> -- <strong>so it keeps
     /// that a change was asked for and by whom.</strong>
     /// </remarks>
-    public List<(int Actor, int Class)> Classes { get; } = new();
+    public List<(int Actor, int Class)> Classes { get; init; } = new();
 
     /// <summary>
     /// What each actor wears, as a 319 ordered it.
@@ -766,7 +766,7 @@ public sealed class MzBranchFacts
     /// the two neighbours of this command.</strong>
     /// </para>
     /// </remarks>
-    public HashSet<(int Actor, int Item)> Equipment { get; } = new();
+    public HashSet<(int Actor, int Item)> Equipment { get; init; } = new();
 
     /// <summary>
     /// Which characters were asked for an animation.
@@ -777,7 +777,7 @@ public sealed class MzBranchFacts
     /// it</strong>, <strong>and a second copy here would be a second place to
     /// get it wrong.</strong>
     /// </remarks>
-    public List<int> AnimationAsked { get; } = new();
+    public List<int> AnimationAsked { get; init; } = new();
 
     /// <summary>
     /// And the runtime is told when a page asks for an animation.
@@ -820,7 +820,7 @@ public sealed class MzBranchFacts
     /// than another animation's length.
     /// </para>
     /// </remarks>
-    public Dictionary<int, int> AnimationLaengen { get; } = new();
+    public Dictionary<int, int> AnimationLaengen { get; init; } = new();
 
     /// <summary>
     /// How long one animation plays, or why it cannot be answered.
@@ -1060,6 +1060,32 @@ public sealed class MzBranchFacts
     /// written.</strong>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The properties <see cref="WithCharacters"/> deliberately does not carry.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And every one of them is a decision.</strong> <c>Characters</c> and <c>Player</c>
+    /// are the map load's own subject, handed in as parameters. <c>Party</c> is the party object,
+    /// which binds itself to the facts that own it, so the copy builds its own and carries the
+    /// gold and the items instead. <c>ChoiceOptions</c>, <c>ChoicePending</c> and
+    /// <c>ItemsAreKnown</c> are computed from state that is carried, so there is nothing to copy.
+    ///
+    /// <strong>And this is the only list here on purpose.</strong> What the copy *does* carry is
+    /// read from the copy itself by the test, which parses its source and compares the names it
+    /// finds against the class's properties: a hand-written carried list would be one more thing
+    /// to forget, which is how `Actors` was lost.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> NotCarriedByWithCharacters =
+        new[]
+        {
+            "Characters",
+            "ChoiceOptions",
+            "ChoicePending",
+            "ItemsAreKnown",
+            "Party",
+            "Player",
+        };
+
     public MzBranchFacts WithCharacters(
         IReadOnlyDictionary<int, MzCharacter> pCharacters, MzPlayer pPlayer)
     {
@@ -1079,6 +1105,44 @@ public sealed class MzBranchFacts
             // on the real project -- the loader reported nine entries and eight actors, and
             // the running game reported zero.
             Actors = Actors,
+            Armors = Armors,
+            Classes = Classes,
+            Equipment = Equipment,
+            HasRememberedBgm = HasRememberedBgm,
+            Message = Message,
+            Names = Names,
+            Notices = Notices,
+            RememberedBgm = RememberedBgm,
+            Skills = Skills,
+            Weapons = Weapons,
+            MapId = MapId,
+            EventId = EventId,
+            TimerFrames = TimerFrames,
+            TimerWorking = TimerWorking,
+            MoviePlaying = MoviePlaying,
+            MaxItems = MaxItems,
+            Map = Map,
+            HpOrders = HpOrders,
+            MpOrders = MpOrders,
+            ExpOrders = ExpOrders,
+            LevelOrders = LevelOrders,
+            ParamOrders = ParamOrders,
+            Szene = Szene,
+            Rollen = Rollen,
+            Anzeige = Anzeige,
+            BilderReserviert = BilderReserviert,
+            Namen = Namen,
+            Kampf = Kampf,
+            NamensZiel = NamensZiel,
+            NamensText = NamensText,
+            LetzterLaden = LetzterLaden,
+            Spiel = Spiel,
+            Begegnungszaehler = Begegnungszaehler,
+            EigenesFenster = EigenesFenster,
+            Spitznamen = Spitznamen,
+            Profile = Profile,
+            Taktischpunkte = Taktischpunkte,
+            AnimationGestartet = AnimationGestartet,
             Items = Items,
             KnownItems = KnownItems,
             Screen = Screen,
@@ -1310,7 +1374,7 @@ public sealed class MzBranchFacts
     /// <b>It does not keep a picture of a window</b>, because a window this
     /// repository cannot draw is a window a caller must not think it has.
     /// </remarks>
-    public List<MzMessage.Line> Message { get; } = new();
+    public List<MzMessage.Line> Message { get; init; } = new();
 
     /// <summary>
     /// The names a line can ask for, or null when this reader has no database
@@ -1378,7 +1442,7 @@ public sealed class MzBranchFacts
     /// Something a command asked for and this reader would not or could not do,
     /// in the order it happened. A caller reads this rather than the log.
     /// </summary>
-    public List<string> Notices { get; } = new();
+    public List<string> Notices { get; init; } = new();
 
     public Dictionary<int, int> Weapons { get; init; } = new();
 
@@ -1398,7 +1462,7 @@ public sealed class MzBranchFacts
     /// are different facts and one number cannot hold both.</strong>
     /// </para>
     /// </remarks>
-    public HashSet<(int Darsteller, int Skill)> Skills { get; } = new();
+    public HashSet<(int Darsteller, int Skill)> Skills { get; init; } = new();
 
     /// <summary>
     /// The music that <c>243</c> put aside, and <c>244</c> puts back.

@@ -786,7 +786,7 @@ it.
 lines that match German markers and do not read as English, and subtract the same set from the
 base. Zero is the target for any new work.
 
-### K-PROD-MZ-FACTS-COPY — READY (WithCharacters drops 38 of the facts' properties)
+### K-PROD-MZ-FACTS-COPY — DONE (2026-10-15, the copy carries the game's state)
 
 **And this is what hid the actor loading.** `MzEngineRuntime` replaces its facts on **every map
 load**: `Facts = Facts.WithCharacters(figuren, Facts.Player)`. The copy carries 18 properties and
@@ -795,17 +795,36 @@ the copy assigns. `Actors` was one of them, so `$gameActors` was filled at start
 away the moment a map was entered -- the loader reported nine entries and eight actors while the
 running game reported zero, which is what the save test caught.
 
-**The rest of the list, measured:** `AnimationAsked`, `AnimationGestartet`, `AnimationLaengen`,
-`Anzeige`, `Begegnungszaehler`, `BilderReserviert`, `ChoiceOptions`, `ChoicePending`,
-`EigenesFenster`, `EventId`, `ExpOrders`, `HpOrders`, `ItemsAreKnown`, `Kampf`, `LetzterLaden`,
-`LevelOrders`, `Map`, `MapId`, `MaxItems`, `MoviePlaying`, `MpOrders`, `Namen`, `NamensText`,
-`NamensZiel`, `ParamOrders`, `Party`, `Profile`, `Recovered`, `Rollen`, `Spiel`, `Spitznamen`,
-`States`, `Szene`, `Taktischpunkte`, `TimerFrames`, `TimerWorking` -- `Actors` is fixed and the
-others are not, because each one needs a decision rather than a sweep: `Map` and `MapId` are set
-by the map load that calls this, `Party` is the party object whose gold is carried separately,
-and the order lists and the choice state are per-page state that a copy must not lose by
-accident. The card asks for that decision field by field, with a test per field that shows the
-value surviving a map load -- which is the shape of evidence the actors needed too.
+**And they are all carried now.** The copy carries 62 of the class's properties: the timer, the
+movie, `maxItems`, the battle, `$gameSystem`, the scene stack, the map scroll and display, the
+names, nicknames and profiles, the tactical points, the pending animations and their callback,
+the state changes an event asked for, the encounter counter, the custom window, the naming
+prompt, the last load list, the database lookups (`Classes`, `Equipment`, `Skills`, `Armors`,
+`Weapons`) and the message and notice state.
+
+**And four of them are carried by a loop rather than an assignment**, which matters: the recovered
+actors, the state changes, the animation lengths and the requested animations are *copied into*
+the new object's own collections. Assigning the same list instead made that loop write into the
+collection it was reading -- `InvalidOperationException: Collection was modified` -- which the
+behaviour test caught.
+
+**And the guard is the interesting part.** A hand-written carried list would be one more thing to
+forget, so the test **parses the copy's own source** for the names it assigns and the collections
+it fills, and requires that set plus a declared exception list to be exactly the class's
+properties: a property nobody decided about fails the test. The exceptions are `Characters` and
+`Player` (the map load's parameters), `Party` (which binds itself to the facts that own it) and
+`ChoiceOptions`/`ChoicePending`/`ItemsAreKnown` (computed from carried state).
+
+**And the copy needed `init` setters.** Nineteen properties were `{ get; }` collections, so an
+object initialiser could not assign them at all -- the copy could not have shared them however it
+tried. They are `{ get; init; }` now, which is exactly the "settable while building a copy"
+semantic and changes nothing else.
+
+**Evidence:** `TestMzFactsCopy` -- the source-parsing invariant, and a behaviour test that sets a
+sentinel in the timer, the encounter counter, the name prompt, the movie, the names, the recovered
+actors and the animation list and checks every one survives, with `ReferenceEquals` for the ones
+the engine shares as globals (`Namen`, `Kampf`, `Spiel`) and contents for the ones the copy fills
+itself.
 
 ### K-PROD-MZ-GAME-ACTORS — DONE (2026-10-15, $gameActors is built from Actors.json)
 
