@@ -210,23 +210,57 @@ seven-bit groups with the **most significant group first**
 159 of 806 maps and silently reports the wrong distribution -- the first scan
 said 2 looping maps, the corrected one says 4.
 
-### K-PROD-RM2K-COMMAND-COVERAGE — READY, measurement first
+### K-PROD-RM2K-COMMAND-COVERAGE — MEASURED: no gap at dispatch level
 
-The audit's own words are that `EventInterpreter` "supports a bounded command
-subset and skips unsupported commands diagnostically", and the runtime reports
-`page route stopped at unsupported command {id}`. What no one has measured is
-**which event command codes the collection actually uses and which of those the
-interpreter does not implement** -- the route-opcode distribution in
-`docs/MOVEMENT_COVERAGE.md` covers move routes only, not event commands. That
-measurement is the next step, with the repository's own parser (never a
-hand-written reader): it decides which commands are worth implementing, in
-demand order, instead of implementing whatever is next in the format's list.
+**Measured over the owned collection with the repository's own parser** (a
+temporary probe, removed after collection, exactly as the earlier movement audit
+was): 806 maps, all 806 parsed, 0 failures; **19,982 map events, 27,470 pages
+and 191,431 event commands in 79 distinct codes**.
 
-Two smaller gaps are already named and measured, so they can be taken first if
-the coverage run has to wait: **route commands 24 (begin jump, 3 instances), 25
-(end jump, 3) and 26 (lock facing, 1)** out of 2,733 custom-route commands, and
-the title screen's **Options** item, which the runtime still reports as
-`Options - not implemented yet`.
+The interpreter's main dispatch (`switch (cmd.Code)`) was then read from its own
+source -- 181 named constants, 125 of them used as case labels -- and
+intersected with that distribution:
+
+| | codes | commands |
+|---|---:|---:|
+| used by the corpus | 79 | 191,431 |
+| used **and** dispatched | 79 | 191,431 |
+| **used but not dispatched** | **0** | **0 (0.00%)** |
+
+**So event-command coverage is not the RM2000/2003 gap.** Every code the
+collection writes is already a case in the interpreter, the rarest included
+(`11070 WeatherEffects`, `11840 ChangeEscapeAccess`, `10480 ChangeCondition`,
+`20710 VictoryHandler`, `20713 EndBattle`). **A case label means the code is
+dispatched, not that its semantics are complete** -- so what remains is
+per-command *fidelity*, not coverage, and the next measurement must be about
+what the runtime reports while a game runs, not about which opcode is missing.
+
+Demand, in order: `10 End` 23,266, `10110 ShowMessage` 22,772,
+`10210 ControlSwitches` 18,215, `12010 ConditionalBranch` 16,791,
+`22011 Else` 16,791, `20110 ShowMessage2` 16,166, `10220 ControlVars` 15,678,
+`12330 CallEvent` 10,343, `11330 MoveEvent` 6,057, `11550 PlaySound` 5,029,
+`22010 ElseBranch` 4,865, `11110 ShowPicture` 4,541, `11130 ErasePicture` 4,442,
+`10810 Teleport` 3,112, `11030` 2,924, `10860` 2,869, `12410 Comment` 2,532,
+`11410 Wait` 2,153.
+
+**And the measurement has a named hole: common events are not in it.** Common
+events live in the LDB, whose event commands this parser does not decode into
+pages, so a code that appears only in a common event is missing from the
+distribution -- and common events are where RM2000 games keep their parallel
+processes and their battle logic. Closing that hole is the honest next step for
+this card.
+
+### K-PROD-RM2K-RUNTIME-DIAGNOSTICS — READY, measure what the runtime reports
+
+Since no opcode is missing, the demand list for fidelity work has to come from
+the runtime itself. Run each owned RM2K game for a bounded number of frames
+through the real plugin path and count `Simulation.Diagnostics` by kind, then
+work that list in demand order. This is the same shape as the movement audit
+that produced the 1,787-page number, and it needs the same discipline: bounded
+frames, no game executable, a temporary probe removed after collection, and the
+counts recorded here. Two known items belong on that list already: the title
+screen's **Options** (`Options - not implemented yet` in the runtime) and the
+route commands 24/25/26 named under the loop-map card.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
