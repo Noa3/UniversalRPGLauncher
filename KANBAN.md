@@ -786,7 +786,26 @@ it.
 lines that match German markers and do not read as English, and subtract the same set from the
 base. Zero is the target for any new work.
 
-### K-PROD-MZ-SAVE-RESTORE — IN PROGRESS (the gold is back; the actors and the screen are named)
+### K-PROD-MZ-GAME-ACTORS — READY (Actors.json is read for the player's sprite and nothing else)
+
+**And this is the gap the save work walked into.** `E:/RPGMakerGames/CamelliaCoronation-Win` has
+**nine** actors in `data/Actors.json`, and the runtime reads that file -- but only to take actor
+1's `characterName`, `characterIndex`, `moveSpeed` and `moveFrequency` for the player's sprite
+and walk clock. Nothing is ever put into `$gameActors`, so `Facts.Actors.Anzahl` is **zero** for
+a real project. Two consequences, both measured: a save writes an empty `actors` entry, and a
+branch or a menu that asks an actor's level, class, skills or equipment finds no actor at all.
+
+**What the load needs from it:** `Game_Actors.prototype.actor` builds a `Game_Actor` per id --
+`_actorId`, `_name`, `_nickname`, `_classId`, `_level` (from `initialLevel`, or one), `_exp`,
+`_skills` and `_equips` from the database's `Actor` entry. Then the save restore that is already
+implemented has something to restore in a real game, and the actor checks in events have
+something to read.
+
+**And the test that proves the save path today places an actor itself**, with the reason written
+next to it, because the real project offers none: the file-to-reader-to-apply path is covered,
+the database-to-`$gameActors` path is not.
+
+### K-PROD-MZ-SAVE-RESTORE — DONE (2026-10-15, the screen, the actors and the gold all come back)
 
 **And the gold exposed a split brain, which was the real defect.** `MzBranchFacts.Party`'s
 getter was `_party ??= new MzParty()`, and a party built without arguments makes its **own**
@@ -802,11 +821,22 @@ gold is set to 4321, saved, changed to 1, and loaded -- the load reports `4321 g
 test asserts the value, because a load that ignored the party would leave 1 and a player would
 have lost their money. `Unapplied` is down to `screen, actors`.
 
-**Still open, and it needs the state model rather than only the reader:** `screen` and `actors`.
-`MzScreen.Tone`, `ToneDuration`, `FlashDuration` and `Brightness` are `{ get; private set; }`
-and `MzGameActors`' skills and equips are internal, so a load cannot apply them at all today --
-the reader could parse them and there would be nowhere to put them. That is the next step, and
-each entry leaves `Unapplied` only when a test shows the value coming back through the file.
+**And the screen and the actors are done too**, which needed the state model and not only the
+reader: `MzScreen.RestoreFromSave` sets both ends of a tint -- `StarteTon` cannot, because it
+*starts* a fade and leaves the tone where it was, so a save taken halfway through one came back
+at the tone it started from -- and `MzActor.SetSkills` replaces a skill list, because the
+engine's `learnSkill` only ever adds. The reader parses `_tone`, `_toneTarget`, `_toneDuration`,
+`_flashColor`, `_flashDuration` and `_brightness`, and every actor with their name, nickname,
+class, level, exp, skills and equipment by item id; the load applies all of it.
+
+**And `Unapplied` is empty.** The load message for a real project now reads
+`4321 gold, 1 actor(s) restored` with nothing named as left behind. The tests: the contents suite
+round-trips a tint whose showing tone and target **differ** (equal values would pass with either
+one read and the other guessed), an actor with two skills, two experience entries and one piece
+of equipment, and asserts that nothing is unapplied; the runtime suite drives the real save file
+and the real load path. One bug of mine was caught by that first test: the array helper read
+`IntArray(entry, "_skills", 0)` as "no items" rather than "all of them", so the skills came back
+empty -- a count of zero now means every item, with the reason in the signature.
 
 ### K-PROD-MZ-SAVE-RESTORE — READY (the load leaves the gold, the actors and the screen behind)
 

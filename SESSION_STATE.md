@@ -1,5 +1,20 @@
 ## Current card
 
+### K-PROD-MZ-SAVE-RESTORE DONE (2026-10-15): screen, actors and gold all come back
+
+The reader parses the screen (both ends of a tint, the flash, the brightness) and every actor
+(name, nickname, class, level, exp, skills, equipment by item id); `MzScreen.RestoreFromSave`
+and `MzActor.SetSkills` give the load somewhere to put them -- `StarteTon` cannot set a showing
+tone, because it starts a fade, and `learnSkill` only ever adds. `Unapplied` is empty, and the
+load message for the real project reads `4321 gold, 1 actor(s) restored`. Evidence:
+`TestMzSaveContents` 7/7 and `TestMzSaveRuntime` 2/2 (the real save file and the real load path).
+One of my own bugs was caught on the way: the array helper treated a count of zero as "no items"
+instead of "all of them", so skills came back empty.
+
+**And the work found the next gap:** `Facts.Actors` is empty for a real project -- the runtime
+reads `Actors.json` only for actor 1's sprite and walk clock and never builds `$gameActors`, so
+a save writes an empty `actors` entry. Named in `K-PROD-MZ-GAME-ACTORS`.
+
 ### Comments in English: this session's 62 German ones are converted (2026-10-15)
 
 The standing rule is English code comments. This session's commits added 62 German comment

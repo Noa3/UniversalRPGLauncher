@@ -297,6 +297,38 @@ public sealed class MzScreen
     }
 
     /// <summary>
+    /// Puts the screen back the way a save left it.
+    /// </summary>
+    /// <param name="pTone">The tint that is showing.</param>
+    /// <param name="pToneTarget">The tint it is on its way to.</param>
+    /// <param name="pToneDuration">The frames it still has to get there.</param>
+    /// <param name="pFlash">The flash colour.</param>
+    /// <param name="pFlashDuration">The frames the flash has left.</param>
+    /// <param name="pBrightness">The brightness.</param>
+    /// <remarks>
+    /// <strong>And a load sets the current tint directly, which
+    /// <see cref="StarteTon"/> cannot.</strong> That method starts a fade: it writes the
+    /// target and the duration and leaves the tone where it was, so a save taken halfway
+    /// through a fade would come back at the tone the fade started from. The engine assigns
+    /// the whole <c>$gameScreen</c> object, so both ends of the fade are restored here,
+    /// exactly as the file has them.
+    /// </remarks>
+    public void RestoreFromSave(
+        int[] pTone, int[] pToneTarget, int pToneDuration,
+        int[] pFlash, int pFlashDuration, int pBrightness)
+    {
+        Tone = Vier(pTone);
+        TargetTone = Vier(pToneTarget);
+        ToneDuration = pToneDuration > 0 ? pToneDuration : 0;
+        // The engine's `startFlash` writes `_flashColor` and `_flashDuration` and nothing
+        // else, so both ends of the flash are the colour the file carries.
+        Flash = Vier(pFlash);
+        TargetFlash = Vier(pFlash);
+        FlashDuration = pFlashDuration > 0 ? pFlashDuration : 0;
+        Brightness = pBrightness;
+    }
+
+    /// <summary>
     /// One frame of the tint, and the engine's <c>updateTone</c>.
     /// </summary>
     /// <remarks>

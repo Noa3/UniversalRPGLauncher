@@ -226,6 +226,25 @@ public sealed class MzActor
         _ausruestung[pSlot] = pAusrüstung;
     }
 
+    /// <summary>
+    /// Replaces the skills the actor knows.
+    /// </summary>
+    /// <param name="pSkillIds">The skills, as the save has them.</param>
+    /// <remarks>
+    /// <strong>And a load replaces rather than adds.</strong> <see cref="LerneSkill"/> is the
+    /// engine's <c>learnSkill</c> and only ever adds; a save that carries a shorter list is a
+    /// game where the actor knows fewer skills than this runtime does, and adding them would
+    /// keep skills the save does not have.
+    /// </remarks>
+    public void SetSkills(IEnumerable<int> pSkillIds)
+    {
+        _skills.Clear();
+        foreach (var id in pSkillIds)
+        {
+            _skills.Add(id);
+        }
+    }
+
     /// <summary>And <c>hasSkill(skillId)</c>.</summary>
     /// <param name="pSkillId">The skill's number.</param>
     /// <returns>Whether it knows it.</returns>

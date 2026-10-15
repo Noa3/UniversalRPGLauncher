@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UniversalRPG.Tests.Framework;
+using UniversalRPG.Mz;
 using UniversalRPG.Web;
 
 namespace UniversalRPG.Tests.Core;
@@ -170,13 +171,9 @@ public partial class TestMzSaveContents : TestBase
         AssertEq(geladen!.Gold, fakten.Party.Gold,
             "**and the gold came back through the file**, so it is applied rather than named");
 
-        foreach (var name in new[] { "screen", "actors" })
-        {
-            AssertTrue(geladen.Unapplied.Contains(name),
-                $"**{name} is named as not put back**, rather than dropped on load");
-        }
-        AssertTrue(!geladen.Unapplied.Contains("party._gold"),
-            "**and the gold is no longer named**, because it is applied now");
+        AssertEq(geladen.Unapplied.Count, 0,
+            "**and nothing is left unapplied**: the screen, the actors and the gold all come"
+                + " back now, so the reader has no entry left to name");
 
         // **And the invariant**: every entry the file carries is either applied or
         // named.
@@ -188,6 +185,57 @@ public partial class TestMzSaveContents : TestBase
                 $"**{name} is either applied or named** -- neither list may forget an entry the"
                     + " save carries");
         }
+    }
+
+    /// <summary>
+    /// The screen and the actors come back through the file, fades and all.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a tint has two ends.</strong> The engine stores the tone that is showing and
+    /// the tone it is heading for; a reader that took only the target would bring a game back
+    /// at the tone its fade started from, and a reader that took only the current one would
+    /// lose the fade. The fixture sets them differently on purpose, because equal values would
+    /// pass with either one read and the other guessed.
+    /// </remarks>
+    public void Test_BildschirmUndDarstellerKommenZurueck()
+    {
+        var fakten = Fakten();
+        // The tone that shows, then the one it heads for: the second call leaves the first in
+        // place, which is what a fade looks like halfway through.
+        fakten.Screen.StarteTon(new int[] { 20, 10, -5, 0 }, 0);
+        fakten.Screen.StarteTon(new int[] { 68, -34, 0, 0 }, 40);
+        var actor = new MzActor
+        {
+            Id = 1, Name = "Alex", Nickname = "Al", ClassId = 1, Level = 12,
+        };
+        actor.Exp.Add(1234);
+        actor.Exp.Add(99);
+        actor.SetSkills(new int[] { 5, 7 });
+        actor.SetzeSlot(0, new MzAusrüstung { Id = 42 });
+        fakten.Actors.Setze(1, actor);
+
+        var (inhalt, fehlend) = MzSaveContents.Capture(fakten, 1, 60);
+        AssertEq(fehlend.Count, 0, "the writer builds all ten entries");
+        AssertTrue(MzJson.TryParse(MzJson.Write(inhalt), out var gelesen, out var fehler), fehler);
+        AssertTrue(MzSaveContents.TryRestore(gelesen!, out var geladen, out var problem), problem);
+
+        var screen = geladen!.Screen;
+        AssertTrue(screen != null, "the screen came back");
+        AssertEq(string.Join(",", screen!.Tone), "20,10,-5,0",
+            "**and the tone that was showing is the one that was showing**, not the target");
+        AssertEq(string.Join(",", screen.ToneTarget), "68,-34,0,0",
+            "**and the tone it was heading for is the other one**");
+        AssertEq(screen.ToneDuration, 40, "and the frames it had left");
+        AssertEq(screen.Brightness, 255, "and the brightness");
+
+        AssertEq(geladen.Actors.Count, 1, "one actor came back");
+        var restored = geladen.Actors[1];
+        AssertEq(restored.Name, "Alex", "with the name");
+        AssertEq(restored.Nickname, "Al", "and the nickname");
+        AssertEq(restored.Level, 12, "**and the level**, which a save otherwise loses");
+        AssertEq(string.Join(",", restored.Exp), "1234,99", "and the experience");
+        AssertEq(string.Join(",", restored.Skills), "5,7", "and the skills");
+        AssertEq(string.Join(",", restored.Equips), "42", "and the equipment by item id");
     }
 
     /// <summary>

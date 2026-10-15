@@ -70,8 +70,8 @@ public static class MzSaveContents
     public static readonly IReadOnlyList<string> AppliedEntries =
         new[]
         {
-            "system", "timer", "switches", "variables", "selfSwitches",
-            "map", "player", "party",
+            "system", "screen", "timer", "switches", "variables", "selfSwitches",
+            "actors", "party", "map", "player",
         };
 
     /// <summary>
@@ -158,6 +158,49 @@ public static class MzSaveContents
         var player = pContents.Member("player");
         var timer = pContents.Member("timer");
         var party = pContents.Member("party");
+        var screen = pContents.Member("screen");
+
+        // **And the screen comes back with both ends of its fades.** The engine assigns the
+        // whole `$gameScreen`, so the tint that is showing and the tint it is heading for are
+        // both part of the file; a reader that took only the target would bring a game back
+        // at the tone its fade started from.
+        var restoredScreen = screen == null
+            ? null
+            : new MzLoadedScreen
+            {
+                Tone = IntArray(screen, "_tone", 4),
+                ToneTarget = IntArray(screen, "_toneTarget", 4),
+                ToneDuration = screen.Member("_toneDuration")?.IntOr(0) ?? 0,
+                Flash = IntArray(screen, "_flashColor", 4),
+                FlashDuration = screen.Member("_flashDuration")?.IntOr(0) ?? 0,
+                Brightness = screen.Member("_brightness")?.IntOr(255) ?? 255,
+            };
+
+        // **And every actor the file carries**, by their id: the engine's `_data` is a sparse
+        // array indexed by actor id, so the index is the id and an entry with no id is one
+        // this reader will not invent one for.
+        var restoredActors = new Dictionary<int, MzLoadedActor>();
+        var actorData = pContents.Member("actors")?.Member("_data");
+        if (actorData?.Kind == MzKind.Array)
+        {
+            foreach (var entry in actorData.Items)
+            {
+                if (entry.Kind != MzKind.Object) continue;
+                var actorId = entry.Member("_actorId")?.IntOr(0) ?? 0;
+                if (actorId <= 0) continue;
+                restoredActors[actorId] = new MzLoadedActor
+                {
+                    Id = actorId,
+                    Name = entry.Member("_name")?.StringOr("") ?? "",
+                    Nickname = entry.Member("_nickname")?.StringOr("") ?? "",
+                    ClassId = entry.Member("_classId")?.IntOr(0) ?? 0,
+                    Level = entry.Member("_level")?.IntOr(1) ?? 1,
+                    Exp = LongArray(entry, "_exp"),
+                    Skills = IntArray(entry, "_skills", 0),
+                    Equips = EquipIds(entry),
+                };
+            }
+        }
 
         var partyMembers = new List<int>();
         if (party != null)
@@ -209,10 +252,66 @@ public static class MzSaveContents
             TimerWorking = timer?.Member("_working")?.BoolOr(false) ?? false,
             PartyMembers = partyMembers,
             Gold = party?.Member("_gold")?.IntOr(0) ?? 0,
+            Screen = restoredScreen,
+            Actors = restoredActors,
             Missing = MissingFrom(pContents),
             Unapplied = unapplied,
         };
         return true;
+    }
+
+    /// <summary>
+    /// A fixed-size array of numbers out of an object, padded with zeroes.
+    /// </summary>
+    /// <param name="pObject">The object that carries the array.</param>
+    /// <param name="pName">The member name.</param>
+    /// <param name="pCount">
+    /// How many numbers to read. **A count of zero means every one of them**, which is what a
+    /// list whose length is part of the data needs -- the tone is always four, the skills are
+    /// as many as the actor knows, and a caller that passed zero for the second kind got an
+    /// empty list and no error.
+    /// </param>
+    private static int[] IntArray(MzValue pObject, string pName, int pCount)
+    {
+        var value = pObject.Member(pName);
+        if (value?.Kind != MzKind.Array) return new int[Math.Max(pCount, 0)];
+        var count = pCount > 0 ? Math.Min(pCount, value.Items.Count) : value.Items.Count;
+        var result = new int[count];
+        for (var index = 0; index < count; index++)
+        {
+            result[index] = value.Items[index].IntOr(0);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The experience a save carries, which is a list of long values.
+    /// </summary>
+    private static long[] LongArray(MzValue pObject, string pName)
+    {
+        var value = pObject.Member(pName);
+        if (value?.Kind != MzKind.Array) return Array.Empty<long>();
+        var result = new long[value.Items.Count];
+        for (var index = 0; index < value.Items.Count; index++)
+        {
+            result[index] = (long)value.Items[index].IntOr(0);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The item ids of an actor's equipment, in slot order.
+    /// </summary>
+    private static int[] EquipIds(MzValue pActor)
+    {
+        var equips = pActor.Member("_equips");
+        if (equips?.Kind != MzKind.Array) return Array.Empty<int>();
+        var result = new int[equips.Items.Count];
+        for (var index = 0; index < equips.Items.Count; index++)
+        {
+            result[index] = equips.Items[index].Member("_itemId")?.IntOr(0) ?? 0;
+        }
+        return result;
     }
 
     /// <summary>
@@ -787,6 +886,51 @@ public static class MzSaveContents
 /// <summary>
 /// What a save file holds, read back into values a runtime applies.
 /// </summary>
+/// <summary>
+/// The screen state a save carries.
+/// </summary>
+/// <remarks>
+/// <strong>And both ends of a fade are kept</strong>, because the engine stores both: a save
+/// taken in the middle of a tint has a tone that is showing and a tone it is heading for, and a
+/// reader with only one of them would either snap the screen or lose the fade.
+/// </remarks>
+public sealed class MzLoadedScreen
+{
+    public int[] Tone { get; init; } = new int[] { 0, 0, 0, 0 };
+
+    public int[] ToneTarget { get; init; } = new int[] { 0, 0, 0, 0 };
+
+    public int ToneDuration { get; init; }
+
+    public int[] Flash { get; init; } = new int[] { 0, 0, 0, 0 };
+
+    public int FlashDuration { get; init; }
+
+    public int Brightness { get; init; } = 255;
+}
+
+/// <summary>
+/// One actor as a save carries them.
+/// </summary>
+public sealed class MzLoadedActor
+{
+    public int Id { get; init; }
+
+    public string Name { get; init; } = "";
+
+    public string Nickname { get; init; } = "";
+
+    public int ClassId { get; init; }
+
+    public int Level { get; init; } = 1;
+
+    public long[] Exp { get; init; } = Array.Empty<long>();
+
+    public int[] Skills { get; init; } = Array.Empty<int>();
+
+    public int[] Equips { get; init; } = Array.Empty<int>();
+}
+
 public sealed class MzLoadedSave
 {
     public Dictionary<int, bool> Switches { get; init; } = new();
@@ -821,6 +965,16 @@ public sealed class MzLoadedSave
     /// Whether the timer is counting down (Game_Timer._working).
     /// </summary>
     public bool TimerWorking { get; init; }
+
+    /// <summary>
+    /// The screen state, which is <c>$gameScreen</c>.
+    /// </summary>
+    public MzLoadedScreen? Screen { get; init; }
+
+    /// <summary>
+    /// Every actor the save carries, by actor id.
+    /// </summary>
+    public Dictionary<int, MzLoadedActor> Actors { get; init; } = new();
 
     /// <summary>
     /// The party's gold, which is <c>Game_Party._gold</c>.

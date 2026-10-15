@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using UniversalRPG.Mz;
 
 namespace UniversalRPG.Plugins;
 
@@ -268,6 +269,44 @@ public sealed partial class MzEngineRuntime
             Facts.Gold = save.Gold;
         }
 
+        // **And the screen comes back**: the tint that was showing, the tint it was heading
+        // for, the flash and the brightness. A load that skipped it would bring a game back
+        // with a clear screen while the save had it tinted.
+        if (save.Screen != null)
+        {
+            Facts.Screen.RestoreFromSave(
+                save.Screen.Tone, save.Screen.ToneTarget, save.Screen.ToneDuration,
+                save.Screen.Flash, save.Screen.FlashDuration, save.Screen.Brightness);
+        }
+
+        // **And every actor the save carries.** The actor object is changed rather than
+        // replaced, because it also holds what this runtime derived from the database -- a
+        // fresh one built from the save alone would drop that.
+        var actorsRestored = 0;
+        foreach (var paar in save.Actors)
+        {
+            var actor = Facts.Actors.Actor(paar.Key);
+            if (actor == null) continue;
+            var saved = paar.Value;
+            actor.Name = saved.Name;
+            actor.Nickname = saved.Nickname;
+            actor.ClassId = saved.ClassId;
+            actor.Level = saved.Level;
+            actor.Exp.Clear();
+            foreach (var exp in saved.Exp)
+            {
+                actor.Exp.Add(exp);
+            }
+            actor.SetSkills(saved.Skills);
+            for (var slot = 0; slot < saved.Equips.Length; slot++)
+            {
+                actor.SetzeSlot(slot, saved.Equips[slot] > 0
+                    ? new MzAusrüstung { Id = saved.Equips[slot] }
+                    : null);
+            }
+            actorsRestored++;
+        }
+
         Facts.Player.StandAt(
             save.MapId > 0 ? save.MapId : CurrentMapId,
             save.PlayerX,
@@ -295,7 +334,8 @@ public sealed partial class MzEngineRuntime
         var bericht = $"loaded slot {pSlot}: {Facts.Switches.Count} "
             + $"switch(es), {Facts.Variables.Count} variable(s), "
             + $"{Facts.SelfSwitches.Count} self switch(es), {bewegt} figure(s) "
-            + $"put back, {Facts.Gold} gold, and the player at {Facts.Player.MapId}/"
+            + $"put back, {Facts.Gold} gold, {actorsRestored} actor(s) restored, and the "
+            + $"player at {Facts.Player.MapId}/"
             + $"{Facts.Player.X}/{Facts.Player.Y}{karteGeladen}";
 
         if (save.Missing.Count > 0)

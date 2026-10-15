@@ -1,3 +1,5 @@
+using System.Linq;
+using UniversalRPG.Mz;
 using System;
 using System.IO;
 using UniversalRPG.Plugins;
@@ -74,6 +76,19 @@ public partial class TestMzSaveRuntime : TestBase
             lauf.Facts.SelfSwitches["2,5,A"] = true;
             // **And the gold**, because a save and a load would otherwise lose it quietly.
             lauf.Facts.Gold = 4321;
+            // **And the screen and an actor**, because a load that skipped them would bring
+            // the game back with a clear screen and a hero at level one.
+            lauf.Facts.Screen.StarteTon(new int[] { 30, -20, 0, 0 }, 0);
+            // **And an actor**: the project has nine in `Actors.json`, but the runtime does
+            // not load them into `$gameActors` -- it reads that file only for the player's
+            // graphic and walk clock. So the test places an actor itself, to walk the whole
+            // way file -> reader -> apply; the gap itself is named in K-PROD-MZ-GAME-ACTORS.
+            var heldId = 7;
+            lauf.Facts.Actors.Setze(heldId, new MzActor
+            {
+                Id = heldId, Name = "Testheld", ClassId = 1, Level = 17,
+            });
+            var held = lauf.Facts.Actors.Actor(heldId);
             var (x, y) = (lauf.PlayerX, lauf.PlayerY);
             lauf.Facts.Player.StandAt(lauf.CurrentMapId, x + 1, y, 6);
 
@@ -93,6 +108,9 @@ public partial class TestMzSaveRuntime : TestBase
             lauf.Facts.Variables[3] = 0;
             lauf.Facts.SelfSwitches.Clear();
             lauf.Facts.Gold = 1;
+            lauf.Facts.Screen.StarteTon(new int[] { 0, 0, 0, 0 }, 0);
+            var geaendert = lauf.Facts.Actors.Actor(heldId);
+            if (geaendert != null) geaendert.Level = 3;
             lauf.Facts.Player.StandAt(lauf.CurrentMapId, 1, 1, 8);
 
             var geladen = lauf.Laden(1);
@@ -112,6 +130,10 @@ public partial class TestMzSaveRuntime : TestBase
                 "**and the player is where the save left them**");
             AssertEq(lauf.PlayerY, y,
                 "**and not where the test put them afterwards**");
+            AssertEq(string.Join(",", lauf.Facts.Screen.Tone), "30,-20,0,0",
+                "**and the tint is the tint that was saved**, after the screen was cleared");
+            AssertEq(lauf.Facts.Actors.Actor(heldId)?.Level, 17,
+                "**and the actor is back at level 17**, after the load changed it to 3");
             AssertEq(lauf.Facts.Gold, 4321,
                 "**and the gold is the gold that was saved** -- 1 was set after the save, so a"
                     + " load that ignored the party would leave 1 and a player would have lost"
