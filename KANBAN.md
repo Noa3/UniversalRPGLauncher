@@ -317,6 +317,23 @@ BER defect stayed hidden, and it is why the measurement above had to read in
 blocks. Making the trace channel separate from the problem channel is the next
 step for this card.
 
+**And one more gap was closed in the same area, without a defect behind it.**
+The animation loader counted its refusals and threw the decoder's reason away
+(`verweigert++; continue;` with `warum` unused), so a refused animation would
+have been a battle effect the player never sees with nobody able to name it.
+Measured: **the finished game's 300 animations and the fixture's 300 all read, 0
+refused**, so this closed a latent hole rather than a live bug -- and the two new
+invariant tests (`Test_JedeAnimationDerBankWirdGelesenOderSagtWarum`,
+`Test_JedeAnimationDesSpielsWirdGelesenOderSagtWarum`) pin that read plus refused
+is the whole bank and that a refusal always carries a reason. The loader now
+reports the first refusal by id and reason when there is one.
+
+**And that measurement also corrected a misreading of its own output.** The probe
+line `1 x RM2K # battle animations read, # refused` is **one message with its
+numbers normalised**, not one refused animation; the first number is the message
+count. The second number is the one that matters, and it is zero. A normalising
+probe that drops the numbers can make a count look like a value.
+
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
 `Rm2kBattleRunner` + `rm2k_troop_page_decoder` add multi-page troop decoding

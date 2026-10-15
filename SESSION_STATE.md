@@ -2,17 +2,18 @@
 
 ### Canonical validation GREEN (2026-10-15, after the BER/tint fixes)
 
-`./scripts/validate.sh` exited **0** with **All 2928 tests passed** and the
+`./scripts/validate.sh` exited **0** with **All 2930 tests passed** and the
 `UniversalRPG validation passed.` marker, 368 suite records and **zero**
 `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-6.log`.
-2921 after `ec1ecdb` plus the seven new tests of this slice (three parser, two
-screen, two real-game). The run before it, `urpg-canonical-5.log`, is the one
-that **caught the three measurement tests the page fix moved** -- 105 readable
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-7.log`.
+The run before it was 2928 (`urpg-canonical-6.log`); the two added tests are the
+animation-bank invariants (fixture and finished game). **And `canonical-5` is the
+run that caught the three measurement tests the page fix moved** -- 105 readable
 troop pages became 106 and 10 distinct commands became 12, and each was
 re-measured rather than loosened. The known shutdown noise (3 CanvasItem RIDs, 6
-ObjectDB instances) is unchanged. Earlier green runs of the same day: **2921**
-after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
+ObjectDB instances) is unchanged. Earlier green runs of the same day: **2928**
+after `dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`, **2912**
+after `073a096`.
 
 ### K-PROD-RM2K-RUNTIME-DIAGNOSTICS — MEASURED, two defects fixed (this commit)
 

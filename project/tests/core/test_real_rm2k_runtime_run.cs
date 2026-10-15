@@ -985,4 +985,83 @@ public partial class TestRealRm2kRuntimeRun : TestBase
                 + " never ran; applied tints: " + applied);
         host.Stop();
     }
+
+    /// <summary>
+    /// The game's own animations are read, and a refusal names its reason.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is what the diagnostics measurement could not tell
+    /// us:</strong> the loader counted its refusals and threw the reason away, so
+    /// a refused animation would be a battle effect the player never sees with
+    /// nobody able to name it. **Measured: the game's 300 animations all read**,
+    /// so nothing is refused today and the reason path is the one that would
+    /// have hidden it.
+    /// </para>
+    /// <para>
+    /// <strong>And a first reading of the probe output got this wrong</strong>:
+    /// the line <c>1 x RM2K # battle animations read, # refused</c> is one
+    /// message with its numbers normalised, not one refused animation. The
+    /// second number is the one that matters, and it is zero.
+    /// </para>
+    /// </remarks>
+    public void Test_JedeAnimationDesSpielsWirdGelesenOderSagtWarum()
+    {
+        UeberspringeWennKeinSpiel();
+        var wurzel = Wurzel();
+        if (wurzel == null)
+        {
+            return;
+        }
+
+        var result = new UniversalRPG.Rm2k.Parser.Rm2kParser()
+            .ParseDatabase(Path.Combine(wurzel, "RPG_RT.ldb"));
+        AssertTrue(result.IsSuccess(),
+            "**and the game's bank is read** -- " + (result.Error?.Describe() ?? ""));
+        if (!result.IsSuccess())
+        {
+            return;
+        }
+        var animations = result.GetData()["animations"].AsGodotArray();
+        AssertTrue(animations.Count > 100,
+            "**and the bank really carries animations** -- it has " + animations.Count);
+
+        var gelesen = 0;
+        var verweigert = new List<string>();
+        foreach (var roh in animations)
+        {
+            if (roh.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+            var eintrag = roh.AsGodotDictionary();
+            var felder = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+            if (eintrag.ContainsKey("unknown_fields"))
+            {
+                foreach (var wert in eintrag["unknown_fields"].AsGodotArray())
+                {
+                    felder.Add(wert.AsGodotDictionary());
+                }
+            }
+            var id = eintrag.ContainsKey("id") ? eintrag["id"].AsInt32() : 0;
+            if (UniversalRPG.Rm2k.Parser.Rm2kAnimationDecoder.TryDecode(
+                    felder, out _, out var warum))
+            {
+                gelesen++;
+                continue;
+            }
+            verweigert.Add(id + ": " + warum);
+            AssertTrue(!string.IsNullOrWhiteSpace(warum),
+                "**and a refusal names its reason**, or it is a finding nobody"
+                    + " can follow up; animation " + id + " was refused");
+        }
+
+        Console.WriteLine($"Animationen des Spiels: gelesen {gelesen}, verweigert"
+            + $" {verweigert.Count}"
+            + (verweigert.Count > 0 ? " -- " + string.Join(" | ", verweigert) : ""));
+        AssertTrue(gelesen > 100,
+            "**and the game's animations are readable** -- " + gelesen + " were read");
+        AssertEq(animations.Count, gelesen + verweigert.Count,
+            "**and nothing disappeared silently**");
+    }
 }

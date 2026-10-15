@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using UniversalRPG.Rm2k;
 using UniversalRPG.Rm2k.Interpreter;
+using UniversalRPG.Rm2k.Parser;
 using UniversalRPG.Rm2k.Presentation;
 using UniversalRPG.Rm2k.Simulation;
 using UniversalRPG.Tests.Framework;
@@ -342,5 +344,82 @@ public partial class TestRm2kBattleAnimation : TestBase
             Cmd(EventInterpreter.ChangeBattleBg, "Panorama", 0));
         AssertEq(state2.BattleBackground, "Panorama",
             "**and without the wait flag the next command runs at once**");
+    }
+
+    /// <summary>
+    /// Every animation of the bank is either read or refused with a reason.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the test the runtime-diagnostics measurement asked
+    /// for:</strong> the loader counted its refusals and **threw the reason
+    /// away** -- <c>verweigert++; continue;</c> with the decoder's <c>warum</c>
+    /// unused -- so a refused animation would have been invisible: an animation
+    /// that does nothing in a battle, with nobody able to say which one or why.
+    /// </para>
+    /// <para>
+    /// <strong>And the measured answer is that nothing is refused today</strong>:
+    /// the fixture's 300 animations and the finished game's own 300 both read
+    /// cleanly. So this is a latent gap closed before it could hide anything,
+    /// and the assertion is the invariant that matters either way -- read plus
+    /// refused is the whole bank, and a refusal always carries a reason.
+    /// </para>
+    /// </remarks>
+    public void Test_JedeAnimationDerBankWirdGelesenOderSagtWarum()
+    {
+        const string bank = "res://tests/fixtures/rm2k-dragon-destiny/RPG_RT.ldb";
+        var result = new Rm2kParser().ParseDatabase(bank);
+        AssertTrue(result.IsSuccess(),
+            "**and the bank is read** -- " + (result.Error?.Describe() ?? ""));
+        if (!result.IsSuccess())
+        {
+            return;
+        }
+        var animations = result.GetData()["animations"].AsGodotArray();
+        AssertTrue(animations.Count > 100,
+            "**and the bank really carries animations** -- it has "
+                + animations.Count);
+
+        var gelesen = 0;
+        var verweigert = new List<string>();
+        foreach (var roh in animations)
+        {
+            if (roh.VariantType != Godot.Variant.Type.Dictionary)
+            {
+                continue;
+            }
+            var eintrag = roh.AsGodotDictionary();
+            var felder = eintrag.ContainsKey("unknown_fields")
+                ? eintrag["unknown_fields"].AsGodotArray()
+                    .Select(pWert => pWert.AsGodotDictionary())
+                    .ToList()
+                : new List<Godot.Collections.Dictionary>();
+            var alsArray = new Godot.Collections.Array<Godot.Collections.Dictionary>();
+            foreach (var feld in felder)
+            {
+                alsArray.Add(feld);
+            }
+            var id = eintrag.ContainsKey("id") ? eintrag["id"].AsInt32() : 0;
+            if (Rm2kAnimationDecoder.TryDecode(alsArray, out _, out var warum))
+            {
+                gelesen++;
+                continue;
+            }
+            verweigert.Add(id + ": " + warum);
+            AssertTrue(!string.IsNullOrWhiteSpace(warum),
+                "**and a refusal names its reason**, because a count without a"
+                    + " reason is a finding nobody can follow up; animation "
+                    + id + " was refused");
+        }
+
+        Console.WriteLine("Animationen: gelesen " + gelesen + ", verweigert "
+            + verweigert.Count
+            + (verweigert.Count > 0 ? " -- " + string.Join(" | ", verweigert) : ""));
+        AssertTrue(gelesen > 100,
+            "**and the bank's animations are readable** -- " + gelesen
+                + " were read");
+        AssertEq(animations.Count, gelesen + verweigert.Count,
+            "**and nothing disappeared silently**, because a dropped animation"
+                + " is one the game plays and this runtime does not");
     }
 }

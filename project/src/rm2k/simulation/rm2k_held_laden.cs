@@ -148,6 +148,8 @@ public static class Rm2kHeldLaden
             .Dictionary<int, int>();
         var gelesen = 0;
         var verweigert = 0;
+        var ersterGrund = "";
+        var ersteId = 0;
         foreach (var a in (Godot.Collections
             .Array<Godot.Collections.Dictionary>)
             pBank["animations"])
@@ -159,6 +161,15 @@ public static class Rm2kHeldLaden
                     felder!, out var frames, out var warum))
             {
                 verweigert++;
+                // **Und der erste Grund wird behalten**, -- **denn eine
+                //  Zahl ohne Grund ist ein Befund, den niemand
+                //  nachgehen kann**: eine Animation, die nicht gelesen
+                //  wird, ist eine Animation, die im Kampf nichts tut.
+                if (ersterGrund == "")
+                {
+                    ersterGrund = warum;
+                    ersteId = a.ContainsKey("id") ? a["id"].AsInt32() : 0;
+                }
                 continue;
             }
 
@@ -167,7 +178,7 @@ public static class Rm2kHeldLaden
         }
 
         // **Und  `BattleAnimationDurations`  ist  `{ get; init; }`**,
-        // -- **und  deshalb  muss  der  Host  es  setzen**, -- **und
+        // -- **und  deshalb  muss  der  Host  es  setzen**,  -- **und
         //  `init`  laesst  das  nur  bei  der  Erzeugung  zu.**
         pZustand.SetBattleAnimationDurations(tabelle);
 
@@ -176,6 +187,12 @@ public static class Rm2kHeldLaden
             pZustand.AddDiagnostic(
                 "RM2K " + gelesen + " battle animations read, "
                 + verweigert + " refused");
+        }
+
+        if (verweigert > 0)
+        {
+            pZustand.AddDiagnostic(
+                "RM2K animation " + ersteId + " refused: " + ersterGrund);
         }
 
         return gelesen;
