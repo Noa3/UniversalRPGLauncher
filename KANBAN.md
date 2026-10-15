@@ -334,7 +334,12 @@ numbers normalised**, not one refused animation; the first number is the message
 count. The second number is the one that matters, and it is zero. A normalising
 probe that drops the numbers can make a count look like a value.
 
-### K-PROD-RM2K-SCREEN-EFFECTS — tint and flash DONE; shake, pan, weather READY
+### K-PROD-RM2K-SCREEN-EFFECTS — DONE (tint, flash, shake, pan painted)
+
+**Four of the five effects are painted; weather is split into its own card**
+(`K-PROD-RM2K-WEATHER`) because it is a particle system and not a screen pass, and
+because its measured demand is a single command in the whole owned collection. Nothing
+here claims weather works.
 
 **Measured: five screen effects were state only.** `project/src/rm2k/rendering/`
 and `project/app/ui/` contained **zero** references to `TintRed`, `FlashRed`,
@@ -615,6 +620,60 @@ flash, with their references already read so the next slice does not re-derive t
   `pan_speed` and `pan_state` in `SavePartyLocation`.
 * **Weather** is a particle count from `Weather::GetMaxNumParticles(type)` with a
   strength.
+
+### K-PROD-RM2K-WEATHER — READY (state exists, nothing draws it)
+
+**Measured demand: one command.** `11070` appears **once** in the whole owned
+collection (`TestRm2kEffektbefehleGemessen` measured 0 in Dragon Destiny, and the
+corpus-wide scan found one). It is split out of `K-PROD-RM2K-SCREEN-EFFECTS` because
+it is a particle system rather than a screen pass, and because a slice this size for
+one command should be a decision and not a by-product.
+
+**What exists already, and is faithful:** `PresentationState.WeatherType` and
+`WeatherStrength`, the interpreter's `11070` handling (the strength clamped to
+`MaxWeatherStrength`, unknown RM2K types folded to 0, with a diagnostic) and the save.
+**What does not exist: any drawing.** No file in `project/src/rm2k/rendering/` or
+`project/app/ui/` reads either field, so a game that turns on rain shows a dry screen.
+Note that the clamp at the command is **not** a defect: the reference stores the
+strength as it comes and clamps the particle index at the draw
+(`Clamp(strength, 0, 2)`), which is the same picture.
+
+**The reference, pinned so the slice does not re-derive it** (EasyRPG
+`src/weather.h`/`weather.cpp` and `Game_Screen::UpdateWeather`):
+
+* `Weather::GetMaxNumParticles(type)`: none 0; rain and snow
+  `num_rain_or_snow_particles[num_strength - 1]` from the table **`{20, 60, 100}`**
+  (`num_strength = 3`) — that is the *maximum*, i.e. the particle vector's size — and
+  the draw uses **`num_rain_or_snow_particles[Clamp(strength, 0, 2)]`**, the actual
+  count, which is **0-based**; fog is **2**; sandstorm
+  `num_sand_particles[num_strength - 1]` from **`{128, 191, 255}`**.
+* The particles are **drawn procedurally and need no RTP asset**:
+  `CreateRainParticle` is a **6x24** bitmap with one white pixel per row at
+  `x = w - (y / 4) - 1` (a diagonal streak); `CreateSnowParticle` is a **2x2** white
+  square; the fog overlay is a **16x16** tile; the sand particle is **1x2** with
+  `num_sand_colors = 4`.
+* `DrawParticles(dst, particle, rect, abase, tmax)` draws each particle at its own
+  `x`/`y` with the alpha from `particle.alpha` and `ainc = abase + strength` (rain
+  `abase = 5`, snow `7`), with the screen tone applied to the particle bitmap first.
+* The four per-frame updates (`Game_Screen::UpdateWeather` dispatches by type):
+  **rain** `p.y += 4; p.x -= 1`, and on expiry `Rand::PercentChance(10)` respawns with
+  `t = 12` at `Rand(0, panLimitX / 16 - 1)` by `Rand(0, panLimitY / 16 - 1)`;
+  **snow** `p.x -= Rand(0, 1); p.y += Rand(2, 3)`, respawning on `PercentChance(5)`
+  with `t = 30`; **fog** is just `particles[0].x++; particles[1].x++`;
+  **sandstorm** runs the fog update and then, for every particle from index 2,
+  `t = 80` with `d = Rand(16, 95)`, `p.x = int(d * c * 2) * screen_width / 320 +
+  screen_width / 2`, `p.y = int(d * s) * screen_height / 240`, `alpha = 180`,
+  `vx = vy = 0`, `ax = c * 2 * screen_width / 320`, `ay = s * 2 * screen_height / 240`
+  and `alpha += 2` while alive (`c`/`s` from a random angle).
+* `Game_Screen::SetWeatherEffect(type, strength)` stores both **as they come** and
+  only calls `OnWeatherChanged()` when either changed, which is what re-seeds the
+  particles.
+
+**Acceptance:** rain, snow, fog and sandstorm are drawn over the composed frame; the
+particle counts follow the tables above for each strength; turning the weather off
+leaves the frame byte for byte as it was; the four updates are pinned by tests against
+the reference's arithmetic, and one end-to-end test drives a real game with the weather
+turned on.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 

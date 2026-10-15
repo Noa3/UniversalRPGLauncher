@@ -1,5 +1,13 @@
 ## Current card
 
+### K-PROD-RM2K-SCREEN-EFFECTS closed; K-PROD-RM2K-WEATHER split out (2026-10-15)
+
+Four of the five screen effects are painted (tint, flash, shake, pan) and the card is
+**DONE**; **weather** moved to its own **READY** card, with the measured demand (one
+`11070` in the whole owned collection) and the full reference pinned there: it is a
+particle system with four types, not a screen pass, and it is not drawn at all today.
+Nothing claims weather works.
+
 ### Canonical validation GREEN (2026-10-15, after the pan)
 
 `./scripts/validate.sh` exited **0** with **All 2961 tests passed** and the
