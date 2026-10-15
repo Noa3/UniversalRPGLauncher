@@ -243,7 +243,11 @@ public partial class TestRm2kActiveEventGraphic
             File.WriteAllBytes(Path.Combine(_root, "Map0002.lmu"), TestRm2kEventPagePoseParser.MapWithPages(page));
             AssertTrue(_runtime.Simulation.SetTimer(1, 4));
             AssertTrue(_runtime.Simulation.StartTimer(1, pVisible: true, pInBattle: true));
-            AssertTrue(_runtime.Presentation.FlashOnce(255, 128, 64, 192, 30));
+            // **And the flash's four values are RPG_RT's own 0 to 31**, not a colour
+            // channel's: this test used to write 255, 128, 64 and 192, which the
+            // editor cannot write and Flash::MakeColor scales by eight, so the flash
+            // was refused and the tick assertions below were measuring nothing.
+            AssertTrue(_runtime.Presentation.FlashOnce(31, 20, 8, 31, 30));
             AssertTrue(_runtime.Presentation.ShakeOnce(2, 3, 30));
             _runtime.Simulation.PendingMapId = 2;
             _runtime.Simulation.PendingX = 0;

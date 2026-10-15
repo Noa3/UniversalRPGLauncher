@@ -108,6 +108,18 @@ public sealed class PresentationState
     public const int MaxColorChannel = 255;
 
     /// <summary>
+    /// The top of the flash's range, which is RPG_RT's own and not a colour
+    /// channel's.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And <c>Flash::MakeColor</c> scales every one of the four values by
+    /// eight</strong>, so 31 is white at full strength and 255 is not a value the
+    /// editor can write. Measured over the owned collection: all 379 flash
+    /// commands of the game stay inside 0 to 31.
+    /// </remarks>
+    public const int MaxFlashValue = 31;
+
+    /// <summary>
     /// The top of the screen tint range, which is not a colour channel's.
     /// </summary>
     /// <remarks>
@@ -519,6 +531,19 @@ public sealed class PresentationState
     public int FlashAlpha { get; internal set; }
     public int FlashFramesRemaining { get; internal set; }
 
+    /// <summary>
+    /// The flash's level right now, which is what is drawn.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is a separate number from the command's own</strong>: the
+    /// engine starts it at the command's level and decays it every frame
+    /// (<c>Flash::Update</c> does <c>level -= level / time_left</c>), so the
+    /// drawn alpha shrinks while the frames run down. A reader that drew the
+    /// command's value would show a flash that is full strength until the frame
+    /// it disappears.
+    /// </remarks>
+    public double FlashCurrentLevel { get; internal set; }
+
     public bool IsShakeActive { get; internal set; }
     public int ShakeStrength { get; internal set; }
     public int ShakeSpeed { get; internal set; }
@@ -632,6 +657,7 @@ public sealed class PresentationState
         PendingTransitionDirection = Rm2kTransitionDirection.Show;
         IsFlashActive = false;
         FlashRed = FlashGreen = FlashBlue = FlashAlpha = 0;
+        FlashCurrentLevel = 0;
         FlashFramesRemaining = 0;
         IsShakeActive = false;
         ShakeStrength = 0;
@@ -653,11 +679,26 @@ public sealed class PresentationState
         TickPictureMoves(pFrames);
         if (IsFlashActive)
         {
-            FlashFramesRemaining -= pFrames;
-            if (FlashFramesRemaining <= 0)
+            // **And the flash decays rather than only counting down**: the engine's
+            // Flash::Update does current_level -= current_level / time_left and
+            // then takes one frame off, so the drawn alpha shrinks with every
+            // frame and reaches zero exactly when the frames run out.
+            for (var frame = 0; frame < pFrames && IsFlashActive; frame++)
             {
-                IsFlashActive = false;
-                FlashFramesRemaining = 0;
+                if (FlashCurrentLevel > 0)
+                {
+                    if (FlashFramesRemaining > 0)
+                    {
+                        FlashCurrentLevel -= FlashCurrentLevel / FlashFramesRemaining;
+                        FlashFramesRemaining -= 1;
+                    }
+                    if (FlashFramesRemaining <= 0)
+                    {
+                        FlashFramesRemaining = 0;
+                        FlashCurrentLevel = 0;
+                        IsFlashActive = false;
+                    }
+                }
             }
         }
         if (IsTintActive)
@@ -701,14 +742,34 @@ public sealed class PresentationState
         }
     }
 
+    /// <summary>
+    /// A single flash, from <c>11040</c> with the once subcommand.
+    /// </summary>
+    /// <param name="pRed">Red, in RPG_RT's own 0 to 31.</param>
+    /// <param name="pGreen">Green, in RPG_RT's own 0 to 31.</param>
+    /// <param name="pBlue">Blue, in RPG_RT's own 0 to 31.</param>
+    /// <param name="pAlpha">The starting level, in RPG_RT's own 0 to 31.</param>
+    /// <param name="pFrames">The duration in frames.</param>
+    /// <returns>Whether the flash was accepted.</returns>
+    /// <remarks>
+    /// <strong>And the four values are RPG_RT's 0 to 31, not a colour channel's
+    /// 0 to 255.</strong> Measured over the owned collection, every one of the
+    /// game's 379 flash commands stays inside that range, and
+    /// <c>Flash::MakeColor</c> scales each of them by eight -- so a bound of 255
+    /// would accept values the editor cannot write and hide a misread field.
+    /// <strong>And the level starts at the command's own value and decays</strong>
+    /// (<c>Flash::Update</c>), which is what makes a flash fade out.
+    /// </remarks>
     public bool FlashOnce(int pRed, int pGreen, int pBlue, int pAlpha, int pFrames)
     {
-        if (!IsChannel(pRed) || !IsChannel(pGreen) || !IsChannel(pBlue) || !IsChannel(pAlpha)) return false;
+        if (!IsFlashValue(pRed) || !IsFlashValue(pGreen) || !IsFlashValue(pBlue)
+            || !IsFlashValue(pAlpha)) return false;
         if (pFrames < 0 || pFrames > MaxEffectFrames) return false;
         FlashRed = pRed;
         FlashGreen = pGreen;
         FlashBlue = pBlue;
         FlashAlpha = pAlpha;
+        FlashCurrentLevel = pAlpha;
         FlashFramesRemaining = pFrames;
         IsFlashActive = pFrames > 0;
         return true;
@@ -718,6 +779,7 @@ public sealed class PresentationState
     {
         IsFlashActive = false;
         FlashFramesRemaining = 0;
+        FlashCurrentLevel = 0;
     }
 
     public bool ShakeOnce(int pStrength, int pSpeed, int pFrames)
@@ -748,6 +810,19 @@ public sealed class PresentationState
     }
 
     private static bool IsChannel(int pValue) => pValue >= 0 && pValue <= MaxColorChannel;
+
+    /// <summary>
+    /// Whether a value is inside the flash's own range.
+    /// </summary>
+    /// <param name="pValue">A flash colour or level.</param>
+    /// <returns>Whether it is in range.</returns>
+    /// <remarks>
+    /// <strong>And it is its own range and not <see cref="IsChannel"/></strong>,
+    /// for the same reason the tint has one: a flash is written in RPG_RT's 0 to
+    /// 31 and scaled by eight, so a shared check would accept what the editor
+    /// cannot write.
+    /// </remarks>
+    private static bool IsFlashValue(int pValue) => pValue >= 0 && pValue <= MaxFlashValue;
 
     /// <summary>
     /// Whether a value is inside the tint range the editor writes.

@@ -152,4 +152,44 @@ public partial class TestRm2kPictureSave : TestBase
         AssertEq(restored.Presentation.TintRed, 0,
             "**and both land exactly on the target**");
     }
+
+    /// <summary>
+    /// A flash saved half way through its decay comes back at the same level.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the level has to travel with the frames</strong>: the save kept
+    /// the frames and the colour but not the level, so a load in the middle of a
+    /// flash would have come back at zero -- the flash the player was watching
+    /// would simply be gone, which is the same defect the tint had with its target.
+    /// </remarks>
+    public void Test_EinFlashWirdMittenImAbklingenGespeichertUndWeitergefuehrt()
+    {
+        var original = CreateState();
+        AssertTrue(original.Presentation!.FlashOnce(31, 31, 31, 31, 4),
+            "the flash of four frames is accepted");
+        original.Presentation.Tick(2);
+        AssertEq(original.Presentation.FlashCurrentLevel, 15.5,
+            "**and the flash has decayed twice**, 31 to 23.25 to 15.5");
+
+        var restored = CreateState();
+        AssertTrue(Rm2kSimulationSaveCodec.TryRestore(
+            Rm2kSimulationSaveCodec.Serialize(original), restored, out var error), error);
+        AssertEq(restored.Presentation!.FlashCurrentLevel, 15.5,
+            "**and the load keeps the level the screen is showing**");
+        AssertEq(restored.Presentation.FlashFramesRemaining, 2,
+            "and the frames it had left");
+
+        for (var frame = 0; frame < 2; frame++)
+        {
+            original.Presentation.Tick(1);
+            restored.Presentation.Tick(1);
+            AssertEq(restored.Presentation.FlashCurrentLevel,
+                original.Presentation.FlashCurrentLevel,
+                "**and every remaining frame of the flash is the frame it would"
+                    + " have been without the save**");
+        }
+        AssertEq(restored.Presentation.FlashCurrentLevel, 0.0,
+            "**and both reach zero exactly**");
+        AssertEq(restored.Presentation.IsFlashActive, false);
+    }
 }

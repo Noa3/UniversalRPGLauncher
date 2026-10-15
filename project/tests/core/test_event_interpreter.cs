@@ -1317,22 +1317,28 @@ public partial class TestEventInterpreter : TestBase
 		var presentation = new PresentationState();
 		var commands = new List<Rm2kMap.EventCommand>
 		{
-			// [red, green, blue, alpha, tenths, wait]
+			// [red, green, blue, alpha, tenths, wait] -- **and all four are RPG_RT's own
+			// 0 to 31**: this test used to write a colour channel's 255, 128 and 200,
+			// which the editor cannot write and Flash::MakeColor scales by eight.
 			new Rm2kMap.EventCommand(EventInterpreter.FlashScreen,
-				new List<int> { 255, 128, 0, 200, 10, 1 }),
-			new Rm2kMap.EventCommand(EventInterpreter.End),
+				new List<int> { 31, 20, 0, 31, 10, 1 }),
+		new Rm2kMap.EventCommand(EventInterpreter.End),
 		};
 
 		var interpreter = new EventInterpreter(state, 1, commands, presentation);
 		AssertTrue(interpreter.ExecuteFrame());
 		AssertTrue(presentation.IsFlashActive, "flash started");
-		AssertEq(presentation.FlashRed, 255);
+		AssertEq(presentation.FlashRed, 31);
+		AssertEq(presentation.FlashCurrentLevel, 31.0,
+			"and the drawn level starts at the command's own");
 		AssertEq(presentation.FlashFramesRemaining, 60, "ten tenths equal sixty frames");
 		AssertEq(interpreter.WaitFramesRemaining, 60, "wait flag blocks the next commands");
 
 		presentation.Tick(60);
 		AssertFalse(presentation.IsFlashActive, "flash ends after its duration");
-	}
+		AssertEq(presentation.FlashCurrentLevel, 0.0,
+			"and the level is back to zero, which is what the flash drew towards");
+		}
 
 	public void Test_FlashScreenRejectsOutOfBoundsColorAndDuration()
 	{

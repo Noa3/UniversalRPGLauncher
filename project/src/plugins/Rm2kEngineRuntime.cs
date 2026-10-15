@@ -422,7 +422,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 Simulation.UpdateCharacterAnimation(pMoving: false);
             }
             if (moving || _isRenderDirty || _eventRoutesMoved || HaveEventGraphicsChanged()
-                || !CurrentTone().Equals(_appliedTone))
+                || !CurrentTone().Equals(_appliedTone)
+                || Presentation.FlashCurrentLevel != _appliedFlashLevel)
             {
                 _isRenderDirty = true;
                 _eventRoutesMoved = false;
@@ -690,6 +691,14 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     /// tint command is none of those.
     /// </remarks>
     private Rm2kScreenTone _appliedTone = Rm2kScreenTone.NeutralTone;
+
+    /// <summary>The flash level the current frame was painted with.</summary>
+    /// <remarks>
+    /// <strong>And a flash has to dirty the frame for the same reason a tone
+    /// does</strong>: its level decays every frame, so a flash on a still screen
+    /// would otherwise be painted once and never again.
+    /// </remarks>
+    private double _appliedFlashLevel;
 
     /// <summary>The tone the presentation is asking for right now.</summary>
     /// <returns>The tone, from the command's own 0 to 200 values.</returns>
@@ -4410,6 +4419,12 @@ ReadString(entry, "name", v => werte.Name = v);
         var tone = CurrentTone();
         Rm2kScreenTonePainter.Apply(frame, tone);
         _appliedTone = tone;
+        // **And the flash is drawn over the tone**, because the engine's tone is
+        // applied to the screen bitmap while the flash is an overlay on top of it.
+        Rm2kScreenFlashPainter.Apply(
+            frame, Presentation.FlashRed, Presentation.FlashGreen,
+            Presentation.FlashBlue, Presentation.FlashCurrentLevel);
+        _appliedFlashLevel = Presentation.FlashCurrentLevel;
         RenderedMap = frame;
 
         // **Und ein Frame, in dem kein einziges Byte gesetzt ist, sagt

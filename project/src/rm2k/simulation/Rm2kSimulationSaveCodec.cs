@@ -293,6 +293,18 @@ public static class Rm2kSimulationSaveCodec
         public int FlashBlue { get; set; }
         public int FlashAlpha { get; set; }
         public int FlashFramesRemaining { get; set; }
+        /// <summary>
+        /// The flash's decaying level, which is what is drawn.
+        /// </summary>
+        /// <remarks>
+        /// **And the level has to be saved with the frames**, for the same reason
+        /// the tint's target is: a load in the middle of a flash that kept only the
+        /// frames would come back with a level of zero, and the flash the player was
+        /// watching would be gone. The engine does not save its flash at all (its own
+        /// comment calls that an RPG_RT bug), so saving the pair is already more than
+        /// it does -- but a half saved flash is worse than none.
+        /// </remarks>
+        public double FlashCurrentLevel { get; set; }
         public bool IsShakeActive { get; set; }
         public int ShakeStrength { get; set; }
         public int ShakeSpeed { get; set; }
@@ -722,6 +734,7 @@ public static class Rm2kSimulationSaveCodec
                 FlashBlue = pres.FlashBlue,
                 FlashAlpha = pres.FlashAlpha,
                 FlashFramesRemaining = pres.FlashFramesRemaining,
+                FlashCurrentLevel = pres.FlashCurrentLevel,
                 IsShakeActive = pres.IsShakeActive,
                 ShakeStrength = pres.ShakeStrength,
                 ShakeSpeed = pres.ShakeSpeed,
@@ -1064,6 +1077,7 @@ public static class Rm2kSimulationSaveCodec
             target.FlashBlue = pres.FlashBlue;
             target.FlashAlpha = pres.FlashAlpha;
             target.FlashFramesRemaining = pres.FlashFramesRemaining;
+            target.FlashCurrentLevel = pres.FlashCurrentLevel;
             target.IsShakeActive = pres.IsShakeActive;
             target.ShakeStrength = pres.ShakeStrength;
             target.ShakeSpeed = pres.ShakeSpeed;

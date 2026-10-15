@@ -334,7 +334,7 @@ numbers normalised**, not one refused animation; the first number is the message
 count. The second number is the one that matters, and it is zero. A normalising
 probe that drops the numbers can make a count look like a value.
 
-### K-PROD-RM2K-SCREEN-EFFECTS — tint DONE; flash, shake, pan, weather READY
+### K-PROD-RM2K-SCREEN-EFFECTS — tint and flash DONE; shake, pan, weather READY
 
 **Measured: five screen effects were state only.** `project/src/rm2k/rendering/`
 and `project/app/ui/` contained **zero** references to `TintRed`, `FlashRed`,
@@ -348,7 +348,7 @@ Demand and **parameters**, measured over the owned collection by
 | Command | Instances | Parameters measured |
 |---|---:|---|
 | `11030` TintScreen | 2,924 | 0..200 with 100 neutral |
-| `11040` FlashScreen | 379 | **colour and level in RPG_RT's 0..31**, six parameters -- no subcommand, so every one of them is a single flash |
+| `11040` FlashScreen | 379 | **colour and level in RPG_RT's 0..31**, six parameters -- no subcommand, so every one of them is a single flash | **painted** |
 | `11050` ShakeScreen | 34 | **strength and speed up to 9** (15 values of exactly nine) |
 | `11060` PanScreen | 43 | five parameters, 26 distinct forms |
 | `11070` WeatherEffects | 0 in this game | -- |
@@ -429,20 +429,65 @@ out in the test, and the re-aimed second tint), `TestRm2kPictureSave` **4/4**
 A mutation that makes the command jump to its target fails exactly the fade tests
 (14/18) and was reverted.
 
-**Still open on this card:** flash, shake, pan and weather, with their references
-already read so the next slice does not re-derive them.
+**And the flash is painted too** (`Rm2kScreenFlashPainter`), over the tone, because
+the engine applies the tone to the screen bitmap while the flash is an overlay on
+top of it. Two things had to be right and both come from `src/flash.h`:
 
-* **Flash** is a **pixel pass**, and its arithmetic is `src/flash.h`:
-  `Update(current_level, time_left, continuous, period, sat)` does
-  `current_level = current_level - (current_level / time_left)` and then decrements
-  `time_left`; when `time_left` reaches zero the level is zero, and for a
-  *continuous* flash it restarts with `time_left = period; current_level = sat`.
-  `MakeColor(r, g, b, level)` is `Color(r * 8, g * 8, b * 8, level * 8)` -- so the
-  flash is a **full-screen alpha blend towards a solid colour**, drawn over the
-  frame, and the level decays instead of the frame count alone. The interpreter
-  currently calls `FlashOnce` for **both** the once and the begin subcommand, so a
-  continuous flash is a single pulse today; the measurement says this game never
-  writes the subcommand, but that is a game's data and not the format.
+* **The range is RPG_RT's 0 to 31, not a colour channel's.** `Flash::MakeColor(r,
+  g, b, level)` is `Color(r * 8, g * 8, b * 8, level * 8)`, so 31 is white at full
+  strength; the presentation bounded all four values by `IsChannel`'s 255. The
+  measurement is what settled it: **all 379 flash commands stay inside 0..31**.
+* **The level decays; the frame count alone does not.** `Flash::Update` does
+  `level -= level / time_left` and then takes one frame off, so a flash of 31 over
+  four frames reads 23.25, 15.5, 7.75 and 0 -- and the presentation now keeps
+  `FlashCurrentLevel` as its own number, because the command's value is the level it
+  *starts* at. A flash of level zero touches **no byte at all**, which is what the
+  reference's `MakeColor` does with an empty colour.
+* **And a flash has to dirty the frame for the same reason a tone does**: its level
+  changes every frame, so a flash on a still screen would otherwise be painted once
+  and never again.
+
+Evidence: `TestRm2kFlash` **4/4** (the four-step decay against arithmetic written out
+in the test, the 0..31 bound, a level of zero leaving every byte identical, and the
+blend against the reference's scale), `TestRm2kRuntimeRendering` **21/21** including
+`Test_EinFlashFaerbtDasGemalteBildUndGibtEsZurueck`, which flashes a rendered map and
+then asserts the frame is **byte for byte** what it was once the flash is over -- a
+flash that leaves the screen lighter is a screen the player keeps. A mutation that
+makes the painter do nothing fails exactly those two (20/21 and 3/4) and was
+reverted.
+
+**And the save carries the flash's level.** The codec stored the flash's frames and
+colours but not the decaying level, so a load in the middle of a flash would have
+come back at zero and the flash the player was watching would be gone -- the same
+defect the tint had with its target. `TestRm2kPictureSave` **5/5** resumes a flash
+saved half way, frame by frame, against the uninterrupted run. (The engine does not
+save its flash at all -- its own comment calls that an RPG_RT bug -- so saving the
+pair is already more than it does, but a half saved flash is worse than none.)
+
+**And two existing tests had to be corrected, honestly** -- both were writing a
+colour channel's values where the format has RPG_RT's 0..31, and both were
+therefore measuring less than they claimed:
+
+* `Test_FlashScreenStoresBoundedFlashAndCanWait` wrote `{255, 128, 0, 200, 10, 1}`;
+  it now writes `{31, 20, 0, 31, 10, 1}` and says why, the same way the tint's three
+  255 fixtures were corrected.
+* `Test_BatchedTransferPreservesEventTimerAndScreenEffectTicks` wrote
+  `FlashOnce(255, 128, 64, 192, 30)` -- and the canonical run found it: with the
+  range in place the flash was **refused**, so the assertions below it ("Expected
+  12, got 0" for the frames left, and the two `Expected true`) had been passing over
+  a flash that never started. It now writes `{31, 20, 8, 31}` and the suite is
+  81/81 again. **A test that writes a value the format cannot hold is not a test of
+  the format.**
+
+**Still open on this card:** shake, pan, weather, and the **continuous** flash, with
+their references already read so the next slice does not re-derive them.
+
+* **A continuous flash is a single pulse today**: the interpreter calls `FlashOnce`
+  for **both** the once and the begin subcommand, while the reference's `FlashBegin`
+  keeps `flash_period = frames` and `flash_continuous = true` and restarts the level
+  at the saturation when the time runs out (`FlashEnd` clears all four). The
+  measurement says this game never writes the seventh parameter, so nothing here
+  needs it yet -- but that is one game's data and not the format.
 * **Shake** is a **camera offset**, not a pixel pass: `src/shake.h`
   `NextPosition(strength, speed, time_left, position)` computes
   `amplitude = 1 + 2 * strength`,
