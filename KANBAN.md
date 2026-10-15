@@ -334,58 +334,79 @@ numbers normalised**, not one refused animation; the first number is the message
 count. The second number is the one that matters, and it is zero. A normalising
 probe that drops the numbers can make a count look like a value.
 
-### K-PROD-RM2K-SCREEN-EFFECTS — READY, measured and fully referenced
+### K-PROD-RM2K-SCREEN-EFFECTS — tint DONE; flash, shake, pan, weather READY
 
-**Measured: five screen effects are state only.** `project/src/rm2k/rendering/`
-and `project/app/ui/` contain **zero** references to `TintRed`, `FlashRed`,
-`ShakeStrength`, `WeatherType`, `IsTintActive`, `IsFlashActive` or
-`IsShakeActive`. The commands are accepted, stored in `PresentationState`, counted
-down by its `Tick`, saved by the codec -- and nothing paints them. A game that
-tints its screen shows an untinted screen.
+**Measured: five screen effects were state only.** `project/src/rm2k/rendering/`
+and `project/app/ui/` contained **zero** references to `TintRed`, `FlashRed`,
+`ShakeStrength`, `WeatherType` or their `IsActive` flags: the commands were
+accepted, stored in `PresentationState`, counted down by its `Tick`, saved by the
+codec -- and nothing painted them.
 
 Demand over the owned collection (all-route distribution, so these are the
 command counts the games actually write):
 
-| Command | Instances |
-|---|---:|
-| `11030` TintScreen | 2,924 |
-| `11040` FlashScreen | 395 |
-| `11050` ShakeScreen | 129 |
-| `11060` PanScreen | 48 |
-| `11070` WeatherEffects | 1 |
+| Command | Instances | State |
+|---|---:|---|
+| `11030` TintScreen | 2,924 | **painted** |
+| `11040` FlashScreen | 395 | state only |
+| `11050` ShakeScreen | 129 | state only |
+| `11060` PanScreen | 48 | state only |
+| `11070` WeatherEffects | 1 | state only |
 
-And it is not a rare path: Lisa issues a tint from a parallel page **150 times in
+And it was not a rare path: Lisa issues a tint from a parallel page **150 times in
 300 frames**, which is a screen that is meant to change colour continuously.
 
-Reference, read from EasyRPG Player master (`src/game_screen.h`, `src/bitmap.cpp`):
+**The tint is now painted** (`Rm2kScreenTone` + `Rm2kScreenTonePainter`, applied
+to the composed frame before it is published, so after every layer and every
+sprite). The arithmetic is the reference's, read from EasyRPG Player master:
 
-* **The command's 0..200 becomes a tone with 128 as neutral**:
-  `Game_Screen::GetTone()` is `Tone(red * 128 / 100, green * 128 / 100, blue *
-  128 / 100, sat * 128 / 100)`. So a command value of 100 is the no-op, 0 is
-  black and 200 is 256 before clamping -- and the tint range this repository now
-  enforces (0..200) is the same range this conversion assumes.
-* `Bitmap::ToneBlit` (line 898) returns to a plain blit when
-  `tone == Tone(128,128,128,128)`, and splits the work into
-  `apply_sat = tone.gray != 128` and `apply_tone = red/green/blue != 128`.
-* **Saturation** (`saturation_tone`, line 860) is a Y'CbCr scaling, "Algorithm
-  from OpenPDN": `lum = (7471 * b + 38470 * g + 19595 * r) >> 16`, then each
-  channel `clamp((lum * 1024 + (c - lum) * sat) >> 10)` where
-  `sat = gray > 128 ? 1024 + (gray - 128) * 16 : gray * 8`. When both apply, the
-  saturation runs **first**, then the colour.
-* **Colour** (`color_tone`, line 883) is a hard-light lookup:
-  `hard_light.table[tone.c][channel]`, with the table built at line 841 as
-  `i <= 128 ? (2 * i * j) / 255 : 255 - 2 * (255 - i) * (255 - j) / 255`, clamped
-  to 0..255. It is a 256x256 byte table, built once.
+* `Game_Screen::GetTone()` is `Tone(value * 128 / 100, ...)`, so **the command's
+  100 is the tone's 128** and is the value that changes nothing -- and the top of
+  the command range, 200, becomes 256 while the hard-light lookup is 256 entries
+  wide, so the reference reads one past its own table there. This implementation
+  **clamps to 255 and says so** instead of reproducing the read.
+* `Bitmap::ToneBlit` blits unchanged at the neutral tone, and splits the work into
+  `apply_sat = gray != 128` and `apply_tone = red/green/blue != 128`.
+* Saturation (`saturation_tone`) is a Y'CbCr scaling:
+  `lum = (7471 * b + 38470 * g + 19595 * r) >> 16`, each channel
+  `clamp((lum * 1024 + (c - lum) * sat) >> 10)`, with
+  `sat = gray > 128 ? 1024 + (gray - 128) * 16 : gray * 8`.
+* Colour (`color_tone`) is the hard-light table
+  `i <= 128 ? (2 * i * j) / 255 : 255 - 2 * (255 - i) * (255 - j) / 255`.
+* **The saturation runs first and the colour second**, and a test distinguishes
+  the two orders.
 
-Where it belongs: the RM2K frame is composed into a `Rm2kPixelBuffer` of 320x240
-in the runtime's frame path (around the `_renderedRenderer` stages), so the tone
-is a pass over the finished frame -- after the sprites -- and it must be an exact
-no-op at the neutral tone so that no existing rendering test changes its pixels.
-`Shake` is a camera offset rather than a pixel effect (`Rm2kMapCamera`), and
-`Pan` is a camera position, so those two are a separate, smaller slice.
+**And building it found two defects that had nothing to do with the arithmetic.**
 
-Order of work: **tint first** (2,924 instances, and the state side is already
-correct and tested), then flash, then shake, then pan, then weather.
+1. **The tint's start value was zero, not neutral.** `PresentationState` left
+   `TintRed/Green/Blue/Saturation` at 0 and its `Reset()` set them back to 0, so
+   the first version of the pass painted **every game's screen black** -- and the
+   existing rendering tests caught it at once: "the camera scroll is visible in
+   the frame, but 0 bytes differ", "the move changed the visible map" failed with
+   0 bytes different, and the new end-to-end test reported "0 pixels carry a
+   colour". The engine's `Game_Screen::OnMapChange` resets the tint to exactly
+   **100**, which is neutral, and both the property initializers and `Reset()` now
+   do the same.
+2. **A tone change did not dirty the frame.** The frame is recomposed for
+   movement, a map change and changed event graphics -- and a tint command is none
+   of those, so a tint on a still screen would never have been painted at all. The
+   runtime now compares the tone it painted with to the tone being asked for.
+
+Evidence: `TestRm2kBildschirmton` **6/6** (the conversion including the clamp, the
+neutral tone leaving every byte identical, a tone of zero, both hard-light
+branches against arithmetic written out in the test, the saturation as luminance,
+and the saturation-before-colour order), `TestRm2kRuntimeRendering` **20/20**
+including `Test_DerBildschirmtonFaerbtDasGemalteBild`, which renders a map, asks
+for a tone of zero, and asserts the painted frame has **no** coloured pixel and
+gets them back at neutral. A mutation that swaps the saturation and colour blocks
+fails exactly the order test (5/6), and it was reverted.
+
+**Still open on this card:** flash, shake, pan and weather (same measurement, same
+kind of reference), and **the tint does not interpolate**: the engine walks
+`tint_current_*` towards `tint_finish_*` over the duration
+(`Game_Screen::Update` calls `interpolate(remaining, current, finish)`), while
+this runtime jumps to the target and only counts the frames down. So a tint fades
+in the engine and snaps here -- painted, but not yet the engine's timing.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 

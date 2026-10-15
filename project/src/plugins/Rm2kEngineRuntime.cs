@@ -421,7 +421,8 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
             {
                 Simulation.UpdateCharacterAnimation(pMoving: false);
             }
-            if (moving || _isRenderDirty || _eventRoutesMoved || HaveEventGraphicsChanged())
+            if (moving || _isRenderDirty || _eventRoutesMoved || HaveEventGraphicsChanged()
+                || !CurrentTone().Equals(_appliedTone))
             {
                 _isRenderDirty = true;
                 _eventRoutesMoved = false;
@@ -680,6 +681,21 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private Rm2kMapLayers? _renderedLayers;
     private Rm2kMapFrameRenderer? _renderedRenderer;
     private bool _isRenderDirty;
+
+    /// <summary>The tone the current frame was painted with.</summary>
+    /// <remarks>
+    /// <strong>And a tone change has to dirty the frame</strong>, or a game whose
+    /// screen is tinted while nothing moves would never repaint: the frame is
+    /// recomposed for movement, a map change and changed event graphics, and a
+    /// tint command is none of those.
+    /// </remarks>
+    private Rm2kScreenTone _appliedTone = Rm2kScreenTone.NeutralTone;
+
+    /// <summary>The tone the presentation is asking for right now.</summary>
+    /// <returns>The tone, from the command's own 0 to 200 values.</returns>
+    private Rm2kScreenTone CurrentTone() => Rm2kScreenTone.FromCommand(
+        Presentation.TintRed, Presentation.TintGreen, Presentation.TintBlue,
+        Presentation.TintSaturation);
 
     /// <summary>
     /// Set when an event move route changed something this update, so the frame
@@ -4386,6 +4402,14 @@ ReadString(entry, "name", v => werte.Name = v);
                     $"RM2K character {sprite.CharacterIndex} at ({sprite.MapX},{sprite.MapY}) could not be drawn.");
             }
         }
+        // **And the screen tone is the last pass**, because the engine tints the
+        // finished screen: after the lower layer, the sprites, the vehicle, the
+        // upper layer and the above-layer sprites. A neutral tone returns without
+        // touching a byte, so a frame nobody tinted is byte for byte the frame it
+        // was before this pass existed.
+        var tone = CurrentTone();
+        Rm2kScreenTonePainter.Apply(frame, tone);
+        _appliedTone = tone;
         RenderedMap = frame;
 
         // **Und ein Frame, in dem kein einziges Byte gesetzt ist, sagt

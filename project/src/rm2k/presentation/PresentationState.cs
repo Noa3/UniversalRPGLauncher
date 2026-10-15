@@ -197,20 +197,33 @@ public sealed class PresentationState
     // what is stored here is what was asked for.
     public bool IsTintActive { get; internal set; }
 
-    public int TintRed { get; internal set; }
-    public int TintGreen { get; internal set; }
-    public int TintBlue { get; internal set; }
-
     /// <summary>
-    /// The saturation in percent, from <c>parameters[3]</c>.
+    /// The tint's red, from <c>parameters[0]</c>, in the command's own 0 to 200.
     /// </summary>
     /// <remarks>
-    /// <strong>0 to 100, and 100 is the untinted screen.</strong> A reader that
+    /// <strong>And it starts at the neutral value, not at zero.</strong> The
+    /// engine's <c>Game_Screen::OnMapChange</c> resets a negative tint -- the
+    /// state before the first tint command -- to exactly 100, and 100 is what
+    /// changes nothing. A zero default would be a black screen for every game
+    /// that never tints at all, which is most of them.
+    /// </remarks>
+    public int TintRed { get; internal set; } = NeutralTintValue;
+
+    public int TintGreen { get; internal set; } = NeutralTintValue;
+
+    public int TintBlue { get; internal set; } = NeutralTintValue;
+
+    /// <summary>
+    /// The saturation, from <c>parameters[3]</c>, in the command's own 0 to 200.
+    /// </summary>
+    /// <remarks>
+    /// <strong>0 to 200, and 100 is the untinted screen.</strong> A reader that
     /// treated 0 as "no tint" would have tinted the screen to grey at the one
     /// value that means "leave it alone" — and that is the value a game writes
-    /// when it wants no tint.
+    /// when it wants no tint. Measured over the owned collection the command
+    /// writes 200 as well, which a 0 to 100 bound refused outright.
     /// </remarks>
-    public int TintSaturation { get; internal set; }
+    public int TintSaturation { get; internal set; } = NeutralTintValue;
 
     /// <summary>
     /// The tint's duration in frames, from <c>tenths * DEFAULT_FPS / 10</c>.
@@ -541,7 +554,15 @@ public sealed class PresentationState
         // dictionary for ever because nothing else removes it.
         _movingPictures.Clear();
         IsTintActive = false;
-        TintRed = 0; TintGreen = 0; TintBlue = 0; TintSaturation = 0;
+        // **And a new game starts at the neutral tint, not at zero.** The engine
+        // resets a negative tint -- the state before the first tint command -- to
+        // exactly 100 in the command's scale (Game_Screen::OnMapChange), and 100
+        // is the value that changes nothing. Zero would be a black screen, which
+        // is why the renderer can apply the tint unconditionally.
+        TintRed = NeutralTintValue;
+        TintGreen = NeutralTintValue;
+        TintBlue = NeutralTintValue;
+        TintSaturation = NeutralTintValue;
         TintFramesRemaining = 0;
         PendingTransition = Rm2kTransition.None;
         PendingTransitionDirection = Rm2kTransitionDirection.Show;
