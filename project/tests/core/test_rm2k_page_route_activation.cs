@@ -84,6 +84,43 @@ public partial class TestRm2kActiveEventGraphic
         for (var tick = 0; tick < count; tick++) AssertTrue(_runtime.Update(1.0 / 60.0).Success);
     }
 
+    /// <summary>
+    /// An event's sprite is drawn between the tiles while its step is unspent.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And  nur  der  Held  interpolierte.</strong>  Der  Event-Sprite  wurde  mit
+    /// seiner  logischen  Kachel  und  ohne  Offset  gebaut,  also  stand  jedes  laufende
+    /// Event  acht  Frames  still  und  sprang  dann  eine  Kachel  weit  --  obwohl  die
+    /// Referenz  eine  einzige  Sprite-Positionsregel  hat,  `Game_Character::GetSpriteX`,
+    /// fuer  jede  Figur.  Und  das  ist  auch  die  Bedingung  dafuer,  dass  der  Bogen
+    /// eines  Routen-Sprungs  ueberhaupt  sichtbar  werden  kann.
+    /// </remarks>
+    public void Test_EinLaufendesEventWirdZwischenDenKachelnGezeichnet()
+    {
+        StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
+        RouteTicks(1);
+        _runtime.MarkFrameDirtyForTest();
+        _runtime.RefreshFrameForTest();
+        var sprite = _runtime.FirstComposedCharacterSprite;
+        AssertTrue(sprite != null, "the walking event is composed into the frame");
+        AssertEq(sprite!.MapX, 9, "**the event already occupies the tile it stepped onto**");
+        AssertTrue(sprite.PixelOffsetX != 0,
+            "**and its sprite is drawn between the tiles while the step is unspent**, which"
+                + " the camera offset alone cannot produce: the event is on a one-tile map");
+        AssertEq(sprite.PixelOffsetY, 0, "**and the step is horizontal**, so only x moves");
+
+        // **Und ein stehendes Event hat keinen Offset**: die Kachel, auf der es steht,
+        // ist auch die, auf der es gezeichnet wird.
+        StartAuthoredRouteMap(RoutePage(0, 8, false));
+        RouteTicks(2);
+        _runtime.MarkFrameDirtyForTest();
+        _runtime.RefreshFrameForTest();
+        var still = _runtime.FirstComposedCharacterSprite;
+        AssertTrue(still != null, "the stationary event is composed as well");
+        AssertEq(still!.PixelOffsetX, 0, "**and a stationary event is drawn on its tile**");
+        AssertEq(still.PixelOffsetY, 0, "and on it in both axes");
+    }
+
     private void HigherRouteRequiresSwitch()
     {
         _event.Pages[1].Conditions["switch_a_enabled"] = true;

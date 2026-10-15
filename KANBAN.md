@@ -758,20 +758,35 @@ leaves the frame byte for byte as it was; the four updates are pinned by tests a
 the reference's arithmetic, and one end-to-end test drives a real game with the weather
 turned on.
 
-### K-PROD-RM2K-EVENT-SPRITE-OFFSET — READY (every event walk is drawn tile to tile)
+### K-PROD-RM2K-EVENT-SPRITE-OFFSET — DONE (2026-10-15, every event walk is drawn between the tiles)
 
-**And this is why the jump cannot be seen yet.** The hero's sprite carries the unspent step as
-a pixel offset -- `Rm2kStepBudget.PixelOffsetX/`Y from `Simulation.RemainingStep`, the
-`GetSpriteX`/`GetSpriteY` shape -- but the **event** sprite is built with `MapX = pEvent.X`
-and no offset at all, so every event that walks is drawn snapped to its tile: an event that
-takes eight frames to cross a tile is drawn standing still and then teleporting. The
-reference has one sprite-position rule for every character (`Game_Character::GetSpriteX`),
-so this is a gap, not a design decision.
+The hero's sprite carried the unspent step as a pixel offset; the **event** sprite was built
+with its logical tile and no offset at all, so every event that walked was drawn standing
+still and then teleporting a tile -- although the reference has one sprite-position rule,
+`Game_Character::GetSpriteX`, for every character.
 
-**Acceptance:** an event's sprite interpolates while its step is unspent, through the same
-`PixelOffsetX/Y` the hero uses; a test asserts that an event mid-step has a non-zero offset
-and a drawn position strictly between its old and its new tile, that a stationary event has
-zero offset, and that the frame renderer places it there (not merely that the field is set).
+**And there were two defects, not one.** `TryBuildEventSprite` never computed the offset, and
+`BuildCharacterSprites` then **assigned** the camera offset over it (`sprite.PixelOffsetX =
+pOffsetX`) while the hero's branch **added** it (`+=`) -- the hero's own comment documents
+exactly this bug, from when the hero snapped to its tile while walking, and the event branch
+still had it. Both are fixed: the event sprite gets `PixelOffsetX/Y` from its own step state,
+and the camera offset is added rather than assigned.
+
+**The direction is already the sprite code.** The step state holds 0..3 (up/right/down/left),
+which is what `PixelOffsetX` expects; converting it through `FacingFromFacingDirection` first
+-- as the hero does, because the hero's state holds a *facing byte* -- silently put the offset
+on the wrong axis. The debug that found it showed the state as `(9, 8, 240, 1)` with the
+sprite offsetting to 0.
+
+**Evidence:** `Test_EinLaufendesEventWirdZwischenDenKachelnGezeichnet` -- a walking event
+occupies its target tile while its sprite is drawn between the tiles (`PixelOffsetX != 0` on a
+one-tile map, where the camera offset is zero and cannot produce it; `PixelOffsetY == 0` for a
+horizontal step), and a stationary event is drawn exactly on its tile. And
+`AssertPinnedCellPixels` in the animation suite now derives the drawn position from the
+sprite's own `PixelOffsetX/Y` (which is the camera scroll **and** the step) instead of from the
+tile plus the camera offset, so it compares the frame against where the renderer really put
+the character -- the eight animation-type assertions that had encoded the old assumption now
+pass with it.
 
 ### K-PROD-RM2K-ROUTE-JUMP — READY (24 and 25, six measured instances)
 
@@ -824,8 +839,11 @@ command it does not implement and a smaller error than the route stopping dead.
 * **The arc** is the drawn position while the jump is in the air: the tile minus the tile
   delta times the unspent step, on **both** axes at once --
   `x = GetX() * 256 - (GetX() - GetBeginJumpX()) * GetRemainingStep()`, the same for y. So a
-  diagonal jump is a straight diagonal, which is why it needs the event sprite offset
-  (`K-PROD-RM2K-EVENT-SPRITE-OFFSET`) before it can be seen at all.
+  diagonal jump is a straight diagonal. **The event sprite offset it needs is done**
+  (`K-PROD-RM2K-EVENT-SPRITE-OFFSET`), so a jump's arc will be visible as soon as the jump
+  exists -- the arc itself still needs a sprite-offset form that interpolates **both** axes
+  from the begin tile (the existing `Rm2kStepBudget.PixelOffsetX/Y` are cardinal and take the
+  step's direction), and that helper does not exist yet.
 * And a failed jump either restores the previous direction and facing (a skippable route)
   or rewinds the index and counts a move failure (a route that is not).
 

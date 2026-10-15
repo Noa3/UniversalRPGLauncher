@@ -349,9 +349,17 @@ public partial class TestRm2kActiveEventGraphic : TestBase
         // 24x32 frame, row=right(1), frame=right(2), feet at tile bottom.
         var sourceX = (index % 4) * 72 + pattern * 24;
         var sourceY = (index / 4) * 128 + facingRow * 32;
+        // **Und  die  Zielposition  kommt  vom  Sprite  selbst**:  `PixelOffsetX/Y`
+        // enthaelt  den  Kamera-Scroll  **und**  den  Offset  des  unverbrauchten
+        // Schritts,  und  genau  das  zeichnet  der  Renderer.  Frueher  rechnete  dieser
+        // Helfer  nur  mit  der  Kachel  und  dem  Kamera-Offset  --  ein  laufendes
+        // Event  wurde  also  auf  seiner  Kachel  erwartet,  obwohl  die  Referenz  es
+        // dazwischen  zeichnet.
+        var sprite = EventSprite();
+        AssertTrue(sprite != null, "the event's sprite is composed into the frame");
         // Game_Character::GetScreenX adds TILE_SIZE, not half a tile.
-        var destinationX = _event.X * 16 + 16 - 12 + _runtime.AppliedCameraOffsetX;
-        var destinationY = _event.Y * 16 + 16 - 32 + _runtime.AppliedCameraOffsetY;
+        var destinationX = _event.X * 16 + 16 - 12 + sprite!.PixelOffsetX;
+        var destinationY = _event.Y * 16 + 16 - 32 + sprite.PixelOffsetY;
         var frame = _runtime.RenderedMap!;
         var sampled = 0;
         var mismatches = 0;

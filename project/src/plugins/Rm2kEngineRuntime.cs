@@ -4810,8 +4810,14 @@ ReadString(entry, "name", v => werte.Name = v);
             var sprite = TryBuildEventSprite(mapEvent, charsets);
             if (sprite != null)
             {
-                sprite.PixelOffsetX = pOffsetX;
-                sprite.PixelOffsetY = pOffsetY;
+                // **Und  addiert,  nicht  ersetzt** --  derselbe  Defekt,  den  der
+                // Helden-Zweig  unten  schon  beschreibt:  eine  Zuweisung  loescht  den
+                // Offset  des  unverbrauchten  Schritts,  und  ein  laufendes  Event
+                // schnappt  auf  seine  Kachel  zurueck,  statt  dazwischen  zu  laufen.
+                // Der  Kamera-Offset  ist  ein  eigener  Scroll,  der  auf  jeden  Sprite
+                // aufgeschlagen  wird.
+                sprite.PixelOffsetX += pOffsetX;
+                sprite.PixelOffsetY += pOffsetY;
                 sprites.Add(sprite);
             }
         }
@@ -4852,12 +4858,29 @@ ReadString(entry, "name", v => werte.Name = v);
             return null;
         }
         var index = page.Graphic.TryGetValue("character_index", out var rawIndex) && rawIndex is int i ? i : 0;
+        // **Und  ein  Event  wird  zwischen  den  Kacheln  gezeichnet,  solange  sein
+        // Schritt  unverbraucht  ist** --  wie  der  Held.  `GetSpriteX`/`GetSpriteY`
+        // sind  eine  Regel  fuer  jede  Figur,  und  ein  Event  auf  seiner  logischen
+        // Kachel  steht  acht  Frames  still  und  springt  dann  eine  Kachel  weit.
+        var stepRemaining = 0;
+        var stepDirection = pEvent.Direction;
+        if (_eventStepStates.TryGetValue(pEvent.Id, out var step))
+        {
+            stepRemaining = step.RemainingStep;
+            stepDirection = (byte)step.Direction;
+        }
         return new Rm2kCharacterSprite
         {
             Charset = charset,
             MapX = pEvent.X,
             MapY = pEvent.Y,
             CharacterIndex = index,
+            // **Und  die  Richtung  ist  schon  der  Karten-Code**: der Schritt-Zustand
+            // haelt  0..3  (oben/rechts/unten/links), genau  was  `PixelOffsetX`  will --
+            // nicht  das  Facing-Byte  der  Seite,  das  erst  `FacingFromFacingDirection`
+            // uebersetzt.
+            PixelOffsetX = Rm2kStepBudget.PixelOffsetX(pEvent.X, stepRemaining, stepDirection),
+            PixelOffsetY = Rm2kStepBudget.PixelOffsetY(pEvent.Y, stepRemaining, stepDirection),
             Stage = Rm2kCharacterSprite.StageForLayer(page.Layer),
             FacingDirection = pEvent.FacingDirection ?? pEvent.Direction,
             Frame = pEvent.AnimationFrame,
