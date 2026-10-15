@@ -90,6 +90,12 @@ public partial class TestRm2kSpielstandAmEchtenSpiel : TestBase
         //  im  Einzelaufruf  gruen  und  in  der  Suite  rot  gelaufen.**
         var ordner = ProjectSettings.GlobalizePath(
             "user://rm2k-slots-" + OS.GetProcessId());
+        // **And the folder is removed first, recursively.** The name carries the process id,
+        // and a process id is reused: a run that dies before it cleans up leaves its files
+        // behind, and a leftover slot would make the first assertion below true for the wrong
+        // reason. `DirAccess.RemoveAbsolute` does not delete a filled folder, so the recursive
+        // delete is the tool.
+        if (Directory.Exists(ordner)) Directory.Delete(ordner, true);
         DirAccess.MakeDirRecursiveAbsolute(ordner);
         var geschrieben = Rm2kSimulationSaveCodec.TryWriteFile(
             ordner, "slot1", state, out var fehler);
@@ -139,15 +145,30 @@ public partial class TestRm2kSpielstandAmEchtenSpiel : TestBase
         //  Loeschen  ausdruecklich  rekursiv.**
         var kopie = ProjectSettings.GlobalizePath(
             "user://rm2k-slot-game-" + OS.GetProcessId());
+        // **And a leftover folder from a dead run must not fail this test.** The name carries
+        // the process id and a process id is reused: a run that dies before its cleanup leaves
+        // the folder behind, the next run gets the same id, and `File.Copy` refuses a file that
+        // is already there. That is exactly how this test failed once, with an IOException on
+        // `RPG_RT.ldb`, while a second validation was running against the same user directory.
+        //
+        // The folder is written here with a file inside it first -- what a dead run leaves --
+        // and then removed recursively. **And the two measures overlap**: a mutation that drops
+        // this delete still passes, because the copy below overwrites, so the delete is the
+        // second line of defence and not the load-bearing one. What it does carry is the state
+        // the test asserts on -- a leftover slot or title file would make an assertion true for
+        // the wrong reason -- and it is stated that way instead of being claimed as the fix.
+        Directory.CreateDirectory(kopie);
+        File.WriteAllText(Path.Combine(kopie, "leftover.txt"), "a run that died here");
+        if (Directory.Exists(kopie)) Directory.Delete(kopie, true);
         DirAccess.MakeDirRecursiveAbsolute(kopie);
         File.Copy(
             ProjectSettings.GlobalizePath(
                 "res://tests/fixtures/rm2k-dragon-destiny/RPG_RT.ldb"),
-            Path.Combine(kopie, "RPG_RT.ldb"));
+            Path.Combine(kopie, "RPG_RT.ldb"), overwrite: true);
         File.Copy(
             ProjectSettings.GlobalizePath(
                 "res://tests/fixtures/rm2k-dragon-destiny/RPG_RT.lmt"),
-            Path.Combine(kopie, "RPG_RT.lmt"));
+            Path.Combine(kopie, "RPG_RT.lmt"), overwrite: true);
 
         // **Und  ohne  eine  Karte  startet  der  Host  nicht** --
         // -- **und  er  hat  sie  beim  Start  auch  wirklich
@@ -253,11 +274,11 @@ public partial class TestRm2kSpielstandAmEchtenSpiel : TestBase
         // first assertion true for the wrong reason.
         var ordner = ProjectSettings.GlobalizePath(
             "user://rm2k-titel-" + OS.GetProcessId());
+        // **And the whole folder goes, not only the files in it**: a subdirectory a dead run
+        // left behind would survive a sweep of the files and stay for the next run with this
+        // process id.
+        if (Directory.Exists(ordner)) Directory.Delete(ordner, true);
         DirAccess.MakeDirRecursiveAbsolute(ordner);
-        foreach (var alt in Directory.GetFiles(ordner))
-        {
-            File.Delete(alt);
-        }
 
         using var host = new EnginePluginHost(
             BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
