@@ -241,6 +241,14 @@ public sealed class RgssLaufzeit
         Messen("rand_probe", "rand(30)");
         Messen("rand_art", "rand(30).class.name");
 
+        // **Und die Eingabe, weil `false` und `nil` zwei verschiedene Antworten
+        // sind.** Ein Spiel, dem `Input.trigger?(Input::C)` nil gibt, weiss
+        // nicht, ob eine Taste unten ist; eines, dem es `false` gibt, weiss,
+        // dass keine unten ist -- **und nur die zweite Antwort ist eine, auf
+        // die ein Titelbild warten kann.**
+        Messen("input_trigger", "Input.trigger?(Input::C)");
+        Messen("input_dir4", "Input.dir4");
+
         // **Und der Host zaehlt mit.** Die Karte liest sich ausserhalb des
         // Spiels einwandfrei -- `RPG::Map` mit elf Feldern und `@width` darin --
         // **und im Spiel ist `$game_map.width` nil**, also ist die Frage, ob

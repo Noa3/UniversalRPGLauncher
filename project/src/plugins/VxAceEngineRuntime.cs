@@ -232,7 +232,54 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
                 + "  def self.fadein(t); end\n"
                 + "  def self.fadeout(t); end\n"
                 + "end",
-            "module Input\nend",
+            // **And `Input` is what a scene reads every frame, and an empty
+            // module answers nil for every one of those reads.** Measured:
+            // `Scene_Title#update` asks `Input.trigger?(Input::C)`, and a nil
+            // there is a title screen that cannot be started -- not because the
+            // game is wrong, but because the runtime never said whether a key
+            // is down.
+            //
+            // **And this runtime is headless, and it says so.** There is no
+            // keyboard, so nothing is pressed: `trigger?`, `press?` and
+            // `repeat?` answer false and `dir4`/`dir8` answer 0. **And that is
+            // not a lie** -- no key arrived -- and it is the difference between
+            // a game that waits for a player and a game that cannot tell
+            // whether one is there. **And the lists are globals so that a host
+            // can fill them**: `$input_pressed` and `$input_triggered` are the
+            // two names a host writes, and the module reads.
+            //
+            // **And the key numbers are RGSS 1.0's own.** A game writes
+            // `Input.trigger?(Input::C)` and never the number, so the values
+            // matter to the direction helpers and to a host that feeds keys.
+            "module Input\n"
+                + "  DOWN = 2; LEFT = 4; RIGHT = 6; UP = 8\n"
+                + "  A = 11; B = 12; C = 13; X = 14; Y = 15; Z = 16\n"
+                + "  L = 17; R = 18; SHIFT = 19; CTRL = 20; ALT = 21\n"
+                + "  F5 = 25; F6 = 26; F7 = 27; F8 = 28; F9 = 29\n"
+                + "  $input_pressed = []\n"
+                + "  $input_triggered = []\n"
+                + "  $input_repeated = []\n"
+                + "  def self.update\n"
+                + "    $input_repeated = []\n"
+                + "    $input_triggered = []\n"
+                + "  end\n"
+                + "  def self.trigger?(k); $input_triggered.include?(k); end\n"
+                + "  def self.press?(k); $input_pressed.include?(k); end\n"
+                + "  def self.repeat?(k)\n"
+                + "    $input_repeated.include?(k) || $input_triggered.include?(k); end\n"
+                + "  def self.dir4\n"
+                + "    return 2 if $input_pressed.include?(DOWN)\n"
+                + "    return 4 if $input_pressed.include?(LEFT)\n"
+                + "    return 6 if $input_pressed.include?(RIGHT)\n"
+                + "    return 8 if $input_pressed.include?(UP)\n"
+                + "    0\n"
+                + "  end\n"
+                + "  def self.dir8\n"
+                + "    d = dir4\n"
+                + "    return d if d != 0\n"
+                + "    0\n"
+                + "  end\n"
+                + "end",
             "module Font\nend",
             "module Color\nend",
             "module Tone\nend",
