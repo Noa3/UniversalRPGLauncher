@@ -229,7 +229,7 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
         // The frame host is reachable now because the built-in module no longer
         // answers `update` -- and a frame has to be the host's work, because the
         // surface will be.
-        _grafik = new RgssGrafikHost { Fallback = _scriptHost };
+        _grafik = new RgssGrafikHost { Fallback = _scriptHost, Wurzel = gameDir };
         _datenHost.Fallback = _grafik;
         _interpreter = new RubyInterpreter(_datenHost);
 

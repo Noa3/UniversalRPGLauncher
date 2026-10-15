@@ -246,6 +246,14 @@ public sealed class RgssLaufzeit
         // nicht, ob eine Taste unten ist; eines, dem es `false` gibt, weiss,
         // dass keine unten ist -- **und nur die zweite Antwort ist eine, auf
         // die ein Titelbild warten kann.**
+        // **Und die verschachtelte Konstante, weil `RPG::Cache` eine ist.**
+        // Gemessen: das Spiel meldet *"the constant RPG::Cache is not defined by
+        // this host"*, obwohl das eingebaute Modul es anlegt -- **also ist die
+        // Frage, ob der Leser ein Modul in einem Modul unter seinem vollen Pfad
+        // findet.**
+        Messen("rpg_nil", "RPG.nil?");
+        Messen("rpg_cache_nil", "RPG::Cache.nil?");
+
         Messen("input_trigger", "Input.trigger?(Input::C)");
         Messen("input_dir4", "Input.dir4");
 
