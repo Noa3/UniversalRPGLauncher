@@ -1,29 +1,28 @@
 ## Current card
 
-### K-PROD-RM2K-ROUTE-JUMP DONE (2026-10-15) -- the route commands are complete
+### Route commands complete: 8, 10 and 11 as route commands (2026-10-15)
 
-`begin_jump` (24) and `end_jump` (25) are implemented: the scan reads the commands between
-them, turns as it goes and accumulates the distance, and the event leaves the ground at
-`end_jump` -- checking no tile, because a jump goes *over* obstacles, and drawing a straight
-diagonal on both axes through the new `Rm2kStepBudget.JumpPixelOffsetX/Y`. With that, every
-route command the format defines is implemented (0..22 movement/turns/faces, 23 wait, 24/25
-jump, 26/27 lock and unlock facing, 28..31 speed and frequency); what remains open is the
-relative/random movement forms 8/10/11 as *route* commands, which the autonomous movement
-types implement and the route dispatch refuses -- now visibly, because an unhandled command
-is walked past and named once instead of stopping the route.
+`move_random` (8) turns to one of the four cardinals (the reference's `TurnRandom()` rolls
+0..3, never a diagonal), `move_away_from_hero` (10) walks away along the dominant axis, and
+`move_forward` (11) keeps the direction the character already has. The dispatch reaches them
+through the same movement branch as the eight named directions, so the interpreter's forced
+routes get them too. **With that every route command the format defines is executed.** The
+test that asserted these three did *nothing* ("does not whitelabel") was the honest
+description of a missing command, not a property of the format; three behaviour tests replace
+it, and a mutation that resolved `away` like `towards` was caught by the new away test.
 
-### Canonical validation GREEN (2026-10-15, after the route jump)
+### Canonical validation GREEN (2026-10-15, after the relative route commands)
 
-`./scripts/validate.sh` exited **0** with **All 2980 tests passed** and the
+`./scripts/validate.sh` exited **0** with **All 2982 tests passed** and the
 `UniversalRPG validation passed.` marker, **373** suite records and **zero**
 `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-21.log`.
-2975 after `4e4bc76` plus the five jump tests. Earlier green runs of the same day: **2975**
-after `4e4bc76`, **2974** after `b942abf`, **2973** after `9687b5f`, **2968** after
-`45b4b21`, **2961** after `6d9eb20`, **2956** after `65a1241`, **2948** after `1352ef2`,
-**2942** after `a1fed99`, **2940** after `aa8017f`, **2937** after `ce9f798`, **2930** after
-`b5aef4a`, **2928** after `dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`,
-**2912** after `073a096`.
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-22.log`.
+2980 after `8fb6cea`, minus the replaced test and plus the three behaviour tests. Earlier
+green runs of the same day: **2980** after `8fb6cea`, **2975** after `4e4bc76`, **2974** after
+`b942abf`, **2973** after `9687b5f`, **2968** after `45b4b21`, **2961** after `6d9eb20`,
+**2956** after `65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940** after
+`aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after `dec3936`,
+**2921** after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
 
 **And the run before it (`urpg-canonical-13.log`) failed on one test, which was a
 real find rather than the intermittent crash**: 2948 tests, **4 failing

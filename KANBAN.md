@@ -828,6 +828,16 @@ command is no longer reported as unhandled; and a diagonal jump is drawn off its
 axes by the same fraction. A mutation that accumulated before turning was caught by two of
 them. Canonical validation of this slice is recorded in `SESSION_STATE.md`.
 
+**And the last three route commands are done too**, so the route commands are complete:
+`move_random` (8) turns to one of the four cardinals -- `TurnRandom()` rolls 0..3, never a
+diagonal and never a standstill -- `move_away_from_hero` (10) walks away along the dominant
+axis, and `move_forward` (11) keeps the direction the character already has. The dispatch
+reaches them through the same movement branch as the eight named directions, so the
+interpreter's forced routes get them as well. The test that used to assert these three did
+**nothing** was the honest description of a missing command, not a property of the format:
+it is replaced by three behaviour tests, and a mutation that resolved `away` like `towards`
+was caught by the new away test.
+
 **The reference, pinned so the slice does not re-derive it** (EasyRPG
 `Game_Character::BeginMoveRouteJump`, `Jump` and the `MoveRouteJump` arc):
 

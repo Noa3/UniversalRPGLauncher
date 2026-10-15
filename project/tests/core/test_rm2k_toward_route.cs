@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.IO;
 using System.Text;
@@ -240,19 +241,75 @@ public partial class TestRm2kActiveEventGraphic
         AssertTrue(pixels.SequenceEqual(_runtime.RenderedMap!.Pixels));
     }
 
-    public void Test_TowardExtensionDoesNotWhitelabelOtherRelativeOrRandomCommands()
+    /// <summary>
+    /// <c>move_random</c> (8) is a route command: one tile, one of the four cardinals.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And  dieser  Test  hiess  frueher  "does  not  whitelabel"</strong>  und
+    /// verlangte,  dass  die  drei  relativen  Formen  <em>nichts</em>  tun  und  einmal
+    /// gemeldet  werden.  Das  war  die  ehrliche  Beschreibung  eines  fehlenden  Befehls,
+    /// keine  Eigenschaft  des  Formats:  die  Referenz  fuehrt  alle  drei  aus,  und  die
+    /// autonomen  Bewegungsmodi  konnten  sie  hier  schon  --  nur  der  Routen-Dispatch
+    /// nicht.  Jetzt  fuehrt  er  sie  aus,  also  pruefen  die  Tests  ihr  Verhalten
+    /// statt  ihrer  Abwesenheit.
+    ///
+    /// <strong>Und  zufaellig  heisst  nicht  beliebig:</strong>  <c>TurnRandom()</c>
+    /// wuerfelt  eine  der  vier  Himmelsrichtungen,  nie  eine  Diagonale  und  nie  eine
+    /// Nullbewegung,  also  ist  genau  das  die  pruefbare  Aussage.
+    /// </remarks>
+    public void Test_MoveRandomIstEinRoutenBefehl()
     {
-        foreach (var command in new[] { Rm2kMoveRoute.MoveRandom, Rm2kMoveRoute.MoveAwayFromHero, Rm2kMoveRoute.MoveForward })
-        {
-            StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(command)));
-            _runtime.Simulation.MapX = 13;
-            _runtime.Simulation.MapY = 8;
-            RouteTicks(20);
-            AssertEq((_event.X, _event.Y), (8, 8));
-            // **Und  die  Meldung  heisst  jetzt  "walked past"**:  der  Befehl  wird
-            // konsumiert  und  die  Route  laeuft  weiter,  statt  sie  abzubrechen.
-            AssertEq(_runtime.Simulation.Diagnostics.Count(message => message.Contains($"walked past unhandled command {command}")), 1);
-        }
+        StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRandom)));
+        _runtime.Simulation.MapX = 13;
+        _runtime.Simulation.MapY = 8;
+        RouteTicks(1);
+        var distance = Math.Abs(_event.X - 8) + Math.Abs(_event.Y - 8);
+        AssertEq(distance, 1,
+            "**the event moved exactly one tile**, so the command was executed rather than"
+                + " walked past");
+        AssertTrue(_event.X == 8 || _event.Y == 8,
+            "**and the turn was one of the four cardinals**, never a diagonal");
+        AssertEq(_runtime.Simulation.Diagnostics.Count(
+            message => message.Contains("walked past unhandled command 8")), 0,
+            "and it is no longer reported as unhandled");
+    }
+
+    /// <summary>
+    /// <c>move_away_from_hero</c> (10) walks away along the dominant axis.
+    /// </summary>
+    public void Test_MoveAwayFromHeroIstEinRoutenBefehl()
+    {
+        StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveAwayFromHero)));
+        // The hero stands five tiles to the right, on the same row.
+        _runtime.Simulation.MapX = 13;
+        _runtime.Simulation.MapY = 8;
+        RouteTicks(1);
+        AssertEq((_event.X, _event.Y), (7, 8),
+            "**the event stepped away from the hero on the dominant axis**, not towards him"
+                + " and not sideways");
+        AssertEq(_event.Direction, 4, "**and it faces the way it went**");
+    }
+
+    /// <summary>
+    /// <c>move_forward</c> (11) keeps the direction the event already has.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Und  die  Erwartung  wird  aus  der  Figur  gelesen,  nicht  gesetzt:</strong>
+    /// der  Test  nimmt  die  Richtung,  die  die  Seite  der  Figur  gegeben  hat,  und
+    /// prueft,  dass  der  Schritt  genau  dorthin  ging.  Eine  fest  verdrahtete  Erwartung
+    /// wuerde  nur  beweisen,  dass  die  Seite  diese  Richtung  hat.
+    /// </remarks>
+    public void Test_MoveForwardIstEinRoutenBefehl()
+    {
+        StartAuthoredRouteMap(RoutePage(6, 8, true, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveForward)));
+        var (expectedX, expectedY) = Rm2kMoveRoute.DirectionDelta(
+            Rm2kMoveRoute.LiblcfFromMovementDirection(_event.Direction));
+        RouteTicks(1);
+        AssertEq((_event.X, _event.Y), (8 + expectedX, 8 + expectedY),
+            "**the event stepped along the direction it already faced**");
+        AssertEq(_runtime.Simulation.Diagnostics.Count(
+            message => message.Contains("walked past unhandled command 11")), 0,
+            "and it is no longer reported as unhandled");
     }
 
     public void Test_BlockedTowardHeroFacesItsAttemptWithoutAlternateAxisFallback()

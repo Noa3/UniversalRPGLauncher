@@ -112,10 +112,14 @@ route/interpreter lifecycle.
   and the event leaves the ground at `end_jump` -- checking no tile, because a jump goes
   *over* obstacles, and drawing a straight diagonal through the event sprite offset. The
   route commands are complete.
-* **What is still open is the relative/random movement forms 8, 10 and 11 as *route*
-  commands**: the autonomous movement types implement them, the route dispatch refuses them
-  -- which is now visible rather than fatal, because an unhandled route command is walked
-  past and named once instead of stopping the route.
+* **And the relative/random movement forms 8, 10 and 11 are route commands as well**
+  (`move_random` rolls one of the four cardinals -- the reference's `TurnRandom()` rolls 0..3,
+  never a diagonal; `move_away_from_hero` walks away along the dominant axis; `move_forward`
+  keeps the direction the character already has), so the route commands are **complete**:
+  every code the format defines is executed. The test that asserted these three did nothing
+  -- "does not whitelabel" -- was the honest description of a missing command rather than a
+  property of the format, and is replaced by three behaviour tests. A mutation that resolved
+  `away` like `towards` was caught by the new one.
 
 ## Verification status
 

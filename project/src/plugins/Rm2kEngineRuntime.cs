@@ -1468,11 +1468,20 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         if (pCommandId == Rm2kMoveRoute.MoveTowardsHero)
         {
             // Pinned Player GetDirectionToCharacter: no alternate-axis fallback.
-            var sx = (long)pEvent.X - Simulation.MapX;
-            var sy = (long)pEvent.Y - Simulation.MapY;
-            return Math.Abs(sx) > Math.Abs(sy)
-                ? (sx > 0 ? Rm2kMoveRoute.MoveLeft : Rm2kMoveRoute.MoveRight)
-                : (sy > 0 ? Rm2kMoveRoute.MoveUp : Rm2kMoveRoute.MoveDown);
+            return DirectionToOrFromHero(pEvent, true);
+        }
+        if (pCommandId == Rm2kMoveRoute.MoveAwayFromHero)
+        {
+            // **Und weg vom Helden ist die eigene Regel, nicht die Negation der Achse**:
+            // Pinned GetDirectionAwayCharacter, dieselbe dominante Achse, umgekehrt.
+            return DirectionToOrFromHero(pEvent, false);
+        }
+        if (pCommandId == Rm2kMoveRoute.MoveRandom)
+        {
+            // **Und `move_random` dreht zufaellig auf eine der vier Himmelsrichtungen**,
+            // nicht auf eine Diagonale: TurnRandom() wuerfelt 0..3. Der Wurf kommt aus
+            // demselben deterministischen Generator wie die autonome Bewegung.
+            return EventRandom.NextInclusive(0, 3);
         }
         return -1;
     }
@@ -3855,7 +3864,11 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 }
                 var command = route.Current!;
                 var id = command.CommandId;
-                if ((id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveUpLeft)
+                // **Und die drei relativen Formen gehoeren dazu**: `move_random` (8),
+                // `move_away_from_hero` (10) und `move_forward` (11) sind Routen-Befehle
+                // wie die acht Richtungen -- die autonomen Bewegungsmodi konnten sie
+                // schon, der Routen-Dispatch hat sie verworfen.
+                if ((id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveForward)
                     || id == Rm2kMoveRoute.MoveTowardsHero)
                 {
                     if (!TryBeginEventStep(pEvent, route, command))
