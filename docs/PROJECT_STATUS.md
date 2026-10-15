@@ -5,6 +5,15 @@
 
 ## Latest runtime correctness work
 
+### Canonical run GREEN (2026-10-15)
+
+`./scripts/validate.sh` exited 0 with **All 2912 tests passed** and the
+`UniversalRPG validation passed.` marker: 368 suite records, no failing test
+method. The known shutdown noise (3 CanvasItem RIDs, 6 ObjectDB instances)
+remains and is not a regression. This is the first canonical pass that includes
+the RM2K save/slot fixes, the MZ battle-page crash fix, the launcher GUI rework
+and the honest RGSS script runtimes.
+
 ### Latest verified runtime fixes (commit 4f14979)
 
 RM2K save/resume: a picture movement whose total frames, remaining frames or

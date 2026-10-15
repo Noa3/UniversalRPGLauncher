@@ -1,6 +1,20 @@
 ## Current card
 
-### Pushed 2026-10-15: four commits on main (0e2cf76..1b6e2a3)
+### Canonical validation GREEN (2026-10-15, after 073a096)
+
+`./scripts/validate.sh` exited **0** with **All 2912 tests passed** and the
+`UniversalRPG validation passed.` marker, 368 suite records and **zero**
+`ERROR:   Test_` lines. Exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-2.log`.
+The only remaining output is the known shutdown noise (3 CanvasItem RIDs and
+6 ObjectDB instances leaked at exit), which predates this work.
+Target suites inside that run: TestRgssRuntime 6/6, TestPluginDetection 25/25,
+TestLauncherUiSafety 26/26, TestRm2kPictureSave 3/3,
+TestRm2kSpielstandAmEchtenSpiel 2/2, TestMzBattleProcessing 5/5,
+TestMvParallelPageDepth 1/1, TestRealRm2kRuntimeRun 6/6,
+TestMzEchtesSpielStartet 12/12, TestMvEchtesSpielStartet 6/6.
+
+### Pushed 2026-10-15: seven commits on main (0e2cf76..073a096)
 
 - `4f14979` fix(rm2k): picture movement timing validation + the slot extension
   that listing, the title's Continue and Continue itself all read.
