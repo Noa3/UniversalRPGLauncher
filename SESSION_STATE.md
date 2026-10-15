@@ -1,4 +1,24 @@
 ## Current card
+### XP: the map loads, and its events do not survive the hash (2026-10-15)
+
+One host instead of two made the map load: `$game_map.width` went from nil to **20**, `$game_map.height`
+to **15**, and the data host reads 14 files. `Game_Player#center` is what uses `Graphics.width` and
+`Graphics.height` -- **so the measured blocker is graphics now**, and it arrived by following the game's
+own failures rather than by guessing the API in advance.
+
+`$game_map.setup` still reports `'%' for a Nil and a Integer`, and the readings plus the game's own
+scripts locate it exactly: `Game_Map#setup` builds its events with `Game_Event.new(@map_id,
+@map.events[i])`, and `Game_Event#initialize` calls `moveto(@event.x, @event.y)` -- so `x` is nil and
+`nil % 20` is the message. Measured on the raw data: `raw_events = 2`, `raw_event1_x = nil`. The map
+file itself reads cleanly (`RPG::Map`, eleven fields, `@width` and `@height`), but its `@events` field
+is an Object with `Members 0` and `Items 2` whose second item is a **Symbol** -- **so the hash's
+contents do not survive the conversion.** That is the next defect: not the reader, not the marking,
+and not the game.
+
+Two readings were wrong before they were right, and both are named in the code: `$game_map.map` does
+not exist (`Game_Map` has no `attr_reader :map`), and a hash keeps its pairs in `Items` and not in
+`Members` -- measured, `Members 0`, `Items 2`.
+
 
 ### XP: the engine's own main sequence, and the extension it needs (2026-10-15)
 
