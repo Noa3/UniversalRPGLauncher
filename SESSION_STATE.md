@@ -1,5 +1,23 @@
 ## Current card
 
+### And a flaky fixture was found and fixed (2026-10-15)
+
+One canonical run came back **red** with a single failure:
+`Test_EinSlotSpeichertUndLaedtDasEchteSpiel` raised
+`IOException: The file '...\rm2k-slot-game-30616\RPG_RT.ldb' already exists`. The fixture names
+its scratch folder after the **process id** and never cleans it up, and `File.Copy` refuses a
+file that is already there -- so a run that dies before its cleanup leaves the folder behind,
+the next run gets the same id, and the test fails for a reason that has nothing to do with the
+code. It surfaced while two validations ran against the same Godot user directory, which is
+worth avoiding for that reason alone.
+
+All three scratch folders in that file are now removed recursively before use, the two copies
+into the game folder overwrite, and the game folder writes a leftover file first on every run so
+the case is exercised rather than only hit when a process id comes round again. **And the
+measures overlap**, which the code comment now says instead of implying otherwise: a mutation
+that drops the delete still passes, because the copy overwrites -- the delete carries the state
+the assertions run against, not the IOException on its own.
+
 ### K-PROD-MZ-SAVE-RESTORE DONE (2026-10-15): screen, actors and gold all come back
 
 The reader parses the screen (both ends of a tint, the flash, the brightness) and every actor
@@ -41,6 +59,14 @@ pass themselves in, so there is one gold.
 reader: `MzScreen.Tone`/`ToneDuration`/`FlashDuration`/`Brightness` are `{ get; private set; }`
 and the actors' skills and equips are internal, so a load could parse them and have nowhere to
 put them.
+
+### Canonical validation GREEN (2026-10-15, after the screen and actors)
+
+`./scripts/validate.sh` exited **0** with **All 2984 tests passed** and the
+`UniversalRPG validation passed.` marker, **373** suite records and **zero**
+`ERROR:   Test_` lines -- `urpg-canonical-26.log` for the screen/actor restore and
+`urpg-canonical-27.log` for the scratch-folder fix, the second one as a single run.
+`urpg-canonical-25.log` is the red one described above.
 
 ### Canonical validation GREEN (2026-10-15, after the MZ gold)
 
