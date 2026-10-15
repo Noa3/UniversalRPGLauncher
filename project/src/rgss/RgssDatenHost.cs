@@ -268,12 +268,29 @@ public sealed class RgssDatenHost : IRubyHost
 
         if (pWert.Kind == "hash")
         {
+            // **And a hash keeps its pairs in `Items`, key and value
+            // alternating, and both of them are converted.**
+            //
+            // **And this was the defect:** the code here wrote
+            // `RubyValue.OfBytes(pWert.Keys[i])` and
+            // `RubyValue.OfSymbol(pWert.Keys[i])` -- **the key twice**, once as
+            // text and once as a symbol, **and the value never.** Measured on
+            // `Map001.rxdata`: the Marshal reader delivers `Kind hash, Items 2`
+            // with `Kind integer` and `Kind object, ClassName RPG::Event`, --
+            // **and the conversion turned that into two symbols.** The game
+            // then read `@map.events[1]`, got a symbol instead of an event, so
+            // `@event.x` was nil and `moveto` reported *"'%' for a Nil and a
+            // Integer"*.
+            //
+            // **And `Keys` does not belong here:** for a hash it carries the
+            // kind of the key (`integer`), and the pairs are in `Items`. A key
+            // converted to text is also a key nobody finds: the game writes
+            // `events[1]` and not `events["1"]`.
             var paare = new List<RubyValue>();
-            for (var i = 0; i < pWert.Keys.Count && i < pWert.Items.Count; i++)
+            for (var i = 0; i + 1 < pWert.Items.Count; i += 2)
             {
-                paare.Add(RubyValue.OfBytes(System.Text.Encoding.UTF8
-                    .GetBytes(pWert.Keys[i])));
-                paare.Add(RubyValue.OfSymbol(pWert.Keys[i]));
+                paare.Add(AlsRuby(pWert.Items[i], pTiefe + 1));
+                paare.Add(AlsRuby(pWert.Items[i + 1], pTiefe + 1));
             }
 
             return RubyValue.OfHash(paare);

@@ -268,6 +268,40 @@ public partial class TestRgssDataFields : TestBase
         AssertTrue(events != null,
             "**and the map carries its events** -- and the field is "
                 + (events == null ? "not there" : "there"));
+
+        // **Und eine Ebene tiefer, weil die Frage dort entschieden wird.**
+        // Der Wert im Hash ist ein Symbol und kein Event-Objekt, -- **und die
+        // Frage ist, ob der Marshal-Leser ihn so liest oder ob die
+        // Ueberfuehrung ihn verliert.** Also wird dieselbe Datei mit dem
+        // Marshal-Leser gelesen und der Wert angesehen.
+        var roh = new MarshalReader(
+            System.IO.File.ReadAllBytes(
+                System.IO.Path.Combine(Wurzel, "Data", "Map001.rxdata")))
+            .Read();
+        System.Console.WriteLine(
+            "Marshal: Kind " + roh.Kind
+            + ", ClassName " + (roh.ClassName ?? "-")
+            + ", Keys " + roh.Keys.Count
+            + ", Items " + roh.Items.Count);
+        var rohEvents = roh.Keys.ToList().IndexOf("@events") is var stelle
+            && stelle >= 0
+            ? roh.Items[stelle]
+            : null;
+        if (rohEvents != null)
+        {
+            System.Console.WriteLine(
+                "Marshal @events: Kind " + rohEvents.Kind
+                + ", ClassName " + (rohEvents.ClassName ?? "-")
+                + ", Keys " + string.Join(" ", rohEvents.Keys)
+                + ", Items " + rohEvents.Items.Count);
+            foreach (var item in rohEvents.Items)
+            {
+                System.Console.WriteLine(
+                    "    Item: Kind " + item.Kind
+                    + ", ClassName " + (item.ClassName ?? "-")
+                    + ", Keys " + item.Keys.Count);
+            }
+        }
     }
 
     /// <summary>
