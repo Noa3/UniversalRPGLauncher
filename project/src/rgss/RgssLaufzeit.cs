@@ -170,6 +170,16 @@ public sealed class RgssLaufzeit
         Messen("map_height", "$game_map.height if $game_map");
         Messen("map_class", "$game_map.class.name if $game_map");
 
+        // **Und die Startposition, weil sie der naechste Schritt ist.**
+        // Gemessen meldet `$game_player.moveto($data_system.start_x,
+        // $data_system.start_y)` danach *"undefined operator '+' for a Nil and a
+        // Nil"*, -- **und der Schritt davor meldete den Fehler noch bei `%`**,
+        // -- **also liest `moveto` jetzt etwas anderes.** Was das Spiel in
+        // `$data_system` haelt, steht hier.
+        Messen("start_x", "$data_system.start_x if $data_system");
+        Messen("start_y", "$data_system.start_y if $data_system");
+        Messen("data_tilesets", "$data_tilesets.size if $data_tilesets");
+
         // **Und der Host zaehlt mit.** Die Karte liest sich ausserhalb des
         // Spiels einwandfrei -- `RPG::Map` mit elf Feldern und `@width` darin --
         // **und im Spiel ist `$game_map.width` nil**, also ist die Frage, ob

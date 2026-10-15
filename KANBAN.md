@@ -873,9 +873,33 @@ Integer and a Nil"*, which says the first operand arrives and not what is nil. `
 | setup failures | 1 | 2, **both further along** |
 | the frame's own failure | `'/'` for a Nil and a Float | `'>'` for a Nil and a Integer |
 
-**And the two remaining setup failures are the next measurement:** `$game_map.setup` now gets past
-the map and reports *"'%' for a Nil and a Integer"* in the tileset part, and `$game_player.moveto`
-reports *"'+' for a Nil and a Nil"*. Still not graphics.
+**And the next measurement is graphics, and it is the first time that is literally true.** The
+runtime now reads its own state after setup, and the readings say the values are all there --
+`start_x = 9`, `start_y = 6`, `data_tilesets = 51`, `map_width = 20`, `map_height = 15` -- while
+`$game_player.moveto` still reports *"'+' for a Nil and a Nil"*. So the nil is not one of those.
+
+The game's own scripts say why. `Scripts.rxdata` holds **two** `moveto` definitions, and the second
+is `Game_Player#moveto`:
+
+```ruby
+def moveto(x, y)
+  super
+  # Centering
+  center(x, y)
+  # Make encounter count
+  make_encounter_count
+end
+```
+
+`super` is `Game_Character#moveto` (`@x = x % $game_map.width`, `@real_x = @x * 128`) and it now
+works -- which is why the error moved from `%` to `+`. **And `center` is where `Graphics` enters:**
+it clamps `@real_x` against `Graphics.width` and `Graphics.height`, and there is no `Graphics` in
+this runtime, so both are nil.
+
+**So the next slice is the graphics surface itself** -- `Graphics.width`, `Graphics.height`,
+`Graphics.update`, and the `Bitmap`/`Sprite`/`Tilemap`/`Viewport`/`Plane` a game asks for next. This
+is the first measured step that is actually graphics, and it arrived by following the game's own
+failures rather than by guessing the API in advance.
 
 **Progress measure:** the problem count in `TestRealXpRuntimeRun` and `SetupProblems`. Measured so
 far: two script problems after five frames when the card was written, one after the `or` fix; and
