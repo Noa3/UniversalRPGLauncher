@@ -852,10 +852,30 @@ Measured on the real `System.rxdata`: `ClassName RPG::System`, 36 fields, `start
 game's own error moved from *"'%' for a Nil and a Nil"* to *"'%' for a Integer and a Nil"* -- so
 `start_x` arrives and `$game_map.width` is the nil that is left.
 
-**And the next step is named by that:** `$game_map.width` is nil, so `@map` is not set -- the map's
-own data object did not arrive, or `setup` did not load it. `$game_map.update` moved past
-`@scroll_rest` at the same time, so `setup` ran. That is the next measurement, and it is still not
-graphics.
+**And the next step was `$game_map.width`, and it was two hosts.** The map's own data object reads
+perfectly well outside the game -- `RPG::Map`, eleven fields, `@width` and `@height` among them --
+so the nil was neither the reader nor the file: the interpreter was built with the **script** host
+while the runtime loaded its data through the **data** host, and `load_data` inside the game reached
+the wrong one. Measured: the data host counted thirteen files and zero refusals while the game held
+no map at all. The data host now answers first and asks the script host for everything else, and all
+three runtimes give the interpreter that one host.
+
+**And the runtime reads its own state back after the setup sequence**, because a report that names
+only the step leaves the reader to guess which value is missing -- the last step said *"'%' for a
+Integer and a Nil"*, which says the first operand arrives and not what is nil. `SetupState` carries
+`map_id`, `map_width`, `map_height`, `map_class` and the host's counters.
+
+| measured on the real XP game | before | after |
+| --- | --- | --- |
+| data host files read | 13 | **14** (the map is the fourteenth) |
+| `$game_map.width` | nil | **20** |
+| `$game_map.height` | nil | **15** |
+| setup failures | 1 | 2, **both further along** |
+| the frame's own failure | `'/'` for a Nil and a Float | `'>'` for a Nil and a Integer |
+
+**And the two remaining setup failures are the next measurement:** `$game_map.setup` now gets past
+the map and reports *"'%' for a Nil and a Integer"* in the tileset part, and `$game_player.moveto`
+reports *"'+' for a Nil and a Nil"*. Still not graphics.
 
 **Progress measure:** the problem count in `TestRealXpRuntimeRun` and `SetupProblems`. Measured so
 far: two script problems after five frames when the card was written, one after the `or` fix; and

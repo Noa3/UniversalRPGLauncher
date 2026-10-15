@@ -68,6 +68,10 @@ public partial class TestRealXpRuntimeRun : TestBase
         {
             Console.WriteLine("XP:   SETUP " + problem);
         }
+        foreach (var reading in lauf.SetupState)
+        {
+            Console.WriteLine("XP:   STATE " + reading);
+        }
         foreach (var problem in lauf.ScriptProblems.Take(40))
         {
             Console.WriteLine("XP:   " + problem);

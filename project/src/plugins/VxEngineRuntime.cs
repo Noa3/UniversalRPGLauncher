@@ -151,8 +151,13 @@ public sealed class VxEngineRuntime : IEngineRuntime
             throw new InvalidOperationException($"Failed to open data host: {dataError}");
         }
 
-        // Create interpreter with script host
-        _interpreter = new RubyInterpreter(_scriptHost);
+        // **And the interpreter gets ONE host that answers both.** It used to
+        // get the script host, and the runtime loaded its data through the data
+        // host -- and `load_data` inside the game then reached the wrong one:
+        // measured, `Game_Map#setup` read `Data/Map001.rxdata` and got nil, so
+        // `$game_map.width` was nil and the map was never read.
+        _datenHost.Fallback = _scriptHost;
+        _interpreter = new RubyInterpreter(_datenHost);
 
         // Define built-in RGSS classes before running scripts
         DefineBuiltinClasses();

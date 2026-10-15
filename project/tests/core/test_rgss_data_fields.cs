@@ -200,6 +200,34 @@ public partial class TestRgssDataFields : TestBase
             "**and the real object carries its fields** -- and it carries "
                 + (system.Felder.Count + system.Members.Count)
                 + " (ClassName [" + (system.ClassName ?? "-") + "])");
+
+        // **Und die Karte ist der naechste Wert, den das Spiel liest.**
+        // `Game_Map#setup` schreibt `@map = load_data(sprintf("Data/Map%03d.rxdata",
+        // @map_id))`, -- **und gemessen ist `$game_map.width` danach nil**, --
+        // **und `width` ist `@map.width`.** Also wird hier dieselbe Datei
+        // gelesen, die das Spiel liest, und gefragt, was zurueckkommt.
+        var karte = daten.Lade("Data/Map001.rxdata");
+        System.Console.WriteLine(
+            "Map001.rxdata: "
+            + (karte == null
+                ? "refused"
+                : "Kind " + karte.Kind
+                    + ", ClassName [" + (karte.ClassName ?? "-") + "]"
+                    + ", Felder " + karte.Felder.Count
+                    + ", Members " + karte.Members.Count));
+        if (karte != null)
+        {
+            foreach (var name in karte.Felder.Keys)
+            {
+                System.Console.WriteLine("  Kartenfeld " + name);
+            }
+        }
+
+        AssertTrue(karte != null,
+            "**and the map file reads** -- and it said "
+                + (karte == null
+                    ? "refused, and that is why `$game_map.width` is nil"
+                    : "read, so the nil is somewhere after the read"));
     }
 
     /// <summary>

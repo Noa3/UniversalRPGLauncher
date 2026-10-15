@@ -54,6 +54,20 @@ public sealed class XpEngineRuntime : IEngineRuntime
         ? (IReadOnlyList<string>)Array.Empty<string>()
         : _laufzeit.Fehlgeschlagen;
 
+    /// <summary>
+    /// What the game's own state reads after the runtime's setup sequence.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is the other half of <see cref="SetupProblems"/>.</strong> A step that
+    /// threw names the step; these say what the game holds afterwards, and a reader who has both
+    /// does not have to guess which value is the nil. Measured: the last step reported
+    /// *"undefined operator '%' for a Integer and a Nil"*, which says the first operand arrives and
+    /// not which value is missing.
+    /// </remarks>
+    public IReadOnlyList<string> SetupState => _laufzeit == null
+        ? (IReadOnlyList<string>)Array.Empty<string>()
+        : _laufzeit.Zustand;
+
     private readonly List<string> _scriptProblems = new();
 
     /// <summary>How many distinct failures the run remembers.</summary>
@@ -164,8 +178,13 @@ public sealed class XpEngineRuntime : IEngineRuntime
             throw new InvalidOperationException($"Failed to open data host: {dataError}");
         }
 
-        // Create interpreter with script host
-        _interpreter = new RubyInterpreter(_scriptHost);
+        // **And the interpreter gets ONE host that answers both.** It used to
+        // get the script host, and the runtime loaded its data through the data
+        // host -- and `load_data` inside the game then reached the wrong one:
+        // measured, `Game_Map#setup` read `Data/Map001.rxdata` and got nil, so
+        // `$game_map.width` was nil and the map was never read.
+        _datenHost.Fallback = _scriptHost;
+        _interpreter = new RubyInterpreter(_datenHost);
 
         // Define built-in RGSS classes before running scripts
         DefineBuiltinClasses();

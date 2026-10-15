@@ -105,7 +105,11 @@ public sealed class RgssDatenHost : IRubyHost
         // `RubyValue`**, -- **und nicht mit einem C#-Objekt.**
         if (pMethod != "load_data" || pArguments.Count < 1)
         {
-            return null;
+            // **Und was dieser Host nicht beantwortet, fragt er weiter.**
+            // **Und er fragt weiter und antwortet nicht selbst mit nil**, weil
+            // ein nil hier eine Datei ist, die es nicht gibt, und nicht eine
+            // Methode, die ein anderer Host kennt.
+            return Fallback?.CallMethod(pReceiver, pMethod, pArguments);
         }
 
         var name = System.Text.Encoding.UTF8.GetString(pArguments[0].Bytes);
@@ -165,7 +169,8 @@ public sealed class RgssDatenHost : IRubyHost
         RubyValue pReceiver,
         string pMethod,
         IReadOnlyList<RubyValue> pArguments,
-        Func<IReadOnlyList<RubyValue>, RubyValue> pYield) => null;
+        Func<IReadOnlyList<RubyValue>, RubyValue> pYield) =>
+        Fallback?.CallMethodWithBlock(pReceiver, pMethod, pArguments, pYield);
 
     /// <inheritdoc/>
     public RubyValue? LookupConstant(string pName) => null;
@@ -350,9 +355,39 @@ public sealed class RgssDatenHost : IRubyHost
         return RubyValue.Nil;
     }
 
+    /// <summary>
+    /// The host this one asks when it has no answer of its own.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is one host and not two, and that was a measured defect.</strong> The
+    /// interpreter was built with the <em>script</em> host while the runtime loaded its data
+    /// through the <em>data</em> host, so `load_data` inside the game reached the wrong one:
+    /// `Game_Map#setup` called `load_data(sprintf("Data/Map%03d.rxdata", @map_id))` and got nil,
+    /// `$game_map.width` was nil, and the map was never read -- measured, the data host counted
+    /// thirteen files and zero refusals while the game held no map. **And the engine's own `main`
+    /// is one program with one `load_data`.**
+    /// </remarks>
+    public IRubyHost? Fallback { get; set; }
+
     /// <inheritdoc/>
-    public IReadOnlyList<string> KnownMethods { get; } =
-        new List<string> { "load_data" };
+    /// <remarks>
+    /// <strong>And the names are both hosts'.</strong> A game asks
+    /// <c>respond_to?(:load_data)</c> and <c>respond_to?(:graphics)</c> in the same expression, and
+    /// a host that reported only its own names would make one of the two answers wrong.
+    /// </remarks>
+    public IReadOnlyList<string> KnownMethods
+    {
+        get
+        {
+            var namen = new List<string> { "load_data" };
+            if (Fallback != null)
+            {
+                namen.AddRange(Fallback.KnownMethods);
+            }
+
+            return namen;
+        }
+    }
 
     /// <summary>
     /// Turns a name the game wrote into a path inside the project.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace UniversalRPG.Rgss;
 
@@ -157,7 +158,87 @@ public sealed class RgssLaufzeit
             + " if $data_system.respond_to?(:start_x)"
             + " && $data_system.respond_to?(:start_y)");
         Rufe("$game_player.refresh if $game_player.respond_to?(:refresh)");
+
+        // **And then the runtime reads back what the game's own state says.**
+        // Measured: the last setup step reported *"undefined operator '%' for a
+        // Integer and a Nil"* -- so `start_x` arrives and something else is
+        // nil, and a report that names only the step leaves the reader to guess
+        // which value. **And a reading is not a fix:** this list says what the
+        // game holds, and the next slice fixes what it says is missing.
+        Messen("map_id", "$game_map.map_id if $game_map");
+        Messen("map_width", "$game_map.width if $game_map");
+        Messen("map_height", "$game_map.height if $game_map");
+        Messen("map_class", "$game_map.class.name if $game_map");
+
+        // **Und der Host zaehlt mit.** Die Karte liest sich ausserhalb des
+        // Spiels einwandfrei -- `RPG::Map` mit elf Feldern und `@width` darin --
+        // **und im Spiel ist `$game_map.width` nil**, also ist die Frage, ob
+        // `load_data` dieselbe Datei durch denselben Host gelesen hat.
+        Zustand.Add("host gelesen = " + (_daten?.Gelesen ?? -1)
+            + ", verweigert = " + (_daten?.Verweigert ?? -1));
     }
+
+    /// <summary>
+    /// Reads one expression out of the game and records what it holds.
+    /// </summary>
+    private void Messen(string pName, string pQuelltext)
+    {
+        try
+        {
+            _interpreter.RunProgram(new RubyParser(new RubyLexer(
+                "$gemessen_" + pName + " = (" + pQuelltext + ")").Tokenize())
+                .ParseProgram());
+            Zustand.Add(pName + " = " + Beschreibe(
+                _interpreter.Global("$gemessen_" + pName)));
+        }
+        catch (Exception ausnahme)
+        {
+            Zustand.Add(pName + " -- " + ausnahme.Message);
+        }
+    }
+
+    /// <summary>
+    /// A reading as text, because a nil and a zero are different answers.
+    /// </summary>
+    private static string Beschreibe(RubyValue pWert)
+    {
+        if (pWert.IsNil)
+        {
+            return "nil";
+        }
+
+        if (pWert.Kind == RubyValueKind.Integer)
+        {
+            return pWert.Integer.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (pWert.Kind == RubyValueKind.Float)
+        {
+            return pWert.Real.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (pWert.Kind == RubyValueKind.Boolean)
+        {
+            return pWert.Boolean ? "true" : "false";
+        }
+
+        if (pWert.Kind == RubyValueKind.String)
+        {
+            return "[" + System.Text.Encoding.UTF8.GetString(pWert.Bytes) + "]";
+        }
+
+        return pWert.ClassName ?? pWert.Kind.ToString();
+    }
+
+    /// <summary>
+    /// What the game's own state reads after the setup sequence.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a reading and not a claim.</strong> The setup steps
+    /// say which step threw; these say what the game holds afterwards, and a
+    /// reader who has both does not have to guess which value is the nil.
+    /// </remarks>
+    public List<string> Zustand { get; } = new List<string>();
 
     /// <summary>
     /// The data globals the engine's own <c>main</c> loads, in its own order.
