@@ -172,4 +172,37 @@ public static class Rm2kStepBudget
         return (SpriteY(pLogicalTileY, pRemainingStep, pDirection) / PixelsPerTile)
             - (pLogicalTileY * PixelsPerTile);
     }
+
+    /// <summary>
+    /// The drawn offset in pixels from the character's logical tile, while the
+    /// character is in the air.
+    /// </summary>
+    /// <param name="pBeginTileX">The tile the jump started from.</param>
+    /// <param name="pLogicalTileX">The tile the jump is going to.</param>
+    /// <param name="pRemainingStep">The unspent part of the jump's step.</param>
+    /// <returns>The pixel offset on the horizontal axis.</returns>
+    /// <remarks>
+    /// <strong><c>Game_Character::GetSpriteX</c> while jumping:</strong>
+    /// <c>x = GetX() * 256 - (GetX() - GetBeginJumpX()) * GetRemainingStep()</c>.
+    /// <strong>And both axes move at once</strong>, which is the whole difference from the
+    /// cardinal form above: a jump of two tiles right and one up is drawn as a straight
+    /// diagonal between the tiles, so its offset cannot be expressed as one direction.
+    /// </remarks>
+    public static int JumpPixelOffsetX(int pBeginTileX, int pLogicalTileX, int pRemainingStep)
+    {
+        var drawn = (pLogicalTileX * ScreenTileSize)
+            - ((pLogicalTileX - pBeginTileX) * pRemainingStep);
+        return (drawn / PixelsPerTile) - (pLogicalTileX * PixelsPerTile);
+    }
+
+    /// <summary>
+    /// The drawn offset in pixels from the character's logical tile, while the
+    /// character is in the air.
+    /// </summary>
+    public static int JumpPixelOffsetY(int pBeginTileY, int pLogicalTileY, int pRemainingStep)
+    {
+        var drawn = (pLogicalTileY * ScreenTileSize)
+            - ((pLogicalTileY - pBeginTileY) * pRemainingStep);
+        return (drawn / PixelsPerTile) - (pLogicalTileY * PixelsPerTile);
+    }
 }

@@ -107,12 +107,15 @@ route/interpreter lifecycle.
   command it does not implement is walked past and the rest of the route runs; the
   runtime used to cancel the whole route at that command, which stopped an event
   the engine keeps moving. The gap is reported by name, once per event and command.
-* **What is still open: 24 (begin jump) and 25 (end jump)** -- a movement mode of
-  their own (`BeginMoveRouteJump` scans ahead between the two commands, applies the
-  turns, accumulates `jdx`/`jdy` and jumps at the end), pinned in
-  `K-PROD-RM2K-ROUTE-JUMP` with six measured instances -- and the relative/random
-  movement forms **8, 10 and 11** as *route* commands, which the autonomous movement
-  types implement but the route dispatch refuses.
+* **And 24 (begin jump) and 25 (end jump) are done too** (`K-PROD-RM2K-ROUTE-JUMP`): the
+  scan reads the commands between the two, turns as it goes and accumulates the distance,
+  and the event leaves the ground at `end_jump` -- checking no tile, because a jump goes
+  *over* obstacles, and drawing a straight diagonal through the event sprite offset. The
+  route commands are complete.
+* **What is still open is the relative/random movement forms 8, 10 and 11 as *route*
+  commands**: the autonomous movement types implement them, the route dispatch refuses them
+  -- which is now visible rather than fatal, because an unhandled route command is walked
+  past and named once instead of stopping the route.
 
 ## Verification status
 

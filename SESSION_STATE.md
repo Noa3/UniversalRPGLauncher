@@ -1,25 +1,29 @@
 ## Current card
 
-### K-PROD-RM2K-EVENT-SPRITE-OFFSET DONE (2026-10-15)
+### K-PROD-RM2K-ROUTE-JUMP DONE (2026-10-15) -- the route commands are complete
 
-Every event that walks is now drawn **between** the tiles instead of snapping to them: the
-event sprite gets `PixelOffsetX/Y` from its own step state, and `BuildCharacterSprites` adds
-the camera offset instead of assigning it (the hero's own comment documents that exact bug,
-and the event branch still had it). A walking event's sprite offset is non-zero on a one-tile
-map where the camera cannot produce it, a stationary event is drawn on its tile, and the
-animation suite's pixel comparison now derives the drawn position from the sprite itself.
+`begin_jump` (24) and `end_jump` (25) are implemented: the scan reads the commands between
+them, turns as it goes and accumulates the distance, and the event leaves the ground at
+`end_jump` -- checking no tile, because a jump goes *over* obstacles, and drawing a straight
+diagonal on both axes through the new `Rm2kStepBudget.JumpPixelOffsetX/Y`. With that, every
+route command the format defines is implemented (0..22 movement/turns/faces, 23 wait, 24/25
+jump, 26/27 lock and unlock facing, 28..31 speed and frequency); what remains open is the
+relative/random movement forms 8/10/11 as *route* commands, which the autonomous movement
+types implement and the route dispatch refuses -- now visibly, because an unhandled command
+is walked past and named once instead of stopping the route.
 
-### Canonical validation GREEN (2026-10-15, after the event sprite offset)
+### Canonical validation GREEN (2026-10-15, after the route jump)
 
-`./scripts/validate.sh` exited **0** with **All 2975 tests passed** and the
+`./scripts/validate.sh` exited **0** with **All 2980 tests passed** and the
 `UniversalRPG validation passed.` marker, **373** suite records and **zero**
 `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-20.log`.
-2974 after `b942abf` plus the event-offset test. Earlier green runs of the same day:
-**2974** after `b942abf`, **2973** after `9687b5f`, **2968** after `45b4b21`, **2961** after
-`6d9eb20`, **2956** after `65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`,
-**2940** after `aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after
-`dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-21.log`.
+2975 after `4e4bc76` plus the five jump tests. Earlier green runs of the same day: **2975**
+after `4e4bc76`, **2974** after `b942abf`, **2973** after `9687b5f`, **2968** after
+`45b4b21`, **2961** after `6d9eb20`, **2956** after `65a1241`, **2948** after `1352ef2`,
+**2942** after `a1fed99`, **2940** after `aa8017f`, **2937** after `ce9f798`, **2930** after
+`b5aef4a`, **2928** after `dec3936`, **2921** after `ec1ecdb`, **2917** after `d474a91`,
+**2912** after `073a096`.
 
 **And the run before it (`urpg-canonical-13.log`) failed on one test, which was a
 real find rather than the intermittent crash**: 2948 tests, **4 failing

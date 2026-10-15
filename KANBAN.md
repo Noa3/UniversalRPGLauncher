@@ -788,16 +788,45 @@ tile plus the camera offset, so it compares the frame against where the renderer
 the character -- the eight animation-type assertions that had encoded the old assumption now
 pass with it.
 
-### K-PROD-RM2K-ROUTE-JUMP — READY (24 and 25, six measured instances)
+### K-PROD-RM2K-ROUTE-JUMP — DONE (2026-10-15, the last two route commands)
 
-**And this is what is left of the route commands.** `lock_facing` (26) and its twin 27 are
-implemented and an unhandled route command is now walked past instead of stopping the
-route (`docs/MOVEMENT_COVERAGE.md`), so the two remaining codes are the jump pair:
-**24 `begin_jump` (3 instances) and 25 `end_jump` (3)** in the whole owned collection.
+`begin_jump` (24) and `end_jump` (25) are implemented, and with them the route commands are
+complete: 0..22 walk, turn and face, 23 waits, 24/25 jump, 26/27 lock and unlock the facing,
+28..31 change speed and frequency. What the owned collection actually uses of the codes that
+were missing is six instances -- three `begin_jump` and three `end_jump` -- and they are now
+executed rather than walked past.
 
-**What happens today:** the route walks past them with a diagnostic, so the event does not
-jump -- but the rest of its route still runs, which is the reference's own behaviour for a
-command it does not implement and a smaller error than the route stopping dead.
+**And the jump is a movement of its own, not a step.** A step asks whether the tile is
+passable; a jump asks nothing at all, because jumping over an obstacle is what a jump is for
+-- the only thing the reference consults is `MakeWay`, which is about characters and not
+about chips, and dynamic character collision is still a named open gap. A jump while a step
+is in flight is not a failure either: the reference returns true for a character that is not
+stopping, so the route carries on.
+
+**The scan is the reference's, arm for arm.** From `begin_jump + 1`: movement commands (0..11)
+turn first and then accumulate `jdx`/`jdy` **unconditionally** along the direction they just
+turned to, so `move_forward` after a turn jumps the new way; facing commands (12..22) turn
+without accumulating, but only `face_up`..`face_left` (12..15), `face_hero` (21) and
+`face_away_from_hero` (22) have arms, so the five turn commands in between (16..20) hit the
+reference's `default: break;` and do nothing inside a jump; anything else is walked past and
+the scan continues to `end_jump` or to the end of the route. A route that ends without an
+`end_jump` backs the index up by one and skips the jump. `Jump` itself takes its direction
+from the larger delta with a vertical tie, sets the facing unless it is locked, and wraps the
+target on a looping map while shifting the begin position with it.
+
+**And the arc needed the event sprite offset first.** A jump draws both axes at once -- a
+straight diagonal from the begin tile -- through `Rm2kStepBudget.JumpPixelOffsetX/`Y, which is
+the reference's own `tile * 256 - (tile - begin) * remaining`. That is why the sprite offset
+card came first: with the cardinal step path only, a diagonal jump would have been a
+staircase, or invisible.
+
+**Evidence:** five tests in the route suite -- a closed jump takes the whole distance in one
+move and sets the direction from the larger delta; a jump lands on a tile that an ordinary
+step is refused on, with the refusal asserted in the same test; `move_forward` inside a jump
+runs along the direction the scan just turned to; a jump with no `end_jump` is skipped and the
+command is no longer reported as unhandled; and a diagonal jump is drawn off its tile on both
+axes by the same fraction. A mutation that accumulated before turning was caught by two of
+them. Canonical validation of this slice is recorded in `SESSION_STATE.md`.
 
 **The reference, pinned so the slice does not re-derive it** (EasyRPG
 `Game_Character::BeginMoveRouteJump`, `Jump` and the `MoveRouteJump` arc):
@@ -810,10 +839,15 @@ command it does not implement and a smaller error than the route stopping dead.
     and the same for `jdy`, outside the inner switch. So a route of `move_forward` after a
     turn jumps along the **new** direction, and even a code inside 0..11 that the inner
     switch does not name still accumulates.
-  * every **facing** command from `face_up` to `face_away_from_hero` (**12..18**) turns the
-    character without accumulating anything. **19..22 (`turn_right`, `turn_left`,
-    `turn_180`, `turn_random`) are outside that range and fall through**: in a jump scan they
-    neither turn nor accumulate -- faithful, and a real difference from executing them.
+  * every **facing** command from `face_up` to `face_away_from_hero` (**12..22**) turns the
+    character without accumulating anything -- but only `face_up`/`face_right`/`face_down`/
+    `face_left` (12..15), `face_hero` (21) and `face_away_from_hero` (22) have arms. **16..20
+    (`turn_90_degree_right`, `turn_90_degree_left`, `turn_180_degree`, `turn_90_degree_random`,
+    `face_random_direction`) hit the switch's `default: break`**, so inside a jump scan they
+    neither turn nor accumulate -- faithful, and a real difference from executing them
+    normally. The code list is liblcf's `MoveCommand::Code`, verified against the generated
+    header: 0..7 the eight directions, 8 random, 9 towards, 10 away, 11 forward, 12..15 the
+    four faces, 16..20 the turns, 21/22 face towards/away, 23 wait, 24/25 jump, 26/27 lock.
   * anything else (23 and up) also falls through, and the scan **continues past it**.
   * at **`end_jump`** it computes `new_x = GetX() + jdx`, `new_y = GetY() + jdy`, calls
     `Jump(new_x, new_y)`, and on success calls `SetMaxStopCountForStep()`; then it **returns

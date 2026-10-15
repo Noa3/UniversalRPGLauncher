@@ -776,6 +776,17 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Dictionary<int, (int X, int Y, int RemainingStep, int Direction)> _eventStepStates = new();
 
     /// <summary>
+    /// The tile each jumping event left the ground from.
+    /// </summary>
+    /// <remarks>
+    /// <strong><c>Game_Character::GetBeginJumpX/Y</c>:</strong> a jump's drawn position
+    /// interpolates from this tile to the one the event already occupies, on both axes, so
+    /// the begin tile is remembered for as long as the jump lasts. An event in this
+    /// dictionary is in the air; the step state above carries the rest.
+    /// </remarks>
+    private readonly Dictionary<int, (int X, int Y)> _eventJumpBegins = new();
+
+    /// <summary>
     /// Advances every event's move route by one command per simulation update,
     /// from <c>Game_Character::UpdateMoveRoute</c>.
     /// </summary>
@@ -826,6 +837,9 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     // The tile is reached. The route may already be finished,
                     // which is why this is not gated on the route still running.
                     _eventStepStates.Remove(mapEvent.Id);
+                    // **Und der Sprung endet mit seinem Schritt**: danach wird die Figur
+                    // wieder auf ihrer Kachel gezeichnet.
+                    _eventJumpBegins.Remove(mapEvent.Id);
                     _eventRoutesMoved = true;
                 }
 
@@ -1260,6 +1274,186 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     /// runtime direction. Toward-hero uses the dominant axis, vertical on ties,
     /// on the current non-looping surface. Other relative/random commands are refused.
     /// </summary>
+    /// <summary>
+    /// Whether the event is in the air, from <c>Game_Character::IsJumping</c>.
+    /// </summary>
+    private bool IsEventJumping(int pEventId) => _eventJumpBegins.ContainsKey(pEventId);
+
+    /// <summary>
+    /// Starts a jump, from <c>Game_Character::Jump</c>.
+    /// </summary>
+    /// <param name="pEvent">The event that jumps.</param>
+    /// <param name="pTargetX">The tile to jump to, before any looping wrap.</param>
+    /// <param name="pTargetY">The tile to jump to, before any looping wrap.</param>
+    /// <returns>Whether a jump started.</returns>
+    /// <remarks>
+    /// <strong>And a jump checks no tile at all.</strong> The reference calls
+    /// <c>MakeWay</c> -- which is about characters, not about chips -- and nothing else,
+    /// because jumping *over* an obstacle is what a jump is for. Dynamic character collision
+    /// is a named open gap here, so nothing can refuse a jump yet; when it lands, that is
+    /// where it goes.
+    ///
+    /// <strong>And a jump while a step is in flight is not a failure:</strong> the reference
+    /// returns true for a character that is not stopping, so the route carries on instead of
+    /// counting a move failure.
+    /// </remarks>
+    private bool TryBeginEventJump(Rm2kMap.Event pEvent, int pTargetX, int pTargetY)
+    {
+        if (_eventStepStates.ContainsKey(pEvent.Id) || IsEventJumping(pEvent.Id))
+        {
+            return true;
+        }
+        var beginX = pEvent.X;
+        var beginY = pEvent.Y;
+        // The direction comes from the larger delta, and a tie goes vertical.
+        var dx = pTargetX - beginX;
+        var dy = pTargetY - beginY;
+        var liblcf = Math.Abs(dy) >= Math.Abs(dx)
+            ? (dy >= 0 ? 2 : 0)
+            : (dx >= 0 ? 1 : 3);
+        pEvent.Direction = Rm2kMoveRoute.FacingFromLiblcfDirection(liblcf);
+        if (dx != 0 || dy != 0)
+        {
+            if (!pEvent.FacingLocked) pEvent.FacingDirection = pEvent.Direction;
+        }
+        // **Und auf einer Loop-Map wandert der Startpunkt mit dem Wickeln**, damit der
+        // Bogen dort beginnt, wo die Figur stand.
+        var targetX = Simulation.RoundX(pTargetX);
+        var targetY = Simulation.RoundY(pTargetY);
+        if (Simulation.LoopHorizontal && (pTargetX < 0 || pTargetX >= Simulation.MapWidth))
+        {
+            beginX += targetX - pTargetX;
+        }
+        if (Simulation.LoopVertical && (pTargetY < 0 || pTargetY >= Simulation.MapHeight))
+        {
+            beginY += targetY - pTargetY;
+        }
+        _eventJumpBegins[pEvent.Id] = (beginX, beginY);
+        pEvent.X = targetX;
+        pEvent.Y = targetY;
+        _eventStepStates[pEvent.Id] = (targetX, targetY, Rm2kStepBudget.ScreenTileSize,
+            Rm2kMoveRoute.LiblcfFromFacingDirection(pEvent.Direction));
+        pEvent.StopCount = 0;
+        _eventMovedThisTick.Add(pEvent.Id);
+        _eventRoutesMoved = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a jump out of a route, from <c>Game_Character::BeginMoveRouteJump</c>.
+    /// </summary>
+    /// <param name="pEvent">The event whose route is read.</param>
+    /// <param name="pRoute">The route, whose index is left where the caller's own increment
+    /// does the right thing.</param>
+    /// <returns>Whether a jump happened.</returns>
+    /// <remarks>
+    /// <strong>The scan is the reference's, arm for arm.</strong> Movement commands (0..11)
+    /// turn first and then accumulate <c>jdx</c>/<c>jdy</c> <em>unconditionally</em> along the
+    /// direction they just turned to, so <c>move_forward</c> after a turn jumps along the new
+    /// direction. Facing commands (12..22) turn without accumulating, but only
+    /// <c>face_up</c>..<c>face_left</c>, <c>face_hero</c> and <c>face_away_from_hero</c> have
+    /// arms: the five turn commands between them hit the reference's <c>default: break;</c>
+    /// and do nothing inside a jump. Anything else is walked past, and the scan runs to
+    /// <c>end_jump</c> or to the end of the route. A route that ends without one backs the
+    /// index up by a single step and skips the jump.
+    /// </remarks>
+    private bool TryExecuteRouteJump(Rm2kMap.Event pEvent, Rm2kMoveRouteState pRoute)
+    {
+        var previousDirection = pEvent.Direction;
+        var previousFacing = pEvent.FacingDirection;
+        var direction = pEvent.Direction;
+        var jdx = 0;
+        var jdy = 0;
+        var index = pRoute.CurrentIndex + 1;
+        for (; index < pRoute.Commands.Count; index++)
+        {
+            var id = pRoute.Commands[index].CommandId;
+            if (id == Rm2kMoveRoute.EndJump)
+            {
+                var started = TryBeginEventJump(pEvent, pEvent.X + jdx, pEvent.Y + jdy);
+                if (started)
+                {
+                    pEvent.MaxStopCount = Rm2kStepBudget.MaxStopCountForStep(pRoute.MoveFrequency);
+                    // The caller's own increment then passes the end_jump itself.
+                    pRoute.SetIndex(index);
+                }
+                else
+                {
+                    pEvent.Direction = previousDirection;
+                    pEvent.FacingDirection = previousFacing;
+                }
+                return started;
+            }
+            if (id >= Rm2kMoveRoute.MoveUp && id <= Rm2kMoveRoute.MoveForward)
+            {
+                direction = ResolveJumpScanDirection(pEvent, direction, id);
+                var (stepX, stepY) = Rm2kMoveRoute.DirectionDelta(
+                    Rm2kMoveRoute.LiblcfFromFacingDirection(direction));
+                jdx += stepX;
+                jdy += stepY;
+            }
+            else if (id >= Rm2kMoveRoute.FaceUp && id <= Rm2kMoveRoute.FaceAwayFromHero)
+            {
+                direction = ResolveJumpScanFacing(pEvent, direction, id);
+            }
+        }
+        // No end_jump: back up one so the caller's increment lands on the last command, and
+        // skip the jump.
+        pRoute.SetIndex(Math.Max(index - 1, 0));
+        return true;
+    }
+
+    /// <summary>
+    /// The direction a movement command turns to inside a jump scan.
+    /// </summary>
+    private byte ResolveJumpScanDirection(Rm2kMap.Event pEvent, byte pDirection, int pCommandId)
+    {
+        if (pCommandId == Rm2kMoveRoute.MoveForward)
+        {
+            return pDirection;
+        }
+        if (pCommandId == Rm2kMoveRoute.MoveRandom)
+        {
+            return Rm2kMoveRoute.FacingFromLiblcfDirection(EventRandom.NextInclusive(0, 3));
+        }
+        if (pCommandId == Rm2kMoveRoute.MoveTowardsHero)
+        {
+            return Rm2kMoveRoute.FacingFromLiblcfDirection(DirectionToOrFromHero(pEvent, true));
+        }
+        if (pCommandId == Rm2kMoveRoute.MoveAwayFromHero)
+        {
+            return Rm2kMoveRoute.FacingFromLiblcfDirection(DirectionToOrFromHero(pEvent, false));
+        }
+        var named = Rm2kMoveRoute.MovementCommandDirection(pCommandId);
+        return named >= 0 ? Rm2kMoveRoute.FacingFromLiblcfDirection(named) : pDirection;
+    }
+
+    /// <summary>
+    /// The direction a facing command turns to inside a jump scan.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And only the arms the reference's scan really has:</strong> the four faces,
+    /// <c>face_hero</c> and <c>face_away_from_hero</c>. The five turn commands between them
+    /// fall through in a jump, which is faithful and different from executing them.
+    /// </remarks>
+    private byte ResolveJumpScanFacing(Rm2kMap.Event pEvent, byte pDirection, int pCommandId)
+    {
+        if (pCommandId >= Rm2kMoveRoute.FaceUp && pCommandId <= Rm2kMoveRoute.FaceLeft)
+        {
+            var named = Rm2kMoveRoute.FacingCommandDirection(pCommandId);
+            return named >= 0 ? Rm2kMoveRoute.FacingFromLiblcfDirection(named) : pDirection;
+        }
+        if (pCommandId == Rm2kMoveRoute.FaceHero)
+        {
+            return Rm2kMoveRoute.FacingFromLiblcfDirection(DirectionToOrFromHero(pEvent, true));
+        }
+        if (pCommandId == Rm2kMoveRoute.FaceAwayFromHero)
+        {
+            return Rm2kMoveRoute.FacingFromLiblcfDirection(DirectionToOrFromHero(pEvent, false));
+        }
+        return pDirection;
+    }
+
     private int ResolveEventStepDirection(Rm2kMap.Event pEvent, int pCommandId)
     {
         var named = Rm2kMoveRoute.MovementCommandDirection(pCommandId);
@@ -3377,6 +3571,7 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
         _eventPageRoutes.Clear();
         _boundEventRoutePages.Clear();
         _eventStepStates.Clear();
+        _eventJumpBegins.Clear();
         _eventMovedThisTick.Clear();
         _eventRoutesMoved = false;
     }
@@ -3688,6 +3883,19 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 {
                     ApplyEventRouteFacingCommand(pEvent, route, id);
                     route.ConsumeCommand();
+                }
+                else if (id == Rm2kMoveRoute.BeginJump)
+                {
+                    // **Und der Sprung wird vorher ausgescannt**: die Referenz liest ab
+                    // `begin_jump + 1` voraus, dreht dabei und sammelt die Strecke, und
+                    // erst `end_jump` springt. Ohne `end_jump` faellt der Sprung aus und
+                    // die Route laeuft weiter.
+                    if (!TryExecuteRouteJump(pEvent, route))
+                    {
+                        if (!route.Skippable) { route.NoteMoveFailure(); break; }
+                    }
+                    route.ConsumeCommand();
+                    if (IsEventJumping(pEvent.Id)) { AdvanceEventPageStep(pEvent, route); return; }
                 }
                 else if (id == Rm2kMoveRoute.LockFacing || id == Rm2kMoveRoute.UnlockFacing)
                 {
@@ -4879,8 +5087,12 @@ ReadString(entry, "name", v => werte.Name = v);
             // haelt  0..3  (oben/rechts/unten/links), genau  was  `PixelOffsetX`  will --
             // nicht  das  Facing-Byte  der  Seite,  das  erst  `FacingFromFacingDirection`
             // uebersetzt.
-            PixelOffsetX = Rm2kStepBudget.PixelOffsetX(pEvent.X, stepRemaining, stepDirection),
-            PixelOffsetY = Rm2kStepBudget.PixelOffsetY(pEvent.Y, stepRemaining, stepDirection),
+            PixelOffsetX = _eventJumpBegins.TryGetValue(pEvent.Id, out var jumpBeginX)
+                ? Rm2kStepBudget.JumpPixelOffsetX(jumpBeginX.X, pEvent.X, stepRemaining)
+                : Rm2kStepBudget.PixelOffsetX(pEvent.X, stepRemaining, stepDirection),
+            PixelOffsetY = _eventJumpBegins.TryGetValue(pEvent.Id, out var jumpBeginY)
+                ? Rm2kStepBudget.JumpPixelOffsetY(jumpBeginY.Y, pEvent.Y, stepRemaining)
+                : Rm2kStepBudget.PixelOffsetY(pEvent.Y, stepRemaining, stepDirection),
             Stage = Rm2kCharacterSprite.StageForLayer(page.Layer),
             FacingDirection = pEvent.FacingDirection ?? pEvent.Direction,
             Frame = pEvent.AnimationFrame,
