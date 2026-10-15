@@ -1,15 +1,15 @@
 ## Current card
 
-### Canonical validation GREEN again (2026-10-15, after d474a91)
+### Canonical validation GREEN (2026-10-15, after ec1ecdb)
 
-`./scripts/validate.sh` exited **0** with **All 2917 tests passed** and the
+`./scripts/validate.sh` exited **0** with **All 2921 tests passed** and the
 `UniversalRPG validation passed.` marker, 368 suite records and **zero**
 `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-3.log`.
-This run includes the RM2K random movement type (five new tests) on top of the
-earlier green run; the known shutdown noise (3 CanvasItem RIDs, 6 ObjectDB
-instances) is unchanged. The previous green run of the same day was **2912**
-tests after 073a096.
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-4.log`.
+This run is the whole repository on top of the movement types 2..5: 2917 tests
+after `d474a91` plus the four new ones. The known shutdown noise (3 CanvasItem
+RIDs, 6 ObjectDB instances) is unchanged. Earlier green runs of the same day:
+**2917** after `d474a91`, **2912** after `073a096`.
 
 ### K-PROD-RM2K-MOVE-TYPES — DONE (all six types)
 

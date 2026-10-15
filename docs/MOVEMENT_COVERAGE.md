@@ -18,12 +18,23 @@ are removed after collection. Private game paths are not published here.
 | Movement mode | Pages | Current production boundary |
 |---|---:|---|
 | 0 stationary | 25,172 | No autonomous route execution |
-| 1 random | 1,787 | Explicitly unsupported |
-| 2 vertical cycle | 15 | Explicitly unsupported |
-| 3 horizontal cycle | 19 | Explicitly unsupported |
-| 4 toward player | 272 | Explicitly unsupported |
-| 5 away from player | 3 | Explicitly unsupported |
+| 1 random | 1,787 | Implemented (`d474a91`) |
+| 2 vertical cycle | 15 | Implemented (`ec1ecdb`) |
+| 3 horizontal cycle | 19 | Implemented (`ec1ecdb`) |
+| 4 toward player | 272 | Implemented (`ec1ecdb`) |
+| 5 away from player | 3 | Implemented (`ec1ecdb`) |
 | 6 custom | 224 | Bounded supported command execution |
+
+All six types now walk the engine's own rules; only a mode outside the format's
+range still reports itself as unimplemented. The rules were read from EasyRPG
+Player's `game_event.cpp` (`MoveTypeRandom`, `MoveTypeCycle` and its two
+wrappers, `MoveTypeTowardsOrAwayPlayer`) and `game_character.cpp`
+(`ReverseDir`, `GetDirectionToCharacter`, `GetDirectionAwayCharacter`,
+`GetMaxStopCountForStep`). The engine's direction order comes from the Player's
+own enum -- `Up = 0, Right, Down, Left, UpRight, ...` -- so the vertical cycle
+starts down and the horizontal one right. The sight margin of the
+player-seeking types is `TILE_SIZE * 2`, that is 32 pixels, and the event's
+screen position is computed from the camera's own `PositionX`/`OffsetPixelsX`.
 
 Total: **807 maps, 27,492 pages, 27,206 empty routes and 286 nonempty routes**.
 Before correction, all 286 nonempty routes failed decoding. After correction,
@@ -73,7 +84,15 @@ corpus. Pinned EasyRPG Player `0de2a9ab`, `Game_Character::UpdateMoveRoute`, set
 
 The extension is tested through native file-authored routes at frequencies8/7,
 with exact wait boundaries, the following real movement step and charset pixels.
-The movement-mode backlog and other unsupported route commands remain open.
+
+The movement-mode backlog is closed: all six types walk their rules, with
+focused evidence and two caught mutations recorded in the KANBAN card. What
+remains unsupported in this corpus is small and named exactly: route commands
+**24 (begin jump, 3 instances), 25 (end jump, 3) and 26 (lock facing, 1)** --
+seven command instances out of 2,733 in custom routes. The structural RM2000
+gaps that are *not* command opcodes remain open as well: loop maps, dynamic
+character collision, full forced-route parity, transparency, and the
+route/interpreter lifecycle.
 
 ## Verification status
 
