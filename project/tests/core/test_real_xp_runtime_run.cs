@@ -49,6 +49,19 @@ public partial class TestRealXpRuntimeRun : TestBase
             "**the real game starts** -- and it said: " + gestartet.Error?.Message);
 
         var lauf = host.Runtime as XpEngineRuntime;
+
+        // **And the game's own loop runs here, bounded.** XP's scenes are
+        // `loop do ... end` and `Graphics.update` presents one frame and returns,
+        // so a measured run sets a budget and starts the loop -- and the scene's
+        // setup, where the windows and the sprites are built, finally runs.
+        // **Measured before this: it never did**, and nothing was drawn while
+        // every report said zero problems.
+        if (lauf != null)
+        {
+            lauf.FrameBudget = 5;
+            lauf.SpielSchleifeStarten();
+            Console.WriteLine("XP: frames presented = " + lauf.Frames);
+        }
         AssertTrue(lauf != null, "**and the host built an XP runtime**");
         if (lauf == null)
         {
@@ -83,13 +96,12 @@ public partial class TestRealXpRuntimeRun : TestBase
         // der Bedarf.** Sie wird hier dedupliziert gedruckt, weil ein Name, den
         // ein Spiel jeden Frame fragt, sonst jede Zeile fuellt.
         var namen = lauf.Diagnostics
-            .Select(d => d.Split(' ')[0])
             .Distinct()
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToArray();
         Console.WriteLine("XP: diagnostics = " + lauf.Diagnostics.Count
-            + ", distinct names = " + namen.Length);
-        foreach (var name in namen.Take(60))
+            + ", distinct = " + namen.Length);
+        foreach (var name in namen.Take(40))
         {
             Console.WriteLine("XP:   FEHLT " + name);
         }

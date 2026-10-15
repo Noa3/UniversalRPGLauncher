@@ -84,6 +84,69 @@ public sealed class XpEngineRuntime : IEngineRuntime
         ? (IReadOnlyList<string>)Array.Empty<string>()
         : _interpreter.Diagnostics;
 
+    /// <summary>
+    /// Runs the game's own scene loop, bounded by <see cref="FrameBudget"/>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this is a method and not part of <c>Start</c>, because the
+    /// loop belongs to the game and blocking is what it does.</strong> XP's
+    /// scenes are `loop do ... end` and <c>Graphics.update</c> presents one frame
+    /// and returns; a host that plays a game runs this on its own thread, and a
+    /// host that measures sets a budget and calls it here. **And measured, a
+    /// runtime that never ran it never ran a scene's setup** -- the windows and
+    /// the sprites are built inside `main`, and nothing was drawn while every
+    /// report said zero problems.
+    /// </remarks>
+    public void SpielSchleifeStarten()
+    {
+        if (_interpreter == null || _grafik == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _interpreter.RunProgram(new RubyParser(new RubyLexer(
+                "$scene.main if $scene && $scene.respond_to?(:main)")
+                .Tokenize()).ParseProgram());
+        }
+        catch (RgssFrameBudgetErreicht)
+        {
+            // **And the budget is the end of the run and not a problem.** A
+            // game's loop has no exit until the player leaves the scene, so a
+            // measured run ends here.
+        }
+        catch (Exception ausnahme)
+        {
+            Melde("scene", "the game's own loop", ausnahme);
+        }
+    }
+
+    /// <summary>
+    /// How many frames the game's own loop may run before the run ends.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And zero is what a player wants and a measurement does not.</strong>
+    /// A game's loop has no exit until the player leaves the scene, so a run that
+    /// measures sets a budget -- and a run that plays does not.
+    /// </remarks>
+    /// <summary>The frames the game's own loop presented.</summary>
+    public int Frames => _grafik?.Frames ?? 0;
+
+    public int FrameBudget
+    {
+        get => _grafik?.Budget ?? 0;
+        set
+        {
+            if (_grafik != null)
+            {
+                _grafik.Budget = value;
+            }
+        }
+    }
+
+    private RgssGrafikHost? _grafik;
+
     private readonly List<string> _scriptProblems = new();
 
     /// <summary>How many distinct failures the run remembers.</summary>
@@ -205,7 +268,12 @@ public sealed class XpEngineRuntime : IEngineRuntime
         // `Graphics.width` on the module itself, so the host never fired and
         // the empty stub was what answered nil. **And one module has one
         // place.**
-        _datenHost.Fallback = _scriptHost;
+        // **And the chain is data, then the frame, then the game's own host.**
+        // The frame host is reachable now because the built-in module no longer
+        // answers `update` -- and a frame has to be the host's work, because the
+        // surface will be.
+        _grafik = new RgssGrafikHost { Fallback = _scriptHost };
+        _datenHost.Fallback = _grafik;
         _interpreter = new RubyInterpreter(_datenHost);
 
         // Define built-in RGSS classes before running scripts
@@ -219,6 +287,8 @@ public sealed class XpEngineRuntime : IEngineRuntime
         // runtime that leaves it out gets thirteen refusals and a game with no data.
         _laufzeit = new RgssLaufzeit(_interpreter, _datenHost, ".rxdata");
         _laufzeit.Startet();
+
+
 
         _scriptsRun = true;
     }
@@ -267,8 +337,6 @@ public sealed class XpEngineRuntime : IEngineRuntime
                 + "  def self.frame_rate=(v); $graphics_rate = v; end\n"
                 + "  def self.brightness; $graphics_brightness; end\n"
                 + "  def self.brightness=(v); $graphics_brightness = v; end\n"
-                + "  def self.update; $graphics_frames = $graphics_frames + 1; end\n"
-                + "  def self.wait(n); $graphics_frames = $graphics_frames + n; end\n"
                 + "  def self.resize_screen(w, h);\n"
                 + "    $graphics_width = w; $graphics_height = h; end\n"
                 + "  def self.freeze; end\n"
