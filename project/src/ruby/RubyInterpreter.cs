@@ -2845,14 +2845,21 @@ public sealed class RubyInterpreter
             // names it answers**, so a name it declares and answers nil for is a
             // nil and not a gap.
             var kennt = _host.KnownMethods.Contains(methode, StringComparer.Ordinal);
-            _diagnostics.Add(kennt
+            // **And the message carries where it happened**, for the same reason
+            // as the other one: a name without a location costs a search through
+            // every script in the game.
+            var woHier = _aktuelleMethode == null
+                ? " (at the top level)"
+                : " (in " + _aktuelleMethode + ")";
+            _diagnostics.Add((kennt
                 ? $"{empfaenger.Name}.{methode} answered nil, and the name is "
                     + "one this host declares; a nil from a host is an answer "
                     + "and not a missing method"
                 : $"{empfaenger.Name} has no method '{methode}' on this "
                     + "host; the interpreter does not guess, and a method "
                     + "that is not implemented is a fact about the host "
-                    + "and not about the script");
+                    + "and not about the script")
+                + woHier);
             return RubyValue.Nil;
         }
 
@@ -2996,13 +3003,22 @@ public sealed class RubyInterpreter
         // **and the message said the host has no such method.** A host declares
         // the names it answers, so a declared name that answers nil is a nil.
         var kenntAntwort = _host.KnownMethods.Contains(methode, StringComparer.Ordinal);
-        _diagnostics.Add(kenntAntwort
+        // **And the message carries where it happened.** Measured: a diagnostic
+        // that names a missing method and not the method that asked for it costs
+        // the reader a search through every script in the game -- and this one
+        // did, more than once. **The running method is what makes the next line
+        // fixable.**
+        var wo = _aktuelleMethode == null
+            ? " (at the top level)"
+            : " (in " + _aktuelleMethode + ")";
+        _diagnostics.Add((kenntAntwort
             ? Describe(empfaenger) + "." + methode + " answered nil, and the name"
                 + " is one this host declares; a nil from a host is an answer and"
                 + " not a missing method"
             : Describe(empfaenger) + " has no method '" + methode + "' on this host;"
                 + " the interpreter does not guess, and a method that is not"
-                + " implemented is a fact about the host and not about the script");
+                + " implemented is a fact about the host and not about the script")
+            + wo);
         return RubyValue.Nil;
     }
     /// <summary>

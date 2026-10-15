@@ -411,7 +411,7 @@ public sealed class XpEngineRuntime : IEngineRuntime
                 + "  def initialize(viewport = nil)\n"
                 + "    @viewport = viewport\n"
                 + "    @bitmap = nil\n"
-                + "    @src_rect = nil\n"
+                + "    @src_rect = Rect.new\n"
                 + "    @x = 0; @y = 0; @z = 0\n"
                 + "    @ox = 0; @oy = 0\n"
                 + "    @opacity = 255\n"
@@ -421,8 +421,8 @@ public sealed class XpEngineRuntime : IEngineRuntime
                 + "    @mirror = false\n"
                 + "    @bush_depth = 0\n"
                 + "    @blend_type = 0\n"
-                + "    @color = nil\n"
-                + "    @tone = nil\n"
+                + "    @color = Color.new\n"
+                + "    @tone = Tone.new\n"
                 + "  end\n"
                 + "  attr_accessor :bitmap\n"
                 + "  attr_accessor :src_rect\n"
@@ -508,7 +508,7 @@ public sealed class XpEngineRuntime : IEngineRuntime
                 + "    @windowskin = nil\n"
                 + "    @title = nil\n"
                 + "    @pause = false\n"
-                + "    @cursor_rect = nil\n"
+                + "    @cursor_rect = Rect.new\n"
                 + "    @ox = 0; @oy = 0; @z = 100\n"
                 + "    @stretch = false\n"
                 + "  end\n"
@@ -640,7 +640,13 @@ public sealed class XpEngineRuntime : IEngineRuntime
             "module RPG::MapInfo\nend",
         };
 
-        foreach (var code in builtinClasses)
+        // **And the extra sources run first, so a module they open is
+        // opened before the game's own scripts extend it.** Measured: the
+        // engine's own `main` asks for `Graphics.update` and `Audio.bgm_play`,
+        // and neither module was in the list.
+        var alleQuellen = new List<string>(RgssExtraRubySources.Sources);
+        alleQuellen.AddRange(builtinClasses);
+        foreach (var code in alleQuellen)
         {
             try
             {
