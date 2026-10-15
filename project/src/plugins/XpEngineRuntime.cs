@@ -352,25 +352,35 @@ public sealed class XpEngineRuntime : IEngineRuntime
     {
         if (_interpreter == null) return;
 
+        // **And each global is named when it fails.** One try around all five reported "the
+        // per-frame globals", and the first thing a reader needs is which of them threw: a game
+        // whose `$game_system` is nil and one whose `$game_map` is nil are two different problems
+        // with two different fixes. Measured on a real game, the whole failure was one of these
+        // five and the message did not say which.
+        UpdateGlobal("$game_temp");
+        UpdateGlobal("$game_system");
+        UpdateGlobal("$game_screen");
+        UpdateGlobal("$game_map");
+        UpdateGlobal("$game_player");
+    }
+
+    /// <summary>
+    /// Runs one global's per-frame update, and names it if it throws.
+    /// </summary>
+    private void UpdateGlobal(string pName)
+    {
+        if (_interpreter == null) return;
+
         try
         {
-            // Update $game_temp, $game_system, etc.
             _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                "$game_temp.update if $game_temp.respond_to?(:update)").Tokenize()).ParseProgram());
-            _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                "$game_system.update if $game_system.respond_to?(:update)").Tokenize()).ParseProgram());
-            _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                "$game_screen.update if $game_screen.respond_to?(:update)").Tokenize()).ParseProgram());
-            _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                "$game_map.update if $game_map.respond_to?(:update)").Tokenize()).ParseProgram());
-            _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                "$game_player.update if $game_player.respond_to?(:update)").Tokenize()).ParseProgram());
+                $"{pName}.update if {pName}.respond_to?(:update)").Tokenize()).ParseProgram());
         }
         catch (Exception ausnahme)
         {
-            // **And an update that throws every frame is reported once**,
-            // because a silent one turns a broken game into a still picture.
-            Melde("update", "the per-frame globals", ausnahme);
+            // **And an update that throws every frame is reported once**, because a silent one
+            // turns a broken game into a still picture.
+            Melde("update", pName, ausnahme);
         }
     }
 

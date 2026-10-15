@@ -1363,10 +1363,19 @@ public sealed class RubyInterpreter
                 // Liste nicht ordnen kann.**
                 return RubyValue.Nil;
 
+            // **And `&&`/`and` and `||`/`or` return a *value*, not a Boolean.** Ruby: `a && b`
+            // is `b` when `a` is truthy and `a` otherwise; `a || b` is `a` when `a` is truthy and
+            // `b` otherwise. **And the word forms were missing entirely** -- measured on a real XP
+            // game, which writes an `or` in `$game_player.update` and was told
+            // *"undefined operator 'or' for a Boolean and a Boolean"*. **The parser knows the word
+            // forms** (the precedence table lists `or` with `||` and `and` with `&&`), **but the
+            // operator node keeps the word as its text**, and nothing here knew it.
             case "&&":
-                return RubyValue.OfBoolean(Truthy(pLeft) && Truthy(pRight));
+            case "and":
+                return Truthy(pLeft) ? pRight : pLeft;
             case "||":
-                return RubyValue.OfBoolean(Truthy(pLeft) || Truthy(pRight));
+            case "or":
+                return Truthy(pLeft) ? pLeft : pRight;
             default:
                 _ = pNode;
                 throw new RubyRuntimeException(

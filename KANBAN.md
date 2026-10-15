@@ -786,6 +786,41 @@ it.
 lines that match German markers and do not read as English, and subtract the same set from the
 base. Zero is the target for any new work.
 
+### K-PROD-RGSS-RENDERING — READY (XP, VX and VX Ace produce no picture at all)
+
+**And the RGSS layer has no graphics whatsoever.** `project/src/rgss` holds the Ruby runtime, the
+data host, the map reader, the script host and the archive reader -- and there is **no `Bitmap`, no
+`Sprite`, no `Tilemap`, no `Viewport` and no `Plane`** anywhere in it. The XP runtime declares
+`Runtime` and not `Rendering`, which is why the launcher reports Experimental and leaves Start
+disabled: three of the user's criteria (XP, VX, VX Ace) hang on this one block.
+
+**And the first step was to ask the game instead of guessing the API.** `TestRealXpRuntimeRun`
+starts a real XP game -- `E:/RPGMakerGames/MicroQuest - Beneath Brimestone 1.0` -- and records
+what its own scripts report. Measured: **90 scripts, 90 parsed and executed, 0 failed**, running
+against **RGSS 1.0.4**, title read, 38 data files, 55 files inspected. So the Ruby side is
+working: the engine's own scripts load and run. What fails is the frame.
+
+**And the failures are not graphics yet, which is the point of measuring.** With **zero** problems
+at start, five frames produce two, and naming them (the per-frame globals now report *which* of
+the five threw, instead of "the per-frame globals") gave:
+
+* `$game_player`: `undefined operator 'or' for a Boolean and a Boolean` -- **a language defect, now
+  fixed**: the parser knows the word forms (`or` sits with `||` in the precedence table) but the
+  operator node keeps the word as its text, and the evaluator only knew `&&`/`||`. Both word forms
+  are handled now, and both symbol and word forms return the *operand* rather than a Boolean, which
+  is what Ruby does and what idioms like `x = y || default` rely on.
+* `$game_map`: `undefined operator '>' for a Nil and a Integer` -- **an attribute of the game's map
+  object is nil**, so the game's own `update` compares nil with a number. That is the next step,
+  and it is still not graphics.
+
+**So the order is: complete the per-frame globals first, then the graphics.** The scripts are the
+demand signal -- each remaining problem names the next thing to build -- and the graphics API
+surface only becomes visible once the game gets far enough to ask for a `Bitmap`. Implementing
+`Bitmap`/`Sprite`/`Tilemap` before that would be guessing at an API the games have not yet named.
+
+**Progress measure:** the problem count in `TestRealXpRuntimeRun` (2 after the first five frames
+when this card was written, 1 after the `or` fix), and a first frame with pixels in it.
+
 ### K-PROD-MZ-FACTS-COPY — DONE (2026-10-15, the copy carries the game's state)
 
 **And this is what hid the actor loading.** `MzEngineRuntime` replaces its facts on **every map

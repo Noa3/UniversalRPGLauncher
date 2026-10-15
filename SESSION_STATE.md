@@ -1,5 +1,27 @@
 ## Current card
 
+### XP/VX/VX Ace: measured what a real game needs, and fixed a Ruby defect (2026-10-15)
+
+The RGSS layer has no graphics at all -- no `Bitmap`, `Sprite`, `Tilemap`, `Viewport` or `Plane`
+-- so XP, VX and VX Ace produce no picture, and the XP runtime declares `Runtime` and not
+`Rendering`. Rather than guess the API surface, `TestRealXpRuntimeRun` starts a real game
+(`MicroQuest - Beneath Brimestone`) and records what its own scripts say. Measured: 90 scripts,
+90 parsed and executed, 0 failed, against RGSS 1.0.4.
+
+Five frames then produced two problems, and naming them (the per-frame globals now report which of
+the five threw) gave one **language defect** and one map-state gap:
+
+* `$game_player`: `undefined operator 'or' for a Boolean and a Boolean` -- **fixed**: the parser
+  knows `or`/`and` (they sit with `||`/`&&` in the precedence table) but the operator node keeps
+  the word as its text and the evaluator only knew the symbol forms. All four now return the
+  *operand* rather than a Boolean, which is Ruby's own semantics.
+* `$game_map`: `undefined operator '>' for a Nil and a Integer` -- an attribute of the game's map
+  object is nil. That is the next step, and it is still not graphics.
+
+**So the order is: complete the per-frame globals, then the graphics** -- the scripts are the
+demand signal, and the graphics API surface only becomes visible once a game gets far enough to
+ask for a `Bitmap`. `K-PROD-RGSS-RENDERING` carries the measurement and the progress measure.
+
 ### K-PROD-MZ-FACTS-COPY DONE (2026-10-15): the map-load copy carries the game's state
 
 `WithCharacters` now carries 62 of the facts' properties -- the timer, the movie, the battle,
