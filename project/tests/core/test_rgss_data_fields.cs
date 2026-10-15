@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
 
@@ -228,6 +229,45 @@ public partial class TestRgssDataFields : TestBase
                 + (karte == null
                     ? "refused, and that is why `$game_map.width` is nil"
                     : "read, so the nil is somewhere after the read"));
+
+        // **Und die Events der Karte, weil das Spiel dort stehenbleibt.**
+        // `Game_Map#setup` baut sie mit
+        // `Game_Event.new(@map_id, @map.events[i])`, -- **und
+        // `Game_Event#initialize` ruft `moveto(@event.x, @event.y)`** -- und im
+        // Spiel ist `x` nil. **Die Frage ist, ob das Feld fehlt oder ob das
+        // Objekt nicht als Datenobjekt markiert ist**, und das entscheidet sich
+        // hier und nicht im Spiel.
+        var events = karte!.Felder.TryGetValue("@events", out var e) ? e : null;
+        System.Console.WriteLine(
+            "Map001 @events: "
+            + (events == null
+                ? "no field"
+                : "Kind " + events.Kind
+                    + ", Members " + events.Members.Count
+                    + ", Items " + events.Items.Count));
+        if (events != null && events.Items.Count > 0)
+        {
+            // **Und ein Hash traegt seine Paare in `Items` und nicht in
+            // `Members`** -- flach, Schluessel und Wert abwechselnd. **Und das
+            // ist gemessen und nicht geraten:** der Ausdruck oben sagte
+            // `Members 0, Items 2`.
+            for (var i = 0; i + 1 < events.Items.Count; i += 2)
+            {
+                var wert = events.Items[i + 1];
+                System.Console.WriteLine(
+                    "  Schluessel " + events.Items[i].Integer
+                    + " -> Kind " + wert.Kind
+                    + ", Klasse " + (wert.ClassName ?? "-")
+                    + ", AusDaten " + wert.AusDaten
+                    + ", Felder " + string.Join(" ", wert.Felder.Keys)
+                    + ", Members " + string.Join(" ",
+                        wert.Members.Keys.Select(k => k.Name ?? "?")));
+            }
+        }
+
+        AssertTrue(events != null,
+            "**and the map carries its events** -- and the field is "
+                + (events == null ? "not there" : "there"));
     }
 
     /// <summary>

@@ -180,6 +180,17 @@ public sealed class RgssLaufzeit
         Messen("start_y", "$data_system.start_y if $data_system");
         Messen("data_tilesets", "$data_tilesets.size if $data_tilesets");
 
+        // **Und die Rohdaten der Karte, weil dort der naechste Fehler sitzt.**
+        // `Game_Map#setup` baut die Events mit
+        // `Game_Event.new(@map_id, @map.events[i])`, -- **und
+        // `Game_Event#initialize` ruft `moveto(@event.x, @event.y)`** -- und
+        // `moveto` meldet *"'%' for a Nil and a Integer"*, also ist `x` nil.
+        // **Und die Frage ist, ob das Feld fehlt oder die Markierung**, und
+        // das entscheidet sich an den Rohdaten und nicht am Spielobjekt.
+        Messen("raw_events", "load_data(\"Data/Map001.rxdata\").events.size");
+        Messen("raw_event1_x", "load_data(\"Data/Map001.rxdata\").events[1].x");
+        Messen("raw_event1_y", "load_data(\"Data/Map001.rxdata\").events[1].y");
+
         // **Und der Host zaehlt mit.** Die Karte liest sich ausserhalb des
         // Spiels einwandfrei -- `RPG::Map` mit elf Feldern und `@width` darin --
         // **und im Spiel ist `$game_map.width` nil**, also ist die Frage, ob
