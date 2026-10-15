@@ -68,7 +68,11 @@ public static class MzSaveContents
     /// without a test failing.
     /// </remarks>
     public static readonly IReadOnlyList<string> AppliedEntries =
-        new[] { "system", "timer", "switches", "variables", "selfSwitches", "map", "player" };
+        new[]
+        {
+            "system", "timer", "switches", "variables", "selfSwitches",
+            "map", "player", "party",
+        };
 
     /// <summary>
     /// Builds a save from the facts of a running game.
@@ -186,8 +190,8 @@ public static class MzSaveContents
             }
             if (!applied) unapplied.Add(name);
         }
-        // And `party` is applied only in part: the members come back, the gold does not.
-        if (party?.Member("_gold") != null) unapplied.Add("party._gold");
+        // **Und das Gold ist kein Teilfall mehr**: es wird oben gelesen und von der Runde
+        // angewendet, also steht es nicht mehr unter dem, was dieser Leser liegen laesst.
 
         pLoaded = new MzLoadedSave
         {
@@ -204,6 +208,7 @@ public static class MzSaveContents
             TimerFrames = timer?.Member("_frames")?.IntOr(0) ?? 0,
             TimerWorking = timer?.Member("_working")?.BoolOr(false) ?? false,
             PartyMembers = partyMembers,
+            Gold = party?.Member("_gold")?.IntOr(0) ?? 0,
             Missing = MissingFrom(pContents),
             Unapplied = unapplied,
         };
@@ -816,6 +821,18 @@ public sealed class MzLoadedSave
     /// Whether the timer is counting down (Game_Timer._working).
     /// </summary>
     public bool TimerWorking { get; init; }
+
+    /// <summary>
+    /// The party's gold, which is <c>Game_Party._gold</c>.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a zero here is not the same as a save without the field.</strong> The
+    /// engine's <c>extractSaveContents</c> assigns the whole party object, so a party that
+    /// carries no <c>_gold</c> really is a party with no gold; the caller decides whether to
+    /// apply it by looking at whether the <c>party</c> entry arrived at all, which is what
+    /// <see cref="Missing"/> answers.
+    /// </remarks>
+    public int Gold { get; init; }
 
     /// <summary>
     /// The engine's entries this save does not carry.

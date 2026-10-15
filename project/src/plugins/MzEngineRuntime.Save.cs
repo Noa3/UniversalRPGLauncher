@@ -254,6 +254,20 @@ public sealed partial class MzEngineRuntime
             }
         }
 
+        // **Und das Gold kommt zurueck.** Die Mitglieder werden oben gesetzt; ohne das Gold
+        // waere ein Speichern und Laden ein Spiel, das still sein Geld verliert. Angewendet
+        // wird es nur, wenn die Datei den `party`-Eintrag ueberhaupt traegt -- fehlt er,
+        // steht das in `Missing`, und dann ist der jetzige Stand ehrlicher als eine Null.
+        var parteiGeladen = true;
+        foreach (var eintrag in save.Missing)
+        {
+            if (eintrag == "party") parteiGeladen = false;
+        }
+        if (parteiGeladen)
+        {
+            Facts.Gold = save.Gold;
+        }
+
         Facts.Player.StandAt(
             save.MapId > 0 ? save.MapId : CurrentMapId,
             save.PlayerX,
@@ -281,7 +295,7 @@ public sealed partial class MzEngineRuntime
         var bericht = $"loaded slot {pSlot}: {Facts.Switches.Count} "
             + $"switch(es), {Facts.Variables.Count} variable(s), "
             + $"{Facts.SelfSwitches.Count} self switch(es), {bewegt} figure(s) "
-            + $"put back, and the player at {Facts.Player.MapId}/"
+            + $"put back, {Facts.Gold} gold, and the player at {Facts.Player.MapId}/"
             + $"{Facts.Player.X}/{Facts.Player.Y}{karteGeladen}";
 
         if (save.Missing.Count > 0)

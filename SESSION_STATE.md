@@ -1,6 +1,36 @@
 ## Current card
 
-### MZ save: what the load leaves behind is named, not silent (2026-10-15)
+### MZ save: the gold comes back, and it exposed a split brain (2026-10-15)
+
+`party._gold` is read back (`MzLoadedSave.Gold`), the runtime applies it, and the load message
+reports it. End-to-end evidence on a real MZ project: the gold is set to 4321, saved, changed
+to 1, loaded -- the load reports `4321 gold` and the test asserts the value.
+
+**And the gold found the real defect.** `MzBranchFacts.Party`'s getter was
+`_party ??= new MzParty()`, and a party built without arguments makes its **own**
+`MzBranchFacts` -- so `Facts.Gold` and `Facts.Party.Gold` were two different fields: the runtime
+set one, the save writer read the other, and the writer therefore wrote a zero whatever the
+game's gold was. `MzParty`'s own constructor comment warns about exactly this; the facts now
+pass themselves in, so there is one gold.
+
+`Unapplied` is down to `screen, actors`. Those two need the **state model**, not only the
+reader: `MzScreen.Tone`/`ToneDuration`/`FlashDuration`/`Brightness` are `{ get; private set; }`
+and the actors' skills and equips are internal, so a load could parse them and have nowhere to
+put them.
+
+### Canonical validation GREEN (2026-10-15, after the MZ gold)
+
+`./scripts/validate.sh` exited **0** with **All 2983 tests passed** and the
+`UniversalRPG validation passed.` marker, **373** suite records and **zero**
+`ERROR:   Test_` lines. Exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-24.log`.
+The same count as before, because the gold assertions live inside existing tests rather than in
+new ones. Earlier green runs of the same day: **2983** after `db61ac3`, **2982** after
+`33f41c5`, **2980** after `8fb6cea`, **2975** after `4e4bc76`, **2974** after `b942abf`,
+**2973** after `9687b5f`, **2968** after `45b4b21`, **2961** after `6d9eb20`, **2956** after
+`65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940** after `aa8017f`,
+**2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after `dec3936`, **2921** after
+`ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
 
 `MzSaveContents.Capture` writes all ten of the engine's entries, and `TryRestore` reads back
 only part of them: it does **not** read `screen`, it does **not** read `actors`, and it does not

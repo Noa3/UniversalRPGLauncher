@@ -758,6 +758,28 @@ leaves the frame byte for byte as it was; the four updates are pinned by tests a
 the reference's arithmetic, and one end-to-end test drives a real game with the weather
 turned on.
 
+### K-PROD-MZ-SAVE-RESTORE — IN PROGRESS (the gold is back; the actors and the screen are named)
+
+**And the gold exposed a split brain, which was the real defect.** `MzBranchFacts.Party`'s
+getter was `_party ??= new MzParty()`, and a party built without arguments makes its **own**
+`MzBranchFacts` -- so `Facts.Gold` and `Facts.Party.Gold` were two different fields: the
+runtime set one, the save writer read the other. The writer therefore wrote a zero no matter
+what the game's gold was, and a load wrote into the wrong field. `MzParty`'s own constructor
+comment warns about exactly this ("one set of facts, because the engine has one"); the facts
+now pass themselves in, so there is one gold.
+
+**Done:** `party._gold` is read back (`MzLoadedSave.Gold`), the runtime applies it, and the
+load message reports the gold it restored. The end-to-end evidence is a real MZ project: the
+gold is set to 4321, saved, changed to 1, and loaded -- the load reports `4321 gold` and the
+test asserts the value, because a load that ignored the party would leave 1 and a player would
+have lost their money. `Unapplied` is down to `screen, actors`.
+
+**Still open, and it needs the state model rather than only the reader:** `screen` and `actors`.
+`MzScreen.Tone`, `ToneDuration`, `FlashDuration` and `Brightness` are `{ get; private set; }`
+and `MzGameActors`' skills and equips are internal, so a load cannot apply them at all today --
+the reader could parse them and there would be nowhere to put them. That is the next step, and
+each entry leaves `Unapplied` only when a test shows the value coming back through the file.
+
 ### K-PROD-MZ-SAVE-RESTORE — READY (the load leaves the gold, the actors and the screen behind)
 
 **And the writer is complete while the reader is not.** `MzSaveContents.Capture` builds all ten

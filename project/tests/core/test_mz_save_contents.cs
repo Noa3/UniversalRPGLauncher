@@ -157,6 +157,9 @@ public partial class TestMzSaveContents : TestBase
     public void Test_WasDerLeserNichtZurueckschreibtWirdBenannt()
     {
         var fakten = Fakten();
+        // **Und ein Gold, das kein Standardwert ist**: eine Null waere von einer
+        // vergessenen Null nicht zu unterscheiden.
+        fakten.Party.Gold = 4321;
         var (inhalt, fehlend) = MzSaveContents.Capture(fakten, 1, 60);
         AssertEq(fehlend.Count, 0,
             "**the writer builds all ten of the engine's entries**, so nothing is missing here");
@@ -164,11 +167,16 @@ public partial class TestMzSaveContents : TestBase
         AssertTrue(MzJson.TryParse(MzJson.Write(inhalt), out var gelesen, out var fehler), fehler);
         AssertTrue(MzSaveContents.TryRestore(gelesen!, out var geladen, out var problem), problem);
 
-        foreach (var name in new[] { "screen", "actors", "party._gold" })
+        AssertEq(geladen!.Gold, fakten.Party.Gold,
+            "**and the gold came back through the file**, so it is applied rather than named");
+
+        foreach (var name in new[] { "screen", "actors" })
         {
-            AssertTrue(geladen!.Unapplied.Contains(name),
+            AssertTrue(geladen.Unapplied.Contains(name),
                 $"**{name} is named as not put back**, rather than dropped on load");
         }
+        AssertTrue(!geladen.Unapplied.Contains("party._gold"),
+            "**and the gold is no longer named**, because it is applied now");
 
         // **Und die Invariante**: jeder Eintrag, den die Datei traegt, ist entweder
         // angewendet oder benannt.

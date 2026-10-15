@@ -72,6 +72,8 @@ public partial class TestMzSaveRuntime : TestBase
             lauf.Facts.Switches[7] = true;
             lauf.Facts.Variables[3] = 99;
             lauf.Facts.SelfSwitches["2,5,A"] = true;
+            // **Und das Gold**, weil ein Speichern und Laden es sonst still verliert.
+            lauf.Facts.Gold = 4321;
             var (x, y) = (lauf.PlayerX, lauf.PlayerY);
             lauf.Facts.Player.StandAt(lauf.CurrentMapId, x + 1, y, 6);
 
@@ -90,6 +92,7 @@ public partial class TestMzSaveRuntime : TestBase
             lauf.Facts.Switches[7] = false;
             lauf.Facts.Variables[3] = 0;
             lauf.Facts.SelfSwitches.Clear();
+            lauf.Facts.Gold = 1;
             lauf.Facts.Player.StandAt(lauf.CurrentMapId, 1, 1, 8);
 
             var geladen = lauf.Laden(1);
@@ -109,6 +112,10 @@ public partial class TestMzSaveRuntime : TestBase
                 "**and the player is where the save left them**");
             AssertEq(lauf.PlayerY, y,
                 "**and not where the test put them afterwards**");
+            AssertEq(lauf.Facts.Gold, 4321,
+                "**and the gold is the gold that was saved** -- 1 was set after the save, so a"
+                    + " load that ignored the party would leave 1 and a player would have lost"
+                    + " their money");
 
             // **And the file info is at the slot's own index.**
             AssertTrue(MzSaveStore.TryLoad(

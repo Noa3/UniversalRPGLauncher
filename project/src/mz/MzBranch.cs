@@ -349,7 +349,13 @@ public sealed class MzBranchFacts
     /// </summary>
     public MzParty Party
     {
-        get => _party ??= new MzParty();
+        // **Und die Partei bekommt diese Fakten, nicht eigene.** Ein `new MzParty()` ohne
+        // Argument legt sich ein *eigenes* `MzBranchFacts` an, und dann sind `Facts.Gold` und
+        // `Facts.Party.Gold` zwei verschiedene Felder: die Runde setzt das eine, der
+        // Speicher-Writer liest das andere, und ein Laden schreibt in das falsche. Genau
+        // davor warnt `MzParty`s eigener Kommentar -- "one set of facts, because the engine
+        // has one".
+        get => _party ??= new MzParty(this);
         set => _party = value;
     }
     private MzParty? _party;
