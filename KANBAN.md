@@ -70,20 +70,26 @@ they really paint. TestRgssRuntime 6/6, TestPluginDetection 25/25,
 TestLauncherUiSafety 26/26. What remains is rendering, input, audio and save
 for the three engines, which is the real "XP/VX/VX Ace complete" work.
 
-### K-PROD-RM2K-MOVE-TYPES — VERIFY (mode 1 random implemented; canonical in flight)
+### K-PROD-RM2K-MOVE-TYPES — DONE for mode 1 (commit d474a91); modes 2..5 READY
 
-Priority 1: RM2000/2003 runtime correctness. **Mode 1 (random) is implemented**
-and covers the largest measured gap: 1,787 pages of the collection, against
-mode 4 toward player 272, mode 3 horizontal 19, mode 2 vertical 15, mode 5 away
-3. Modes 2..5 still report `not implemented`.
+Priority 1: RM2000/2003 runtime correctness. **Mode 1 (random) is implemented
+and canonically green**: `./scripts/validate.sh` exited 0 with **All 2917 tests
+passed** and the pass marker, 368 suite records and no failing test method
+(log `scratch/urpg-canonical-3.log`). It covers the largest measured gap --
+1,787 pages of the collection -- against mode 4 toward player 272, mode 3
+horizontal 19, mode 2 vertical 15 and mode 5 away 3. **Modes 2..5 still report
+`not implemented`** and are the next slice; their reference is pinned below.
 
 Reference (EasyRPG Player, read from source and kept in scratch):
-`game_event.cpp` `MoveTypeRandom` / `SetMaxStopCountForRandom` /
-`Game_Character::Update`'s increment, `game_character.cpp`
-`GetDirection90DegreeLeft/Right/180 = (dir+3|1|2)%4`, `IsStopCountActive =
-StopCount < MaxStopCount`, `GetMaxStopCountForStep = freq>=8 ? 0 : 1<<(9-freq)`,
-and `Rand::GetRandomNumber` being **inclusive** on both ends (so `Rand(0,9)` is
-ten buckets). `game_character.cpp` sha256
+`game_event.cpp` `MoveTypeRandom` / `MoveTypeCycle` / `MoveTypeCycleLeftRight` /
+`MoveTypeCycleUpDown` / `MoveTypeTowardsOrAwayPlayer` /
+`SetMaxStopCountForRandom` / `Game_Character::Update`'s increment,
+`game_character.cpp` `GetDirection90DegreeLeft/Right/180 = (dir+3|1|2)%4`,
+`GetDirectionToCharacter`/`GetDirectionAwayCharacter`,
+`IsStopCountActive = StopCount < MaxStopCount`,
+`GetMaxStopCountForStep = freq>=8 ? 0 : 1<<(9-freq)`, and
+`Rand::GetRandomNumber` being **inclusive** on both ends (so `Rand(0,9)` is ten
+buckets). `game_character.cpp` sha256
 `56c1283aa344e0c81222cb64218581da22c11b7843a9b9780b3ee8696b88e008`.
 
 Implemented: `Rm2kEventRandom` (a deterministic, seedable stream of its own, so
@@ -103,15 +109,25 @@ measuring the autonomous walk instead of their own subject and now say
 the `CreateRouteGame` fixture); the mode-policy test now asserts that random
 never executes the page's embedded route, for mode 1 and for an absent field.
 
-Focused evidence: TestRm2kActiveEventGraphic **77/77** (five new tests: the
-drawn first delay, the four moving branches with the redrawn delay, the wait
-branch, a refused step restoring the pose, and no "not implemented" report),
-TestRm2kEventMoveRoute 7/7, TestRm2kMoveRoute 10/10,
+What modes 2..5 still need, all measured and none of it guessed: the cycles
+(`vertical` starts `Down`, `horizontal` starts `Right`) return while the stop
+count is short, take `default` unless the current direction is already its
+reverse, and try `ReverseDir(move_dir)` once more when the first attempt failed
+and the count has passed the maximum by twenty; toward/away test whether the
+event is in sight -- its screen position within the viewport plus 64 pixels --
+and then draw from zero to nine, where zero keeps the direction, one takes a
+random one and the rest takes the direction to (or away from) the player. The
+camera helpers (`Rm2kMapCamera.PositionX/OffsetPixelsX`) and the
+toward-player direction rule already exist for the route command.
+
+Focused evidence for mode 1: TestRm2kActiveEventGraphic **77/77** (five new
+tests: the drawn first delay, the four moving branches with the redrawn delay,
+the wait branch, a refused step restoring the pose, and no "not implemented"
+report), TestRm2kEventMoveRoute 7/7, TestRm2kMoveRoute 10/10,
 TestRm2kRuntimeRendering 19/19, TestRm2kActiveEventPage 8/8,
 TestRm2kRealFixtures 12/12, TestRealRm2kRuntimeRun 6/6,
 TestRm2kSpielstandAmEchtenSpiel 2/2, TestRm2kPictureSave 3/3,
-TestRm2kEventPagePoseParser 1/1. The canonical validator is running; the card
-is VERIFY until it is green.
+TestRm2kEventPagePoseParser 1/1.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
