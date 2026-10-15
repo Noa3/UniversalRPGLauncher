@@ -1509,6 +1509,18 @@ public sealed class RubyInterpreter
             return wert;
         }
 
+        // **And a type that IS defined is the answer, and not a diagnostic.**
+        // Measured: `RPG::Cache` reported *"the constant RPG::Cache is not
+        // defined by this host"* while `RPG.nil?` answered false -- **and the
+        // branch below found the name in the type table and then reported it as
+        // missing anyway.** A nested module is reached by its full path, and a
+        // game's own `module RPG; module Actors; end; end` is written that way in
+        // every VX project.
+        if (_types.TryGetValue(name, out var bekannterTyp))
+        {
+            return RubyValue.OfSymbol(bekannterTyp.Name);
+        }
+
         // **Und `const_missing` ist eine Methode, und kein Haken des
         // Lesers.** Ruby 1.8.1 macht `rb_funcall(klass,
         // "const_missing", 1, ID2SYM(id))` (`variable.c` Zeile 1120),
@@ -10066,6 +10078,19 @@ public sealed class RubyInterpreter
         if (geschrieben != null)
         {
             typ.Superclass = geschrieben;
+        }
+
+        // **And a type defined inside another one is reachable by its full
+        // path.** Measured: `RPG::Cache` reported *"the constant RPG::Cache is
+        // not defined by this host"* while `RPG.nil?` answered false -- **the
+        // module was there and the path was not**, because the definition stored
+        // the written name (`Cache`) and the lookup asks for the path. **And the
+        // short name stays registered**, because a module refers to its own types
+        // by it: `module RPG; class Sprite; end; Sprite.new; end` is how the
+        // engine's own scripts are written.
+        if (_aktuellerTyp != null && !string.IsNullOrEmpty(_aktuellerTyp.Name))
+        {
+            _types[_aktuellerTyp.Name + "::" + name] = typ;
         }
         // **Und eine zweite Definition LEERTA NICHT.** Das ist keine
         // Vermutung, sondern `rb_define_class` in Ruby 1.8.6,
