@@ -1394,6 +1394,39 @@ public partial class TestEventInterpreter : TestBase
 		AssertEq(interpreter.WaitFramesRemaining, 0, "no wait without the wait flag");
 	}
 
+	/// <summary>
+	/// A shake of strength and speed nine is accepted, and ten is not.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// <strong>And nine is what the game writes.</strong> Measured over the owned
+	/// collection, <c>11050</c> carries <c>[9,9,2,1]</c> nine times out of 34
+	/// shake commands -- so a bound of eight refused the strongest shake a game
+	/// asks for, which is the same defect the tint had with its saturation.
+	/// </para>
+	/// <para>
+	/// <strong>And the engine has no bound at all</strong>:
+	/// <c>Game_Screen::ShakeScreen</c> stores strength and speed as they come, and
+	/// <c>Shake::NextPosition</c> computes <c>amplitude = 1 + 2 * strength</c> with
+	/// them. Nine is the editor's own maximum, which is why the reader bounds
+	/// there and not at a byte.
+	/// </para>
+	/// </remarks>
+	public void Test_ShakeOfNineIsAccepted()
+	{
+		var presentation = new PresentationState();
+		AssertTrue(presentation.ShakeOnce(9, 9, 30),
+			"**and the shake of nine is accepted**, because that is the strongest"
+				+ " one the editor writes and the measurement found it in a game");
+		AssertEq(presentation.ShakeStrength, 9);
+		AssertEq(presentation.ShakeSpeed, 9);
+
+		AssertTrue(!presentation.ShakeOnce(10, 9, 30),
+			"**and ten is refused**, because it is outside the editor's range");
+		AssertTrue(!presentation.ShakeOnce(9, 10, 30),
+			"and so is a speed of ten");
+	}
+
 	public void Test_WeatherEffectsClampsStrengthAndUnknownType()
 	{
 		var state = new GameSimulationState();

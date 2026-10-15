@@ -120,8 +120,22 @@ public sealed class PresentationState
     /// <summary>The neutral tint value, which the engine restores on a map change.</summary>
     public const int NeutralTintValue = 100;
     public const int MaxEffectFrames = 600; // 10 seconds at 60 Hz, matching EventInterpreter.MaxWaitFrames
-    public const int MaxShakeStrength = 8;
-    public const int MaxShakeSpeed = 8;
+    /// <summary>
+    /// The strongest shake the editor writes.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And it is nine, not eight.</strong> Measured over the owned
+    /// collection, <c>11050</c> carries <c>[9,9,2,1]</c> nine times out of 34
+    /// shake commands, so a bound of eight refused the strongest shake a game
+    /// asks for. The engine itself has no bound -- <c>Game_Screen::ShakeScreen</c>
+    /// stores both values as they come and <c>Shake::NextPosition</c> uses
+    /// <c>amplitude = 1 + 2 * strength</c> -- so the editor's range is the one
+    /// that decides.
+    /// </remarks>
+    public const int MaxShakeStrength = 9;
+
+    /// <summary>The fastest shake the editor writes, which is nine as well.</summary>
+    public const int MaxShakeSpeed = 9;
     public const int MaxWeatherType = 2;
     /// <summary>
     /// The highest effect mode, from liblcf's enumeration: none, rotate, flip

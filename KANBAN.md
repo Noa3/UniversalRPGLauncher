@@ -342,19 +342,30 @@ and `project/app/ui/` contained **zero** references to `TintRed`, `FlashRed`,
 accepted, stored in `PresentationState`, counted down by its `Tick`, saved by the
 codec -- and nothing painted them.
 
-Demand over the owned collection (all-route distribution, so these are the
-command counts the games actually write):
+Demand and **parameters**, measured over the owned collection by
+`TestRm2kEffektbefehleGemessen` (a permanent measurement, not a throwaway probe):
 
-| Command | Instances | State |
+| Command | Instances | Parameters measured |
 |---|---:|---|
-| `11030` TintScreen | 2,924 | **painted** |
-| `11040` FlashScreen | 395 | state only |
-| `11050` ShakeScreen | 129 | state only |
-| `11060` PanScreen | 48 | state only |
-| `11070` WeatherEffects | 1 | state only |
+| `11030` TintScreen | 2,924 | 0..200 with 100 neutral |
+| `11040` FlashScreen | 379 | **colour and level in RPG_RT's 0..31**, six parameters -- no subcommand, so every one of them is a single flash |
+| `11050` ShakeScreen | 34 | **strength and speed up to 9** (15 values of exactly nine) |
+| `11060` PanScreen | 43 | five parameters, 26 distinct forms |
+| `11070` WeatherEffects | 0 in this game | -- |
 
 And it was not a rare path: Lisa issues a tint from a parallel page **150 times in
 300 frames**, which is a screen that is meant to change colour continuously.
+
+**And the measurement found a second range defect, which is fixed here.** The
+runtime bounded the shake's strength and speed to **8**, while the game writes
+**nine** -- `[9,9,2,1]` nine times out of 34 shake commands, 15 values of exactly
+nine overall -- so the strongest shake a game asks for was refused. The engine has
+no bound at all (`Game_Screen::ShakeScreen` stores both values as they come and
+`Shake::NextPosition` computes `amplitude = 1 + 2 * strength`), so the editor's
+0..9 is what decides. `MaxShakeStrength` and `MaxShakeSpeed` are nine now, with
+`Test_ShakeOfNineIsAccepted` (which was RED first: "the shake of nine is
+accepted" failed against the old bound) and the range assertion in the
+measurement.
 
 **The tint is now painted** (`Rm2kScreenTone` + `Rm2kScreenTonePainter`, applied
 to the composed frame before it is published, so after every layer and every
@@ -418,8 +429,29 @@ out in the test, and the re-aimed second tint), `TestRm2kPictureSave` **4/4**
 A mutation that makes the command jump to its target fails exactly the fade tests
 (14/18) and was reverted.
 
-**Still open on this card:** flash, shake, pan and weather (same measurement, same
-kind of reference).
+**Still open on this card:** flash, shake, pan and weather, with their references
+already read so the next slice does not re-derive them.
+
+* **Flash** is a **pixel pass**, and its arithmetic is `src/flash.h`:
+  `Update(current_level, time_left, continuous, period, sat)` does
+  `current_level = current_level - (current_level / time_left)` and then decrements
+  `time_left`; when `time_left` reaches zero the level is zero, and for a
+  *continuous* flash it restarts with `time_left = period; current_level = sat`.
+  `MakeColor(r, g, b, level)` is `Color(r * 8, g * 8, b * 8, level * 8)` -- so the
+  flash is a **full-screen alpha blend towards a solid colour**, drawn over the
+  frame, and the level decays instead of the frame count alone. The interpreter
+  currently calls `FlashOnce` for **both** the once and the begin subcommand, so a
+  continuous flash is a single pulse today; the measurement says this game never
+  writes the subcommand, but that is a game's data and not the format.
+* **Shake** is a **camera offset**, not a pixel pass: `src/shake.h`
+  `NextPosition(strength, speed, time_left, position)` computes
+  `amplitude = 1 + 2 * strength`,
+  `newpos = amplitude * sin((time_left * 4 * (speed + 2)) % 256 * PI / 128) * -1`
+  with a cutoff of `(speed * amplitude / 8) + 1`, and `Update` decrements the time
+  left, restarting at `kShakeContinuousTimeStart = 65535` for a continuous shake.
+* **Pan** moves the camera position (`Game_Screen::PanScreen` wraps
+  `pan_x`/`pan_y` by `pan_limit_x`/`pan_limit_y`), and **weather** is a particle
+  count from `Weather::GetMaxNumParticles(type)` with a strength.
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
