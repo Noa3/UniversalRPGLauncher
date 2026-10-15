@@ -6,6 +6,7 @@ using UniversalRPG.Core;
 using UniversalRPG.Mz;
 using UniversalRPG.Rm2k.Rendering;
 using UniversalRPG.Web;
+using UniversalRPG.App.Library;
 
 namespace UniversalRPG.Plugins;
 
@@ -179,7 +180,7 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
     /// the <em>player</em>, because <c>SubmitInput</c> read every direction as
     /// a step. A player could not point at an answer at all.
     /// </remarks>
-    public int ChoiceIndex { get; private set; }
+    public int ChoiceIndex { get; set; }
 
     /// <summary>And the options the cursor was last counted against.</summary>
     private string _choiceSignature = "";
@@ -881,6 +882,11 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
         _startMapId = start;
         _runner = new MzEventRunner(_commonEvents);
 
+        // **Und der Plugin-Sandbox wird gestartet**, -- **denn ein MZ-Spiel
+        // ohne seine Plugins ist ein Spiel, das seine Menues nicht zeigt**.
+        var pluginHost = MzPluginHost.Start(_game.GameDirectory);
+        UsePluginHost(pluginHost);
+
         // **Und die Laufzeit hoert, wenn eine Seite ein Bild anfordert.**
         //
         // **Und das muss hier stehen**, **denn `Repaint` ersetzt `Facts`
@@ -968,6 +974,16 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
 
     /// <summary>Why the title screen is not there, and empty when it is.</summary>
     public string TitleProblem { get; private set; } = "";
+
+    /// <summary>
+    /// Why a battle could not read its troop page, and empty when it could.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And this exists because the reason used to be discarded</strong>
+    /// -- a page that failed to load left the frame in a battle that ran no
+    /// command and never ended, and nothing said why.
+    /// </remarks>
+    public string BattleProblem { get; private set; } = "";
 
     /// <summary>
     /// The commands the title screen offers.
@@ -1250,20 +1266,31 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     private MzBranchFacts BefehlsTatsachen => _facts ?? Facts;
 
-    /// <summary>And whether a menu is open on the screen.</summary>
+    /// <summary>And whether any menu is open on the screen.</summary>
     /// <remarks>
     /// <strong>And it is read from <see cref="BefehlsTatsachen"/></strong>,
     /// because <c>351 Open Menu</c> writes through <c>pFacts</c> and that is
     /// the object <c>_facts</c> points at.
     /// </remarks>
     public bool MenuVisible =>
-        BefehlsTatsachen.Menu == MzMenuState.Open;
+        BefehlsTatsachen.Menu != MzMenuState.Closed;
+
+    /// <summary>And whether the main menu (Scene_Menu) is open.</summary>
+    public bool MainMenuVisible =>
+        BefehlsTatsachen.Menu == MzMenuState.Main;
+
+    /// <summary>And whether a submenu is open.</summary>
+    public bool SubMenuVisible =>
+        BefehlsTatsachen.Menu > MzMenuState.Main;
+
+    /// <summary>And which submenu is open, or none.</summary>
+    public MzMenuState CurrentMenu => BefehlsTatsachen.Menu;
 
     /// <summary>And whether the menu stops the player from walking.</summary>
     /// <remarks>
     /// <strong>And it does, and this is the engine's own reason:</strong>
     /// <c>SceneManager.push(Scene_Menu)</c> puts a whole scene over the map,
-    /// **so the map's own <c>update</c> does not run while a manu is up** --
+    /// **so the map's own <c>update</c> does not run while a menu is up** --
     /// **and a player who can still walk behind a menu is walking through a
     /// scene that is supposed to be covering him.**
     /// </remarks>
@@ -1282,8 +1309,9 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
     /// </remarks>
     public void OpenMenu()
     {
-        BefehlsTatsachen.Menu = MzMenuState.Open;
+        BefehlsTatsachen.Menu = MzMenuState.Main;
         MenuIndex = 0;
+        _subMenuIndex = 0;
     }
 
     /// <summary>And the player closes it.</summary>
@@ -1296,6 +1324,7 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
     {
         BefehlsTatsachen.Menu = MzMenuState.Closed;
         MenuIndex = 0;
+        _subMenuIndex = 0;
     }
 
     /// <summary>And the cursor moves, and wraps the way the engine wraps.</summary>
@@ -1303,7 +1332,8 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
     /// <returns>Whether anything moved.</returns>
     public bool MoveMenuCursor(int pSchritt)
     {
-        var anzahl = MenuCommands.Count;
+        var commands = GetCurrentMenuCommands();
+        var anzahl = commands.Count;
         if (anzahl <= 0)
         {
             return false;
@@ -1311,7 +1341,9 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
         // **And the engine wraps**, because `Window_Selectable.
         // processCursorMove` clamps the index into the list rather than
         // stopping at the edges.
-        MenuIndex = ((MenuIndex + pSchritt) % anzahl + anzahl) % anzahl;
+        var index = GetCurrentMenuIndex();
+        index = ((index + pSchritt) % anzahl + anzahl) % anzahl;
+        SetCurrentMenuIndex(index);
         return true;
     }
 
@@ -1320,39 +1352,292 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
     /// </summary>
     /// <returns>Whether anything was carried out.</returns>
     /// <remarks>
-    /// <strong>And what each of them does is a scene of its own, and this
-    /// reader runs none of them yet.</strong> Measured at
+    /// <strong>And what each of them does is a scene of its own.</strong> Measured at
     /// <c>Scene_Menu.prototype.createCommandWindow</c>: <c>item</c> pushes
-    /// <c>Scene_Item</c>, <c>save</c> pushes <c>Scene_Save</c>, <c>gameEnd</c>
-    /// pushes <c>Scene_GameEnd</c>, and <c>cancel</c> pops. **So a command is
-    /// reported and not carried out**, and <see cref="MenuReport"/> says which
-    /// one a player chose -- **which is the honest answer for a reader with no
-    /// item, save or game-end scene.**
+    /// <c>Scene_Item</c>, <c>skill</c> pushes <c>Scene_Skill</c>,
+    /// <c>equip</c> pushes <c>Scene_Equip</c>, <c>status</c> pushes
+    /// <c>Scene_Status</c>, <c>formation</c> pushes <c>Scene_Formation</c>,
+    /// <c>save</c> pushes <c>Scene_Save</c>, <c>gameEnd</c> pushes
+    /// <c>Scene_GameEnd</c>, and <c>cancel</c> pops. **A submenu opens and
+    /// cancel closes it**, returning to the main menu.
     /// </remarks>
     public bool ChooseMenuCommand()
     {
-        if (MenuIndex < 0 || MenuIndex >= MenuCommands.Count)
+        var commands = GetCurrentMenuCommands();
+        var index = GetCurrentMenuIndex();
+        if (index < 0 || index >= commands.Count)
         {
             return false;
         }
-        var symbol = MenuIndex < MenuCommandSymbols.Count
-            ? MenuCommandSymbols[MenuIndex] : MenuCommands[MenuIndex];
-        MenuReport = $"{MenuCommands[MenuIndex]} ({symbol})";
+        var symbol = GetCurrentMenuSymbol(index);
+        var command = commands[index];
+        MenuReport = $"{command} ({symbol})";
 
-        // **Und `cancel` schliesst**, **denn `setHandler("cancel",
-        // popScene)` ist der eine Handler, den diese Laufzeit schon
-        // ausfuehren kann.**
-        if (symbol == "gameEnd")
+        // Handle main menu commands
+        if (BefehlsTatsachen.Menu == MzMenuState.Main)
         {
-            Facts.Notices.Add(
-                "the menu asked for " + MenuReport
-                + ", and this runtime has no game-end scene yet");
+            return HandleMainMenuCommand(symbol, command);
         }
-        return true;
+
+        // Handle submenu commands
+        return HandleSubMenuCommand(symbol, command);
     }
 
     /// <summary>And the last command a player chose from the menu.</summary>
     public string MenuReport { get; private set; } = "";
+
+    // Submenu state
+    private int _subMenuIndex = 0;
+    private IReadOnlyList<string> _subMenuCommands = Array.Empty<string>();
+    private IReadOnlyList<string> _subMenuSymbols = Array.Empty<string>();
+
+    private IReadOnlyList<string> GetCurrentMenuCommands()
+    {
+        return BefehlsTatsachen.Menu == MzMenuState.Main
+            ? MenuCommands
+            : _subMenuCommands;
+    }
+
+    private IReadOnlyList<string> GetCurrentMenuSymbols()
+    {
+        return BefehlsTatsachen.Menu == MzMenuState.Main
+            ? MenuCommandSymbols
+            : _subMenuSymbols;
+    }
+
+    private int GetCurrentMenuIndex()
+    {
+        return BefehlsTatsachen.Menu == MzMenuState.Main
+            ? MenuIndex
+            : _subMenuIndex;
+    }
+
+    private void SetCurrentMenuIndex(int pIndex)
+    {
+        if (BefehlsTatsachen.Menu == MzMenuState.Main)
+        {
+            MenuIndex = pIndex;
+        }
+        else
+        {
+            _subMenuIndex = pIndex;
+        }
+    }
+
+    private string GetCurrentMenuSymbol(int pIndex)
+    {
+        var symbols = GetCurrentMenuSymbols();
+        return pIndex < symbols.Count ? symbols[pIndex] : GetCurrentMenuCommands()[pIndex];
+    }
+
+    private bool HandleMainMenuCommand(string pSymbol, string pCommand)
+    {
+        // Open submenu based on symbol
+        switch (pSymbol)
+        {
+            case "item":
+                OpenItemMenu();
+                return true;
+            case "skill":
+                OpenSkillMenu();
+                return true;
+            case "equip":
+                OpenEquipMenu();
+                return true;
+            case "status":
+                OpenStatusMenu();
+                return true;
+            case "formation":
+                OpenFormationMenu();
+                return true;
+            case "options":
+                OpenOptionsMenu();
+                return true;
+            case "save":
+                OpenSaveMenu();
+                return true;
+            case "gameEnd":
+                OpenGameEndMenu();
+                return true;
+            default:
+                // Plugin command
+                Facts.Notices.Add(
+                    "the menu asked for " + MenuReport
+                    + ", and this runtime has no handler for it yet");
+                return true;
+        }
+    }
+
+    private bool HandleSubMenuCommand(string pSymbol, string pCommand)
+    {
+        // Cancel closes submenu and returns to main menu
+        if (pSymbol == "cancel" || pCommand == "Cancel")
+        {
+            CloseSubMenu();
+            return true;
+        }
+
+        // Handle Save submenu - slot selection and save/load
+        if (BefehlsTatsachen.Menu == MzMenuState.Save)
+        {
+            if (pSymbol.StartsWith("slot"))
+            {
+                // Slot selected - store which slot
+                _saveSlotIndex = int.Parse(pSymbol.Substring(4)) - 1;
+                return true;
+            }
+            if (pSymbol == "save")
+            {
+                var result = Speichern(_saveSlotIndex + 1);
+                Facts.Notices.Add(result);
+                return true;
+            }
+            if (pSymbol == "load")
+            {
+                var result = Laden(_saveSlotIndex + 1);
+                if (!string.IsNullOrEmpty(result) && !result.StartsWith("saved"))
+                {
+                    Facts.Notices.Add(result);
+                }
+                else
+                {
+                    // Close menu and return to game
+                    CloseSubMenu();
+                    Facts.Notices.Add("game loaded from slot " + (_saveSlotIndex + 1));
+                }
+                return true;
+            }
+        }
+
+        // Handle GameEnd submenu
+        if (BefehlsTatsachen.Menu == MzMenuState.GameEnd)
+        {
+            if (pSymbol == "toTitle")
+            {
+                // Return to title screen
+                TitleVisible = true;
+                CloseSubMenu();
+                return true;
+            }
+        }
+
+        // For other submenus, report the action
+        Facts.Notices.Add(
+            "the submenu " + BefehlsTatsachen.Menu
+            + " asked for " + MenuReport
+            + ", and this runtime has no handler for it yet");
+        return true;
+    }
+
+    private int _saveSlotIndex = 0;
+
+    private void OpenItemMenu()
+    {
+        // Scene_Item: item list with categories, use item
+        _subMenuCommands = new[] { "Items", "Weapons", "Armors", "Key Items", "All" };
+        _subMenuSymbols = new[] { "items", "weapons", "armors", "keyItems", "all" };
+        BefehlsTatsachen.Menu = MzMenuState.Item;
+        _subMenuIndex = 0;
+        Facts.Notices.Add("opened Item menu");
+    }
+
+    private void OpenSkillMenu()
+    {
+        // Scene_Skill: skill list by actor, use skill
+        _subMenuCommands = new[] { "Skills" };
+        _subMenuSymbols = new[] { "skills" };
+        BefehlsTatsachen.Menu = MzMenuState.Skill;
+        _subMenuIndex = 0;
+        Facts.Notices.Add("opened Skill menu");
+    }
+
+    private void OpenEquipMenu()
+    {
+        // Scene_Equip: equipment list, change equipment
+        _subMenuCommands = new[] { "Equip", "Optimize", "Clear" };
+        _subMenuSymbols = new[] { "equip", "optimize", "clear" };
+        BefehlsTatsachen.Menu = MzMenuState.Equip;
+        _subMenuIndex = 0;
+        Facts.Notices.Add("opened Equip menu");
+    }
+
+    private void OpenStatusMenu()
+    {
+        // Scene_Status: actor status display
+        _subMenuCommands = new[] { "Status" };
+        _subMenuSymbols = new[] { "status" };
+        BefehlsTatsachen.Menu = MzMenuState.Status;
+        _subMenuIndex = 0;
+        Facts.Notices.Add("opened Status menu");
+    }
+
+    private void OpenFormationMenu()
+    {
+        // Scene_Formation: party formation
+        _subMenuCommands = new[] { "Formation" };
+        _subMenuSymbols = new[] { "formation" };
+        BefehlsTatsachen.Menu = MzMenuState.Formation;
+        _subMenuIndex = 0;
+        Facts.Notices.Add("opened Formation menu");
+    }
+
+    private void OpenOptionsMenu()
+    {
+        // Scene_Options: options screen
+        _subMenuCommands = new[] { "Volume", "Always Dash", "Command Remember", "Touch UI" };
+        _subMenuSymbols = new[] { "volume", "alwaysDash", "commandRemember", "touchUI" };
+        BefehlsTatsachen.Menu = MzMenuState.Options;
+        _subMenuIndex = 0;
+        Facts.Notices.Add("opened Options menu");
+    }
+
+    private void OpenSaveMenu()
+    {
+        // Scene_Save: save screen with slots from managed save directory
+        var saveDir = Path.Combine(
+            GameLibrary.SaveRoot,
+            Uri.EscapeDataString(_game.GameDirectory));
+        var slots = MzSaveStore.Slots(saveDir, _generation);
+        var cmds = new List<string>();
+        var syms = new List<string>();
+        for (int i = 1; i <= MzSaveStore.MaxSavefiles; i++)
+        {
+            var hasSave = slots.Contains(i);
+            var label = hasSave ? $"Slot {i}" : $"Slot {i} (empty)";
+            cmds.Add(label);
+            syms.Add("slot" + i);
+        }
+        cmds.Add("Save");
+        cmds.Add("Load");
+        syms.Add("save");
+        syms.Add("load");
+        _subMenuCommands = cmds.ToArray();
+        _subMenuSymbols = syms.ToArray();
+        BefehlsTatsachen.Menu = MzMenuState.Save;
+        _subMenuIndex = 0;
+        _saveSlotIndex = 0;
+        Facts.Notices.Add("opened Save menu");
+    }
+
+    private void OpenGameEndMenu()
+    {
+        // Scene_GameEnd: confirmation to quit
+        _subMenuCommands = new[] { "To Title", "Cancel" };
+        _subMenuSymbols = new[] { "toTitle", "cancel" };
+        BefehlsTatsachen.Menu = MzMenuState.GameEnd;
+        _subMenuIndex = 0;
+        Facts.Notices.Add("opened Game End menu");
+    }
+
+    private void CloseSubMenu()
+    {
+        BefehlsTatsachen.Menu = MzMenuState.Main;
+        _subMenuIndex = 0;
+        _subMenuCommands = Array.Empty<string>();
+        _subMenuSymbols = Array.Empty<string>();
+        MenuIndex = 0; // Reset main menu cursor
+        Facts.Notices.Add("closed submenu, back to main menu");
+    }
 
     /// <summary>And the screen a project with no size of its own gets.</summary>
     /// <remarks>
@@ -1572,13 +1857,33 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
         var symbols = new List<string> { "newGame", "options" };
         TitleCommandSource = "the engine's own commands, and nothing else";
 
+        // **Und "Continue" wird hinzugefuegt, wenn es Speicherstaende gibt.**
+        var saveDir = Path.Combine(
+            GameLibrary.SaveRoot,
+            Uri.EscapeDataString(_game.GameDirectory));
+        var saveSlots = MzSaveStore.Slots(saveDir, _generation);
+        if (saveSlots.Count > 0)
+        {
+            befehle.Insert(1, Begriff(19, "Continue"));
+            symbols.Insert(1, "continue");
+        }
+
         var ausDemSandkasten = PluginHost?.TitleCommands();
         if (ausDemSandkasten is { Count: > 0 })
         {
             var enabled = ausDemSandkasten.Where(command => command.Enabled).ToList();
-            befehle = enabled.Select(command => command.Name).ToList();
-            symbols = enabled.Select(command => command.Symbol).ToList();
-            TitleCommandSource = "the executed plugins";
+            // Merge: keep engine commands, add plugin commands that don't duplicate symbols
+            var existingSymbols = new HashSet<string>(symbols);
+            foreach (var cmd in enabled)
+            {
+                if (!existingSymbols.Contains(cmd.Symbol))
+                {
+                    befehle.Add(cmd.Name);
+                    symbols.Add(cmd.Symbol);
+                    existingSymbols.Add(cmd.Symbol);
+                }
+            }
+            TitleCommandSource = "the engine's commands, extended by executed plugins";
         }
         else
         {
@@ -1834,10 +2139,17 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
             return false;
         }
 
-        if (TitleIndex >= 0 && TitleIndex < _titleCommandSymbols.Count
-            && _titleCommandSymbols[TitleIndex] == "newGame")
+        if (TitleIndex >= 0 && TitleIndex < _titleCommandSymbols.Count)
         {
-            return BeginNewGame();
+            var symbol = _titleCommandSymbols[TitleIndex];
+            if (symbol == "newGame")
+            {
+                return BeginNewGame();
+            }
+            if (symbol == "continue")
+            {
+                return BeginContinueGame();
+            }
         }
 
         TitleProblem = $"The title offers \"{TitleSelection}\", and that "
@@ -1874,6 +2186,57 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
         }
 
         CurrentMapId = _startMapId;
+        Repaint();
+
+        // **Und die automatischen Seiten laufen, sobald die Karte steht.**
+        var autorun = RunPage(StartMode.Autorun);
+        if (autorun.StartsWith("map", StringComparison.Ordinal)
+            || autorun.StartsWith("the map has no events", StringComparison.Ordinal))
+        {
+            AutorunProblem = autorun;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// And a saved game is continued: the save is loaded and the map
+    /// takes over.
+    /// </summary>
+    /// <returns>Whether a save was loaded and the map started.</returns>
+    /// <remarks>
+    /// <strong>And this is the engine's own order.</strong> Measured at
+    /// <c>Scene_Title.prototype.commandContinue</c>:
+    /// <c>DataManager.loadGame(savefileId); this._commandWindow.close();
+    /// this.fadeOutAll(); SceneManager.goto(Scene_Map);</c> -- the save
+    /// is loaded, then the title closes and the map starts.
+    /// </remarks>
+    public bool BeginContinueGame()
+    {
+        if (!TitleVisible)
+        {
+            return false;
+        }
+
+        var saveDir = Path.Combine(
+            GameLibrary.SaveRoot,
+            Uri.EscapeDataString(_game.GameDirectory));
+        var saveSlots = MzSaveStore.Slots(saveDir, _generation);
+        if (saveSlots.Count == 0)
+        {
+            TitleProblem = "no save to continue";
+            return false;
+        }
+
+        // Load the most recent save (highest slot number with a save)
+        var latestSlot = saveSlots.Max();
+        var loadResult = Laden(latestSlot);
+        if (!string.IsNullOrEmpty(loadResult) && !loadResult.StartsWith("saved"))
+        {
+            TitleProblem = loadResult;
+            return false;
+        }
+
+        TitleVisible = false;
         Repaint();
 
         // **Und die automatischen Seiten laufen, sobald die Karte steht.**
@@ -4124,6 +4487,11 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
         TickAnimationen();
         TickAnimationsBlend();
 
+        // **Und der Timer zaehlt in jedem Bild, wenn er laeuft.**
+        // Measured: Game_Timer.update runs every frame with sceneActive=true
+        // unless the scene is paused. Here we treat the game as active.
+        Facts.Spiel.UhrEinBild(true);
+
             // **Und ein Menue, das aufgeht, faengt oben an.**
             //
             // **Und das ist `Window_MenuCommand.initCommandPosition`:**
@@ -4481,6 +4849,73 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
         if (_playerClock != null && _playerClock.Tick())
         {
             wechselt++;
+        }
+
+        // **Und der Kampf laeuft, wenn die Partei in einem ist.**
+        if (Facts.InBattle)
+        {
+            // Initialize battle runner if not yet loaded
+            if (_battleRunner == null)
+            {
+                _battleRunner = new MzBattleRunner(Facts, _game.GameDirectory);
+                var troopsPath = DataPfad("Troops.json");
+                if (troopsPath.Length > 0)
+                {
+                    try
+                    {
+                        var troopsData = MzDataFile.Read("data/Troops.json", File.ReadAllBytes(troopsPath));
+                        // **And a page that cannot be read names its reason.**
+                        // The reason was discarded here, so a battle whose page
+                        // failed to load ran no command and nothing said why.
+                        //
+                        // **And the battle is deliberately NOT ended here.**
+                        // Ending it changes where a parallel page stops on a
+                        // map change -- measured: `TestMvParallelPageDepth`
+                        // moved from index 440 to 445 and ran on into the next
+                        // map. That is a behaviour question about the transfer
+                        // command and needs its own measurement, so this stays
+                        // a diagnostic and nothing else.
+                        if (!_battleRunner.Lade(troopsData, Facts.BattleTroop, out var warum))
+                        {
+                            BattleProblem = $"troop {Facts.BattleTroop}: {warum}";
+                        }
+                    }
+                    catch (MzDataException ausnahme)
+                    {
+                        // If troops data can't be loaded, battle ends
+                        BattleProblem = $"Troops.json could not be read: {ausnahme.Message}";
+                        Facts.EndBattle(true);
+                    }
+                }
+                else
+                {
+                    // **And a project without the file cannot run its page at
+                    // all**, which the run has to be able to say.
+                    BattleProblem = "this project has no data/Troops.json, so no troop page can be read";
+                }
+            }
+
+            // Process one frame of battle
+            if (_battleRunner != null && _battleRunner.Laeuft)
+            {
+                var battleContinues = _battleRunner.Schritt();
+                if (!battleContinues)
+                {
+                    // Battle page finished - determine outcome from battle result
+                    var result = Facts.Kampf.Ausgang;
+                    bool lost = result == MzBattleResult.Lose;
+                    bool escaped = result == MzBattleResult.Escape;
+                    Facts.EndBattle(lost);
+
+                    // Clean up battle runner
+                    _battleRunner = null;
+                    wechselt++;
+                }
+                else
+                {
+                    wechselt++;
+                }
+            }
         }
 
         Frames++;
@@ -6477,6 +6912,8 @@ public sealed partial class MzEngineRuntime : IEngineRuntime
     private MzEventRunner? _runner;
 
     private MzBranchFacts? _facts;
+
+    private MzBattleRunner? _battleRunner;
 
     /// <inheritdoc />
     public PluginOperationResult Update(double pDeltaSeconds)

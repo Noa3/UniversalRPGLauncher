@@ -19,9 +19,9 @@ public partial class TestMzSaveStoreSafety : TestBase
         {
             foreach (var name in new[] { "../escape", "..\\escape", Path.Combine(directory, "absolute"), "file1:stream", "", ".", "../file1" })
             {
-                var saved = MzSaveStore.Save(directory, name, Number(17), out var problem);
+                var saved = MzSaveStore.Save(directory, name, "mz", Number(17), out var problem);
                 AssertFalse(saved, $"Unsafe name '{name}' is refused: {problem}");
-                AssertFalse(MzSaveStore.TryLoad(directory, name, out var loaded, out _),
+                AssertFalse(MzSaveStore.TryLoad(directory, name, "mz", out var loaded, out _),
                     "Unsafe names cannot be loaded either");
                 AssertTrue(loaded == null, "Rejected load returns no value");
             }
@@ -34,7 +34,7 @@ public partial class TestMzSaveStoreSafety : TestBase
         InDirectory(directory =>
         {
             WriteCompressed(directory, new byte[] { 34, 0xc3, 0x28, 34 });
-            AssertFalse(MzSaveStore.TryLoad(directory, "file1", out var value, out var problem),
+            AssertFalse(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out var problem),
                 $"Invalid UTF-8 is refused: {problem}");
             AssertTrue(value == null, "Invalid bytes cannot become repaired game data");
         });
@@ -46,7 +46,7 @@ public partial class TestMzSaveStoreSafety : TestBase
         {
             var bytes = MzSaveStore.Zip("{\"progress\":42}");
             File.WriteAllBytes(MzSaveStore.PathOf(directory, "file1"), bytes[..^3]);
-            AssertFalse(MzSaveStore.TryLoad(directory, "file1", out var value, out var problem),
+            AssertFalse(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out var problem),
                 $"Incomplete checksum is refused: {problem}");
             AssertTrue(value == null, "Truncated file produces no loaded state");
         });
@@ -57,7 +57,7 @@ public partial class TestMzSaveStoreSafety : TestBase
         InDirectory(directory =>
         {
             WriteCompressed(directory, Encoding.UTF8.GetBytes("\"" + new string('x', ByteLimit) + "\""));
-            AssertFalse(MzSaveStore.TryLoad(directory, "file1", out var value, out var problem),
+            AssertFalse(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out var problem),
                 $"Compression bomb is refused: {problem}");
             AssertTrue(value == null, "Oversized input produces no state");
         });
@@ -73,7 +73,7 @@ public partial class TestMzSaveStoreSafety : TestBase
                 file.Write(small);
                 file.SetLength(ByteLimit + 1L);
             }
-            AssertFalse(MzSaveStore.TryLoad(directory, "file1", out var value, out var problem),
+            AssertFalse(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out var problem),
                 $"Oversized stored file is refused before reading: {problem}");
             AssertTrue(value == null, "Oversized stored file produces no state");
         });
@@ -85,9 +85,9 @@ public partial class TestMzSaveStoreSafety : TestBase
         {
             var results = new bool[16];
             Parallel.For(0, results.Length, i =>
-                results[i] = MzSaveStore.Save(directory, "file1", Number(i), out _));
+                results[i] = MzSaveStore.Save(directory, "file1", "mz", Number(i), out _));
             AssertTrue(results.All(x => x), "In-process concurrent callers all commit complete values");
-            AssertTrue(MzSaveStore.TryLoad(directory, "file1", out var value, out var problem),
+            AssertTrue(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out var problem),
                 $"Final save remains readable: {problem}");
             AssertTrue(value?.Kind == MzKind.Number && value.Number >= 0 && value.Number < results.Length,
                 "Destination contains one complete submitted value");
@@ -107,8 +107,8 @@ public partial class TestMzSaveStoreSafety : TestBase
             };
             foreach (var json in payloads)
             {
-                File.WriteAllBytes(MzSaveStore.PathOf(directory, "file1"), MzSaveStore.Zip(json));
-                AssertFalse(MzSaveStore.TryLoad(directory, "file1", out var value, out var problem),
+File.WriteAllBytes(MzSaveStore.PathOf(directory, "file1"), MzSaveStore.Zip(json));
+            AssertFalse(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out var problem),
                     $"Malformed or excessive JSON is refused: {problem}");
                 AssertTrue(value == null, "Rejected JSON cannot become live state");
             }
@@ -120,16 +120,16 @@ public partial class TestMzSaveStoreSafety : TestBase
         if (!OperatingSystem.IsWindows()) { return; }
         InDirectory(directory =>
         {
-            AssertTrue(MzSaveStore.Save(directory, "file1", Number(111), out _), "Initial save commits");
+            AssertTrue(MzSaveStore.Save(directory, "file1", "mz", Number(111), out _), "Initial save commits");
             var path = MzSaveStore.PathOf(directory, "file1");
             var before = File.ReadAllBytes(path);
             using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                AssertFalse(MzSaveStore.Save(directory, "file1", Number(222), out var problem),
+                AssertFalse(MzSaveStore.Save(directory, "file1", "mz", Number(222), out var problem),
                     $"Windows sharing lock prevents replacement: {problem}");
                 AssertTrue(before.SequenceEqual(File.ReadAllBytes(path)), "Failed commit leaves old bytes unchanged");
             }
-            AssertTrue(MzSaveStore.TryLoad(directory, "file1", out var value, out _), "Previous save is still readable");
+            AssertTrue(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out _), "Previous save is still readable");
             AssertEq(value!.Number, 111.0, "Previous value survives a commit-stage failure");
             AssertEq(Directory.GetFiles(directory).Length, 1, "Failed commit cleans only its own staging file");
         });
@@ -139,10 +139,10 @@ public partial class TestMzSaveStoreSafety : TestBase
     {
         InDirectory(directory =>
         {
-            AssertTrue(MzSaveStore.Save(directory, "file1", Number(111), out _), "Initial save commits");
+            AssertTrue(MzSaveStore.Save(directory, "file1", "mz", Number(111), out _), "Initial save commits");
             var cycle = new MzValue(MzKind.Array);
             cycle.Items.Add(cycle);
-            AssertFalse(MzSaveStore.Save(directory, "file1", cycle, out _), "Cycles are refused before recursive serialization");
+            AssertFalse(MzSaveStore.Save(directory, "file1", "mz", cycle, out _), "Cycles are refused before recursive serialization");
             var deep = Number(0);
             for (var i = 0; i < 110; i++)
             {
@@ -150,10 +150,10 @@ public partial class TestMzSaveStoreSafety : TestBase
                 parent.Items.Add(deep);
                 deep = parent;
             }
-            AssertFalse(MzSaveStore.Save(directory, "file1", deep, out _), "Deep trees are bounded");
+            AssertFalse(MzSaveStore.Save(directory, "file1", "mz", deep, out _), "Deep trees are bounded");
             var large = new MzValue(MzKind.String) { Text = new string('x', ByteLimit + 1) };
-            AssertFalse(MzSaveStore.Save(directory, "file1", large, out _), "Output is bounded too");
-            AssertTrue(MzSaveStore.TryLoad(directory, "file1", out var value, out _), "Rejected writes preserve old save");
+            AssertFalse(MzSaveStore.Save(directory, "file1", "mz", large, out _), "Output is bounded too");
+            AssertTrue(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out _), "Rejected writes preserve old save");
             AssertEq(value!.Number, 111.0, "Last good value stays unchanged");
         });
     }
@@ -188,11 +188,11 @@ public partial class TestMzSaveStoreSafety : TestBase
                     tree = parent;
                 }
                 var accepted = depth <= MzSaveStore.MaxSaveDepth;
-                AssertEq(MzSaveStore.Save(directory, "file1", tree, out _), accepted,
+                AssertEq(MzSaveStore.Save(directory, "file1", "mz", tree, out _), accepted,
                     $"Writing allows at most {MzSaveStore.MaxSaveDepth} nested containers; depth={depth}");
                 var json = new string('[', depth) + "0" + new string(']', depth);
                 File.WriteAllBytes(MzSaveStore.PathOf(directory, "file1"), MzSaveStore.Zip(json));
-                AssertEq(MzSaveStore.TryLoad(directory, "file1", out _, out _), accepted,
+                AssertEq(MzSaveStore.TryLoad(directory, "file1", "mz", out _, out _), accepted,
                     $"Reading uses the same container-depth convention; depth={depth}");
             }
         });
@@ -206,7 +206,7 @@ public partial class TestMzSaveStoreSafety : TestBase
             var outside = Path.Combine(Path.GetDirectoryName(directory)!, "outside");
             var linked = Path.Combine(directory, "linked");
             Directory.CreateDirectory(outside);
-            AssertTrue(MzSaveStore.Save(outside, "file1", Number(111), out _), "Outside fixture is prepared explicitly");
+            AssertTrue(MzSaveStore.Save(outside, "file1", "mz", Number(111), out _), "Outside fixture is prepared explicitly");
             var target = MzSaveStore.PathOf(outside, "file1");
             var before = File.ReadAllBytes(target);
             var start = new System.Diagnostics.ProcessStartInfo("cmd.exe")
@@ -229,11 +229,11 @@ public partial class TestMzSaveStoreSafety : TestBase
             try
             {
                 AssertTrue((File.GetAttributes(linked) & FileAttributes.ReparsePoint) != 0, "Fixture is a real junction");
-                AssertFalse(MzSaveStore.Save(linked, "file1", Number(222), out var problem), $"Save rejects junction: {problem}");
-                AssertFalse(MzSaveStore.TryLoad(linked, "file1", out var loaded, out _), "Load rejects junction");
+                AssertFalse(MzSaveStore.Save(linked, "file1", "mz", Number(222), out var problem), $"Save rejects junction: {problem}");
+                AssertFalse(MzSaveStore.TryLoad(linked, "file1", "mz", out var loaded, out _), "Load rejects junction");
                 AssertTrue(loaded == null, "Rejected linked load produces no state");
-                AssertFalse(MzSaveStore.Exists(linked, "file1"), "Linked save is not advertised");
-                AssertFalse(MzSaveStore.Remove(linked, "file1"), "Remove cannot delete through a junction");
+                AssertFalse(MzSaveStore.Exists(linked, "file1", "mz"), "Linked save is not advertised");
+                AssertFalse(MzSaveStore.Remove(linked, "file1", "mz"), "Remove cannot delete through a junction");
                 AssertTrue(before.SequenceEqual(File.ReadAllBytes(target)), "Outside file remains byte-for-byte unchanged");
                 Console.WriteLine("Save safety: real Windows junction rejected for Save, TryLoad, Exists and Remove; target unchanged.");
             }
@@ -249,10 +249,10 @@ public partial class TestMzSaveStoreSafety : TestBase
     {
         InDirectory(directory =>
         {
-            AssertTrue(MzSaveStore.Save(directory, "file1", Number(111), out _), "Initial save commits");
+            AssertTrue(MzSaveStore.Save(directory, "file1", "mz", Number(111), out _), "Initial save commits");
             var text = new MzValue(MzKind.String) { Text = "日本語 — Grüezi 🎮" };
-            AssertTrue(MzSaveStore.Save(directory, "file1", text, out var problem), $"Valid overwrite commits: {problem}");
-            AssertTrue(MzSaveStore.TryLoad(directory, "file1", out var value, out _), "Overwrite reads back");
+            AssertTrue(MzSaveStore.Save(directory, "file1", "mz", text, out var problem), $"Valid overwrite commits: {problem}");
+            AssertTrue(MzSaveStore.TryLoad(directory, "file1", "mz", out var value, out _), "Overwrite reads back");
             AssertEq(value!.Text, text.Text, "Unicode is preserved byte-for-byte through UTF-8");
         });
     }

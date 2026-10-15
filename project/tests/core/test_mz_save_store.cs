@@ -43,7 +43,7 @@ public partial class TestMzSaveStore : TestBase
         try
         {
             var (inhalt, _) = MzSaveContents.Capture(Fakten(), 1, 900);
-            AssertTrue(MzSaveStore.Save(ordner, MzSaveStore.SlotName(1), inhalt, out var problem),
+            AssertTrue(MzSaveStore.Save(ordner, MzSaveStore.SlotName(1), "mz", inhalt, out var problem),
                 "**and the save is written** -- and the store said: " + problem);
 
             // **And the path is the engine's own.** Measured:
@@ -52,7 +52,7 @@ public partial class TestMzSaveStore : TestBase
             var pfad = MzSaveStore.PathOf(ordner, "file1");
             AssertTrue(File.Exists(pfad),
                 "**and it sits where the engine would put it** -- and the "
-                    + $"folder holds: {string.Join(", ", Directory.GetFiles(ordner))}");
+                + $"folder holds: {string.Join(", ", Directory.GetFiles(ordner))}");
             AssertTrue(pfad.EndsWith("file1.rmmzsave", StringComparison.Ordinal),
                 "**and its name ends in .rmmzsave** -- and the name is the "
                 + "engine's and not this launcher's, so the saves stay "
@@ -66,17 +66,17 @@ public partial class TestMzSaveStore : TestBase
                 + $"starts {bytes[0]:X2} {bytes[1]:X2}");
             AssertEq(bytes[0], 0x78,
                 "**and the first byte is 0x78** -- which is the zlib header, "
-                    + "and a reader that wrote plain JSON would fail here");
+                + "and a reader that wrote plain JSON would fail here");
             AssertFalse(bytes[0] == (byte)'{',
                 "**and it does not start with a brace** -- so it is not the "
-                    + "JSON itself");
+                + "JSON itself");
 
             // **And no leftover is left behind.**
             AssertFalse(File.Exists(pfad + "_"),
                 "**and the temporary file is gone**");
             AssertFalse(File.Exists(pfad + "__"),
                 "**and so is the backup** -- and a save that left one would "
-                    + "leave a file the engine would never write");
+                + "leave a file the engine would never write");
         }
         finally
         {
@@ -93,18 +93,18 @@ public partial class TestMzSaveStore : TestBase
         try
         {
             var (inhalt, _) = MzSaveContents.Capture(Fakten(), 7, 4321);
-            MzSaveStore.Save(ordner, MzSaveStore.SlotName(7), inhalt, out _);
+            MzSaveStore.Save(ordner, MzSaveStore.SlotName(7), "mz", inhalt, out _);
 
             AssertTrue(MzSaveStore.TryLoad(
-                    ordner, MzSaveStore.SlotName(7), out var gelesen, out var problem),
+                    ordner, MzSaveStore.SlotName(7), "mz", out var gelesen, out var problem),
                 "**and it reads back** -- and the store said: " + problem);
 
             AssertTrue(MzSaveContents.TryRestore(gelesen!, out var geladen, out var fehler),
                 "**and the contents read back** -- and the reader said: " + fehler);
             AssertEq(geladen!.SavefileId, 7,
                 "**and the slot number survived the file** -- and it is "
-                    + "written into the save itself, which is what a game "
-                    + "reads back to know where it is");
+                + "written into the save itself, which is what a game "
+                + "reads back to know where it is");
             AssertEq(geladen.FramesOnSave, 4321,
                 "**and the frame it was saved at**");
             AssertTrue(geladen.Switches.TryGetValue(5, out var an) && an,
@@ -112,12 +112,12 @@ public partial class TestMzSaveStore : TestBase
             AssertEq(geladen.PlayerX, 4, "**and the player is still where it was**");
 
             // **And the slot list is what a load screen would draw.**
-            var slots = MzSaveStore.Slots(ordner);
+            var slots = MzSaveStore.Slots(ordner, "mz");
             AssertEq(slots.Count, 1, "**and one slot has a save**");
             AssertEq(slots[0], 7,
                 "**and it is slot seven** -- and the list counts from one, "
-                    + "because `emptySavefileId` starts at one and slot zero "
-                    + "is not a slot the engine offers");
+                + "because `emptySavefileId` starts at one and slot zero "
+                + "is not a slot the engine offers");
         }
         finally
         {
@@ -140,19 +140,19 @@ public partial class TestMzSaveStore : TestBase
         var ordner = NeuerOrdner();
         try
         {
-            AssertFalse(MzSaveStore.Exists(ordner, MzSaveStore.SlotName(3)),
+            AssertFalse(MzSaveStore.Exists(ordner, MzSaveStore.SlotName(3), "mz"),
                 "**and the slot has no file**");
             AssertFalse(MzSaveStore.TryLoad(
-                    ordner, MzSaveStore.SlotName(3), out var gelesen, out var problem),
+                    ordner, MzSaveStore.SlotName(3), "mz", out var gelesen, out var problem),
                 "**and reading it fails**");
             AssertTrue(gelesen == null,
                 "**and it hands back nothing at all** -- and an empty object "
-                    + "would be an empty save");
+                + "would be an empty save");
             AssertTrue(problem.Contains("no save"),
                 "**and it says why** -- and it said: " + problem);
-            AssertEq(MzSaveStore.Slots(ordner).Count, 0,
+            AssertEq(MzSaveStore.Slots(ordner, "mz").Count, 0,
                 "**and the slot list is empty** -- and a load screen that "
-                    + "listed it would offer a slot that cannot be read");
+                + "listed it would offer a slot that cannot be read");
         }
         finally
         {
@@ -175,6 +175,7 @@ public partial class TestMzSaveStore : TestBase
     /// try {
     ///     this.fsWriteFile(filePath, zip);
     ///     this.fsUnlink(backupFilePath);
+    ///     this.fsUnlink(backupFilePath);
     ///     resolve();
     /// } catch (e) {
     ///     try { this.fsUnlink(filePath); this.fsRename(backupFilePath, filePath); }
@@ -194,27 +195,27 @@ public partial class TestMzSaveStore : TestBase
         try
         {
             var (erster, _) = MzSaveContents.Capture(Fakten(), 2, 111);
-            AssertTrue(MzSaveStore.Save(ordner, MzSaveStore.SlotName(2), erster, out _),
+            AssertTrue(MzSaveStore.Save(ordner, MzSaveStore.SlotName(2), "mz", erster, out _),
                 "**and the first save lands**");
 
             // Block serialization before the atomic commit, independent of
             // the staging-file naming strategy.
             var zweiter = new MzValue(MzKind.Number) { Number = double.NaN };
-            AssertFalse(MzSaveStore.Save(ordner, MzSaveStore.SlotName(2), zweiter, out var problem),
+            AssertFalse(MzSaveStore.Save(ordner, MzSaveStore.SlotName(2), "mz", zweiter, out var problem),
                 "**and the second save fails** -- and it said: " + problem);
 
             // **And the first save is still there, and still readable, and
             // still says 111.**
             AssertTrue(MzSaveStore.TryLoad(
-                    ordner, MzSaveStore.SlotName(2), out var gelesen, out var fehler),
+                    ordner, MzSaveStore.SlotName(2), "mz", out var gelesen, out var fehler),
                 "**and the save that was there is still readable** -- and "
-                    + "the store said: " + fehler);
+                + "the store said: " + fehler);
             AssertTrue(MzSaveContents.TryRestore(gelesen!, out var geladen, out _),
                 "**and its contents read back**");
             AssertEq(geladen!.FramesOnSave, 111,
                 "**and it is the FIRST save and not the second** -- and a "
-                    + "reader that wrote straight into the file would have "
-                    + "lost the game the player had");
+                + "reader that wrote straight into the file would have "
+                + "lost the game the player had");
         }
         finally
         {
@@ -227,16 +228,16 @@ public partial class TestMzSaveStore : TestBase
     {
         AssertEq(MzSaveStore.SlotName(1), "file1",
             "**and slot one is file1** -- measured: `makeSavename` is "
-                + "\"file%1\".format(savefileId)");
+            + "\"file%1\".format(savefileId)");
         AssertEq(MzSaveStore.SlotName(20), "file20", "**and slot twenty is file20**");
         AssertEq(MzSaveStore.GlobalName, "global",
             "**and the info file is called global** -- measured: "
-                + "`DataManager.saveGlobalInfo` writes "
-                + "`StorageManager.saveObject(\"global\", this._globalInfo)`");
+            + "`DataManager.saveGlobalInfo` writes "
+            + "`StorageManager.saveObject(\"global\", this._globalInfo)`");
         AssertEq(MzSaveStore.MaxSavefiles, 20,
             "**and there are twenty slots** -- measured: "
-                + "`DataManager.maxSavefiles` returns 20");
-        AssertEq(MzSaveStore.Suffix, ".rmmzsave",
+            + "`DataManager.maxSavefiles` returns 20");
+        AssertEq(MzSaveStore.GetSuffix("mz"), ".rmmzsave",
             "**and the suffix is .rmmzsave**");
     }
 

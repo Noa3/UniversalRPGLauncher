@@ -135,19 +135,16 @@ public partial class TestMzPluginHost : TestBase
         }
 
         var runtime = (MzEngineRuntime)host.Runtime!;
-        Console.WriteLine($"MZ title before the sandbox: "
+        Console.WriteLine($"MZ title after auto sandbox: "
             + $"source=\"{runtime.TitleCommandSource}\" "
             + $"commands=[{string.Join(", ", runtime.TitleCommands)}]");
+        // **And the exact contract, and not a substring of it.** `Start()`
+        // starts the plugin host itself, so the engine's own commands are
+        // extended by the plugins' answer rather than replaced by it -- and
+        // "mentions engine" would pass for a runtime that dropped them.
         AssertEq(runtime.TitleCommandSource,
-            "the engine's own commands, and nothing else",
-            "without a sandbox the title is the engine's own two commands");
-
-        runtime.UsePluginHost(MzPluginHost.Start(Camellia));
-        Console.WriteLine($"MZ title after the sandbox: "
-            + $"source=\"{runtime.TitleCommandSource}\" "
-            + $"commands=[{string.Join(", ", runtime.TitleCommands)}]");
-        AssertEq(runtime.TitleCommandSource, "the executed plugins",
-            "and with one, the list is the plugins' own answer");
+            "the engine's commands, extended by executed plugins",
+            "with a sandbox the title is the engine's list plus the plugins'");
         AssertTrue(runtime.TitleCommands.Contains("New Game"),
             "which still offers a new game");
         AssertTrue(runtime.TitleCommands.Contains("Options"),
@@ -158,6 +155,24 @@ public partial class TestMzPluginHost : TestBase
         // the sandbox answers that there are none.
         AssertTrue(!runtime.TitleCommands.Contains("Continue"),
             "and it does not offer to continue a game that was never saved");
+
+        // **And a second sandbox does not extend the same list twice.**
+        var vorher = runtime.TitleCommands.ToList();
+        runtime.UsePluginHost(MzPluginHost.Start(Camellia));
+        Console.WriteLine($"MZ title after manual sandbox: "
+            + $"source=\"{runtime.TitleCommandSource}\" "
+            + $"commands=[{string.Join(", ", runtime.TitleCommands)}]");
+        AssertEq(runtime.TitleCommandSource,
+            "the engine's commands, extended by executed plugins",
+            "the second sandbox reports the same contract");
+        AssertEq(runtime.TitleCommands.Count, vorher.Count,
+            "and the command count is the same one -- and a merge that"
+                + " appended the plugins' answer again would double it");
+        AssertEq(runtime.TitleCommands.Distinct().Count(),
+            runtime.TitleCommands.Count,
+            "and no command appears twice");
+        AssertTrue(vorher.SequenceEqual(runtime.TitleCommands),
+            "and the list is the same list, command for command");
     }
 
     /// <summary>

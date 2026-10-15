@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UniversalRPG.Mz;
 using UniversalRPG.Tests.Framework;
 using UniversalRPG.Web;
 
@@ -159,5 +160,53 @@ public partial class TestMzBattleProcessing : TestBase
                 + "*If Player Won* as a branch of its own, and a reader "
                 + "with one flag for both gave a game its defeat branch "
                 + "after a win");
+    }
+
+    /// <summary>
+    /// And a battle runner reads the database it was handed, and refuses
+    /// without one instead of ending the frame in a crash.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And this is the regression for a measured crash:</strong>
+    /// <c>Lade</c> passed <c>null</c> to the page decoder while holding the
+    /// parsed database, so the decoder dereferenced it on its first line and
+    /// every battle frame threw a NullReferenceException -- and because the
+    /// reason was discarded, nothing named the troop either.
+    /// </para>
+    /// <para>
+    /// <strong>Both halves are asserted:</strong> the refusal that says why,
+    /// and the read that really uses the bank.
+    /// </para>
+    /// </remarks>
+    public void Test_EineTruppenseiteLiestDieUebergebeneBank()
+    {
+        var ohneBank = new MzBattleRunner(new MzBranchFacts(), "E:/does-not-exist");
+        AssertFalse(ohneBank.Lade(null, 7, out var warum),
+            "**and a runner without a database refuses**");
+        AssertTrue(warum.Contains("troop 7"),
+            "**and the refusal names the troop** -- and it said: " + warum);
+        AssertTrue(warum.Contains("not handed in"),
+            "**and it names the missing database** -- and it said: " + warum);
+        AssertTrue(!ohneBank.Laeuft,
+            "**and it is not running**");
+
+        var bank = MzDataFile.Read("data/Troops.json",
+            System.Text.Encoding.UTF8.GetBytes(
+                "{\"troops\":[{\"id\":7,\"pages\":[{\"conditions\":{},"
+                + "\"list\":[{\"code\":101,\"indent\":0,"
+                + "\"parameters\":[\"The fight begins\"]},"
+                + "{\"code\":0,\"indent\":0,\"parameters\":[]}]}]}]}"));
+        var mitBank = new MzBattleRunner(new MzBranchFacts(), "E:/does-not-exist");
+        AssertTrue(mitBank.Lade(bank, 7, out var fehler),
+            "**and the troop page reads from the bank that was handed in** --"
+                + " and it said: " + fehler);
+        AssertTrue(mitBank.Laeuft,
+            "**and the battle is running**");
+
+        AssertFalse(mitBank.Lade(bank, 8, out var unbekannt),
+            "**and a troop the file does not carry is refused**");
+        AssertTrue(unbekannt.Contains("troop 8"),
+            "**and that refusal names it too** -- and it said: " + unbekannt);
     }
 }

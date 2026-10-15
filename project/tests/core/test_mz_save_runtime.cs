@@ -112,7 +112,7 @@ public partial class TestMzSaveRuntime : TestBase
 
             // **And the file info is at the slot's own index.**
             AssertTrue(MzSaveStore.TryLoad(
-                    ordner, MzSaveStore.GlobalName, out var global, out var problem),
+                    ordner, MzSaveStore.GlobalName, "mz", out var global, out var problem),
                 "**and the info file reads back** -- and the store said: "
                     + problem);
             AssertTrue(global!.Kind == MzKind.Array,

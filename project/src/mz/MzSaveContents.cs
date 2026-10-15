@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace UniversalRPG.Web;
@@ -138,6 +139,24 @@ public static class MzSaveContents
 
         var system = pContents.Member("system");
         var player = pContents.Member("player");
+        var timer = pContents.Member("timer");
+        var party = pContents.Member("party");
+
+        var partyMembers = new List<int>();
+        if (party != null)
+        {
+            var actorsArray = party.Member("_actors");
+            if (actorsArray?.Kind == MzKind.Array)
+            {
+                foreach (var item in actorsArray.Items)
+                {
+                    if (item.Kind == MzKind.Number)
+                    {
+                        partyMembers.Add((int)Math.Round(item.Number));
+                    }
+                }
+            }
+        }
 
         pLoaded = new MzLoadedSave
         {
@@ -151,6 +170,9 @@ public static class MzSaveContents
             PlayerX = player?.Member("_x")?.IntOr(0) ?? 0,
             PlayerY = player?.Member("_y")?.IntOr(0) ?? 0,
             PlayerDirection = player?.Member("_direction")?.IntOr(2) ?? 2,
+            TimerFrames = timer?.Member("_frames")?.IntOr(0) ?? 0,
+            TimerWorking = timer?.Member("_working")?.BoolOr(false) ?? false,
+            PartyMembers = partyMembers,
             Missing = MissingFrom(pContents),
         };
         return true;
@@ -507,6 +529,21 @@ public static class MzSaveContents
         partyObj.Members["@"] = Str("Game_Party");
         partyObj.Keys.Add("_gold");
         partyObj.Members["_gold"] = Num(pFacts.Party?.Gold ?? 0);
+        
+        // Party members (actors in the party) - _actors array
+        partyObj.Keys.Add("_actors");
+        var actorsArr = new MzValue(MzKind.Array);
+        if (pFacts.PartyMembers != null)
+        {
+            var sortedMembers = new List<int>(pFacts.PartyMembers);
+            sortedMembers.Sort();
+            foreach (var actorId in sortedMembers)
+            {
+                actorsArr.Items.Add(Num(actorId));
+            }
+        }
+        partyObj.Members["_actors"] = actorsArr;
+
         partyObj.Keys.Add("_items");
         var itemsObj = new MzValue(MzKind.Object);
         itemsObj.Keys.Add("@");
@@ -739,7 +776,22 @@ public sealed class MzLoadedSave
     public int PlayerDirection { get; init; } = 2;
 
     /// <summary>
+    /// Timer frames remaining (Game_Timer._frames).
+    /// </summary>
+    public int TimerFrames { get; init; }
+
+    /// <summary>
+    /// Whether the timer is counting down (Game_Timer._working).
+    /// </summary>
+    public bool TimerWorking { get; init; }
+
+    /// <summary>
     /// The engine's entries this save does not carry.
     /// </summary>
     public IReadOnlyList<string> Missing { get; init; } = new List<string>();
+
+    /// <summary>
+    /// Party members (actor IDs in the party) from Game_Party._actors.
+    /// </summary>
+    public List<int> PartyMembers { get; init; } = new();
 }

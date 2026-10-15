@@ -85,7 +85,7 @@ partial class TestMzMenuAndPlugins : TestBase
         interpreter.Run(actions, outOfBattle);
 
         AssertEq(
-            outOfBattle.Menu, MzMenuState.Open,
+            outOfBattle.Menu, MzMenuState.Main,
             "and a menu is open outside a battle, which is the command's whole"
             + $" effect; it is {outOfBattle.Menu}");
         AssertEq(

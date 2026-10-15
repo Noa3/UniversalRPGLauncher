@@ -78,7 +78,7 @@ public sealed partial class MzEngineRuntime
     /// The slots that have a save, which is what a load screen lists.
     /// </summary>
     public IReadOnlyList<int> Spielstaende() =>
-        UniversalRPG.Web.MzSaveStore.Slots(SaveDirectory);
+        UniversalRPG.Web.MzSaveStore.Slots(SaveDirectory, _generation);
 
     /// <summary>
     /// Whether a slot has a save, which is
@@ -86,7 +86,7 @@ public sealed partial class MzEngineRuntime
     /// </summary>
     public bool SpielstandVorhanden(int pSlot) =>
         UniversalRPG.Web.MzSaveStore.Exists(
-            SaveDirectory, UniversalRPG.Web.MzSaveStore.SlotName(pSlot));
+            SaveDirectory, UniversalRPG.Web.MzSaveStore.SlotName(pSlot), _generation);
 
     /// <summary>
     /// Writes the running game into a slot.
@@ -120,12 +120,16 @@ public sealed partial class MzEngineRuntime
             return SaveProblem;
         }
 
+        // Sync timer from MzSystem to MzBranchFacts before saving
+        Facts.TimerFrames = Facts.Spiel.TimerFrames;
+        Facts.TimerWorking = Facts.Spiel.TimerWorking;
+
         var (inhalt, fehlend) = UniversalRPG.Web.MzSaveContents.Capture(
             Facts, pSlot, Frames);
 
         var name = UniversalRPG.Web.MzSaveStore.SlotName(pSlot);
         if (!UniversalRPG.Web.MzSaveStore.Save(
-                SaveDirectory, name, inhalt, out var problem))
+                SaveDirectory, name, _generation, inhalt, out var problem))
         {
             SaveProblem = problem;
             return SaveProblem;
@@ -140,7 +144,7 @@ public sealed partial class MzEngineRuntime
         var infoProblem = WriteGlobalInfo(pSlot);
 
         var bericht = $"saved slot {pSlot} to "
-            + $"{UniversalRPG.Web.MzSaveStore.PathOf(SaveDirectory, name)}, "
+            + $"{UniversalRPG.Web.MzSaveStore.PathOf(SaveDirectory, name, _generation)}, "
             + $"{Facts.Switches.Count} switch(es), "
             + $"{Facts.Variables.Count} variable(s), "
             + $"{Facts.SelfSwitches.Count} self switch(es), and the player at "
@@ -184,7 +188,7 @@ public sealed partial class MzEngineRuntime
 
         var name = UniversalRPG.Web.MzSaveStore.SlotName(pSlot);
         if (!UniversalRPG.Web.MzSaveStore.TryLoad(
-                SaveDirectory, name, out var inhalt, out var problem))
+                SaveDirectory, name, _generation, out var inhalt, out var problem))
         {
             SaveProblem = problem;
             return SaveProblem;
@@ -256,6 +260,19 @@ public sealed partial class MzEngineRuntime
             save.PlayerY,
             save.PlayerDirection);
 
+        // Restore timer to both MzBranchFacts and MzSystem
+        Facts.TimerFrames = save.TimerFrames;
+        Facts.TimerWorking = save.TimerWorking;
+        Facts.Spiel.TimerFrames = save.TimerFrames;
+        Facts.Spiel.TimerWorking = save.TimerWorking;
+
+        // Restore party members
+        Facts.PartyMembers.Clear();
+        foreach (var actorId in save.PartyMembers)
+        {
+            Facts.PartyMembers.Add(actorId);
+        }
+
         // **And no camera has to be moved**, and that is not an omission:
         // this runtime does not model a display position at all. The
         // engine's  and  live on , and a
@@ -318,12 +335,13 @@ public sealed partial class MzEngineRuntime
         if (UniversalRPG.Web.MzSaveStore.TryLoad(
                 ordner,
                 UniversalRPG.Web.MzSaveStore.GlobalName,
-                out var vorhanden,
+                _generation,
+                out var vorhandenn,
                 out _)
-            && vorhanden != null
-            && vorhanden.Kind == UniversalRPG.Web.MzKind.Array)
+            && vorhandenn != null
+            && vorhandenn.Kind == UniversalRPG.Web.MzKind.Array)
         {
-            foreach (var eintrag in vorhanden.Items)
+            foreach (var eintrag in vorhandenn.Items)
             {
                 global.Items.Add(eintrag);
             }
@@ -345,6 +363,7 @@ public sealed partial class MzEngineRuntime
         return UniversalRPG.Web.MzSaveStore.Save(
             ordner,
             UniversalRPG.Web.MzSaveStore.GlobalName,
+            _generation,
             global,
             out var problem)
                 ? ""

@@ -867,7 +867,7 @@ public static class MzCommands
                         + " battle and the engine opens no menu there"));
                     return true;
                 }
-                pFacts.Menu = MzMenuState.Open;
+                pFacts.Menu = MzMenuState.Main;
                 pActions.Add(new MzAction(pCommand, "the menu is open"));
                 return true;
             }

@@ -162,6 +162,9 @@ public sealed class MzValue
 
     public int IntOr(int pFallback) =>
         Kind == MzKind.Number ? (int)Math.Round(Number) : pFallback;
+
+    public bool BoolOr(bool pFallback) =>
+        Kind == MzKind.Bool ? Boolean : pFallback;
 }
 
 public enum MzKind

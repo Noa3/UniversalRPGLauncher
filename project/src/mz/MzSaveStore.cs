@@ -32,10 +32,16 @@ public static class MzSaveStore
     public const int MaxSavefiles = 20;
 
     /// <summary>
-    /// The engine's own suffix, which is
+    /// The engine's own suffix for MZ, which is
     /// <c>StorageManager.filePath</c>'s <c>".rmmzsave"</c>.
     /// </summary>
-    public const string Suffix = ".rmmzsave";
+    public const string SuffixMz = ".rmmzsave";
+
+    /// <summary>
+    /// The engine's own suffix for MV, which is
+    /// <c>StorageManager.filePath</c>'s <c>".rvdata2"</c>.
+    /// </summary>
+    public const string SuffixMv = ".rvdata2";
 
     /// <summary>
     /// The file name of a slot, which is
@@ -49,6 +55,16 @@ public static class MzSaveStore
     /// </summary>
     public const string GlobalName = "global";
 
+    /// <summary>
+    /// Gets the save suffix for a generation.
+    /// </summary>
+    public static string GetSuffix(string pGeneration)
+        => pGeneration switch
+        {
+            "mv" or "MV" => SuffixMv,
+            _ => SuffixMz,
+        };
+
     public const int MaxFileBytes = 16 * 1024 * 1024;
     public const int MaxJsonBytes = 16 * 1024 * 1024;
     public const int MaxNodes = 250000;
@@ -59,6 +75,10 @@ public static class MzSaveStore
 
     /// <summary>Resolves a single portable file name within the selected directory.</summary>
     public static string PathOf(string pDirectory, string pName)
+        => PathOf(pDirectory, pName, SuffixMz);
+
+    /// <summary>Resolves a single portable file name within the selected directory with a custom suffix.</summary>
+    public static string PathOf(string pDirectory, string pName, string pSuffix)
     {
         if (string.IsNullOrWhiteSpace(pDirectory))
         {
@@ -69,7 +89,7 @@ public static class MzSaveStore
         {
             throw new ArgumentException("A save name must be a non-reserved ASCII leaf name containing only letters, digits, '-' or '_'.", nameof(pName));
         }
-        return Path.Combine(Path.GetFullPath(pDirectory), pName + Suffix);
+        return Path.Combine(Path.GetFullPath(pDirectory), pName + pSuffix);
     }
 
     private static bool IsPortableName(string name)
@@ -114,6 +134,7 @@ public static class MzSaveStore
     public static bool Save(
         string pDirectory,
         string pName,
+        string pGeneration,
         MzValue pObject,
         out string pProblem)
     {
@@ -124,7 +145,7 @@ public static class MzSaveStore
         {
             try
             {
-                var path = PathOf(pDirectory, pName);
+                var path = PathOf(pDirectory, pName, GetSuffix(pGeneration));
                 using var processLock = AcquireProcessLock(path);
                 ValidateTree(pObject);
                 var json = MzJson.Write(pObject);
@@ -183,6 +204,7 @@ public static class MzSaveStore
     /// </summary>
     /// <param name="pDirectory">Where this game's saves live.</param>
     /// <param name="pName">The engine's name for the file.</param>
+    /// <param name="pGeneration">The generation ("MV" or "MZ") for the save suffix.</param>
     /// <param name="pObject">The contents, when they could be read.</param>
     /// <param name="pProblem">What went wrong, when something did.</param>
     /// <returns>Whether a file was there and could be read.</returns>
@@ -196,6 +218,7 @@ public static class MzSaveStore
     public static bool TryLoad(
         string pDirectory,
         string pName,
+        string pGeneration,
         out MzValue? pObject,
         out string pProblem)
     {
@@ -203,7 +226,7 @@ public static class MzSaveStore
         pProblem = "";
         try
         {
-            var path = PathOf(pDirectory, pName);
+            var path = PathOf(pDirectory, pName, GetSuffix(pGeneration));
             RejectLinks(path);
             if (!File.Exists(path))
             {
@@ -234,11 +257,11 @@ public static class MzSaveStore
     }
 
     /// <summary>Whether a slot has a file, which is <c>savefileExists</c>.</summary>
-    public static bool Exists(string pDirectory, string pName)
+    public static bool Exists(string pDirectory, string pName, string pGeneration)
     {
         try
         {
-            var path = PathOf(pDirectory, pName);
+            var path = PathOf(pDirectory, pName, GetSuffix(pGeneration));
             RejectLinks(path);
             return File.Exists(path);
         }
@@ -249,13 +272,13 @@ public static class MzSaveStore
     }
 
     /// <summary>Removes only a regular file within the selected save directory.</summary>
-    public static bool Remove(string pDirectory, string pName)
+    public static bool Remove(string pDirectory, string pName, string pGeneration)
     {
         lock (FileGate)
         {
             try
             {
-                var path = PathOf(pDirectory, pName);
+                var path = PathOf(pDirectory, pName, GetSuffix(pGeneration));
                 using var processLock = AcquireProcessLock(path);
                 RejectLinks(path);
                 if (!File.Exists(path)) { return false; }
@@ -272,17 +295,18 @@ public static class MzSaveStore
     /// <summary>
     /// The slots that have a save, which is what a load screen lists.
     /// </summary>
+    /// <param name="pGeneration">The generation ("MV" or "MZ") for the save suffix.</param>
     /// <remarks>
     /// <strong>And it counts from one</strong>, because
     /// <c>DataManager.emptySavefileId</c> starts at 1 and slot 0 is not a
     /// slot the engine offers.
     /// </remarks>
-    public static IReadOnlyList<int> Slots(string pDirectory)
+    public static IReadOnlyList<int> Slots(string pDirectory, string pGeneration)
     {
         var slots = new List<int>();
         for (var id = 1; id <= MaxSavefiles; id++)
         {
-            if (Exists(pDirectory, SlotName(id)))
+            if (Exists(pDirectory, SlotName(id), pGeneration))
             {
                 slots.Add(id);
             }

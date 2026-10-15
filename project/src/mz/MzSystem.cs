@@ -126,12 +126,12 @@ public sealed class MzSystem
     public bool HatKampflied { get; set; }
 
     /// <summary>Whether the timer runs, and the engine's start value.</summary>
-    public bool TimerWorking { get; private set; }
+    public bool TimerWorking { get; set; }
 
     /// <summary>
     /// The timer's frames, and the engine counts frames and not seconds.
     /// </summary>
-    public int TimerFrames { get; private set; }
+    public int TimerFrames { get; set; }
 
     /// <summary>The four frames a second, as the engine multiplies by it.</summary>
     public const int FramesPerSecond = 60;
