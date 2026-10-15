@@ -1,23 +1,26 @@
 ## Current card
 
-### K-PROD-RM2K-LOOP-MAPS DONE (2026-10-15)
+### Route commands: facing lock done, unhandled commands no longer stop the route (2026-10-15)
 
-The LMU's `scroll_type` is parsed, the state carries it, and the camera, the passability
-lookups and every step (player and events) wrap through `RoundX`/`RoundY` -- the four
-looping maps of the corpus now wrap instead of walling the player in. The save carries the
-scroll type as part of the map's identity.
+`lock_facing` (26) and `unlock_facing` (27) are implemented, and an unhandled route command
+is now **walked past with a diagnostic** instead of cancelling the whole route -- which is
+the reference's `default: break;` plus index advance, and the repository's own rule that a
+failure is reported and the run continues. What is left of the route commands is the jump
+pair (24/25, six measured instances), pinned with its full reference in
+`K-PROD-RM2K-ROUTE-JUMP`; the relative/random movement forms (8/10/11) as *route* commands
+remain open as well.
 
-### Canonical validation GREEN (2026-10-15, after the loop maps)
+### Canonical validation GREEN (2026-10-15, after the route commands)
 
-`./scripts/validate.sh` exited **0** with **All 2973 tests passed** and the
-`UniversalRPG validation passed.` marker, **373** suite records (the new
-`TestRm2kLoopMaps` among them) and **zero** `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-18.log`.
-2968 after `45b4b21` plus the five new tests of the loop-map slice. Earlier green runs of
-the same day: **2968** after `45b4b21`, **2961** after `6d9eb20`, **2956** after
-`65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940** after `aa8017f`,
-**2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after `dec3936`, **2921**
-after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
+`./scripts/validate.sh` exited **0** with **All 2974 tests passed** and the
+`UniversalRPG validation passed.` marker, **373** suite records and **zero**
+`ERROR:   Test_` lines. Exact log:
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-19.log`.
+2973 after `9687b5f` plus the facing-lock test. Earlier green runs of the same day:
+**2973** after `9687b5f`, **2968** after `45b4b21`, **2961** after `6d9eb20`, **2956**
+after `65a1241`, **2948** after `1352ef2`, **2942** after `a1fed99`, **2940** after
+`aa8017f`, **2937** after `ce9f798`, **2930** after `b5aef4a`, **2928** after `dec3936`,
+**2921** after `ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
 
 **And the run before it (`urpg-canonical-13.log`) failed on one test, which was a
 real find rather than the intermittent crash**: 2948 tests, **4 failing

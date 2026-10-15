@@ -759,6 +759,17 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
     private readonly Dictionary<int, Rm2kMoveRouteState> _eventRoutes = new();
 
     /// <summary>
+    /// The route commands already reported as unhandled, per event.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And a repeated route would otherwise report the same gap every cycle</strong>:
+    /// a route of one unhandled command with `repeat` runs it once per tick, and twenty
+    /// identical lines in the diagnostic channel hide the twenty different ones behind
+    /// them. The key is the event and the command, so two different gaps are both named.
+    /// </remarks>
+    private readonly HashSet<(int EventId, int CommandId)> _unhandledRouteCommands = new();
+
+    /// <summary>
     /// The position an event is drawn at while a route is walking it, which
     /// differs from its logical tile until the step budget runs out.
     /// </summary>
@@ -1330,6 +1341,16 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                 return;
             case Rm2kMoveRoute.DecreaseMovementFrequence:
                 pRoute.MoveFrequency = Rm2kMoveRoute.ClampMoveFrequency(pRoute.MoveFrequency - 1);
+                return;
+            // **And the facing lock is a route command**, from `Code::lock_facing` and
+            // `Code::unlock_facing`: the reference sets `SetFacingLocked(true/false)` and
+            // nothing else. It shares the flag the page's own animation type uses, which
+            // is the reference's shape too -- one field, and the last writer decides.
+            case Rm2kMoveRoute.LockFacing:
+                pEvent.FacingLocked = true;
+                return;
+            case Rm2kMoveRoute.UnlockFacing:
+                pEvent.FacingLocked = false;
                 return;
         }
     }
@@ -3668,11 +3689,32 @@ public sealed class Rm2kEngineRuntime : IEngineRuntime, IRuntimeSaveTools, IRunt
                     ApplyEventRouteFacingCommand(pEvent, route, id);
                     route.ConsumeCommand();
                 }
+                else if (id == Rm2kMoveRoute.LockFacing || id == Rm2kMoveRoute.UnlockFacing)
+                {
+                    // **Und die Sperre ist ein Routenbefehl**: die Referenz setzt nur das
+                    // Flag, ohne Stop-Count, also laeuft die Route sofort weiter.
+                    ApplyEventRouteFacingCommand(pEvent, route, id);
+                    route.ConsumeCommand();
+                }
                 else
                 {
-                    Simulation.AddDiagnostic($"RM2K event {pEvent.Id} page route stopped at unsupported command {id}, index {route.CurrentIndex}.");
-                    route.Cancel();
-                    break;
+                    // **And an unhandled command is consumed, not fatal.** The reference's
+                    // move-route switch has `default: break;` and then advances the index,
+                    // so a command it does not implement is walked past and the rest of the
+                    // route still runs. Cancelling here stopped a whole route -- and with
+                    // it the event's movement -- on one command the engine ignores, which is
+                    // a bigger difference than the command itself.
+                    // **Und  gemeldet  wird  jeder  Befehl  einmal  je  Event**,  nicht  je
+                    // Zyklus:  eine  Route  mit  `repeat`  laeuft  denselben  Befehl  sonst
+                    // zwanzigmal  in  zwanzig  Ticks  vorbei  und  fuellt  den  Kanal  mit
+                    // zwanzig  gleichen  Zeilen.
+                    if (_unhandledRouteCommands.Add((pEvent.Id, id)))
+                    {
+                        Simulation.AddDiagnostic(
+                            $"RM2K event {pEvent.Id} page route walked past unhandled command"
+                            + $" {id} at index {route.CurrentIndex}.");
+                    }
+                    route.ConsumeCommand();
                 }
                 if (pEvent.StopCount < pEvent.MaxStopCount || route.CurrentIndex == start) break;
             }

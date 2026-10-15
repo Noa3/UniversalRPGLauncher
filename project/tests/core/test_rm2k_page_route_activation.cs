@@ -249,15 +249,65 @@ public partial class TestRm2kActiveEventGraphic
         AssertEq(_event.X, 8, "The original route resumes at its second command");
     }
 
-    public void Test_UnsupportedPageRouteCommandIsVisibleAndDoesNotPretendToExecute()
+    public void Test_UnhandledPageRouteCommandIsWalkedPastAndTheRouteContinues()
     {
+        // **Und  die  Route  laeuft  weiter**:  die  Referenz  hat  `default: break;`
+        // und  zaehlt  danach  den  Index  hoch,  also  geht  ein  Befehl,  den  sie
+        // nicht  kennt,  vorbei  --  und  der  Rest  der  Route  laeuft.  **Und  die
+        // eigene  Repo-Regel  sagt  dasselbe**:  "Failures are reported by name and
+        // reason, and the run continues."
+        //
+        // **Und  dieser  Test  verlangte  frueher  das  Gegenteil**:  die  Route
+        // musste  an  einem  unbekannten  Befehl  stehenbleiben,  damit  nichts
+        // "still verschwindet".  Das  ist  die  groessere  Abweichung  --  ein  Event
+        // bleibt  stehen,  wo  die  Engine  weitergeht.
         StartAuthoredRouteMap(RoutePage(6, 8, true,
             new Rm2kMap.MoveCommand(Rm2kMoveRoute.SwitchOn) { ParameterA = 1 }, new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
-        RouteTicks(40);
-        AssertEq(_event.X, 8, "An unsupported prefix cannot silently disappear while later commands run");
-        AssertEq(PageRoutes()[1].CurrentIndex, 0);
-        AssertEq(_runtime.Simulation.Diagnostics.Count(message => message.Contains("unsupported command 32")), 1,
-            "The unsupported command is diagnosed once, not every tick");
+        // **Und ein Tick genuegt**: die Route laeuft in einem Tick bis zum ersten
+        // Schritt, und die Route wiederholt sich danach -- vierzig Ticks haetten
+        // das Event weiter bewegt und nichts ueber diesen Befehl gesagt.
+        RouteTicks(1);
+        AssertEq(_event.X, 9,
+            "**the step after the unhandled command happens**, because the route walks past"
+                + " it and runs the rest");
+        AssertEq(_runtime.Simulation.Diagnostics.Count(message => message.Contains("walked past unhandled command 32")), 1,
+            "**and the command is named once**, so the gap is visible without stopping the"
+                + " event");
+    }
+
+    /// <summary>
+    /// A route's facing lock and unlock are commands, from 26 and 27.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the lock shares the page's own flag</strong>: the reference has one
+    /// `facing_locked` field that both `Code::lock_facing` and the page's animation type
+    /// write, so the last writer decides. The runtime had the flag for the animation types
+    /// and no command that set it, which is why a route that locked its facing had its
+    /// route cancelled at that command instead.
+    /// </remarks>
+    public void Test_DieFacingSperreIstEinRoutenBefehl()
+    {
+        StartAuthoredRouteMap(RoutePage(6, 8, true,
+            new Rm2kMap.MoveCommand(Rm2kMoveRoute.LockFacing),
+            new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
+        // **Und ein Tick genuegt**: die Route laeuft in einem Tick bis zum ersten
+        // Schritt -- die Sperre setzt keinen Stop-Count, also folgt der naechste
+        // Befehl sofort.
+        RouteTicks(1);
+        AssertEq(_event.FacingLocked, true,
+            "**and a locked facing stays locked**");
+        AssertEq(_event.X, 9,
+            "**and the step behind the lock happened in the same tick**, because the lock"
+                + " does not spend the route's stop count");
+
+        StartAuthoredRouteMap(RoutePage(6, 8, true,
+            new Rm2kMap.MoveCommand(Rm2kMoveRoute.LockFacing),
+            new Rm2kMap.MoveCommand(Rm2kMoveRoute.UnlockFacing),
+            new Rm2kMap.MoveCommand(Rm2kMoveRoute.MoveRight)));
+        RouteTicks(1);
+        AssertEq(_event.FacingLocked, false,
+            "**and unlocking clears it again**");
+        AssertEq(_event.X, 9, "and the route still runs");
     }
 
     public void Test_MainInterpreterBlocksAutonomousStartsButParallelDoesNot()

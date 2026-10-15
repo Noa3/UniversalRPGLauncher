@@ -758,6 +758,47 @@ leaves the frame byte for byte as it was; the four updates are pinned by tests a
 the reference's arithmetic, and one end-to-end test drives a real game with the weather
 turned on.
 
+### K-PROD-RM2K-ROUTE-JUMP — READY (24 and 25, six measured instances)
+
+**And this is what is left of the route commands.** `lock_facing` (26) and its twin 27 are
+implemented and an unhandled route command is now walked past instead of stopping the
+route (`docs/MOVEMENT_COVERAGE.md`), so the two remaining codes are the jump pair:
+**24 `begin_jump` (3 instances) and 25 `end_jump` (3)** in the whole owned collection.
+
+**What happens today:** the route walks past them with a diagnostic, so the event does not
+jump -- but the rest of its route still runs, which is the reference's own behaviour for a
+command it does not implement and a smaller error than the route stopping dead.
+
+**The reference, pinned so the slice does not re-derive it** (EasyRPG
+`Game_Character::BeginMoveRouteJump`, `Jump` and the `MoveRouteJump` arc):
+
+* **`BeginMoveRouteJump(current_index, route)`** scans forward from `begin_jump + 1`:
+  * every **movement** command (0..11) first sets the direction -- `move_up`..`move_upleft`
+    assign it, `move_random` turns randomly, `move_towards_hero`/`move_away_from_hero` turn
+    towards or away, and `move_forward` uses the direction the character already has -- and
+    then accumulates `jdx += GetDxFromDirection(GetDirection())` and the same for `jdy`.
+    So a route of `move_forward` after a turn jumps along the **new** direction.
+  * every **facing** command (12..22) turns the character without accumulating anything.
+  * at **`end_jump`** it calls `Jump(GetX() + jdx, GetY() + jdy)` and returns whether that
+    succeeded; the outer loop's increment then passes the `end_jump`.
+  * **if the route ends without an `end_jump`** the index backs up by one and the jump is
+    **skipped**, returning true -- so an unterminated jump is not a crash and not a jump.
+* **`Jump(x, y)`** returns true (a no-op) unless the character `IsStopping()`; it sets the
+  direction from the larger of `dx`/`dy` (vertical on a tie), sets `jumping`, sets the
+  facing **unless the facing is locked**, and calls `MakeWay` for the tiles it crosses.
+* **The arc** is `MoveRouteJump`: the drawn position is the tile minus
+  `(GetX() - GetBeginJumpX()) * GetRemainingStep()` on each axis, over the step budget
+  the jump sets -- the same budget shape the normal step uses.
+* And a failed jump either restores the previous direction and facing (a skippable route)
+  or rewinds the index and counts a move failure (a route that is not).
+
+**Acceptance:** a route of `begin_jump` … `end_jump` jumps the accumulated distance in one
+movement, with the turns between the two commands applied first; a jump that is not closed
+by an `end_jump` is skipped and the route continues; a locked facing survives the jump; a
+jump into an impassable tile fails the way the reference fails it; the three measured
+`begin_jump` instances of the corpus are exercised in a test, and the diagnostic that names
+the command disappears once it is implemented.
+
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 
 `Rm2kBattleRunner` + `rm2k_troop_page_decoder` add multi-page troop decoding

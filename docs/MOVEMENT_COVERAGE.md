@@ -94,6 +94,26 @@ gaps that are *not* command opcodes remain open as well: loop maps, dynamic
 character collision, full forced-route parity, transparency, and the
 route/interpreter lifecycle.
 
+**Update (2026-10-15).** Two of those three are closed and the third is pinned:
+
+* **Loop maps are done.** The LMU's `scroll_type` is parsed, and the camera, the
+  passability lookups and every step (player and events) wrap through
+  `RoundX`/`RoundY` -- the four looping maps of the collection now wrap instead of
+  walling the player in (`K-PROD-RM2K-LOOP-MAPS`).
+* **26 (lock facing) is implemented**, together with its twin 27 (unlock facing),
+  which shares the page's own facing-lock flag the way the reference does.
+* **And an unhandled route command no longer stops the route.** The reference's
+  move-route switch ends in `default: break;` and then advances the index, so a
+  command it does not implement is walked past and the rest of the route runs; the
+  runtime used to cancel the whole route at that command, which stopped an event
+  the engine keeps moving. The gap is reported by name, once per event and command.
+* **What is still open: 24 (begin jump) and 25 (end jump)** -- a movement mode of
+  their own (`BeginMoveRouteJump` scans ahead between the two commands, applies the
+  turns, accumulates `jdx`/`jdy` and jumps at the end), pinned in
+  `K-PROD-RM2K-ROUTE-JUMP` with six measured instances -- and the relative/random
+  movement forms **8, 10 and 11** as *route* commands, which the autonomous movement
+  types implement but the route dispatch refuses.
+
 ## Verification status
 
 Native-format literal regression observed RED before reader correction.

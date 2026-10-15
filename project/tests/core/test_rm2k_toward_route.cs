@@ -249,7 +249,9 @@ public partial class TestRm2kActiveEventGraphic
             _runtime.Simulation.MapY = 8;
             RouteTicks(20);
             AssertEq((_event.X, _event.Y), (8, 8));
-            AssertEq(_runtime.Simulation.Diagnostics.Count(message => message.Contains($"unsupported command {command},")), 1);
+            // **Und  die  Meldung  heisst  jetzt  "walked past"**:  der  Befehl  wird
+            // konsumiert  und  die  Route  laeuft  weiter,  statt  sie  abzubrechen.
+            AssertEq(_runtime.Simulation.Diagnostics.Count(message => message.Contains($"walked past unhandled command {command}")), 1);
         }
     }
 
