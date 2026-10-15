@@ -277,6 +277,10 @@ public static class Rm2kSimulationSaveCodec
         public List<SavedPicture> Pictures { get; set; } = new();
         public bool IsTintActive { get; set; }
         public int TintRed { get; set; }
+        public int TintFinishRed { get; set; }
+        public int TintFinishGreen { get; set; }
+        public int TintFinishBlue { get; set; }
+        public int TintFinishSaturation { get; set; }
         public int TintGreen { get; set; }
         public int TintBlue { get; set; }
         public int TintSaturation { get; set; }
@@ -701,6 +705,14 @@ public static class Rm2kSimulationSaveCodec
                 TintGreen = pres.TintGreen,
                 TintBlue = pres.TintBlue,
                 TintSaturation = pres.TintSaturation,
+                // **And the target of a running fade is saved with it**, because a
+                // load in the middle of a tint has to keep fading towards the same
+                // colour: without it the screen would arrive at whatever the next
+                // tick happened to interpolate towards.
+                TintFinishRed = pres.TintFinishRed,
+                TintFinishGreen = pres.TintFinishGreen,
+                TintFinishBlue = pres.TintFinishBlue,
+                TintFinishSaturation = pres.TintFinishSaturation,
                 TintFramesRemaining = pres.TintFramesRemaining,
                 PendingTransition = (int)pres.PendingTransition,
                 PendingTransitionDirection = (int)pres.PendingTransitionDirection,
@@ -1039,6 +1051,10 @@ public static class Rm2kSimulationSaveCodec
             target.TintGreen = pres.TintGreen;
             target.TintBlue = pres.TintBlue;
             target.TintSaturation = pres.TintSaturation;
+            target.TintFinishRed = pres.TintFinishRed;
+            target.TintFinishGreen = pres.TintFinishGreen;
+            target.TintFinishBlue = pres.TintFinishBlue;
+            target.TintFinishSaturation = pres.TintFinishSaturation;
             target.TintFramesRemaining = pres.TintFramesRemaining;
             target.PendingTransition = (Rm2kTransition)pres.PendingTransition;
             target.PendingTransitionDirection = (Rm2kTransitionDirection)pres.PendingTransitionDirection;

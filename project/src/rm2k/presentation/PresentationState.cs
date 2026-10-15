@@ -238,6 +238,23 @@ public sealed class PresentationState
     public int TintFramesRemaining { get; internal set; }
 
     /// <summary>
+    /// The red a running tint is fading towards, in the command's own 0 to 200.
+    /// </summary>
+    /// <remarks>
+    /// <strong>And the target is its own state, not the current value</strong>:
+    /// the engine keeps <c>tint_finish_*</c> beside <c>tint_current_*</c> so a
+    /// second tint command during a fade re-aims the screen from wherever it has
+    /// got to instead of from the colour it was heading for.
+    /// </remarks>
+    public int TintFinishRed { get; internal set; } = NeutralTintValue;
+
+    public int TintFinishGreen { get; internal set; } = NeutralTintValue;
+
+    public int TintFinishBlue { get; internal set; } = NeutralTintValue;
+
+    public int TintFinishSaturation { get; internal set; } = NeutralTintValue;
+
+    /// <summary>
     /// The transition a command asked for, or <c>TransitionNone</c>.
     /// </summary>
     /// <remarks>
@@ -277,13 +294,42 @@ public sealed class PresentationState
             return false;
         }
         IsTintActive = true;
-        TintRed = pRed;
-        TintGreen = pGreen;
-        TintBlue = pBlue;
-        TintSaturation = pSaturation;
+        // **And the command sets the target, not the colour.** The engine's
+        // Game_Screen::TintScreen writes tint_finish_* and only copies it into
+        // tint_current_* when the duration is zero, so a fade starts from where
+        // the screen already is -- and a command of no duration is in effect at
+        // once, which is what a game means by it.
+        TintFinishRed = pRed;
+        TintFinishGreen = pGreen;
+        TintFinishBlue = pBlue;
+        TintFinishSaturation = pSaturation;
         TintFramesRemaining = pFrames;
+        if (pFrames == 0)
+        {
+            TintRed = pRed;
+            TintGreen = pGreen;
+            TintBlue = pBlue;
+            TintSaturation = pSaturation;
+        }
         return true;
     }
+
+    /// <summary>
+    /// One frame of a tint's fade, in the reference's own arithmetic.
+    /// </summary>
+    /// <param name="pCurrent">The tone value now.</param>
+    /// <param name="pFinish">The tone value the fade is heading for.</param>
+    /// <param name="pRemaining">The frames left, counted before the decrement.</param>
+    /// <returns>The next tone value.</returns>
+    /// <remarks>
+    /// <strong>And it is <c>(x0 * (d - 1) + x1) / d</c></strong>, EasyRPG's
+    /// <c>game_screen.cpp</c> <c>interpolate</c>, evaluated in floating point and
+    /// truncated into the integer the tone is stored as. With one frame left it
+    /// returns the target exactly, which is why a fade lands on the colour the
+    /// game asked for instead of approaching it.
+    /// </remarks>
+    private static int StepTint(int pCurrent, int pFinish, int pRemaining) =>
+        (int)((pCurrent * (pRemaining - 1.0) + pFinish) / pRemaining);
 
     /// <summary>
     /// Asks for a screen transition, from <c>11010</c> and <c>11020</c>.
@@ -563,6 +609,10 @@ public sealed class PresentationState
         TintGreen = NeutralTintValue;
         TintBlue = NeutralTintValue;
         TintSaturation = NeutralTintValue;
+        TintFinishRed = NeutralTintValue;
+        TintFinishGreen = NeutralTintValue;
+        TintFinishBlue = NeutralTintValue;
+        TintFinishSaturation = NeutralTintValue;
         TintFramesRemaining = 0;
         PendingTransition = Rm2kTransition.None;
         PendingTransitionDirection = Rm2kTransitionDirection.Show;
@@ -602,11 +652,28 @@ public sealed class PresentationState
             // three end together when they were given the same duration. **A
             // tint that outlived its flash would be a screen that stayed
             // coloured after the game said it was over.**
-            TintFramesRemaining -= pFrames;
-            if (TintFramesRemaining <= 0)
+            //
+            // **And it walks towards its target rather than jumping to it**: the
+            // engine's Game_Screen::UpdateScreenEffects interpolates the current
+            // tone with the frames it still has left and only then counts one
+            // down, which is what makes a tint of thirty frames fade over thirty
+            // frames and land exactly on the colour that was asked for.
+            for (var frame = 0; frame < pFrames && IsTintActive; frame++)
             {
-                IsTintActive = false;
-                TintFramesRemaining = 0;
+                if (TintFramesRemaining > 0)
+                {
+                    TintRed = StepTint(TintRed, TintFinishRed, TintFramesRemaining);
+                    TintGreen = StepTint(TintGreen, TintFinishGreen, TintFramesRemaining);
+                    TintBlue = StepTint(TintBlue, TintFinishBlue, TintFramesRemaining);
+                    TintSaturation = StepTint(
+                        TintSaturation, TintFinishSaturation, TintFramesRemaining);
+                    TintFramesRemaining -= 1;
+                }
+                if (TintFramesRemaining <= 0)
+                {
+                    IsTintActive = false;
+                    TintFramesRemaining = 0;
+                }
             }
         }
         if (IsShakeActive)

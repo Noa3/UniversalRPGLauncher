@@ -306,18 +306,29 @@ public partial class TestRm2kScreen : TestBase
 		interpreter.ExecuteFrame();
 
 		AssertEq(
-			presentation.TintRed, 64,
-			"and red is 64, from parameters[0]; it is {presentation.TintRed}");
+			presentation.TintFinishRed, 64,
+			"and the target red is 64, from parameters[0]; it is"
+			+ $" {presentation.TintFinishRed}");
 		AssertEq(
-			presentation.TintGreen, 32,
-			"and green is 32, from parameters[1]; it is {presentation.TintGreen}");
+			presentation.TintFinishGreen, 32,
+			"and the target green is 32, from parameters[1]; it is"
+			+ $" {presentation.TintFinishGreen}");
 		AssertEq(
-			presentation.TintBlue, 16,
-			"and blue is 16, from parameters[2]; it is {presentation.TintBlue}");
+			presentation.TintFinishBlue, 16,
+			"and the target blue is 16, from parameters[2]; it is"
+			+ $" {presentation.TintFinishBlue}");
 		AssertEq(
-			presentation.TintSaturation, 80,
-			"**and the saturation is 80, a percentage**, from parameters[3]; it"
-			+ $" is {presentation.TintSaturation}");
+			presentation.TintFinishSaturation, 80,
+			"**and the target saturation is 80, in the command's own 0 to 200**"
+			+ " (100 is neutral, not 0 and not a percentage), from parameters[3];"
+			+ $" it is {presentation.TintFinishSaturation}");
+		// **And the screen itself has not moved**: the command writes the target
+		// and the fade walks towards it, so the current tone is still neutral in
+		// the frame the command ran in.
+		AssertEq(
+			presentation.TintRed, PresentationState.NeutralTintValue,
+			"**and the screen is still untinted in the frame the command ran in**,"
+			+ $" because the fade has not ticked; it is {presentation.TintRed}");
 		AssertEq(
 			presentation.TintFramesRemaining, 150,
 			"**and the duration is 150 frames, not 25 tenths**, because the"
@@ -464,13 +475,86 @@ public partial class TestRm2kScreen : TestBase
 			presentation.IsTintActive, true,
 			"**and the tint of the format's own maximum is applied**, because"
 			+ " 200 is what the editor writes and 100 is neutral; the tint is"
-			+ $" {presentation.IsTintActive} and the saturation"
-			+ $" {presentation.TintSaturation}");
-		AssertEq(presentation.TintSaturation, 200);
+			+ $" {presentation.IsTintActive}");
+		// **And the command sets the target and not the colour**: the engine's
+		// TintScreen writes tint_finish_* and lets the fade walk the current tone
+		// towards it, so a command with a duration does not change the screen in
+		// the frame it runs in.
+		AssertEq(presentation.TintFinishSaturation, 200,
+			"**and the target saturation is the command's own two hundred**");
+		AssertEq(presentation.TintSaturation, 100,
+			"and the screen has not moved yet, because the fade has not ticked");
 		AssertTrue(
 			!ContainsDiagnostic(state, "refused"),
 			"and nothing was refused; the diagnostics are"
 			+ $" {state.Diagnostics.Count}");
+	}
+
+	/// <summary>
+	/// A tint walks towards its target instead of jumping to it.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And the four steps are the reference's arithmetic, not this
+	/// repository's:</strong> EasyRPG's <c>interpolate(d, x0, x1)</c> is
+	/// <c>(x0 * (d - 1) + x1) / d</c> with <c>d</c> the frames still left, so a
+	/// fade of four frames from 100 towards 0 reads 75, 50, 25 and then lands on
+	/// 0 exactly -- and the last step is what makes a game's tint end on the
+	/// colour it asked for rather than one step short of it.
+	/// </remarks>
+	public void Test_EinTintLaeuftAufSeinZielZu()
+	{
+		var presentation = new PresentationState();
+		AssertTrue(presentation.TintScreen(0, 0, 0, 100, 4),
+			"**and the tint of four frames is accepted**");
+		AssertEq(presentation.TintRed, 100,
+			"**and the screen has not changed in the frame the command ran in**");
+		AssertEq(presentation.TintFinishRed, 0,
+			"and the target is the black the command asked for");
+
+		presentation.Tick(1);
+		AssertEq(presentation.TintRed, (100 * 3 + 0) / 4,
+			"**and one of four frames is a quarter of the way**");
+		presentation.Tick(1);
+		AssertEq(presentation.TintRed, (75 * 2 + 0) / 3,
+			"and the next is a third of what is left");
+		presentation.Tick(1);
+		AssertEq(presentation.TintRed, (50 * 1 + 0) / 2);
+		presentation.Tick(1);
+		AssertEq(presentation.TintRed, 0,
+			"**and the last frame lands exactly on the target**");
+		AssertEq(presentation.IsTintActive, false,
+			"and the fade is over");
+	}
+
+	/// <summary>
+	/// A second tint re-aims the fade from where the screen has got to.
+	/// </summary>
+	/// <remarks>
+	/// <strong>And that is why the target is its own state.</strong> A screen
+	/// half way to black that is told to go white continues from the grey it is
+	/// showing: a reader that kept only one value would either snap to the old
+	/// target or start the new fade from the colour the screen never reached.
+	/// </remarks>
+	public void Test_EinZweiterTintZieltVonDortWoScreenSteht()
+	{
+		var presentation = new PresentationState();
+		AssertTrue(presentation.TintScreen(0, 0, 0, 100, 4));
+		presentation.Tick(2);
+		AssertEq(presentation.TintRed, 50, "**and the screen is half way to black**");
+
+		AssertTrue(presentation.TintScreen(200, 200, 200, 100, 2),
+			"**and the second tint is accepted**");
+		AssertEq(presentation.TintRed, 50,
+			"**and it does not move the screen in the frame it ran in**");
+		AssertEq(presentation.TintFinishRed, 200,
+			"and it re-aims the fade at the new colour");
+
+		presentation.Tick(1);
+		AssertEq(presentation.TintRed, (50 * 1 + 200) / 2,
+			"**and the fade continues from where the screen was**");
+		presentation.Tick(1);
+		AssertEq(presentation.TintRed, 200,
+			"**and it lands on the new target**");
 	}
 
 	/// <summary>

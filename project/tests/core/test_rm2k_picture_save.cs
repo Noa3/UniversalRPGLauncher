@@ -104,4 +104,52 @@ public partial class TestRm2kPictureSave : TestBase
                 "A rejected save must preserve the complete live snapshot");
         }
     }
+
+    /// <summary>
+    /// A tint saved in the middle of its fade is resumed, not restarted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And the target is the part that would have been lost.</strong> A
+    /// save that carried only the colour the screen is showing would resume the
+    /// fade towards whatever the next tick interpolated against -- which, with
+    /// nothing to aim at, is the colour it already has: the screen would stop
+    /// fading and stay grey for the rest of the game.
+    /// </para>
+    /// <para>
+    /// <strong>And the assertion is frame by frame against the uninterrupted
+    /// run</strong>, because "it looks about right after loading" is exactly the
+    /// kind of claim that hides a one-frame offset.
+    /// </para>
+    /// </remarks>
+    public void Test_EinTintWirdMittenImFadeGespeichertUndWeitergefuehrt()
+    {
+        var original = CreateState();
+        AssertTrue(original.Presentation!.TintScreen(0, 0, 0, 100, 4),
+            "the tint of four frames is accepted");
+        original.Presentation.Tick(2);
+        AssertEq(original.Presentation.TintRed, 50,
+            "**and the screen is half way to black**");
+
+        var restored = CreateState();
+        AssertTrue(Rm2kSimulationSaveCodec.TryRestore(
+            Rm2kSimulationSaveCodec.Serialize(original), restored, out var error), error);
+        AssertEq(restored.Presentation!.TintRed, 50,
+            "**and the load keeps the colour the screen is showing**");
+        AssertEq(restored.Presentation.TintFinishRed, 0,
+            "**and the colour it was fading towards**");
+        AssertEq(restored.Presentation.TintFramesRemaining, 2,
+            "and the frames it had left");
+
+        for (var frame = 0; frame < 2; frame++)
+        {
+            original.Presentation.Tick(1);
+            restored.Presentation.Tick(1);
+            AssertEq(restored.Presentation.TintRed, original.Presentation.TintRed,
+                "**and every remaining frame of the fade is the frame it would"
+                    + " have been without the save**");
+        }
+        AssertEq(restored.Presentation.TintRed, 0,
+            "**and both land exactly on the target**");
+    }
 }

@@ -401,12 +401,25 @@ for a tone of zero, and asserts the painted frame has **no** coloured pixel and
 gets them back at neutral. A mutation that swaps the saturation and colour blocks
 fails exactly the order test (5/6), and it was reverted.
 
+**And the tint now fades instead of jumping.** The engine's
+`Game_Screen::TintScreen` writes `tint_finish_*` and `UpdateScreenEffects` walks
+`tint_current_*` towards it with `interpolate(d, x0, x1) = (x0 * (d - 1) + x1) / d`,
+where `d` is the frames still left and the interpolation runs **before** the
+decrement. So a command sets a target and not a colour, a fade of four frames from
+100 towards 0 reads 75, 50, 25 and lands on 0 exactly, and a second tint re-aims
+the fade from wherever the screen has got to. The target is its own state
+(`TintFinishRed/Green/Blue/Saturation`, neutral by default and in `Reset`) and it
+is **saved with the fade**, because a load in the middle of a tint that carried
+only the current colour would have nothing to aim at and would stop fading.
+
+Evidence: `TestRm2kScreen` **18/18** (the four-step fade against arithmetic written
+out in the test, and the re-aimed second tint), `TestRm2kPictureSave` **4/4**
+(a tint saved half way is resumed frame by frame against the uninterrupted run).
+A mutation that makes the command jump to its target fails exactly the fade tests
+(14/18) and was reverted.
+
 **Still open on this card:** flash, shake, pan and weather (same measurement, same
-kind of reference), and **the tint does not interpolate**: the engine walks
-`tint_current_*` towards `tint_finish_*` over the duration
-(`Game_Screen::Update` calls `interpolate(remaining, current, finish)`), while
-this runtime jumps to the target and only counts the frames down. So a tint fades
-in the engine and snaps here -- painted, but not yet the engine's timing.
+kind of reference).
 
 ### K-PROD-RM2K-BATTLE-MULTI-PAGE — BLOCKED (half-migrated, uncommitted)
 

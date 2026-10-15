@@ -1,16 +1,27 @@
 ## Current card
 
-### Canonical validation GREEN (2026-10-15, after the tint pass)
+### Canonical validation GREEN (2026-10-15, after the tint fade)
 
-`./scripts/validate.sh` exited **0** with **All 2937 tests passed** and the
+`./scripts/validate.sh` exited **0** with **All 2940 tests passed** and the
 `UniversalRPG validation passed.` marker, **369** suite records and **zero**
 `ERROR:   Test_` lines. Exact log:
-`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-8.log`.
-2930 after `b5aef4a` plus the seven new tests of the tint slice (six over the
-tone's arithmetic, one end to end in the runtime). The known shutdown noise (3
-CanvasItem RIDs, 6 ObjectDB instances) is unchanged. Earlier green runs of the
-same day: **2930** after `b5aef4a`, **2928** after `dec3936`, **2921** after
-`ec1ecdb`, **2917** after `d474a91`, **2912** after `073a096`.
+`C:/Users/noa3/AppData/Local/hermes/profiles/code/cache/scratch/urpg-canonical-10.log`.
+2937 after `ce9f798` plus the three new tests of the fade slice (two over the
+fade's arithmetic and its re-aiming, one save round trip mid-fade).
+
+**And one run died before it, on the known intermittent native crash.** The first
+attempt (`urpg-canonical-9.log`) took a **segmentation fault** while running
+`TestMvActorNumbers` -- an MV suite this slice does not touch -- with the stack in
+`godotsharp_dictionary_destroy` during `System.GC.RunFinalizers`, i.e. the
+finalizer teardown of native interop objects and not a failing test: the log has
+no `ERROR:   Test_` line and no assertion. The retry was green, which is what
+makes it the intermittent crash this repository has seen before; nothing was
+cleared, weakened or worked around.
+
+The known shutdown noise (3 CanvasItem RIDs, 6 ObjectDB instances) is unchanged.
+Earlier green runs of the same day: **2937** after `ce9f798`, **2930** after
+`b5aef4a`, **2928** after `dec3936`, **2921** after `ec1ecdb`, **2917** after
+`d474a91`, **2912** after `073a096`.
 
 ### K-PROD-RM2K-RUNTIME-DIAGNOSTICS — MEASURED, two defects fixed (this commit)
 
