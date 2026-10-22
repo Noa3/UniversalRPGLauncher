@@ -786,7 +786,22 @@ it.
 lines that match German markers and do not read as English, and subtract the same set from the
 base. Zero is the target for any new work.
 
-### K-PROD-RGSS-RENDERING — READY (XP, VX and VX Ace produce no picture at all)
+### K-PROD-RGSS-FRAME-BRIDGE — DONE (bounded host boundary, not rendering)
+
+Shared XP/VX/VX Ace bootstrap now invokes the host from Graphics.update/wait.
+Attached-block roles, Kernel loop forwarding/override/break/next, empty-loop
+execution budgets, instance/module self identity and independent Bitmap fonts
+are covered. Measured scene completion is terminal; Update cannot restart it.
+Focused loop5/5, identity2/2, frame-bridge3/3, font1/1; real XP reaches five
+host boundaries with zero script problems. Final validator: 3003 tests passed,
+381 suite records, exit0. No rendered pixels, audio or continuous runner claim.
+Parent self-review completed; independent review unavailable (provider HTTP401).
+Next is persistent frame handoff and actual pixel composition/presentation under
+the rendering card and execplan/rgss-frame-presentation.md.
+
+### K-PROD-RGSS-RENDERING — IN PROGRESS (XP, VX and VX Ace produce no picture at all)
+
+Owner priority: work on the largest integration blockers first. Execution and presentation across all three RGSS generations now follow execplan/rgss-frame-presentation.md. Runtime remains Experimental. Graphics.update/wait now cross the host boundary; real XP reaches a 5-frame budget and then stops, rejecting subsequent updates. Synthetic production-bootstrap coverage spans XP/VX/VX Ace. Loop5/5, self-identity2/2, frame-bridge3/3 and bitmap-font1/1 pass; final canonical verification passes: 3003 tests, 381 suite records, exit 0. Four initial RGSS wrapper regressions were corrected and preserved in the failure log. No rendered pixels, continuous scheduler or audio output is claimed.
 
 **And the RGSS layer has no graphics whatsoever.** `project/src/rgss` holds the Ruby runtime, the
 data host, the map reader, the script host and the archive reader -- and there is **no `Bitmap`, no

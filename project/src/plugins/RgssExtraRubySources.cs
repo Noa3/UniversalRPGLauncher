@@ -45,10 +45,17 @@ public static class RgssExtraRubySources
         module Graphics
           def self.update
             $graphics_frames = $graphics_frames + 1
+            rgss_present_frame()
           end
 
+          def self.wait(duration)
+            duration.times do
+              Graphics.update
+            end
+          end
+
+          # Only timing is reset; the headless host has no wall-clock scheduler.
           def self.frame_reset
-            $graphics_frames = 0
           end
         end
         """,
@@ -189,6 +196,31 @@ public static class RgssExtraRubySources
             @blue = blue
             @gray = gray
             self
+          end
+        end
+        """,
+
+        // **And `Font` is what a Bitmap's text is drawn with.** Measured: the
+        // engine's own `draw_item` does `self.contents.font.color = ...`, and the
+        // reader reported *"nil has no method 'color='"* -- because a Bitmap's
+        // `font` started as nil and the color had nothing to be set on.
+        //
+        // **And a font is state and not a drawing**, like everything else here:
+        // a game sets the size, the colour and the boldness, and reads them back.
+        """
+        class Font
+          attr_accessor :name
+          attr_accessor :size
+          attr_accessor :bold
+          attr_accessor :italic
+          attr_accessor :color
+
+          def initialize(name = "Arial", size = 22)
+            @name = name
+            @size = size
+            @bold = false
+            @italic = false
+            @color = Color.new(255, 255, 255, 255)
           end
         end
         """,

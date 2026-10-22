@@ -5,6 +5,28 @@
 
 ## Latest runtime correctness work
 
+### Shared RGSS frame boundary — bounded milestone verified
+
+The owner-prioritized XP/VX/VX Ace execution/presentation integration is tracked
+in `execplan/rgss-frame-presentation.md`. `Graphics.update`/`wait` now reach the
+trusted per-game host, rather than only incrementing a Ruby counter. Scene
+`self` identity, loop block forwarding, break/next, empty-loop execution bounds
+and terminal measured-run lifecycle have regression coverage. The real XP
+measurement reaches exactly five host frame boundaries with zero script
+problems; updates after its terminal budget exit are rejected.
+
+Fresh canonical validation: **3003 tests passed**, 381 suite records, exit 0,
+with the final validator pass marker. Build reports 148 warnings (also present
+in the preceding recovery build); shutdown still reports 3 CanvasItem RIDs and
+6 ObjectDB instances. Independent review was unavailable because the delegated
+provider returned HTTP401; parent source and runtime review was performed.
+
+This is **not rendering**: no pixel surface, continuous resumable scene runner,
+input, audible output or complete RGSS save path is established. All three
+engines remain Experimental and none of the full engine/GUI release gates is
+closed by this milestone.
+
+
 ### Canonical run GREEN (2026-10-15)
 
 `./scripts/validate.sh` exited 0 with **All 2912 tests passed** and the

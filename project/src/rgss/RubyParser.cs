@@ -1756,6 +1756,12 @@ public sealed class RubyParser
                     Kind = RubyNodeKind.Block,
                     Line = node.Line,
                     Children = [node, parameters, body],
+                    Role_Children =
+                    [
+                        new RubyNodePart { Role = RubyNodeRole.Receiver, Node = node },
+                        new RubyNodePart { Role = RubyNodeRole.Parameter, Node = parameters },
+                        new RubyNodePart { Role = RubyNodeRole.BlockBody, Node = body },
+                    ],
                 };
                 continue;
             }
@@ -1769,6 +1775,12 @@ public sealed class RubyParser
                     Kind = RubyNodeKind.Block,
                     Line = node.Line,
                     Children = [node, parameters, body],
+                    Role_Children =
+                    [
+                        new RubyNodePart { Role = RubyNodeRole.Receiver, Node = node },
+                        new RubyNodePart { Role = RubyNodeRole.Parameter, Node = parameters },
+                        new RubyNodePart { Role = RubyNodeRole.BlockBody, Node = body },
+                    ],
                 };
                 continue;
             }

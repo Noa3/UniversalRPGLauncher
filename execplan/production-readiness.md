@@ -8,6 +8,8 @@ A player must be able to run a supported game without losing progress, overwriti
 
 ## Progress
 
+- [ ] Shared RGSS execution/presentation is the owner-prioritized large integration blocker. Follow [the bounded frame-presentation plan](rgss-frame-presentation.md); host-frame callbacks are now locally verified across XP/VX/VX Ace, but continuous scheduling, rendered pixels, input, audio and saves remain open.
+
 - [x] Folder-scan responsiveness: isolated worker, immediate localized activity/path/counts/elapsed feedback, cooperative cancellation, guarded owner-thread publication and preserved prior library. Scan8/8, UI20/20, integration11/11 and plugins25/25 pass; final canonical validator exited0 with2822/2822. Both audits resolved; selected-root junction compatibility and saved explicit choices are regression-tested. Real rendered collection probe: 11games,1010ms,28frames while scanning. No release export or complete GUI/engine claim.
 
 - [x] (2026-10-09 13:28 UTC+8) Inspected repository instructions, checkpoint, status, architecture, roadmap and current save storage implementation on main 264af64.

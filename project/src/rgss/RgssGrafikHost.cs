@@ -105,7 +105,7 @@ public sealed class RgssGrafikHost : IRubyHost
             // **And the helper the cache calls is one of the names.** A host that
             // answers a name and does not declare it is a host whose own answers
             // read as gaps -- measured, and that is what the message did.
-            var namen = new List<string> { "update", "wait", "BildGroesse" };
+            var namen = new List<string> { "update", "wait", "BildGroesse", "rgss_present_frame" };
             if (Fallback != null)
             {
                 namen.AddRange(Fallback.KnownMethods);
@@ -134,6 +134,16 @@ public sealed class RgssGrafikHost : IRubyHost
             return BildGroesse(art, name);
         }
 
+        if (pMethod == "rgss_present_frame")
+        {
+            if (pArguments.Count != 0)
+            {
+                throw new RubyRuntimeException("ArgumentError", "rgss_present_frame accepts no arguments");
+            }
+            PresentFrame();
+            return RubyValue.Nil;
+        }
+
         if (pReceiver.Kind != RubyValueKind.Symbol || pReceiver.Name != "Graphics")
         {
             return Fallback?.CallMethod(pReceiver, pMethod, pArguments);
@@ -142,18 +152,7 @@ public sealed class RgssGrafikHost : IRubyHost
         switch (pMethod)
         {
             case "update":
-                Frames++;
-                Rahmen?.Invoke(Frames);
-
-                // **And the budget ends the run, and it ends it loudly enough to
-                // unwind the game's own loop.** A silent return would leave the
-                // game looping and the measurement waiting.
-                if (Budget > 0 && Frames >= Budget)
-                {
-                    BudgetErreicht = true;
-                    throw new RgssFrameBudgetErreicht(Frames);
-                }
-
+                PresentFrame();
                 return RubyValue.Nil;
 
             case "wait":
@@ -164,19 +163,24 @@ public sealed class RgssGrafikHost : IRubyHost
                         : 0;
                 for (var i = 0; i < anzahl; i++)
                 {
-                    Frames++;
-                    Rahmen?.Invoke(Frames);
-                    if (Budget > 0 && Frames >= Budget)
-                    {
-                        BudgetErreicht = true;
-                        throw new RgssFrameBudgetErreicht(Frames);
-                    }
+                    PresentFrame();
                 }
 
                 return RubyValue.Nil;
 
             default:
                 return Fallback?.CallMethod(pReceiver, pMethod, pArguments);
+        }
+    }
+
+    private void PresentFrame()
+    {
+        Frames = checked(Frames + 1);
+        Rahmen?.Invoke(Frames);
+        if (Budget > 0 && Frames >= Budget)
+        {
+            BudgetErreicht = true;
+            throw new RgssFrameBudgetErreicht(Frames);
         }
     }
 

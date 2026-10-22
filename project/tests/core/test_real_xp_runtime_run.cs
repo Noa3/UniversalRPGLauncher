@@ -60,7 +60,10 @@ public partial class TestRealXpRuntimeRun : TestBase
         {
             lauf.FrameBudget = 5;
             lauf.SpielSchleifeStarten();
-            Console.WriteLine("XP: frames presented = " + lauf.Frames);
+            Console.WriteLine("XP: host frame boundaries = " + lauf.Frames);
+            AssertEq(lauf.Frames, 5, "The game's own main must reach the host frame budget.");
+            AssertEq(lauf.State, PluginRuntimeState.Stopped,
+                "A measured loop is stopped after unwinding, not resumable.");
         }
         AssertTrue(lauf != null, "**and the host built an XP runtime**");
         if (lauf == null)
@@ -106,17 +109,19 @@ public partial class TestRealXpRuntimeRun : TestBase
             Console.WriteLine("XP:   FEHLT " + name);
         }
 
-        AssertTrue(lauf.ScriptProblems.Count >= 0,
-            "**and every problem is named rather than swallowed**: the count is what the "
-                + "rendering work has to bring down, and the list is where it says why");
+        AssertEq(lauf.ScriptProblems.Count, 0,
+            "The measured scene must not report script failures.");
 
-        // **And a few frames are run**, because a script problem that only shows up on the
-        // second frame is not visible in the first.
+        // A bounded run unwound its stack; ordinary updates must not restart it.
         var vorher = lauf.ScriptProblems.Count;
+        var completedFrames = lauf.Frames;
         for (var frame = 0; frame < 5; frame++)
         {
-            lauf.Update(1.0 / 60.0);
+            AssertFalse(lauf.Update(1.0 / 60.0).Success,
+                "Updates after a measured scene has stopped must be rejected.");
         }
+        AssertEq(lauf.Frames, completedFrames);
+        AssertEq(lauf.ScriptProblems.Count, vorher);
         Console.WriteLine("XP: script problems after 5 frames = " + lauf.ScriptProblems.Count);
         foreach (var problem in lauf.ScriptProblems.Skip(vorher))
         {

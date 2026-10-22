@@ -1,4 +1,18 @@
 ## Current card
+### RGSS execution/frame bridge — IN PROGRESS
+
+Owner priority: largest and hardest integration blockers first. Continue K-PROD-RGSS-RENDERING via execplan/rgss-frame-presentation.md, not isolated API stubs.
+
+Implemented locally: loop block forwarding with explicit AST roles, break return and next handling, empty-loop step-budget enforcement, script loop overrides, instance/module self identity, Graphics.update/wait host routing, terminal measured-run lifecycle, independent Bitmap fonts across XP/VX/VX Ace.
+
+Focused evidence: TestRubyKernelLoop 5/5, TestRubySelfIdentity 2/2, TestRgssFrameBridge 3/3, TestRgssBitmapFont 1/1; all four formerly failing RGSS suites pass. Font mutation back to nil fails all three generations. Real XP reaches 5 host boundaries with 0 script problems, then is Stopped and rejects Update; 4 diagnostics contain one distinct missing-image message. This is no pixel/rendering/audio evidence.
+
+Validation: canonical-58 log unavailable after earlier interruption. First recovery validator was killed after interruption. Second validator (urpg-loop-canonical-final.log) exited 10 with four failing RGSS suites: OpenListGap, RuntimeGlobals, SetupDurch, SetupRun. Root cause: ordinary method bodies misclassified as attached blocks. Parser now explicitly tags block wrapper roles; the failing suites pass focused. Final validator urpg-frame-bridge-canonical.log completed: exit 0, All 3003 tests passed, 381 suite records, final validation passed marker. 148 build warnings, 3 CanvasItem RID leaks and 6 ObjectDB instances remain. Parent diff review complete; independent reviewer unavailable (HTTP401).
+
+Failure log for this slice: empty loop timed out after 15s (fixed by per-iteration budget); bare-Identifier wrapper extension broke four old suites (fixed by explicit BlockBody role); frame helper without parentheses was read as an unset local (fixed by explicit rgss_present_frame()); script-defined loop was intercepted by Kernel fallback (fixed and tested). Reviewer delegation failed with provider HTTP401 and produced no findings; parent review still required.
+
+Preserve unrelated RM2K battle WIP and qa_patches/. Do not commit those files. No release export requested. Next substantial milestone after green checkpoint: preserve the scene stack across cooperative frame handoffs, then integrate actual pixel surfaces/composition and Godot presentation. Budget exceptions are terminal, not continuations.
+
 ### XP: the scene's setup never runs, and the loop belongs to the game (2026-10-15)
 
 A real XP game now runs its whole startup without a problem: 90 scripts parsed and executed, 0 failed;

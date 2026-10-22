@@ -790,7 +790,7 @@ public sealed class RubyInterpreter
 
     // ---- Leaves
 
-    private RubyValue Evaluate(RubyNode pNode)
+    private void ConsumeStep()
     {
         _steps++;
         if (_steps > StepLimit)
@@ -801,13 +801,17 @@ public sealed class RubyInterpreter
                     + "game's while-true does not come back and this runtime "
                     + "stops rather than hang");
         }
+    }
 
+    private RubyValue Evaluate(RubyNode pNode)
+    {
+        ConsumeStep();
         return pNode.Kind switch
         {
             RubyNodeKind.Nil => RubyValue.Nil,
             RubyNodeKind.True => RubyValue.OfBoolean(true),
             RubyNodeKind.False => RubyValue.OfBoolean(false),
-            RubyNodeKind.Self => RubyValue.OfSymbol("self"),
+            RubyNodeKind.Self => _self ?? RubyValue.OfSymbol("self"),
             RubyNodeKind.Integer => RubyValue.OfInteger(pNode.Integer ?? 0),
             RubyNodeKind.Float => RubyValue.OfReal(pNode.Real ?? 0d),
             RubyNodeKind.String => RubyValue.OfBytes(
@@ -2259,6 +2263,7 @@ public sealed class RubyInterpreter
             : RubyValue.OfSymbol("self");
         var methode = pNode.Name ?? string.Empty;
         var argumente = EvaluateChildren(pNode, RubyNodeRole.Argument);
+
         // **`new` ist Sprache und nicht Skript.** `Klasse.new(1, 2)` macht
         // ein Objekt und ruft `initialize` auf,
         // **und in keinem Skript steht diese Methode geschrieben** -- sie ist
@@ -2490,6 +2495,17 @@ public sealed class RubyInterpreter
         // **Und sie kommen vor der Skriptmethode**, **weil ein Spiel
         // `catch` auch als eigener Name definieren darf und `catch`
         // ohne Block ein Aufruf mit Block ist, und nicht ein Name.**
+        // **And `loop` is the engine's own `main`, and it is language and not a
+        // host call.** Measured: `Scene_Title#main` is `loop do ... break if
+        // $scene != self end`, and the reader reported *"self has no method
+        // 'loop'"* -- so the one call the engine's loop is made of was the one
+        // that did not run.
+        if (methode == "loop" && empfaenger.Name == "self"
+            && EigeneMethode(empfaenger, methode) == null)
+        {
+            return Endlosschleife(empfaenger, argumente);
+        }
+
         var kern = KernMethode(empfaenger, methode, argumente, this);
         if (kern != null)
         {
@@ -5671,6 +5687,42 @@ public sealed class RubyInterpreter
         }
     }
 
+    /// <summary>Run a block until break, enforcing the execution budget.</summary>
+    /// <returns>The value supplied by break.</returns>
+    private RubyValue Endlosschleife(
+        RubyValue pEmpfaenger, IReadOnlyList<RubyValue> pArgumente)
+    {
+        var block = pArgumente.Count > 0
+            && pArgumente[^1].Kind == RubyValueKind.Proc
+            ? pArgumente[^1].Block
+            : null;
+        if (block == null)
+        {
+            _diagnostics.Add(
+                "loop needs a block, and none came with it; a loop without a "
+                    + "block has nothing to run, and this reader does not invent "
+                    + "one");
+            return RubyValue.Nil;
+        }
+
+        while (true)
+        {
+            // Empty blocks still consume execution budget.
+            ConsumeStep();
+            BlockAufrufen(block, [], _self ?? pEmpfaenger);
+            if (_gebrochen)
+            {
+                var result = _abbruchWert;
+                _gebrochen = false;
+                _abbruchWert = RubyValue.Nil;
+                _weiter = false;
+                return result;
+            }
+
+            _weiter = false;
+        }
+    }
+
     /// <summary>A count with a block run over it.</summary>
     /// <param name="pEmpfaenger">The number.</param>
     /// <param name="pMethode">The method's name.</param>
@@ -7546,6 +7598,14 @@ public sealed class RubyInterpreter
             // `Game_Character` erweitert.**
             _self = pEmpfanger;
             _instanceVariables = pEmpfanger.Felder;
+        }
+        else if (pEmpfanger is { Kind: RubyValueKind.Symbol, Name: not null }
+            && pEmpfanger.Name != "self"
+            && _types.TryGetValue(pEmpfanger.Name, out var receiverType))
+        {
+            // A class/module call must not retain an instance caller as self.
+            _self = pEmpfanger;
+            _instanceVariables = receiverType.Felder;
         }
 
         _scopes.Add(new Dictionary<string, RubyValue>());
@@ -9979,21 +10039,20 @@ public sealed class RubyInterpreter
 
         if (pNode.Kind == RubyNodeKind.Block
             && pNode.Children.Count >= 3
-            && pNode.Children[0].Kind is RubyNodeKind.Call
+            && (pNode.Children[0].Kind is RubyNodeKind.Call
                 or RubyNodeKind.MethodCall
-                // **Und `SelfCall`, denn ein Name mit Klammern und ohne
-                // Empfaenger ist jetzt `SelfCall`.** `sprintf("%d", 5) { }`
-                // ist nicht ueblich,
-                // **aber `draw_text(x, y, "a") do ... end` steht in jedem
-                // Bildschirm, der eine Liste zeichnet**,
-                // **und ohne dieses `or` wuerde der Blockzweig den Aufruf
-                // nicht als Aufruf erkennen**, und die Liste waere leer.
-                or RubyNodeKind.SelfCall)
+                or RubyNodeKind.SelfCall
+                || (pNode.Children[0].Kind == RubyNodeKind.Identifier
+                    && Child(pNode, RubyNodeRole.BlockBody) != null)))
         {
             _blockKette.Add(pNode);
             try
             {
-                return Evaluate(pNode.Children[0]);
+                // A bare block call such as `loop do` is still an Identifier.
+                // Keep its node identity so Call can find its attached block.
+                return pNode.Children[0].Kind == RubyNodeKind.Identifier
+                    ? Call(pNode.Children[0])
+                    : Evaluate(pNode.Children[0]);
             }
             finally
             {
@@ -11013,7 +11072,7 @@ public sealed class RubyInterpreter
             // das seinen Gegaennamen in Grossbuchstaben schreibt, wuerde
             // leere Zeichen daraus machen und der Name waere weg.**
             or "sub" or "gsub" or "delete" or "squeeze"
-            or "times" or "upto" or "downto";
+            or "times" or "upto" or "downto" or "loop";
 
 
     /// <summary>

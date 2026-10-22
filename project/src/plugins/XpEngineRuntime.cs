@@ -120,6 +120,15 @@ public sealed class XpEngineRuntime : IEngineRuntime
         {
             Melde("scene", "the game's own loop", ausnahme);
         }
+        finally
+        {
+            // The diagnostic entry unwinds the Ruby stack; it cannot resume it.
+            // Do not drive the legacy per-frame loop after this run has ended.
+            if (State == PluginRuntimeState.Running)
+            {
+                State = PluginRuntimeState.Stopped;
+            }
+        }
     }
 
     /// <summary>
@@ -459,7 +468,7 @@ public sealed class XpEngineRuntime : IEngineRuntime
             "class Bitmap\n"
                 + "  def initialize(w, h = nil)\n"
                 + "    @width = w; @height = h || w\n"
-                + "    @font = nil\n"
+                + "    @font = Font.new\n"
                 + "    @disposed = false\n"
                 + "  end\n"
                 + "  attr_reader :width\n"
