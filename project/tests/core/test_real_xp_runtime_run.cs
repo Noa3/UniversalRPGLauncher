@@ -28,6 +28,38 @@ public partial class TestRealXpRuntimeRun : TestBase
 
     private static bool Vorhanden() => Directory.Exists(Spiel);
 
+    public void Test_RealXpSceneResumesThroughOrdinaryUpdates()
+    {
+        if (!Vorhanden()) return;
+        using var host = new EnginePluginHost(BuiltInEnginePluginCatalog.CreateRuntimeRegistry());
+        var started = host.Start(new PluginGameInfo
+        {
+            GameDirectory = Spiel,
+            EngineId = EnginePluginIds.RpgMakerXp,
+            Generation = "xp",
+            DetectorScore = 900,
+        });
+        AssertTrue(started.Success, started.Error?.Message ?? "Real XP game starts");
+        var runtime = host.Runtime as XpEngineRuntime;
+        AssertTrue(runtime != null);
+        if (runtime == null) return;
+        AssertEq(runtime.FrameBudget, 0);
+        for (var frame = 1; frame <= 10; frame++)
+        {
+            var result = runtime.Update(1.0 / 60.0);
+            AssertTrue(result.Success, result.Error?.Message ?? "Ordinary update reaches a frame");
+            AssertEq(runtime.State, PluginRuntimeState.Running);
+            AssertEq(runtime.Frames, frame);
+        }
+        AssertEq(runtime.ScriptProblems.Count, 0, string.Join("; ", runtime.ScriptProblems));
+        Console.WriteLine("XP: resumable host frame boundaries = " + runtime.Frames);
+        Console.WriteLine("XP: resumable script problems = " + runtime.ScriptProblems.Count);
+        AssertTrue(runtime.Stop().Success);
+        AssertEq(runtime.State, PluginRuntimeState.Stopped);
+        AssertFalse(runtime.Update(1.0 / 60.0).Success);
+        AssertEq(runtime.Frames, 10);
+    }
+
     public void Test_WasEinEchtesXpSpielBraucht()
     {
         if (!Vorhanden())

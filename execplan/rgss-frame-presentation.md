@@ -11,7 +11,7 @@ XP, VX and VX Ace must execute the game's own scene setup and loop, present the 
 - [x] Inspected production runtime bootstrap, Ruby block dispatch and RgssGrafikHost. Existing host has a frame callback and budget but the Ruby Graphics.update implementation bypasses it.
 - [x] Local regression coverage for loop forwarding, break values, nested break/next, empty-loop execution budget, script overrides and ordinary method bodies passes (5/5). Bitmap font ownership passes across all three bootstraps (1/1) and detects mutation back to nil. Final canonical verification passed: 3003 tests, 381 suite records, exit 0. Build148 warnings and known shutdown leaks remain.
 - [x] Route Graphics.update and wait through the host. Frame-bridge regressions pass 3/3, including all three bootstraps, terminal measured lifecycle and timing reset. The real XP scene reaches 5 host boundaries with 0 script problems; stopped updates are rejected rather than restarting it.
-- [ ] Preserve the running scene across frame handoffs; prevent duplicate updates, repeated setup, premature self comparison exits, and interpreter-state corruption on cancellation.
+- [x] Preserve the running scene across frame handoffs; prevent duplicate updates, repeated setup, premature self comparison exits, and interpreter-state corruption on cancellation. Implemented locally with an owned worker rendezvous: focused13/13 and real XP ordinary Update10 frames/0 script problems. Review-driven lifecycle, measured-budget and diagnostic-retention corrections were reproduced RED then fixed GREEN. Corrected canonical run passed3017 tests,382 suite records,exit0 with final validator marker. Independent follow-up review found no new actionable regression; this is static review, not execution evidence.
 - [ ] Implement and integrate bounded pixel surfaces, image loading and sprite composition; validate actual captured pixels and disposal.
 - [ ] Wire a frame consumer and input into the Godot game view, then verify rendered runtime behavior.
 
@@ -36,7 +36,7 @@ The runtime also invokes per-frame global updates and scene.update directly in R
 
 ## Outcomes & Retrospective
 
-The bounded host-frame bridge is implemented and locally tested, including instance/module self identity. Continuous execution, rendering and input are not implemented. The broad engine criteria remain open. Record actual commands and final results below as milestones land; do not infer success from silence or compiler output filters.
+The bounded host-frame bridge is implemented and locally tested, including instance/module self identity. Continuous scene-stack execution is implemented and validated by focused13/13 plus canonical3017 tests/exit0. Independent follow-up review found no new actionable regression. Rendering and input are not implemented. The broad engine criteria remain open. Record actual commands and final results below as milestones land; do not infer success from silence or compiler output filters.
 
 ## Context and Orientation
 

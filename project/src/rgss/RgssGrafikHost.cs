@@ -208,7 +208,7 @@ public sealed class RgssGrafikHost : IRubyHost
     {
         if (Wurzel == null || !Ordner.TryGetValue(pArt, out var ordner))
         {
-            _fehlende.Add(pArt + "/" + pName);
+            RecordMissingImage(pArt + "/" + pName);
             return null;
         }
 
@@ -219,7 +219,7 @@ public sealed class RgssGrafikHost : IRubyHost
             // with a nil bitmap should know that it is drawing nothing -- and the
             // RTP is a real answer to where it is, which is why the name of the
             // file is reported and not a bare nil.
-            _fehlende.Add("Graphics/" + ordner + "/" + pName + ".png");
+            RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png");
             return null;
         }
 
@@ -228,7 +228,7 @@ public sealed class RgssGrafikHost : IRubyHost
         {
             if (strom.Read(kopf, 0, kopf.Length) < 24)
             {
-                _fehlende.Add("Graphics/" + ordner + "/" + pName + ".png (truncated)");
+                RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png (truncated)");
                 return null;
             }
         }
@@ -244,9 +244,23 @@ public sealed class RgssGrafikHost : IRubyHost
     }
 
     /// <summary>The images a game asked for and this runtime could not find.</summary>
-    public IReadOnlyList<string> FehlendeBilder => _fehlende;
+    public IReadOnlyList<string> FehlendeBilder
+    {
+        get { lock (_missingImagesGate) return Array.AsReadOnly(_fehlende.ToArray()); }
+    }
 
+    private readonly object _missingImagesGate = new();
     private readonly List<string> _fehlende = new();
+
+    private void RecordMissingImage(string image)
+    {
+        lock (_missingImagesGate)
+        {
+            if (_fehlende.Contains(image)) return;
+            if (_fehlende.Count == 64) _fehlende.RemoveAt(0);
+            _fehlende.Add(image);
+        }
+    }
 }
 
 /// <summary>

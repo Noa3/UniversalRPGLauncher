@@ -1,5 +1,19 @@
 ## Current card
-### RGSS execution/frame bridge — IN PROGRESS
+### RGSS resumable scene execution — VERIFIED checkpoint
+
+The owned RgssFrameSession worker preserves the recursive Ruby stack at host frame boundaries. Ordinary Update in XP/VX/VX Ace now advances that session instead of replaying scene.main or driving a second global/scene updater. Cancellation is checked by interpreter steps; the instruction budget is renewed only after a frame handoff. Immutable bounded diagnostics cross the worker boundary. Rendering, input, frame pacing and complete engine boot/save support remain open.
+
+Focused verification: TestRgssResumableScene13/13, TestRealXpRuntimeRun2/2, FrameBridge3/3, KernelLoop5/5, RuntimeGlobals2/2, SetupRun6/6. The real XP game advances through ten ordinary Update calls, remains Running, reports zero script problems, then stops. These are host boundaries, not pixels. The first canonical run proc_c470e9465089 was intentionally stopped after independent review identified concrete defects; it has no pass claim. The wrapper kill left its Godot child alive, so the exact validated PID/parent chain was terminated and absence checked before rebuilding. Final canonical validation proc_df6d7b0a0253 completed: urpg-resumable-canonical-final.log, exit0, All3017 tests passed, 382 suite records and final validation-passed marker. Build148 warnings; known shutdown noise remains3 CanvasItem RIDs and6 ObjectDB instances. Independent follow-up review deleg_0f88e1ec completed read-only: no new actionable regression; lifecycle/cancellation/disposal, budget completion and diagnostic retention corrections are statically consistent. Execution evidence remains the parent tests. Minor coverage follow-up: assert snapshot selection through the public XP Diagnostics property (the session snapshots themselves are tested).
+
+Failure log: initial preservation test failed0/1 against the legacy updater, then passed after session integration. An isolated teardown test called Graphics.update without the Ruby forwarding bootstrap and did not reach the host; corrected it to explicit rgss_present_frame(), while integration tests retain real bootstraps. Live budget mutation regression failed7/8 in all three runtime setters; guards now pass8/8. A long legacy-updater deletion patch failed source matching; byte-exact method-boundary removal preserved surrounding content and line endings.
+
+Review corrections, each RED then GREEN: internal diagnostic retention8/9 to bounded insertion (64 recent entries, discarded count exposed); preconfigured frame budget9/10 to normal completion; concurrent Stop and faulted cleanup10/12 to serialized lifecycle publication and cancel-aware failure classification; missing-image history12/13 to bounded/deduplicated snapshots. Final focused13/13. Dispose-vs-advance uses a stable local session and handles disposal before advance. Worker callbacks are explicitly trusted, thread-safe, non-Godot hooks. No live resource is freed if joining fails.
+
+Remaining limits: the fixed1-second frame watchdog may reject slow scene setup; it is a safety bound, not frame pacing and not derived from delta. The legacy synchronous diagnostic entry is not the normal Update path and is not a general responsive runner. Host/interpreter ownership is permanent: do not reuse a cancelled pair. Real-game frame evidence is XP only; VX/VX Ace use synthetic bootstrap integration, not full scene-manager/game parity. No rendering/input/audio/save completeness claim.
+
+Preserve unrelated RM2K battle files and qa_patches/. No release export requested. Canonical verification and review of this slice are complete. Next card remains K-PROD-RGSS-RENDERING: bounded pixel surfaces/composition and actual presentation, with engine-specific boot and pacing still explicit gates.
+
+### Prior verified checkpoint: RGSS execution/frame bridge
 
 Owner priority: largest and hardest integration blockers first. Continue K-PROD-RGSS-RENDERING via execplan/rgss-frame-presentation.md, not isolated API stubs.
 

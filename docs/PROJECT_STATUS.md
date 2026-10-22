@@ -5,6 +5,32 @@
 
 ## Latest runtime correctness work
 
+### Resumable RGSS scenes — bounded milestone verified
+
+The ordinary XP/VX/VX Ace Update path now hands execution to one owned Ruby
+worker instead of replaying main or independently updating global objects.
+The scene stack pauses at a host frame boundary and resumes with its method
+locals intact. Lifecycle publication is synchronized with Stop/Dispose;
+intentional cancellation is not reported as a script error, and faulted runs
+can still clean up. Preconfigured diagnostic frame budgets finish normally.
+Internal diagnostic histories and published snapshots are bounded.
+
+Focused verification: resumable scene suite13/13; frame bridge3/3; real XP2/2.
+The real XP fixture reaches ten successive ordinary Update boundaries, remains
+Running, reports zero script problems, then stops. VX/VX Ace evidence here is
+synthetic integration through their real bootstraps, not full game parity.
+Review findings were reproduced RED and corrected GREEN. The corrected full
+validator passed **3017 tests**,382 suite records,exit0, with the final
+validation-passed marker. Build148 warnings; known shutdown noise remains3
+CanvasItem RIDs and6 ObjectDB instances. Independent follow-up review found no
+new actionable regression (static review, no test execution). The initial full
+run was intentionally stopped and is not counted as a pass.
+
+No new Rendering capability is declared. Pixel composition, input, audible
+output, complete saves, engine-specific boot parity and display pacing remain
+open. The fixed one-second per-advance watchdog is a compatibility limitation
+for slow setup/host work, not a production responsiveness guarantee.
+
 ### Shared RGSS frame boundary — bounded milestone verified
 
 The owner-prioritized XP/VX/VX Ace execution/presentation integration is tracked

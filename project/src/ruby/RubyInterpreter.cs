@@ -438,6 +438,19 @@ public sealed class RubyInterpreter
     public int GlobaleAnzahl => _globals.Count;
     private readonly List<string> _diagnostics = new List<string>();
 
+    internal int DiagnosticLimit { get; set; } = int.MaxValue;
+    internal long DroppedDiagnosticCount { get; private set; }
+
+    private void RecordDiagnostic(string message)
+    {
+        if (_diagnostics.Count >= DiagnosticLimit)
+        {
+            _diagnostics.RemoveAt(0);
+            DroppedDiagnosticCount++;
+        }
+        _diagnostics.Add(message);
+    }
+
     /// <summary>
     /// The last constant the host did not know, for the caller that needs
     /// the name and not the value.
@@ -513,6 +526,11 @@ public sealed class RubyInterpreter
     public int StepLimit { get; init; } = 2_000_000;
 
     private int _steps;
+
+    internal System.Threading.CancellationToken ExecutionCancellation { get; set; }
+
+    // Called only by the interpreter's owning worker after a frame rendezvous.
+    internal void ResetFrameStepBudget() => _steps = 0;
 
     /// <summary>Whether a <c>return</c> has been seen, which stops the loops.</summary>
     private bool _returned;
@@ -754,7 +772,7 @@ public sealed class RubyInterpreter
                 // dreihundert Skripten laesst sich sonst nicht finden,
                 // **und ein schwarzer Bildschirm ohne Namen ist keine
                 // Fehlermeldung.**
-                _diagnostics.Add(name + ": " + ausnahme.Message);
+                RecordDiagnostic(name + ": " + ausnahme.Message);
             }
         }
 
@@ -792,6 +810,7 @@ public sealed class RubyInterpreter
 
     private void ConsumeStep()
     {
+        ExecutionCancellation.ThrowIfCancellationRequested();
         _steps++;
         if (_steps > StepLimit)
         {
@@ -1535,7 +1554,7 @@ public sealed class RubyInterpreter
         if (FehlerKlassen.Contains(name)
             || _types.TryGetValue(name, out _))
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"the constant {name} is not defined, and "
                 + "`const_missing` would have to be written by the "
                 + "game to answer it");
@@ -1554,7 +1573,7 @@ public sealed class RubyInterpreter
         // eine Diagnose, die den Namen nicht nennt, laesst den Leser
         // raten.**
         _letzteUnbekannteKonstante = name;
-        _diagnostics.Add(
+        RecordDiagnostic(
             $"the constant {name} is not defined by this host, and the "
             + "interpreter does not guess; a game's own constant needs a host "
             + "that provides it");
@@ -1795,7 +1814,7 @@ public sealed class RubyInterpreter
         if (pArgumente.Count == 0
             || pArgumente[0].Kind != RubyValueKind.Symbol)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + " takes the name of a field as a symbol, and the "
                     + "first argument is not one; a reader that took any "
                     + "value would have answered about whatever the game "
@@ -1832,7 +1851,7 @@ public sealed class RubyInterpreter
             case "instance_variable_set":
                 if (pArgumente.Count < 2)
                 {
-                    _diagnostics.Add(
+                    RecordDiagnostic(
                         "instance_variable_set takes a name and a value, and "
                             + "only the name came; a reader that set nil "
                             + "would have written a field the game never "
@@ -2091,7 +2110,7 @@ public sealed class RubyInterpreter
                 if (pArgumente.Count == 0
                     || pArgumente[0].Kind != RubyValueKind.Symbol)
                 {
-                    _diagnostics.Add(
+                    RecordDiagnostic(
                         pMethode + " takes the name of a method as a symbol, "
                             + "and the first argument is not one; a reader "
                             + "that took any value would have called a "
@@ -2137,7 +2156,7 @@ public sealed class RubyInterpreter
                     return wertAntwort;
                 }
 
-                _diagnostics.Add(
+                RecordDiagnostic(
                     gesuchterName + " is a name this value has no method "
                         + "under, and send does not guess; a reader that took "
                         + "any name would have called a method nobody wrote");
@@ -2561,7 +2580,7 @@ public sealed class RubyInterpreter
                 || _blockKette[^1].Children.Count < 3
                 || _blockKette[^1].Children[0] != pNode)
             {
-                _diagnostics.Add(
+                RecordDiagnostic(
                     $"{methode} needs a block, and a block is where the code "
                     + "comes from; "
                     + (argumente.Count > 0
@@ -2581,7 +2600,7 @@ public sealed class RubyInterpreter
                 || (argumente[0].Kind != RubyValueKind.Symbol
                     && argumente[0].Kind != RubyValueKind.String))
             {
-                _diagnostics.Add(
+                RecordDiagnostic(
                     $"{methode} needs a name, and a symbol is what a game "
                     + "writes; this reader does not guess a name out of an "
                     + "expression");
@@ -2867,7 +2886,7 @@ public sealed class RubyInterpreter
             var woHier = _aktuelleMethode == null
                 ? " (at the top level)"
                 : " (in " + _aktuelleMethode + ")";
-            _diagnostics.Add((kennt
+            RecordDiagnostic((kennt
                 ? $"{empfaenger.Name}.{methode} answered nil, and the name is "
                     + "one this host declares; a nil from a host is an answer "
                     + "and not a missing method"
@@ -3027,7 +3046,7 @@ public sealed class RubyInterpreter
         var wo = _aktuelleMethode == null
             ? " (at the top level)"
             : " (in " + _aktuelleMethode + ")";
-        _diagnostics.Add((kenntAntwort
+        RecordDiagnostic((kenntAntwort
             ? Describe(empfaenger) + "." + methode + " answered nil, and the name"
                 + " is one this host declares; a nil from a host is an answer and"
                 + " not a missing method"
@@ -3307,7 +3326,7 @@ public sealed class RubyInterpreter
             var argument = pArgumente[stelle];
             if (argument.Kind != RubyValueKind.Symbol)
             {
-                _diagnostics.Add(
+                RecordDiagnostic(
                     "Struct.new was given something that is not a name, and a "
                         + "field without a name has nowhere to be read from");
                 return RubyValue.Nil;
@@ -3495,7 +3514,7 @@ public sealed class RubyInterpreter
         }
         catch (System.ArgumentException e)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "the pattern /" + quelle + "/ could not be put together ("
                     + e.Message.Split('\n')[0] + "); a game that writes a "
                     + "pattern the reader cannot build would have a silent "
@@ -3578,7 +3597,7 @@ public sealed class RubyInterpreter
 
         if (muster.Kind != RubyValueKind.Regexp)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + " needs a pattern on one side, and got "
                     + (muster.IsNil ? "nothing" : muster.Kind.ToString())
                     + "; a game that compares a text with a text is looking "
@@ -3599,7 +3618,7 @@ public sealed class RubyInterpreter
             // Namen ist die Meldung eine Warnung vor nichts,
             // **und mit ihm kann ein Skriptautor die Zeile finden, die
             // haengt.**
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "the pattern /" + gebaut.Quelle + "/ was not run on "
                     + inhalt.Length + " bytes, because this reader runs a "
                     + "pattern that came from a script only while the text "
@@ -4086,7 +4105,7 @@ public sealed class RubyInterpreter
         // mit einem Wort, wo es drei erwartet.**
         if (pTrenner.Kind == RubyValueKind.Regexp)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "split was given the pattern /" + (pTrenner.Source ?? "")
                     + "/, and this reader does not run a pattern that came "
                     + "from a script without a time limit; a pattern that "
@@ -4151,7 +4170,7 @@ public sealed class RubyInterpreter
     {
         if (pArgumente.Count == 0)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + " needs what to look for, and got no arguments; a "
                     + "replacement without a search would change nothing and "
                     + "look like it worked");
@@ -4176,7 +4195,7 @@ public sealed class RubyInterpreter
 
         if (pArgumente[0].Kind != RubyValueKind.String)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + " was given something that is neither a text nor a "
                     + "pattern to look for");
             return RubyValue.Nil;
@@ -4307,7 +4326,7 @@ public sealed class RubyInterpreter
             // **und eine Meldung ohne das Muster schickt den Leser
             // suchen** -- **und bei hundert Mustern in einem Spiel weiss
             // er dann nicht, welches von ihnen zu gross war.**
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + " was not run on " + pText.Length + " bytes, "
                     + "because the pattern /" + gebaut.Quelle + "/ is only "
                     + "run while the text stays under 4096 bytes; a pattern "
@@ -5698,7 +5717,7 @@ public sealed class RubyInterpreter
             : null;
         if (block == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "loop needs a block, and none came with it; a loop without a "
                     + "block has nothing to run, and this reader does not invent "
                     + "one");
@@ -5763,7 +5782,7 @@ public sealed class RubyInterpreter
             : null;
         if (block == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + " needs a block, and none came with it; a count "
                     + "without a block has nothing to run, and this reader "
                     + "does not invent one");
@@ -6019,7 +6038,7 @@ public sealed class RubyInterpreter
         // das Spiel eine leere gefunden.**
         if (block == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + " needs a block, and "
                     + "none came with it; a list method without a block has "
                     + "nothing to walk and this reader does not invent one");
@@ -8331,7 +8350,7 @@ public sealed class RubyInterpreter
                 });
 
             default:
-                _diagnostics.Add(
+                RecordDiagnostic(
                     $"{ziel.Kind} is on the left of an = and there is nowhere "
                     + "to put the value; the reference would raise, and this "
                     + "reader does not guess a place");
@@ -9045,7 +9064,7 @@ public sealed class RubyInterpreter
         {
             // **Und der Name steht in der Meldung, weil eine Diagnose ohne
             // Namen den Leser raten laesst.**
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "require " + (pEinmal ? "" : "or load ") + "'" + pName
                     + "' asked for a script this host does not have; the host "
                     + "decides what a name means, because a folder, an "
@@ -10146,7 +10165,7 @@ public sealed class RubyInterpreter
         var name = pNode.Name ?? string.Empty;
         if (name.Length == 0)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "a class or module with no name was defined, and there is "
                     + "nothing to file it under");
             return RubyValue.Nil;
@@ -10338,7 +10357,7 @@ public sealed class RubyInterpreter
 
         if (typ == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "method " + name + " is defined outside a class, and the "
                 + "language's own Object is not in this reader, so the "
                 + "sentence has no home; Ruby 1.8.1 raises TypeError "
@@ -10967,7 +10986,7 @@ public sealed class RubyInterpreter
         // Ebene hoeher", nicht "in meiner Klasse".
         if (_aufrufKette.Count == 0)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 "super was called outside a method, and there is no class to "
                     + "go up to");
             return RubyValue.Nil;
@@ -10976,7 +10995,7 @@ public sealed class RubyInterpreter
         var eigene = _aufrufKette[^1];
         if (!_types.TryGetValue(eigene, out var typ) || typ.Superclass == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"{typ?.Name ?? eigene} has no superclass, so super has "
                     + "nowhere to go; the reference would raise here");
             return RubyValue.Nil;
@@ -10991,7 +11010,7 @@ public sealed class RubyInterpreter
         var methode = FindMethod(typ.Superclass, _aktuelleMethode);
         if (methode == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"{typ.Superclass} does not have {_aktuelleMethode}, so "
                     + "super has no method to call");
             return RubyValue.Nil;
@@ -11118,7 +11137,7 @@ public sealed class RubyInterpreter
     {
         if (pArgumente.Count == 0 || pArgumente[0].Kind != RubyValueKind.Symbol)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"{pMethode} needs a name, and a symbol is what a game writes; "
                 + "the first argument was "
                 + (pArgumente.Count > 0 ? pArgumente[0].Kind.ToString() : "nothing")
@@ -11137,7 +11156,7 @@ public sealed class RubyInterpreter
             : null;
         if (body == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 pMethode + "(:" + pArgumente[0].Name
                 + ") was given no block, and a "
                 + "block is where the method's body comes from; without one "
@@ -11294,7 +11313,7 @@ public sealed class RubyInterpreter
             // of the module is a `NoMethodError` in Ruby,
             // **und ein Leser, der auf die Instanzkette weiterlief, hat
             // die Methode ausgefuehrt und 7 gesagt.**
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"{typ.Name} has no method '{pMethode}' on this host; the "
                     + "interpreter does not guess, and a method that is "
                     + "not implemented is a fact about the host and not "
@@ -12204,7 +12223,7 @@ public sealed class RubyInterpreter
         {
             if (arg.Kind != RubyValueKind.Symbol)
             {
-                _diagnostics.Add(
+                RecordDiagnostic(
                     $"attr_{pMethode} takes names as symbols, and the "
                     + "argument is not one; a reader that took anything would "
                     + "have made a method out of whatever the game wrote");
@@ -12274,7 +12293,7 @@ public sealed class RubyInterpreter
     {
         if (pArgumente.Count == 0)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"{pMethode} was called with no module, and there is nothing "
                     + "to take methods from");
             return false;
@@ -12292,7 +12311,7 @@ public sealed class RubyInterpreter
             };
             if (name == null || !_types.TryGetValue(name, out var modul))
             {
-                _diagnostics.Add(
+                RecordDiagnostic(
                     $"{pMethode} names {name ?? "(nothing)"}, and this "
                     + "interpreter has no module under that name; a module is a "
                     + "type and not a method, so a message about the host "
@@ -12494,7 +12513,7 @@ public sealed class RubyInterpreter
         var typ = _aktuellerTyp;
         if (typ == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"alias {neuer} {alter} stands outside a class, and this "
                 + "interpreter files methods under a class; the reference "
                 + "would put it on Object, and that is a host's job");
@@ -12504,7 +12523,7 @@ public sealed class RubyInterpreter
         var methode = FindMethod(typ.Name, alter);
         if (methode == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"{typ.Name} does not have {alter}, so alias {neuer} has "
                     + "nothing to point at; an alias is a second name for an "
                     + "existing method and not a new one");
@@ -12822,7 +12841,7 @@ public sealed class RubyInterpreter
         var typ = _aktuellerTyp;
         if (typ == null)
         {
-            _diagnostics.Add(
+            RecordDiagnostic(
                 $"undef {UndefName(pNode)} stands outside a class, and this "
                 + "interpreter files methods under a class; the reference "
                 + "would put it on Object, and that is a host's job");
@@ -12959,7 +12978,7 @@ public sealed class RubyInterpreter
 
     private RubyValue Refuse(RubyNode pNode)
     {
-        _diagnostics.Add(
+        RecordDiagnostic(
             $"this interpreter does not evaluate a {pNode.Kind} node, and the "
             + "node is in the tree; the parser produces it and the evaluator "
             + "says so rather than answering nil and moving on");

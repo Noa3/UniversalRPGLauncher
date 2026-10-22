@@ -39,7 +39,10 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// <summary>
     /// The scripts and updates that failed, by name and reason.
     /// </summary>
-    public IReadOnlyList<string> ScriptProblems => _scriptProblems;
+    public IReadOnlyList<string> ScriptProblems
+    {
+        get { lock (_lifecycleGate) return _scriptProblems.ToArray(); }
+    }
 
     /// <summary>
     /// The setup steps the RGSS runtime could not run, with their reason.
@@ -80,9 +83,14 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// it is the honest way to find the next class instead of guessing which
     /// one to build.
     /// </remarks>
-    public IReadOnlyList<string> Diagnostics => _interpreter == null
-        ? (IReadOnlyList<string>)Array.Empty<string>()
-        : _interpreter.Diagnostics;
+    public IReadOnlyList<string> Diagnostics
+    {
+        get
+        {
+            lock (_lifecycleGate)
+                return _frameSession?.Diagnostics ?? _interpreter?.Diagnostics ?? Array.Empty<string>();
+        }
+    }
 
     /// <summary>
     /// Runs the game's own scene loop, bounded by <see cref="FrameBudget"/>.
@@ -99,6 +107,8 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// </remarks>
     public void SpielSchleifeStarten()
     {
+        if (_frameSession != null)
+            throw new InvalidOperationException("A persistent scene session already owns this interpreter.");
         if (_interpreter == null || _grafik == null)
         {
             return;
@@ -140,21 +150,29 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// measures sets a budget -- and a run that plays does not.
     /// </remarks>
     /// <summary>The frames the game's own loop presented.</summary>
-    public int Frames => _grafik?.Frames ?? 0;
+    public int Frames
+    {
+        get { lock (_lifecycleGate) return _frameSession?.Frames ?? _grafik?.Frames ?? 0; }
+    }
 
     public int FrameBudget
     {
-        get => _grafik?.Budget ?? 0;
+        get { lock (_lifecycleGate) return _grafik?.Budget ?? 0; }
         set
         {
-            if (_grafik != null)
+            lock (_lifecycleGate)
             {
-                _grafik.Budget = value;
+                if (_frameSession != null)
+                    throw new InvalidOperationException("A persistent scene session owns the frame budget.");
+                if (_grafik != null) _grafik.Budget = value;
             }
         }
     }
 
     private RgssGrafikHost? _grafik;
+    private RgssFrameSession? _frameSession;
+    private readonly object _lifecycleGate = new();
+    private bool _updateInProgress;
 
     private readonly List<string> _scriptProblems = new();
 
@@ -712,144 +730,103 @@ public sealed class XpEngineRuntime : IEngineRuntime
         return PluginOperationResult.Succeeded();
     }
 
+    /// <summary>Reach one host boundary or finish the scene; success need not add a frame.</summary>
     public PluginOperationResult Update(double pDeltaSeconds)
     {
-        if (State != PluginRuntimeState.Running)
+        RgssFrameSession session;
+        lock (_lifecycleGate)
         {
-            return Fail(PluginErrorCode.InvalidLifecycleTransition, $"XP runtime cannot update from state {State}.", "update");
+            if (State != PluginRuntimeState.Running || _updateInProgress)
+                return Fail(PluginErrorCode.InvalidLifecycleTransition,
+                    "The runtime is not running or another update is in progress.", "update");
+            if (double.IsNaN(pDeltaSeconds) || double.IsInfinity(pDeltaSeconds) || pDeltaSeconds < 0)
+                return Fail(PluginErrorCode.InvalidLifecycleTransition,
+                    "Delta time must be finite and non-negative.", "update");
+            _clock.ProcessFrame(pDeltaSeconds);
+            if (!_scriptsRun) return PluginOperationResult.Succeeded();
+            if (_interpreter == null || _grafik == null)
+            {
+                State = PluginRuntimeState.Faulted;
+                return Fail(PluginErrorCode.LifecycleFailure, "The script runtime is missing its interpreter or graphics host.", "update");
+            }
+            session = _frameSession ??= new RgssFrameSession(_interpreter, _grafik,
+                new RubyParser(new RubyLexer("while $scene; $scene.main; end").Tokenize()).ParseProgram());
+            _updateInProgress = true;
         }
-        if (double.IsNaN(pDeltaSeconds) || double.IsInfinity(pDeltaSeconds) || pDeltaSeconds < 0)
-        {
-            return Fail(PluginErrorCode.InvalidLifecycleTransition, "Delta time must be finite and non-negative.", "update");
-        }
-        _clock.ProcessFrame(pDeltaSeconds);
-
-        // Run game loop if scripts are loaded
-        if (_scriptsRun && _interpreter != null)
-        {
-            RunGameLoop();
-        }
-
-        return PluginOperationResult.Succeeded();
-    }
-
-    private void RunGameLoop()
-    {
-        // Run the game's main loop
-        // This would typically call $scene.main or similar
-        try
-        {
-            // Update global game objects
-            UpdateGlobals();
-
-            // Run scene update if there's a current scene
-            RunSceneUpdate();
-        }
-        catch (Exception ex)
-        {
-            Melde("game loop", "one frame", ex);
-        }
-    }
-
-    private void UpdateGlobals()
-    {
-        if (_interpreter == null) return;
-
-        // **And each global is named when it fails.** One try around all five reported "the
-        // per-frame globals", and the first thing a reader needs is which of them threw: a game
-        // whose `$game_system` is nil and one whose `$game_map` is nil are two different problems
-        // with two different fixes. Measured on a real game, the whole failure was one of these
-        // five and the message did not say which.
-        UpdateGlobal("$game_temp");
-        UpdateGlobal("$game_system");
-        UpdateGlobal("$game_screen");
-        UpdateGlobal("$game_map");
-        UpdateGlobal("$game_player");
-    }
-
-    /// <summary>
-    /// Runs one global's per-frame update, and names it if it throws.
-    /// </summary>
-    private void UpdateGlobal(string pName)
-    {
-        if (_interpreter == null) return;
 
         try
         {
-            _interpreter.RunProgram(new RubyParser(new RubyLexer(
-                $"{pName}.update if {pName}.respond_to?(:update)").Tokenize()).ParseProgram());
+            // Do not hold the lifecycle lock while Ruby runs: Stop must be able to cancel it.
+            var advanced = session.Advance(TimeSpan.FromSeconds(1));
+            lock (_lifecycleGate)
+            {
+                if (State != PluginRuntimeState.Running)
+                    return Fail(PluginErrorCode.InvalidLifecycleTransition,
+                        "The runtime was stopped or disposed during this update.", "update");
+                if (advanced) return PluginOperationResult.Succeeded();
+                if (session.State == RgssExecutionState.Completed)
+                {
+                    State = PluginRuntimeState.Stopped;
+                    return PluginOperationResult.Succeeded();
+                }
+                if (session.State == RgssExecutionState.Cancelled)
+                {
+                    State = PluginRuntimeState.Stopped;
+                    return Fail(PluginErrorCode.InvalidLifecycleTransition, "The scene was stopped.", "update");
+                }
+                State = PluginRuntimeState.Faulted;
+                var reason = session.Error ?? "The scene execution failed.";
+                Melde("scene", "frame session", new InvalidOperationException(reason));
+                session.Stop(TimeSpan.FromSeconds(2));
+                return Fail(PluginErrorCode.LifecycleFailure, reason, "scene-frame");
+            }
         }
-        catch (Exception ausnahme)
+        catch (ObjectDisposedException)
         {
-            // **And an update that throws every frame is reported once**, because a silent one
-            // turns a broken game into a still picture.
-            Melde("update", pName, ausnahme);
+            lock (_lifecycleGate)
+            {
+                if (State != PluginRuntimeState.Disposed) throw;
+                return Fail(PluginErrorCode.InvalidLifecycleTransition,
+                    "The runtime was disposed before this update could advance.", "update");
+            }
         }
-    }
-
-    /// <summary>
-    /// Runs one statement of the frame, and names it if it throws.
-    /// </summary>
-    private void RufeSzene(string pQuelltext)
-    {
-        if (_interpreter == null) return;
-
-        try
+        finally
         {
-            _interpreter.RunProgram(new RubyParser(
-                new RubyLexer(pQuelltext).Tokenize()).ParseProgram());
-        }
-        catch (Exception ausnahme)
-        {
-            Melde("scene", pQuelltext, ausnahme);
-        }
-    }
-
-    private void RunSceneUpdate()
-    {
-        if (_interpreter == null) return;
-
-        try
-        {
-            // **And this is the body of the engine's own loop, and not the
-            // loop.** XP's `Scene_Title#main` is
-            // `loop do Graphics.update; Input.update; update; break if $scene != self end`
-            // -- **and a runtime that called `main` would sit in that loop
-            // forever**, because there is no scene change to break on. **So the
-            // runtime is the loop**, and what it runs each frame is the three
-            // statements inside it.
-            //
-            // **And each one is named if it throws**, because "the scene failed"
-            // says nothing about whether it was the picture, the input or the
-            // game's own update.
-            RufeSzene("Graphics.update");
-            RufeSzene("Input.update");
-            RufeSzene("$scene.update if $scene");
-        }
-        catch (Exception ausnahme)
-        {
-            Melde("scene", "the current scene", ausnahme);
+            lock (_lifecycleGate) _updateInProgress = false;
         }
     }
 
     public PluginOperationResult Stop()
     {
-        if (State != PluginRuntimeState.Initialized && State != PluginRuntimeState.Running)
+        lock (_lifecycleGate)
         {
-            return Fail(PluginErrorCode.InvalidLifecycleTransition, $"XP runtime cannot stop from state {State}.", "stop");
+            if (State != PluginRuntimeState.Initialized && State != PluginRuntimeState.Running
+                && State != PluginRuntimeState.Faulted)
+                return Fail(PluginErrorCode.InvalidLifecycleTransition,
+                    $"The runtime cannot stop from state {State}.", "stop");
+            if (_frameSession != null && !_frameSession.Stop(TimeSpan.FromSeconds(2)))
+            {
+                State = PluginRuntimeState.Faulted;
+                return Fail(PluginErrorCode.LifecycleFailure, "The RGSS scene worker did not stop.", "stop");
+            }
+            State = PluginRuntimeState.Stopped;
+            return PluginOperationResult.Succeeded();
         }
-        State = PluginRuntimeState.Stopped;
-        return PluginOperationResult.Succeeded();
     }
 
     public void Dispose()
     {
-        State = PluginRuntimeState.Disposed;
-        _runtimeInfo = null;
-        _interpreter = null;
-        _scriptHost = null;
-        _laufzeit = null;
-        _datenHost = null;
+        lock (_lifecycleGate)
+        {
+            _frameSession?.Dispose();
+            _frameSession = null;
+            State = PluginRuntimeState.Disposed;
+            _runtimeInfo = null;
+            _interpreter = null;
+            _scriptHost = null;
+            _laufzeit = null;
+            _datenHost = null;
+        }
     }
 
     private PluginOperationResult Fail(PluginErrorCode pCode, string pMessage, string pPhase)

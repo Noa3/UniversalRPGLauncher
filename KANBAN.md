@@ -799,6 +799,24 @@ Parent self-review completed; independent review unavailable (provider HTTP401).
 Next is persistent frame handoff and actual pixel composition/presentation under
 the rendering card and execplan/rgss-frame-presentation.md.
 
+### K-PROD-RGSS-SCENE-SESSION — DONE (owned resumable stack, no pixel claim)
+
+Ordinary Update in all three RGSS runtime adapters now advances one shared
+RgssFrameSession worker to a host boundary. Setup and method locals survive;
+scene transitions finish the old main before entering the next. Removed the
+unreachable competing updater. Stop/Dispose cancel and join the owned worker;
+non-yielding Ruby is instruction-bounded and a stalled host fails visibly.
+Frame counters and bounded diagnostic snapshots cross the worker boundary.
+Focused13/13; real XP ordinary updates10 boundaries/0 script problems, measured
+terminal budget test retained. Independent review found lifecycle/budget/retention
+issues, reproduced RED and fixed GREEN. Initial canonical run intentionally
+stopped; corrected full validation passes3017 tests,382 suite records,exit0,
+with final validator marker. Build148 warnings; shutdown3 CanvasItem RIDs/6
+ObjectDB instances remain. Independent follow-up review found no new actionable
+regression (static review only). The1-second
+watchdog remains an explicit compatibility bound, not a pacing implementation.
+No pixel composition, input, audio, pacing or full-engine completion claim.
+
 ### K-PROD-RGSS-RENDERING — IN PROGRESS (XP, VX and VX Ace produce no picture at all)
 
 Owner priority: work on the largest integration blockers first. Execution and presentation across all three RGSS generations now follow execplan/rgss-frame-presentation.md. Runtime remains Experimental. Graphics.update/wait now cross the host boundary; real XP reaches a 5-frame budget and then stops, rejecting subsequent updates. Synthetic production-bootstrap coverage spans XP/VX/VX Ace. Loop5/5, self-identity2/2, frame-bridge3/3 and bitmap-font1/1 pass; final canonical verification passes: 3003 tests, 381 suite records, exit 0. Four initial RGSS wrapper regressions were corrected and preserved in the failure log. No rendered pixels, continuous scheduler or audio output is claimed.
