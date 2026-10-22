@@ -2196,7 +2196,15 @@ public sealed class RubyInterpreter
                 // Figuren aus einem Helden macht, haette dieselbe Figur
                 // zweimal, und jede Aenderung an der einen waere an der
                 // anderen sichtbar.**
-                return Kopie(pEmpfaenger);
+                var copy = Kopie(pEmpfaenger);
+                // Resource-owning objects must replace copied handles on the new receiver.
+                if (copy.Kind == RubyValueKind.Object && !string.IsNullOrEmpty(copy.ClassName))
+                {
+                    var initializer = EigeneMethode(copy, "initialize_copy");
+                    if (initializer != null)
+                        Aufrufen(initializer, [pEmpfaenger], copy.ClassName, copy);
+                }
+                return copy;
 
             case "itself":
                 return pEmpfaenger;
@@ -7576,6 +7584,7 @@ public sealed class RubyInterpreter
     {
         var tiefe = _scopes.Count;
         var grenze = _methodenGrenze;
+        var callDepth = _aufrufKette.Count;
         _methodenGrenze = tiefe;
         _aufrufKette.Add(pKlasse ?? string.Empty);
         var alteArgumente = _aktuelleArgumente;
@@ -7627,6 +7636,8 @@ public sealed class RubyInterpreter
             _instanceVariables = receiverType.Felder;
         }
 
+        try
+        {
         _scopes.Add(new Dictionary<string, RubyValue>());
 
         // **Ein Splat in der Mitte oder am Anfang verschiebt, was die
@@ -7769,23 +7780,21 @@ public sealed class RubyInterpreter
         var wert = pMethode.IsAttribute
             ? Attribut(pMethode, pArgumente)
             : Evaluate(pMethode.Body);
-        _returned = false;
-        _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
-        _methodenGrenze = grenze;
-        _aufrufKette.RemoveAt(_aufrufKette.Count - 1);
-        _aktuelleArgumente = alteArgumente;
-        _aktuelleMethode = alteMethode;
-        _aktuellerTyp = laufenderTyp;
-
-        // **Und `self` und sein Feldspeicher kommen zurueck.** `Aufrufen`
-        // richtet sich selbst auf (`super`, `instance_eval`, ein Handler
-        // von `method_missing`), **und ohne diesen Satz waere nach dem
-        // inneren Aufruf der aeussere auf einem fremden Objekt** -- ein
-        // Spiel, das `super` schreibt, haette in der zweiten Haelfte seines
-        // eigenen Rumpfes die Felder des anderen Objekts gesehen.
-        _self = alterSelf;
-        _instanceVariables = alterFelder;
         return wert;
+        }
+        finally
+        {
+            // Restore the caller even when defaults, host calls or the body throw.
+            _returned = false;
+            _scopes.RemoveRange(tiefe, _scopes.Count - tiefe);
+            _methodenGrenze = grenze;
+            _aufrufKette.RemoveRange(callDepth, _aufrufKette.Count - callDepth);
+            _aktuelleArgumente = alteArgumente;
+            _aktuelleMethode = alteMethode;
+            _aktuellerTyp = laufenderTyp;
+            _self = alterSelf;
+            _instanceVariables = alterFelder;
+        }
     }
 
     /// <summary>
@@ -9721,7 +9730,10 @@ public sealed class RubyInterpreter
     {
         try
         {
-            return Encoding.GetEncoding(932).GetString(pQuelle);
+            // Source loading must not depend on another subsystem registering code pages first.
+            var encoding = CodePagesEncodingProvider.Instance.GetEncoding(932)
+                ?? throw new NotSupportedException("CP932 is unavailable for Ruby source decoding.");
+            return encoding.GetString(pQuelle);
         }
         catch (DecoderFallbackException)
         {

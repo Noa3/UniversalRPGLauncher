@@ -38,6 +38,9 @@ public sealed class RgssGrafikHost : IRubyHost
     /// <summary>The host this one asks when the name is not its own.</summary>
     public IRubyHost? Fallback { get; set; }
 
+    /// <summary>Owned pixel storage; access only from the interpreter's execution owner.</summary>
+    public RgssBitmapStore Bitmaps { get; } = new();
+
     /// <summary>The game's own folder, which is where its images are.</summary>
     public string? Wurzel { get; set; }
 
@@ -105,7 +108,7 @@ public sealed class RgssGrafikHost : IRubyHost
             // **And the helper the cache calls is one of the names.** A host that
             // answers a name and does not declare it is a host whose own answers
             // read as gaps -- measured, and that is what the message did.
-            var namen = new List<string> { "update", "wait", "BildGroesse", "rgss_present_frame" };
+            var namen = new List<string> { "update", "wait", "BildGroesse", "rgss_present_frame", "rgss_bitmap" };
             if (Fallback != null)
             {
                 namen.AddRange(Fallback.KnownMethods);
@@ -133,6 +136,8 @@ public sealed class RgssGrafikHost : IRubyHost
                 : string.Empty;
             return BildGroesse(art, name);
         }
+
+        if (pMethod == "rgss_bitmap") return CallBitmap(pArguments);
 
         if (pMethod == "rgss_present_frame")
         {
@@ -171,6 +176,81 @@ public sealed class RgssGrafikHost : IRubyHost
             default:
                 return Fallback?.CallMethod(pReceiver, pMethod, pArguments);
         }
+    }
+
+    private RubyValue CallBitmap(IReadOnlyList<RubyValue> arguments)
+    {
+        if (arguments.Count == 0 || arguments[0].Kind != RubyValueKind.Symbol)
+            throw new RubyRuntimeException("ArgumentError", "rgss_bitmap requires an operation symbol.");
+        var operation = arguments[0].Name;
+        var count = operation switch
+        {
+            "create" => 3,
+            "clear" or "dispose" or "copy" => 2,
+            "get_pixel" => 4,
+            "set_pixel" => 8,
+            "fill_rect" => 10,
+            _ => throw new RubyRuntimeException("ArgumentError", "Unknown bitmap operation: " + operation),
+        };
+        if (arguments.Count != count)
+            throw new RubyRuntimeException("ArgumentError", "Wrong argument count for bitmap " + operation);
+        if (operation == "create")
+            return RubyValue.OfInteger(Bitmaps.Create(BitmapInteger(arguments[1]), BitmapInteger(arguments[2])));
+        if (arguments[1].Kind != RubyValueKind.Integer)
+            throw new RubyRuntimeException("RGSSError", "The bitmap has no pixel surface.");
+        var id = arguments[1].Integer;
+        switch (operation)
+        {
+            case "copy": return RubyValue.OfInteger(Bitmaps.Copy(id));
+            case "clear": Bitmaps.Clear(id); break;
+            case "dispose": Bitmaps.DisposeBitmap(id); break;
+            case "get_pixel": return Bitmaps.GetPixel(id, BitmapCoordinate(arguments[2]), BitmapCoordinate(arguments[3]));
+            case "fill_rect":
+                Bitmaps.FillRect(id, BitmapCoordinate(arguments[2]), BitmapCoordinate(arguments[3]),
+                    BitmapCoordinate(arguments[4]), BitmapCoordinate(arguments[5]),
+                    BitmapChannel(arguments[6]), BitmapChannel(arguments[7]),
+                    BitmapChannel(arguments[8]), BitmapChannel(arguments[9]));
+                break;
+            case "set_pixel":
+                Bitmaps.SetPixel(id, BitmapCoordinate(arguments[2]), BitmapCoordinate(arguments[3]),
+                    BitmapChannel(arguments[4]), BitmapChannel(arguments[5]),
+                    BitmapChannel(arguments[6]), BitmapChannel(arguments[7]));
+                break;
+        }
+        return RubyValue.Nil;
+    }
+
+    private static int BitmapInteger(RubyValue value)
+    {
+        if (value.Kind != RubyValueKind.Integer || value.Integer < int.MinValue || value.Integer > int.MaxValue)
+            throw new RubyRuntimeException("ArgumentError", "Bitmap dimensions and coordinates must be bounded integers; image loading is not implemented.");
+        return (int)value.Integer;
+    }
+
+    private static int BitmapCoordinate(RubyValue value)
+    {
+        var number = value.Kind switch
+        {
+            RubyValueKind.Integer => (double)value.Integer,
+            RubyValueKind.Float => Math.Truncate(value.Real),
+            _ => throw new RubyRuntimeException("TypeError", "Bitmap coordinates must be numeric."),
+        };
+        if (!double.IsFinite(number) || number < int.MinValue || number > int.MaxValue)
+            throw new RubyRuntimeException("ArgumentError", "Bitmap coordinates must fit a finite 32-bit integer.");
+        return (int)number;
+    }
+
+    private static byte BitmapChannel(RubyValue value)
+    {
+        var number = value.Kind switch
+        {
+            RubyValueKind.Integer => (double)value.Integer,
+            RubyValueKind.Float => value.Real,
+            _ => throw new RubyRuntimeException("TypeError", "Bitmap color channels must be numeric."),
+        };
+        if (!double.IsFinite(number))
+            throw new RubyRuntimeException("ArgumentError", "Bitmap color channels must be finite.");
+        return (byte)Math.Clamp(number, 0, 255);
     }
 
     private void PresentFrame()
@@ -223,23 +303,43 @@ public sealed class RgssGrafikHost : IRubyHost
             return null;
         }
 
-        var kopf = new byte[24];
-        using (var strom = File.OpenRead(pfad))
+        var kopf = new byte[33];
+        try
         {
-            if (strom.Read(kopf, 0, kopf.Length) < 24)
+            using var strom = File.OpenRead(pfad);
+            if (strom.ReadAtLeast(kopf, kopf.Length, throwOnEndOfStream: false) < kopf.Length)
             {
                 RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png (truncated)");
                 return null;
             }
         }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png (unreadable: " + error.GetType().Name + ")");
+            return null;
+        }
+
+        // Metadata only: require the PNG signature and a complete first IHDR chunk.
+        // Full image decoding and CRC validation remain the image loader's responsibility.
+        ReadOnlySpan<byte> prefix = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82];
+        if (!kopf.AsSpan(0, prefix.Length).SequenceEqual(prefix))
+        {
+            RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png (invalid PNG header)");
+            return null;
+        }
+        var width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(kopf.AsSpan(16, 4));
+        var height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(kopf.AsSpan(20, 4));
+        if (width <= 0 || height <= 0 || width > RgssBitmapStore.MaximumDimension || height > RgssBitmapStore.MaximumDimension)
+        {
+            RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png (unsupported dimensions)");
+            return null;
+        }
 
         return RubyValue.OfArray(
             new List<RubyValue>
             {
-                RubyValue.OfInteger((kopf[16] << 24) | (kopf[17] << 16)
-                    | (kopf[18] << 8) | kopf[19]),
-                RubyValue.OfInteger((kopf[20] << 24) | (kopf[21] << 16)
-                    | (kopf[22] << 8) | kopf[23]),
+                RubyValue.OfInteger(width),
+                RubyValue.OfInteger(height),
             });
     }
 

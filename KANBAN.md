@@ -819,6 +819,23 @@ No pixel composition, input, audio, pacing or full-engine completion claim.
 
 ### K-PROD-RGSS-RENDERING — IN PROGRESS (XP, VX and VX Ace produce no picture at all)
 
+Current local slice: numeric Bitmap objects now own bounded RGBA arrays through
+actual host calls for set_pixel/get_pixel/clear/dispose. Limits checked before
+allocation; disposal releases storage and runtime teardown releases abandoned
+surfaces only after worker join. Focused10/10 through all generation bootstraps;
+real RGBA fill/clear_rect and integer-edge bounds pass. Two pixel mutations were
+detected and restored. Font1/1, real XP2/2 and resumable scene13/13 also pass.
+Review reproduced and corrected cache growth, dup/clone handle aliasing and
+float-coordinate refusal. Copy-hook2/2 and fresh-process interpreter271/271 pass;
+CP932 loading no longer needs another subsystem to register code pages first.
+Reference distinctions: docs/RGSS_BITMAP_BOUNDARY.md. Final-delta review found
+exception-unwind and PNG-header gaps; both were reproduced and fixed.
+Copy-hook2/2 and metadata1/1 pass. Final canonical validation passes3030 tests
+with385 suite records plus20 smoke checks,exit0 and matching frozen code hashes.
+The bitmap milestone is verified; this larger rendering card remains IN PROGRESS.
+Next slice: docs/RGSS_SPRITE_REFERENCE.md. This remains offscreen storage,
+not sprite composition, game presentation or a complete Bitmap API.
+
 Owner priority: work on the largest integration blockers first. Execution and presentation across all three RGSS generations now follow execplan/rgss-frame-presentation.md. Runtime remains Experimental. Graphics.update/wait now cross the host boundary; real XP reaches a 5-frame budget and then stops, rejecting subsequent updates. Synthetic production-bootstrap coverage spans XP/VX/VX Ace. Loop5/5, self-identity2/2, frame-bridge3/3 and bitmap-font1/1 pass; final canonical verification passes: 3003 tests, 381 suite records, exit 0. Four initial RGSS wrapper regressions were corrected and preserved in the failure log. No rendered pixels, continuous scheduler or audio output is claimed.
 
 **And the RGSS layer has no graphics whatsoever.** `project/src/rgss` holds the Ruby runtime, the

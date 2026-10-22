@@ -163,7 +163,7 @@ public partial class TestRubyInterpreter
                 + "this: `Delimiter text=:` followed by `String "
                 + "text=\"r?\"`, and the parser said a colon does not "
                 + "begin an expression");
-        AssertEq(System.Text.Encoding.GetEncoding(932)
+        AssertEq(System.Text.CodePagesEncodingProvider.Instance.GetEncoding(932)!
             .GetString(einziges!.Bytes), "reich?",
             "**and it carries the name without the quotes and the colon** "
                 + "-- measured: `value=r?`");

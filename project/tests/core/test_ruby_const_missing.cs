@@ -75,7 +75,7 @@ public partial class TestRubyInterpreter
             "**and the answer is a text** -- because the game turned the "
                 + "name into one, and `ID2SYM(id)` is what Ruby hands it");
         AssertEq(
-            System.Text.Encoding.GetEncoding(932).GetString(geantwortet.Bytes),
+            System.Text.CodePagesEncodingProvider.Instance.GetEncoding(932)!.GetString(geantwortet.Bytes),
             "IRGEND_WAS",
             "**and the name it got is the one it asked for** -- "
                 + "measured: a reader that hands `const_missing` some "

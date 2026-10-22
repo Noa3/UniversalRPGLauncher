@@ -1,9 +1,37 @@
 # UniversalRPG — Project Status
 
-> **Last Updated:** 2026-10-09
+> **Last Updated:** 2026-10-22
 > **Current Phase:** Bounded RM2000/2003 runtime; Windows audit/export verified
 
 ## Latest runtime correctness work
+
+### RGSS numeric bitmap storage — bounded milestone verified
+
+The XP/VX/VX Ace bootstraps now back numeric Bitmap objects with bounded RGBA
+storage. Pixel reads/writes, clear, both fill_rect forms and RGSS2/3 clear_rect
+modify real bytes. Copies own independent pixel arrays; cache requests reuse
+surfaces, cache clear frees them, and runtime teardown waits for its worker.
+The existing 4096-dimension/4096-surface/64MiB limits apply before allocation.
+Review caught cache growth, duplicate-handle aliasing and float-coordinate
+refusal; each was reproduced and corrected with regression coverage.
+
+The final corrected-source validation passed **3030 tests**, with385 suite records,
+exit0 and the final validation-passed marker. Build148 warnings and the known
+3 CanvasItem RID /6 ObjectDB shutdown warnings remain. Source hashes match the
+frozen validation inputs; unrelated RM2K battle WIP remains untouched.
+Focused evidence: pixels10/10, metadata1/1, copy hook2/2, interpreter271/271, font1/1,
+real XP2/2 and resumable scenes13/13. Standalone interpreter checks also exposed
+and corrected CP932 provider-registration ordering in source loading and four
+fixtures. Final-delta review exposed exception-unwind context retention and
+unvalidated PNG metadata. Both reproduced RED, were corrected and are included
+in the3030-test final validation. Method calls restore caller state in finally;
+metadata rejects malformed headers and unsupported dimensions by name. The
+resource budget remains an explicit refusal rather than a hidden allocation.
+
+This is offscreen numeric storage, not rendered gameplay or a complete Bitmap
+API. Image decoding, text/blit operations, sprite/tilemap composition, input and
+presentation remain open. Exact compatibility limits and references are in
+`docs/RGSS_BITMAP_BOUNDARY.md`; no new Rendering capability is declared.
 
 ### Resumable RGSS scenes — bounded milestone verified
 

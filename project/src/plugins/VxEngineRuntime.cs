@@ -577,12 +577,7 @@ public sealed class VxEngineRuntime : IEngineRuntime
             // **And a missing image is nil and a name.** The host reads the
             // file's own size out of the PNG header and reports the path it
             // looked for when there is none.
-            "module RPG::Cache\n"
-                + "  def self.Bild(art, name)\n"
-                + "    groesse = BildGroesse(art, name)\n"
-                + "    return nil if groesse == nil\n"
-                + "    Bitmap.new(groesse[0], groesse[1])\n"
-                + "  end\n"
+            RgssBitmapRubySource.CacheSource + "\nmodule RPG::Cache\n"
                 + "  def self.windowskin(n); Bild(:windowskins, n); end\n"
                 + "  def self.picture(n); Bild(:pictures, n); end\n"
                 + "  def self.battleback_name(n); Bild(:battlebacks, n); end\n"
@@ -595,7 +590,6 @@ public sealed class VxEngineRuntime : IEngineRuntime
                 + "  def self.fog(n); Bild(:fogs, n); end\n"
                 + "  def self.panorama(n); Bild(:panoramas, n); end\n"
                 + "  def self.title(n); Bild(:titles, n); end\n"
-                + "  def self.clear; end\n"
                 + "end",
 
             "module RPG::Actor\nend",
@@ -623,6 +617,8 @@ public sealed class VxEngineRuntime : IEngineRuntime
         // and neither module was in the list.
         var alleQuellen = new List<string>(RgssExtraRubySources.Sources);
         alleQuellen.AddRange(builtinClasses);
+        alleQuellen.Add(RgssBitmapRubySource.Source);
+        alleQuellen.Add(RgssBitmapRubySource.ClearRectSource);
         foreach (var code in alleQuellen)
         {
             try
@@ -769,6 +765,8 @@ public sealed class VxEngineRuntime : IEngineRuntime
         lock (_lifecycleGate)
         {
             _frameSession?.Dispose();
+            // Release worker-owned pixels only after its stack has stopped.
+            _grafik?.Bitmaps.ReleaseAll();
             _frameSession = null;
             State = PluginRuntimeState.Disposed;
             _runtimeInfo = null;

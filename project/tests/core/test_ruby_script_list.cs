@@ -38,7 +38,7 @@ public partial class TestRubyInterpreter
         {
             _dateien = pDateien.ToDictionary(
                 kvp => kvp.Key,
-                kvp => Encoding.GetEncoding(932).GetBytes(kvp.Value),
+                kvp => CodePagesEncodingProvider.Instance.GetEncoding(932)!.GetBytes(kvp.Value),
                 StringComparer.Ordinal);
         }
 

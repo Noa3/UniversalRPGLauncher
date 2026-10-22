@@ -53,7 +53,7 @@ public partial class TestRubyInterpreter
         try
         {
             knoten = Statements(
-                System.Text.Encoding.GetEncoding(932)
+                System.Text.CodePagesEncodingProvider.Instance.GetEncoding(932)!
                     .GetString(System.IO.File.ReadAllBytes(pfad)));
             wert = m.RunProgram(knoten);
         }

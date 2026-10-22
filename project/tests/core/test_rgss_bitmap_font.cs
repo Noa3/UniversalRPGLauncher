@@ -14,7 +14,7 @@ public partial class TestRgssBitmapFont : TestBase
         foreach (var runtimeType in new[]
             { typeof(XpEngineRuntime), typeof(VxEngineRuntime), typeof(VxAceEngineRuntime) })
         {
-            var interpreter = new RubyInterpreter(new RubyNullHost());
+            var interpreter = new RubyInterpreter(new RgssGrafikHost());
             var runtime = Activator.CreateInstance(runtimeType, "test", new PluginGameInfo());
             // Invoke only the actual built-in bootstrap, never Start or a game's scripts.
             runtimeType.GetField("_interpreter", BindingFlags.Instance | BindingFlags.NonPublic)!
