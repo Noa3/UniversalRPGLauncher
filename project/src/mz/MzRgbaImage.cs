@@ -203,19 +203,20 @@ public sealed class MzRgbaImage
             }
         }
 
-        // **Und aus den Kanaelen wird ein Vierbytes-Bild**, **denn die
-        // beiden Typen haben entweder drei oder vier.** **Und ein Bild,
-        // das an der vierten Stelle keine Zahl traegt, hat keine
-        // Durchsicht** -- **und `TrySetPixel` braucht eine, denn ohne
-        // sie zaehlt `DistinctColours` kein einziges Pixel.**
-        for (var index = 0; index < breite * hoehe; index++)
+        // Expand from the end so RGB writes cannot overwrite later source pixels.
+        // Capture the channels first: source and destination can overlap within one pixel.
+        for (var index = breite * hoehe - 1; index >= 0; index--)
         {
             var quell = index * kanale;
             var ziel = index * 4;
-            pixel[ziel] = pixel[quell];
-            pixel[ziel + 1] = pixel[quell + 1];
-            pixel[ziel + 2] = pixel[quell + 2];
-            pixel[ziel + 3] = farbtyp == 6 ? pixel[quell + 3] : (byte)255;
+            var red = pixel[quell];
+            var green = pixel[quell + 1];
+            var blue = pixel[quell + 2];
+            var alpha = farbtyp == 6 ? pixel[quell + 3] : (byte)255;
+            pixel[ziel] = red;
+            pixel[ziel + 1] = green;
+            pixel[ziel + 2] = blue;
+            pixel[ziel + 3] = alpha;
         }
 
         pImage = new MzRgbaImage

@@ -817,6 +817,31 @@ regression (static review only). The1-second
 watchdog remains an explicit compatibility bound, not a pacing implementation.
 No pixel composition, input, audio, pacing or full-engine completion claim.
 
+### K-PROD-MZ-RGB-EXPANSION — DONE (colour correction only)
+
+Confirmed via an isolated console project compiling the exact MzRgbaImage source:
+TryParse succeeds on a valid4x2 RGB PNG but corrupts7 of8 pixels; the RGBA control
+is exact. Parent inspected and reran the probe; source hash unchanged.
+Report: scratch/urpg-mz-rgb-probe/probe/result.md. This is a reproduction, not a fix.
+
+Acceptance: permanent tests compare multi-pixel/multi-row RGB and RGBA output
+against known bytes and the native PNG decoder, including supported scanline
+filters. Repair overlapping RGB-to-RGBA expansion without corrupting bytes
+inside the same pixel or losing RGBA alpha. Preserve supported formats and
+actual callers; focused tests plus canonical validation must pass. Keep the
+separate unbounded-inflate/structural-validation issues explicit, not hidden
+behind a colour-correction completion claim.
+
+Implemented: reverse pixel traversal plus channel snapshots prevent both kinds
+of overlap. Permanent native-oracle tests cover40 RGB/RGBA geometry/filter cases
+and the actual MzCharacterSheet caller. RED1/2 to GREEN2/2; existing filePNG7/7,
+MZ image-reader4/4 and vehicle-image5/5 pass. Canonical working-tree validation
+passes3069 tests (393 suites/3049 cases +20 smoke), exit0;702 frozen inputs
+unchanged, baseline native diagnostics retained. Review reconciled: a separate
+scratch mutation disproves the reviewer's claim that channel snapshots are not
+required/tested. Reverse-only expansion fails the permanent fixture's2x2 RGB
+case; the current original decoder passes. No production mutation was made.
+
 ### K-PROD-RGSS-DATA-PATH — DONE (bounded static-path fix)
 
 Close the reproduced Windows sibling-prefix traversal in RgssDatenHost.Lade,

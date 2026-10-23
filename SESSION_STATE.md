@@ -1,4 +1,57 @@
 ## Current card
+### K-PROD-MZ-RGB-EXPANSION — VERIFIED
+
+Production MzRgbaImage now expands from the end and captures all channels before
+writing each RGBA pixel. Reverse traversal alone would not fix overlapping
+source/destination channels within a pixel. No additional image allocation or
+format/capability change; RGBA keeps its original alpha.
+
+Permanent TestMzRgbaPixels covers four geometries, five filters and both RGB8
+and RGBA8: 40 fixture combinations, native Godot decoding vs known bytes, the
+actual MzRgbaImage decoder and MzCharacterSheet caller. It shares the existing
+test-only PNG/CRC builder, not a production encoder/decoder implementation.
+RED: 1/2 suite tests passed, Godot exit46 / focused wrapper exit1; RGB failed
+native and caller comparisons for every multi-pixel geometry/filter, while
+RGBA passed. The terminal receipt is preserved in session history; the focused
+helper overwrites its per-suite log, so that file now contains GREEN, not RED.
+GREEN: TestMzRgbaPixels2/2, TestRgssBitmapFiles7/7, TestMzImageReader4/4 and
+TestMzVehicleImage5/5; build148 warnings/0 errors.
+
+Canonical proc_58e78c188d9f PASSED3069 tests:393 suites/3049 cases +20 smoke,
+exit0. All702 frozen inputs in scratch/urpg_mz_rgb_inputs_v1.json unchanged.
+Receipt: scratch/urpg-mz-rgb-validation-receipt.json; log:
+scratch/urpg-mz-rgb-canonical.log. All previous suite counts are retained;
+new TestMzRgbaPixels adds2 cases. Existing native error lines and3 CanvasItem/
+6 ObjectDB warnings match the prior baseline exactly. This is working-tree
+validation including the protected RM2K WIP, not a commit-only clean-tree run.
+
+Own-path diff/whitespace checks pass. A whole-tree diff --check flags existing
+trailing whitespace in protected rm2k_troop_page_decoder.cs:109; its frozen hash
+is unchanged from the preceding slice. Do not edit or publish that unrelated WIP.
+Read-only review deleg_d94d3277 was read and reconciled. Its claim that channel
+snapshots are unnecessary and untested is false: an isolated scratch mutation
+kept reverse traversal but removed the snapshots. The exact2x2 RGB/filter0
+fixture formula from the permanent suite produces PIXELS_MATCH=False; compiling
+the current original source produces True. Both parsers return success. Commands:
+dotnet run --project OverlapProbe.csproj -- fixed
+dotnet run --project OverlapProbe.csproj -p:DecoderSource=Mutation.cs -- mutant
+Both commands exited0 (the second expects the defect). Probe directory:
+scratch/urpg-mz-overlap-mutation/. No repository source was modified and the
+Godot project was not rebuilt by this isolated counterexample.
+The report's suggested channel assertion is redundant with full-buffer equality;
+its proposed i*4+i index is not a fixed channel index. Neither suggestion adopted.
+Uniform per-image rather than mixed per-row filters remain a coverage limit;
+all filter branches and multi-row reconstruction are covered. No colour-fix
+blocker remains after parent reconciliation, not an unqualified reviewer approval.
+Full report: scratch/urpg-mz-rgb-review.md. Publication pending. Paths:
+scratch/urpg_mz_rgb_publish_paths.json; remote main and empty index preflight pass.
+
+The earlier isolated probe and its source hash below describe the pre-fix source.
+Unbounded inflate, unchecked dimensions/allocation arithmetic and missing PNG
+CRC/structure checks are still separate unresolved MZ decoder issues. No full
+engine or GUI completion claim. Protected RM2K WIP and qa_patches remain untouched.
+
+## Previous verified slices
 ### K-PROD-RGSS-IMAGE-METADATA-PATH — VERIFIED
 
 Data-path fix committed/pushed as31ed5ca, remote main and commit manifest verified.
@@ -24,15 +77,25 @@ scratch/urpg-metadata-path-canonical.log. Build148 warnings/0 errors; existing
 native error lines and3 CanvasItem/6 ObjectDB warnings exactly match baseline.
 Final diff inspected: the metadata API and original header checks remain;
 only its unsafe file resolution is replaced, with real host-dispatch regressions.
-Ready to commit this separately verified fix. TOCTOU, hard links, linked-
+Committed/pushed asf8a8f65; remote main, manifest blobs and frozen hashes verified.
+TOCTOU, hard links, linked-
 installation refusal and broader incomplete runtime features remain.
 
-While the canonical runner owns the frozen project, deleg_62e0fc1e is producing
-an isolated RGB-expansion reproduction for the existing MzRgbaImage defect.
-It may write only scratch/urpg-mz-rgb-probe/, compile the original decoder via
-an explicit Compile Include in a plain console project, and must preserve its
-source hash. This is diagnostic work only, not an implemented MZ fix or another
-project build. Await its report/result.md; do not infer results from dispatch.
+The isolated MZ reproduction deleg_62e0fc1e completed. Parent inspected its
+project/program/report and reran the binary: RGB4x2/filter0 returns success but
+7 of8 pixels are wrong; the RGBA control is exact for all8 pixels and alpha.
+Source SHA remains1eae721c826c34fd8a8e555a30b5432b03060846d5328a8143986e589fb8fd73;
+git reports no MzRgbaImage source changes. Probe project compiles the original
+source via Compile Include, not a copied/repaired decoder or Godot SDK.
+Report: scratch/urpg-mz-rgb-probe/probe/result.md; executable:
+scratch/urpg-mz-rgb-probe/out/UrpgMzRgbProbe.dll. HARNESS_EXIT0 means successful
+defect reproduction, NOT a passing decoder. The fixture self-inflate agrees
+with intended rows. The additional expansion simulation is explanatory only;
+the actual TryParse output is the reproduction evidence.
+
+This pre-fix probe covers filter0 only, not all PNG formats or bounded
+decompression. The current MZ regression slice is recorded above; the probe
+binary remains historical defect evidence and is not relabelled as fixed output.
 
 ### K-PROD-RGSS-DATA-PATH — VERIFIED
 

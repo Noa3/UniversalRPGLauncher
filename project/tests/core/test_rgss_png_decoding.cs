@@ -165,7 +165,7 @@ public partial class TestRgssBitmapFiles
         return distances[0] == minimum ? a : distances[1] == minimum ? b : c;
     }
 
-    private static byte[] Png(int width, int height, int type, int depth, byte[] rows,
+    internal static byte[] Png(int width, int height, int type, int depth, byte[] rows,
         byte[]? palette = null, byte[]? transparency = null, byte interlace = 0, bool truncateZlib = false)
     {
         using var output = new MemoryStream();

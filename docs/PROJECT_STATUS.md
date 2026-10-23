@@ -5,6 +5,19 @@
 
 ## Latest runtime correctness work
 
+### MV/MZ RGB pixel expansion — regression verified
+
+The true-color decoder previously returned success with corrupted RGB pixels.
+It now expands backwards while capturing each pixel's source channels before
+writing RGBA. New tests compare40 combinations of geometry, PNG filter and
+RGB/RGBA format with known bytes and native Godot output, including the real
+character-sheet reader. RED1/2 became GREEN2/2; existing filePNG7/7, MZ image4/4
+and vehicle-image5/5 pass. Canonical working-tree validation passes3069 tests
+(393 suites/3049 cases +20 smoke), exit0, with702 frozen inputs unchanged.
+The existing148 build warnings and native diagnostics remain. This colour fix
+does not resolve unbounded inflation, unchecked size arithmetic or missing
+CRC/chunk validation, and does not establish complete MV/MZ compatibility.
+
 ### Legacy image metadata path — bounded fix verified
 
 The separate BildGroesse path escape was reproduced through its real host call
