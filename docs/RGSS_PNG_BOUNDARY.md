@@ -67,3 +67,9 @@ PNG-loader blocker; independent existing data-loader issues remain tracked.
 This bounded slice is verified, not a complete RGSS implementation. Launch gates and Rendering
 capability declarations remain unchanged. Blit/text/window/tilemap operations,
 input, audio, pacing and full XP/VX/VX Ace compatibility remain incomplete.
+
+The legacy BildGroesse metadata host entry is NOT covered by the constructor/
+cache resolver. Full review found its raw Path.Combine/File.OpenRead route still
+permits rooted/traversal access; source inspection confirmed this separate
+pre-existing issue. K-PROD-RGSS-IMAGE-METADATA-PATH tracks its closure. The
+successful PNG tests must not be read as confinement of every image-host entry.

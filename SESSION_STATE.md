@@ -1,4 +1,49 @@
 ## Current card
+### K-PROD-RGSS-DATA-PATH — VERIFIED
+
+PNG slice committed and pushed as958663c; exact remote main and all700 frozen
+inputs verified afterward. Only the two protected RM2K WIP files remained dirty
+before this new slice. They remain untouched.
+
+Reproduced unsafe data reads through actual RgssDatenHost.Lade with owned Marshal
+fixtures: Windows backslash traversal could read a sibling sharing the game's
+root prefix. NUL paths escaped as ArgumentException. RED1/3 is preserved in
+scratch/urpg-data-path-red.log. Normalize both separators, reject root/drive/NUL/
+oversized names, check a separator-terminated canonical root with OS-appropriate
+casing, and keep malformed path handling inside the existing refusal contract.
+This yielded3/3; legacy datahost2/2 and realXP2/2 also pass.
+
+Actual Windows directory-junction cases then reproduced a separate static-link
+escape and linked-root bypass (RED3/4, scratch/urpg-data-link-red.log). The host
+now rejects reparse points on the file and every ancestor, including its root.
+Final focused data paths4/4, datahost2/2, realXP2/2 and filePNG7/7 pass; additional
+trailing-dot/space traversal variants retain4/4. Linked game installations are
+deliberately refused rather than silently followed. This is not an OS sandbox:
+concurrent replacement, hard links and unbounded File.ReadAllBytes remain outside
+this path-only fix and must not be described as resolved.
+
+Fixture failure: Windows symlink creation was unavailable (1314); tests instead
+create bounded, trusted NTFS junctions to owned fixture directories using mklink.
+Initial recursive teardown failed on a junction; explicitly remove both owned
+links before deleting the fixture. The subsequent4/4 run includes clean teardown.
+Production never launches that fixture helper or any imported native executable.
+
+Read-only review deleg_83faf704 completed; the full report was read from
+scratch/urpg-data-path-review.md. No blocking defect in this path-only scope.
+Coverage caveats retained: tests prove actual refusal, not independent exercise
+of the separator-prefix defense; trailing dot/space cases do not establish
+explicit component normalization. Directory junctions are exercised, individual
+file symlinks are not (Windows privilege unavailable); hard links are not reparse
+points and remain outside this guard. No changes needed to the validated source.
+
+Canonical proc_4028e84916a0 PASSED3065 tests:392 suites/3045 cases +20 smoke,
+exit0; all701 inputs in scratch/urpg_data_path_inputs_v1.json unchanged.
+Log: scratch/urpg-data-path-canonical.log; structured receipt:
+scratch/urpg-data-path-validation-receipt.json. Build148 warnings/0 errors;
+existing native error lines and3 CanvasItem/6 ObjectDB leak warnings exactly
+match the prior run. Next: commit this verified fix, then reproduce/fix the
+separate BildGroesse metadata path. Whole-engine completion is not claimed.
+
 ### RGSS file-backed bitmap decoding — VERIFIED BOUNDED SLICE
 
 Implemented constructor and RPG::Cache file loading through managed
@@ -31,14 +76,26 @@ JSON fixtures and audio outside the scene tree); no new native diagnostic lines.
 These are remaining issues, not a clean-stderr claim. The receipt helper first
 required zero native ERRORs; after inspecting both logs it was corrected to
 require exact baseline equality and retain every line in its receipt.
-Final-delta review deleg_5f81423f completed. Its completed transcript records
-no new blocker in RgssPngImage/RgssBitmapFileLoader and identifies the existing
-data-path boundary as the severe adjacent issue. The normal completion message
-was not present; this conclusion was recovered from the completed manifest/log,
-whose detailed report is truncated. Do not claim all omitted remarks reviewed.
-Parent independently reviewed the changed loader, decoder, host, cache and tests;
-the existing data-path issue is tracked below and is the next implementation step.
-The bounded PNG slice is ready to commit; whole-engine readiness remains open.
+Final-delta review deleg_5f81423f is now available in full and reconciled.
+It finds no new blocker in RgssPngImage/RgssBitmapFileLoader. Correction to the
+earlier truncated-transcript interpretation: its adjacent severe finding is
+RgssGrafikHost.BildGroesse, NOT RgssDatenHost.Pfad (the latter came from the reuse
+audit). Parent source inspection confirms BildGroesse still combines a raw Ruby
+filename and opens it without the new loader's path checks. This allows rooted/
+traversal metadata reads and needs the dedicated next card below. The already
+running data-path canonical run must finish before touching frozen inputs.
+
+Other review limits reconciled: strict ancillary CRC/palette rejection is
+deliberately fail-closed; root-ancestor links, TOCTOU, temporary encoded memory,
+duplicate cache-path walks and missing-cache/direct-load behavior are bounded
+but not full compatibility. A read-length/EOF check is not proof against same-size
+replacement. Direct Load twice in the case-lookup test intentionally creates two
+owned bitmaps; it does not establish a cache leak. Cache keys remain case-sensitive.
+Font.new throwing after surface allocation can retain that bounded surface until
+runtime release, as with the prior numeric constructor; GC-owned release is not
+implemented. RGB+tRNS has alpha assertions but not a native full-RGB comparison.
+No unlimited-memory, complete sandbox or complete Bitmap API claim is warranted.
+The bounded PNG slice was committed/pushed as958663c; whole-engine readiness remains open.
 Reuse audit deleg_455b6b1a has been reconciled:
 it confirms unbounded inflate, missing CRC/structure/budget checks and the
 RM2K reader's unsuitable palette/alpha semantics. Do not adopt its claim that

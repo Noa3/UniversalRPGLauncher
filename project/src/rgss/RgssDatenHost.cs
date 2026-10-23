@@ -428,27 +428,40 @@ public sealed class RgssDatenHost : IRubyHost
     /// </remarks>
     private string? Pfad(string pName)
     {
-        if (pName.Length == 0 || Path.IsPathRooted(pName))
+        var relative = pName.Replace('\\', '/');
+        if (relative.Length == 0 || relative.Length > 4096 || Path.IsPathRooted(relative)
+            || relative.Contains(':') || relative.Contains('\0'))
         {
             return null;
         }
 
-        foreach (var teil in pName.Split('/'))
+        foreach (var component in relative.Split('/'))
         {
-            if (teil == "..")
+            if (component == "..")
             {
                 return null;
             }
         }
 
-        var voll = Path.GetFullPath(Path.Combine(_wurzel, pName));
-        var wurzel = Path.GetFullPath(_wurzel);
-        if (!voll.StartsWith(wurzel, StringComparison.Ordinal))
+        try
         {
+            var root = Path.GetFullPath(_wurzel);
+            if (!Path.EndsInDirectorySeparator(root)) root += Path.DirectorySeparatorChar;
+            var full = Path.GetFullPath(Path.Combine(root, relative));
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            // Include the separator: a sibling named root-extra is not inside root.
+            if (!full.StartsWith(root, comparison)) return null;
+            if (!File.Exists(full) || (File.GetAttributes(full) & FileAttributes.ReparsePoint) != 0) return null;
+            // Also check the configured root and its ancestors, not just the final file.
+            for (DirectoryInfo? directory = new FileInfo(full).Directory; directory != null; directory = directory.Parent)
+                if ((directory.Attributes & FileAttributes.ReparsePoint) != 0) return null;
+            return full;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Preserve the load_data refusal/counting contract for invalid paths.
             return null;
         }
-
-        return File.Exists(voll) ? voll : null;
     }
 
     /// <summary>

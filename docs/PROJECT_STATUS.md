@@ -5,6 +5,20 @@
 
 ## Latest runtime correctness work
 
+### RGSS data-path confinement — bounded fix verified
+
+Real fixture reads reproduced Windows backslash traversal into a sibling whose
+name shared the game-root prefix. A separate junction fixture reproduced link
+redirection, including a linked configured root. The data host now normalizes
+separators, checks an exact root boundary, handles malformed paths as refusals
+and rejects static reparse points along the path. The new suite passes4/4;
+legacy datahost2/2 and realXP2/2 remain passing. Canonical3065 tests/392 suites
+plus smoke pass, exit0; all701 frozen inputs unchanged. Full review accepts the
+bounded fix. Build/native diagnostics remain unchanged; file-symlink and
+independent prefix-guard test coverage remain limited.
+Linked installations are deliberately refused; concurrent filesystem
+replacement, hard links and data-file allocation bounds remain limitations.
+
 ### RGSS file-backed PNG pixels — verified bounded slice
 
 Filename Bitmap construction and the shared cache now decode actual PNG pixels,
@@ -17,7 +31,9 @@ sprite and its subsequent pixel mutation through the production launcher scene.
 The full validator passes3061 tests (391 suites/3041 cases +20 smoke), exit0,
 with all700 frozen inputs unchanged. Build148 warnings and the existing native
 diagnostics remain; no new native diagnostic lines. The completed review records
-no new PNG-loader blocker; the older data-loader path boundary remains open.
+no new PNG-loader blocker; its full report also identifies a separate unsafe
+legacy BildGroesse metadata path, now tracked for correction. The current data-
+loader path fix does not close that distinct image-host entry.
 No engine completion or capability upgrade is claimed. Supported
 formats, filesystem limitations and remaining work: docs/RGSS_PNG_BOUNDARY.md.
 

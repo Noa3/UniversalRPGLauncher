@@ -817,6 +817,38 @@ regression (static review only). The1-second
 watchdog remains an explicit compatibility bound, not a pacing implementation.
 No pixel composition, input, audio, pacing or full-engine completion claim.
 
+### K-PROD-RGSS-DATA-PATH — DONE (bounded static-path fix)
+
+Close the reproduced Windows sibling-prefix traversal in RgssDatenHost.Lade,
+reject static directory/file reparse redirection including a linked game root,
+and preserve valid XP/VX/VX Ace data loading plus refusal/read counters.
+Acceptance: real owned Marshal fixtures prove escaped data is never read;
+malformed paths do not leak CLR path exceptions; normal data files still load;
+focused tests and canonical validation pass without unrelated source changes.
+
+Implemented locally: separator normalization, exact root boundary, malformed
+path refusal and ancestor reparse checks. RED1/3 then GREEN3/3; actual junction
+RED3/4 then GREEN4/4. Legacy datahost2/2, realXP2/2 and PNG files7/7 pass.
+Full validator3065 tests (392 suites/3045 cases +20 smoke), exit0, all701 frozen
+inputs unchanged. Full read-only review accepts the path scope; file-symlink
+coverage and independent prefix-guard coverage remain limitations. Build/native
+diagnostics match baseline. This does not claim race-free OS isolation or solve
+hard links/unbounded data-file allocation.
+
+### K-PROD-RGSS-IMAGE-METADATA-PATH — READY
+
+Full review deleg_5f81423f identifies a separate pre-existing escape in
+RgssGrafikHost.BildGroesse: raw names enter Path.Combine and File.OpenRead,
+bypassing the newly bounded bitmap file resolver. Parent confirmed the source.
+After checkpointing the current data-path fix, reproduce rooted/traversal and
+linked metadata access with owned PNG fixtures through the real host call.
+Route metadata reads through the confined image resolver while preserving valid
+size queries and named refusal diagnostics; do not remove the API merely to
+hide the path. Require focused regression tests and canonical validation.
+
+This is distinct from RgssDatenHost.Pfad and is NOT fixed by that card. The
+verified PNG decoder/constructor does not close every legacy image-host entry.
+
 ### K-PROD-RGSS-RENDERING — IN PROGRESS (bounded sprite view; gameplay incomplete)
 
 Verified bounded slice: real file-backed Bitmap/cache pixels implemented through a
@@ -831,9 +863,9 @@ The rendering card remains incomplete. See docs/RGSS_PNG_BOUNDARY.md for exact
 supported PNG formats, path/budget boundaries and unsupported functionality.
 
 Production-readiness follow-ups from decoder reuse audit (not fixed here):
-RgssDatenHost.Pfad uses slash-only traversal rejection plus a separator-free
-root prefix check; reproduce Windows sibling-prefix escape and harden the data
-path before claiming RGSS confinement. MzRgbaImage has unbounded inflate and
+The RgssDatenHost traversal/static-link fix is verified under
+K-PROD-RGSS-DATA-PATH above; the separate image-metadata path remains open.
+MzRgbaImage has unbounded inflate and
 forward in-place RGB expansion; existing RM2K PNG reading also needs bounded
 inflate. Regress each real caller separately without importing RM2K's palette0
 transparency semantics into RGSS. These remain open despite this PNG slice's
