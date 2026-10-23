@@ -1,4 +1,100 @@
 ## Current card
+### RGSS file-backed bitmap decoding — VERIFIED BOUNDED SLICE
+
+Implemented constructor and RPG::Cache file loading through managed
+RgssBitmapFileLoader/RgssPngImage. RGB/RGBA8 and indexed1/2/4/8 non-interlaced PNG,
+all5 filters and straight alpha/tRNS are supported with structure/CRC/checksum,
+row-length and palette validation. File32MiB/chunk4096 bounds plus existing
+dimension/surface/store limits; row-wise inflate, rollback on decode rejection,
+cancellation and bounded relative-path lookup with static link rejection.
+No Godot APIs in the worker, no new package. Exact limitations are documented
+in docs/RGSS_PNG_BOUNDARY.md, including non-sandbox filesystem races/IO and
+unsupported grayscale/16-bit/interlace, JPEG/BMP, RTP and archive image loading.
+
+Current focused results: TestRgssBitmapFiles7/7, bitmap10/10, metadata1/1,
+font1/1, sprite16/16 and real XP2/2. File tests compare pixels against native
+Godot PNG decoding, not merely decoder self-consistency. All3 generation
+bootstraps publish file-backed cached sprite pixels through normal Update.
+The existing cache test now uses actual PNGs, retaining every ownership assertion.
+Native OpenGL witness also passes: file-backed cached PNG -> red viewport,
+bitmap mutation -> green viewport, stop -> hidden view, exit0/no diagnostics.
+Log: scratch/urpg-file-render-witness.log; captures in urpg-file-render-witness/.
+The red native capture was visually inspected; this is synthetic artwork, not
+proof of a complete imported game or player-facing Experimental launch.
+
+Canonical proc_e9e3f0229d9d has PASSED:3061 tests,391 suite receipts/3041 cases
+plus20 smoke checks, exit0. All700 inputs in scratch/urpg_png_inputs_v1.json
+remain unchanged; receipt scratch/urpg-png-validation-receipt.json. Build148
+warnings/0 errors. Existing3 CanvasItem RIDs/6 ObjectDB warnings and7 native
+ERROR lines exactly match the preceding canonical log (editor settings, invalid
+JSON fixtures and audio outside the scene tree); no new native diagnostic lines.
+These are remaining issues, not a clean-stderr claim. The receipt helper first
+required zero native ERRORs; after inspecting both logs it was corrected to
+require exact baseline equality and retain every line in its receipt.
+Final-delta review deleg_5f81423f completed. Its completed transcript records
+no new blocker in RgssPngImage/RgssBitmapFileLoader and identifies the existing
+data-path boundary as the severe adjacent issue. The normal completion message
+was not present; this conclusion was recovered from the completed manifest/log,
+whose detailed report is truncated. Do not claim all omitted remarks reviewed.
+Parent independently reviewed the changed loader, decoder, host, cache and tests;
+the existing data-path issue is tracked below and is the next implementation step.
+The bounded PNG slice is ready to commit; whole-engine readiness remains open.
+Reuse audit deleg_455b6b1a has been reconciled:
+it confirms unbounded inflate, missing CRC/structure/budget checks and the
+RM2K reader's unsuitable palette/alpha semantics. Do not adopt its claim that
+the MzRgbaImage pixel kernel is wholly correct: parent reread of lines211-218
+shows forward RGB-to-RGBA expansion overwriting unread RGB in the same array.
+The current separate bounded RGSS decoder remains the decision; changing the
+MZ/RM2K readers during this validated slice would broaden scope and require
+their own regression evidence.
+
+The audit also identified an independent existing RgssDatenHost.Pfad boundary
+issue, confirmed by source inspection at429-451: only slash-separated '..'
+is rejected and the final StartsWith(root) check lacks a separator boundary.
+Windows backslash traversal to a sibling sharing the root prefix therefore
+needs a direct fixture reproduction and containment fix. This is NOT fixed by
+the new image loader. Track it and existing PNG reader hardening in KANBAN;
+do not mistake this reuse audit for the pending final-delta safety review.
+
+Failure log for this slice: filename constructor RED0/1 became1/1; file-backed
+cache composition RED1/2 (zero RGB instead of17/23/29 in all3 engines) became2/2.
+Expanded guards were5/7: InvalidDataException was not matched by IOException,
+so corruption/path errors escaped the Ruby error boundary; explicit handling
+fixed both and yielded7/7. BuildCS0117 on a nonexistent RubyValue.OfString was
+corrected to the inspected OfBytes(UTF8) API. No assertions were weakened.
+These RED results were observed in tool output; focused logs are overwritten
+by subsequent runs. Build logs retain their distinct named filenames.
+
+Historical start of this slice (superseded by the implementation above):
+
+Continuing K-PROD-RGSS-RENDERING from verified commit2e7b0a2. Added
+TestRgssBitmapFiles with a real Godot-encoded PNG fixture and assertions for
+dimensions, RGB, partial alpha, allocation accounting and disposal through all
+three production bootstraps. Build passes; focused run is expected RED0/1:
+RubyRuntimeException: ArgumentError: Bitmap dimensions and coordinates must be
+bounded integers; image loading is not implemented. The current implementation
+refuses the filename before decoding. No production implementation changed yet.
+Log: scratch/TestRgssBitmapFiles-focused.log; build log:
+scratch/urpg-file-bitmap-red-build-2.log. Initial fixture build failedCS0104
+because Environment was ambiguous; qualifying System.Environment fixed it.
+
+Read-only decoder reuse audit deleg_455b6b1a is in flight. Do not poll its
+transcript; it performs no edits/builds and the parent owns validation.
+Existing managed MzRgbaImage and Rm2kIndexedImage need format/alpha, allocation,
+inflate and validation checks before reuse. VirtualFileSystem inherits Godot
+RefCounted and uses native FileAccess, so it is not the worker's pure-managed
+asset resolver. Codegraph found no indexed symbols; file search returned invalid
+directory-only candidates, so bounded Python filename enumeration found the
+actual decoder files. No dependencies added.
+
+Acceptance: bounded game-relative PNG loading (including alpha), named failure
+for corrupt/unsupported data and unsafe paths, no resource leak on rejection,
+cache/constructor integration and a published sprite frame sourced from a file.
+Keep original numeric behavior and engine launch gates unchanged. Re-run focused
+pixel/metadata/sprite/real-XP tests, then canonical validation after integration.
+The new tests/implementation are uncommitted; the old3054 pass applies only to2e7b0a2's
+source state. Preserve both unrelated RM2K battle WIP files and qa_patches.
+
 ### RGSS Godot frame consumer — VERIFIED BOUNDED SLICE
 
 The production Main._Process now routes IRgssFrameSource snapshots to the full
@@ -40,14 +136,30 @@ this is not a clean native-runtime audit. The separate OpenGL witness is clean.
 RM2K WIP hashes unchanged and excluded from publication. The canonical receipt
 describes the working tree, including those unrelated preserved WIP files.
 
-Read-only UI review deleg_4fd56747 completed; its recovered transcript reports
-no blocking defects and identifies null-frame test coverage as optional hardening.
-The full summary has not been delivered here; do not invent its omitted findings.
+Read-only UI review deleg_4fd56747 is now fully received and reconciled against
+the unchanged source. No blocking defect was reported. Its free-running-worker
+premise (items2/3 and the slower-producer scenario in5) does not describe this
+route: Advance returns at AtFrame, OnFrame parks until the next permit, and
+Main calls Update before reading the frame. Pause returns before Update. There
+is therefore no demonstrated frame/counter race in the current single-owner UI
+path. An atomic snapshot pair would matter for a future asynchronous producer.
+
+Valid follow-ups: Reset retains a buffer of the former size while restoring
+default view dimensions, currently safe because map dimensions are zero and
+GetMapTexture returns null; null-frame handling lacks direct coverage; the size
+test resets each iteration and does not cover signature-cache reuse. Frame
+immutability is enforced by producer ownership, not a defensive constructor
+copy. Texture replacement/copy pressure merits a separate ownership/performance
+change with native lifetime tests, not blind Dispose insertion based solely on
+idempotence. None of these optional suggestions changed the validated code.
 Parent reviewed the complete production UI diff and native witness. The older
 fixture review's stub/unrun claims are superseded by the actual helper, unique-last
 Main guards, real-runtime progress assertions and both canonical passes.
 
-Next: checkpoint the verified slice, then implement bounded file-backed bitmap
+The verified slice is committed and remote-confirmed as2e7b0a2. The first push
+timed out without changing remote main; an invocation-local authenticated gh
+credential helper succeeded, without changing persistent Git configuration.
+Next: implement bounded file-backed bitmap
 decoding/blit operations with tests. RGSS still lacks imported image pixels,
 windows/tilemaps, input, audio and responsive frame pacing. Experimental launch
 gates remain closed; do not label the engine complete or promote capabilities.

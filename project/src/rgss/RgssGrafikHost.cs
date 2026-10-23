@@ -199,8 +199,8 @@ public sealed class RgssGrafikHost : IRubyHost
         var operation = arguments[0].Name;
         var count = operation switch
         {
-            "create" => 3,
-            "clear" or "dispose" or "copy" => 2,
+            "create" or "cache_path" => 3,
+            "clear" or "dispose" or "copy" or "load" => 2,
             "get_pixel" => 4,
             "set_pixel" => 8,
             "fill_rect" => 10,
@@ -208,6 +208,48 @@ public sealed class RgssGrafikHost : IRubyHost
         };
         if (arguments.Count != count)
             throw new RubyRuntimeException("ArgumentError", "Wrong argument count for bitmap " + operation);
+        if (operation == "cache_path")
+        {
+            if (arguments[1].Kind != RubyValueKind.Symbol || arguments[2].Kind != RubyValueKind.String)
+                throw new RubyRuntimeException("TypeError", "Image cache requires a category Symbol and filename String.");
+            var name = System.Text.Encoding.UTF8.GetString(arguments[2].Bytes);
+            if (Wurzel == null || !Ordner.TryGetValue(arguments[1].Name ?? "", out var folder))
+            {
+                RecordMissingImage((arguments[1].Name ?? "") + "/" + name);
+                return RubyValue.Nil;
+            }
+            var filename = "Graphics/" + folder + "/" + name;
+            try
+            {
+                RgssBitmapFileLoader.Resolve(Wurzel, filename, ExecutionCancellation);
+                return RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(filename));
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                RecordMissingImage(filename + " (" + error.Message + ")");
+                return RubyValue.Nil;
+            }
+        }
+        if (operation == "load")
+        {
+            if (arguments[1].Kind != RubyValueKind.String)
+                throw new RubyRuntimeException("TypeError", "Bitmap filename must be a String.");
+            var filename = System.Text.Encoding.UTF8.GetString(arguments[1].Bytes);
+            try
+            {
+                var loaded = RgssBitmapFileLoader.Load(Bitmaps, Wurzel, filename, ExecutionCancellation);
+                return RubyValue.OfArray(new List<RubyValue>
+                {
+                    RubyValue.OfInteger(loaded.Id), RubyValue.OfInteger(loaded.Width), RubyValue.OfInteger(loaded.Height),
+                });
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                RecordMissingImage(filename + " (" + error.Message + ")");
+                throw new RubyRuntimeException(error is FileNotFoundException ? "Errno::ENOENT" : "RGSSError",
+                    "Image '" + filename + "': " + error.Message);
+            }
+        }
         if (operation == "create")
             return RubyValue.OfInteger(Bitmaps.Create(BitmapInteger(arguments[1]), BitmapInteger(arguments[2])));
         if (arguments[1].Kind != RubyValueKind.Integer)
@@ -237,7 +279,7 @@ public sealed class RgssGrafikHost : IRubyHost
     private static int BitmapInteger(RubyValue value)
     {
         if (value.Kind != RubyValueKind.Integer || value.Integer < int.MinValue || value.Integer > int.MaxValue)
-            throw new RubyRuntimeException("ArgumentError", "Bitmap dimensions and coordinates must be bounded integers; image loading is not implemented.");
+            throw new RubyRuntimeException("ArgumentError", "Bitmap dimensions must be bounded integers.");
         return (int)value.Integer;
     }
 

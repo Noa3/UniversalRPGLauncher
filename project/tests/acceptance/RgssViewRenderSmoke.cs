@@ -27,13 +27,24 @@ public partial class RgssViewRenderSmoke : Node
                 if (argument.StartsWith("--output=", StringComparison.Ordinal)) output = argument[9..];
             if (output.Length == 0) throw new InvalidOperationException("Pass --output=<isolated capture directory>.");
             Directory.CreateDirectory(output);
+            var pictures = Path.Combine(output, "Graphics", "Pictures");
+            Directory.CreateDirectory(pictures);
+            var seedPixels = new byte[8 * 6 * 4];
+            for (var i = 0; i < seedPixels.Length; i += 4)
+            {
+                seedPixels[i] = 255;
+                seedPixels[i + 3] = 255;
+            }
+            using (var seed = Image.CreateFromData(8, 6, false, Image.Format.Rgba8, seedPixels))
+                if (seed.SavePng(Path.Combine(pictures, "witness.png")) != Error.Ok)
+                    throw new IOException("Could not write the file-backed sprite fixture.");
             using var scene = GD.Load<PackedScene>("res://scenes/main.tscn");
             main = scene.Instantiate<Main>();
             Field<GameLibrary>(main, "_library").Dispose();
             SetField(main, "_library", new GameLibrary(pSettingsPath: Path.Combine(output, "library.cfg")));
             AddChild(main);
             main.SetProcess(false);
-            var graphics = new RgssGrafikHost();
+            var graphics = new RgssGrafikHost { Wurzel = output };
             var ruby = new RubyInterpreter(graphics);
             using var runtime = new XpEngineRuntime("render-smoke", new PluginGameInfo());
             SetField(runtime, "_grafik", graphics);
@@ -45,10 +56,9 @@ public partial class RgssViewRenderSmoke : Node
                 class RenderWitness
                   def main
                     Graphics.resize_screen(8, 6)
-                    bitmap = Bitmap.new(8, 6)
+                    bitmap = RPG::Cache.picture("witness")
                     sprite = Sprite.new
                     sprite.bitmap = bitmap
-                    bitmap.fill_rect(0, 0, 8, 6, Color.new(255, 0, 0, 255))
                     Graphics.update
                     bitmap.fill_rect(0, 0, 8, 6, Color.new(0, 255, 0, 255))
                     loop do
@@ -74,7 +84,7 @@ public partial class RgssViewRenderSmoke : Node
             main._Process(0);
             if (Field<Rm2kGameScreen>(main, "_gameScreen").Visible)
                 throw new InvalidOperationException("Stopped view remained visible.");
-            GD.Print("RGSS_RENDER_WITNESS_PASS: two native viewport captures, red then green; stop cleared the view.");
+            GD.Print("RGSS_RENDER_WITNESS_PASS: file-backed cached PNG rendered red, then pixel writes rendered green; stop cleared the view.");
             exitCode = 0;
         }
         catch (Exception error)

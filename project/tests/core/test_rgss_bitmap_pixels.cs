@@ -11,20 +11,18 @@ public partial class TestRgssBitmapPixels : TestBase
 {
     public void Test_ImageCacheReusesPixelsAndReleasesThemOnClear()
     {
+        using var fixture = new RgssImageFixture();
         foreach (var type in new[] { typeof(XpEngineRuntime), typeof(VxEngineRuntime), typeof(VxAceEngineRuntime) })
         {
-            var graphics = new RgssGrafikHost();
+            var graphics = new RgssGrafikHost { Wurzel = fixture.Root };
             var interpreter = new RubyInterpreter(graphics);
             using var runtime = (IEngineRuntime)Activator.CreateInstance(type, "test", new PluginGameInfo())!;
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
             type.GetField("_interpreter", flags)!.SetValue(runtime, interpreter);
             type.GetField("_grafik", flags)!.SetValue(runtime, graphics);
             type.GetMethod("DefineBuiltinClasses", flags)!.Invoke(runtime, null);
-            // Synthetic metadata isolates cache ownership from unfinished file decoding.
+            // Real PNG files exercise cache ownership through the production loader.
             interpreter.RunProgram(new RubyParser(new RubyLexer("""
-                module RPG::Cache
-                  def self.BildGroesse(art, name); [2, 2]; end
-                end
                 $first = RPG::Cache.picture("shared")
                 $first.set_pixel(0, 0, Color.new(17, 23, 29, 255))
                 200.times do

@@ -5,6 +5,22 @@
 
 ## Latest runtime correctness work
 
+### RGSS file-backed PNG pixels — verified bounded slice
+
+Filename Bitmap construction and the shared cache now decode actual PNG pixels,
+rather than allocating blank surfaces from dimensions. The managed worker path
+supports bounded non-interlaced RGB/RGBA8 and indexed1/2/4/8 data, filters and
+alpha/tRNS, with malformed-input, resource and path checks. Focused file7/7,
+bitmap10/10 and real XP2/2 pass. A native OpenGL run shows the cached file-backed
+sprite and its subsequent pixel mutation through the production launcher scene.
+
+The full validator passes3061 tests (391 suites/3041 cases +20 smoke), exit0,
+with all700 frozen inputs unchanged. Build148 warnings and the existing native
+diagnostics remain; no new native diagnostic lines. The completed review records
+no new PNG-loader blocker; the older data-loader path boundary remains open.
+No engine completion or capability upgrade is claimed. Supported
+formats, filesystem limitations and remaining work: docs/RGSS_PNG_BOUNDARY.md.
+
 ### RGSS Godot view — bounded consumer verified
 
 The production game view now consumes RGSS snapshots on the main thread and uses

@@ -8,6 +8,13 @@ XP, VX and VX Ace must execute the game's own scene setup and loop, present the 
 
 ## Progress
 
+- [x] Bounded file-backed PNG slice: constructor/cache integration implemented; file7/7,
+  bitmap10/10, real XP2/2 and native file-backed viewport capture pass. Full
+  validation3061 tests/391 suites plus smoke, exit0;700 frozen inputs unchanged.
+  Existing build/native diagnostics unchanged; completed review records no new
+  PNG-loader blocker. Existing data-loader confinement is the next security fix.
+  See docs/RGSS_PNG_BOUNDARY.md. Blits, text, windows/tilemaps and input remain open.
+
 - [x] Inspected production runtime bootstrap, Ruby block dispatch and RgssGrafikHost. Existing host has a frame callback and budget but the Ruby Graphics.update implementation bypasses it.
 - [x] Local regression coverage for loop forwarding, break values, nested break/next, empty-loop execution budget, script overrides and ordinary method bodies passes (5/5). Bitmap font ownership passes across all three bootstraps (1/1) and detects mutation back to nil. Final canonical verification passed: 3003 tests, 381 suite records, exit 0. Build148 warnings and known shutdown leaks remain.
 - [x] Route Graphics.update and wait through the host. Frame-bridge regressions pass 3/3, including all three bootstraps, terminal measured lifecycle and timing reset. The real XP scene reaches 5 host boundaries with 0 script problems; stopped updates are rejected rather than restarting it.

@@ -3,6 +3,10 @@
 This is a bounded step under `K-PROD-RGSS-RENDERING`, not a complete Bitmap API
 or a rendered game. Detection and parsing still execute no game scripts.
 
+This document records the numeric-storage slice and its historical validation.
+Later sprite/frame work is described in RGSS_SPRITE_BOUNDARY.md; filename/cache
+PNG decoding now has a real pixel implementation described in RGSS_PNG_BOUNDARY.md.
+
 ## Implemented path
 
 The three production bootstraps install `RgssBitmapRubySource` after their
@@ -38,8 +42,9 @@ Limits are implementation policy, not claims about original RGSS limits:
   Reject non-finite channels and coordinates outside the supported integer range.
   Finite float pixel coordinates and rectangle extents truncate toward zero;
   constructor dimensions currently still require integers.
-- Pixel access after disposal fails with a named RGSSError. Unsupported file
-  construction is refused rather than pretending to load image pixels.
+- Pixel access after disposal fails with a named RGSSError. Filename construction
+  uses the separately bounded PNG path; unsupported formats are refused instead
+  of pretending to load image pixels.
 
 ## Evidence sources and limits
 
@@ -93,7 +98,8 @@ behavior. This slice adds initialize_copy, not full initialize_dup/initialize_cl
 dispatch or complete Ruby object-copy semantics. It does not claim that source
 script names appear in every runtime exception.
 
-File decoding, RTP image resolution, blt/stretch_blt, text/font drawing, sprite
-composition, tilemaps, Godot frame publication and input remain separate gates.
+File decoding, sprite composition and Godot frame publication are covered by
+the later bounded slices linked above. RTP image resolution, blt/stretch_blt,
+text/font drawing, tilemaps and input remain separate unfinished gates.
 Some older bootstrap methods outside this slice are still stubs; their existence
 is not a support claim. No Rendering capability is enabled by offscreen storage.

@@ -3,7 +3,7 @@ namespace UniversalRPG.Plugins;
 /// <summary>Install after value-class bootstraps, before any game scripts.</summary>
 internal static class RgssBitmapRubySource
 {
-    // Shared by the three existing cache adapters; file decoding is still separate.
+    // Shared by the three existing cache adapters; cached images own decoded pixels.
     internal const string CacheSource = """
         module RPG::Cache
           def self.Bild(kind, name)
@@ -17,9 +17,9 @@ internal static class RgssBitmapRubySource
             if bitmap != nil
               return bitmap if !bitmap.disposed?
             end
-            size = BildGroesse(kind, name)
-            return nil if size == nil
-            bitmap = Bitmap.new(size[0], size[1])
+            path = rgss_bitmap(:cache_path, kind, name)
+            return nil if path == nil
+            bitmap = Bitmap.new(path)
             bucket[name] = bitmap
             bitmap
           end
@@ -55,9 +55,16 @@ internal static class RgssBitmapRubySource
     internal const string Source = """
         class Bitmap
           def initialize(width, height = nil)
-            @pixel_surface = rgss_bitmap(:create, width, height)
-            @width = width
-            @height = height
+            if height == nil
+              loaded = rgss_bitmap(:load, width)
+              @pixel_surface = loaded[0]
+              @width = loaded[1]
+              @height = loaded[2]
+            else
+              @pixel_surface = rgss_bitmap(:create, width, height)
+              @width = width
+              @height = height
+            end
             @font = Font.new
             @disposed = false
           end

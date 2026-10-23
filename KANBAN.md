@@ -819,6 +819,26 @@ No pixel composition, input, audio, pacing or full-engine completion claim.
 
 ### K-PROD-RGSS-RENDERING — IN PROGRESS (bounded sprite view; gameplay incomplete)
 
+Verified bounded slice: real file-backed Bitmap/cache pixels implemented through a
+bounded managed PNG reader. File/decoder7/7, bitmap10/10, metadata1/1, font1/1,
+sprite16/16 and real XP2/2 pass. Native OpenGL file-backed cache-to-view witness
+passes red/green/stop, exit0 without native diagnostics. Canonical run
+proc_e9e3f0229d9d passes3061 tests (391 suites/3041 cases +20 smoke), exit0;
+all700 frozen inputs unchanged. Build148 warnings and known native diagnostics
+remain unchanged from baseline. Completed review records no new PNG-loader
+blocker; the separately identified data-path issue below remains open.
+The rendering card remains incomplete. See docs/RGSS_PNG_BOUNDARY.md for exact
+supported PNG formats, path/budget boundaries and unsupported functionality.
+
+Production-readiness follow-ups from decoder reuse audit (not fixed here):
+RgssDatenHost.Pfad uses slash-only traversal rejection plus a separator-free
+root prefix check; reproduce Windows sibling-prefix escape and harden the data
+path before claiming RGSS confinement. MzRgbaImage has unbounded inflate and
+forward in-place RGB expansion; existing RM2K PNG reading also needs bounded
+inflate. Regress each real caller separately without importing RM2K's palette0
+transparency semantics into RGSS. These remain open despite this PNG slice's
+successful canonical run.
+
 Verified bounded consumer slice: Main._Process displays RGSS
 snapshots with authoritative frame numbers and clears foreign-engine overlays.
 Exact-size upload fixes smaller frames; Reset clears stale frame/menu state.
@@ -842,8 +862,8 @@ partial hosts executing Main; library-only test preparation now parses all90
 sources and executes89 libraries, while real-runtime tests prove Main remains
 live across10 updates. All34 affected cases pass. Build148 warnings and known
 native diagnostics/leaks remain unchanged from the bitmap baseline.
-Actual Godot presentation remains pending; a separate native probe confirms the
-view's grow-only pixel storage must be sized exactly before image construction.
+At that earlier core checkpoint, Godot presentation was pending; the subsequent
+verified consumer slice above fixes exact-size upload and proves a native view.
 No capability upgrade. This rendering card is still IN PROGRESS.
 Evidence and failure signatures: SESSION_STATE.md and docs/RGSS_SPRITE_BOUNDARY.md.
 
