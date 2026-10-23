@@ -89,10 +89,9 @@ public partial class TestRgssSkriptHost : TestBase
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And this is the measurement, and it is deliberately not
-    /// an assertion with a target.</strong> A test that says "95 %"
-    /// would be a number I invented, -- <strong>and this one prints
-    /// what came out and fails only if nothing at all parses.</strong>
+    /// Every source must parse. Library scripts execute on this partial host;
+    /// the known Main entry executes only in the full-runtime integration test.
+    /// Parsing, library execution and deferred entry are counted separately.
     /// </para>
     /// </remarks>
     public void Test_DerInterpreterLiestDasRubyDesSpiels()
@@ -103,7 +102,9 @@ public partial class TestRgssSkriptHost : TestBase
 
         var interpreter = new RubyInterpreter(host!);
         var namen = new List<string>(host!.Namen);
-        var geparst = 0;
+        var parsed = 0;
+        var executed = 0;
+        var deferred = 0;
         var fehlgeschlagen = new List<string>();
         foreach (var name in namen)
         {
@@ -118,8 +119,9 @@ public partial class TestRgssSkriptHost : TestBase
                 var text = System.Text.Encoding.UTF8.GetString(bytes);
                 var knoten = new RubyParser(
                     new RubyLexer(text).Tokenize()).ParseProgram();
-                interpreter.RunProgram(knoten);
-                geparst++;
+                parsed++;
+                if (MicroQuestScriptFixture.RunLibraryScript(interpreter, name, knoten)) executed++;
+                else deferred++;
             }
             catch (RubyParseException ausnahme)
             {
@@ -128,21 +130,18 @@ public partial class TestRgssSkriptHost : TestBase
         }
 
         System.Console.WriteLine(
-            "XP: " + namen.Count + " Skripte, " + geparst
-                + " geparst und ausgefuehrt, " + fehlgeschlagen.Count
-                + " nicht");
+            $"XP fixture: {namen.Count} sources, {parsed} parsed, {executed} library scripts executed, "
+                + $"{deferred} entry deferred, {fehlgeschlagen.Count} parse failures");
         foreach (var grund in FehlgeschlagenKurz(fehlgeschlagen))
         {
             System.Console.WriteLine("    " + grund);
         }
 
-        AssertTrue(geparst > 0,
-            "**and at least one script of a real game parses and runs**"
-                + " -- and " + geparst + " do");
-        AssertTrue(geparst + fehlgeschlagen.Count == namen.Count,
-            "**and every script is either parsed or named as a failure**"
-                + " -- and " + geparst + " and "
-                + fehlgeschlagen.Count + " of " + namen.Count);
+        AssertTrue(executed > 0, "Real game library scripts must execute.");
+        AssertEq(parsed, namen.Count, "Every source, including Main, must parse.");
+        AssertEq(fehlgeschlagen.Count, 0, string.Join("; ", fehlgeschlagen));
+        AssertEq(deferred, 1, "Only the known fixture entry is deferred to the real-runtime test.");
+        AssertEq(executed + deferred, namen.Count, "Every source must be accounted for.");
     }
 
     /// <summary>
@@ -174,7 +173,7 @@ public partial class TestRgssSkriptHost : TestBase
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize())
                     .ParseProgram();
-                interpreter.RunProgram(knoten);
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, knoten);
             }
             catch (RubyParseException)
             {

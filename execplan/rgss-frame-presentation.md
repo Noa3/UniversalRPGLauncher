@@ -14,7 +14,20 @@ XP, VX and VX Ace must execute the game's own scene setup and loop, present the 
 - [x] Preserve the running scene across frame handoffs; prevent duplicate updates, repeated setup, premature self comparison exits, and interpreter-state corruption on cancellation. Implemented locally with an owned worker rendezvous: focused13/13 and real XP ordinary Update10 frames/0 script problems. Review-driven lifecycle, measured-budget and diagnostic-retention corrections were reproduced RED then fixed GREEN. Corrected canonical run passed3017 tests,382 suite records,exit0 with final validator marker. Independent follow-up review found no new actionable regression; this is static review, not execution evidence.
 - [x] Numeric bitmap milestone: pixel10/10, copy-hook2/2, metadata1/1 and interpreter271/271 pass. Review-driven cache/copy/coordinate/unwind/header fixes are covered. Final canonical proc_39f12be94ee5 passed3030 tests with385 suite records plus20 smoke checks,exit0, matching frozen code hashes and final validator marker. See docs/RGSS_BITMAP_BOUNDARY.md.
 - [ ] Complete image loading, sprite composition and actual captured presentation. The bounded numeric milestone does not complete these gates. Next-slice source contract: docs/RGSS_SPRITE_REFERENCE.md.
+- [x] Local bounded sprite composition and immutable publication: generation ordering,
+  alpha/opacity, source rectangles, lifecycle and resource/work limits exercised
+  through all3 runtime bootstraps. Focused sprite/startup suite16/16. Corrected
+  canonical validation passed3051 tests,388 suite receipts/3031 cases plus20 smoke
+  checks,exit0, all692 frozen inputs unchanged. Build148 warnings and known native
+  stderr/leaks remain. Native-screen verification is still required; this does
+  not close the item above.
 - [ ] Wire a frame consumer and input into the Godot game view, then verify rendered runtime behavior.
+  Consumer now wired and locally tested: native screen2/2, real Main route1/1
+  across3 generations, launcher safety26/26. Standalone OpenGL witness captures
+  synthetic XP red/green frames through the production scene, exit0. Canonical
+  UI rerun passed3054 tests (390 suites/3034 plus20 smoke), exit0,696 frozen inputs
+  unchanged. Known native teardown leaks remain. Input, player-facing launch and
+  complete rendering remain open.
 
 ## Surprises & Discoveries
 
@@ -31,6 +44,18 @@ The runtime also invokes per-frame global updates and scene.update directly in R
 Next composition integration, inspected after the bitmap slice: Sprite currently stores bitmap/x/y/z/origin/opacity/visible/source rectangle only in Ruby fields; no host sprite registry exists. Its dispose remains a no-op and assigning a bitmap does not reset the initially empty src_rect. The Godot game view consumes RM2K and MZ surfaces, not RGSS. Consequently a composition slice must register/unregister actual Sprite instances, implement bitmap-assignment/source-rectangle lifecycle, observe mutable fields only on the worker, and publish owned immutable frame data at the existing rendezvous. Test moving/hiding/disposing a sprite through ordinary runtime Update and exact output pixels before enabling any presentation capability. Also reconcile the copied640x480 Graphics defaults in VX/VX Ace against their generation contract before claiming display parity.
 
 ## Decision Log
+
+Startup correction: explicit BlockBody roles now guard every attached-block
+dispatch, including call-first bodies. This exposed real Main loops executing
+during Initialize. Execute the complete ordered project script list on the owned
+worker, not guessed script names. Initialization only prepares it. First-frame
+startup is bounded separately (10s), subsequent frames remain1s. A script receipt
+reports pending/running/completed/cancelled/frame-budget states and exact counts;
+an entry script paused at a frame has not completed. Returning project code does
+not trigger synthetic RgssLaufzeit setup or replay a leftover $scene. The old
+frames/nil heuristic changed a terminating program into a new game and is removed.
+Melde writes use the same gate as snapshot reads. No new Rendering capability is
+declared: file decode, native presentation/input, pacing and wider parity remain.
 
 Sprite reference research deleg_aaa56331 completed. Parent read pinned scene ordering, sprite bitmap/y setters, transform matrix and normal-blend GL factors. XP skips y in z ties; VX/VX Ace compare raw y before creation order. Assigning the same bitmap preserves src_rect; a different live bitmap resets it, whereas nil/disposed assignment preserves the rectangle. Source-level evidence and original-runtime uncertainties are separated in docs/RGSS_SPRITE_REFERENCE.md. These checks supersede the pending-research status below, not the remaining implementation gates.
 

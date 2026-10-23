@@ -24,7 +24,7 @@ namespace UniversalRPG.Plugins;
 /// game that does nothing.
 /// </para>
 /// </remarks>
-public sealed class VxAceEngineRuntime : IEngineRuntime
+public sealed class VxAceEngineRuntime : IEngineRuntime, IRgssFrameSource
 {
     private readonly string _pluginId;
     private readonly PluginGameInfo _game;
@@ -34,7 +34,18 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
     private RgssSkriptHost? _scriptHost;
     private RgssLaufzeit? _laufzeit;
     private RgssDatenHost? _datenHost;
-    private bool _scriptsRun;
+    private bool _scriptsRun; // Built-in execution context prepared; project progress is reported separately.
+    private bool _bootstrapPending;
+    private readonly RgssScriptRunner _scriptRunner = new();
+    public RgssScriptProgress ScriptProgress => _scriptRunner.Progress;
+    public long DroppedDiagnosticCount
+    {
+        get { lock (_lifecycleGate) return _frameSession?.DroppedDiagnosticCount ?? _interpreter?.DroppedDiagnosticCount ?? 0; }
+    }
+    public RgssRenderedFrame? RenderedFrame
+    {
+        get { lock (_lifecycleGate) return _frameSession?.RenderedFrame; }
+    }
 
     /// <summary>
     /// The scripts and updates that failed, by name and reason.
@@ -59,6 +70,8 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
     /// </remarks>
     public void SpielSchleifeStarten()
     {
+        if (State != PluginRuntimeState.Running)
+            throw new InvalidOperationException("Diagnostic execution requires a running runtime.");
         if (_frameSession != null)
             throw new InvalidOperationException("A persistent scene session already owns this interpreter.");
         if (_interpreter == null || _grafik == null)
@@ -68,6 +81,9 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
 
         try
         {
+            var hasProjectEntry = _bootstrapPending;
+            RunPendingScripts();
+            if (hasProjectEntry) return;
             _interpreter.RunProgram(new RubyParser(new RubyLexer(
                 "$scene.main if $scene && $scene.respond_to?(:main)")
                 .Tokenize()).ParseProgram());
@@ -143,11 +159,11 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
     private void Melde(string pWo, string pName, Exception pAusnahme)
     {
         var meldung = pWo + " " + pName + ": " + pAusnahme.Message;
-        if (_scriptProblems.Contains(meldung) || _scriptProblems.Count >= MaxProblems)
+        lock (_lifecycleGate)
         {
-            return;
+            if (_scriptProblems.Contains(meldung) || _scriptProblems.Count >= MaxProblems) return;
+            _scriptProblems.Add(meldung);
         }
-        _scriptProblems.Add(meldung);
     }
 
     public VxAceEngineRuntime(string pPluginId, PluginGameInfo pGame)
@@ -203,7 +219,7 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
         {
             PluginDiagnostic.Info(
                 "vxace.runtime-initialized",
-                $"Initialized complete VX Ace RGSS runtime with Ruby execution; {_runtimeInfo?.InspectedFileCount ?? 0} files inspected, scripts loaded: {_scriptHost?.Anzahl ?? 0}.",
+                $"Prepared experimental VX Ace RGSS runtime; {_runtimeInfo?.InspectedFileCount ?? 0} files inspected, {_scriptHost?.Anzahl ?? 0} project scripts pending execution on the first update.",
                 _pluginId),
         });
     }
@@ -229,6 +245,7 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
             throw new InvalidOperationException($"Failed to load scripts: {scriptError}");
         }
 
+        _scriptRunner.Prepare(_scriptHost.Anzahl);
         // Load data host
         _datenHost = RgssDatenHost.Oeffne(gameDir, out var dataError);
         if (_datenHost == null)
@@ -258,12 +275,13 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
         // Define built-in RGSS classes before running scripts
         DefineBuiltinClasses();
 
-        // Run all game scripts
-        RunGameScripts();
+        // Project entry scripts may contain the whole game loop. Run them only
+        // inside the owned frame session, never during synchronous initialization.
+        _bootstrapPending = true;
 
         // Initialize runtime globals
         _laufzeit = new RgssLaufzeit(_interpreter, _datenHost, ".rvdata2");
-        _laufzeit.Startet();
+
 
 
 
@@ -273,6 +291,7 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
     private void DefineBuiltinClasses()
     {
         if (_interpreter == null) return;
+        if (_grafik != null) _grafik.Sprites.SortByY = true;
 
         // Define core RGSS built-in classes that the game's scripts expect
         // These are minimal stubs - the game's scripts will extend them
@@ -618,6 +637,7 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
         var alleQuellen = new List<string>(RgssExtraRubySources.Sources);
         alleQuellen.AddRange(builtinClasses);
         alleQuellen.Add(RgssBitmapRubySource.Source);
+        alleQuellen.Add(RgssSpriteRubySource.Source);
         alleQuellen.Add(RgssBitmapRubySource.ClearRectSource);
         foreach (var code in alleQuellen)
         {
@@ -636,34 +656,20 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
         }
     }
 
+    private void RunPendingScripts()
+    {
+        if (!_bootstrapPending) return;
+        _bootstrapPending = false;
+        RunGameScripts();
+        // The project owns its entry point. Returning without a scene means
+        // completion, not permission to invent a new game or replay its setup.
+    }
+
     private void RunGameScripts()
     {
         if (_interpreter == null || _scriptHost == null) return;
 
-        var scriptNames = _scriptHost.Namen.ToList();
-        foreach (var name in scriptNames)
-        {
-            var bytes = _scriptHost.ReadScript(name, true);
-            if (bytes == null) continue;
-
-            try
-            {
-                var text = System.Text.Encoding.UTF8.GetString(bytes);
-                var tokens = new RubyLexer(text).Tokenize();
-                var nodes = new RubyParser(tokens).ParseProgram();
-                _interpreter.RunProgram(nodes);
-            }
-            catch (RubyParseException ausnahme)
-            {
-                Melde("script", name, ausnahme);
-            }
-            catch (Exception ausnahme)
-            {
-                Melde("script", name, ausnahme);
-            }
-        }
-
-        System.Console.WriteLine($"VX Ace: {scriptNames.Count} scripts, {scriptNames.Count - _scriptProblems.Count} parsed and executed, {_scriptProblems.Count} failed");
+        _scriptRunner.Run(_scriptHost, _interpreter, (name, error) => Melde("script", name, error));
     }
 
     public PluginOperationResult Start()
@@ -696,7 +702,8 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
                 return Fail(PluginErrorCode.LifecycleFailure, "The script runtime is missing its interpreter or graphics host.", "update");
             }
             session = _frameSession ??= new RgssFrameSession(_interpreter, _grafik,
-                new RubyParser(new RubyLexer("while $scene; $scene.main; end").Tokenize()).ParseProgram());
+                _bootstrapPending ? Array.Empty<RubyNode>()
+                    : new RubyParser(new RubyLexer("while $scene; $scene.main; end").Tokenize()).ParseProgram(), RunPendingScripts);
             _updateInProgress = true;
         }
 
@@ -766,7 +773,7 @@ public sealed class VxAceEngineRuntime : IEngineRuntime
         {
             _frameSession?.Dispose();
             // Release worker-owned pixels only after its stack has stopped.
-            _grafik?.Bitmaps.ReleaseAll();
+            _grafik?.ReleaseRenderResources();
             _frameSession = null;
             State = PluginRuntimeState.Disposed;
             _runtimeInfo = null;

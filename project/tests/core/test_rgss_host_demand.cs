@@ -188,7 +188,7 @@ public partial class TestRgssHostDemand : TestBase
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }
@@ -230,9 +230,8 @@ public partial class TestRgssHostDemand : TestBase
         }
         System.Console.WriteLine("  " + string.Join("  ", top));
 
-        AssertTrue(host.Konstanten.Count > 0,
-            "**and the scripts asked for something** -- and it was "
-                + host.Konstanten.Count + " different constants");
+        AssertEq(host.Konstanten.Count, 0,
+            "Library definitions must not inherit the Graphics request from Main.");
 
         // **Und `$game_` ist die Familie, die eine Spielwelt
         // beantworten muss** -- **und sie wird gemessen, nicht
@@ -260,6 +259,11 @@ public partial class TestRgssHostDemand : TestBase
                 + " -- and they asked for " + spielKonstanten
                 + ", and that is because a world's state is read when"
                 + " a command runs and not when a class is defined");
+
+        // Positive control: an explicit call must still reach both probe sinks.
+        interpreter.RunProgram(new RubyParser(new RubyLexer("Graphics; rand(1)").Tokenize()).ParseProgram());
+        AssertTrue(host.Konstanten.ContainsKey("Graphics"));
+        AssertTrue(host.Methoden.ContainsKey("rand"), "Kernel rand must consult the host before its fallback.");
     }
 
     /// <summary>
@@ -291,7 +295,7 @@ public partial class TestRgssHostDemand : TestBase
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }

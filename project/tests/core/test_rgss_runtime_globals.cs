@@ -57,7 +57,7 @@ public partial class TestRgssRuntimeGlobals : TestBase
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }
@@ -121,7 +121,7 @@ public partial class TestRgssRuntimeGlobals : TestBase
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }

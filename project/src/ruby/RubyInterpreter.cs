@@ -10062,6 +10062,7 @@ public sealed class RubyInterpreter
         // wo es einen aufrufbaren Wert erwartet.**
         if (pNode.Kind == RubyNodeKind.Block
             && pNode.Children.Count >= 3
+            && Child(pNode, RubyNodeRole.BlockBody) != null
             && pNode.Children[0].Kind == RubyNodeKind.Identifier
             && pNode.Children[0].Name is "lambda" or "proc")
         {
@@ -10070,11 +10071,11 @@ public sealed class RubyInterpreter
 
         if (pNode.Kind == RubyNodeKind.Block
             && pNode.Children.Count >= 3
+            && Child(pNode, RubyNodeRole.BlockBody) != null
             && (pNode.Children[0].Kind is RubyNodeKind.Call
                 or RubyNodeKind.MethodCall
                 or RubyNodeKind.SelfCall
-                || (pNode.Children[0].Kind == RubyNodeKind.Identifier
-                    && Child(pNode, RubyNodeRole.BlockBody) != null)))
+                or RubyNodeKind.Identifier))
         {
             _blockKette.Add(pNode);
             try

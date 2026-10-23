@@ -1,4 +1,182 @@
 ## Current card
+### RGSS Godot frame consumer — VERIFIED BOUNDED SLICE
+
+The production Main._Process now routes IRgssFrameSource snapshots to the full
+game view on the main thread, using the runtime's own Frames counter. Other-engine
+command/message/input/battle overlays are cleared. Experimental launch gates and
+capability declarations are unchanged; the test installs real runtimes directly,
+not through the blocked player-facing Start button.
+
+Rm2kGameScreen uses exact-size image data when frames shrink as well as grow;
+temporary Image wrappers are disposed. Reset clears frame count, diagnostics,
+message/choice selection and command rows/visibility/index. Reproductions:
+size0/1 then1/1; reset1/2 then2/2; route0/1 then1/1 across XP/VX/VX Ace. Native
+texture readback asserts dimensions and actual pixels, not only backing bytes.
+Focused: TestGameScreenFrames2/2, TestRgssFrameViewRoute1/1,
+TestLauncherUiSafety26/26, TestMzCommandWindow3/3, sprite16/16, real XP2/2.
+
+Actual rendered witness also passed with Godot4.7.2 OpenGL/RTX5090: production
+scenes/main.tscn + real XP interpreter/sprite/frame worker, synthetic red then
+green frames captured from the native viewport at1100x700, stop hides the view.
+Log: scratch/urpg-render-witness-2.log; captures under scratch/urpg-render-witness/.
+The green capture was visually inspected: green game area, black letterboxing,
+no old menu/dialog. This is NOT imported-game artwork, full gameplay or input.
+Reproduce with the pinned Godot console binary, --audio-driver Dummy
+--rendering-method gl_compatibility --path E:/URPG/project
+res://tests/acceptance/rgss_view_render_smoke.tscn -- --output=<isolated directory>.
+
+Failure log: first visual harness used new Main() without the production scene's
+full-window anchors and captured gray. Corrected the fixture to instantiate the
+actual scenes/main.tscn, preserving pixel assertions; rerun exit0 and no native
+warnings/errors. RED logs: urpg-screen-size-red.log, urpg-screen-reset-red.log,
+urpg-route-red.log, urpg-render-witness.log. All remain in managed scratch.
+
+Canonical run proc_a0bef33dd7ee finished exit0:3054 tests,390 suite receipts
+(3034 cases) plus20 smoke checks. All696 inputs in urpg_rgss_view_inputs_v1.json
+are unchanged. Receipt: urpg-rgss-view-validation-receipt.json; full log:
+urpg-rgss-view-canonical.log. Build148 warnings/0 errors. Native diagnostic
+signatures match the prior run, including3 CanvasItem RIDs and6 ObjectDB leaks;
+this is not a clean native-runtime audit. The separate OpenGL witness is clean.
+RM2K WIP hashes unchanged and excluded from publication. The canonical receipt
+describes the working tree, including those unrelated preserved WIP files.
+
+Read-only UI review deleg_4fd56747 completed; its recovered transcript reports
+no blocking defects and identifies null-frame test coverage as optional hardening.
+The full summary has not been delivered here; do not invent its omitted findings.
+Parent reviewed the complete production UI diff and native witness. The older
+fixture review's stub/unrun claims are superseded by the actual helper, unique-last
+Main guards, real-runtime progress assertions and both canonical passes.
+
+Next: checkpoint the verified slice, then implement bounded file-backed bitmap
+decoding/blit operations with tests. RGSS still lacks imported image pixels,
+windows/tilemaps, input, audio and responsive frame pacing. Experimental launch
+gates remain closed; do not label the engine complete or promote capabilities.
+
+### Owned startup and bounded sprite composition — VERIFIED CORE
+
+Current focused checks pass: TestRgssSpriteFrames16/16,
+TestRubyBlockBodyDispatch2/2, TestRgssResumableScene13/13 and
+TestRealXpRuntimeRun2/2; interpreter271/271, bitmap10/10 and frame bridge3/3
+also passed after the renderer/startup changes. Following the canonical failure,
+all14 affected suites now pass34/34 focused cases; MicroQuest fixture3/3 and the
+strengthened real-XP entry test2/2 pass. Full corrected-source validation PASSED:
+proc_81148f894f29 exited0, All3051 tests passed,388 suite receipts covering3031
+tests plus20 smoke checks. All692 hashes in urpg_sprite_core_inputs_v2.json match.
+Log: urpg-sprite-fixture-canonical.log; machine receipt:
+urpg-sprite-fixture-validation-receipt.json (all under managed scratch).
+Build148 warnings/0 errors. Known3 CanvasItem RID/6 ObjectDB teardown warnings
+remain; editor/JSON/audio stderr signatures and occurrence counts exactly match
+the earlier bitmap baseline. Test success is not a clean native-runtime audit.
+The source freeze is released. No commit or new launcher Rendering capability.
+Earlier core run proc_9820e76d761a exited36; all691 v1 inputs were unchanged.
+
+Failure log — fixture isolation, first focused run: the new regression first
+passed1/3 and directly named Main as the nil/integer division source. Explicit
+test-only library preparation then passed3/3 and removed the exception from all
+affected suites. Five cases in four suites still expected Graphics/freeze probes
+caused by the old partial execution of Main. Preserve those RED logs under
+*-fixture-isolation-first.log. Their oracles now require zero startup pollution,
+retain actual setup/attribute assertions and add a positive host-probe control.
+Production startup and AST evaluation are unchanged by this fixture correction.
+Real XP now additionally asserts Main is Running/Attempted but not Completed at
+every frame; its focused2/2 and sprite16/16/interpreter271/271 passed.
+The next build caught CS1503 in the new zero-probe assertion: Gehlagt is a
+string array, not a list; corrected Count to Length after inspecting its type.
+One new positive control then failed: freeze is handled by the interpreter rather
+than the host. Replaced it with rand(1), whose production dispatch explicitly
+consults IRubyHost.CallMethod before its deterministic bounded fallback. The
+constant-lookup control remains Graphics. All other selected suites passed.
+
+Failure log — canonical core, first run:387 suite receipts,3006/3028 suite cases
+passed;22 failures in14 suites (CommandCall, DatenHost, GameMapWorld, HostDemand,
+InterpreterRun, OpenListGap, RuntimeGlobals, RuntimeStart, SetupDurch, SetupRun,
+SetupWelt, SkriptHost, TypTable, World). All22 fail with RubyRuntimeException:
+NoMethodError: undefined operator '/' for a Nil and a Integer. The runner's
+36/3048 summary includes14 failed-suite headers plus22 failed-case records and
+20 additional smoke checks; do not call these36 distinct failing test cases.
+Confirmed in CSharpRunner.cs:175-180. Known teardown warnings remain3 CanvasItem
+RIDs and6 ObjectDB instances.
+
+The first trace reaches TestRgssCommandCall.Lauf:199 while running every source
+from a real game's script host; TestRgssDatenHost duplicates that pattern at167.
+Diagnosis deleg_f5ec0867 is confirmed by the named RED reproduction: corrected
+call-first bodies reach project Main in old synchronous class-loading fixtures.
+MicroQuestScriptFixture is test-only and defers that known entry after parsing;
+it never catches library runtime failures. Every source remains accounted for.
+The full runtime still executes Main, with live progress assertions proving it.
+Boundary review deleg_be797f03 arrived. Its claims that the helper is still a
+stub and the new real-XP assertions are unrun are stale: current source and the
+later focused2/2 receipt were checked. Its fixture-content analysis confirms Main
+contains no library definitions and is unique/final. The fixture regression
+already checks unique/final entry and exact executed/deferred totals. Scope stays
+MicroQuest tests only, never a production Main-name filter. The changed probe
+counts and their RED logs are recorded above, not claimed unchanged. Consider
+explicit deferred-name accounting and named library-error context at final review;
+do not accept arbitrary Main crashes or claim full Window/rendering support.
+
+Implemented: live bounded Sprite registry, generation-specific z/y/creation order,
+normal alpha/opacity composition, mutable source rectangles, bitmap assignment
+reset, visibility/disposal, detached immutable frame publication at the worker
+rendezvous. Limits:4096 sprites,4Mi output pixels,16Mi sampled pixels per frame;
+unsupported transforms/viewports/effects are omitted with an explicit warning.
+All3 bootstraps are exercised through ordinary Update with exact pixel assertions.
+No image-file decode, Godot screen integration or game input is claimed yet.
+
+Review deleg_8e81d037 addressed: project startup runs on the owned worker; the
+first frame has a10-second startup deadline, later frames retain1 second. These
+are safety bounds, not pacing or responsive asynchronous UI. Immutable per-project
+script receipts distinguish Pending/Running/Completed/Cancelled/FrameBudget and
+report attempted/completed/failed counts. Named script failures still continue to
+following scripts; cancellation/budget does not. Melde now shares the reader lock.
+The old zero-frames/nil-scene synthetic setup heuristic is removed: returning
+project code means completion, never permission to inject a new game or replay
+a leftover scene. Both normal and diagnostic entry paths preserve that rule.
+Initialization messages now say prepared/pending, not complete/executed.
+
+Review regressions reproduced11/14 then passed14/14. A leftover $scene revealed
+an additional unwanted replay (15/16), now corrected16/16. Frame snapshots remain
+stable after movement, consumer mutation and runtime disposal. Opacity clamping
+and fractional unsupported-color detection each reproduced8/9 before fixes.
+Full-tree diff check reports existing trailing whitespace in the protected
+RM2K decoder; do not alter that other work. UI adapter delegation deleg_2a0d63bd
+returned artifacts under scratch/urpg-rgss-frame-route; NOT applied or tested.
+Parent review: existing IRgssFrameSource already requires Frames, omitted by the
+proposed test double. Replace its redundant UI counter with the authoritative
+runtime count. Tests only inspect backing pixels and miss native image creation
+with an oversized backing array after a smaller frame. Reproduce and fix that
+upload boundary, and rewrite new German code/comments into English. Full notes:
+scratch/urpg-rgss-frame-route/parent-review.md. Keep launch gates unchanged.
+Independent native probe now confirms the upload defect without touching frozen
+repository inputs: Godot4.7.2 rejects a4x3 RGBA8 image backed by307200 bytes
+(expected48). Exact-size data produces the expected dimensions and red pixel.
+Evidence: scratch/urpg-image-size-probe/result.log. This proves native Image
+construction, not launcher rendering; add a real screen regression after the
+canonical run and before claiming the UI route is complete.
+Preserve both RM2K WIP files and
+qa_patches/. Next: final review/checkpoint of this verified core slice, then fix
+the native image-size defect and integrate/test the real Godot consumer. Any new
+source changes require fresh relevant verification;3051 applies to the v2 inputs,
+not to the still-unapplied UI artifact. The broader rendering card remains open.
+
+### Earlier sprite integration reproduction
+
+The first sprite-frame regression exposed an earlier execution defect: a method
+starting with a call was classified as an attached block, skipping its remaining
+statements. Temporary progress assignments masked it and were removed. A dedicated
+regression failed0/1; requiring the parser's explicit BlockBody role passes1/1,
+interpreter271/271 and resumable13/13. This also unmasks real Main execution during
+Initialize: real XP now runs thousands of unowned frames and hits the step limit.
+Do not weaken the real-game assertions or restore the wrong AST classification.
+Move project script startup onto the owned frame worker before composition. All
+three generations must preserve startup locals and script order, propagate frame
+budget/cancellation, and never restart the entry point. The new sprite integration
+test is still RED because no published image exists. No renderer claim yet.
+
+Failure log: uninstrumented sprite scene exhausted2,000,000 steps; instrumentation
+changed the first AST statement and hid the defect. Dedicated call-first test
+proved skipped statements. Correcting classification then exposed eager Main
+execution (real XP expected frame1, observed6268). These are distinct root causes.
+
 ### RGSS numeric bitmap checkpoint — VERIFIED
 
 Latest follow-up to final-delta review deleg_edc9c06a: reproduced caller-context corruption after a rescued initialize_copy failure (copy suite1/2; self and __method__ remained in Bitmap/copy receiver). Aufrufen now restores scopes, method boundary, call chain, arguments, type, self and instance fields in finally, including errors in argument defaults. Expanded regression checks actual caller fields and scope/call-depth restoration; copy suite2/2. The depth test first counted the normal lazily created top-level scope as a leak; its baseline now comes after an empty RunProgram, leaving the caller-state assertions unchanged.

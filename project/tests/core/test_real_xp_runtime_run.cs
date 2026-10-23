@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using UniversalRPG.Plugins;
+using UniversalRPG.Rgss;
 using UniversalRPG.Tests.Framework;
 
 namespace UniversalRPG.Tests.Core;
@@ -43,6 +44,7 @@ public partial class TestRealXpRuntimeRun : TestBase
         var runtime = host.Runtime as XpEngineRuntime;
         AssertTrue(runtime != null);
         if (runtime == null) return;
+        AssertEq(runtime.Frames, 0, "Project Main must not run during synchronous initialization.");
         AssertEq(runtime.FrameBudget, 0);
         for (var frame = 1; frame <= 10; frame++)
         {
@@ -50,6 +52,12 @@ public partial class TestRealXpRuntimeRun : TestBase
             AssertTrue(result.Success, result.Error?.Message ?? "Ordinary update reaches a frame");
             AssertEq(runtime.State, PluginRuntimeState.Running);
             AssertEq(runtime.Frames, frame);
+            var progress = runtime.ScriptProgress;
+            AssertEq(progress.State, RgssScriptRunState.Running);
+            AssertEq(progress.CurrentScript, "Main", "The real project entry must execute, not be skipped.");
+            AssertEq(progress.Attempted, progress.Total);
+            AssertEq(progress.Completed, progress.Total - 1, "Main remains on its live stack between frames.");
+            AssertEq(progress.Failed, 0);
         }
         AssertEq(runtime.ScriptProblems.Count, 0, string.Join("; ", runtime.ScriptProblems));
         Console.WriteLine("XP: resumable host frame boundaries = " + runtime.Frames);

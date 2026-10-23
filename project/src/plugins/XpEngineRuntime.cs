@@ -24,7 +24,7 @@ namespace UniversalRPG.Plugins;
 /// game that does nothing.
 /// </para>
 /// </remarks>
-public sealed class XpEngineRuntime : IEngineRuntime
+public sealed class XpEngineRuntime : IEngineRuntime, IRgssFrameSource
 {
     private readonly string _pluginId;
     private readonly PluginGameInfo _game;
@@ -34,7 +34,18 @@ public sealed class XpEngineRuntime : IEngineRuntime
     private RgssSkriptHost? _scriptHost;
     private RgssLaufzeit? _laufzeit;
     private RgssDatenHost? _datenHost;
-    private bool _scriptsRun;
+    private bool _scriptsRun; // Built-in execution context prepared; project progress is reported separately.
+    private bool _bootstrapPending;
+    private readonly RgssScriptRunner _scriptRunner = new();
+    public RgssScriptProgress ScriptProgress => _scriptRunner.Progress;
+    public long DroppedDiagnosticCount
+    {
+        get { lock (_lifecycleGate) return _frameSession?.DroppedDiagnosticCount ?? _interpreter?.DroppedDiagnosticCount ?? 0; }
+    }
+    public RgssRenderedFrame? RenderedFrame
+    {
+        get { lock (_lifecycleGate) return _frameSession?.RenderedFrame; }
+    }
 
     /// <summary>
     /// The scripts and updates that failed, by name and reason.
@@ -53,9 +64,10 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// game will hit later, and it has to be readable by name before that happens rather than
     /// after.
     /// </remarks>
-    public IReadOnlyList<string> SetupProblems => _laufzeit == null
-        ? (IReadOnlyList<string>)Array.Empty<string>()
-        : _laufzeit.Fehlgeschlagen;
+    public IReadOnlyList<string> SetupProblems
+    {
+        get { lock (_lifecycleGate) return Array.AsReadOnly(_laufzeit?.Fehlgeschlagen.ToArray() ?? Array.Empty<string>()); }
+    }
 
     /// <summary>
     /// What the game's own state reads after the runtime's setup sequence.
@@ -67,9 +79,10 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// *"undefined operator '%' for a Integer and a Nil"*, which says the first operand arrives and
     /// not which value is missing.
     /// </remarks>
-    public IReadOnlyList<string> SetupState => _laufzeit == null
-        ? (IReadOnlyList<string>)Array.Empty<string>()
-        : _laufzeit.Zustand;
+    public IReadOnlyList<string> SetupState
+    {
+        get { lock (_lifecycleGate) return Array.AsReadOnly(_laufzeit?.Zustand.ToArray() ?? Array.Empty<string>()); }
+    }
 
     /// <summary>
     /// The names the game asked for and the runtime could not answer.
@@ -107,6 +120,8 @@ public sealed class XpEngineRuntime : IEngineRuntime
     /// </remarks>
     public void SpielSchleifeStarten()
     {
+        if (State != PluginRuntimeState.Running)
+            throw new InvalidOperationException("Diagnostic execution requires a running runtime.");
         if (_frameSession != null)
             throw new InvalidOperationException("A persistent scene session already owns this interpreter.");
         if (_interpreter == null || _grafik == null)
@@ -116,6 +131,9 @@ public sealed class XpEngineRuntime : IEngineRuntime
 
         try
         {
+            var hasProjectEntry = _bootstrapPending;
+            RunPendingScripts();
+            if (hasProjectEntry) return;
             _interpreter.RunProgram(new RubyParser(new RubyLexer(
                 "$scene.main if $scene && $scene.respond_to?(:main)")
                 .Tokenize()).ParseProgram());
@@ -191,11 +209,11 @@ public sealed class XpEngineRuntime : IEngineRuntime
     private void Melde(string pWo, string pName, Exception pAusnahme)
     {
         var meldung = pWo + " " + pName + ": " + pAusnahme.Message;
-        if (_scriptProblems.Contains(meldung) || _scriptProblems.Count >= MaxProblems)
+        lock (_lifecycleGate)
         {
-            return;
+            if (_scriptProblems.Contains(meldung) || _scriptProblems.Count >= MaxProblems) return;
+            _scriptProblems.Add(meldung);
         }
-        _scriptProblems.Add(meldung);
     }
 
     public XpEngineRuntime(string pPluginId, PluginGameInfo pGame)
@@ -251,7 +269,7 @@ public sealed class XpEngineRuntime : IEngineRuntime
         {
             PluginDiagnostic.Info(
                 "xp.runtime-initialized",
-                $"Initialized complete XP RGSS runtime with Ruby execution; {_runtimeInfo?.InspectedFileCount ?? 0} files inspected, scripts loaded: {_scriptHost?.Anzahl ?? 0}.",
+                $"Prepared experimental XP RGSS runtime; {_runtimeInfo?.InspectedFileCount ?? 0} files inspected, {_scriptHost?.Anzahl ?? 0} project scripts pending execution on the first update.",
                 _pluginId),
         });
     }
@@ -277,6 +295,7 @@ public sealed class XpEngineRuntime : IEngineRuntime
             throw new InvalidOperationException($"Failed to load scripts: {scriptError}");
         }
 
+        _scriptRunner.Prepare(_scriptHost.Anzahl);
         // Load data host
         _datenHost = RgssDatenHost.Oeffne(gameDir, out var dataError);
         if (_datenHost == null)
@@ -306,14 +325,15 @@ public sealed class XpEngineRuntime : IEngineRuntime
         // Define built-in RGSS classes before running scripts
         DefineBuiltinClasses();
 
-        // Run all game scripts
-        RunGameScripts();
+        // Project entry scripts may contain the whole game loop. Run them only
+        // inside the owned frame session, never during synchronous initialization.
+        _bootstrapPending = true;
 
         // Initialize runtime globals
         // **And the extension is XP's own**: the data host takes the name as written, and a
         // runtime that leaves it out gets thirteen refusals and a game with no data.
         _laufzeit = new RgssLaufzeit(_interpreter, _datenHost, ".rxdata");
-        _laufzeit.Startet();
+
 
 
 
@@ -668,6 +688,7 @@ public sealed class XpEngineRuntime : IEngineRuntime
         var alleQuellen = new List<string>(RgssExtraRubySources.Sources);
         alleQuellen.AddRange(builtinClasses);
         alleQuellen.Add(RgssBitmapRubySource.Source);
+        alleQuellen.Add(RgssSpriteRubySource.Source);
         foreach (var code in alleQuellen)
         {
             try
@@ -685,34 +706,20 @@ public sealed class XpEngineRuntime : IEngineRuntime
         }
     }
 
+    private void RunPendingScripts()
+    {
+        if (!_bootstrapPending) return;
+        _bootstrapPending = false;
+        RunGameScripts();
+        // The project owns its entry point. Returning without a scene means
+        // completion, not permission to invent a new game or replay its setup.
+    }
+
     private void RunGameScripts()
     {
         if (_interpreter == null || _scriptHost == null) return;
 
-        var scriptNames = _scriptHost.Namen.ToList();
-        foreach (var name in scriptNames)
-        {
-            var bytes = _scriptHost.ReadScript(name, true);
-            if (bytes == null) continue;
-
-            try
-            {
-                var text = System.Text.Encoding.UTF8.GetString(bytes);
-                var tokens = new RubyLexer(text).Tokenize();
-                var nodes = new RubyParser(tokens).ParseProgram();
-                _interpreter.RunProgram(nodes);
-            }
-            catch (RubyParseException ausnahme)
-            {
-                Melde("script", name, ausnahme);
-            }
-            catch (Exception ausnahme)
-            {
-                Melde("script", name, ausnahme);
-            }
-        }
-
-        System.Console.WriteLine($"XP: {scriptNames.Count} scripts, {scriptNames.Count - _scriptProblems.Count} parsed and executed, {_scriptProblems.Count} failed");
+        _scriptRunner.Run(_scriptHost, _interpreter, (name, error) => Melde("script", name, error));
     }
 
     public PluginOperationResult Start()
@@ -745,7 +752,8 @@ public sealed class XpEngineRuntime : IEngineRuntime
                 return Fail(PluginErrorCode.LifecycleFailure, "The script runtime is missing its interpreter or graphics host.", "update");
             }
             session = _frameSession ??= new RgssFrameSession(_interpreter, _grafik,
-                new RubyParser(new RubyLexer("while $scene; $scene.main; end").Tokenize()).ParseProgram());
+                _bootstrapPending ? Array.Empty<RubyNode>()
+                    : new RubyParser(new RubyLexer("while $scene; $scene.main; end").Tokenize()).ParseProgram(), RunPendingScripts);
             _updateInProgress = true;
         }
 
@@ -815,7 +823,7 @@ public sealed class XpEngineRuntime : IEngineRuntime
         {
             _frameSession?.Dispose();
             // Release worker-owned pixels only after its stack has stopped.
-            _grafik?.Bitmaps.ReleaseAll();
+            _grafik?.ReleaseRenderResources();
             _frameSession = null;
             State = PluginRuntimeState.Disposed;
             _runtimeInfo = null;

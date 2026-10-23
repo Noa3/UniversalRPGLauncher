@@ -1,9 +1,65 @@
 # UniversalRPG — Project Status
 
-> **Last Updated:** 2026-10-22
+> **Last Updated:** 2026-10-23
 > **Current Phase:** Bounded RM2000/2003 runtime; Windows audit/export verified
 
 ## Latest runtime correctness work
+
+### RGSS Godot view — bounded consumer verified
+
+The production game view now consumes RGSS snapshots on the main thread and uses
+the runtime's frame number. It clears old command/dialog/input/battle overlays.
+Native texture creation now receives exact-size data even after shrinking a frame;
+reset clears stale image counters, diagnostics and menu state.
+
+Tests pass: native screen2/2, view route1/1 across XP/VX/VX Ace, launcher safety26/26
+and MZ command-window3/3. A separately run OpenGL acceptance scene used the actual
+launcher scene and XP runtime to capture red then green synthetic frames from the
+1100x700 viewport, and verified stop clears the game view. Exit0, no native errors
+or warnings; the green capture was inspected. This is a rendered synthetic witness,
+not proof of imported-game artwork, input, audio or playable compatibility.
+
+The full working-tree validator passed3054 tests (390 suites/3034 cases plus20
+smoke checks), exit0; all696 frozen inputs unchanged. Build148 warnings/0 errors,
+with the existing3 CanvasItem RID/6 ObjectDB shutdown leaks and no new native
+diagnostic signatures. This is not a clean native-runtime audit. Experimental
+launch gates remain unchanged; fixtures install runtimes directly and do not
+prove player-facing launch.
+
+### RGSS sprite composition and owned project startup — bounded core verified
+
+The working tree now composes registered numeric Bitmap/Sprite objects into owned
+immutable frames through the real XP/VX/VX Ace Update path. Exact-pixel tests cover
+generation ordering, normal alpha/opacity, source rectangles, movement, visibility,
+disposal and independent registry/output/work limits. Unsupported effects are
+reported instead of being silently treated as neutral values.
+
+The integration exposed call-first Ruby bodies being mistaken for attached blocks.
+Correcting their AST-role check then exposed eager project Main execution during
+Initialize. Project scripts now run on the owned worker, with an explicit startup
+deadline and immutable execution receipts. Returning project code does not invent
+new-game setup or replay a leftover scene. Initial diagnostics now distinguish
+prepared sources from executed scripts.
+
+Focused checks pass: sprite/startup16/16, block bodies2/2, resumable scenes13/13,
+real XP2/2, interpreter271/271, bitmap10/10 and frame bridge3/3. Initial canonical
+validation failed:22 test cases in14 older RGSS suites reported nil/integer division while
+loading game scripts. All691 frozen inputs remained unchanged. The387 suite
+receipts total3006/3028 passing cases; the runner additionally executes20 smoke
+checks and counts failed-suite headers in its failure summary. A named reproduction
+confirmed Main was being run on partial library-test hosts. Explicit test-only
+library preparation now passes34/34 affected cases, with all90 sources parsed,
+89 library scripts executed and Main deferred to the full-runtime integration test.
+That real-XP test now proves Main remains executing across10 normal updates, with
+zero script failures. The full corrected-source rerun passed **3051 tests**:
+388 suite receipts with3031 cases plus20 smoke checks, exit0, and all692 frozen
+source/resource hashes unchanged. Build148 warnings/0 errors; known editor,
+JSON and audio stderr signatures match the bitmap baseline, as do the3 CanvasItem
+RID/6 ObjectDB teardown warnings. This is a passed test gate, not a clean native
+runtime audit or production-complete engine.
+Godot view integration and native capture were outside that core checkpoint;
+the subsequent consumer slice is reported above. No new Rendering capability
+or complete-engine claim. Details: `docs/RGSS_SPRITE_BOUNDARY.md`.
 
 ### RGSS numeric bitmap storage — bounded milestone verified
 

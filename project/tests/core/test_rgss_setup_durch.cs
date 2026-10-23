@@ -106,37 +106,12 @@ i.instance_variable_get(:@list)
                 + " count of three is what says the whole list was"
                 + " read and not one entry of it");
 
-        // **Und die zwei unbeantworteten  Fragen  sind  namentlich
-        //  die  beiden,  die  MicroQuest  beim  Laden  stellt.**
-        //
-        // **Und  das  ist  nicht  geraten:**
-        //
-        // ```text
-        // Fragen: Konstante Graphics | freeze an Nil (Block)
-        //         | map_id an Game_game_map | clear an Object
-        // ohne Antwort: 2
-        // ```
-        //
-        // **Und  `Graphics`  und  `freeze`  kommen  aus  den  Skripten**
-        // **und nicht aus `setup`**,
-        // **und `setup` selbst  hat  nichts  offen  gelassen.**
-        //
-        // **Und  mein  erster  Entwurf  behauptete hier  `0`,
-        // **und  die  Messung  sagte  `2`** --
-        // **und  ein  Test,  der  eine  Zahl  behauptet,  die  die
-        // Messung  nicht  traegt,  ist  das  Gegenteil  von  dem,
-        // was  dieses  Repository  braucht.**
-        AssertEq(2, host.Unbeantwortet.Count,
-            "**and exactly two questions went unanswered** -- and"
-                + " they are `Graphics` and `freeze`, both asked while"
-                + " MicroQuest's scripts load, and neither asked by"
-                + " `setup` itself");
-
-        AssertTrue(host.Unbeantwortet.Contains("freeze")
-                && host.Unbeantwortet.Contains("Konstante Graphics"),
-            "**and the two are named** -- and a count without the"
-                + " names says nothing about which runtime would"
-                + " need them");
+        // The previous two unanswered requests came from Main's Graphics.freeze,
+        // not Interpreter#setup. Library preparation now leaves Main to runtime tests.
+        AssertEq(host.Unbeantwortet.Count, 0, "Setup must leave no unanswered requests.");
+        AssertTrue(host.Fragen.Contains("map_id an Game_game_map")
+                && host.Fragen.Contains("clear an Object"),
+            "Setup must actually exercise both supported host operations.");
     }
 
     /// <summary>And what the run gave back, read out.</summary>
@@ -182,7 +157,7 @@ i.instance_variable_get(:@list)
 
             try
             {
-                pInterpreter.RunProgram(new RubyParser(new RubyLexer(
+                MicroQuestScriptFixture.RunLibraryScript(pInterpreter, name, new RubyParser(new RubyLexer(
                     System.Text.Encoding.UTF8.GetString(bytes))
                     .Tokenize()).ParseProgram());
             }

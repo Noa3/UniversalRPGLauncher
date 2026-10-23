@@ -15,6 +15,7 @@ public sealed class RgssBitmapStore
     public const long MaximumBytes = 64L * 1024 * 1024;
     public long AllocatedBytes { get; private set; }
     public int Count => _surfaces.Count;
+    internal Rm2kPixelBuffer? FindSurface(long id) => _surfaces.GetValueOrDefault(id);
 
     public long Create(int width, int height)
     {

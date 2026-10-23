@@ -6,6 +6,7 @@ using Godot;
 using UniversalRPG.App.Launcher;
 using UniversalRPG.App.Library;
 using UniversalRPG.Plugins;
+using UniversalRPG.Rgss;
 using UniversalRPG.Rm2k.Interpreter;
 using UniversalRPG.Rm2k.Input;
 using UniversalRPG.Rm2k.Rendering;
@@ -999,7 +1000,7 @@ _mzAudio = new MzAudioOutput();
 		// hohes  Vorschaubild  links  unten  bekommen  hat,  ist  kein
 		//  spielbares  Fenster.
 		var gameMode = running
-			&& _launcher.ActiveRuntime is Rm2kEngineRuntime or MzEngineRuntime;
+			&& _launcher.ActiveRuntime is Rm2kEngineRuntime or MzEngineRuntime or IRgssFrameSource;
 		if (_gameScreen.Visible != gameMode)
 		{
 			_gameScreen.Visible = gameMode;
@@ -1191,6 +1192,23 @@ _mzAudio = new MzAudioOutput();
         {
             _rm2kAudio.StoppeAlle();
         }
+
+		if (_launcher.ActiveRuntime is IRgssFrameSource rgss)
+		{
+			// Only owned snapshots cross from the Ruby worker into Godot UI code.
+			var frame = rgss.RenderedFrame;
+			_gameScreen.SetGameState(frame?.CopyPixels(), rgss.Frames,
+				frame?.Warning ?? "The RGSS runtime has published no frame yet.");
+			// These native overlays belong to the other engines, not this game.
+			_gameScreen.SetCommandWindow(0, 0, 0, 0, 0, null, 0);
+			_gameScreen.SetPresentation(false, "", null, -1, false, 0);
+			_gameScreen.SetBattle(null);
+			_battleView.Visible = false;
+			_presentationControls.Visible = false;
+			_presentationState.Text = frame == null
+				? "RGSS runtime: no frame published yet"
+				: $"RGSS frame {rgss.Frames}: {frame.Width}x{frame.Height}";
+		}
     }
 
 

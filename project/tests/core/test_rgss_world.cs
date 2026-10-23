@@ -247,7 +247,7 @@ public partial class TestRgssWorld : TestBase
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }
@@ -352,9 +352,7 @@ public partial class TestRgssWorld : TestBase
                 + " and Ruby assignment evaluates to its right side,"
                 + " and that is the interpreter's own attribute"
                 + " writer and not this repository's world");
-        AssertEq(host.Unbeantwortet, 1,
-            "**and the host was asked exactly once** -- and that one"
-                + " question was `freeze` from one of the 90 scripts,"
-                + " and not from this assignment");
+        AssertEq(host.Unbeantwortet, 0,
+            "Library loading and attribute assignment must not inherit Main's freeze request.");
     }
 }

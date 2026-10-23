@@ -40,6 +40,15 @@ public sealed class RgssGrafikHost : IRubyHost
 
     /// <summary>Owned pixel storage; access only from the interpreter's execution owner.</summary>
     public RgssBitmapStore Bitmaps { get; } = new();
+    public RgssSpriteStore Sprites { get; } = new();
+    internal System.Threading.CancellationToken ExecutionCancellation { get; set; }
+    internal RgssRenderedFrame? RenderedFrame { get; private set; }
+    internal void ReleaseRenderResources()
+    {
+        Bitmaps.ReleaseAll();
+        Sprites.ReleaseAll();
+        RenderedFrame = null;
+    }
 
     /// <summary>The game's own folder, which is where its images are.</summary>
     public string? Wurzel { get; set; }
@@ -108,7 +117,7 @@ public sealed class RgssGrafikHost : IRubyHost
             // **And the helper the cache calls is one of the names.** A host that
             // answers a name and does not declare it is a host whose own answers
             // read as gaps -- measured, and that is what the message did.
-            var namen = new List<string> { "update", "wait", "BildGroesse", "rgss_present_frame", "rgss_bitmap" };
+            var namen = new List<string> { "update", "wait", "BildGroesse", "rgss_present_frame", "rgss_bitmap", "rgss_sprite" };
             if (Fallback != null)
             {
                 namen.AddRange(Fallback.KnownMethods);
@@ -138,14 +147,19 @@ public sealed class RgssGrafikHost : IRubyHost
         }
 
         if (pMethod == "rgss_bitmap") return CallBitmap(pArguments);
+        if (pMethod == "rgss_sprite") return Sprites.Call(pArguments, Bitmaps);
 
         if (pMethod == "rgss_present_frame")
         {
-            if (pArguments.Count != 0)
+            if (pArguments.Count != 0 && pArguments.Count != 2)
             {
-                throw new RubyRuntimeException("ArgumentError", "rgss_present_frame accepts no arguments");
+                throw new RubyRuntimeException("ArgumentError", "rgss_present_frame accepts zero arguments or width and height.");
             }
-            PresentFrame();
+            var width = pArguments.Count == 2 && pArguments[0].Kind != RubyValueKind.Nil
+                ? BitmapCoordinate(pArguments[0]) : Breite;
+            var height = pArguments.Count == 2 && pArguments[1].Kind != RubyValueKind.Nil
+                ? BitmapCoordinate(pArguments[1]) : Hoehe;
+            PresentFrame(width, height);
             return RubyValue.Nil;
         }
 
@@ -253,8 +267,9 @@ public sealed class RgssGrafikHost : IRubyHost
         return (byte)Math.Clamp(number, 0, 255);
     }
 
-    private void PresentFrame()
+    private void PresentFrame(int width = 640, int height = 480)
     {
+        RenderedFrame = Sprites.Compose(Bitmaps, width, height, ExecutionCancellation);
         Frames = checked(Frames + 1);
         Rahmen?.Invoke(Frames);
         if (Budget > 0 && Frames >= Budget)

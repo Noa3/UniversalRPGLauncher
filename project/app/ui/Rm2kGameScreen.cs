@@ -396,18 +396,13 @@ public partial class Rm2kGameScreen : Control
             return;
         }
 
-        // **Und der Puffer waechst mit dem Bild, statt es zu beschneiden.**
-        // Ein 672x864-Frame braucht 2,3 MB statt der 307 KB eines
-        // RM2K-Bildschirms; das ist eine Kopie pro Bildwechsel und keine
-        // pro Frame, weil die Signatur den Wechsel erkennt.
-        if (_viewPixels.Length < pMap.Pixels.Length)
+        // Native image creation requires the exact payload size, not capacity.
+        // Resize downward too when an engine changes its resolution or a new
+        // game publishes a smaller frame.
+        if (_viewPixels.Length != pMap.Pixels.Length)
         {
             _viewPixels = new byte[pMap.Pixels.Length];
             _mapSignature = "";
-        }
-        else
-        {
-            Array.Clear(_viewPixels, pMap.Pixels.Length, _viewPixels.Length - pMap.Pixels.Length);
         }
         _viewWidth = pMap.Width;
         _viewHeight = pMap.Height;
@@ -498,7 +493,7 @@ public partial class Rm2kGameScreen : Control
         {
             return _mapTexture;
         }
-        var image = Image.CreateFromData(
+        using var image = Image.CreateFromData(
             _viewWidth, _viewHeight, false, Image.Format.Rgba8, _viewPixels);
         if (image == null)
         {
@@ -601,6 +596,10 @@ public partial class Rm2kGameScreen : Control
     /// <summary>And a fresh run starts with the pause menu shut.</summary>
     public void Reset()
     {
+        _frameCount = 0;
+        RenderDiagnostic = "";
+        _viewWidth = ScreenWidth;
+        _viewHeight = ScreenHeight;
         _mapPixelWidth = 0;
         _mapPixelHeight = 0;
         _mapTexture = null;
@@ -608,11 +607,18 @@ public partial class Rm2kGameScreen : Control
         Array.Clear(_viewPixels);
         ClosePause();
         _messageVisible = false;
+        _messageText = "";
+        _messageLabel.Text = "";
         _messagePanel.Visible = false;
         _choiceOptions.Clear();
+        _choiceSelected = -1;
         _choicePanel.Visible = false;
         _inputPending = false;
+        _inputValue = 0;
         _inputPanel.Visible = false;
+        _commandRows.Clear();
+        _commandVisible = false;
+        _commandIndex = 0;
         _battleView.SetzeZustand(null);
         _battleView.Visible = false;
         QueueRedraw();

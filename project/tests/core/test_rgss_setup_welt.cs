@@ -163,7 +163,7 @@ i.setup([[101, 0, ['Hallo']]], 0)
 
             try
             {
-                pInterpreter.RunProgram(new RubyParser(new RubyLexer(
+                MicroQuestScriptFixture.RunLibraryScript(pInterpreter, name, new RubyParser(new RubyLexer(
                     System.Text.Encoding.UTF8.GetString(bytes))
                     .Tokenize()).ParseProgram());
             }

@@ -123,7 +123,7 @@ public partial class TestRgssSetupRun : TestBase
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }
@@ -476,7 +476,7 @@ i.setup([[101, 0, ['Hallo']]], 0)
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }

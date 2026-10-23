@@ -45,7 +45,7 @@ public static class RgssExtraRubySources
         module Graphics
           def self.update
             $graphics_frames = $graphics_frames + 1
-            rgss_present_frame()
+            rgss_present_frame($graphics_width, $graphics_height)
           end
 
           def self.wait(duration)

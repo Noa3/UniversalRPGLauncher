@@ -34,6 +34,9 @@ public sealed class RgssFrameSession : IDisposable
     private readonly RubyInterpreter _interpreter;
     private readonly RgssGrafikHost _graphics;
     private readonly IReadOnlyList<RubyNode> _program;
+    private readonly Action? _startup;
+    private readonly TimeSpan _startupTimeout;
+    private RgssRenderedFrame? _renderedFrame;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly Action<int>? _previousFrame;
     private Thread? _worker;
@@ -46,19 +49,24 @@ public sealed class RgssFrameSession : IDisposable
     private IReadOnlyList<string> _diagnostics = Array.Empty<string>();
 
     public RgssFrameSession(RubyInterpreter interpreter, RgssGrafikHost graphics,
-        IReadOnlyList<RubyNode> program)
+        IReadOnlyList<RubyNode> program, Action? startup = null, TimeSpan? startupTimeout = null)
     {
         _interpreter = interpreter ?? throw new ArgumentNullException(nameof(interpreter));
         _graphics = graphics ?? throw new ArgumentNullException(nameof(graphics));
         _program = program ?? throw new ArgumentNullException(nameof(program));
+        _startup = startup;
+        _startupTimeout = startupTimeout ?? TimeSpan.FromSeconds(10);
+        ValidateTimeout(_startupTimeout);
         _previousFrame = graphics.Rahmen;
         _interpreter.ExecutionCancellation = _cancellation.Token;
+        _graphics.ExecutionCancellation = _cancellation.Token;
         _interpreter.DiagnosticLimit = 64;
         _graphics.Rahmen = OnFrame;
     }
 
     public RgssExecutionState State { get { lock (_gate) return _state; } }
     public int Frames { get { lock (_gate) return _frames; } }
+    public RgssRenderedFrame? RenderedFrame { get { lock (_gate) return _renderedFrame; } }
     public long DroppedDiagnosticCount { get { lock (_gate) return _droppedDiagnostics; } }
     public string? Error { get { lock (_gate) return _error; } }
     public IReadOnlyList<string> Diagnostics { get { lock (_gate) return _diagnostics; } }
@@ -79,6 +87,8 @@ public sealed class RgssFrameSession : IDisposable
             try
             {
                 var timer = Stopwatch.StartNew();
+                var starting = _worker == null && _startup != null;
+                var deadline = starting ? _startupTimeout : timeout;
                 if (_state == RgssExecutionState.Created)
                 {
                     _state = RgssExecutionState.Running;
@@ -93,10 +103,12 @@ public sealed class RgssFrameSession : IDisposable
 
                 while (_state == RgssExecutionState.Running)
                 {
-                    var remaining = timeout - timer.Elapsed;
+                    var remaining = deadline - timer.Elapsed;
                     if (remaining <= TimeSpan.Zero)
                     {
-                        _error = "The RGSS scene did not reach a frame within the allowed time.";
+                        _error = starting
+                            ? "The RGSS startup did not reach its first frame within the allowed time."
+                            : "The RGSS scene did not reach a frame within the allowed time.";
                         _state = RgssExecutionState.Faulted;
                         _cancellation.Cancel();
                         Monitor.PulseAll(_gate);
@@ -119,6 +131,7 @@ public sealed class RgssFrameSession : IDisposable
         string? error = null;
         try
         {
+            _startup?.Invoke();
             _interpreter.RunProgram(_program);
         }
         catch (RgssFrameBudgetErreicht)
@@ -158,6 +171,7 @@ public sealed class RgssFrameSession : IDisposable
         {
             _cancellation.Token.ThrowIfCancellationRequested();
             _frames = frame;
+            _renderedFrame = _graphics.RenderedFrame;
             CaptureDiagnostics();
             _state = RgssExecutionState.AtFrame;
             Monitor.PulseAll(_gate);

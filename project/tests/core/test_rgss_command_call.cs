@@ -196,7 +196,7 @@ public partial class TestRgssCommandCall : TestBase
 
             try
             {
-                interpreter.RunProgram(new RubyParser(
+                MicroQuestScriptFixture.RunLibraryScript(interpreter, name, new RubyParser(
                     new RubyLexer(System.Text.Encoding.UTF8
                         .GetString(bytes)).Tokenize()).ParseProgram());
             }
@@ -239,9 +239,8 @@ public partial class TestRgssCommandCall : TestBase
         AssertTrue(wert.Kind != RubyValueKind.Nil,
             "**and the game's own interpreter can be built** -- and the"
                 + " value is " + wert.Kind);
-        AssertTrue(host.GefragtOderDefiniert,
-            "**and the host was asked for something on the way** -- and"
-                + " that is the world entering the picture");
+        AssertFalse(host.GefragtOderDefiniert,
+            "Constructing the library's Interpreter must not start Main or request Graphics.");
     }
 
     /// <summary>
@@ -332,39 +331,9 @@ Interpreter.new.setup([[101, 0, ['Hallo Welt', 'Face']], [0, 1, []]])
             "**and the game's own scripts define the world types** -- and"
                 + " these are missing: " + string.Join(" ", fehlend));
 
-        // **Und `Graphics` ist nicht `$game_temp`** -- **und das heisst:
-        // der Aufruf hat den Befehl nicht erreicht.**
-        //
-        // **Und warum, ist die Frage** -- **und die Antwort liegt in
-        // `setup`:** -- **XP setzt `@parameters` aus der Liste, und ein
-        // Feld `message_text` braucht ein Objekt, das der Host
-        // beantwortet.**
-        //
-        // **Und `Graphics` wird beim Laden der Skripte gefragt**,
-        // -- **und nicht vom Befehl.**
-        // **Und der Aufruf erreicht die Welt NOCH NICHT** -- **und das
-        // ist der Befund dieses Schritts und nicht ein Fehler, den man
-        // wegassertiert.**
-        //
-        // **Und die Diagnosen des Interpreters sagen genau, woran es
-        // liegt, und beide Zeilen sind aus dem Spiel selbst:**
-        //
-        // 1. **`nil has no method 'message_text='`**
-        //    -- **`$game_temp` ist in Ruby eine globale Variable und
-        //    keine Konstante** -- -- **und `LookupConstant` wird fuer
-        //    ein `$name` nicht gefragt**, -- **und die Welt muss
-        //    deshalb ueber die Variablenstelle kommen und nicht ueber
-        //    einen Namen.**
-        //
-        // 2. **`Interpreter has no method 'setup'`**
-        //    -- **und this one is not a missing world, it is a
-        //    missing method in the game's own scripts** -- --
-        //    **and that is measured, not guessed.**
-        AssertTrue(host.Gehlagt.Contains("Graphics"),
-            "**and the only name the world was asked for is Graphics**"
-                + " -- and it was asked while the scripts loaded, and"
-                + " `$game_temp` was never asked for, because a"
-                + " `$name` is a variable and not a constant");
+        // Graphics.freeze belonged to Main, not to library loading or setup.
+        AssertEq(host.Gehlagt.Length, 0,
+            "The library-only fixture must not introduce title-screen host requests.");
         AssertFalse(Enthaelt(host.Gehlagt, "$game_temp"),
             "**and `$game_temp` never arrives as a name** -- and that is"
                 + " the first of the two things this repository still"

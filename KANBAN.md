@@ -817,7 +817,35 @@ regression (static review only). The1-second
 watchdog remains an explicit compatibility bound, not a pacing implementation.
 No pixel composition, input, audio, pacing or full-engine completion claim.
 
-### K-PROD-RGSS-RENDERING — IN PROGRESS (XP, VX and VX Ace produce no picture at all)
+### K-PROD-RGSS-RENDERING — IN PROGRESS (bounded sprite view; gameplay incomplete)
+
+Verified bounded consumer slice: Main._Process displays RGSS
+snapshots with authoritative frame numbers and clears foreign-engine overlays.
+Exact-size upload fixes smaller frames; Reset clears stale frame/menu state.
+Native texture regressions2/2, real-runtime view route1/1 across all3 generations,
+launcher safety26/26 and MZ command-window3/3 pass. A separate OpenGL acceptance
+scene instantiated the production launcher scene and captured real viewport red
+then green frames from a synthetic XP program; stop cleared the view, exit0,
+no native diagnostics. This is not imported-game rendering or gameplay/input.
+Full run proc_a0bef33dd7ee passed3054 tests (390 suites/3034 cases plus20 smoke
+checks), exit0, all696 frozen inputs unchanged. Build148 warnings/0 errors;
+existing3 CanvasItem RID/6 ObjectDB leaks remain. No capability or gate change.
+
+Local composition/startup slice: exact pixel integration16/16 across XP/VX/VX Ace;
+block-body regression2/2, real XP2/2, resumable13/13. Actual Sprite registration,
+normal-alpha composition and immutable frame publication now exist. Full project
+entry scripts run on the owned worker, with a separate first-frame deadline and
+immutable execution receipts; completion never invents/replays a scene. Corrected
+canonical validation passed3051 tests (388 suites/3031 cases plus20 smoke checks),
+exit0, with all692 frozen inputs unchanged. Initial22 legacy failures exposed
+partial hosts executing Main; library-only test preparation now parses all90
+sources and executes89 libraries, while real-runtime tests prove Main remains
+live across10 updates. All34 affected cases pass. Build148 warnings and known
+native diagnostics/leaks remain unchanged from the bitmap baseline.
+Actual Godot presentation remains pending; a separate native probe confirms the
+view's grow-only pixel storage must be sized exactly before image construction.
+No capability upgrade. This rendering card is still IN PROGRESS.
+Evidence and failure signatures: SESSION_STATE.md and docs/RGSS_SPRITE_BOUNDARY.md.
 
 Current local slice: numeric Bitmap objects now own bounded RGBA arrays through
 actual host calls for set_pixel/get_pixel/clear/dispose. Limits checked before
