@@ -94,7 +94,7 @@ public partial class TestRgssDataPaths : TestBase
         AssertEq(linkedHost.Verweigert, 1);
     }
 
-    private static void CreateDirectoryLink(string link, string target)
+    internal static void CreateDirectoryLink(string link, string target)
     {
         if (!OperatingSystem.IsWindows())
         {

@@ -68,8 +68,11 @@ This bounded slice is verified, not a complete RGSS implementation. Launch gates
 capability declarations remain unchanged. Blit/text/window/tilemap operations,
 input, audio, pacing and full XP/VX/VX Ace compatibility remain incomplete.
 
-The legacy BildGroesse metadata host entry is NOT covered by the constructor/
-cache resolver. Full review found its raw Path.Combine/File.OpenRead route still
-permits rooted/traversal access; source inspection confirmed this separate
-pre-existing issue. K-PROD-RGSS-IMAGE-METADATA-PATH tracks its closure. The
-successful PNG tests must not be read as confinement of every image-host entry.
+Full review found that legacy BildGroesse metadata bypassed the constructor/
+cache resolver. K-PROD-RGSS-IMAGE-METADATA-PATH now routes it through that same
+resolver: actual rooted/traversal/junction tests went from1/3 to3/3; valid header
+queries and named refusals are retained. Its canonical run passes3067 tests
+(392 suites/3047 cases +20 smoke), exit0, all701 frozen inputs unchanged; existing
+build/native diagnostics remain. This later receipt covers the metadata fix;
+the earlier3061 PNG receipt does not. In either case,
+static path checks must not be described as race-free OS isolation.

@@ -349,20 +349,12 @@ public sealed class RgssGrafikHost : IRubyHost
             return null;
         }
 
-        var pfad = Path.Combine(Wurzel, "Graphics", ordner, pName + ".png");
-        if (!File.Exists(pfad))
-        {
-            // **And a name that is not there is said by name.** A game that draws
-            // with a nil bitmap should know that it is drawing nothing -- and the
-            // RTP is a real answer to where it is, which is why the name of the
-            // file is reported and not a bare nil.
-            RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png");
-            return null;
-        }
-
+        var filename = "Graphics/" + ordner + "/" + pName + ".png";
         var kopf = new byte[33];
         try
         {
+            // Metadata queries must share the image loader's path boundary.
+            var pfad = RgssBitmapFileLoader.Resolve(Wurzel, filename, ExecutionCancellation);
             using var strom = File.OpenRead(pfad);
             if (strom.ReadAtLeast(kopf, kopf.Length, throwOnEndOfStream: false) < kopf.Length)
             {
@@ -370,9 +362,9 @@ public sealed class RgssGrafikHost : IRubyHost
                 return null;
             }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            RecordMissingImage("Graphics/" + ordner + "/" + pName + ".png (unreadable: " + error.GetType().Name + ")");
+            RecordMissingImage(filename + " (" + error.Message + ")");
             return null;
         }
 

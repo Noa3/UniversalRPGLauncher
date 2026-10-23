@@ -5,6 +5,17 @@
 
 ## Latest runtime correctness work
 
+### Legacy image metadata path — bounded fix verified
+
+The separate BildGroesse path escape was reproduced through its real host call
+with rooted/traversal names and NTFS junctions. It now uses the same confined
+resolver as file-backed bitmaps before reading the PNG header. Metadata tests
+pass3/3, including valid dimensions, named refusals and no surface allocation;
+PNG files7/7, data paths4/4 and realXP2/2 remain passing. Canonical3067 tests
+(392 suites/3047 cases +20 smoke) pass, exit0; all701 frozen inputs unchanged.
+Build/native diagnostics remain unchanged. The API has not been removed or replaced by
+a success stub; static path checks still do not provide race-free OS isolation.
+
 ### RGSS data-path confinement — bounded fix verified
 
 Real fixture reads reproduced Windows backslash traversal into a sibling whose

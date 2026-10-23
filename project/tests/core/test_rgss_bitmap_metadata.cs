@@ -8,6 +8,67 @@ namespace UniversalRPG.Tests.Core;
 
 public partial class TestRgssBitmapMetadata : TestBase
 {
+    public void Test_MetadataHostRefusesRootedAndTraversalNames()
+    {
+        using var fixture = new RgssImageFixture();
+        var outside = fixture.Root + "-outside";
+        Directory.CreateDirectory(outside);
+        try
+        {
+            File.Copy(Path.Combine(fixture.Root, "Graphics", "Pictures", "shared.png"), Path.Combine(outside, "external.png"));
+            var graphics = new RgssGrafikHost { Wurzel = fixture.Root };
+            AssertTrue(graphics.KnownMethods.Contains("BildGroesse"), "Keep the metadata API available.");
+            var valid = QuerySize(graphics, "shared");
+            AssertTrue(valid != null);
+            if (valid != null)
+            {
+                AssertEq(valid.Items[0].Integer, 2);
+                AssertEq(valid.Items[1].Integer, 2);
+            }
+            var traversal = "../../../" + Path.GetFileName(outside) + "/external";
+            foreach (var name in new[] { traversal, traversal.Replace('/', '\\'), Path.Combine(outside, "external"), "bad\0", "shared.png:stream" })
+            {
+                AssertTrue(QuerySize(graphics, name) == null, "Unsafe metadata name must not expose image dimensions.");
+                AssertTrue(graphics.FehlendeBilder.Any(item => item.Contains(name)), "Refusal must identify the requested name.");
+            }
+            AssertEq(graphics.Bitmaps.Count, 0, "Metadata queries must not allocate pixel surfaces.");
+        }
+        finally { Directory.Delete(outside, true); }
+    }
+
+    public void Test_MetadataHostRefusesDirectoryAndRootLinks()
+    {
+        using var fixture = new RgssImageFixture();
+        var outside = fixture.Root + "-outside";
+        var rootLink = fixture.Root + "-link";
+        var link = Path.Combine(fixture.Root, "Graphics", "Pictures", "redirect");
+        Directory.CreateDirectory(outside);
+        try
+        {
+            File.Copy(Path.Combine(fixture.Root, "Graphics", "Pictures", "shared.png"), Path.Combine(outside, "external.png"));
+            TestRgssDataPaths.CreateDirectoryLink(link, outside);
+            var graphics = new RgssGrafikHost { Wurzel = fixture.Root };
+            AssertTrue(QuerySize(graphics, "redirect/external") == null, "A junction must not redirect the metadata reader.");
+            AssertTrue(graphics.FehlendeBilder.Any(item => item.Contains("redirect/external")));
+            TestRgssDataPaths.CreateDirectoryLink(rootLink, fixture.Root);
+            var rooted = new RgssGrafikHost { Wurzel = rootLink };
+            AssertTrue(QuerySize(rooted, "shared") == null, "A linked configured root must not bypass the guard.");
+            AssertTrue(rooted.FehlendeBilder.Any(item => item.Contains("shared")));
+            AssertEq(graphics.Bitmaps.Count, 0);
+            AssertEq(rooted.Bitmaps.Count, 0);
+        }
+        finally
+        {
+            if (Directory.Exists(link)) Directory.Delete(link);
+            if (Directory.Exists(rootLink)) Directory.Delete(rootLink);
+            Directory.Delete(outside, true);
+        }
+    }
+
+    private static RubyValue? QuerySize(RgssGrafikHost graphics, string name) => graphics.CallMethod(
+        RubyValue.Nil, "BildGroesse", new[] { RubyValue.OfSymbol("pictures"),
+            RubyValue.OfBytes(System.Text.Encoding.UTF8.GetBytes(name)) });
+
     public void Test_MetadataRejectsInvalidHeadersAndUnsupportedDimensionsByName()
     {
         var root = Path.Combine(Environment.GetEnvironmentVariable("TMPDIR") ?? Path.GetTempPath(),

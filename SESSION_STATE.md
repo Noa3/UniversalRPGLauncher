@@ -1,4 +1,39 @@
 ## Current card
+### K-PROD-RGSS-IMAGE-METADATA-PATH — VERIFIED
+
+Data-path fix committed/pushed as31ed5ca, remote main and commit manifest verified.
+Only protected RM2K WIP remained dirty before this new card.
+Reproduced review B1 through the actual BildGroesse host dispatch with owned PNG
+fixtures: rooted names, slash/backslash traversal and directory/root junctions
+exposed outside image dimensions. RED1/3 is preserved in
+scratch/urpg-metadata-path-red.log (exit11 includes assertion entries, not11 cases).
+
+BildGroesse now constructs a game-relative category/name and resolves it through
+RgssBitmapFileLoader.Resolve before opening its existing33-byte metadata read.
+The API remains in KnownMethods, valid dimensions and header checks remain, no
+pixel surfaces are allocated, and refused names retain diagnostic reasons.
+Path/format exceptions are caught at the metadata host boundary; cancellation
+still propagates. The existing junction fixture helper is shared internally
+instead of duplicating a process-launch helper.
+
+Focused metadata3/3, filePNG7/7, dataPaths4/4 and realXP2/2 pass. Canonical
+proc_bd325717afd4 PASSED3067 tests:392 suites/3047 cases +20 smoke, exit0.
+All701 frozen inputs in scratch/urpg_metadata_path_inputs_v1.json are unchanged.
+Receipt: scratch/urpg-metadata-path-validation-receipt.json; log:
+scratch/urpg-metadata-path-canonical.log. Build148 warnings/0 errors; existing
+native error lines and3 CanvasItem/6 ObjectDB warnings exactly match baseline.
+Final diff inspected: the metadata API and original header checks remain;
+only its unsafe file resolution is replaced, with real host-dispatch regressions.
+Ready to commit this separately verified fix. TOCTOU, hard links, linked-
+installation refusal and broader incomplete runtime features remain.
+
+While the canonical runner owns the frozen project, deleg_62e0fc1e is producing
+an isolated RGB-expansion reproduction for the existing MzRgbaImage defect.
+It may write only scratch/urpg-mz-rgb-probe/, compile the original decoder via
+an explicit Compile Include in a plain console project, and must preserve its
+source hash. This is diagnostic work only, not an implemented MZ fix or another
+project build. Await its report/result.md; do not infer results from dispatch.
+
 ### K-PROD-RGSS-DATA-PATH — VERIFIED
 
 PNG slice committed and pushed as958663c; exact remote main and all700 frozen

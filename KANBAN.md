@@ -835,7 +835,7 @@ coverage and independent prefix-guard coverage remain limitations. Build/native
 diagnostics match baseline. This does not claim race-free OS isolation or solve
 hard links/unbounded data-file allocation.
 
-### K-PROD-RGSS-IMAGE-METADATA-PATH — READY
+### K-PROD-RGSS-IMAGE-METADATA-PATH — DONE (bounded static-path fix)
 
 Full review deleg_5f81423f identifies a separate pre-existing escape in
 RgssGrafikHost.BildGroesse: raw names enter Path.Combine and File.OpenRead,
@@ -846,8 +846,14 @@ Route metadata reads through the confined image resolver while preserving valid
 size queries and named refusal diagnostics; do not remove the API merely to
 hide the path. Require focused regression tests and canonical validation.
 
-This is distinct from RgssDatenHost.Pfad and is NOT fixed by that card. The
-verified PNG decoder/constructor does not close every legacy image-host entry.
+This is distinct from RgssDatenHost.Pfad and was not fixed by that card.
+Local implementation now routes metadata through the image resolver, retaining
+the API and named diagnostics. Actual traversal/rooted/junction fixtures were
+RED1/3 then GREEN3/3; filePNG7/7, dataPaths4/4 and realXP2/2 remain passing.
+Canonical proc_bd325717afd4 passes3067 tests (392 suites/3047 cases +20 smoke),
+exit0; all701 frozen inputs unchanged. Final diff preserves the API and header
+validation. Build/native diagnostics match baseline; static checks are not an
+OS sandbox and do not remove TOCTOU/hard-link limitations.
 
 ### K-PROD-RGSS-RENDERING — IN PROGRESS (bounded sprite view; gameplay incomplete)
 
@@ -864,7 +870,8 @@ supported PNG formats, path/budget boundaries and unsupported functionality.
 
 Production-readiness follow-ups from decoder reuse audit (not fixed here):
 The RgssDatenHost traversal/static-link fix is verified under
-K-PROD-RGSS-DATA-PATH above; the separate image-metadata path remains open.
+K-PROD-RGSS-DATA-PATH above; the image-metadata path is also verified under its
+separate card. Remaining decoder issues follow.
 MzRgbaImage has unbounded inflate and
 forward in-place RGB expansion; existing RM2K PNG reading also needs bounded
 inflate. Regress each real caller separately without importing RM2K's palette0
